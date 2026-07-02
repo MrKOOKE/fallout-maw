@@ -5,7 +5,10 @@ import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
 import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
-import { isTokenDocumentInActiveBlockTurn } from "../combat/turn-order-blocks.mjs";
+import {
+  isBlockTurnOrderEnabled,
+  isTokenDocumentInActiveBlockTurn
+} from "../combat/turn-order-blocks.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -77,7 +80,11 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   _refreshTurnMarker() {
-    if (!isTokenDocumentInActiveBlockTurn(this.document, game.combat)) return super._refreshTurnMarker();
+    if (!isBlockTurnOrderEnabled(game.combat)) return super._refreshTurnMarker();
+    if (!isTokenDocumentInActiveBlockTurn(this.document, game.combat)) {
+      this._clearTurnMarker();
+      return;
+    }
 
     const { turnMarker } = this.document;
     const markersEnabled = CONFIG.Combat.settings.turnMarker.enabled
@@ -92,6 +99,13 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
       this.turnMarker.destroy();
       this.turnMarker = null;
     }
+  }
+
+  _clearTurnMarker() {
+    if (!this.turnMarker) return;
+    canvas.tokens.turnMarkers.delete(this);
+    this.turnMarker.destroy();
+    this.turnMarker = null;
   }
 
   /** @override */
