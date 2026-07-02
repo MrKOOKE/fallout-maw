@@ -8,6 +8,8 @@ import { HandlebarsApplication, mergeClone, mergeObject } from "./utils.mjs";
 import {
     getActiveCombatTurnBlock,
     getCombatTurnBlocks,
+    getCombatTurnOrderScheme,
+    TURN_ORDER_SCHEMES,
     isBlockTurnOrderEnabled
 } from "../../combat/turn-order-blocks.mjs";
 
@@ -157,7 +159,7 @@ export class CombatDock extends HandlebarsApplication {
         this.portraits = [];
         this.sortedCombatants.forEach((combatant) => this.portraits.push(new CONFIG.combatTrackerDock.CombatantPortrait(combatant)));
         const combatantsContainer = this.element.querySelector("#combatants");
-        combatantsContainer.classList.toggle("block-turn-order", isBlockTurnOrderEnabled(this.combat));
+        combatantsContainer.classList.toggle("block-turn-order", this.isBlockTurnOrderVisualEnabled());
         combatantsContainer.innerHTML = "";
         this.appendPortraitBlocks(combatantsContainer);
         const isEven = this.portraits.length % 2 === 0;
@@ -169,11 +171,12 @@ export class CombatDock extends HandlebarsApplication {
             this._combatTrackerRefreshed = true;
             ui.combat.render(true);
         }
+        const ready = Promise.all(this.portraits.map((p) => p.ready));
+        ready.then(() => this.updateBlockFrameClasses());
         if (this._playAnimation && this.sortedCombatants.length > 0) {
             this._playAnimation = false;
-            const promises = this.portraits.map((p) => p.ready);
-            this._promises = promises;
-            Promise.all(promises).then(() => {
+            this._promises = this.portraits.map((p) => p.ready);
+            ready.then(() => {
                 this.playIntroAnimation();
             });
         }
@@ -283,8 +286,7 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     updateCombatants() {
-        this.portraits.forEach((p) => p.renderInner());
-        this.updateBlockFrameClasses();
+        Promise.all(this.portraits.map((p) => p.renderInner())).then(() => this.updateBlockFrameClasses());
     }
 
     updateOrder() {
@@ -412,7 +414,7 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     _onRenderCombatTracker() {
-        this.portraits.forEach((p) => p.renderInner());
+        Promise.all(this.portraits.map((p) => p.renderInner())).then(() => this.updateBlockFrameClasses());
         this.updateStartEndButtons();
     }
 
@@ -626,6 +628,10 @@ export class CombatDock extends HandlebarsApplication {
         return Array.from(this.element?.querySelectorAll("#combatants > .combatant-portrait") ?? []);
     }
 
+    isBlockTurnOrderVisualEnabled() {
+        return Boolean(this.combat && getCombatTurnOrderScheme() === TURN_ORDER_SCHEMES.block);
+    }
+
     updateBlockFrameClasses() {
         const combatantsContainer = this.element?.querySelector("#combatants");
         if (!combatantsContainer) return;
@@ -637,10 +643,11 @@ export class CombatDock extends HandlebarsApplication {
             "turn-block-frame-active"
         ];
         this.portraits.forEach(portrait => portrait.element.classList.remove(...frameClasses));
-        if (!isBlockTurnOrderEnabled(this.combat)) return;
+        combatantsContainer.classList.toggle("block-turn-order", this.isBlockTurnOrderVisualEnabled());
+        if (!this.isBlockTurnOrderVisualEnabled()) return;
 
         const blocks = getRenderableCombatantBlocks(this.combat, this.sortedCombatants);
-        const activeBlock = getActiveCombatTurnBlock(this.combat);
+        const activeBlock = isBlockTurnOrderEnabled(this.combat) ? getActiveCombatTurnBlock(this.combat) : null;
         const portraitByCombatant = new Map(this.portraits.map(portrait => [portrait.combatant, portrait]));
 
         for (const block of blocks) {
@@ -660,7 +667,7 @@ export class CombatDock extends HandlebarsApplication {
 }
 
 function getRenderableCombatantBlocks(combat, sortedCombatants) {
-    if (isBlockTurnOrderEnabled(combat)) {
+    if (getCombatTurnOrderScheme() === TURN_ORDER_SCHEMES.block) {
         const visibleCombatants = new Set(sortedCombatants);
         return getCombatTurnBlocks(combat)
             .map(block => ({
