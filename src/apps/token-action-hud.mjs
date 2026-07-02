@@ -28,7 +28,7 @@ import {
 import { isActorUnableToAct, isReactionSystemLocked } from "../combat/reaction-hub.mjs";
 import {
   BLOCK_TURN_ACTOR_OPTION,
-  isActorInActiveBlock,
+  isActorPendingInActiveBlock,
   isBlockTurnOrderEnabled
 } from "../combat/turn-order-blocks.mjs";
 import { canSpendWeaponSwitchActionPoints, getWeaponSwitchActionPointCost, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
@@ -435,7 +435,7 @@ function isTokenCombatTurn(token, combat) {
   const combatant = combat?.combatant;
   if (!tokenDocument || !combatant) return false;
   if (combat.round < 1 || combat.turn === null) return false;
-  if (isBlockTurnOrderEnabled(combat)) return isActorInActiveBlock(tokenDocument.actor, combat);
+  if (isBlockTurnOrderEnabled(combat)) return isActorPendingInActiveBlock(tokenDocument.actor, combat);
   if (combatant.sceneId && tokenDocument.parent?.id && combatant.sceneId !== tokenDocument.parent.id) return false;
   return combatant.tokenId === tokenDocument.id;
 }

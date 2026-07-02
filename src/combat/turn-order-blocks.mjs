@@ -109,6 +109,11 @@ export function isActorCompletedInActiveBlock(actor, combat = game.combat) {
   return Boolean(progress?.completedActorUuids.has(actor.uuid));
 }
 
+export function isActorPendingInActiveBlock(actor, combat = game.combat) {
+  if (!isActorInActiveBlock(actor, combat)) return false;
+  return !isActorCompletedInActiveBlock(actor, combat);
+}
+
 export function isCombatantCompletedInActiveBlock(combatant, combat = game.combat) {
   if (!combatant || !isBlockTurnOrderEnabled(combat)) return false;
   const progress = getActiveBlockProgress(combat);
@@ -141,23 +146,28 @@ export function getBlockTurnTargetCombatant(combat = game.combat, options = {}) 
   const progress = getActiveBlockProgress(combat);
   if (!progress) return null;
   const block = progress.block;
+  const firstIncomplete = getFirstIncompleteBlockCombatant(block, progress);
 
   const byCombatantId = normalizeId(options?.[BLOCK_TURN_COMBATANT_OPTION]);
   if (byCombatantId) {
     const combatant = block.combatants.find(candidate => candidate.id === byCombatantId);
-    if (combatant) return combatant;
+    if (combatant && !isCombatantCompleted(combatant, progress)) return combatant;
+    return firstIncomplete;
   }
 
   const byActorUuid = normalizeId(options?.[BLOCK_TURN_ACTOR_OPTION]);
   if (byActorUuid) {
     const combatant = block.combatants.find(candidate => candidate.actor?.uuid === byActorUuid);
-    if (combatant) return combatant;
+    if (combatant && !isCombatantCompleted(combatant, progress)) return combatant;
+    return firstIncomplete;
   }
 
   const selected = getSelectedBlockCombatant(combat, block);
-  if (selected) return selected;
-  if (block.combatants.includes(combat.combatant)) return combat.combatant;
-  return block.combatants.find(combatant => !isCombatantCompleted(combatant, progress)) ?? block.combatants[0] ?? null;
+  if (selected && !isCombatantCompleted(selected, progress)) return selected;
+  if (block.combatants.includes(combat.combatant) && !isCombatantCompleted(combat.combatant, progress)) {
+    return combat.combatant;
+  }
+  return firstIncomplete;
 }
 
 export function markCombatantCompletedInState(combat, combatant, state) {
@@ -220,6 +230,10 @@ function getActiveBlockManualCombatants(combat) {
   const progress = getActiveBlockProgress(combat);
   if (!progress) return [];
   return progress.block.combatants.filter(combatant => !isCombatantCompleted(combatant, progress));
+}
+
+function getFirstIncompleteBlockCombatant(block, progress) {
+  return block?.combatants.find(combatant => !isCombatantCompleted(combatant, progress)) ?? null;
 }
 
 function getCombatantTokenObject(combatant) {

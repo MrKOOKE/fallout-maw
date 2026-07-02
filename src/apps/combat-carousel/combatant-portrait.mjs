@@ -330,7 +330,7 @@ export class CombatantPortrait {
             blockCompleted: isBlockCompleted,
             owner: combatant.isOwner,
             isGM: game.user.isGM,
-            showPass: combatant.isOwner && !game.user.isGM && (isActive || isBlockActive),
+            showPass: combatant.isOwner && !game.user.isGM && (isActive || isBlockActive) && !isBlockCompleted,
             defeated: combatant.isDefeated,
             hidden: combatant.hidden,
             initiative: combatant.initiative,

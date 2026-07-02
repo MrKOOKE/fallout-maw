@@ -17,6 +17,7 @@ import {
   BLOCK_TURN_STATE_FLAG,
   getActiveBlockProgress,
   isActorInActiveBlock,
+  isActorPendingInActiveBlock,
   isBlockTurnOrderEnabled,
   isCombatantAutoCompleted,
   markActorPreparedInState
@@ -665,7 +666,7 @@ function buildOneTimeActionPointEffectData(actor, value, { source = "" } = {}) {
 function isActorCurrentCombatant(actor) {
   const combat = game.combat;
   if (!combat?.started || !actor?.uuid) return false;
-  if (isBlockTurnOrderEnabled(combat)) return isActorInActiveBlock(actor, combat);
+  if (isBlockTurnOrderEnabled(combat)) return isActorPendingInActiveBlock(actor, combat);
   return combat.combatant?.actor?.uuid === actor.uuid;
 }
 
