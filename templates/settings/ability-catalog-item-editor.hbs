@@ -701,6 +701,60 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedCommandBasicsSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Основы командования</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Стоимость активации, энергия</span>
+            <input type="number" data-field="fixed.commandBasics.energyCost" value="{{fixedCommandBasicsSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Лимит исполнителей</span>
+            <input type="text" data-field="fixed.commandBasics.targetLimitFormula" value="{{fixedCommandBasicsSettings.targetLimitFormula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.commandBasics.overloadEnergyCost" value="{{fixedCommandBasicsSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.commandBasics.overloadDurationAmount" value="{{fixedCommandBasicsSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.commandBasics.overloadDurationUnit">
+                {{#each fixedCommandBasicsSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Ложись</strong>
+          <label>
+            <span>Бонус уклонения</span>
+            <input type="text" data-field="fixed.commandBasics.dodgeBonusFormula" value="{{fixedCommandBasicsSettings.dodgeBonusFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.commandBasics.dodgeDurationAmount" value="{{fixedCommandBasicsSettings.dodgeDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.commandBasics.dodgeDurationUnit">
+                {{#each fixedCommandBasicsSettings.dodgeDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

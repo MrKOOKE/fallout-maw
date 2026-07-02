@@ -20,6 +20,7 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeAbilityEntry,
+  normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
@@ -896,6 +897,22 @@ function readFixedFunctionSettings(row) {
       energyCost: row.querySelector("[data-field='fixed.twoHands.energyCost']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.commandBasics.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.commandBasics.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.commandBasics.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.commandBasics.overloadDurationUnit']")?.value
+      ),
+      targetLimitFormula: row.querySelector("[data-field='fixed.commandBasics.targetLimitFormula']")?.value,
+      dodgeBonusFormula: row.querySelector("[data-field='fixed.commandBasics.dodgeBonusFormula']")?.value,
+      dodgeDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.commandBasics.dodgeDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.commandBasics.dodgeDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -1185,6 +1202,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedTwoHandsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands
     ? normalizeTwoHandsSettings(normalized.fixedSettings)
     : null;
+  const fixedCommandBasicsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics
+    ? prepareCommandBasicsSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1227,6 +1247,7 @@ function prepareFunctionForDisplay(entry) {
     fixedCounterSniperSettings,
     fixedFullForceSettings,
     fixedTwoHandsSettings,
+    fixedCommandBasicsSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -1409,6 +1430,19 @@ function prepareFullForceSettingsForDisplay(settings = {}) {
   return {
     ...normalized,
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareCommandBasicsSettingsForDisplay(settings = {}) {
+  const normalized = normalizeCommandBasicsSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const dodgeDuration = splitDurationSeconds(normalized.dodgeDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    dodgeDurationAmount: dodgeDuration.amount,
+    dodgeDurationUnitChoices: buildDurationUnitChoices(dodgeDuration.unit)
   };
 }
 

@@ -48,6 +48,43 @@ export const SETTINGS_BASELINE = Object.freeze({
                 }
               },
               {
+                "id": "fixed-command-basics",
+                "name": "Основы командования",
+                "img": "icons/svg/upgrade.svg",
+                "visible": true,
+                "description": "<p>Активная способность: за 30 энергии отдаёт одну из трёх команд союзникам или членам одной фракции. «Цельсь, пли» заставляет до 2 + Речь / 50 союзников выполнить неприцельный выстрел; «Коли» - неприцельную атаку; «Ложись» даёт +10 + Речь / 10 к уклонению на 12 секунд. Перегрузка: +100 энергии на 12 секунд.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-command-basics-function",
+                      "type": "fixed",
+                      "fixedKey": "commandBasics",
+                      "fixedSettings": {
+                        "energyCost": 30,
+                        "overloadEnergyCost": 100,
+                        "overloadDurationSeconds": 12,
+                        "targetLimitFormula": "2+speech/50",
+                        "dodgeBonusFormula": "10+speech/10",
+                        "dodgeDurationSeconds": 12
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "fixed-oversight",
                 "name": "Надзор",
                 "img": "icons/svg/eye.svg",

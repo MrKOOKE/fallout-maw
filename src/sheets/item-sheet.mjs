@@ -46,6 +46,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
+  normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
@@ -5003,6 +5004,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedTwoHandsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands
     ? normalizeTwoHandsSettings(entry?.fixedSettings)
     : null;
+  const fixedCommandBasicsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics
+    ? prepareCommandBasicsSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -5044,6 +5048,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedWhereAreYouGoingSettings,
     fixedFullForceSettings,
     fixedTwoHandsSettings,
+    fixedCommandBasicsSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -5242,6 +5247,19 @@ function prepareFullForceSettingsForDisplay(settings = {}) {
   return {
     ...normalized,
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareCommandBasicsSettingsForDisplay(settings = {}) {
+  const normalized = normalizeCommandBasicsSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const dodgeDuration = splitAbilityDurationSeconds(normalized.dodgeDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    dodgeDurationAmount: dodgeDuration.amount,
+    dodgeDurationUnitChoices: buildAbilityDurationUnitChoices(dodgeDuration.unit)
   };
 }
 
@@ -6021,6 +6039,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-counter-attack-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-command-basics-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-command-basics-overload-duration-unit]")?.value
+      );
+      const dodgeDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-command-basics-dodge-duration-amount]")?.value,
+        row.querySelector("[data-fixed-command-basics-dodge-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.dodgeDurationSeconds`, dodgeDurationSeconds);
       continue;
     }
 

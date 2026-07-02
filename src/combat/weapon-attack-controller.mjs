@@ -94,6 +94,7 @@ const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
+const COMMANDED_ATTACK_SOCKET_TIMEOUT_MS = 120000;
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
@@ -105,9 +106,11 @@ const GEOMETRY_EPSILON = 0.0001;
 const AUTO_COVER_GRID_STEPS = 4;
 const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
+const pendingCommandedAttackRequests = new Map();
 const processingDelayedVolleyRegions = new Set();
 let activeAttack = null;
 let activeDualWeaponAttack = null;
+let activeCommandedAttack = null;
 let delayedVolleyProcessorRegistered = false;
 
 class WeaponActionModifierState {
@@ -272,6 +275,8 @@ export function cancelWeaponAttack({ ignoreReactionLock = false } = {}) {
   activeAttack = null;
   activeDualWeaponAttack?.destroy();
   activeDualWeaponAttack = null;
+  activeCommandedAttack?.destroy();
+  activeCommandedAttack = null;
   return true;
 }
 
@@ -431,6 +436,415 @@ export function startDualWeaponAttack({
   };
 
   return startCapture(0);
+}
+
+export function startCommandedWeaponAttacks({
+  attacks = [],
+  label = "Команда",
+  onCancel = null,
+  onBeforeExecute = null
+} = {}) {
+  if (isReactionSystemLocked()) return undefined;
+  const entries = (Array.isArray(attacks) ? attacks : [])
+    .map(entry => ({
+      token: entry?.token?.object ?? entry?.token ?? null,
+      weapon: entry?.weapon ?? null,
+      actionKey: String(entry?.actionKey ?? ""),
+      weaponFunctionId: String(entry?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
+    }))
+    .filter(entry => entry.token?.actor && entry.weapon && entry.actionKey);
+  if (!entries.length) return undefined;
+
+  for (const entry of entries) {
+    if (!entry.weapon || !hasItemFunction(entry.weapon, ITEM_FUNCTIONS.weapon)) return undefined;
+    if (isActorUnableToAct(entry.token.actor)) return undefined;
+    if (!getWeaponAttackData(entry.weapon, entry.weaponFunctionId)?.enabled) return undefined;
+    if (!hasWeaponAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)) return undefined;
+    if (isWeaponActionBlocked(entry.token.actor, entry.actionKey)) return undefined;
+    if (isWeaponPlacementDisabled(entry.token.actor, entry.weapon)) return undefined;
+    const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
+    if (!hasRequiredWeaponResources(entry.weapon, attackCount, entry.weaponFunctionId)) return undefined;
+  }
+
+  if (activeAttack && !cancelWeaponAttack()) return undefined;
+  activeCommandedAttack?.destroy();
+  activeCommandedAttack = new CommandedWeaponAttackController(entries, {
+    label,
+    onCancel,
+    onBeforeExecute
+  });
+  activeCommandedAttack.activate();
+  return activeCommandedAttack;
+}
+
+class CommandedWeaponAttackController {
+  constructor(entries = [], { label = "Команда", onCancel = null, onBeforeExecute = null } = {}) {
+    this.id = foundry.utils.randomID();
+    this.label = String(label ?? "") || "Команда";
+    this.container = new PIXI.Container();
+    this.container.eventMode = "none";
+    this.entries = entries.map((entry, index) => this.createEntry(entry, index));
+    this.pointer = null;
+    this.processing = false;
+    this.destroyed = false;
+    this.onCancel = typeof onCancel === "function" ? onCancel : null;
+    this.onBeforeExecute = typeof onBeforeExecute === "function" ? onBeforeExecute : null;
+    this.events = {
+      move: event => this.onMove(event),
+      pointerDown: event => this.onPointerDown(event),
+      keyDown: event => this.onKeyDown(event),
+      tick: () => this.onTick()
+    };
+  }
+
+  createEntry(entry = {}, index = 0) {
+    const shape = new PIXI.Graphics();
+    const targetMarkers = new PIXI.Graphics();
+    const focusedTargetMarker = new PIXI.Graphics();
+    this.container.addChild(shape, targetMarkers, focusedTargetMarker);
+    return {
+      ...entry,
+      index,
+      pointer: null,
+      geometry: null,
+      lockedGeometry: null,
+      targetUuid: "",
+      selectedLimbKey: "",
+      directionKey: "",
+      mode: "current",
+      locked: false,
+      targets: [],
+      hoveredTarget: null,
+      trajectoryAimTarget: null,
+      burstRanges: new Map(),
+      shape,
+      targetMarkers,
+      focusedTargetMarker
+    };
+  }
+
+  activate() {
+    getAttackPreviewLayer().addChild(this.container);
+    canvas.stage.on("mousemove", this.events.move);
+    document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
+    document.addEventListener("keydown", this.events.keyDown, { capture: true });
+    canvas.app?.ticker?.add?.(this.events.tick);
+    ui.notifications.info(`${this.label}: клик фиксирует луч, Esc отменяет.`);
+  }
+
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    canvas.stage.off("mousemove", this.events.move);
+    document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
+    document.removeEventListener("keydown", this.events.keyDown, { capture: true });
+    canvas.app?.ticker?.remove?.(this.events.tick);
+    this.container.destroy({ children: true });
+    if (activeCommandedAttack === this) activeCommandedAttack = null;
+  }
+
+  onMove(event) {
+    if (this.processing) return;
+    event.stopPropagation();
+    this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
+    this.refresh();
+  }
+
+  onTick() {
+    if (this.processing || this.destroyed) return;
+    for (const entry of this.entries) this.drawFocusedTargetMarkerForEntry(entry, performance.now());
+  }
+
+  onKeyDown(event) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    this.cancel();
+  }
+
+  onPointerDown(event) {
+    if (event.button !== 0 || this.processing || !isCanvasViewEvent(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    this.updatePointerFromClientEvent(event);
+    const entry = this.entries.find(entry => !entry.locked);
+    if (!entry) return;
+    if (!this.lockEntry(entry)) return;
+    if (this.entries.every(entry => entry.locked)) void this.execute();
+  }
+
+  updatePointerFromClientEvent(event) {
+    if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return;
+    this.pointer = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+    this.refresh();
+  }
+
+  lockEntry(entry) {
+    this.refreshEntry(entry, this.pointer);
+    const geometry = entry.geometry;
+    if (!geometry || !this.pointer) return false;
+    const selection = this.getEntrySelection(entry);
+    if (!selection) return false;
+    entry.pointer = serializePoint(this.pointer);
+    entry.geometry = serializeGeometry(geometry);
+    entry.lockedGeometry = entry.geometry;
+    entry.mode = selection.mode;
+    entry.targetUuid = selection.targetUuid;
+    entry.selectedLimbKey = selection.selectedLimbKey;
+    entry.directionKey = selection.directionKey;
+    entry.locked = true;
+    this.drawEntry(entry, performance.now());
+    const remaining = this.entries.filter(entry => !entry.locked).length;
+    if (remaining > 0) ui.notifications.info(`${this.label}: осталось лучей ${remaining}.`);
+    return true;
+  }
+
+  refresh() {
+    if (!this.pointer) return;
+    for (const entry of this.entries) {
+      if (entry.locked) {
+        continue;
+      }
+      this.refreshEntry(entry, this.pointer);
+    }
+  }
+
+  refreshEntry(entry, pointer) {
+    if (!entry?.token?.actor || !entry.weapon || !pointer) return;
+    const origin = getTokenAimPoint(entry.token);
+    let geometry = getAttackGeometry(entry.weapon, entry.actionKey, entry.token, origin, pointer, entry.weaponFunctionId);
+    if (!geometry) {
+      entry.geometry = null;
+      entry.targets = [];
+      entry.hoveredTarget = null;
+      entry.trajectoryAimTarget = null;
+      entry.burstRanges = new Map();
+      entry.shape.clear();
+      this.clearEntryTargetMarkers(entry);
+      return;
+    }
+    let potentialTargets = getPotentialTargets(entry.token, geometry, {
+      includeAttacker: isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId),
+      includeDead: isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)
+    });
+    entry.hoveredTarget = MELEE_ACTION_KEYS.has(entry.actionKey)
+      ? getAimedTargetUnderPointer(pointer, potentialTargets)
+      : null;
+    entry.trajectoryAimTarget = isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)
+      ? getVolleyTrajectoryAimTarget(entry.token, geometry, { includeAttacker: true, includeDead: true })
+      : (entry.hoveredTarget ?? potentialTargets.at(0) ?? null);
+    geometry.aimPoint = entry.trajectoryAimTarget
+      ? selectAttackGeometryAimPoint(entry.token, entry.trajectoryAimTarget, geometry)
+      : null;
+    if (isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId) && geometry.aimPoint) {
+      geometry = aimVolleyGeometryAtPoint(entry.token, geometry, geometry.aimPoint);
+      potentialTargets = getPotentialTargets(entry.token, geometry, { includeAttacker: true, includeDead: true });
+    } else if (geometry.aimPoint) {
+      potentialTargets = getAimedElevationTargets(entry.token, geometry, potentialTargets);
+    }
+    entry.geometry = geometry;
+    entry.targets = potentialTargets;
+    entry.burstRanges = this.getEntryBurstTargetRanges(entry);
+    this.drawEntry(entry, performance.now());
+  }
+
+  getEntrySelection(entry) {
+    if (!entry?.geometry) return null;
+    if (MELEE_ACTION_KEYS.has(entry.actionKey)) {
+      const target = entry.hoveredTarget ?? entry.trajectoryAimTarget ?? entry.targets.find(target => target && target !== entry.token) ?? null;
+      if (!target?.actor) {
+        ui.notifications.warn(`${entry.token?.name ?? entry.token?.actor?.name ?? this.label}: нет цели для удара.`);
+        return null;
+      }
+      const directions = getEnabledMeleeDirections(entry.weapon, entry.actionKey, entry.weaponFunctionId);
+      const direction = directions.find(direction => direction.mode === "thrust") ?? directions.at(0);
+      if (!direction) return null;
+      return {
+        mode: "directed",
+        target,
+        targetUuid: target.document?.uuid ?? target.uuid ?? "",
+        selectedLimbKey: "",
+        directionKey: direction.key
+      };
+    }
+    return {
+      mode: "current",
+      target: null,
+      targetUuid: "",
+      selectedLimbKey: "",
+      directionKey: ""
+    };
+  }
+
+  getEntryBurstTargetRanges(entry) {
+    if (
+      entry.actionKey !== "burst"
+      || isVolleyAttackAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)
+      || !entry.geometry
+      || hasWeaponSpecialProperty(entry.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, entry.weaponFunctionId)
+    ) return new Map();
+    const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
+    const projectileCount = getBurstProjectileCount(attackCount, getWeaponPelletCount(entry.weapon, entry.weaponFunctionId));
+    return buildBurstTargetRanges(entry.token, entry.geometry, entry.targets, projectileCount);
+  }
+
+  getEntryFocusedTarget(entry) {
+    return entry.hoveredTarget ?? entry.trajectoryAimTarget ?? null;
+  }
+
+  drawEntry(entry, time = performance.now()) {
+    entry.shape.clear();
+    if (!entry.geometry) {
+      this.clearEntryTargetMarkers(entry);
+      return;
+    }
+    drawAttackShape(entry.shape, entry.geometry, {
+      locked: entry.locked,
+      hasTargets: entry.targets.length > 0
+    });
+    drawTargetMarkers(entry.targetMarkers, entry.targets, null, time, entry.burstRanges);
+    this.drawFocusedTargetMarkerForEntry(entry, time);
+  }
+
+  clearEntryTargetMarkers(entry) {
+    clearTargetMarkerLayer(entry.targetMarkers);
+    clearTargetMarkerLayer(entry.focusedTargetMarker);
+  }
+
+  drawFocusedTargetMarkerForEntry(entry, time = performance.now()) {
+    clearTargetMarkerLayer(entry.focusedTargetMarker);
+    const marker = getTargetCenterMarkerPosition(this.getEntryFocusedTarget(entry));
+    if (marker) drawFocusedTargetMarker(entry.focusedTargetMarker, marker, time);
+  }
+
+  cancel() {
+    this.destroy();
+    this.onCancel?.();
+    ui.notifications.info(`${this.label}: отменено.`);
+  }
+
+  async execute() {
+    if (this.processing) return false;
+    this.processing = true;
+    try {
+      if (typeof this.onBeforeExecute === "function" && (await this.onBeforeExecute()) === false) {
+        this.destroy();
+        return false;
+      }
+      const selections = this.entries.map(entry => serializeCommandedAttackSelection({
+        token: entry.token,
+        weapon: entry.weapon,
+        actionKey: entry.actionKey,
+        weaponFunctionId: entry.weaponFunctionId,
+        pointer: entry.pointer,
+        geometry: entry.lockedGeometry,
+        lockedGeometry: entry.lockedGeometry,
+        targetUuid: entry.targetUuid,
+        selectedLimbKey: entry.selectedLimbKey,
+        directionKey: entry.directionKey,
+        mode: entry.mode
+      }));
+      this.destroy();
+      return executeCommandedWeaponAttackSelections(selections);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Commanded weapon attacks failed`, error);
+      ui.notifications.error(`${this.label}: атака не выполнена.`);
+      this.destroy();
+      return false;
+    }
+  }
+}
+
+function serializeCommandedAttackSelection(selection = {}) {
+  return {
+    tokenUuid: selection.token?.document?.uuid ?? selection.token?.uuid ?? "",
+    weaponUuid: selection.weapon?.uuid ?? "",
+    actionKey: String(selection.actionKey ?? ""),
+    weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+    pointer: selection.pointer,
+    geometry: selection.geometry,
+    lockedGeometry: selection.lockedGeometry ?? selection.geometry,
+    targetUuid: String(selection.targetUuid ?? ""),
+    selectedLimbKey: String(selection.selectedLimbKey ?? ""),
+    directionKey: String(selection.directionKey ?? ""),
+    mode: String(selection.mode ?? "current")
+  };
+}
+
+async function executeCommandedWeaponAttackSelections(selections = []) {
+  const serialized = (Array.isArray(selections) ? selections : []).filter(selection => selection?.tokenUuid && selection?.weaponUuid);
+  if (!serialized.length) return false;
+  if (game.user?.isGM) return processCommandedWeaponAttackSelections(serialized);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения командной атаки.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingCommandedAttackRequests.delete(requestId);
+      resolve(false);
+    }, COMMANDED_ATTACK_SOCKET_TIMEOUT_MS);
+    pendingCommandedAttackRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(WEAPON_ATTACK_SOCKET, {
+      scope: WEAPON_ATTACK_SOCKET_SCOPE,
+      action: "executeCommandedAttacks",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      selections: serialized
+    });
+  });
+}
+
+async function processCommandedWeaponAttackSocketRequest(payload = {}) {
+  const applied = await processCommandedWeaponAttackSelections(payload.selections ?? []);
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "commandedAttacksResult",
+    requestId: payload.requestId,
+    targetUserId: payload.senderUserId ?? "",
+    result: { applied: Boolean(applied) },
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
+async function processCommandedWeaponAttackSelections(selections = []) {
+  const resolved = [];
+  for (const selection of selections ?? []) {
+    const tokenDocument = await fromUuid(String(selection.tokenUuid ?? ""));
+    const token = tokenDocument?.object ?? tokenDocument ?? null;
+    const weapon = await fromUuid(String(selection.weaponUuid ?? ""));
+    if (!token?.actor || !weapon) continue;
+    resolved.push({
+      token,
+      weapon,
+      actionKey: String(selection.actionKey ?? ""),
+      weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+      pointer: selection.pointer,
+      geometry: selection.geometry,
+      lockedGeometry: selection.lockedGeometry ?? selection.geometry,
+      targetUuid: String(selection.targetUuid ?? ""),
+      selectedLimbKey: String(selection.selectedLimbKey ?? ""),
+      directionKey: String(selection.directionKey ?? ""),
+      mode: String(selection.mode ?? "current")
+    });
+  }
+  if (!resolved.length) return false;
+
+  const reactionCoordinator = createWeaponReactionCoordinator();
+  const results = await Promise.allSettled(resolved.map(selection => executeCapturedWeaponAttack(selection, {
+    skipActionPointCost: true,
+    reactionCoordinator
+  })));
+  for (const result of results) {
+    if (result.status === "rejected") console.error("Fallout MaW | Commanded weapon attack execution failed", result.reason);
+  }
+  await reactionCoordinator.drain();
+  return results.some(result => result.status === "fulfilled" && result.value);
 }
 
 function validateDualWeaponAttackResources(actor, selections = [], label = "С двух рук") {
@@ -1660,9 +2074,10 @@ class WeaponAttackController {
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       if (this.attackCanceledByReaction) break;
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
-      const shotTrajectories = buildAttackTrajectories(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [], pelletCount);
-      const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), shotTrajectories.map(() => 1));
-      for (const trajectory of shotTrajectories) trajectories.push({ ...trajectory, delayGroup: attackIndex });
+      const shotCount = Math.max(1, toInteger(pelletCount));
+      const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(shotCount).fill(1));
+      const animationTrajectory = buildConeAnimationTrajectory(this.geometry);
+      if (animationTrajectory) trajectories.push({ ...animationTrajectory, delayGroup: attackIndex });
       attempted = true;
 
       for (const target of this.targets) {
@@ -3644,6 +4059,20 @@ function broadcastAttackPreview(payload = {}) {
 
 function handleWeaponAttackSocketMessage(payload = {}) {
   if (!payload || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
+  if (payload.action === "commandedAttacksResult") {
+    if (payload.targetUserId && payload.targetUserId !== game.user?.id) return;
+    const pending = pendingCommandedAttackRequests.get(String(payload.requestId ?? ""));
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingCommandedAttackRequests.delete(String(payload.requestId ?? ""));
+    pending.resolve(Boolean(payload.result?.applied));
+    return;
+  }
+  if (payload.action === "executeCommandedAttacks") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    void processCommandedWeaponAttackSocketRequest(payload);
+    return;
+  }
   if (payload.action === "completeAttack") {
     requestActiveWeaponAttackFinish(payload.attackId);
     removeRemoteAttackPreview(payload.attackId);
@@ -4412,7 +4841,7 @@ function isSameOptionalPoint(current, previous) {
   return isSamePoint(current, previous);
 }
 
-function getActionAttackCount(weapon, actionKey, weaponFunctionId = "") {
+export function getActionAttackCount(weapon, actionKey, weaponFunctionId = "") {
   if (actionKey !== "burst") return 1;
   return Math.max(1, evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.burst?.count, {
     minimum: 1,
@@ -7052,6 +7481,24 @@ function buildVolleyAnimationTrajectory(geometry) {
     distance: geometry.distance,
     halfAngle: 0,
     end: geometry.end,
+    delayGroup: 0
+  };
+}
+
+function buildConeAnimationTrajectory(geometry) {
+  if (!geometry?.origin) return null;
+  const distance = Math.max(1, Number(geometry.distance) || 1);
+  const angle = Number.isFinite(Number(geometry.angle)) ? Number(geometry.angle) : 0;
+  return {
+    origin: geometry.origin,
+    angle,
+    distance,
+    halfAngle: Math.max(0, Number(geometry.halfAngle) || 0),
+    end: {
+      x: geometry.origin.x + (Math.cos(angle) * distance),
+      y: geometry.origin.y + (Math.sin(angle) * distance),
+      elevation: Number.isFinite(Number(geometry.end?.elevation)) ? Number(geometry.end.elevation) : geometry.origin.elevation
+    },
     delayGroup: 0
   };
 }

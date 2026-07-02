@@ -9,6 +9,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
+  normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
   normalizeOversightSettings,
   normalizeWatchOutSettings,
@@ -37,7 +38,8 @@ import {
 import { abilityConditionsApply } from "./evaluation.mjs";
 import {
   ATTACKING_WEAPON_ACTION_KEYS,
-  getActionBlockEffectKey
+  getActionBlockEffectKey,
+  getWeaponActionBlockState
 } from "./runtime-state.mjs";
 import {
   DAMAGE_APPLIED_HOOK,
@@ -57,7 +59,9 @@ import {
   canPerformWeaponActionAgainstToken,
   canTokenPhysicallySeeTarget,
   executeWeaponAttackAgainstToken,
+  getActionAttackCount,
   getWeaponActionModifierEnergyCost,
+  startCommandedWeaponAttacks,
   startForcedAimedAttackSelection,
   startWeaponAttack,
   WEAPON_ACTION_MODIFIER_REQUEST_HOOK,
@@ -124,7 +128,8 @@ import {
   createStoredPlacement
 } from "../utils/inventory-containers.mjs";
 import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
-import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
+import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -138,6 +143,7 @@ const LETHAL_ATTACK_EFFECT_FLAG_KEY = "lethalAttack";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
+const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
@@ -410,6 +416,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.twoHands
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
+    label: "Основы командования",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
+      fixedSettings: normalizeCommandBasicsSettings()
     })
   })
 ]);
@@ -774,6 +789,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics) {
+    const used = await useCommandBasics(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(abilityFunction.fixedKey)) {
     const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -781,6 +802,470 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
   }
 
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
+  return true;
+}
+
+async function useCommandBasics(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const settings = normalizeCommandBasicsSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+
+  const limit = Math.max(1, Math.floor(evaluateActorFormula(settings.targetLimitFormula, actor, {
+    fallback: 2,
+    minimum: 1,
+    context: "command basics target limit"
+  })));
+  const command = await requestCommandBasicsChoice({ abilityName, commander: actor, limit });
+  if (!command) return false;
+
+  const selection = await selectCommandBasicsTargets({
+    commander: actor,
+    command,
+    limit,
+    abilityName
+  });
+  if (!selection?.length) return false;
+
+  if (command === "duck") {
+    if (!game.user?.isGM && !getResponsibleGM()) {
+      ui.notifications.warn(`${abilityName}: нет активного GM для выполнения команды.`);
+      return false;
+    }
+    if (!(await spendEnergy(actor, energyCost))) return false;
+    await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+      name: getAbilityOverloadName(abilityItem),
+      energyCost: settings.overloadEnergyCost,
+      durationSeconds: settings.overloadDurationSeconds
+    });
+    const dodgeBonus = Math.max(0, Math.floor(evaluateActorFormula(settings.dodgeBonusFormula, actor, {
+      fallback: 10,
+      minimum: 0,
+      context: "command basics dodge bonus"
+    })));
+    const applied = await requestCommandBasicsDodgeOperation({
+      actorUuid: actor.uuid,
+      abilityItemId: abilityItem.id,
+      abilityFunctionId: abilityFunction.id,
+      targetActorUuids: selection.map(entry => entry.token?.actor?.uuid).filter(Boolean),
+      dodgeBonus,
+      durationSeconds: settings.dodgeDurationSeconds,
+      senderUserId: game.user?.id ?? ""
+    });
+    if (!applied) return false;
+    await createAbilityChatMessage(actor, abilityItem, `Ложись: ${selection.length} целей, +${dodgeBonus} к уклонению на ${formatDuration(settings.dodgeDurationSeconds)}.`);
+    return true;
+  }
+
+  const attacks = selection
+    .map(entry => entry.attack)
+    .filter(Boolean);
+  if (!attacks.length) return false;
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для выполнения команды.`);
+    return false;
+  }
+  const controller = startCommandedWeaponAttacks({
+    attacks,
+    label: `${abilityName}: ${getCommandBasicsCommandLabel(command)}`,
+    onBeforeExecute: async () => {
+      if (!(await spendEnergy(actor, energyCost))) return false;
+      await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+        name: getAbilityOverloadName(abilityItem),
+        energyCost: settings.overloadEnergyCost,
+        durationSeconds: settings.overloadDurationSeconds
+      });
+      await createAbilityChatMessage(actor, abilityItem, `${getCommandBasicsCommandLabel(command)}: ${attacks.length} исполнителей.`);
+      return true;
+    }
+  });
+  if (!controller) {
+    ui.notifications.warn(`${abilityName}: не удалось начать командную атаку.`);
+    return false;
+  }
+  return true;
+}
+
+async function requestCommandBasicsChoice({ abilityName = "Основы командования", commander = null, limit = 1 } = {}) {
+  const rows = ["shoot", "strike", "duck"].map(command => {
+    const available = collectCommandBasicsTargetRows(commander, command).filter(row => row.selectable).length;
+    return {
+      command,
+      label: getCommandBasicsCommandLabel(command),
+      available,
+      selectable: available > 0,
+      checked: false
+    };
+  });
+  const firstSelectable = rows.find(row => row.selectable);
+  if (firstSelectable) firstSelectable.checked = true;
+
+  const content = `
+    <fieldset class="form-group stacked">
+      ${rows.map(row => `
+        <label class="checkbox">
+          <input type="radio" name="command" value="${escapeAttribute(row.command)}" ${row.checked ? "checked" : ""} ${row.selectable ? "" : "disabled"}>
+          ${escapeHTML(row.label)} (${Math.min(row.available, limit)})
+        </label>
+      `).join("")}
+    </fieldset>
+  `;
+  const result = await DialogV2.input({
+    window: { title: abilityName },
+    content,
+    ok: {
+      label: "Выбрать",
+      icon: "fa-solid fa-check",
+      callback: (_event, button) => String(button.form?.querySelector?.("input[name='command']:checked")?.value ?? "")
+    },
+    buttons: [{
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    rejectClose: false,
+    modal: true,
+    position: { width: 420 }
+  });
+  return ["shoot", "strike", "duck"].includes(result) ? result : "";
+}
+
+function selectCommandBasicsTargets({ commander = null, command = "", limit = 1, abilityName = "Основы командования" } = {}) {
+  const rows = collectCommandBasicsTargetRows(commander, command);
+  const selectable = rows.filter(row => row.selectable);
+  if (!selectable.length) {
+    ui.notifications.warn(`${abilityName}: нет подходящих исполнителей.`);
+    return Promise.resolve([]);
+  }
+
+  return new Promise(resolve => {
+    const layer = getCommandBasicsPreviewLayer();
+    const graphics = new PIXI.Graphics();
+    const selected = new Set();
+    layer.addChild(graphics);
+    drawCommandBasicsTargetRows(graphics, rows, selected);
+    ui.notifications.info(`${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`);
+
+    const cleanup = () => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      graphics.destroy();
+    };
+    const finish = value => {
+      cleanup();
+      resolve(value);
+    };
+    const getSelection = () => {
+      const seen = new Set();
+      return rows.filter(row => {
+        if (!selected.has(row.actorUuid) || seen.has(row.actorUuid)) return false;
+        seen.add(row.actorUuid);
+        return true;
+      });
+    };
+    const confirm = () => {
+      const selection = getSelection();
+      if (!selection.length) return;
+      finish(selection);
+    };
+    const onKeyDown = event => {
+      if (event.key !== "Escape" && event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      if (event.key === "Escape") finish([]);
+      else confirm();
+    };
+    const onPointerDown = event => {
+      if (event.button !== 0) return;
+      if (!isCanvasViewEventForCommandBasics(event)) return;
+      const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+      const row = getCommandBasicsRowAtPoint(rows, point);
+      if (!row) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      if (!row.selectable) {
+        if (row.reason) ui.notifications.warn(`${row.token?.name ?? row.token?.actor?.name ?? "Цель"}: ${row.reason}`);
+        return;
+      }
+      if (selected.has(row.actorUuid)) selected.delete(row.actorUuid);
+      else if (selected.size < limit) selected.add(row.actorUuid);
+      drawCommandBasicsTargetRows(graphics, rows, selected);
+      if (selected.size >= limit) confirm();
+    };
+
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    document.addEventListener("pointerdown", onPointerDown, { capture: true });
+  });
+}
+
+function collectCommandBasicsTargetRows(commander, command = "") {
+  return (canvas.tokens?.placeables ?? [])
+    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token.actor.uuid !== commander?.uuid)
+    .filter(token => isCommandBasicsAlly(commander, token.actor))
+    .map(token => createCommandBasicsTargetRow(commander, token, command));
+}
+
+function createCommandBasicsTargetRow(commander, token, command = "") {
+  const actor = token?.actor ?? null;
+  const row = {
+    token,
+    actorUuid: actor?.uuid ?? "",
+    selectable: false,
+    reason: "",
+    attack: null
+  };
+  if (isActorUnableToAct(actor)) {
+    row.reason = "актёр не может действовать.";
+    return row;
+  }
+  if (command === "duck") {
+    row.selectable = true;
+    return row;
+  }
+
+  const actionKey = command === "strike" ? "meleeAttack" : "snapshot";
+  const candidate = getCommandBasicsWeaponCandidate(actor, actionKey);
+  if (!candidate) {
+    row.reason = actionKey === "snapshot" ? "нет неприцельного выстрела." : "нет неприцельной атаки.";
+    return row;
+  }
+  const block = getWeaponActionBlockState(actor, actionKey);
+  if (block.blocked) {
+    row.reason = `действие заблокировано${block.effect?.name ? ` (${block.effect.name})` : ""}.`;
+    return row;
+  }
+  const attackCount = getActionAttackCount(candidate.weapon, actionKey, candidate.weaponFunctionId);
+  const missing = getMissingWeaponResourceCost(candidate.weapon, attackCount, candidate.weaponFunctionId);
+  if (missing) {
+    row.reason = `не хватает ${missing.label} (${missing.current} / ${missing.required}).`;
+    return row;
+  }
+  row.selectable = true;
+  row.attack = {
+    token,
+    weapon: candidate.weapon,
+    actionKey,
+    weaponFunctionId: candidate.weaponFunctionId
+  };
+  return row;
+}
+
+function getCommandBasicsWeaponCandidate(actor, actionKey = "") {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
+  const inventory = prepareInventoryContext(actor, race, { includeLocked: false });
+  const sets = [
+    ...(inventory.naturalWeaponSet ? [inventory.naturalWeaponSet] : []),
+    ...(inventory.weaponSets ?? [])
+  ].filter(set => set?.key);
+  const activeSet = resolveActiveHudWeaponSet(actor, sets);
+  const orderedSets = [
+    ...(activeSet ? [activeSet] : []),
+    ...sets.filter(set => set !== activeSet)
+  ];
+  for (const set of orderedSets) {
+    const candidate = getCommandBasicsWeaponCandidateFromSet(actor, set, actionKey);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function getCommandBasicsWeaponCandidateFromSet(actor, set = null, actionKey = "") {
+  const seen = new Set();
+  for (const slot of set?.slots ?? []) {
+    const itemId = String(slot.item?.id ?? "");
+    if (!itemId || seen.has(itemId) || slot.phantom || slot.item?.phantom || slot.useDisabled || slot.item?.useDisabled) continue;
+    seen.add(itemId);
+    const weapon = actor.items?.get(itemId);
+    if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon, { ignoreBroken: false })) continue;
+    const weaponFunctionId = getCommandBasicsWeaponFunctionId(weapon, actionKey);
+    if (weaponFunctionId) return { weapon, weaponFunctionId, weaponSet: set.key };
+  }
+  return null;
+}
+
+function getCommandBasicsWeaponFunctionId(weapon, actionKey = "") {
+  for (const weaponFunction of getEnabledWeaponFunctions(weapon)) {
+    const weaponFunctionId = weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id;
+    if (hasWeaponAction(weapon, actionKey, weaponFunctionId)) return weaponFunctionId;
+  }
+  return "";
+}
+
+function isCommandBasicsAlly(left, right) {
+  const leftFactions = getActorFactionBelongs(left);
+  const rightFactions = getActorFactionBelongs(right);
+  const normalizedLeft = leftFactions.length ? leftFactions : [DEFAULT_FACTION_NAME];
+  const normalizedRight = rightFactions.length ? rightFactions : [DEFAULT_FACTION_NAME];
+  if (normalizedLeft.some(faction => normalizedRight.includes(faction))) return true;
+  return normalizedRight.some(faction => getRelationTo(left, faction) === "ally")
+    || normalizedLeft.some(faction => getRelationTo(right, faction) === "ally");
+}
+
+function drawCommandBasicsTargetRows(graphics, rows = [], selected = new Set()) {
+  graphics.clear();
+  for (const row of rows) {
+    const rect = getCommandBasicsTokenRect(row.token);
+    const selectedRow = selected.has(row.actorUuid);
+    const color = row.selectable ? 0x36d06f : 0xd64b4b;
+    const lineWidth = selectedRow ? 5 : 3;
+    const alpha = selectedRow ? 0.28 : 0.14;
+    graphics.lineStyle(lineWidth, color, 0.95);
+    graphics.beginFill(color, alpha);
+    graphics.drawRect(rect.x, rect.y, rect.width, rect.height);
+    graphics.endFill();
+  }
+}
+
+function getCommandBasicsRowAtPoint(rows = [], point = null) {
+  return rows
+    .slice()
+    .reverse()
+    .find(row => isCommandBasicsPointInToken(point, row.token)) ?? null;
+}
+
+function isCommandBasicsPointInToken(point, token) {
+  const rect = getCommandBasicsTokenRect(token);
+  return point
+    && point.x >= rect.x
+    && point.x <= rect.x + rect.width
+    && point.y >= rect.y
+    && point.y <= rect.y + rect.height;
+}
+
+function getCommandBasicsTokenRect(token) {
+  const document = token?.document ?? token;
+  const size = document?.getSize?.() ?? {
+    width: Math.max(1, Number(document?.width) || 1) * canvas.grid.size,
+    height: Math.max(1, Number(document?.height) || 1) * canvas.grid.size
+  };
+  return {
+    x: Number(document?.x ?? token?.x) || 0,
+    y: Number(document?.y ?? token?.y) || 0,
+    width: Math.max(1, Number(size.width) || canvas.grid.size),
+    height: Math.max(1, Number(size.height) || canvas.grid.size)
+  };
+}
+
+function getCommandBasicsPreviewLayer() {
+  return canvas.controls._rulerPaths;
+}
+
+function isCanvasViewEventForCommandBasics(event) {
+  const view = canvas.app?.view;
+  if (!view) return false;
+  return event.target === view || Array.from(event.composedPath?.() ?? []).includes(view);
+}
+
+function getCommandBasicsCommandLabel(command = "") {
+  if (command === "shoot") return "Цельсь, пли";
+  if (command === "strike") return "Коли";
+  if (command === "duck") return "Ложись";
+  return "Команда";
+}
+
+async function requestCommandBasicsDodgeOperation(payload = {}) {
+  if (game.user?.isGM) return processCommandBasicsDodgeOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения команды.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DISARM_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performCommandBasicsDodge",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+async function processCommandBasicsDodgeSocketRequest(message = {}) {
+  const applied = await processCommandBasicsDodgeOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "commandBasicsDodgeResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { applied: Boolean(applied) }
+  });
+}
+
+async function processCommandBasicsDodgeOperation(payload = {}) {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!actor || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const targetActorUuids = Array.from(new Set((payload.targetActorUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  const targets = (await Promise.all(targetActorUuids.map(uuid => fromUuid(uuid))))
+    .filter(target => target && isCommandBasicsAlly(actor, target));
+  if (!targets.length) return false;
+
+  const dodgeBonus = Math.max(0, toInteger(payload.dodgeBonus));
+  const durationSeconds = Math.max(0, toInteger(payload.durationSeconds));
+  const startTime = Number(game.time?.worldTime) || 0;
+  for (const target of targets) {
+    await target.createEmbeddedDocuments("ActiveEffect", [{
+      type: "base",
+      name: `${getAbilityDisplayName(abilityItem)}: ${getCommandBasicsCommandLabel("duck")}`,
+      img: abilityItem.img || "icons/svg/shield.svg",
+      origin: abilityItem.uuid,
+      transfer: false,
+      disabled: false,
+      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+      duration: {
+        seconds: durationSeconds,
+        startTime
+      },
+      system: {
+        changes: [{
+          key: "system.resources.dodge.bonus",
+          type: "add",
+          value: String(dodgeBonus),
+          phase: "initial",
+          priority: null
+        }]
+      },
+      flags: {
+        [SYSTEM_ID]: {
+          kind: "temporary",
+          [COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY]: {
+            abilityItemId: abilityItem.id,
+            abilitySourceId: getAbilitySourceId(abilityItem),
+            functionId: abilityFunction.id,
+            createdAt: startTime
+          }
+        }
+      }
+    }], { animate: false });
+  }
   return true;
 }
 
@@ -4212,6 +4697,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processDeusExMachinaDisintegrateSocketRequest(message);
     return;
   }
+  if (message.action === "performCommandBasicsDodge") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processCommandBasicsDodgeSocketRequest(message);
+    return;
+  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -4221,6 +4711,14 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pending.resolve(Boolean(message.result?.used));
   }
   if (message.action === "deusExMachinaDisintegrateResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
+  }
+  if (message.action === "commandBasicsDodgeResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;

@@ -43,7 +43,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   counterSniper: "counterSniper",
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce",
-  twoHands: "twoHands"
+  twoHands: "twoHands",
+  commandBasics: "commandBasics"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -113,7 +114,7 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
         locked: true,
-        abilities: [createTwoHandsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry(), createFullControlAbilityCatalogEntry()]
+        abilities: [createTwoHandsAbilityCatalogEntry(), createCommandBasicsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry(), createFullControlAbilityCatalogEntry()]
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
@@ -152,6 +153,38 @@ export function createTwoHandsAbilityCatalogEntry() {
           fixedSettings: {
             energyCost: 10
           },
+          changes: [],
+          conditions: [],
+          penalties: []
+        }
+      ]
+    }
+  });
+}
+
+export function createCommandBasicsAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-command-basics",
+    name: "Основы командования",
+    img: "icons/svg/upgrade.svg",
+    visible: true,
+    description: "<p>Активная способность: за 30 энергии отдаёт одну из трёх команд союзникам или членам одной фракции. «Цельсь, пли» заставляет до 2 + Речь / 50 союзников выполнить неприцельный выстрел; «Коли» - неприцельную атаку; «Ложись» даёт +10 + Речь / 10 к уклонению на 12 секунд. Перегрузка: +100 энергии на 12 секунд.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: {
+        onlyFree: false,
+        onlyManual: false,
+        skillKey: "speech",
+        difficulty: 60
+      },
+      acquisitionRequirements: [],
+      functions: [
+        {
+          id: "fixed-command-basics-function",
+          type: ABILITY_FUNCTION_TYPES.fixed,
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
+          fixedSettings: normalizeCommandBasicsSettings(),
           changes: [],
           conditions: [],
           penalties: []
@@ -744,6 +777,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands) {
     return normalizeTwoHandsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics) {
+    return normalizeCommandBasicsSettings(value);
+  }
   return {};
 }
 
@@ -1103,6 +1139,17 @@ export function normalizeFullForceSettings(value = {}) {
 export function normalizeTwoHandsSettings(value = {}) {
   return {
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 10))
+  };
+}
+
+export function normalizeCommandBasicsSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 30)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    targetLimitFormula: String(value?.targetLimitFormula ?? "2+speech/50").trim() || "2+speech/50",
+    dodgeBonusFormula: String(value?.dodgeBonusFormula ?? "10+speech/10").trim() || "10+speech/10",
+    dodgeDurationSeconds: Math.max(0, toInteger(value?.dodgeDurationSeconds ?? 12))
   };
 }
 

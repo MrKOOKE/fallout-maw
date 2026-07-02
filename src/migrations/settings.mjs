@@ -3,6 +3,7 @@ import { ABILITIES_CATALOG_SETTING, MIGRATION_STATE_SETTING } from "../settings/
 import { getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
+  createCommandBasicsAbilityCatalogEntry,
   createFullControlAbilityCatalogEntry,
   createTwoHandsAbilityCatalogEntry,
   normalizeAbilityCatalog
@@ -16,6 +17,10 @@ const SETTING_MIGRATIONS = Object.freeze([
   {
     id: "2026-06-23-add-full-control-ability",
     migrate: migrateFullControlAbilityCatalog
+  },
+  {
+    id: "2026-07-02-add-command-basics-ability",
+    migrate: migrateCommandBasicsAbilityCatalog
   }
 ]);
 
@@ -76,6 +81,24 @@ async function migrateFullControlAbilityCatalog() {
   const features = categories.find(category => category.id === "features") ?? categories[0];
   if (!features) return;
   features.abilities = [createFullControlAbilityCatalogEntry(), ...(features.abilities ?? [])];
+
+  await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
+    ...catalog,
+    categories
+  });
+}
+
+async function migrateCommandBasicsAbilityCatalog() {
+  const catalog = normalizeAbilityCatalog(
+    game.settings.get(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING),
+    getSkillSettings()
+  );
+  if (catalogHasFixedAbilityFunction(catalog, ABILITY_FIXED_FUNCTION_KEYS.commandBasics)) return;
+
+  const categories = foundry.utils.deepClone(catalog.categories ?? []);
+  const features = categories.find(category => category.id === "features") ?? categories[0];
+  if (!features) return;
+  features.abilities = [createCommandBasicsAbilityCatalogEntry(), ...(features.abilities ?? [])];
 
   await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
     ...catalog,
