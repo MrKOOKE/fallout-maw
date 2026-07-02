@@ -706,6 +706,9 @@
         "DodgeRoundRecoveryPercent": "Восстановление за раунд, % от максимума уклонения",
         "DodgeRestoreOnCombatStart": "Восстанавливать в начале боя",
         "DodgeRestoreOnCombatEnd": "Восстанавливать в конце боя",
+        "TurnOrderScheme": "Схема последовательности ходов",
+        "TurnOrderNormal": "Обычная",
+        "TurnOrderBlock": "Блочная",
         "AreasTitle": "Области",
         "AreaMovementDamageThresholdFormula": "Передвижение внутри области наносит урон после N очков движения",
         "AreaMovementDamageThresholdHint": "Формула для каждого актёра. ОД и ОП — максимумы соответствующих ресурсов; результат округляется вниз, минимум 1."

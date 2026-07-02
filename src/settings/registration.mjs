@@ -276,7 +276,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings())
+    default: getBaselineDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings()),
+    onChange: refreshCombatUi
   });
 
   game.settings.register(FALLOUT_MAW.id, COVER_SETTINGS_SETTING, {
@@ -308,7 +309,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings())
+    default: getBaselineDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings()),
+    onChange: refreshCombatUi
   });
 
   game.settings.register(FALLOUT_MAW.id, FACTION_MATRIX_SETTING, {
@@ -316,7 +318,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix())
+    default: getBaselineDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix()),
+    onChange: refreshCombatUi
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
@@ -614,4 +617,10 @@ export async function finalizeSystemSettings() {
 function onCreatureOptionsChanged() {
   refreshPreparedActors();
   if (game.ready) void syncLoadedActorNaturalRaceItems();
+}
+
+function refreshCombatUi() {
+  ui.combat?.render?.(false);
+  ui.combatDock?.refresh?.();
+  game.combat?._updateTurnMarkers?.();
 }

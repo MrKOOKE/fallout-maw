@@ -5,6 +5,7 @@ import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
 import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import { isTokenDocumentInActiveBlockTurn } from "../combat/turn-order-blocks.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -72,6 +73,25 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     manager.interactionData.screenOrigin.x -= resistance + 1;
     foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
     return true;
+  }
+
+  /** @override */
+  _refreshTurnMarker() {
+    if (!isTokenDocumentInActiveBlockTurn(this.document, game.combat)) return super._refreshTurnMarker();
+
+    const { turnMarker } = this.document;
+    const markersEnabled = CONFIG.Combat.settings.turnMarker.enabled
+      && (turnMarker.mode !== CONST.TOKEN_TURN_MARKER_MODES.DISABLED);
+    if (markersEnabled) {
+      const TokenTurnMarker = foundry.canvas.placeables.tokens.TokenTurnMarker;
+      if (!this.turnMarker) this.turnMarker = this.addChildAt(new TokenTurnMarker(this), 0);
+      canvas.tokens.turnMarkers.add(this);
+      this.turnMarker.draw();
+    } else if (this.turnMarker) {
+      canvas.tokens.turnMarkers.delete(this);
+      this.turnMarker.destroy();
+      this.turnMarker = null;
+    }
   }
 
   /** @override */

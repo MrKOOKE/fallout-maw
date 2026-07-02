@@ -13,6 +13,14 @@ import {
   callActorTurnEndHandlers,
   callActorTurnStartPreparedHandlers
 } from "./turn-events.mjs";
+import {
+  BLOCK_TURN_STATE_FLAG,
+  getActiveBlockProgress,
+  isActorInActiveBlock,
+  isBlockTurnOrderEnabled,
+  isCombatantAutoCompleted,
+  markActorPreparedInState
+} from "./turn-order-blocks.mjs";
 
 export const REACTION_RESOURCE_KEY = "reactionPoints";
 export const ONE_TIME_ACTION_POINTS_KEY = "system.resources.actionPoints.once";
@@ -56,6 +64,12 @@ export function registerReactionResourceHooks() {
     if (!game.user?.isActiveGM || !combat?.started) return undefined;
     const previousActor = combat.combatants?.get(prior?.combatantId)?.actor ?? null;
     const currentActor = combat.combatants?.get(current?.combatantId)?.actor ?? combat.combatant?.actor ?? null;
+    if (isBlockTurnOrderEnabled(combat)) {
+      if (previousActor?.uuid && !isActorInActiveBlock(previousActor, combat)) {
+        await restoreActorReactionResource(previousActor);
+      }
+      return prepareActiveBlockTurnStart(combat);
+    }
     if (previousActor?.uuid && previousActor.uuid !== currentActor?.uuid) {
       await restoreActorReactionResource(previousActor);
     }
@@ -81,6 +95,40 @@ export function registerReactionResourceHooks() {
     await resetActorReactionResources(combatant.actor, { restore: !isCurrentActor });
     return syncActorDefeatedCombatants(combatant.actor, { advanceCurrent: isCurrentActor });
   });
+}
+
+async function prepareActiveBlockTurnStart(combat) {
+  const progress = getActiveBlockProgress(combat);
+  if (!progress) return undefined;
+
+  let state = progress.state;
+  let changed = false;
+  const prepared = new Set(progress.preparedActorUuids);
+  const seenActors = new Set();
+
+  for (const combatant of progress.block.combatants) {
+    const actor = combatant.actor;
+    if (!actor?.uuid || seenActors.has(actor.uuid)) continue;
+    seenActors.add(actor.uuid);
+    if (isCombatantAutoCompleted(combatant)) {
+      await syncActorDefeatedCombatants(actor, { combat, advanceCurrent: false });
+      continue;
+    }
+    if (!prepared.has(actor.uuid)) {
+      await prepareActorTurnStart(actor);
+      state = markActorPreparedInState(combat, actor, state);
+      prepared.add(actor.uuid);
+      changed = true;
+    }
+    await syncActorDefeatedCombatants(actor, { combat, advanceCurrent: false });
+  }
+
+  if (changed) {
+    await combat.update({
+      [`flags.${SYSTEM_ID}.${BLOCK_TURN_STATE_FLAG}`]: state
+    }, { turnEvents: false });
+  }
+  return undefined;
 }
 
 export async function prepareActorTurnStart(actor) {
@@ -615,7 +663,10 @@ function buildOneTimeActionPointEffectData(actor, value, { source = "" } = {}) {
 }
 
 function isActorCurrentCombatant(actor) {
-  return Boolean(game.combat?.started && actor?.uuid && game.combat.combatant?.actor?.uuid === actor.uuid);
+  const combat = game.combat;
+  if (!combat?.started || !actor?.uuid) return false;
+  if (isBlockTurnOrderEnabled(combat)) return isActorInActiveBlock(actor, combat);
+  return combat.combatant?.actor?.uuid === actor.uuid;
 }
 
 function buildFlatMeterStyle(color, sections = 10) {

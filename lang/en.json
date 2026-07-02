@@ -646,6 +646,9 @@
         "DodgeRoundRecoveryPercent": "Round recovery, % of maximum dodge",
         "DodgeRestoreOnCombatStart": "Restore at combat start",
         "DodgeRestoreOnCombatEnd": "Restore at combat end",
+        "TurnOrderScheme": "Turn order scheme",
+        "TurnOrderNormal": "Normal",
+        "TurnOrderBlock": "Block",
         "AreasTitle": "Areas",
         "AreaMovementDamageThresholdFormula": "Movement inside an area deals damage after N movement points",
         "AreaMovementDamageThresholdHint": "Evaluated per actor. ОД and ОП are the resource maximums; the result is rounded down with a minimum of 1."

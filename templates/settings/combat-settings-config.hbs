@@ -9,6 +9,14 @@
 
     <div class="fallout-maw-settings-grid">
       <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.TurnOrderScheme"}}</span>
+        <select name="turnOrder.scheme">
+          {{#each turnOrderSchemeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
         <span>Стоимость вставки оружия в набор, ОД</span>
         <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
       </label>

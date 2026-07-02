@@ -1,4 +1,10 @@
 import { MODULE_ID } from "./main.mjs";
+import {
+    BLOCK_TURN_COMBATANT_OPTION,
+    isBlockTurnOrderEnabled,
+    isCombatantCompletedInActiveBlock,
+    isCombatantInActiveBlock
+} from "../../combat/turn-order-blocks.mjs";
 import { generateDescription, getInitiativeDisplay, getSystemIcons } from "./systems.mjs";
 
 export class CombatantPortrait {
@@ -115,7 +121,9 @@ export class CombatantPortrait {
     async _onCombatantMouseDown(event) {
         event.preventDefault();
 
-        if (event.target.dataset.action === "player-pass") return this.combat.nextTurn();
+        if (event.target.dataset.action === "player-pass") {
+            return this.combat.nextTurn({ [BLOCK_TURN_COMBATANT_OPTION]: this.combatant.id });
+        }
 
         if (!event.target.classList.contains("combatant-wrapper")) return;
 
@@ -172,6 +180,8 @@ export class CombatantPortrait {
         this.element.setAttribute("data-tooltip-direction", tooltipDirection);
 
         this.element.classList.toggle("active", data.css.includes("active"));
+        this.element.classList.toggle("block-active", data.css.includes("block-active"));
+        this.element.classList.toggle("block-completed", data.css.includes("block-completed"));
         this.element.classList.toggle("visible", data.css.includes("hidden"));
         this.element.classList.toggle("defeated", data.css.includes("defeated"));
         this.element.style.borderBottomColor = this.getBorderColor(this.token?.document);
@@ -271,7 +281,10 @@ export class CombatantPortrait {
         const hideDefeated = game.settings.get(MODULE_ID, "hideDefeated");
         if (hideDefeated && combatant.isDefeated) return null;
         const isActive = this.combat.turns.indexOf(combatant) === this.combat.turn;
-        if (isActive && this.combat.started) this._hasTakenTurn = true;
+        const isBlockMode = isBlockTurnOrderEnabled(this.combat);
+        const isBlockActive = isBlockMode && isCombatantInActiveBlock(combatant, this.combat);
+        const isBlockCompleted = isBlockMode && isCombatantCompletedInActiveBlock(combatant, this.combat);
+        if ((isActive || isBlockActive) && this.combat.started) this._hasTakenTurn = true;
         const hasPermission = this.hasPermission;
         if (!hasPermission && !this._hasTakenTurn) return null;
         if (!combatant.visible && !game.user.isGM) return null;
@@ -313,9 +326,11 @@ export class CombatantPortrait {
             name: this.name,
             img: this.img,
             active: this.combat.turns.indexOf(combatant) === this.combat.turn,
+            blockActive: isBlockActive,
+            blockCompleted: isBlockCompleted,
             owner: combatant.isOwner,
             isGM: game.user.isGM,
-            showPass: combatant.isOwner && !game.user.isGM,
+            showPass: combatant.isOwner && !game.user.isGM && (isActive || isBlockActive),
             defeated: combatant.isDefeated,
             hidden: combatant.hidden,
             initiative: combatant.initiative,
@@ -344,7 +359,13 @@ export class CombatantPortrait {
         };
         if (turn.initiative !== null && !Number.isInteger(turn.initiative)) hasDecimals = true;
         if (turn.initiativeData.value !== null && !Number.isInteger(turn.initiativeData.value)) hasDecimals = true;
-        turn.css = [turn.active ? "active" : "", turn.hidden ? "hidden" : "", turn.defeated ? "defeated" : ""].join(" ").trim();
+        turn.css = [
+            turn.active ? "active" : "",
+            turn.blockActive ? "block-active" : "",
+            turn.blockCompleted ? "block-completed" : "",
+            turn.hidden ? "hidden" : "",
+            turn.defeated ? "defeated" : ""
+        ].join(" ").trim();
 
         // Actor and Token status effects
         turn.effects = new Set();

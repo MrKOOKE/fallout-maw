@@ -63,7 +63,19 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     return {
       ...(await super._prepareContext(options)),
-      settings: this.settings
+      settings: this.settings,
+      turnOrderSchemeChoices: [
+        {
+          value: "normal",
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.TurnOrderNormal"),
+          selected: this.settings.turnOrder?.scheme === "normal"
+        },
+        {
+          value: "block",
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.TurnOrderBlock"),
+          selected: this.settings.turnOrder?.scheme === "block"
+        }
+      ]
     };
   }
 

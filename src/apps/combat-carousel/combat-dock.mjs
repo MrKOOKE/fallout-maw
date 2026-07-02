@@ -5,6 +5,11 @@ import {
     promptCombatInitiativeSurprise
 } from "./combat-initiative-surprise-dialog.mjs";
 import { HandlebarsApplication, mergeClone, mergeObject } from "./utils.mjs";
+import {
+    getActiveCombatTurnBlock,
+    getCombatTurnBlocks,
+    isBlockTurnOrderEnabled
+} from "../../combat/turn-order-blocks.mjs";
 
 export class CombatDock extends HandlebarsApplication {
     constructor(combat) {
@@ -109,6 +114,10 @@ export class CombatDock extends HandlebarsApplication {
                 fn: this._onCombatTurn.bind(this),
             },
             {
+                hook: "updateActor",
+                fn: this._onUpdateActor.bind(this),
+            },
+            {
                 hook: "deleteCombat",
                 fn: this._onDeleteCombat.bind(this),
             },
@@ -149,7 +158,7 @@ export class CombatDock extends HandlebarsApplication {
         this.sortedCombatants.forEach((combatant) => this.portraits.push(new CONFIG.combatTrackerDock.CombatantPortrait(combatant)));
         const combatantsContainer = this.element.querySelector("#combatants");
         combatantsContainer.innerHTML = "";
-        this.portraits.forEach((p) => combatantsContainer.appendChild(p.element));
+        this.appendPortraitBlocks(combatantsContainer);
         const isEven = this.portraits.length % 2 === 0;
         this.element.classList.toggle("even", isEven);
         this.setupSeparator();
@@ -166,6 +175,27 @@ export class CombatDock extends HandlebarsApplication {
             Promise.all(promises).then(() => {
                 this.playIntroAnimation();
             });
+        }
+    }
+
+    appendPortraitBlocks(combatantsContainer) {
+        const portraitByCombatant = new Map(this.portraits.map(portrait => [portrait.combatant, portrait]));
+        const blocks = getRenderableCombatantBlocks(this.combat, this.sortedCombatants);
+        const activeBlock = isBlockTurnOrderEnabled(this.combat) ? getActiveCombatTurnBlock(this.combat) : null;
+        for (const block of blocks) {
+            const wrapper = document.createElement("div");
+            wrapper.classList.add("combatant-block");
+            wrapper.dataset.blockSignature = block.signature;
+            wrapper.dataset.blockStart = String(block.start);
+            wrapper.classList.toggle("stacked", block.combatants.length > 1);
+            wrapper.classList.toggle("active-block", Boolean(activeBlock && block.signature === activeBlock.signature));
+            for (const combatant of block.combatants) {
+                const portrait = portraitByCombatant.get(combatant);
+                if (!portrait) continue;
+                portrait.element.style.order = "";
+                wrapper.appendChild(portrait.element);
+            }
+            if (wrapper.children.length) combatantsContainer.appendChild(wrapper);
         }
     }
 
@@ -242,7 +272,8 @@ export class CombatDock extends HandlebarsApplication {
         if (!this.autoFit) return document.documentElement.style.setProperty("--combatant-portrait-size", max + "px");
 
         const sizeModifier = game.settings.get(MODULE_ID, "floatingSize");
-        const combatantCount = this.sortedCombatants.length + (combatantRevived ? 1 : 0);
+        const blockCount = getRenderableCombatantBlocks(this.combat, this.sortedCombatants).length;
+        const combatantCount = Math.max(1, blockCount + (combatantRevived ? 1 : 0));
         let maxSpace, portraitSize;
         if (this.isVertical) {
             maxSpace = window.innerHeight * sizeModifier / 100;
@@ -265,10 +296,12 @@ export class CombatDock extends HandlebarsApplication {
         if (portrait) portrait.renderInner();
         const combatantRevived = updates.defeated === false;
         this.autosize(combatantRevived);
+        if ("defeated" in updates) this.combat?._updateTurnMarkers?.();
     }
 
     updateCombatants() {
         this.portraits.forEach((p) => p.renderInner());
+        this.updateBlockClasses();
     }
 
     updateOrder() {
@@ -285,7 +318,14 @@ export class CombatDock extends HandlebarsApplication {
         const combatants = this.sortedCombatants;
 
 
-        if (!this.trueCarousel) return this.portraits.forEach((p) => p.element.style.setProperty("order", combatants.indexOf(p.combatant)));
+        const blockWrappers = this.getBlockWrappers();
+
+        if (!this.trueCarousel) {
+            for (const wrapper of blockWrappers) {
+                wrapper.style.setProperty("order", wrapper.dataset.blockStart || "0");
+            }
+            return;
+        }
 
         const isLeftAligned = this.leftAligned;
 
@@ -298,14 +338,17 @@ export class CombatDock extends HandlebarsApplication {
 
         const lastCombatant = this.sortedCombatants[this.sortedCombatants.length - 1];
 
-        this.portraits.forEach((p) => {
-            const combatant = orderedCombatants.find((c) => c === p.combatant);
+        for (const wrapper of blockWrappers) {
+            const portrait = this.portraits.find(p => wrapper.contains(p.element));
+            const combatant = orderedCombatants.find((c) => c === portrait?.combatant);
             const index = orderedCombatants.findIndex((c) => c === combatant);
-            p.element.style.setProperty("order", index * 100);
-        });
+            const order = index >= 0 ? index * 100 : (Number(wrapper.dataset.blockStart) || 0) * 100;
+            wrapper.style.setProperty("order", order);
+        }
 
         //get last combatant's order
-        const lastCombatantOrder = this.portraits.find((p) => p.combatant === lastCombatant)?.element?.style?.order ?? 999999;
+        const lastPortrait = this.portraits.find((p) => p.combatant === lastCombatant);
+        const lastCombatantOrder = lastPortrait?.element?.closest(".combatant-block")?.style?.order ?? 999999;
         //set separator's order to last combatant's order + 1
 
         separator.style.setProperty("order", parseInt(lastCombatantOrder) + 1);
@@ -397,6 +440,10 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     _onCombatTurn(combat, updates, update) {
+        if (!("turn" in updates) && !("round" in updates) && isBlockTurnStateUpdate(updates)) {
+            this.updateCombatants();
+            return;
+        }
         if (!("turn" in updates) && !("round" in updates)) return;
         if ("round" in updates) this._onRoundChange();
         const combatantsContainer = this.element.querySelector("#combatants");
@@ -554,6 +601,13 @@ export class CombatDock extends HandlebarsApplication {
         if (combat === this.combat) this._playAnimation = true;
     }
 
+    _onUpdateActor(actor, updates = {}) {
+        if (!actor || !this.sortedCombatants.some(combatant => combatant.actor?.uuid === actor.uuid)) return;
+        if (!isActorFactionUpdate(updates)) return;
+        this.setupCombatants();
+        this.combat?._updateTurnMarkers?.();
+    }
+
     _onHoverToken(token, hover) {
         const portrait = this.portraits.find((p) => p.token === token);
         if (!portrait) return;
@@ -561,8 +615,9 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     refresh() {
-        this.autosize();
-        this.updateCombatants();
+        if (!this.element) return;
+        this.setupCombatants();
+        this.combat?._updateTurnMarkers?.();
         this.appendHtml();
     }
 
@@ -578,4 +633,46 @@ export class CombatDock extends HandlebarsApplication {
         this._closed = true;
         return super.close(...args);
     }
+
+    getBlockWrappers() {
+        return Array.from(this.element?.querySelectorAll("#combatants > .combatant-block") ?? []);
+    }
+
+    updateBlockClasses() {
+        const activeBlock = isBlockTurnOrderEnabled(this.combat) ? getActiveCombatTurnBlock(this.combat) : null;
+        for (const wrapper of this.getBlockWrappers()) {
+            wrapper.classList.toggle("active-block", Boolean(activeBlock && wrapper.dataset.blockSignature === activeBlock.signature));
+        }
+    }
+}
+
+function getRenderableCombatantBlocks(combat, sortedCombatants) {
+    if (isBlockTurnOrderEnabled(combat)) {
+        const visibleCombatants = new Set(sortedCombatants);
+        return getCombatTurnBlocks(combat)
+            .map(block => ({
+                ...block,
+                combatants: block.combatants.filter(combatant => visibleCombatants.has(combatant))
+            }))
+            .filter(block => block.combatants.length);
+    }
+    return sortedCombatants.map((combatant, index) => ({
+        index,
+        start: index,
+        end: index,
+        combatants: [combatant],
+        signature: `${combat?.id ?? ""}:${combatant.id}`
+    }));
+}
+
+function isBlockTurnStateUpdate(updates = {}) {
+    return foundry.utils.getProperty(updates, `flags.${MODULE_ID}.blockTurnState`) !== undefined
+        || updates.flags?.[MODULE_ID]?.blockTurnState !== undefined;
+}
+
+function isActorFactionUpdate(updates = {}) {
+    return foundry.utils.getProperty(updates, `flags.${MODULE_ID}.factionBelongs`) !== undefined
+        || foundry.utils.getProperty(updates, `flags.${MODULE_ID}.factionRelations`) !== undefined
+        || updates.flags?.[MODULE_ID]?.factionBelongs !== undefined
+        || updates.flags?.[MODULE_ID]?.factionRelations !== undefined;
 }

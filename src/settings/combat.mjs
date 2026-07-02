@@ -1,4 +1,7 @@
 export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
+  turnOrder: Object.freeze({
+    scheme: "block"
+  }),
   weaponSwitch: Object.freeze({
     actionPointCost: 3
   }),
@@ -42,6 +45,7 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
 });
 
 const WEAPON_SKILL_DAMAGE_KEYS = Object.freeze(["meleeCombat", "rangedCombat", "throwing"]);
+const TURN_ORDER_SCHEMES = new Set(["normal", "block"]);
 
 export function createDefaultCombatSettings() {
   return foundry.utils.deepClone(DEFAULT_COMBAT_SETTINGS);
@@ -55,6 +59,11 @@ export function normalizeCombatSettings(value = {}) {
   );
 
   return {
+    turnOrder: {
+      scheme: TURN_ORDER_SCHEMES.has(source.turnOrder?.scheme)
+        ? source.turnOrder.scheme
+        : DEFAULT_COMBAT_SETTINGS.turnOrder.scheme
+    },
     weaponSwitch: {
       actionPointCost: clampInteger(source.weaponSwitch?.actionPointCost, DEFAULT_COMBAT_SETTINGS.weaponSwitch.actionPointCost, 0, 100)
     },

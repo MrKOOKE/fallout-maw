@@ -26,6 +26,11 @@ import {
   promptEndTurnConversion
 } from "../combat/reaction-resources.mjs";
 import { isActorUnableToAct, isReactionSystemLocked } from "../combat/reaction-hub.mjs";
+import {
+  BLOCK_TURN_ACTOR_OPTION,
+  isActorInActiveBlock,
+  isBlockTurnOrderEnabled
+} from "../combat/turn-order-blocks.mjs";
 import { canSpendWeaponSwitchActionPoints, getWeaponSwitchActionPointCost, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import {
   getGrappleTargetId,
@@ -430,6 +435,7 @@ function isTokenCombatTurn(token, combat) {
   const combatant = combat?.combatant;
   if (!tokenDocument || !combatant) return false;
   if (combat.round < 1 || combat.turn === null) return false;
+  if (isBlockTurnOrderEnabled(combat)) return isActorInActiveBlock(tokenDocument.actor, combat);
   if (combatant.sceneId && tokenDocument.parent?.id && combatant.sceneId !== tokenDocument.parent.id) return false;
   return combatant.tokenId === tokenDocument.id;
 }
@@ -740,7 +746,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#activeTray = "";
     const conversionMode = await promptEndTurnConversion(this.actor);
     if (!conversionMode) return this.render({ force: true });
-    await combat.nextTurn({ falloutMawConversionMode: conversionMode });
+    await combat.nextTurn({
+      falloutMawConversionMode: conversionMode,
+      [BLOCK_TURN_ACTOR_OPTION]: this.actor?.uuid
+    });
     return this.render({ force: true });
   }
 

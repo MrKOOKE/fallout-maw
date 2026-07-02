@@ -2,7 +2,20 @@ import {
   TURN_CONVERSION_MODES,
   prepareActorTurnEnd
 } from "../combat/reaction-resources.mjs";
+import { SYSTEM_ID } from "../constants.mjs";
 import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
+import {
+  BLOCK_TURN_STATE_FLAG,
+  createBlockTurnState,
+  getActiveBlockProgress,
+  getActiveBlockTokenObjects,
+  getBlockTurnTargetCombatant,
+  getNextBlockTurnIndex,
+  isActiveBlockComplete,
+  isBlockTurnOrderEnabled,
+  isCombatantCompletedInActiveBlock,
+  markCombatantCompletedInState
+} from "../combat/turn-order-blocks.mjs";
 
 const TURN_END_PROCESSED_OPTION = "falloutMawTurnEndProcessed";
 const SURPRISED_INITIATIVE_OPTION = "falloutMawSurprisedCombatantIds";
@@ -31,6 +44,7 @@ export class FalloutMaWCombat extends Combat {
   }
 
   async nextTurn(options = {}) {
+    if (isBlockTurnOrderEnabled(this)) return this.#nextBlockTurn(options);
     const processed = await this.#processCurrentTurnEnd(options);
     try {
       return await super.nextTurn({ ...options, [TURN_END_PROCESSED_OPTION]: processed });
@@ -40,6 +54,7 @@ export class FalloutMaWCombat extends Combat {
   }
 
   async previousTurn(options = {}) {
+    if (isBlockTurnOrderEnabled(this)) return this.#previousBlockTurn(options);
     const processed = await this.#processCurrentTurnEnd(options);
     try {
       return await super.previousTurn({ ...options, [TURN_END_PROCESSED_OPTION]: processed });
@@ -49,6 +64,14 @@ export class FalloutMaWCombat extends Combat {
   }
 
   async nextRound(options = {}) {
+    if (isBlockTurnOrderEnabled(this)) {
+      const processed = await this.#processBlockTurnTargetEnd(options);
+      try {
+        return await super.nextRound({ ...options, [TURN_END_PROCESSED_OPTION]: processed });
+      } finally {
+        if (processed) this.#processingFalloutMawTurnEnd = false;
+      }
+    }
     const processed = await this.#processCurrentTurnEnd(options);
     try {
       return await super.nextRound({ ...options, [TURN_END_PROCESSED_OPTION]: processed });
@@ -58,6 +81,7 @@ export class FalloutMaWCombat extends Combat {
   }
 
   async previousRound(options = {}) {
+    if (isBlockTurnOrderEnabled(this)) return super.previousRound(options);
     const processed = await this.#processCurrentTurnEnd(options);
     try {
       return await super.previousRound({ ...options, [TURN_END_PROCESSED_OPTION]: processed });
@@ -66,17 +90,102 @@ export class FalloutMaWCombat extends Combat {
     }
   }
 
+  async #nextBlockTurn(options = {}) {
+    if (this.round === 0) return super.nextRound(options);
+    const progress = getActiveBlockProgress(this);
+    if (!progress) return this;
+
+    let state = progress.state;
+    const target = getBlockTurnTargetCombatant(this, options);
+    if (target && !isCombatantCompletedInActiveBlock(target, this)) {
+      const processed = await this.#processCombatantTurnEnd(target, options);
+      if (processed) state = markCombatantCompletedInState(this, target, state);
+    }
+
+    try {
+      if (!isActiveBlockComplete(this, state)) {
+        await this.#updateBlockTurnState(state);
+        return this;
+      }
+
+      const nextTurn = getNextBlockTurnIndex(this, 1);
+      if (nextTurn === null) return super.nextRound({ ...options, [TURN_END_PROCESSED_OPTION]: true });
+      await this.#advanceToTurn(nextTurn, 1);
+      return this;
+    } finally {
+      this.#processingFalloutMawTurnEnd = false;
+    }
+  }
+
+  async #previousBlockTurn(options = {}) {
+    if (this.round === 0) return this;
+    const previousTurn = getNextBlockTurnIndex(this, -1);
+    if (previousTurn === null) return super.previousRound(options);
+    await this.#advanceToTurn(previousTurn, -1);
+    return this;
+  }
+
+  async #processBlockTurnTargetEnd(options = {}) {
+    const target = getBlockTurnTargetCombatant(this, options);
+    if (!target || isCombatantCompletedInActiveBlock(target, this)) return true;
+    const processed = await this.#processCombatantTurnEnd(target, options);
+    if (!processed) return false;
+    const progress = getActiveBlockProgress(this);
+    const state = markCombatantCompletedInState(this, target, progress?.state ?? createBlockTurnState(this, progress?.block));
+    await this.#updateBlockTurnState(state);
+    return true;
+  }
+
   async #processCurrentTurnEnd(options = {}) {
+    return this.#processCombatantTurnEnd(this.combatant, options);
+  }
+
+  async #processCombatantTurnEnd(combatant, options = {}) {
     if (options?.[TURN_END_PROCESSED_OPTION]) return true;
     if (this.#processingFalloutMawTurnEnd) return true;
-    if (!game.user?.isActiveGM && !this.combatant?.isOwner) return false;
-    if (!this.started || !this.combatant?.actor) return false;
-    const conversionMode = this.combatant.isDefeated || isActorUnableToAct(this.combatant.actor)
+    if (!game.user?.isActiveGM && !combatant?.isOwner) return false;
+    if (!this.started || !combatant) return false;
+    if (!combatant.actor) return true;
+    const conversionMode = combatant.isDefeated || isActorUnableToAct(combatant.actor)
       ? TURN_CONVERSION_MODES.skip
       : (options?.falloutMawConversionMode ?? TURN_CONVERSION_MODES.dodge);
     this.#processingFalloutMawTurnEnd = true;
-    await prepareActorTurnEnd(this.combatant.actor, { conversionMode });
+    await prepareActorTurnEnd(combatant.actor, { conversionMode });
     return true;
+  }
+
+  async #advanceToTurn(turn, direction = 1) {
+    if (!Number.isInteger(turn) || turn < 0 || turn >= this.turns.length) return this;
+    const advanceTime = this.getTimeDelta(this.round, this.turn, this.round, turn);
+    const updateData = { round: this.round, turn };
+    const updateOptions = { direction, worldTime: { delta: advanceTime } };
+    Hooks.callAll("combatTurn", this, updateData, updateOptions);
+    await this.update(updateData, updateOptions);
+    return this;
+  }
+
+  async #updateBlockTurnState(state) {
+    const progress = getActiveBlockProgress(this);
+    const block = progress?.block;
+    if (!block) return this;
+    const next = createBlockTurnState(this, block, state);
+    await this.update({
+      [`flags.${SYSTEM_ID}.${BLOCK_TURN_STATE_FLAG}`]: next
+    }, { turnEvents: false });
+    this._updateTurnMarkers();
+    return this;
+  }
+
+  _updateTurnMarkers() {
+    if (!isBlockTurnOrderEnabled(this)) return super._updateTurnMarkers();
+    if (!canvas.ready) return;
+    const activeTokens = new Set(getActiveBlockTokenObjects(this));
+    for (const token of canvas.tokens.turnMarkers) {
+      if (!activeTokens.has(token)) token.renderFlags.set({ refreshTurnMarker: true });
+    }
+    if (this.isView) {
+      for (const token of activeTokens) token.renderFlags.set({ refreshTurnMarker: true });
+    }
   }
 
   async #rollInitiativeWithSurprise(ids, { formula = null, updateTurn = true, messageMode, messageOptions = {} } = {}, surprisedIds = new Set()) {
