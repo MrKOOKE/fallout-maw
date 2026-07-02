@@ -64,7 +64,12 @@ const SKILL_LABELS = new Map([
   ["Метание", "throwing"],
   ["Атлетика", "athletics"],
   ["Стойкость", "resilience"],
+  ["СтойкостЬ", "resilience"],
   ["Энергия", "energy"],
+  ["Скрытность", "stealth"],
+  ["Натуралист", "naturalist"],
+  ["Наука", "science"],
+  ["Доктор", "doctor"],
   ["Красноречие", "speech"],
   ["тяжёлое оружие", "rangedCombat"],
   ["тяжелое оружие", "rangedCombat"]
@@ -74,10 +79,27 @@ const CHARACTERISTIC_LABELS = new Map([
   ["Сила", "strength"],
   ["Ловкость", "dexterity"],
   ["Выносливость", "endurance"],
+  ["Вынослиовсть", "endurance"],
   ["Восприятие", "perception"],
   ["Интеллект", "intelligence"],
+  ["Инт", "intelligence"],
   ["Харизма", "charisma"],
   ["Удача", "luck"]
+]);
+
+const CONSTRUCT_PART_MITIGATION_LIMB_KEY = "constructPart";
+const CONSTRUCT_PART_ALL_DAMAGE_LABEL = "Все";
+const CONSTRUCT_PART_DAMAGE_TYPE_KEYS = Array.from(new Set(DAMAGE_TYPE_LABELS.values()));
+const CONSTRUCT_PART_EFFECT_LABELS = new Map([
+  ["Максимум ОЗ", "system.limbs.all.maxBonus"],
+  ["Класс Брони", "system.resources.dodge.bonus"],
+  ["КБ", "system.resources.dodge.bonus"],
+  ["Вес", "system.load.bonus"],
+  ["ОП", "system.resources.movementPoints.bonus"],
+  ["Очки передвижения", "system.resources.movementPoints.bonus"],
+  ["ОД", "system.resources.actionPoints.bonus"],
+  ...Array.from(CHARACTERISTIC_LABELS, ([label, key]) => [label, `system.characteristics.${key}`]),
+  ...Array.from(SKILL_LABELS, ([label, key]) => [label, `system.skills.${key}.bonus`])
 ]);
 
 const EQUIPMENT_SLOT_TOKEN_MAP = new Map([
@@ -253,6 +275,32 @@ export function parseEquipmentMigration(description = "") {
   };
 }
 
+export function parseConstructPartMigration(description = "", itemName = "") {
+  const html = String(description ?? "");
+  const flatText = stripGearHtml(html).replace(/\s+/g, " ").trim();
+  const targets = parseConstructPartTargets(flatText);
+  const freeSettings = buildFreeSettingsFunctionFromChanges(parseConstructPartEffectChanges(flatText));
+
+  return {
+    parsedGear: parseGearDescription(description),
+    weaponOldId: parseConstructPartWeaponOldId(flatText),
+    targets,
+    constructPart: {
+      enabled: true,
+      partType: String(itemName ?? "").trim(),
+      aimedDifficultyPercent: resolveConstructPartAimedDifficulty(targets),
+      aimedDifficultyBonus: 0,
+      critical: resolveConstructPartCritical(targets),
+      blockedPeriodicEffects: [],
+      lossEffects: [],
+      weaponSets: [],
+      needs: []
+    },
+    damageMitigation: parseConstructPartDamageMitigation(flatText),
+    freeSettings
+  };
+}
+
 export function parseWeaponMigration(description = "", itemName = "", {
   magazineSourceOldIds = [],
   rarityConditionLossByRarity = null
@@ -416,6 +464,26 @@ export function buildFreeSettingsFunction({ skills = [], characteristics = [] } 
   };
 }
 
+function buildFreeSettingsFunctionFromChanges(changes = []) {
+  const normalized = (Array.isArray(changes) ? changes : [])
+    .filter(change => change?.key && parseNumber(change.value) !== 0)
+    .map(change => createEffectChange(change.key, change.value));
+  if (!normalized.length) {
+    return { enabled: false, useConditionWeakening: false, entries: [] };
+  }
+  return {
+    enabled: true,
+    useConditionWeakening: false,
+    entries: [{
+      id: migrationRandomId(),
+      type: "effectChanges",
+      changes: normalized,
+      conditions: [],
+      penalties: []
+    }]
+  };
+}
+
 export function buildConditionFunction(parsed = null) {
   if (!parsed) {
     return { enabled: true };
@@ -495,6 +563,11 @@ export function resolveWeaponFolderPath(folderPath, parsed = null) {
 
 export function resolveEquipmentFolderPath(folderPath, parsed = null) {
   return resolveGearFolderParts(folderPath, "Снаряжение", parsed?.rarity);
+}
+
+export function resolveConstructPartFolderPath(folderPath) {
+  const parts = String(folderPath ?? "").split(" / ").filter(Boolean);
+  return parts[0] === "Детали роботов" ? parts.slice(1) : parts.filter(Boolean);
 }
 
 export function resolveAmmoFolderPath(folderPath, parsed = null) {
@@ -1454,6 +1527,101 @@ function resolveWeaponPellets(flatText, damageInfo, actions) {
   return 1;
 }
 
+function parseConstructPartTargets(flatText = "") {
+  const raw = matchField(flatText, /Деталь\s+для:\s*([^]+?)(?=Состояние:|Степень\s+интеграции:|Сложность\s+установки:|Сложность\s+удаления:|Сопротивление:|Оружие:|$)/i);
+  return String(raw ?? "")
+    .split(",")
+    .map(entry => entry.trim())
+    .filter(Boolean);
+}
+
+function parseConstructPartWeaponOldId(flatText = "") {
+  return String(flatText ?? "").match(/Оружие:\s*@UUID\[Item\.([A-Za-z0-9]+)\]/i)?.[1] ?? "";
+}
+
+function parseConstructPartEffectChanges(flatText = "") {
+  const labels = Array.from(CONSTRUCT_PART_EFFECT_LABELS.keys())
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+    .join("|");
+  const pattern = new RegExp(`(?:^|\\s)(${labels}):\\s*([+-]?\\d+(?:[.,]\\d+)?)`, "giu");
+  const changes = [];
+  for (const match of String(flatText ?? "").matchAll(pattern)) {
+    const key = findMappedLabelValue(CONSTRUCT_PART_EFFECT_LABELS, match[1]);
+    const value = parseNumber(match[2]);
+    if (!key || !value) continue;
+    changes.push({ key, value });
+  }
+  return changes;
+}
+
+function parseConstructPartDamageMitigation(flatText = "") {
+  const labels = [
+    CONSTRUCT_PART_ALL_DAMAGE_LABEL,
+    ...Array.from(DAMAGE_TYPE_ALIASES.keys())
+  ].sort((left, right) => right.length - left.length).map(escapeRegExp).join("|");
+  const pattern = new RegExp(`Сопротивление:\\s*([+-]?\\d+(?:[.,]\\d+)?)\\s*-\\s*(${labels})`, "giu");
+  const entries = {};
+  for (const match of String(flatText ?? "").matchAll(pattern)) {
+    const value = Math.max(0, parseInteger(match[1]));
+    if (!value) continue;
+    const damageTypeKeys = resolveConstructPartMitigationDamageKeys(match[2]);
+    for (const damageTypeKey of damageTypeKeys) {
+      entries[CONSTRUCT_PART_MITIGATION_LIMB_KEY] ??= {};
+      const current = parseInteger(entries[CONSTRUCT_PART_MITIGATION_LIMB_KEY][damageTypeKey]?.value);
+      entries[CONSTRUCT_PART_MITIGATION_LIMB_KEY][damageTypeKey] = { value: current + value };
+    }
+  }
+  return {
+    enabled: Object.keys(entries[CONSTRUCT_PART_MITIGATION_LIMB_KEY] ?? {}).length > 0,
+    mode: "resistance",
+    limbSetIds: [],
+    entries
+  };
+}
+
+function resolveConstructPartMitigationDamageKeys(label = "") {
+  if (normalizeLabelKey(label) === normalizeLabelKey(CONSTRUCT_PART_ALL_DAMAGE_LABEL)) {
+    return CONSTRUCT_PART_DAMAGE_TYPE_KEYS;
+  }
+  const damageTypeKey = findMappedLabelValue(DAMAGE_TYPE_ALIASES, label);
+  return damageTypeKey ? [damageTypeKey] : [];
+}
+
+function resolveConstructPartAimedDifficulty(targets = []) {
+  const values = targets.map(target => {
+    const normalized = normalizeLabelKey(target);
+    if (normalized.includes("глаз")) return 50;
+    if (normalized.includes("голов")) return 30;
+    if (normalized.includes("туловищ")) return 0;
+    if (normalized.includes("пах")) return 20;
+    if (normalized.includes("рук") || normalized.includes("ног")) return 20;
+    return 20;
+  });
+  return values.length ? Math.max(...values) : 20;
+}
+
+function resolveConstructPartCritical(targets = []) {
+  return targets.some(target => {
+    const normalized = normalizeLabelKey(target);
+    return normalized.includes("голов") || normalized.includes("туловищ");
+  });
+}
+
+function findMappedLabelValue(labelMap = new Map(), label = "") {
+  const normalized = normalizeLabelKey(label);
+  return Array.from(labelMap.entries())
+    .find(([candidate]) => normalizeLabelKey(candidate) === normalized)?.[1] ?? "";
+}
+
+function normalizeLabelKey(value = "") {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("ru");
+}
+
+function escapeRegExp(value = "") {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseBonusPairs(section = "", labelMap = new Map()) {
   const entries = [];
   for (const chunk of String(section ?? "").split("|")) {
@@ -1517,7 +1685,10 @@ function parseConditionFields(flatText) {
 
   return {
     repairDifficulty: parseInteger(matchField(flatText, /Сложность\s+ремонта:\s*(\d+)/i)),
-    partClass: normalizeToolClass(matchField(flatText, /Мин\.?\s*класс\s+деталей:\s*([A-D]|S\+?)/i)),
+    partClass: normalizeToolClass(
+      matchField(flatText, /Мин\.?\s*класс\s+деталей:\s*([A-D]|S\+?)/i)
+      || matchField(flatText, /Класс\s+снаряжения:\s*([A-D]|S\+?)/i)
+    ),
     conditionValue: conditionMatch?.[1] ?? 0,
     conditionMax: conditionMatch?.[2] ?? 0,
     weakeningThreshold: parseInteger(matchField(flatText, /Порог\s+ослабления:\s*(\d+)/i)),

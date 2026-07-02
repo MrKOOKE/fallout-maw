@@ -508,6 +508,10 @@ function constructPartFunctionField() {
     aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0 }),
     aimedDifficultyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     critical: new BooleanField({ required: true, initial: false }),
+    blockedPeriodicEffects: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: () => []
+    }),
     lossEffects: new ArrayField(limbLossEffectField(), { required: true, initial: [] }),
     weaponSets: new ArrayField(constructPartWeaponSetField(), { required: true, initial: [] }),
     needs: new ArrayField(needDefinitionField(), { required: true, initial: [] })

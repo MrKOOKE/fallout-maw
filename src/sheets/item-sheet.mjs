@@ -503,6 +503,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
       firstAidWithdrawalDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.withdrawalDurationSeconds),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
+      constructPartBlockedEffectRows: buildConstructPartBlockedEffectRows(item, damageTypeSettings),
+      canAddConstructPartBlockedEffect: canAddConstructPartBlockedEffect(item, damageTypeSettings),
       constructPartWeaponSetRows: buildConstructPartWeaponSetRows(item),
       constructPartLossEffectRows: buildConstructPartLossEffectRows(item),
       constructPartNeedRows: buildConstructPartNeedRows(item),
@@ -587,6 +589,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         .map(input => String(input.value ?? "").trim())
         .filter(Boolean);
       foundry.utils.setProperty(submitData, "system.functions.prosthesis.blockedPeriodicEffects", Array.from(new Set(blocked)));
+    }
+    if (form?.querySelector?.("[data-construct-part-blocked-effect-list]")) {
+      const blocked = Array.from(form.querySelectorAll("[data-construct-part-blocked-effect-list] select"))
+        .map(input => String(input.value ?? "").trim())
+        .filter(Boolean);
+      foundry.utils.setProperty(submitData, "system.functions.constructPart.blockedPeriodicEffects", Array.from(new Set(blocked)));
     }
     const constructPartCriticalInput = form?.querySelector?.("[data-construct-part-critical]");
     if (constructPartCriticalInput) {
@@ -769,6 +777,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-prosthesis-blocked-effect]")?.addEventListener("click", event => this.#onAddProsthesisBlockedEffect(event));
     this.element?.querySelectorAll("[data-delete-prosthesis-blocked-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteProsthesisBlockedEffect(event));
+    });
+    this.element?.querySelector("[data-add-construct-part-blocked-effect]")?.addEventListener("click", event => this.#onAddConstructPartBlockedEffect(event));
+    this.element?.querySelectorAll("[data-delete-construct-part-blocked-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteConstructPartBlockedEffect(event));
     });
     this.element?.querySelector("[data-add-construct-part-weapon-set]")?.addEventListener("click", event => this.#onAddConstructPartWeaponSet(event));
     this.element?.querySelectorAll("[data-delete-construct-part-weapon-set]").forEach(button => {
@@ -2937,6 +2949,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.constructPart.aimedDifficultyPercent": 0,
         "system.functions.constructPart.aimedDifficultyBonus": 0,
         "system.functions.constructPart.critical": false,
+        "system.functions.constructPart.blockedPeriodicEffects": [],
         "system.functions.constructPart.lossEffects": [],
         "system.functions.constructPart.weaponSets": [],
         "system.functions.constructPart.needs": []
@@ -3135,6 +3148,24 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.prosthesis.blockedPeriodicEffects": current });
   }
 
+  #onAddConstructPartBlockedEffect(event) {
+    event.preventDefault();
+    const current = this.#getSubmittedConstructPartBlockedEffects();
+    const choices = buildConstructPartBlockedEffectChoiceEntries(getDamageTypeSettings(), current);
+    const nextKey = choices.find(choice => !current.includes(choice.key))?.key ?? "";
+    if (!nextKey) return undefined;
+    return this.item.update({ "system.functions.constructPart.blockedPeriodicEffects": [...current, nextKey] });
+  }
+
+  #onDeleteConstructPartBlockedEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteConstructPartBlockedEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = this.#getSubmittedConstructPartBlockedEffects();
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.constructPart.blockedPeriodicEffects": current });
+  }
+
   #getSubmittedImplantLimbKeys() {
     if (!this.form) return normalizeImplantLimbKeys(this.item.system?.functions?.implant?.limbKeys);
     const formData = new FormDataExtended(this.form);
@@ -3162,6 +3193,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return normalizeProsthesisBlockedEffects(
       foundry.utils.getProperty(submitData, "system.functions.prosthesis.blockedPeriodicEffects")
         ?? this.item.system?.functions?.prosthesis?.blockedPeriodicEffects
+    );
+  }
+
+  #getSubmittedConstructPartBlockedEffects() {
+    if (!this.form) return getConstructPartBlockedEffects(this.item);
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeConstructPartBlockedEffects(
+      foundry.utils.getProperty(submitData, "system.functions.constructPart.blockedPeriodicEffects")
+        ?? getConstructPartBlockedEffects(this.item)
     );
   }
 
@@ -3266,6 +3307,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.constructPart.aimedDifficultyPercent": 0,
         "system.functions.constructPart.aimedDifficultyBonus": 0,
         "system.functions.constructPart.critical": false,
+        "system.functions.constructPart.blockedPeriodicEffects": [],
         "system.functions.constructPart.lossEffects": [],
         "system.functions.constructPart.weaponSets": [],
         "system.functions.constructPart.needs": [],
@@ -9190,6 +9232,28 @@ function canAddProsthesisBlockedEffect(item, damageTypeSettings = []) {
   return buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings, selected).some(choice => !selected.includes(choice.key));
 }
 
+function buildConstructPartBlockedEffectRows(item, damageTypeSettings = []) {
+  const selected = getConstructPartBlockedEffects(item);
+  const choices = buildConstructPartBlockedEffectChoiceEntries(damageTypeSettings, selected);
+  return selected.map((selectedKey, index) => {
+    const usedByOtherRows = new Set(selected.filter((_, usedIndex) => usedIndex !== index));
+    return {
+      key: selectedKey,
+      choices: choices
+        .filter(choice => choice.key === selectedKey || !usedByOtherRows.has(choice.key))
+        .map(choice => ({
+          ...choice,
+          selected: choice.key === selectedKey
+        }))
+    };
+  });
+}
+
+function canAddConstructPartBlockedEffect(item, damageTypeSettings = []) {
+  const selected = getConstructPartBlockedEffects(item);
+  return buildConstructPartBlockedEffectChoiceEntries(damageTypeSettings, selected).some(choice => !selected.includes(choice.key));
+}
+
 function buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings = [], extraKeys = []) {
   const choices = new Map();
   choices.set(BLEEDING_DAMAGE_TYPE_KEY, game.i18n.localize("FALLOUTMAW.Item.ProsthesisBleedingEffect"));
@@ -9202,6 +9266,10 @@ function buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings = [], extr
   return Array.from(choices, ([key, label]) => ({ key, label }));
 }
 
+function buildConstructPartBlockedEffectChoiceEntries(damageTypeSettings = [], extraKeys = []) {
+  return buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings, extraKeys);
+}
+
 function normalizeProsthesisBlockedEffects(value) {
   const source = Array.isArray(value)
     ? value
@@ -9209,6 +9277,18 @@ function normalizeProsthesisBlockedEffects(value) {
   return Array.from(new Set(source
     .map(key => String(key ?? "").trim())
     .filter(Boolean)));
+}
+
+function normalizeConstructPartBlockedEffects(value) {
+  return normalizeProsthesisBlockedEffects(value);
+}
+
+function getConstructPartBlockedEffects(itemOrData = null) {
+  return normalizeConstructPartBlockedEffects(
+    itemOrData?._source?.system?.functions?.constructPart?.blockedPeriodicEffects
+      ?? itemOrData?.system?._source?.functions?.constructPart?.blockedPeriodicEffects
+      ?? []
+  );
 }
 
 function canAddImplantLimb(item, creatureOptions) {

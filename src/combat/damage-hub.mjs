@@ -571,7 +571,7 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     : data.amount;
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
-  if (shouldSplitPeriodicDamage(data, mode, periodic) && !isProsthesisTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
+  if (shouldSplitPeriodicDamage(data, mode, periodic) && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
     return applyPeriodicSplitDamageApplicationNow(actor, { ...data, amount: requestedAmount }, {
       createSummary,
       damageType,
@@ -660,7 +660,7 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       source: data.source,
       worldTime: getDamageApplicationWorldTime(data.source)
     });
-    if (!isProsthesisTimedDamageBlocked(actor, data.limbKey, damageType, "bleeding")) {
+    if (!isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "bleeding")) {
       await createBleedingDamageEffect(actor, {
         damageType,
         limbKey: data.limbKey,
@@ -950,7 +950,7 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
-  if (shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic) && !isProsthesisTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
+  if (shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic) && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
     const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
     if (delayedAmount > 0) pendingPeriodicDamageEffects?.push({
       damageType,
@@ -2154,15 +2154,33 @@ function hasInstalledProsthesis(actor, limbKey = "") {
   return Boolean(getInstalledProsthesis(actor, limbKey));
 }
 
-function isProsthesisTimedDamageBlocked(actor, limbKey = "", damageType = {}, kind = "") {
+function isLimbTimedDamageBlocked(actor, limbKey = "", damageType = {}, kind = "") {
   const prosthesis = getInstalledProsthesis(actor, limbKey);
-  if (!prosthesis) return false;
-  if (kind === "bleeding") return true;
-  const blocked = new Set((getProsthesisFunction(prosthesis).blockedPeriodicEffects ?? [])
+  if (prosthesis) {
+    if (kind === "bleeding") return true;
+    if (isTimedDamageKeyBlocked(getProsthesisFunction(prosthesis).blockedPeriodicEffects, damageType, kind)) return true;
+  }
+  const constructPart = getConstructPartItemForLimb(actor, limbKey);
+  if (constructPart && isTimedDamageKeyBlocked(getConstructPartBlockedPeriodicEffects(constructPart), damageType, kind)) return true;
+  return false;
+}
+
+function getConstructPartBlockedPeriodicEffects(itemOrData = null) {
+  const source = itemOrData?._source?.system?.functions?.constructPart?.blockedPeriodicEffects
+    ?? itemOrData?.system?._source?.functions?.constructPart?.blockedPeriodicEffects
+    ?? [];
+  return Array.isArray(source)
+    ? source
+    : source && typeof source === "object" ? Object.values(source) : [];
+}
+
+function isTimedDamageKeyBlocked(blockedKeys = [], damageType = {}, kind = "") {
+  const blocked = new Set((blockedKeys ?? [])
     .map(key => String(key ?? "").trim())
     .filter(Boolean));
   if (!blocked.size) return false;
-  if (kind === "periodic" && blocked.has(String(damageType?.key ?? "").trim())) return true;
+  if (kind === "bleeding") return blocked.has(BLEEDING_DAMAGE_TYPE_KEY);
+  if (kind === "periodic") return blocked.has(String(damageType?.key ?? "").trim());
   return false;
 }
 
@@ -3985,7 +4003,7 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
   const bleedingEntries = buildBatchBleedingEntries(
     normalizedEntries.filter(entry => (
       entry.processDamageTypeSettings !== false
-      && !isProsthesisTimedDamageBlocked(actor, entry.limbKey, entry.damageType, "bleeding")
+      && !isLimbTimedDamageBlocked(actor, entry.limbKey, entry.damageType, "bleeding")
     )),
     actualHealthDelta,
     requestedHealthDamage

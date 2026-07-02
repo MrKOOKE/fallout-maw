@@ -19,10 +19,12 @@ import {
   buildConditionFunction,
   buildRangedConditionLossByRarity,
   parseAmmoDamageSource,
+  parseConstructPartMigration,
   parseEquipmentMigration,
   parseGearDescription,
   parseModuleMigration,
   parseWeaponMigration,
+  resolveConstructPartFolderPath,
   resolveAmmoFolderPath,
   resolveEquipmentFolderPath,
   resolveModuleFolderPath,
@@ -68,7 +70,8 @@ const ALL_MIGRATION_FLAG_KEYS = [
   "ammoMigration",
   "weaponMigration",
   "moduleMigration",
-  "equipmentMigration"
+  "equipmentMigration",
+  "constructPartMigration"
 ];
 
 const GEAR_CATEGORIES = {
@@ -111,6 +114,16 @@ const GEAR_CATEGORIES = {
     importLabel: "снаряжения",
     itemCategoryFallback: "Снаряжение",
     resolveMaxStack: () => 1
+  },
+  constructParts: {
+    folderPrefix: "Детали роботов",
+    rootFolder: "MAW Импорт деталей конструктов",
+    macroDir: "construct-parts",
+    macroFile: "01-import-construct-part-items.js",
+    flagKey: "constructPartMigration",
+    importLabel: "деталей конструктов",
+    itemCategoryFallback: "Детали роботов",
+    resolveMaxStack: () => 1
   }
 };
 
@@ -119,7 +132,7 @@ async function main() {
   const categories = requested.length
     ? requested.map(key => {
       const config = GEAR_CATEGORIES[key];
-      if (!config) throw new Error(`Unknown gear category "${key}". Use: ammo, weapon, module, equipment`);
+      if (!config) throw new Error(`Unknown gear category "${key}". Use: ${Object.keys(GEAR_CATEGORIES).join(", ")}`);
       return [key, config];
     })
     : Object.entries(GEAR_CATEGORIES);
@@ -150,7 +163,7 @@ async function main() {
 }
 
 async function generateCategoryMigration(key, config, items, folderById, itemById, ammoByCaliber, rarityConditionLossByRarity) {
-  const candidates = items
+  const candidates = filterGearMigrationCandidates(key, items
     .map(item => ({
       item,
       folderPath: getFolderPath(item.folder, folderById)
@@ -160,7 +173,7 @@ async function generateCategoryMigration(key, config, items, folderById, itemByI
       compareRu(left.folderPath, right.folderPath)
       || compareRu(left.item.name, right.item.name)
       || left.item._id.localeCompare(right.item._id)
-    ));
+    )));
 
   const macroOutputDir = path.join(MACRO_ROOT, config.macroDir);
   await fs.mkdir(macroOutputDir, { recursive: true });
@@ -239,6 +252,26 @@ async function generateCategoryMigration(key, config, items, folderById, itemByI
   console.log(`[${key}] macro: ${path.join(macroOutputDir, config.macroFile)}`);
 }
 
+function filterGearMigrationCandidates(categoryKey, candidates) {
+  if (categoryKey !== "constructParts") return candidates;
+
+  const embeddedWeaponFolder = "Детали роботов / ВСТРОЕННОЕ ОРУЖИЕ";
+  const referencedWeaponIds = new Set();
+  for (const { item, folderPath } of candidates) {
+    if (folderPath === embeddedWeaponFolder) continue;
+    const weaponId = String(extractDescription(item) ?? "").match(/@UUID\[Item\.([A-Za-z0-9]+)\]/i)?.[1] ?? "";
+    if (weaponId) referencedWeaponIds.add(weaponId);
+  }
+
+  return candidates.filter(({ item, folderPath }) => (
+    folderPath !== embeddedWeaponFolder || !referencedWeaponIds.has(item._id)
+  ));
+}
+
+function normalizeConstructPartWeaponSetLabel(name = "") {
+  return String(name ?? "").trim().replace(/^Атака\s*-\s*/i, "");
+}
+
 async function createGearMigrationRecord(item, folderPath, categoryKey, config, itemById, ammoByCaliber, rarityConditionLossByRarity) {
   const img = await migrateAssetPath(item.img);
   const description = extractDescription(item);
@@ -302,6 +335,62 @@ async function createGearMigrationRecord(item, folderPath, categoryKey, config, 
     occupiedSlots = {};
     occupiedSlotMode = "all";
     weaponSlotRequirement = { mode: "oneOf", slots: {} };
+  } else if (categoryKey === "constructParts") {
+    const constructData = parseConstructPartMigration(description, item.name);
+    if (item.type === "weapon") {
+      constructData.damageMitigation = { enabled: false, mode: "resistance", limbSetIds: [], entries: {} };
+      constructData.freeSettings = { enabled: false, useConditionWeakening: false, entries: [] };
+    }
+    if (!constructData.parsedGear?.repairDifficulty) parseWarnings.push("нет сложности ремонта");
+    if (!constructData.parsedGear?.partClass) parseWarnings.push("нет класса деталей");
+    folderParts = resolveConstructPartFolderPath(folderPath);
+    functions = {
+      condition: buildConditionFunction(constructData.parsedGear ?? parsedGear),
+      constructPart: constructData.constructPart,
+      damageMitigation: constructData.damageMitigation,
+      freeSettings: constructData.freeSettings
+    };
+
+    const weaponItem = constructData.weaponOldId ? itemById.get(constructData.weaponOldId) : null;
+    if (constructData.weaponOldId && !weaponItem) {
+      parseWarnings.push(`не найдено встроенное оружие ${constructData.weaponOldId}`);
+    }
+    const weaponSourceItem = weaponItem ?? (item.type === "weapon" ? item : null);
+    if (weaponSourceItem) {
+      const weaponDescription = extractDescription(weaponSourceItem);
+      const weaponParsedGear = parseGearDescription(weaponDescription);
+      const magazineSourceOldIds = weaponParsedGear?.caliberKey
+        ? (ammoByCaliber.get(weaponParsedGear.caliberKey) ?? [])
+        : [];
+      if (weaponParsedGear?.caliberKey && !magazineSourceOldIds.length) {
+        parseWarnings.push(`нет патронов для калибра ${weaponParsedGear.caliberKey}`);
+      }
+      const weaponData = parseWeaponMigration(weaponDescription, weaponSourceItem.name, {
+        magazineSourceOldIds,
+        rarityConditionLossByRarity
+      });
+      parseWarnings.push(...weaponData.warnings.map(warning => `оружие: ${warning}`));
+      if (weaponData.primary?.moduleSlots?.length) {
+        for (const slot of weaponData.primary.moduleSlots) {
+          if (slot?.itemData && !slot.itemData.img) slot.itemData.img = img;
+        }
+      }
+      functions.weapon = weaponData.primary;
+      functions.additionalWeapons = Object.fromEntries(
+        weaponData.additionalWeapons.map(entry => [entry.id, entry])
+      );
+      functions.constructPart.weaponSets = [{
+        id: `weapon-${weaponSourceItem._id}`,
+        label: normalizeConstructPartWeaponSetLabel(weaponSourceItem.name),
+        quantity: 1
+      }];
+      weaponSlotRequirement = weaponData.weaponSlotRequirement ?? { mode: "oneOf", slots: {} };
+    }
+
+    if (!functions.damageMitigation?.enabled) delete functions.damageMitigation;
+    if (!functions.freeSettings?.enabled) delete functions.freeSettings;
+    occupiedSlots = {};
+    occupiedSlotMode = "all";
   } else {
     const equipmentData = parseEquipmentMigration(description);
     if (!equipmentData.parsedGear?.repairDifficulty) parseWarnings.push("нет сложности ремонта");
@@ -448,12 +537,16 @@ function buildGearMacro(config, records, craftReferenceNames, buildStamp) {
     ? "AMMO_ITEMS"
     : config.macroDir === "weapons"
       ? "WEAPON_ITEMS"
-      : "EQUIPMENT_ITEMS";
+      : config.macroDir === "construct-parts"
+        ? "CONSTRUCT_PART_ITEMS"
+        : "EQUIPMENT_ITEMS";
   const runFn = config.macroDir === "ammo"
     ? "runAmmoImport"
     : config.macroDir === "weapons"
       ? "runWeaponImport"
-      : "runEquipmentImport";
+      : config.macroDir === "construct-parts"
+        ? "runConstructPartImport"
+        : "runEquipmentImport";
 
   return `// Generated by systems/fallout-maw/scripts/generate-gear-migration.mjs
 // ${buildStamp}
@@ -526,10 +619,8 @@ async function ${runFn}() {
       const craft = rewriteCraftReferences(entry.system.craft, idMap, item.id);
       const system = rewriteGearFunctionReferences(entry.system, idMap);
       const updates = { "system.craft": craft };
-      if (system.functions?.weapon?.magazine) {
-        updates["system.functions.weapon.magazine.sourceItemUuids"] = system.functions.weapon.magazine.sourceItemUuids;
-        updates["system.functions.weapon.magazine.sourceItemUuid"] = system.functions.weapon.magazine.sourceItemUuid;
-      }
+      if (system.functions?.weapon) updates["system.functions.weapon"] = system.functions.weapon;
+      if (system.functions?.additionalWeapons) updates["system.functions.additionalWeapons"] = system.functions.additionalWeapons;
       await item.update(updates);
     } catch (error) {
       craftErrors += 1;
@@ -736,6 +827,7 @@ function describeFunctions(config) {
   if (config.flagKey === "ammoMigration") return "источник урона (из описания)";
   if (config.flagKey === "weaponMigration") return "состояние + оружие с источниками урона по калибру и слотами модулей";
   if (config.flagKey === "moduleMigration") return "модуль оружия (модификаторы, доп. функции, источник света)";
+  if (config.flagKey === "constructPartMigration") return "состояние + деталь конструкта + встроенное оружие + сопротивления + бонусы";
   return "состояние + защита";
 }
 
@@ -774,10 +866,11 @@ async function writeCombinedImportMacro() {
     { dir: "ammo", file: GEAR_CATEGORIES.ammo.macroFile, label: "боеприпасы" },
     { dir: "modules", file: GEAR_CATEGORIES.module.macroFile, label: "модули" },
     { dir: "weapons", file: GEAR_CATEGORIES.weapon.macroFile, label: "оружие" },
-    { dir: "equipment", file: GEAR_CATEGORIES.equipment.macroFile, label: "снаряжение" }
+    { dir: "equipment", file: GEAR_CATEGORIES.equipment.macroFile, label: "снаряжение" },
+    { dir: "construct-parts", file: GEAR_CATEGORIES.constructParts.macroFile, label: "детали конструктов" }
   ];
 
-  const combinedMacro = `// Fallout-MaW gear migration: ammo → modules → weapons → equipment
+  const combinedMacro = `// Fallout-MaW gear migration: ammo → modules → weapons → equipment → construct parts
 // Вставьте весь этот скрипт в один макрос Foundry (Script) и запустите от GM.
 
 const SYSTEM_ID = "fallout-maw";

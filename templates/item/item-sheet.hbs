@@ -2236,6 +2236,24 @@
       </label>
     </div>
     <div class="fallout-maw-panel-header subsection">
+      <h3>{{localize "FALLOUTMAW.Item.ProsthesisBlockedEffects"}}</h3>
+      <button type="button" data-add-construct-part-blocked-effect {{#unless canAddConstructPartBlockedEffect}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+    </div>
+    <div class="fallout-maw-prosthesis-blocked-effect-row-list" data-construct-part-blocked-effect-list>
+      {{#each constructPartBlockedEffectRows}}
+      <div class="fallout-maw-prosthesis-blocked-effect-row">
+        <select name="system.functions.constructPart.blockedPeriodicEffects.{{@index}}">
+          {{#each choices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-delete-construct-part-blocked-effect="{{@index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.ProsthesisNoBlockedEffects"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header subsection">
       <h3>Потребности детали</h3>
       <button type="button" data-add-construct-part-need><i class="fa-solid fa-plus"></i> Создать потребность</button>
     </div>

@@ -4075,6 +4075,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildEnergyConsumerTooltipSection(item),
     buildLightSourceTooltipSection(item),
     buildModuleTooltipSection(item),
+    buildConstructPartTooltipSection(item),
     buildProsthesisTooltipSection(item, actor),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
     ...buildToolTooltipSections(item)
@@ -4478,6 +4479,30 @@ function buildModuleTooltipSection(item) {
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item));
 }
 
+function buildConstructPartTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) return "";
+  const constructPart = getConstructPartFunction(item);
+  const partType = String(constructPart.partType ?? "").trim() || item.name;
+  const blockedLabels = getProsthesisBlockedEffectLabels(getConstructPartBlockedEffects(item));
+  const rows = [
+    ["Тип детали", partType],
+    ["Критическая деталь", game.i18n.localize(constructPart.critical ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.join(", ")]
+  ];
+  return renderTooltipFunctionSection("Деталь конструкта", rows);
+}
+
+function getConstructPartBlockedEffects(itemOrData = null) {
+  const source = itemOrData?._source?.system?.functions?.constructPart?.blockedPeriodicEffects
+    ?? itemOrData?.system?._source?.functions?.constructPart?.blockedPeriodicEffects
+    ?? [];
+  return Array.from(new Set((Array.isArray(source)
+    ? source
+    : source && typeof source === "object" ? Object.values(source) : [])
+    .map(key => String(key ?? "").trim())
+    .filter(Boolean)));
+}
+
 function buildProsthesisTooltipSection(item, actor = null) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.prosthesis, { ignoreBroken: true })) return "";
   const prosthesis = getProsthesisFunction(item);
@@ -4720,6 +4745,7 @@ function buildInstalledWeaponModuleTooltipSections(item, actor = null) {
     buildEnergyConsumerTooltipSection(item),
     buildLightSourceTooltipSection(item),
     buildModuleTooltipSection(item),
+    buildConstructPartTooltipSection(item),
     buildProsthesisTooltipSection(item, actor),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
