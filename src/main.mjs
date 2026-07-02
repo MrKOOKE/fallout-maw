@@ -4,6 +4,7 @@ import { FalloutMaWTokenLayer } from "./canvas/token-layer.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
 import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerCoverHooks, registerCoverSocket } from "./canvas/cover.mjs";
+import { registerTokenEquipmentHudHooks } from "./canvas/token-equipment-hud.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerTrapHooks } from "./canvas/traps.mjs";
 import { registerActorContainerHooks, registerActorContainerSocket } from "./canvas/actor-containers.mjs";
@@ -117,6 +118,7 @@ Hooks.once("init", () => {
   registerTrackableAttributes();
   registerPostureMovementHooks();
   registerCoverHooks();
+  registerTokenEquipmentHudHooks();
   registerMovementInterruptionHooks();
   registerPeriodicDamageRegionHooks();
   registerCombatDodgeHooks();

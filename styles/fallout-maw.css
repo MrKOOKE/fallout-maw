@@ -1359,6 +1359,287 @@ body #prosemirror-dropdown {
   gap: 0.5rem;
 }
 
+#token-hud .fallout-maw-token-equipment-hud {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: all;
+  z-index: 0;
+}
+
+#token-hud .col.left .fallout-maw-token-equipment-hud.left {
+  right: calc(100% + 8px);
+  align-items: flex-end;
+}
+
+#token-hud .col.right .fallout-maw-token-equipment-hud.right {
+  left: calc(100% + 8px);
+  align-items: flex-start;
+}
+
+#token-hud .col.right .fallout-maw-token-equipment-hud.weapons {
+  left: calc(100% + 64px);
+  align-items: flex-start;
+}
+
+#token-hud .fallout-maw-token-equipment-hud-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: all;
+}
+
+#token-hud .fallout-maw-token-equipment-hud-slot,
+#token-hud .fallout-maw-token-equipment-hud-action {
+  box-sizing: border-box;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(12, 12, 12, 0.72);
+}
+
+#token-hud .fallout-maw-token-equipment-hud-slot.weapon {
+  width: 84px;
+  min-width: 84px;
+  aspect-ratio: 7 / 4;
+}
+
+#token-hud .fallout-maw-token-equipment-hud-slot img,
+#token-hud .fallout-maw-token-equipment-hud-action img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  margin: 0;
+  border: 0;
+}
+
+#token-hud .fallout-maw-token-equipment-hud-slot.weapon img {
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+#token-hud .fallout-maw-token-equipment-hud-slot i {
+  line-height: 1;
+}
+
+#token-hud .fallout-maw-token-equipment-hud-slot[aria-disabled="true"] {
+  cursor: default;
+}
+
+#token-hud .fallout-maw-token-equipment-hud-hidden {
+  display: none !important;
+}
+
+#token-hud:has(.status-effects.active) .fallout-maw-token-equipment-hud,
+#token-hud:has(.status-effects.active) .fallout-maw-token-equipment-hud-actions {
+  z-index: -1;
+  pointer-events: none;
+}
+
+.fallout-maw-token-equipment-picker-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(0, 0, 0, 0.46);
+  pointer-events: all;
+  z-index: 10050;
+}
+
+.fallout-maw-token-equipment-picker {
+  --fallout-maw-slot-picker-casing: #20221c;
+  --fallout-maw-slot-picker-casing-top: #35382f;
+  --fallout-maw-slot-picker-casing-bottom: #0e100d;
+  --fallout-maw-slot-picker-edge-light: rgba(219, 219, 186, 0.24);
+  --fallout-maw-slot-picker-edge-mid: rgba(120, 124, 94, 0.72);
+  --fallout-maw-slot-picker-edge-dark: rgba(0, 0, 0, 0.88);
+  --fallout-maw-slot-picker-screen: #050806;
+  --fallout-maw-slot-picker-text: #e8d889;
+  --fallout-maw-slot-picker-text-strong: #f7e8a6;
+  --fallout-maw-slot-picker-text-soft: #d9c76f;
+  --fallout-maw-slot-picker-accent: #dcc56e;
+  width: min(960px, calc(100vw - 2rem));
+  max-height: min(720px, calc(100vh - 2rem));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--fallout-maw-slot-picker-text);
+  background:
+    linear-gradient(135deg, var(--fallout-maw-slot-picker-casing-top), var(--fallout-maw-slot-picker-casing) 46%, var(--fallout-maw-slot-picker-casing-bottom));
+  border: 2px solid var(--fallout-maw-slot-picker-edge-mid);
+  box-shadow:
+    inset 3px 3px 0 var(--fallout-maw-slot-picker-edge-light),
+    inset -4px -4px 0 var(--fallout-maw-slot-picker-edge-dark),
+    0 0 0 1px rgba(0, 0, 0, 0.9),
+    0 18px 48px rgba(0, 0, 0, 0.72);
+  border-radius: 0;
+}
+
+.fallout-maw-token-equipment-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem 0.8rem;
+  background: var(--fallout-maw-slot-picker-screen);
+  border: 1px solid var(--fallout-maw-slot-picker-edge-mid);
+  border-bottom: 0;
+  margin: 0.75rem 0.75rem 0;
+}
+
+.fallout-maw-token-equipment-picker-eyebrow {
+  display: block;
+  color: var(--fallout-maw-slot-picker-text-soft);
+  font-size: 0.72rem;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.fallout-maw-token-equipment-picker-header h2 {
+  margin: 0.18rem 0 0;
+  color: var(--fallout-maw-slot-picker-text-strong);
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.fallout-maw-token-equipment-picker-close {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--fallout-maw-slot-picker-text-strong);
+  background: rgba(0, 0, 0, 0.36);
+  border: 1px solid var(--fallout-maw-slot-picker-accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fallout-maw-token-equipment-picker-close:hover {
+  color: #111;
+  background: var(--fallout-maw-slot-picker-accent);
+}
+
+.fallout-maw-token-equipment-picker-body {
+  min-height: 0;
+  overflow: auto;
+  margin: 0 0.75rem 0.75rem;
+  padding: 1rem;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.018) 50%, transparent 50%),
+    var(--fallout-maw-slot-picker-screen);
+  background-size: 100% 4px;
+  border: 1px solid var(--fallout-maw-slot-picker-edge-mid);
+  border-top: 0;
+}
+
+.fallout-maw-token-equipment-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.fallout-maw-token-equipment-picker-card {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.58rem;
+  color: var(--fallout-maw-slot-picker-text);
+  text-align: left;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(120, 124, 94, 0.68);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.62);
+  cursor: pointer;
+}
+
+.fallout-maw-token-equipment-picker-card:hover,
+.fallout-maw-token-equipment-picker-card:focus-visible {
+  border-color: var(--fallout-maw-slot-picker-accent);
+  background: rgba(220, 197, 110, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 197, 110, 0.22),
+    0 0 12px rgba(220, 197, 110, 0.16);
+  outline: none;
+}
+
+.fallout-maw-token-equipment-picker-card img {
+  width: 58px;
+  height: 58px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(120, 124, 94, 0.68);
+  border-radius: 2px;
+}
+
+.fallout-maw-token-equipment-picker-card-content {
+  min-width: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.fallout-maw-token-equipment-picker-card-content strong {
+  overflow: hidden;
+  color: var(--fallout-maw-slot-picker-text-strong);
+  font-size: 0.92rem;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-token-equipment-picker-condition {
+  color: var(--fallout-maw-slot-picker-text-soft);
+  font-size: 0.75rem;
+  line-height: 1.1;
+}
+
+.fallout-maw-token-equipment-picker-condition.high {
+  color: #a9c879;
+}
+
+.fallout-maw-token-equipment-picker-condition.medium {
+  color: var(--fallout-maw-slot-picker-accent);
+}
+
+.fallout-maw-token-equipment-picker-condition.low {
+  color: #ff796f;
+}
+
+.fallout-maw-token-equipment-picker-condition-meter {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  background: rgba(120, 124, 94, 0.26);
+  border-radius: 0;
+}
+
+.fallout-maw-token-equipment-picker-condition-meter::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--fallout-maw-slot-picker-condition, 0%);
+  background: #88a85e;
+}
+
+.fallout-maw-token-equipment-picker-condition-meter.medium::before {
+  background: var(--fallout-maw-slot-picker-accent);
+}
+
+.fallout-maw-token-equipment-picker-condition-meter.low::before {
+  background: #ff796f;
+}
+
 .fallout-maw-full-control-dialog {
   display: grid;
   gap: 0.45rem;

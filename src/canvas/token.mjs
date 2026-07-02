@@ -3,6 +3,7 @@ import { evaluateActorEffectChangeBaseNumber, prepareActorEffectChangeForApplica
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
+import { isTokenEquipmentHudEnabled, openTokenHudForInteraction } from "./token-equipment-hud.mjs";
 import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
 import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import {
@@ -76,6 +77,21 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     manager.interactionData.screenOrigin.x -= resistance + 1;
     foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
     return true;
+  }
+
+  /** @override */
+  _canHUD(user, event) {
+    if (super._canHUD(user, event)) return true;
+    return Boolean(this.layer?.active && this.actor && isTokenEquipmentHudEnabled());
+  }
+
+  /** @override */
+  _onClickRight(event) {
+    if (!this.isOwner && isTokenEquipmentHudEnabled()) {
+      event.stopPropagation();
+      return openTokenHudForInteraction(this);
+    }
+    return super._onClickRight(event);
   }
 
   /** @override */

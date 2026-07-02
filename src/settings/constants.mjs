@@ -27,6 +27,7 @@ export const TOKEN_ACTION_HUD_ENABLED_SETTING = "tokenActionHudEnabled";
 export const TOKEN_ACTION_HUD_SCALE_SETTING = "tokenActionHudScale";
 export const TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING = "tokenActionHudCollapsedSections";
 export const TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING = "tokenActionHudDamageIcons";
+export const TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING = "tokenHudEquipmentSlotsEnabled";
 export const TOKEN_PROTOTYPE_DEFAULTS_SETTING = "tokenPrototypeDefaults";
 export const COMBAT_CAROUSEL_ENABLED_SETTING = "combatCarouselEnabled";
 export const COMBAT_CAROUSEL_SIZE_SETTING = "combatCarouselSize";

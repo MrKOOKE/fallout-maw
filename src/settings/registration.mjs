@@ -76,6 +76,7 @@ import {
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
   TOKEN_ACTION_HUD_SCALE_SETTING,
+  TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING,
   TOKEN_PROTOTYPE_DEFAULTS_SETTING
 } from "./constants.mjs";
 import { createDefaultAbilityCatalog } from "./abilities.mjs";
@@ -376,6 +377,14 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: getBaselineDefault(TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, normalizeTokenActionHudIcons(DEFAULT_TOKEN_ACTION_HUD_ICONS))
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING, {
+    name: "Token HUD Equipment Slots",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: getBaselineDefault(TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING, true)
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_PROTOTYPE_DEFAULTS_SETTING, {

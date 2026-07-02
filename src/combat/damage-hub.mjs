@@ -1791,7 +1791,9 @@ function isDamageSystemEffect(effect) {
   if (!effect) return false;
   const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[TRAUMA_FLAG_SCOPE] ?? {};
   const flagKind = flags[DAMAGE_EFFECT_FLAG_KEY]?.kind;
-  const flagManaged = flagKind === "resourceLimit" || flagKind === "resourceBlock";
+  const flagManaged = flagKind === "resourceLimit"
+    || flagKind === "resourceBlock"
+    || flagKind === RESISTANCE_OVERHEAT_EFFECT_KIND;
   return Boolean(getDamageEffectChanges(effect).length || flagManaged);
 }
 
