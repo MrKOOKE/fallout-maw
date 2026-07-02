@@ -157,6 +157,7 @@ export class CombatDock extends HandlebarsApplication {
         this.portraits = [];
         this.sortedCombatants.forEach((combatant) => this.portraits.push(new CONFIG.combatTrackerDock.CombatantPortrait(combatant)));
         const combatantsContainer = this.element.querySelector("#combatants");
+        combatantsContainer.classList.toggle("block-turn-order", isBlockTurnOrderEnabled(this.combat));
         combatantsContainer.innerHTML = "";
         this.appendPortraitBlocks(combatantsContainer);
         const isEven = this.portraits.length % 2 === 0;
@@ -174,29 +175,14 @@ export class CombatDock extends HandlebarsApplication {
             this._promises = promises;
             Promise.all(promises).then(() => {
                 this.playIntroAnimation();
+                this.scheduleBlockFrameUpdate();
             });
         }
+        this.scheduleBlockFrameUpdate();
     }
 
     appendPortraitBlocks(combatantsContainer) {
-        const portraitByCombatant = new Map(this.portraits.map(portrait => [portrait.combatant, portrait]));
-        const blocks = getRenderableCombatantBlocks(this.combat, this.sortedCombatants);
-        const activeBlock = isBlockTurnOrderEnabled(this.combat) ? getActiveCombatTurnBlock(this.combat) : null;
-        for (const block of blocks) {
-            const wrapper = document.createElement("div");
-            wrapper.classList.add("combatant-block");
-            wrapper.dataset.blockSignature = block.signature;
-            wrapper.dataset.blockStart = String(block.start);
-            wrapper.classList.toggle("stacked", block.combatants.length > 1);
-            wrapper.classList.toggle("active-block", Boolean(activeBlock && block.signature === activeBlock.signature));
-            for (const combatant of block.combatants) {
-                const portrait = portraitByCombatant.get(combatant);
-                if (!portrait) continue;
-                portrait.element.style.order = "";
-                wrapper.appendChild(portrait.element);
-            }
-            if (wrapper.children.length) combatantsContainer.appendChild(wrapper);
-        }
+        this.portraits.forEach((portrait) => combatantsContainer.appendChild(portrait.element));
     }
 
     setupSeparator(){
@@ -244,7 +230,7 @@ export class CombatDock extends HandlebarsApplication {
             });
         };
         let totalAnimationTime = 0;
-        Array.from(this.element.querySelector("#combatants").children).forEach((el, index) => {
+        this.getCarouselItems().forEach((el, index) => {
             const order = this.trueCarousel ? parseInt(el.style.order) / 100 : index;
             const delay = order * duration * delayMultiplier;
             totalAnimationTime = Math.max(totalAnimationTime, delay + duration);
@@ -272,8 +258,7 @@ export class CombatDock extends HandlebarsApplication {
         if (!this.autoFit) return document.documentElement.style.setProperty("--combatant-portrait-size", max + "px");
 
         const sizeModifier = game.settings.get(MODULE_ID, "floatingSize");
-        const blockCount = getRenderableCombatantBlocks(this.combat, this.sortedCombatants).length;
-        const combatantCount = Math.max(1, blockCount + (combatantRevived ? 1 : 0));
+        const combatantCount = Math.max(1, this.sortedCombatants.length + (combatantRevived ? 1 : 0));
         let maxSpace, portraitSize;
         if (this.isVertical) {
             maxSpace = window.innerHeight * sizeModifier / 100;
@@ -301,7 +286,7 @@ export class CombatDock extends HandlebarsApplication {
 
     updateCombatants() {
         this.portraits.forEach((p) => p.renderInner());
-        this.updateBlockClasses();
+        this.scheduleBlockFrameUpdate();
     }
 
     updateOrder() {
@@ -317,13 +302,9 @@ export class CombatDock extends HandlebarsApplication {
 
         const combatants = this.sortedCombatants;
 
-
-        const blockWrappers = this.getBlockWrappers();
-
         if (!this.trueCarousel) {
-            for (const wrapper of blockWrappers) {
-                wrapper.style.setProperty("order", wrapper.dataset.blockStart || "0");
-            }
+            this.portraits.forEach((p) => p.element.style.setProperty("order", combatants.indexOf(p.combatant)));
+            this.scheduleBlockFrameUpdate();
             return;
         }
 
@@ -338,20 +319,18 @@ export class CombatDock extends HandlebarsApplication {
 
         const lastCombatant = this.sortedCombatants[this.sortedCombatants.length - 1];
 
-        for (const wrapper of blockWrappers) {
-            const portrait = this.portraits.find(p => wrapper.contains(p.element));
-            const combatant = orderedCombatants.find((c) => c === portrait?.combatant);
+        this.portraits.forEach((p) => {
+            const combatant = orderedCombatants.find((c) => c === p.combatant);
             const index = orderedCombatants.findIndex((c) => c === combatant);
-            const order = index >= 0 ? index * 100 : (Number(wrapper.dataset.blockStart) || 0) * 100;
-            wrapper.style.setProperty("order", order);
-        }
+            p.element.style.setProperty("order", index * 100);
+        });
 
         //get last combatant's order
-        const lastPortrait = this.portraits.find((p) => p.combatant === lastCombatant);
-        const lastCombatantOrder = lastPortrait?.element?.closest(".combatant-block")?.style?.order ?? 999999;
+        const lastCombatantOrder = this.portraits.find((p) => p.combatant === lastCombatant)?.element?.style?.order ?? 999999;
         //set separator's order to last combatant's order + 1
 
         separator.style.setProperty("order", parseInt(lastCombatantOrder) + 1);
+        this.scheduleBlockFrameUpdate();
     }
 
     updateStartEndButtons() {
@@ -447,7 +426,7 @@ export class CombatDock extends HandlebarsApplication {
         if (!("turn" in updates) && !("round" in updates)) return;
         if ("round" in updates) this._onRoundChange();
         const combatantsContainer = this.element.querySelector("#combatants");
-        const filteredChildren = Array.from(combatantsContainer.children).filter((c) => !c.classList.contains("separator"));
+        const filteredChildren = this.getCarouselItems();
         const currentSize = combatantsContainer.getBoundingClientRect();
         combatantsContainer.style.minWidth = currentSize.width + "px";
         combatantsContainer.style.minHeight = currentSize.height + "px";
@@ -491,6 +470,7 @@ export class CombatDock extends HandlebarsApplication {
         }
 
         setTimeout(() => this.updateOrder(), 200);
+        if (isBlockTurnOrderEnabled(this.combat)) this.trackBlockFrames(500);
 
         if (!this.trueCarousel) {
             combatantsContainer.style.minWidth = "";
@@ -634,14 +614,58 @@ export class CombatDock extends HandlebarsApplication {
         return super.close(...args);
     }
 
-    getBlockWrappers() {
-        return Array.from(this.element?.querySelectorAll("#combatants > .combatant-block") ?? []);
+    getCarouselItems() {
+        return Array.from(this.element?.querySelectorAll("#combatants > .combatant-portrait, #combatants > .separator") ?? []);
     }
 
-    updateBlockClasses() {
-        const activeBlock = isBlockTurnOrderEnabled(this.combat) ? getActiveCombatTurnBlock(this.combat) : null;
-        for (const wrapper of this.getBlockWrappers()) {
-            wrapper.classList.toggle("active-block", Boolean(activeBlock && wrapper.dataset.blockSignature === activeBlock.signature));
+    scheduleBlockFrameUpdate() {
+        if (this._blockFrameUpdate) cancelAnimationFrame(this._blockFrameUpdate);
+        this._blockFrameUpdate = requestAnimationFrame(() => {
+            this._blockFrameUpdate = null;
+            this.updateBlockFrames();
+        });
+    }
+
+    trackBlockFrames(duration = 450) {
+        const end = performance.now() + duration;
+        const update = () => {
+            this.updateBlockFrames();
+            if (performance.now() < end) requestAnimationFrame(update);
+        };
+        requestAnimationFrame(update);
+    }
+
+    updateBlockFrames() {
+        const combatantsContainer = this.element?.querySelector("#combatants");
+        if (!combatantsContainer) return;
+        combatantsContainer.querySelectorAll(".combatant-block-frame").forEach(frame => frame.remove());
+        if (!isBlockTurnOrderEnabled(this.combat)) return;
+
+        const blocks = getRenderableCombatantBlocks(this.combat, this.sortedCombatants);
+        const activeBlock = getActiveCombatTurnBlock(this.combat);
+        const containerRect = combatantsContainer.getBoundingClientRect();
+        const pad = Math.max(3, parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--combatant-portrait-size")) * 0.04);
+
+        for (const block of blocks) {
+            const portraits = block.combatants
+                .map(combatant => this.portraits.find(portrait => portrait.combatant === combatant)?.element)
+                .filter(element => element?.isConnected && !element.classList.contains("hidden"));
+            if (!portraits.length) continue;
+
+            const rects = portraits.map(element => element.getBoundingClientRect());
+            const left = Math.min(...rects.map(rect => rect.left));
+            const right = Math.max(...rects.map(rect => rect.right));
+            const top = Math.min(...rects.map(rect => rect.top));
+            const bottom = Math.max(...rects.map(rect => rect.bottom));
+
+            const frame = document.createElement("div");
+            frame.classList.add("combatant-block-frame");
+            frame.classList.toggle("active-block", block.signature === activeBlock?.signature);
+            frame.style.left = `${left - containerRect.left + combatantsContainer.scrollLeft - pad}px`;
+            frame.style.top = `${top - containerRect.top + combatantsContainer.scrollTop - pad}px`;
+            frame.style.width = `${right - left + (pad * 2)}px`;
+            frame.style.height = `${bottom - top + (pad * 2)}px`;
+            combatantsContainer.appendChild(frame);
         }
     }
 }
