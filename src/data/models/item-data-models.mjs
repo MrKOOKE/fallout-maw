@@ -15,6 +15,12 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       description: new HTMLField({ required: false, blank: true, initial: "" }),
       quantity: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       maxStack: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      stackParts: new ArrayField(new SchemaField({
+        quantity: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+        x: new NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        y: new NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        rotated: new BooleanField({ required: false, nullable: true, initial: null })
+      }), { required: true, initial: [] }),
       itemCategory: new StringField({ required: true, blank: true, initial: "" }),
       weight: new NumberField({ required: true, min: 0, initial: 0 }),
       price: new NumberField({ required: true, min: 0, initial: 0 }),

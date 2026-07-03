@@ -3,6 +3,12 @@ import { getCreatureOptions } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
   buildInventoryCellStyle,
+  createItemStackPartAdditionUpdate,
+  createItemStackPartMergeUpdate,
+  createItemStackPartPlacementUpdate,
+  createItemStackPartRemovalUpdate,
+  createItemStackPartSplitUpdate,
+  createItemStackPartsForQuantity,
   createStoredPlacement,
   createInventoryPlacement,
   findFirstAvailableInventoryPlacement,
@@ -13,12 +19,14 @@ import {
   getItemContainerParentId,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackPartQuantity,
   getItemTotalWeight,
   isContainerItem,
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
   prepareInventoryGridContext,
+  usesVirtualInventoryStacks,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
@@ -156,10 +164,17 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const itemId = event.currentTarget?.dataset?.itemId ?? "";
     const item = this.actor?.items?.get(itemId);
     if (!item) return;
+    const stackIndex = Math.max(0, toInteger(event.currentTarget?.dataset?.stackIndex));
+    const stackQuantity = Math.max(0, toInteger(event.currentTarget?.dataset?.stackQuantity));
     this.#draggedItemId = item.id;
     this.#draggedItemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      foundry.utils.setProperty(this.#draggedItemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    }
     const dragData = item.toDragData();
     dragData.itemId = item.id;
+    dragData.stackIndex = stackIndex;
+    dragData.stackQuantity = stackQuantity || (usesVirtualInventoryStacks(item) ? getItemStackPartQuantity(item, stackIndex) : getItemQuantity(item));
     event.dataTransfer?.setData("text/plain", JSON.stringify(dragData));
     event.currentTarget?.classList?.add("dragging");
   }
@@ -188,13 +203,38 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
+    const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
 
     const zone = this.#getDropZone(event);
-    const targetItem = this.#getTargetStackItem(zone, dropped.item?.id ?? "");
+    const targetElement = getInventoryGridItemElementAtPointer(event, this.element)
+      ?? zone?.closest?.("[data-inventory-grid-item][data-item-id]");
+    const targetStackIndex = Math.max(0, toInteger(targetElement?.dataset?.stackIndex));
+    const pointedTargetItem = targetElement
+      ? this.actor.items.get(String(targetElement.dataset.itemId ?? "")) ?? null
+      : null;
+    if (
+      dropped.item?.parent === this.actor
+      && usesVirtualInventoryStacks(dropped.item)
+      && targetElement?.dataset?.itemId === dropped.item.id
+      && targetStackIndex !== sourceStackIndex
+    ) {
+      const updateData = createItemStackPartMergeUpdate(dropped.item, sourceStackIndex, targetStackIndex, getItemQuantity(dropped.itemData));
+      if (!updateData) return null;
+      if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+      await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+      return this.actor.items.get(dropped.item.id) ?? null;
+    }
+    const targetItem = (
+      pointedTargetItem
+      && pointedTargetItem.id !== dropped.item?.id
+      && getItemContainerParentId(pointedTargetItem) === this.item.id
+    )
+      ? pointedTargetItem
+      : this.#getTargetStackItem(zone, dropped.item?.id ?? "");
     if (this.#canStackDroppedItem(dropped.itemData, targetItem)) {
-      const quantity = await this.#getDroppedStackQuantity(dropped, targetItem, event);
+      const quantity = await this.#getDroppedStackQuantity(dropped, targetItem, event, { targetStackIndex });
       if (!quantity) return null;
-      return this.#stackDroppedItemQuantity(dropped.item, dropped.itemData, targetItem, quantity);
+      return this.#stackDroppedItemQuantity(dropped.item, dropped.itemData, targetItem, quantity, { sourceStackIndex, targetStackIndex });
     }
 
     let placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""]);
@@ -208,7 +248,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     }
 
     if (dropped.item?.parent === this.actor) {
-      return this.#moveOwnedItem(dropped.item, placement, targetItem);
+      return this.#moveOwnedItem(dropped.item, placement, targetItem, { sourceStackIndex });
     }
 
     return this.#createOrStackDroppedItem(dropped.itemData, placement, targetItem);
@@ -252,11 +292,21 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (data?.type !== "Item") return null;
 
     const ownedItem = data.itemId ? this.actor?.items?.get(data.itemId) : null;
-    if (ownedItem) return { item: ownedItem, itemData: ownedItem.toObject() };
+    if (ownedItem) {
+      const itemData = ownedItem.toObject();
+      if (usesVirtualInventoryStacks(ownedItem)) {
+        foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(ownedItem, Math.max(0, toInteger(data.stackIndex)))));
+      }
+      return { item: ownedItem, itemData };
+    }
 
     const item = data.uuid ? resolveWorldItemSync(data.uuid) : null;
     if (!(item instanceof Item)) return null;
-    return { item, itemData: item.toObject() };
+    const itemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(item, Math.max(0, toInteger(data.stackIndex)))));
+    }
+    return { item, itemData };
   }
 
   #getPreviewItemData(event) {
@@ -267,11 +317,21 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const ownedItem = data.itemId ? this.actor?.items?.get(data.itemId) : null;
     if (ownedItem) {
       this.#draggedItemId = ownedItem.id;
-      return ownedItem.toObject();
+      const itemData = ownedItem.toObject();
+      if (usesVirtualInventoryStacks(ownedItem)) {
+        foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(ownedItem, Math.max(0, toInteger(data.stackIndex)))));
+      }
+      return itemData;
     }
 
     const droppedDocument = data.uuid ? resolveWorldItemSync(data.uuid) : null;
-    if (droppedDocument instanceof Item) return droppedDocument.toObject();
+    if (droppedDocument instanceof Item) {
+      const itemData = droppedDocument.toObject();
+      if (usesVirtualInventoryStacks(droppedDocument)) {
+        foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(droppedDocument, Math.max(0, toInteger(data.stackIndex)))));
+      }
+      return itemData;
+    }
     return null;
   }
 
@@ -465,45 +525,64 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     });
   }
 
-  async #moveOwnedItem(item, placement, targetItem = null) {
-    return this.#insertItemIntoContainer(item.toObject(), placement, { sourceItem: item, targetItem });
+  async #moveOwnedItem(item, placement, targetItem = null, { sourceStackIndex = 0 } = {}) {
+    const itemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      foundry.utils.setProperty(itemData, "system.quantity", getItemStackPartQuantity(item, sourceStackIndex));
+    }
+    return this.#insertItemIntoContainer(itemData, placement, { sourceItem: item, targetItem, sourceStackIndex });
   }
 
   #canStackDroppedItem(itemData, targetItem = null) {
     return Boolean(
       targetItem
       && this.#areStackable(itemData, targetItem)
-      && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
+      && (usesVirtualInventoryStacks(targetItem) || getItemQuantity(targetItem) < getItemMaxStack(targetItem))
     );
   }
 
-  async #getDroppedStackQuantity(dropped, targetItem, _event) {
-    const sourceQuantity = Math.max(1, getItemQuantity(dropped?.item ?? dropped?.itemData));
-    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
+  async #getDroppedStackQuantity(dropped, targetItem, _event, { targetStackIndex = null } = {}) {
+    const sourceQuantity = Math.max(1, getItemQuantity(dropped?.itemData ?? dropped?.item));
+    const availableSpace = usesVirtualInventoryStacks(targetItem)
+      ? Math.max(0, getItemMaxStack(targetItem) - getItemStackPartQuantity(targetItem, targetStackIndex))
+      : Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
     return maxTransfer > 0 ? maxTransfer : 0;
   }
 
-  async #stackDroppedItemQuantity(sourceItem, itemData, targetItem, quantity) {
+  async #stackDroppedItemQuantity(sourceItem, itemData, targetItem, quantity, { sourceStackIndex = 0, targetStackIndex = null } = {}) {
     const transferQuantity = Math.max(1, toInteger(quantity));
     const sourceOwned = sourceItem?.parent === this.actor;
-    const sourceQuantity = Math.max(1, getItemQuantity(sourceOwned ? sourceItem : itemData));
+    const sourceQuantity = Math.max(1, getItemQuantity(usesVirtualInventoryStacks(itemData) ? itemData : (sourceOwned ? sourceItem : itemData)));
     const targetQuantity = getItemQuantity(targetItem);
-    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
+    if (sourceOwned && usesVirtualInventoryStacks(sourceItem) && sourceItem.id === targetItem.id) return targetItem;
+    const virtualTarget = usesVirtualInventoryStacks(targetItem);
+    const virtualSource = sourceOwned && usesVirtualInventoryStacks(sourceItem);
+    const availableSpace = virtualTarget ? Number.POSITIVE_INFINITY : Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
     const appliedQuantity = Math.min(transferQuantity, sourceQuantity, availableSpace);
     if (!appliedQuantity) return null;
 
-    const updates = [{
-      _id: targetItem.id,
-      "system.quantity": targetQuantity + appliedQuantity
-    }];
+    const targetUpdate = virtualTarget
+      ? createItemStackPartAdditionUpdate(targetItem, appliedQuantity, targetStackIndex)
+      : {
+          _id: targetItem.id,
+          "system.quantity": targetQuantity + appliedQuantity
+        };
+    if (!targetUpdate) return null;
+    const updates = [targetUpdate];
     const deletes = [];
     if (sourceOwned) {
-      if (appliedQuantity >= sourceQuantity) deletes.push(sourceItem.id);
-      else updates.push({
-        _id: sourceItem.id,
-        "system.quantity": sourceQuantity - appliedQuantity
-      });
+      if (virtualSource) {
+        const sourceUpdate = createItemStackPartRemovalUpdate(sourceItem, appliedQuantity, sourceStackIndex);
+        if ((sourceUpdate?.["system.quantity"] ?? getItemQuantity(sourceItem)) <= 0) deletes.push(sourceItem.id);
+        else if (sourceUpdate) updates.push(sourceUpdate);
+      } else if (appliedQuantity >= sourceQuantity) deletes.push(sourceItem.id);
+      else {
+        updates.push({
+          _id: sourceItem.id,
+          "system.quantity": sourceQuantity - appliedQuantity
+        });
+      }
     }
 
     if (!this.#validateProjectedInventoryState({ updates, deletes })) return null;
@@ -517,7 +596,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     return this.#insertItemIntoContainer(itemData, placement, { targetItem });
   }
 
-  async #insertItemIntoContainer(itemData, requestedPlacement, { sourceItem = null, targetItem = null } = {}) {
+  async #insertItemIntoContainer(itemData, requestedPlacement, { sourceItem = null, targetItem = null, sourceStackIndex = 0 } = {}) {
+    if (usesVirtualInventoryStacks(itemData)) {
+      return this.#insertVirtualStackItemIntoContainer(itemData, requestedPlacement, { sourceItem, targetItem, sourceStackIndex });
+    }
+
     const maxStack = getItemMaxStack(itemData);
     let remainingQuantity = Math.max(1, getItemQuantity(itemData));
     const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
@@ -606,6 +689,58 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     return null;
   }
 
+  async #insertVirtualStackItemIntoContainer(itemData, requestedPlacement, { sourceItem = null, targetItem = null, sourceStackIndex = 0 } = {}) {
+    const quantity = Math.max(1, getItemQuantity(itemData));
+    const sourceOwned = sourceItem?.parent === this.actor;
+    const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData, this.actor.items);
+    if (sourceOwned && sourceItem && getItemContainerParentId(sourceItem) === this.item.id && (!targetItem || targetItem.id === sourceItem.id)) {
+      const updateData = createItemStackPartPlacementUpdate(sourceItem, sourceStackIndex, preferredPlacement);
+      if (!updateData) return null;
+      if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+      await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+      return this.actor.items.get(sourceItem.id) ?? null;
+    }
+
+    const excludedIds = [sourceOwned ? sourceItem?.id ?? "" : ""].filter(Boolean);
+    const target = this.#getCompatibleVirtualStackTarget(itemData, targetItem, excludedIds);
+    const targetUpdates = [];
+    const createData = [];
+
+    if (target) {
+      const updateData = createItemStackPartAdditionUpdate(target, quantity, null, preferredPlacement);
+      if (updateData) targetUpdates.push(updateData);
+    } else {
+      const createDataEntry = this.#createInventoryStackData(itemData, quantity, preferredPlacement);
+      const stackParts = createItemStackPartsForQuantity(itemData, quantity);
+      const storedPlacement = createStoredPlacement(preferredPlacement, itemData);
+      if (stackParts[0]) {
+        stackParts[0] = {
+          ...stackParts[0],
+          x: storedPlacement.x,
+          y: storedPlacement.y,
+          rotated: storedPlacement.rotated
+        };
+      }
+      foundry.utils.setProperty(createDataEntry, "system.stackParts", stackParts);
+      createData.push(createDataEntry);
+    }
+
+    const sourceUpdates = [];
+    const sourceDeletes = [];
+    if (sourceOwned && sourceItem) {
+      const removalUpdate = createItemStackPartRemovalUpdate(sourceItem, quantity, sourceStackIndex);
+      if ((removalUpdate?.["system.quantity"] ?? getItemQuantity(sourceItem)) <= 0) sourceDeletes.push(sourceItem.id);
+      else if (removalUpdate) sourceUpdates.push(removalUpdate);
+    }
+
+    const updates = [...targetUpdates, ...sourceUpdates];
+    if (!this.#validateProjectedInventoryState({ updates, deletes: sourceDeletes, creates: createData })) return null;
+    if (updates.length) await this.actor.updateEmbeddedDocuments("Item", updates);
+    if (sourceDeletes.length) await this.actor.deleteEmbeddedDocuments("Item", sourceDeletes);
+    if (createData.length) return this.actor.createEmbeddedDocuments("Item", createData);
+    return target ? this.actor.items.get(target.id) ?? null : null;
+  }
+
   #getCompatibleStackTarget(itemData, preferredTarget = null, excludeItemIds = []) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
     const canUsePreferredTarget = preferredTarget
@@ -614,6 +749,25 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       && this.#areStackable(itemData, preferredTarget)
       && (getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget));
     return canUsePreferredTarget ? [preferredTarget] : [];
+  }
+
+  #getCompatibleVirtualStackTarget(itemData, preferredTarget = null, excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    if (
+      preferredTarget
+      && !excluded.has(preferredTarget.id)
+      && getItemContainerParentId(preferredTarget) === this.item.id
+      && usesVirtualInventoryStacks(preferredTarget)
+      && this.#areStackable(itemData, preferredTarget)
+    ) return preferredTarget;
+
+    for (const item of getContextInventoryItems(this.item.id, this.actor.items)) {
+      if (!item || excluded.has(item.id)) continue;
+      if (!usesVirtualInventoryStacks(item)) continue;
+      if (!this.#areStackable(itemData, item)) continue;
+      return item;
+    }
+    return null;
   }
 
   #getSourcePlacement(sourceItem, itemData, preferredPlacement = null, targetItem = null, reservedPlacements = []) {
@@ -640,6 +794,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #createInventoryStackData(itemData, quantity, placement) {
     const createData = foundry.utils.deepClone(itemData);
     delete createData._id;
+    delete createData.id;
     const storedPlacement = createStoredPlacement(placement, itemData);
     foundry.utils.mergeObject(createData, {
       system: {
@@ -720,6 +875,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     event.preventDefault();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
     if (!item) return;
+    const stackIndex = Math.max(0, toInteger(event.currentTarget?.dataset?.stackIndex));
+    const stackQuantity = Math.max(0, toInteger(event.currentTarget?.dataset?.stackQuantity));
+    const selectedQuantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
 
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
     const menu = document.createElement("nav");
@@ -742,7 +902,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (canRotate) {
       menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
     }
-    if (getItemQuantity(item) > 1) {
+    if (selectedQuantity > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
     if (game.user?.isGM) {
@@ -771,9 +931,9 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       if (action === "interact") return openItemInteractionDialog({ actor: this.actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "rotate") return this.#rotateInventoryItem(item);
-      if (action === "split") return this.#splitInventoryItem(item);
+      if (action === "split") return this.#splitInventoryItem(item, { stackIndex, stackQuantity: selectedQuantity });
       if (action === "copy" && game.user?.isGM) return this.#copyInventoryItem(item);
-      if (action === "delete" && game.user?.isGM) return item.delete();
+      if (action === "delete" && game.user?.isGM) return this.#deleteInventoryItem(item, { stackIndex, stackQuantity: selectedQuantity });
       return undefined;
     });
   }
@@ -817,8 +977,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     return this.actor.createEmbeddedDocuments("Item", [data]);
   }
 
-  async #splitInventoryItem(item) {
-    const quantity = getItemQuantity(item);
+  async #splitInventoryItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    const quantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
     if (quantity <= 1) return null;
     const amount = await promptItemStackQuantity({
       item,
@@ -828,6 +990,21 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       value: Math.max(1, Math.floor(quantity / 2))
     });
     if (!amount) return null;
+
+    if (usesVirtualInventoryStacks(item)) {
+      const splitData = item.toObject();
+      foundry.utils.setProperty(splitData, "system.quantity", amount);
+      const placement = this.#getFirstAvailableInventoryPlacement(splitData, [], []);
+      if (!placement) {
+        this.#warnValidation({ reason: "no-space" });
+        return null;
+      }
+      const updateData = createItemStackPartSplitUpdate(item, stackIndex, amount, placement);
+      if (!updateData) return null;
+      if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+      await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+      return this.actor.items.get(item.id) ?? null;
+    }
 
     const data = item.toObject();
     delete data._id;
@@ -847,6 +1024,15 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (!this.#validateProjectedInventoryState({ updates: [updateData], creates: [data] })) return null;
     await item.update({ "system.quantity": quantity - amount });
     return this.actor.createEmbeddedDocuments("Item", [data]);
+  }
+
+  async #deleteInventoryItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    if (!usesVirtualInventoryStacks(item)) return item.delete();
+    const amount = Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    const updateData = createItemStackPartRemovalUpdate(item, amount, stackIndex);
+    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return this.actor.deleteEmbeddedDocuments("Item", [item.id]);
+    if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+    return this.actor.updateEmbeddedDocuments("Item", [updateData]);
   }
 
   #areStackable(sourceData, targetItem) {
@@ -928,6 +1114,16 @@ function escapeAttribute(value) {
   return escapeHTML(value);
 }
 
+function getInventoryGridItemElementAtPointer(event = null, root = null) {
+  const direct = event?.target?.closest?.("[data-inventory-grid-item][data-item-id]");
+  if (direct && (!root || root.contains(direct))) return direct;
+  const clientX = Number(event?.clientX);
+  const clientY = Number(event?.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  const pointed = document.elementFromPoint(clientX, clientY)?.closest?.("[data-inventory-grid-item][data-item-id]") ?? null;
+  return pointed && (!root || root.contains(pointed)) ? pointed : null;
+}
+
 function formatWeight(value) {
   const numeric = Number(value) || 0;
   if (Number.isInteger(numeric)) return String(numeric);
@@ -939,6 +1135,9 @@ function createInventoryItemData(item, allItems, placement = null, { actor = nul
   const interactionState = getItemInteractionState(actor ?? item?.actor, item, { token });
   return {
     id: item.id,
+    stackIndex: Math.max(0, toInteger(item._stackIndex)),
+    stackQuantity: Math.max(1, toInteger(item._stackQuantity) || getItemQuantity(item)),
+    virtualStack: usesVirtualInventoryStacks(item),
     name: item.name,
     img: item.img,
     type: item.type,

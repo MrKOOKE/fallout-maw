@@ -17,6 +17,12 @@ import {
   BUTCHERING_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle,
   buildInventoryGridStyle,
+  createItemStackPartAdditionUpdate,
+  createItemStackPartMergeUpdate,
+  createItemStackPartPlacementUpdate,
+  createItemStackPartRemovalUpdate,
+  createItemStackPartSplitUpdate,
+  createItemStackPartsForQuantity,
   createInventoryPlacement,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
@@ -32,6 +38,7 @@ import {
   getItemsArray,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackPartQuantity,
   getItemTotalWeight,
   hasContainerCycle,
   inventoryPlacementsOverlap,
@@ -41,6 +48,7 @@ import {
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
+  usesVirtualInventoryStacks,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
@@ -747,6 +755,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const itemElement = event.currentTarget?.closest?.("[data-item-id][data-search-actor-uuid]");
     const itemId = String(itemElement?.dataset?.itemId ?? "");
     const actorUuid = String(itemElement?.dataset?.searchActorUuid ?? "");
+    const stackIndex = Math.max(0, toInteger(itemElement?.dataset?.stackIndex));
+    const stackQuantity = Math.max(0, toInteger(itemElement?.dataset?.stackQuantity));
     const actor = this.#getActorByUuid(actorUuid);
     const item = actor?.items?.get(itemId);
     if (!item || !this.#canInteract()) return;
@@ -754,6 +764,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#draggedItemId = item.id;
     this.#draggedActorUuid = actor.uuid;
     this.#draggedItemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      foundry.utils.setProperty(this.#draggedItemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    }
     this.#draggedTradeOfferKind = String(offerEntry?.dataset?.tradeOfferKind ?? "");
     this.#draggedTradeOfferKey = String(offerEntry?.dataset?.tradeOfferKey ?? "");
     this.#highlightEquipmentSlotsForItem(this.#draggedItemData);
@@ -761,6 +774,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       type: "Item",
       uuid: item.uuid,
       itemId: item.id,
+      stackIndex,
+      stackQuantity: stackQuantity || (usesVirtualInventoryStacks(item) ? getItemStackPartQuantity(item, stackIndex) : getItemQuantity(item)),
       actorUuid: actor.uuid,
       sourceActorUuid: actor.uuid,
       falloutMawTradeOffer: Boolean(offerEntry),
@@ -805,6 +820,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const sourceActor = this.#getActorByUuid(String(data.sourceActorUuid ?? data.actorUuid ?? ""));
       const item = sourceActor?.items?.get(String(data.itemId ?? ""));
       if (!sourceActor || !item) return null;
+      const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
+      const sourceStackQuantity = Math.max(0, toInteger(data.stackQuantity));
+      const draggedItemData = item.toObject();
+      if (usesVirtualInventoryStacks(item)) {
+        foundry.utils.setProperty(draggedItemData, "system.quantity", sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex));
+      }
 
       const zone = this.#getDropZone(event);
       const tradeOfferActorUuid = String(zone?.dataset?.tradeOfferActorUuid ?? zone?.closest?.("[data-trade-offer-actor-uuid]")?.dataset?.tradeOfferActorUuid ?? "");
@@ -824,9 +845,30 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
       const placementRequest = getDropZonePlacementRequest(zone);
       const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
-      const targetItem = this.#getTargetStackItem(zone, targetActor, item.id, parentId);
-      if (canStackItems(item.toObject(), targetItem)) {
-        const quantity = await this.#getSearchStackQuantity(item, targetItem, event, { sourceActor, targetActor });
+      const targetElement = getInventoryGridItemElementAtPointer(event, this.element)
+        ?? zone?.closest?.("[data-inventory-grid-item][data-item-id]");
+      const targetStackIndex = Math.max(0, toInteger(targetElement?.dataset?.stackIndex));
+      const pointedTargetItem = (
+        targetElement
+        && String(targetElement.dataset.searchActorUuid ?? "") === targetActor.uuid
+        && String(targetElement.dataset.inventoryParentId ?? ROOT_CONTAINER_ID) === String(parentId ?? ROOT_CONTAINER_ID)
+      )
+        ? targetActor.items.get(String(targetElement.dataset.itemId ?? "")) ?? null
+        : null;
+      const targetItem = (
+        targetActor.uuid === sourceActor.uuid
+        && usesVirtualInventoryStacks(item)
+        && targetElement?.dataset?.itemId === item.id
+        && targetStackIndex !== sourceStackIndex
+      )
+        ? item
+        : (
+          pointedTargetItem && (targetActor.uuid !== sourceActor.uuid || pointedTargetItem.id !== item.id)
+            ? pointedTargetItem
+            : this.#getTargetStackItem(zone, targetActor, item.id, parentId)
+        );
+      if (canStackItems(draggedItemData, targetItem)) {
+        const quantity = await this.#getSearchStackQuantity(item, targetItem, event, { sourceActor, targetActor, sourceStackIndex, sourceStackQuantity, targetStackIndex });
         if (!quantity) return null;
         return await this.#executeSearchStackTransfer({
           searcherActorUuid: this.#searcherActorUuid,
@@ -836,13 +878,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           itemId: item.id,
           targetItemId: targetItem.id,
           targetParentId: parentId,
+          sourceStackIndex,
+          targetStackIndex,
           quantity
         });
       }
       const pointerPlacement = placementRequest.mode === "inventory"
         ? getSearchDropPlacementForPointer({
           actor: targetActor,
-          itemData: item.toObject(),
+          itemData: draggedItemData,
           sourceActor,
           sourceItemId: item.id,
           parentId,
@@ -850,7 +894,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           zone
         })
         : null;
-      const quantity = await this.#getSearchTransferQuantity(item, event, { sourceActor, targetActor });
+      const quantity = await this.#getSearchTransferQuantity(item, event, { sourceActor, targetActor, sourceStackIndex, sourceStackQuantity });
       if (!quantity) return null;
       const payload = {
         searcherActorUuid: this.#searcherActorUuid,
@@ -866,6 +910,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
         targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
         targetItemId: targetItem?.id ?? "",
+        sourceStackIndex,
         quantity
       };
 
@@ -1031,16 +1076,22 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
-  async #getSearchStackQuantity(sourceItem, targetItem, _event, _options = {}) {
-    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
-    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
+  async #getSearchStackQuantity(sourceItem, targetItem, _event, options = {}) {
+    const sourceQuantity = usesVirtualInventoryStacks(sourceItem)
+      ? Math.max(1, toInteger(options.sourceStackQuantity) || getItemStackPartQuantity(sourceItem, options.sourceStackIndex))
+      : Math.max(1, getItemQuantity(sourceItem));
+    const availableSpace = usesVirtualInventoryStacks(targetItem)
+      ? Math.max(0, getItemMaxStack(targetItem) - getItemStackPartQuantity(targetItem, options.targetStackIndex))
+      : Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
     return maxTransfer > 0 ? maxTransfer : 0;
   }
 
-  async #getSearchTransferQuantity(sourceItem, _event, _options = {}) {
-    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
-    return sourceQuantity;
+  async #getSearchTransferQuantity(sourceItem, _event, options = {}) {
+    if (usesVirtualInventoryStacks(sourceItem)) {
+      return Math.max(1, toInteger(options.sourceStackQuantity) || getItemStackPartQuantity(sourceItem, options.sourceStackIndex));
+    }
+    return Math.max(1, getItemQuantity(sourceItem));
   }
 
   #getTradeQuantityPromptData(sourceActor = null, targetActor = null) {
@@ -1071,8 +1122,18 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!side || !this.#canManageTradeOfferSide(side)) return null;
     if (this.#tradeOffers.completed) return null;
 
-    const alreadyOffered = getTradeOfferedItemQuantity(this.#tradeOffers[side], item.id, sourceActor.uuid);
-    const sourceQuantity = Math.max(1, getItemQuantity(item));
+    const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
+    const sourceStackIndex = Math.max(0, toInteger(dragData?.stackIndex));
+    const sourceStackQuantity = Math.max(0, toInteger(dragData?.stackQuantity));
+    const alreadyOffered = getTradeOfferedItemQuantity(
+      this.#tradeOffers[side],
+      item.id,
+      sourceActor.uuid,
+      usesVirtualInventoryStacks(item) ? sourceStackIndex : null
+    );
+    const sourceQuantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex))
+      : Math.max(1, getItemQuantity(item));
     const remaining = Math.max(0, sourceQuantity - alreadyOffered);
     if (remaining <= 0) {
       ui.notifications.info("Вся штучность предмета уже в предложении.");
@@ -1099,12 +1160,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         sourceActorUuid: sourceActor.uuid,
         itemId: item.id,
         quantity,
+        sourceStackIndex,
         placement
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
       return result;
     }
-    this.#tradeOffers = addTradeOfferItem(this.#tradeOffers, side, item, quantity, placement, sourceActor.uuid);
+    this.#tradeOffers = addTradeOfferItem(this.#tradeOffers, side, item, quantity, placement, sourceActor.uuid, {
+      sourceStackIndex
+    });
     this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
@@ -1115,7 +1179,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!this.#isTradeMode() || !this.#tradeOffers.completed || !sourceActor || !item) return null;
     const side = this.#getTradeSideForActor(offerActorUuid);
     if (!this.#canDepositCompletedTradeHub(side, sourceActor)) return null;
-    const sourceQuantity = getTransferItemQuantity(item, getItemQuantity(item));
+    const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
+    const sourceStackIndex = Math.max(0, toInteger(dragData?.stackIndex));
+    const sourceStackQuantity = Math.max(0, toInteger(dragData?.stackQuantity));
+    const sourceQuantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex))
+      : getTransferItemQuantity(item, getItemQuantity(item));
     const quantity = event?.type === "drop" || sourceQuantity <= 1 || isContainerItem(item)
       ? sourceQuantity
       : await promptSearchItemStackQuantity({
@@ -1136,6 +1205,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         sourceActorUuid: sourceActor.uuid,
         itemId: item.id,
         quantity,
+        sourceStackIndex,
         placement
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
@@ -1149,6 +1219,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         sourceActorUuid: sourceActor.uuid,
         itemId: item.id,
         quantity,
+        sourceStackIndex,
         placement
       }),
       mode: SEARCH_INVENTORY_MODE_TRADE
@@ -1567,7 +1638,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!item) return null;
     this.#draggedItemId = item.id;
     this.#draggedActorUuid = actor.uuid;
-    return item.toObject();
+    const itemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      const stackIndex = Math.max(0, toInteger(data.stackIndex));
+      const stackQuantity = Math.max(0, toInteger(data.stackQuantity));
+      foundry.utils.setProperty(itemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    }
+    return itemData;
   }
 
   #getDragEventData(event) {
@@ -1973,10 +2050,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!actor || !item) return;
     event.preventDefault();
     event.stopPropagation();
-    this.#showInventoryContextMenu(actor, item, event);
+    this.#showInventoryContextMenu(actor, item, event, {
+      stackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
+      stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity))
+    });
   }
 
-  #showInventoryContextMenu(actor, item, event) {
+  #showInventoryContextMenu(actor, item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
     this.#clearInventoryTooltip({ force: true });
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
 
@@ -1989,6 +2069,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const isButcheringItem = isItemInButcheringStorage(item);
     const canRotate = canShowInventoryRotateAction(item);
     const rotationResolution = canRotate ? this.#resolveSearchItemRotation(actor, item) : null;
+    const selectedQuantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
     const menuOptions = [];
 
     if (isButcheringItem) {
@@ -2013,7 +2096,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     } else if (!isButcheringItem) {
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
-    if (!isButcheringItem && getItemQuantity(item) > 1) {
+    if (!isButcheringItem && selectedQuantity > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
     if (!isButcheringItem && game.user?.isGM && !isSlottedItem) {
@@ -2045,9 +2128,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "rotate") return this.#rotateSearchItem(actor, item);
       if (action === "equip") return this.#equipSearchItem(actor, item);
       if (action === "unequip") return this.#unequipSearchItem(actor, item);
-      if (action === "split") return this.#splitSearchItem(actor, item);
+      if (action === "split") return this.#splitSearchItem(actor, item, { stackIndex, stackQuantity: selectedQuantity });
       if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(actor, item);
-      if (action === "delete" && game.user?.isGM) return item.delete();
+      if (action === "delete" && game.user?.isGM) return this.#deleteSearchItem(actor, item, { stackIndex, stackQuantity: selectedQuantity });
       return undefined;
     });
   }
@@ -2575,8 +2658,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     });
   }
 
-  async #splitSearchItem(actor, item) {
-    const quantity = getItemQuantity(item);
+  async #splitSearchItem(actor, item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    const quantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
     if (quantity <= 1) return null;
     const amount = await promptSearchItemStackQuantity({
       item,
@@ -2592,7 +2677,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       searchedActorUuid: this.#searchedActorUuid,
       actorUuid: actor.uuid,
       itemId: item.id,
-      amount
+      amount,
+      stackIndex: Math.max(0, toInteger(stackIndex))
     };
     try {
       const responsibleGM = getResponsibleGM();
@@ -2610,12 +2696,22 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return null;
   }
 
+  async #deleteSearchItem(actor, item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    if (!usesVirtualInventoryStacks(item)) return item.delete();
+    const amount = Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    const updateData = createItemStackPartRemovalUpdate(item, amount, stackIndex);
+    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return actor.deleteEmbeddedDocuments("Item", [item.id]);
+    return actor.updateEmbeddedDocuments("Item", [updateData]);
+  }
+
   async #transferItemToOppositeRoot(itemElement) {
     if (!this.#canInteract()) return;
     const sourceActor = this.#getActorByUuid(String(itemElement?.dataset?.searchActorUuid ?? ""));
     const targetActor = sourceActor?.uuid === this.#searcherActorUuid ? this.#searchedActor : this.#searcherActor;
     const item = sourceActor?.items?.get(String(itemElement?.dataset?.itemId ?? ""));
     if (!sourceActor || !targetActor || !item || sourceActor.uuid === targetActor.uuid) return;
+    const sourceStackIndex = Math.max(0, toInteger(itemElement?.dataset?.stackIndex));
+    const sourceStackQuantity = Math.max(0, toInteger(itemElement?.dataset?.stackQuantity));
     const targetParentId = getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem: item });
     if (targetParentId === null) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
@@ -2635,7 +2731,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetWeaponSlot: "",
       targetX: null,
       targetY: null,
-      targetItemId: ""
+      targetItemId: "",
+      quantity: usesVirtualInventoryStacks(item)
+        ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex))
+        : getItemQuantity(item),
+      sourceStackIndex
     });
   }
 
@@ -3699,6 +3799,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetY: payload.targetY,
     targetItemId: String(payload.targetItemId ?? ""),
     quantity,
+    sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
     allowButchering: isItemInButcheringStorage(item)
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
@@ -3720,6 +3821,25 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
   if (!item) throw new Error("Item not found.");
   if (isItemInButcheringStorage(item)) throw new Error("Предмет разделки нельзя разделять в хранилище.");
   assertSearchTransferableItem(item);
+  if (usesVirtualInventoryStacks(item)) {
+    const splitData = item.toObject();
+    foundry.utils.setProperty(splitData, "system.quantity", toInteger(payload.amount));
+    const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+      ? LOCKED_STORAGE_PARENT_ID
+      : getItemContainerParentId(item);
+    const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, splitData, [], []);
+    if (!placement) throwInventoryNoSpace();
+    const updateData = createItemStackPartSplitUpdate(
+      item,
+      Math.max(0, toInteger(payload.stackIndex)),
+      toInteger(payload.amount),
+      createContextInventoryPlacement(placement, parentId)
+    );
+    if (!updateData) throwInventoryNoSpace();
+    if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
+    await actor.updateEmbeddedDocuments("Item", [updateData]);
+    return actor.items.get(item.id) ?? null;
+  }
   return splitActorInventoryItem(actor, item, toInteger(payload.amount));
 }
 
@@ -3803,7 +3923,9 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     sourceItem,
     targetItem,
     targetParentId: String(payload.targetParentId ?? ROOT_CONTAINER_ID),
-    quantity
+    quantity,
+    sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
+    targetStackIndex: Math.max(0, toInteger(payload.targetStackIndex))
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
   return result;
@@ -3948,12 +4070,14 @@ async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "
   const side = String(payload.side ?? "");
   if (!TRADE_OFFER_SIDES.includes(side)) throw new Error("Invalid trade side.");
   const quantity = getTransferItemQuantity(item, payload.quantity);
-  const deposited = await depositItemIntoCompletedTradeHub(offers, side, sourceActor, item, quantity, payload.placement);
+  const deposited = await depositItemIntoCompletedTradeHub(offers, side, sourceActor, item, quantity, payload.placement, {
+    sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex))
+  });
   if (session) session.offers = deposited;
   return { ok: true, offers: deposited };
 }
 
-async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sourceActor = null, item = null, quantity = 0, placement = null) {
+async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sourceActor = null, item = null, quantity = 0, placement = null, { sourceStackIndex = 0 } = {}) {
   const offers = normalizeTradeOffersState(offersState);
   if (!offers.completed) throw new Error("Trade is not completed.");
   if (!TRADE_OFFER_SIDES.includes(side) || !sourceActor || !item) throw new Error("Invalid completed trade deposit.");
@@ -3978,20 +4102,27 @@ async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sou
     const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
     await sourceActor.deleteEmbeddedDocuments("Item", deleteIds);
   } else {
-    await removeTransferredItemQuantity(sourceActor, item, amount);
+    if (usesVirtualInventoryStacks(item)) await removeTransferredVirtualStackQuantity(sourceActor, item, amount, sourceStackIndex);
+    else await removeTransferredItemQuantity(sourceActor, item, amount);
   }
   return offers;
 }
 
 function validateTradeOfferSide(actor, offer = {}) {
-  for (const entry of offer?.items ?? []) {
+  const itemEntries = [...(offer?.items ?? [])].sort((left, right) => (
+    Math.max(0, toInteger(right?.sourceStackIndex)) - Math.max(0, toInteger(left?.sourceStackIndex))
+  ));
+  for (const entry of itemEntries) {
     const sourceActor = getCachedActorByUuid(entry.sourceActorUuid);
     if (!sourceActor) throw new Error("Trade item source actor not found.");
     const item = sourceActor?.items?.get(String(entry.itemId ?? ""));
     if (!item) throw new Error("Item not found.");
     assertSearchTransferableItem(item);
     const requested = Math.max(1, toInteger(entry.quantity));
-    if (!isContainerItem(item) && requested > Math.max(1, getItemQuantity(item))) throw new Error("Not enough item quantity.");
+    const available = usesVirtualInventoryStacks(item)
+      ? getItemStackPartQuantity(item, Math.max(0, toInteger(entry.sourceStackIndex)))
+      : Math.max(1, getItemQuantity(item));
+    if (!isContainerItem(item) && requested > available) throw new Error("Not enough item quantity.");
   }
   for (const entry of offer?.currencies ?? []) {
     const currencyKey = String(entry.currencyKey ?? "");
@@ -4045,7 +4176,11 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
       const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
       await entrySourceActor.deleteEmbeddedDocuments("Item", deleteIds);
     } else {
-      await removeTransferredItemQuantity(entrySourceActor, item, quantity);
+      if (usesVirtualInventoryStacks(item)) {
+        await removeTransferredVirtualStackQuantity(entrySourceActor, item, quantity, Math.max(0, toInteger(entry.sourceStackIndex)));
+      } else {
+        await removeTransferredItemQuantity(entrySourceActor, item, quantity);
+      }
     }
   }
 
@@ -4199,6 +4334,7 @@ function getTransferItemQuantity(item, quantity = 0) {
 }
 
 async function removeTransferredItemQuantity(actor, item, quantity = 0) {
+  if (usesVirtualInventoryStacks(item)) return removeTransferredVirtualStackQuantity(actor, item, quantity, 0);
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
   if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id]);
@@ -4206,6 +4342,14 @@ async function removeTransferredItemQuantity(actor, item, quantity = 0) {
     _id: item.id,
     "system.quantity": sourceQuantity - transferQuantity
   }]);
+}
+
+async function removeTransferredVirtualStackQuantity(actor, item, quantity = 0, stackIndex = 0) {
+  const sourceQuantity = Math.max(1, getItemQuantity(item));
+  const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
+  const updateData = createItemStackPartRemovalUpdate(item, transferQuantity, stackIndex);
+  if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return actor.deleteEmbeddedDocuments("Item", [item.id]);
+  return actor.updateEmbeddedDocuments("Item", [updateData]);
 }
 
 function ensureTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, quantity = 1, barterAdjustmentPercent = null } = {}) {
@@ -4471,6 +4615,7 @@ function normalizeTradeOffersState(state = {}) {
         entryId: String(entry?.entryId ?? entry?.offerKey ?? entry?.itemId ?? foundry.utils.randomID()),
         itemId: String(entry?.itemId ?? ""),
         sourceActorUuid: String(entry?.sourceActorUuid ?? ""),
+        sourceStackIndex: Math.max(0, toInteger(entry?.sourceStackIndex)),
         returnActorUuid: String(entry?.returnActorUuid ?? ""),
         quantity: Math.max(1, toInteger(entry?.quantity)),
         itemData: normalizeTradeOfferItemData(entry?.itemData),
@@ -4526,12 +4671,15 @@ function normalizeTradeOfferContainedItems(containedItems = []) {
     .filter(Boolean);
 }
 
-function getTradeOfferedItemQuantity(offer = {}, itemId = "", actorUuid = "") {
+function getTradeOfferedItemQuantity(offer = {}, itemId = "", actorUuid = "", sourceStackIndex = null) {
   const key = String(itemId ?? "");
   const sourceActorUuid = String(actorUuid ?? "");
+  const hasSourceStackIndex = sourceStackIndex !== null && sourceStackIndex !== undefined;
+  const normalizedStackIndex = Math.max(0, toInteger(sourceStackIndex));
   return (offer?.items ?? [])
     .filter(entry => String(entry.itemId ?? entry.id ?? entry.offerKey ?? "") === key)
     .filter(entry => !sourceActorUuid || String(entry.sourceActorUuid ?? "") === sourceActorUuid)
+    .filter(entry => !hasSourceStackIndex || Math.max(0, toInteger(entry.sourceStackIndex)) === normalizedStackIndex)
     .reduce((total, entry) => total + Math.max(0, toInteger(entry.quantity)), 0);
 }
 
@@ -4595,16 +4743,29 @@ function normalizeTradeOfferPlacement(placement = null, fallback = null) {
   };
 }
 
-function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "") {
+function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "", { sourceStackIndex = 0 } = {}) {
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side) || !item) return offers;
   const itemId = String(item.id ?? "");
   const amount = Math.max(1, toInteger(quantity));
   const sourceUuid = String(sourceActorUuid ?? "");
+  const stackIndex = Math.max(0, toInteger(sourceStackIndex));
   if (!sourceUuid) return offers;
-  const existing = offers[side].items.find(entry => entry.itemId === itemId && String(entry.sourceActorUuid ?? "") === sourceUuid);
+  const virtualStack = usesVirtualInventoryStacks(item);
+  const existing = offers[side].items.find(entry => (
+    entry.itemId === itemId
+    && String(entry.sourceActorUuid ?? "") === sourceUuid
+    && (!virtualStack || Math.max(0, toInteger(entry.sourceStackIndex)) === stackIndex)
+  ));
   if (existing) existing.quantity += amount;
-  else offers[side].items.push({ entryId: foundry.utils.randomID(), itemId, sourceActorUuid: sourceUuid, quantity: amount, placement: normalizeTradeOfferPlacement(placement) });
+  else offers[side].items.push({
+    entryId: foundry.utils.randomID(),
+    itemId,
+    sourceActorUuid: sourceUuid,
+    sourceStackIndex: virtualStack ? stackIndex : 0,
+    quantity: amount,
+    placement: normalizeTradeOfferPlacement(placement)
+  });
   if (placement?.columns) offers[side].columns = Math.max(1, toInteger(placement.columns));
   return offers;
 }
@@ -5215,6 +5376,7 @@ export async function transferItemBetweenActors({
   targetY = null,
   targetItemId = "",
   quantity = 0,
+  sourceStackIndex = 0,
   allowLocked = false,
   allowButchering = false,
   spendWeaponSwitchCost = true
@@ -5246,20 +5408,22 @@ export async function transferItemBetweenActors({
   if (!isInventoryContextPlacementMode(preferredPlacement.mode)) {
     if (sourceActor.uuid === targetActor.uuid) return moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement, { spendWeaponSwitchCost });
     if (isContainerItem(sourceItem)) return transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId: ROOT_CONTAINER_ID, preferredPlacement });
-    return createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem, spendWeaponSwitchCost });
+    return createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem, sourceStackIndex, spendWeaponSwitchCost });
   }
 
   if (sourceActor.uuid === targetActor.uuid) {
     const moved = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
       parentId: targetParentId,
       quantity: transferQuantity,
-      targetItem
+      targetItem,
+      sourceStackIndex
     });
     if (moved) return moved;
     return insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
       sourceItem,
       targetItem,
-      parentId: targetParentId
+      parentId: targetParentId,
+      sourceStackIndex
     });
   }
 
@@ -5271,7 +5435,8 @@ export async function transferItemBetweenActors({
     sourceActor,
     sourceItem,
     targetItem,
-    parentId: targetParentId
+    parentId: targetParentId,
+    sourceStackIndex
   });
 }
 
@@ -5295,7 +5460,7 @@ async function moveOwnedItemToActorPlacement(actor, item, placement, { spendWeap
   return result;
 }
 
-async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem, spendWeaponSwitchCost = true } = {}) {
+async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem, sourceStackIndex = 0, spendWeaponSwitchCost = true } = {}) {
   const placementResolution = resolveActorPlacementWithReplacements(actor, itemData, placement);
   if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   const { placement: resolvedPlacement, conflicts } = placementResolution;
@@ -5311,12 +5476,27 @@ async function createExternalPlacedItem(actor, itemData, placement, { sourceActo
   }
   if (replacementUpdates.length) await actor.updateEmbeddedDocuments("Item", replacementUpdates);
   const created = await actor.createEmbeddedDocuments("Item", [createData]);
-  await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
+  if (usesVirtualInventoryStacks(sourceItem)) await removeTransferredVirtualStackQuantity(sourceActor, sourceItem, getItemQuantity(itemData), sourceStackIndex);
+  else await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
   if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(actor);
   return created;
 }
 
-async function insertItemIntoActorInventory(actor, itemData, requestedPlacement, { sourceItem = null, targetItem = null, parentId = ROOT_CONTAINER_ID } = {}) {
+async function insertItemIntoActorInventory(actor, itemData, requestedPlacement, {
+  sourceItem = null,
+  targetItem = null,
+  parentId = ROOT_CONTAINER_ID,
+  sourceStackIndex = 0
+} = {}) {
+  if (usesVirtualInventoryStacks(itemData)) {
+    return insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
+      sourceItem,
+      targetItem,
+      parentId,
+      sourceStackIndex
+    });
+  }
+
   const maxStack = getItemMaxStack(itemData);
   const transferQuantity = Math.max(1, getItemQuantity(itemData));
   const sourceOriginalQuantity = sourceItem ? Math.max(1, getItemQuantity(sourceItem)) : 0;
@@ -5400,16 +5580,96 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   return null;
 }
 
+async function insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
+  sourceActor = null,
+  sourceItem = null,
+  targetItem = null,
+  parentId = ROOT_CONTAINER_ID,
+  sourceStackIndex = 0
+} = {}) {
+  const quantity = Math.max(1, getItemQuantity(itemData));
+  const preferredPlacement = createContextInventoryPlacement(
+    normalizeInventoryPlacement(requestedPlacement, itemData, actor.items),
+    parentId
+  );
+  const excludedIds = [sourceActor?.uuid === actor.uuid || sourceItem?.parent === actor ? sourceItem?.id ?? "" : ""].filter(Boolean);
+  const target = getCompatibleVirtualStackTarget(actor, itemData, targetItem, excludedIds, parentId);
+  const targetUpdates = [];
+  const createData = [];
+
+  if (target) {
+    const additionUpdate = createItemStackPartAdditionUpdate(target, quantity, null, preferredPlacement);
+    if (additionUpdate) targetUpdates.push(additionUpdate);
+  } else {
+    const createDataEntry = createInventoryStackData(itemData, quantity, parentId, preferredPlacement);
+    const storedPlacement = createStoredPlacement(preferredPlacement, itemData);
+    const stackParts = createItemStackPartsForQuantity(itemData, quantity);
+    if (stackParts[0]) {
+      stackParts[0] = {
+        ...stackParts[0],
+        x: storedPlacement.x,
+        y: storedPlacement.y,
+        rotated: storedPlacement.rotated
+      };
+    }
+    foundry.utils.setProperty(createDataEntry, "system.stackParts", stackParts);
+    createData.push(createDataEntry);
+  }
+
+  const sourceUpdates = [];
+  const sourceDeletes = [];
+  const sourceOwner = sourceActor ?? sourceItem?.parent ?? null;
+  if (sourceItem && sourceOwner?.uuid === actor.uuid) {
+    const removalUpdate = createItemStackPartRemovalUpdate(sourceItem, quantity, sourceStackIndex);
+    if ((removalUpdate?.["system.quantity"] ?? getItemQuantity(sourceItem)) <= 0) sourceDeletes.push(sourceItem.id);
+    else if (removalUpdate) sourceUpdates.push(removalUpdate);
+  }
+
+  if (sourceOwner?.uuid === actor.uuid) {
+    const updates = mergeItemUpdates(targetUpdates, sourceUpdates);
+    if (!validateActorProjectedInventoryState(actor, { updates, deletes: sourceDeletes, creates: createData })) throwInventoryNoSpace();
+    if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+    if (sourceDeletes.length) await actor.deleteEmbeddedDocuments("Item", sourceDeletes);
+    if (createData.length) return actor.createEmbeddedDocuments("Item", createData);
+    return target ? actor.items.get(target.id) ?? null : null;
+  }
+
+  if (!validateActorProjectedInventoryState(actor, { updates: targetUpdates, creates: createData })) throwInventoryNoSpace();
+  if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
+  if (createData.length) await actor.createEmbeddedDocuments("Item", createData);
+  if (sourceOwner && sourceItem) await removeTransferredVirtualStackQuantity(sourceOwner, sourceItem, quantity, sourceStackIndex);
+  return target ? actor.items.get(target.id) ?? null : null;
+}
+
 async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requestedPlacement, {
   parentId = ROOT_CONTAINER_ID,
   quantity = 0,
-  targetItem = null
+  targetItem = null,
+  sourceStackIndex = 0
 } = {}) {
   if (!actor || !sourceItem || targetItem) return null;
   if (!isInventoryContextPlacementMode(requestedPlacement?.mode)) return null;
   if (isItemInButcheringStorage(sourceItem)) return null;
 
   const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+  if (usesVirtualInventoryStacks(sourceItem)) {
+    const storedParentId = getStoredInventoryParentId(parentId);
+    const placementMode = getInventoryPlacementModeForParent(parentId);
+    if (
+      getItemContainerParentId(sourceItem) !== storedParentId
+      || sourceItem.system?.placement?.mode !== placementMode
+    ) return null;
+    const placement = createContextInventoryPlacement(
+      normalizeInventoryPlacement(requestedPlacement, sourceItem, actor.items),
+      parentId
+    );
+    const updateData = createItemStackPartPlacementUpdate(sourceItem, sourceStackIndex, placement);
+    if (!updateData) return null;
+    if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
+    await actor.updateEmbeddedDocuments("Item", [updateData], { render: false });
+    return actor.items.get(sourceItem.id) ?? sourceItem;
+  }
+
   if (Math.max(1, toInteger(quantity) || sourceQuantity) !== sourceQuantity) return null;
 
   const itemData = sourceItem.toObject();
@@ -5434,8 +5694,19 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
   sourceActor,
   sourceItem,
   targetItem = null,
-  parentId = ROOT_CONTAINER_ID
+  parentId = ROOT_CONTAINER_ID,
+  sourceStackIndex = 0
 } = {}) {
+  if (usesVirtualInventoryStacks(itemData)) {
+    return insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
+      sourceActor,
+      sourceItem,
+      targetItem,
+      parentId,
+      sourceStackIndex
+    });
+  }
+
   const maxStack = getItemMaxStack(itemData);
   let remainingQuantity = Math.max(1, getItemQuantity(itemData));
   const usableTargetItem = targetItem && areStackable(itemData, targetItem) ? targetItem : null;
@@ -5607,6 +5878,23 @@ function getCompatibleStackTarget(actor, itemData, preferredTarget = null, exclu
     && areStackable(itemData, preferredTarget)
     && getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget);
   return canUsePreferredTarget ? [preferredTarget] : [];
+}
+
+function getCompatibleVirtualStackTarget(actor, itemData, preferredTarget = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const storedParentId = getStoredInventoryParentId(parentId);
+  const placementMode = getInventoryPlacementModeForParent(parentId);
+  const candidates = [];
+  if (preferredTarget) candidates.push(preferredTarget);
+  candidates.push(...getContextInventoryItems(parentId, actor.items));
+  return candidates.find(candidate => (
+    candidate
+    && !excluded.has(candidate.id)
+    && usesVirtualInventoryStacks(candidate)
+    && getItemContainerParentId(candidate) === storedParentId
+    && candidate.system?.placement?.mode === placementMode
+    && areStackable(itemData, candidate)
+  )) ?? null;
 }
 
 function getSourcePlacement(actor, sourceItem, itemData, preferredPlacement = null, targetItem = null, parentId = ROOT_CONTAINER_ID, reservedPlacements = []) {
@@ -6239,32 +6527,51 @@ async function stackActorInventoryItem({
   sourceItem,
   targetItem,
   targetParentId = ROOT_CONTAINER_ID,
-  quantity = 0
+  quantity = 0,
+  sourceStackIndex = 0,
+  targetStackIndex = null
 } = {}) {
   assertSearchTransferableItem(sourceItem, { allowButchering: isItemInButcheringStorage(sourceItem) });
   assertSearchTransferableItem(targetItem);
   if (!canStackItems(sourceItem?.toObject?.(), targetItem)) throw new Error("Items cannot be stacked.");
+  if (usesVirtualInventoryStacks(sourceItem) && sourceActor.uuid === targetActor.uuid && sourceItem.id === targetItem.id) {
+    const updateData = createItemStackPartMergeUpdate(sourceItem, sourceStackIndex, targetStackIndex, quantity);
+    if (!updateData) throw new Error("No stack room.");
+    if (!validateActorProjectedInventoryState(targetActor, { updates: [updateData] })) throwInventoryNoSpace();
+    await targetActor.updateEmbeddedDocuments("Item", [updateData]);
+    return targetActor.items.get(targetItem.id) ?? null;
+  }
   if (getItemContainerParentId(targetItem) !== targetParentId) throw new Error("Invalid stack target.");
 
   const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
   const targetQuantity = getItemQuantity(targetItem);
-  const availableSpace = Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
+  const virtualTarget = usesVirtualInventoryStacks(targetItem);
+  const virtualSource = usesVirtualInventoryStacks(sourceItem);
+  const availableSpace = virtualTarget
+    ? Math.max(0, getItemMaxStack(targetItem) - getItemStackPartQuantity(targetItem, targetStackIndex))
+    : Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
   const appliedQuantity = Math.min(Math.max(1, toInteger(quantity)), sourceQuantity, availableSpace);
   if (!appliedQuantity) throw new Error("No stack room.");
 
-  const targetUpdate = {
-    _id: targetItem.id,
-    "system.quantity": targetQuantity + appliedQuantity
-  };
+  const targetUpdate = virtualTarget
+    ? createItemStackPartAdditionUpdate(targetItem, appliedQuantity, targetStackIndex)
+    : {
+        _id: targetItem.id,
+        "system.quantity": targetQuantity + appliedQuantity
+      };
+  if (!targetUpdate) throwInventoryNoSpace();
 
   if (sourceActor.uuid === targetActor.uuid) {
     const updates = [targetUpdate];
     const deletes = [];
     if (appliedQuantity >= sourceQuantity) deletes.push(sourceItem.id);
-    else updates.push({
-      _id: sourceItem.id,
-      "system.quantity": sourceQuantity - appliedQuantity
-    });
+    else if (virtualSource) updates.push(createItemStackPartRemovalUpdate(sourceItem, appliedQuantity, sourceStackIndex));
+    else {
+      updates.push({
+        _id: sourceItem.id,
+        "system.quantity": sourceQuantity - appliedQuantity
+      });
+    }
     if (!validateActorProjectedInventoryState(targetActor, { updates, deletes })) throwInventoryNoSpace();
     await targetActor.updateEmbeddedDocuments("Item", updates);
     if (deletes.length) await targetActor.deleteEmbeddedDocuments("Item", deletes);
@@ -6273,7 +6580,8 @@ async function stackActorInventoryItem({
 
   if (!validateActorProjectedInventoryState(targetActor, { updates: [targetUpdate] })) throwInventoryNoSpace();
   await targetActor.updateEmbeddedDocuments("Item", [targetUpdate]);
-  if (appliedQuantity >= sourceQuantity) await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
+  if (virtualSource) await removeTransferredVirtualStackQuantity(sourceActor, sourceItem, appliedQuantity, sourceStackIndex);
+  else if (appliedQuantity >= sourceQuantity) await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
   else await sourceActor.updateEmbeddedDocuments("Item", [{
     _id: sourceItem.id,
     "system.quantity": sourceQuantity - appliedQuantity
@@ -6287,7 +6595,7 @@ export function canStackItems(sourceData, targetItem = null) {
     && !isNaturalRaceItem(sourceData)
     && !isNaturalRaceItem(targetItem)
     && areStackable(sourceData, targetItem)
-    && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
+    && (usesVirtualInventoryStacks(targetItem) || getItemQuantity(targetItem) < getItemMaxStack(targetItem))
   );
 }
 
@@ -6339,6 +6647,16 @@ export async function promptSearchItemStackQuantity({ item, title = "Колич�
   });
   if (!formData || formData === "cancel") return 0;
   return Math.max(1, Math.min(limit, toInteger(formData.quantity)));
+}
+
+function getInventoryGridItemElementAtPointer(event = null, root = null) {
+  const direct = event?.target?.closest?.("[data-inventory-grid-item][data-item-id]");
+  if (direct && (!root || root.contains(direct))) return direct;
+  const clientX = Number(event?.clientX);
+  const clientY = Number(event?.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  const pointed = document.elementFromPoint(clientX, clientY)?.closest?.("[data-inventory-grid-item][data-item-id]") ?? null;
+  return pointed && (!root || root.contains(pointed)) ? pointed : null;
 }
 
 function createInventoryItemUpdate(itemId, quantity, parentId, placement, itemData) {
@@ -7013,7 +7331,9 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     assertSearchTransferableItem(item);
     ensureTradeSessionActorOfferMutation(session, actor.uuid, requesterUserId);
     if (getTradeSessionActorSide(session, actor.uuid) !== payload.side) throw new Error("Trade offer side mismatch.");
-    session.offers = addTradeOfferItem(session.offers, payload.side, item, payload.quantity, payload.placement, actor.uuid);
+    session.offers = addTradeOfferItem(session.offers, payload.side, item, payload.quantity, payload.placement, actor.uuid, {
+      sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex))
+    });
     resetTradeSessionReady(session);
   } else if (action === "moveTradeOfferEntry") {
     ensureTradeSessionParticipant(session, requesterUserId);

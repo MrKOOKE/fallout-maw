@@ -27,7 +27,8 @@ import {
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
   normalizeInventoryPlacement,
-  prepareInventoryGridContext
+  prepareInventoryGridContext,
+  usesVirtualInventoryStacks
 } from "./inventory-containers.mjs";
 import { getActiveItemChargesData, getConstructPartFunction, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { prepareActorContainerInventoryContext } from "./actor-containers.mjs";
@@ -623,6 +624,9 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
   ) && firstAidCharges.max > 1;
   return {
     id: item.id,
+    stackIndex: Math.max(0, toInteger(item._stackIndex)),
+    stackQuantity: Math.max(1, toInteger(item._stackQuantity) || getItemQuantity(item)),
+    virtualStack: usesVirtualInventoryStacks(item),
     uuid: item.uuid,
     name: item.name,
     img: normalizeImagePath(item.img, "icons/svg/item-bag.svg"),

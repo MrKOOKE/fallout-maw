@@ -38,6 +38,9 @@ import {
   INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
+  createItemStackPartAdditionUpdate,
+  createItemStackPartRemovalUpdate,
+  createItemStackPartsForQuantity,
   createStoredPlacement,
   findFirstAvailableResolvedInventoryPlacement,
   getContainerContentsWeight,
@@ -51,7 +54,8 @@ import {
   getItemTotalWeight,
   isContainerItem,
   normalizeInventoryPlacement,
-  placementContainsInventoryCell
+  placementContainsInventoryCell,
+  usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import {
   canShowInventoryRotateAction,
@@ -2039,7 +2043,13 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
         deletes.push(item.id);
         remaining -= quantity;
       } else {
-        updates.push({ _id: item.id, "system.quantity": quantity - remaining });
+        if (usesVirtualInventoryStacks(item)) {
+          const updateData = createItemStackPartRemovalUpdate(item, remaining, 0);
+          if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) deletes.push(item.id);
+          else updates.push(updateData);
+        } else {
+          updates.push({ _id: item.id, "system.quantity": quantity - remaining });
+        }
         remaining = 0;
       }
     }
@@ -2282,14 +2292,20 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
 
     for (const target of getCraftOutputStackTargets(actor, spec.data, planningItems)) {
       if (remainingQuantity <= 0) break;
-      const availableSpace = Math.max(0, getItemMaxStack(target) - getItemQuantity(target));
+      const availableSpace = usesVirtualInventoryStacks(target)
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, getItemMaxStack(target) - getItemQuantity(target));
       if (!availableSpace) continue;
       const stackQuantity = Math.min(remainingQuantity, availableSpace);
       if (!canCraftOutputIncreaseStack(target, stackQuantity, spec.data, planningItems)) continue;
 
       const nextQuantity = getItemQuantity(target) + stackQuantity;
-      upsertCraftOutputUpdate(updates, target, { "system.quantity": nextQuantity });
+      const updateData = usesVirtualInventoryStacks(target)
+        ? createItemStackPartAdditionUpdate(target, stackQuantity)
+        : { _id: getItemId(target), "system.quantity": nextQuantity };
+      if (updateData) upsertCraftOutputUpdate(updates, target, updateData);
       foundry.utils.setProperty(target, "system.quantity", nextQuantity);
+      if (updateData?.["system.stackParts"]) foundry.utils.setProperty(target, "system.stackParts", updateData["system.stackParts"]);
       remainingQuantity -= stackQuantity;
     }
 
@@ -2297,6 +2313,9 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
       const stackQuantity = Math.min(remainingQuantity, maxStack);
       const createData = foundry.utils.deepClone(spec.data);
       foundry.utils.setProperty(createData, "system.quantity", stackQuantity);
+      if (usesVirtualInventoryStacks(createData)) {
+        foundry.utils.setProperty(createData, "system.stackParts", createItemStackPartsForQuantity(createData, stackQuantity));
+      }
       const target = findCraftOutputTarget(actor, createData, planningItems);
       if (!target) {
         return {

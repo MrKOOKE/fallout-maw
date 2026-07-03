@@ -116,6 +116,9 @@ import {
 import { getHudWeaponSetsForActor } from "../utils/hud-active-items.mjs";
 import {
   ROOT_CONTAINER_ID,
+  createItemStackPartAdditionUpdate,
+  createItemStackPartRemovalUpdate,
+  createItemStackPartsForQuantity,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
@@ -127,7 +130,8 @@ import {
   getItemTotalWeight,
   getItemUnitWeight,
   hasContainerCycle,
-  getItemQuantity
+  getItemQuantity,
+  usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getActorInstalledModuleItems, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -1794,7 +1798,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await weapon.update({ [`${path}.moduleSlots`]: slots });
     if (oldItemData?.system) await returnModuleItemToActorInventory(this.actor, oldItemData);
     const quantity = getItemQuantity(moduleItem);
-    if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
+    if (usesVirtualInventoryStacks(moduleItem)) {
+      const updateData = createItemStackPartRemovalUpdate(moduleItem, 1, 0);
+      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) await moduleItem.delete();
+      else {
+        const { _id, ...changes } = updateData;
+        await moduleItem.update(changes);
+      }
+    } else if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
     else await moduleItem.delete();
     this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
@@ -4355,7 +4366,11 @@ async function insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weapo
     const quantity = getItemQuantity(stack);
     const spent = Math.min(quantity, remaining);
     const next = quantity - spent;
-    if (next > 0) updates.push({ _id: stack.id, "system.quantity": next });
+    if (usesVirtualInventoryStacks(stack)) {
+      const removalUpdate = createItemStackPartRemovalUpdate(stack, spent, 0);
+      if (!removalUpdate || (removalUpdate["system.quantity"] ?? 0) <= 0) deletes.push(stack.id);
+      else updates.push(removalUpdate);
+    } else if (next > 0) updates.push({ _id: stack.id, "system.quantity": next });
     else deletes.push(stack.id);
     remaining -= spent;
   }
@@ -4498,10 +4513,13 @@ function createActorMagazineSourceReturnPlan(actor, sourceItem, quantity) {
     const room = getMagazineSourceStackReturnRoom(actor, stack, reservedPlacementContexts);
     if (!room) continue;
     const returned = Math.min(remaining, room);
-    updates.push({
-      _id: stack.id,
-      "system.quantity": getItemQuantity(stack) + returned
-    });
+    const updateData = usesVirtualInventoryStacks(stack)
+      ? createItemStackPartAdditionUpdate(stack, returned)
+      : {
+          _id: stack.id,
+          "system.quantity": getItemQuantity(stack) + returned
+        };
+    if (updateData) updates.push(updateData);
     reserveMagazineSourceContainerLoad(stack, sourceItem, returned, reservedPlacementContexts);
     remaining -= returned;
   }
@@ -4545,19 +4563,24 @@ function createActorMagazineSourceStackData(sourceItem, quantity) {
   const createData = sourceItem.toObject();
   delete createData._id;
   foundry.utils.setProperty(createData, "system.quantity", Math.max(0, toInteger(quantity)));
+  if (usesVirtualInventoryStacks(createData)) {
+    foundry.utils.setProperty(createData, "system.stackParts", createItemStackPartsForQuantity(createData, quantity));
+  }
   foundry.utils.setProperty(createData, `flags.${SYSTEM_ID}.damageSourcePrototypeUuid`, sourceItem.uuid);
   return createData;
 }
 
 function canReturnMagazineSourceToStack(actor, item) {
-  if (!item || getItemQuantity(item) >= getItemMaxStack(item)) return false;
+  if (!item || (!usesVirtualInventoryStacks(item) && getItemQuantity(item) >= getItemMaxStack(item))) return false;
   if (String(item.system?.placement?.mode ?? "inventory") !== "inventory") return false;
   const parentId = getItemContainerParentId(item);
   return !parentId || Boolean(actor?.items?.get(parentId));
 }
 
 function getMagazineSourceStackReturnRoom(actor, item, reservedPlacementContexts = []) {
-  const stackRoom = Math.max(0, getItemMaxStack(item) - getItemQuantity(item));
+  const stackRoom = usesVirtualInventoryStacks(item)
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0, getItemMaxStack(item) - getItemQuantity(item));
   if (!stackRoom) return 0;
   const parentId = getItemContainerParentId(item);
   if (!parentId) return stackRoom;
@@ -4584,10 +4607,16 @@ async function returnModuleItemToActorInventory(actor, itemData) {
   const moduleName = getWeaponModuleTechnicalName(itemData);
   const stackTarget = actor.items.contents.find(item => (
     getWeaponModuleTechnicalName(item) === moduleName
-    && getItemQuantity(item) < getItemMaxStack(item)
+    && (usesVirtualInventoryStacks(item) || getItemQuantity(item) < getItemMaxStack(item))
     && String(item.system?.placement?.mode ?? "inventory") === "inventory"
   ));
   if (stackTarget) {
+    if (usesVirtualInventoryStacks(stackTarget)) {
+      const updateData = createItemStackPartAdditionUpdate(stackTarget, 1);
+      if (!updateData) return null;
+      const { _id, ...changes } = updateData;
+      return stackTarget.update(changes);
+    }
     return stackTarget.update({ "system.quantity": getItemQuantity(stackTarget) + 1 });
   }
 

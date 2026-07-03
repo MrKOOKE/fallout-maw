@@ -56,6 +56,7 @@ import { canStackItems, registerSearchInventorySocket } from "./apps/search-inve
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
+import { registerVirtualStackConsolidationHooks } from "./items/virtual-stack-consolidation.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
@@ -136,6 +137,7 @@ Hooks.once("init", () => {
   registerNaturalRaceItemHooks();
   registerLightSourceHooks();
   registerEnergyConsumptionHooks();
+  registerVirtualStackConsolidationHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
   registerTravelGroupHudHooks();

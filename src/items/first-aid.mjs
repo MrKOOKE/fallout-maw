@@ -11,7 +11,11 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { getFirstAidChargesData, getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
-import { getItemQuantity } from "../utils/inventory-containers.mjs";
+import {
+  createItemStackPartRemovalUpdate,
+  getItemQuantity,
+  usesVirtualInventoryStacks
+} from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -723,6 +727,12 @@ async function spendFirstAidItem(item, amount = 1) {
   const charges = getFirstAidChargesData(item);
   const cost = Math.max(1, toInteger(amount));
   if (charges.max <= 1) {
+    if (usesVirtualInventoryStacks(item)) {
+      const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
+      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+      const { _id, ...changes } = updateData;
+      return item.update(changes);
+    }
     const next = Math.max(0, quantity - 1);
     if (next <= 0) return item.delete();
     return item.update({ "system.quantity": next });
@@ -735,6 +745,15 @@ async function spendFirstAidItem(item, amount = 1) {
 
   const nextQuantity = Math.max(0, quantity - 1);
   if (nextQuantity <= 0) return item.delete();
+  if (usesVirtualInventoryStacks(item)) {
+    const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
+    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+    const { _id, ...changes } = updateData;
+    return item.update({
+      ...changes,
+      "system.functions.firstAid.charges.value": charges.max
+    });
+  }
   return item.update({
     "system.quantity": nextQuantity,
     "system.functions.firstAid.charges.value": charges.max
