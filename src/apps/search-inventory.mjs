@@ -1112,7 +1112,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     };
   }
 
-  async #addItemToTradeOffer({ sourceActor = null, item = null, offerActorUuid = "", event = null, zone = null } = {}) {
+  async #addItemToTradeOffer({ sourceActor = null, item = null, offerActorUuid = "", event = null, zone = null, sourceStackIndex = null, sourceStackQuantity = null } = {}) {
     if (!this.#isTradeMode() || !sourceActor || !item) return null;
     if (sourceActor.uuid !== offerActorUuid) {
       ui.notifications.warn("Предмет кладется в предложение своего владельца.");
@@ -1123,16 +1123,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#tradeOffers.completed) return null;
 
     const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
-    const sourceStackIndex = Math.max(0, toInteger(dragData?.stackIndex));
-    const sourceStackQuantity = Math.max(0, toInteger(dragData?.stackQuantity));
+    const selectedStackIndex = Math.max(0, toInteger(sourceStackIndex ?? dragData?.stackIndex));
+    const selectedStackQuantity = Math.max(0, toInteger(sourceStackQuantity ?? dragData?.stackQuantity));
     const alreadyOffered = getTradeOfferedItemQuantity(
       this.#tradeOffers[side],
       item.id,
       sourceActor.uuid,
-      usesVirtualInventoryStacks(item) ? sourceStackIndex : null
+      usesVirtualInventoryStacks(item) ? selectedStackIndex : null
     );
     const sourceQuantity = usesVirtualInventoryStacks(item)
-      ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex))
+      ? Math.max(1, selectedStackQuantity || getItemStackPartQuantity(item, selectedStackIndex))
       : Math.max(1, getItemQuantity(item));
     const remaining = Math.max(0, sourceQuantity - alreadyOffered);
     if (remaining <= 0) {
@@ -1160,14 +1160,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         sourceActorUuid: sourceActor.uuid,
         itemId: item.id,
         quantity,
-        sourceStackIndex,
+        sourceStackIndex: selectedStackIndex,
         placement
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
       return result;
     }
     this.#tradeOffers = addTradeOfferItem(this.#tradeOffers, side, item, quantity, placement, sourceActor.uuid, {
-      sourceStackIndex
+      sourceStackIndex: selectedStackIndex
     });
     this.#resetTradeReady();
     this.#broadcastTradeOffers();
@@ -1175,15 +1175,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return this.#renderPreservingWindowStack();
   }
 
-  async #addItemToCompletedTradeHub({ sourceActor = null, item = null, offerActorUuid = "", event = null, zone = null } = {}) {
+  async #addItemToCompletedTradeHub({ sourceActor = null, item = null, offerActorUuid = "", event = null, zone = null, sourceStackIndex = null, sourceStackQuantity = null } = {}) {
     if (!this.#isTradeMode() || !this.#tradeOffers.completed || !sourceActor || !item) return null;
     const side = this.#getTradeSideForActor(offerActorUuid);
     if (!this.#canDepositCompletedTradeHub(side, sourceActor)) return null;
     const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
-    const sourceStackIndex = Math.max(0, toInteger(dragData?.stackIndex));
-    const sourceStackQuantity = Math.max(0, toInteger(dragData?.stackQuantity));
+    const selectedStackIndex = Math.max(0, toInteger(sourceStackIndex ?? dragData?.stackIndex));
+    const selectedStackQuantity = Math.max(0, toInteger(sourceStackQuantity ?? dragData?.stackQuantity));
     const sourceQuantity = usesVirtualInventoryStacks(item)
-      ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex))
+      ? Math.max(1, selectedStackQuantity || getItemStackPartQuantity(item, selectedStackIndex))
       : getTransferItemQuantity(item, getItemQuantity(item));
     const quantity = event?.type === "drop" || sourceQuantity <= 1 || isContainerItem(item)
       ? sourceQuantity
@@ -1205,7 +1205,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         sourceActorUuid: sourceActor.uuid,
         itemId: item.id,
         quantity,
-        sourceStackIndex,
+        sourceStackIndex: selectedStackIndex,
         placement
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
@@ -1219,7 +1219,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         sourceActorUuid: sourceActor.uuid,
         itemId: item.id,
         quantity,
-        sourceStackIndex,
+        sourceStackIndex: selectedStackIndex,
         placement
       }),
       mode: SEARCH_INVENTORY_MODE_TRADE
@@ -2008,11 +2008,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const actor = this.#getActorByUuid(String(itemElement.dataset.searchActorUuid ?? ""));
       const item = actor?.items?.get(String(itemElement.dataset.itemId ?? ""));
       if (!actor || !item) return;
+      const sourceStackIndex = Math.max(0, toInteger(itemElement.dataset.stackIndex));
+      const sourceStackQuantity = Math.max(0, toInteger(itemElement.dataset.stackQuantity));
       if (this.#tradeOffers.completed) {
-        await this.#addItemToCompletedTradeHub({ sourceActor: actor, item, offerActorUuid: actor.uuid, event });
+        await this.#addItemToCompletedTradeHub({ sourceActor: actor, item, offerActorUuid: actor.uuid, event, sourceStackIndex, sourceStackQuantity });
         return;
       }
-      await this.#addItemToTradeOffer({ sourceActor: actor, item, offerActorUuid: actor.uuid, event });
+      await this.#addItemToTradeOffer({ sourceActor: actor, item, offerActorUuid: actor.uuid, event, sourceStackIndex, sourceStackQuantity });
       return;
     }
     await this.#transferItemToOppositeRoot(itemElement);
@@ -3357,10 +3359,17 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
   const decorateItem = item => {
     if (!item) return item;
     const liveItem = actor.items.get(String(item.id));
+    const offeredQuantity = isTrade && tradeOffer && !tradeOffer.completed
+      ? getTradeOfferedSourceItemQuantity(item, tradeOffer, actor)
+      : 0;
+    const displayedQuantity = offeredQuantity > 0
+      ? Math.max(0, Math.max(1, toInteger(item.quantity)) - offeredQuantity)
+      : item.quantity;
     return {
       ...item,
       actorUuid,
-      draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer) ? " trade-offered-source" : ""}` : "",
+      quantity: displayedQuantity,
+      draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer, actor) ? " trade-offered-source" : ""}` : "",
       tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent }) : ""
     };
   };
@@ -4678,7 +4687,7 @@ function getTradeOfferedItemQuantity(offer = {}, itemId = "", actorUuid = "", so
   const normalizedStackIndex = Math.max(0, toInteger(sourceStackIndex));
   return (offer?.items ?? [])
     .filter(entry => String(entry.itemId ?? entry.id ?? entry.offerKey ?? "") === key)
-    .filter(entry => !sourceActorUuid || String(entry.sourceActorUuid ?? "") === sourceActorUuid)
+    .filter(entry => !sourceActorUuid || String(entry.sourceActorUuid ?? entry.actorUuid ?? "") === sourceActorUuid)
     .filter(entry => !hasSourceStackIndex || Math.max(0, toInteger(entry.sourceStackIndex)) === normalizedStackIndex)
     .reduce((total, entry) => total + Math.max(0, toInteger(entry.quantity)), 0);
 }
@@ -4747,11 +4756,16 @@ function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, pla
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side) || !item) return offers;
   const itemId = String(item.id ?? "");
-  const amount = Math.max(1, toInteger(quantity));
   const sourceUuid = String(sourceActorUuid ?? "");
   const stackIndex = Math.max(0, toInteger(sourceStackIndex));
   if (!sourceUuid) return offers;
   const virtualStack = usesVirtualInventoryStacks(item);
+  const stackLimit = virtualStack
+    ? Math.max(1, getItemStackPartQuantity(item, stackIndex))
+    : Math.max(1, getItemQuantity(item));
+  const alreadyOffered = getTradeOfferedItemQuantity(offers[side], itemId, sourceUuid, virtualStack ? stackIndex : null);
+  const amount = Math.max(0, Math.min(Math.max(0, toInteger(quantity)), Math.max(0, stackLimit - alreadyOffered)));
+  if (!amount) return offers;
   const existing = offers[side].items.find(entry => (
     entry.itemId === itemId
     && String(entry.sourceActorUuid ?? "") === sourceUuid
@@ -4899,6 +4913,8 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
       side,
       completed: Boolean(offer.completed),
       id: String(entry.itemId ?? liveItem?.id ?? offerKey),
+      sourceActorUuid: sourceActor?.uuid ?? "",
+      sourceStackIndex: Math.max(0, toInteger(entry.sourceStackIndex)),
       actorUuid: sourceActor?.uuid ?? "",
       name: liveItem?.name ?? itemData.name,
       img: normalizeImagePath(liveItem?.img ?? itemData.img, FALLBACK_ICON),
@@ -5087,9 +5103,28 @@ function tradeOfferPlacementsOverlap(left = null, right = null) {
   );
 }
 
-function isTradeItemFullyOffered(item = null, tradeOffer = null) {
+function isTradeItemFullyOffered(item = null, tradeOffer = null, actor = null) {
   if (!item || !tradeOffer || tradeOffer.completed) return false;
-  return getTradeOfferedItemQuantity(tradeOffer, item.id) >= Math.max(1, getItemQuantity(item));
+  return getTradeOfferedSourceItemQuantity(item, tradeOffer, actor) >= getTradeSourceItemQuantity(item);
+}
+
+function getTradeOfferedSourceItemQuantity(item = null, tradeOffer = null, actor = null) {
+  if (!item || !tradeOffer) return 0;
+  const actorUuid = String(actor?.uuid ?? item?.actorUuid ?? "");
+  if (usesVirtualInventoryStacks(item)) {
+    const stackIndex = Math.max(0, toInteger(item?.stackIndex ?? item?._stackIndex));
+    return getTradeOfferedItemQuantity(tradeOffer, item.id, actorUuid, stackIndex);
+  }
+  return getTradeOfferedItemQuantity(tradeOffer, item.id, actorUuid);
+}
+
+function getTradeSourceItemQuantity(item = null) {
+  if (!item) return 0;
+  if (usesVirtualInventoryStacks(item)) {
+    const stackIndex = Math.max(0, toInteger(item?.stackIndex ?? item?._stackIndex));
+    return Math.max(1, toInteger(item?.stackQuantity ?? item?._stackQuantity) || getItemStackPartQuantity(item, stackIndex));
+  }
+  return Math.max(1, getItemQuantity(item));
 }
 
 function calculateCurrencyTradeValue(amount = 0, sourceCurrencyKey = "", targetCurrencyKey = "") {
