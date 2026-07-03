@@ -3,12 +3,12 @@ import { getCreatureOptions } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
   buildInventoryCellStyle,
+  createAnchoredItemStackPartsForQuantity,
   createItemStackPartAdditionUpdate,
   createItemStackPartMergeUpdate,
   createItemStackPartPlacementUpdate,
   createItemStackPartRemovalUpdate,
   createItemStackPartSplitUpdate,
-  createItemStackPartsForQuantity,
   createStoredPlacement,
   createInventoryPlacement,
   findFirstAvailableInventoryPlacement,
@@ -703,25 +703,36 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
     const excludedIds = [sourceOwned ? sourceItem?.id ?? "" : ""].filter(Boolean);
     const target = this.#getCompatibleVirtualStackTarget(itemData, targetItem, excludedIds);
+    const { columns, rows } = getContainerDimensions(this.item);
+    const stackParts = createAnchoredItemStackPartsForQuantity({
+      itemData,
+      quantity,
+      preferredPlacement,
+      contextItems: getContextInventoryItems(this.item.id, this.actor.items),
+      columns,
+      rows,
+      allItems: this.actor.items,
+      excludeItemIds: excludedIds
+    });
+    if (!stackParts) {
+      this.#warnValidation({ reason: "no-space" });
+      return null;
+    }
     const targetUpdates = [];
     const createData = [];
 
     if (target) {
-      const updateData = createItemStackPartAdditionUpdate(target, quantity, null, preferredPlacement);
+      const updateData = createItemStackPartAdditionUpdate(target, quantity, null, stackParts);
       if (updateData) targetUpdates.push(updateData);
     } else {
       const createDataEntry = this.#createInventoryStackData(itemData, quantity, preferredPlacement);
-      const stackParts = createItemStackPartsForQuantity(itemData, quantity);
-      const storedPlacement = createStoredPlacement(preferredPlacement, itemData);
-      if (stackParts[0]) {
-        stackParts[0] = {
-          ...stackParts[0],
-          x: storedPlacement.x,
-          y: storedPlacement.y,
-          rotated: storedPlacement.rotated
-        };
-      }
       foundry.utils.setProperty(createDataEntry, "system.stackParts", stackParts);
+      const primaryPart = stackParts[0] ?? null;
+      if (primaryPart) {
+        foundry.utils.setProperty(createDataEntry, "system.placement.x", primaryPart.x);
+        foundry.utils.setProperty(createDataEntry, "system.placement.y", primaryPart.y);
+        foundry.utils.setProperty(createDataEntry, "system.placement.rotated", Boolean(primaryPart.rotated));
+      }
       createData.push(createDataEntry);
     }
 

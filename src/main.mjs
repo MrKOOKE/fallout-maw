@@ -56,7 +56,6 @@ import { canStackItems, registerSearchInventorySocket } from "./apps/search-inve
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
-import { registerVirtualStackConsolidationHooks } from "./items/virtual-stack-consolidation.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
@@ -74,6 +73,8 @@ import { registerFormFocusDragGuard } from "./utils/form-focus-drag-guard.mjs";
 import { rewriteItemReferenceData, rewriteSceneTokenActorReferences } from "./utils/document-references.mjs";
 import {
   ROOT_CONTAINER_ID,
+  createAnchoredItemStackPartsForQuantity,
+  createItemStackPartAdditionUpdate,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerDimensions,
@@ -82,6 +83,7 @@ import {
   getItemMaxStack,
   getItemQuantity,
   isContainerItem,
+  usesVirtualInventoryStacks,
   validateInventoryTree
 } from "./utils/inventory-containers.mjs";
 import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
@@ -137,7 +139,6 @@ Hooks.once("init", () => {
   registerNaturalRaceItemHooks();
   registerLightSourceHooks();
   registerEnergyConsumptionHooks();
-  registerVirtualStackConsolidationHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
   registerTravelGroupHudHooks();
@@ -405,6 +406,8 @@ async function promptActorDropItemQuantity(itemData) {
 }
 
 function planActorDropItem(actor, itemData) {
+  if (usesVirtualInventoryStacks(itemData)) return planActorDropVirtualItem(actor, itemData);
+
   const maxStack = getItemMaxStack(itemData);
   let remainingQuantity = Math.max(1, getItemQuantity(itemData));
   const updates = [];
@@ -444,6 +447,84 @@ function planActorDropItem(actor, itemData) {
     rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   }).valid) return null;
   return { updates, creates };
+}
+
+function planActorDropVirtualItem(actor, itemData) {
+  let remainingQuantity = Math.max(1, getItemQuantity(itemData));
+  const updates = [];
+  const creates = [];
+  const reservedPlacements = new Map();
+  const contexts = getActorDropInventoryContexts(actor);
+
+  for (const target of getActorDropStackTargets(actor, itemData).filter(usesVirtualInventoryStacks)) {
+    if (remainingQuantity <= 0) break;
+    const parentId = getItemContainerParentId(target);
+    const context = contexts.find(entry => entry.parentId === parentId);
+    if (!context) continue;
+    const parts = createAnchoredItemStackPartsForQuantity({
+      itemData,
+      quantity: remainingQuantity,
+      contextItems: context.items,
+      columns: context.dimensions.columns,
+      rows: context.dimensions.rows,
+      allItems: actor.items.contents,
+      reservedPlacements: reservedPlacements.get(parentId) ?? [],
+      options: getActorRootInventoryGridOptions(actor, parentId)
+    });
+    if (!parts?.length) continue;
+    const transferQuantity = parts.reduce((total, part) => total + Math.max(1, toInteger(part.quantity)), 0);
+    const updateData = createItemStackPartAdditionUpdate(target, transferQuantity, null, parts);
+    if (!updateData) continue;
+    updates.push(updateData);
+    if (!reservedPlacements.has(parentId)) reservedPlacements.set(parentId, []);
+    reservedPlacements.get(parentId).push(...parts.map(part => createPlacementFromStackPart(itemData, part)));
+    remainingQuantity -= transferQuantity;
+  }
+
+  for (const context of contexts) {
+    if (remainingQuantity <= 0) break;
+    const parentId = context.parentId;
+    const parts = createAnchoredItemStackPartsForQuantity({
+      itemData,
+      quantity: remainingQuantity,
+      contextItems: context.items,
+      columns: context.dimensions.columns,
+      rows: context.dimensions.rows,
+      allItems: actor.items.contents,
+      reservedPlacements: reservedPlacements.get(parentId) ?? [],
+      options: getActorRootInventoryGridOptions(actor, parentId)
+    });
+    if (!parts?.length) continue;
+    const createQuantity = parts.reduce((total, part) => total + Math.max(1, toInteger(part.quantity)), 0);
+    const stackData = foundry.utils.deepClone(itemData);
+    foundry.utils.setProperty(stackData, "system.quantity", createQuantity);
+    foundry.utils.setProperty(stackData, "system.stackParts", parts);
+    creates.push(createActorDropItemData(stackData, {
+      parentId,
+      placement: createPlacementFromStackPart(stackData, parts[0])
+    }));
+    if (!reservedPlacements.has(parentId)) reservedPlacements.set(parentId, []);
+    reservedPlacements.get(parentId).push(...parts.map(part => createPlacementFromStackPart(stackData, part)));
+    remainingQuantity -= createQuantity;
+  }
+
+  if (remainingQuantity > 0) return null;
+  const rootDimensions = getActorRootInventoryDimensions(actor);
+  const projectedItems = projectActorDropItems(actor, { updates, creates });
+  if (!validateInventoryTree(projectedItems, rootDimensions, {
+    rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+  }).valid) return null;
+  return { updates, creates };
+}
+
+function createPlacementFromStackPart(itemData, part = {}) {
+  const placement = itemData?.system?.placement ?? {};
+  return {
+    ...placement,
+    x: Math.max(1, toInteger(part?.x)),
+    y: Math.max(1, toInteger(part?.y)),
+    rotated: Boolean(part?.rotated ?? placement.rotated)
+  };
 }
 
 function getActorDropStackTargets(actor, itemData) {

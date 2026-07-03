@@ -230,7 +230,13 @@ export function createItemStackPartAdditionUpdate(itemOrSystem = null, amount = 
   }
   if (remaining > 0) {
     const addedParts = createCanonicalStackParts(remaining, maxStack);
-    applyStackPartPlacement(addedParts[0], placement);
+    if (Array.isArray(placement)) {
+      for (let index = 0; index < addedParts.length; index += 1) {
+        applyStackPartPlacement(addedParts[index], placement[index]);
+      }
+    } else {
+      applyStackPartPlacement(addedParts[0], placement);
+    }
     parts.push(...addedParts);
   }
   const nextQuantity = quantity + addQuantity;
@@ -245,6 +251,55 @@ export function createItemStackPartAdditionUpdate(itemOrSystem = null, amount = 
 
 export function createItemStackPartsForQuantity(itemOrSystem = null, quantity = getItemQuantity(itemOrSystem)) {
   return createCanonicalStackParts(Math.max(0, toInteger(quantity)), getItemMaxStack(itemOrSystem));
+}
+
+export function createAnchoredItemStackPartsForQuantity({
+  itemData = null,
+  quantity = getItemQuantity(itemData),
+  preferredPlacement = null,
+  contextItems = [],
+  columns = 1,
+  rows = 1,
+  allItems = contextItems,
+  excludeItemIds = [],
+  reservedPlacements = [],
+  options = {}
+} = {}) {
+  if (!itemData || !usesVirtualInventoryStacks(itemData)) return createItemStackPartsForQuantity(itemData, quantity);
+  const parts = createItemStackPartsForQuantity(itemData, quantity);
+  const reserved = Array.isArray(reservedPlacements) ? [...reservedPlacements] : [];
+  const anchored = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = { ...parts[index] };
+    const partData = foundry.utils.deepClone(itemData);
+    foundry.utils.setProperty(partData, "system.quantity", part.quantity);
+    let placement = null;
+    if (
+      index === 0
+      && preferredPlacement
+      && isInventoryPlacementAvailable(preferredPlacement, contextItems, columns, rows, allItems, excludeItemIds, reserved, options)
+    ) {
+      placement = preferredPlacement;
+    } else {
+      placement = findFirstAvailableInventoryPlacement(
+        contextItems,
+        columns,
+        rows,
+        partData,
+        allItems,
+        excludeItemIds,
+        reserved,
+        options
+      );
+    }
+    if (!placement) return null;
+    applyStackPartPlacement(part, placement);
+    anchored.push(part);
+    reserved.push(placement);
+  }
+
+  return anchored;
 }
 
 export function createSingleItemStackPartForQuantity(itemOrSystem = null, quantity = getItemQuantity(itemOrSystem)) {

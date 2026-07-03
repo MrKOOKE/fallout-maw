@@ -116,12 +116,12 @@ import {
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
+  createAnchoredItemStackPartsForQuantity,
   createItemStackPartAdditionUpdate,
   createItemStackPartMergeUpdate,
   createItemStackPartPlacementUpdate,
   createItemStackPartRemovalUpdate,
   createItemStackPartSplitUpdate,
-  createItemStackPartsForQuantity,
   createStoredPlacement,
   createInventoryPlacement as createInventoryPlacementHelper,
   findFirstAvailableInventoryPlacement as findFirstAvailableInventoryPlacementHelper,
@@ -2381,27 +2381,35 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
     const target = this.#getCompatibleVirtualStackTarget(itemData, targetItem, excludedIds, parentId);
+    const { columns, rows } = this.#getInventoryGridDimensions(parentId);
+    const stackParts = createAnchoredItemStackPartsForQuantity({
+      itemData,
+      quantity,
+      preferredPlacement,
+      contextItems: this.#getContextInventoryItems(parentId),
+      columns,
+      rows,
+      allItems: this.actor.items,
+      excludeItemIds: excludedIds,
+      options: this.#getInventoryGridOptions(parentId)
+    });
+    if (!stackParts) {
+      this.#warnInventoryNoSpace();
+      return null;
+    }
     const updates = [];
     const creates = [];
     const deletes = [];
 
     if (target) {
-      const additionUpdate = createItemStackPartAdditionUpdate(target, quantity, null, preferredPlacement);
+      const additionUpdate = createItemStackPartAdditionUpdate(target, quantity, null, stackParts);
       if (additionUpdate) updates.push(additionUpdate);
     } else {
       const createData = foundry.utils.deepClone(itemData);
       delete createData._id;
       delete createData.id;
       const storedPlacement = createStoredPlacement(preferredPlacement, itemData);
-      const stackParts = createItemStackPartsForQuantity(itemData, quantity);
-      if (stackParts[0]) {
-        stackParts[0] = {
-          ...stackParts[0],
-          x: storedPlacement.x,
-          y: storedPlacement.y,
-          rotated: storedPlacement.rotated
-        };
-      }
+      const primaryPart = stackParts[0] ?? null;
       foundry.utils.mergeObject(createData, {
         system: {
           quantity,
@@ -2417,11 +2425,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
             weaponSet: storedPlacement.weaponSet,
             weaponSlot: storedPlacement.weaponSlot,
             limbKey: storedPlacement.limbKey,
-            x: storedPlacement.x,
-            y: storedPlacement.y,
+            x: primaryPart?.x ?? storedPlacement.x,
+            y: primaryPart?.y ?? storedPlacement.y,
             width: storedPlacement.width,
             height: storedPlacement.height,
-            rotated: storedPlacement.rotated
+            rotated: primaryPart?.rotated ?? storedPlacement.rotated
           }
         }
       });

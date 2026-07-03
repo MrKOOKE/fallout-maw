@@ -17,12 +17,12 @@ import {
   BUTCHERING_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle,
   buildInventoryGridStyle,
+  createAnchoredItemStackPartsForQuantity,
   createItemStackPartAdditionUpdate,
   createItemStackPartMergeUpdate,
   createItemStackPartPlacementUpdate,
   createItemStackPartRemovalUpdate,
   createItemStackPartSplitUpdate,
-  createItemStackPartsForQuantity,
   createInventoryPlacement,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
@@ -5594,25 +5594,34 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   );
   const excludedIds = [sourceActor?.uuid === actor.uuid || sourceItem?.parent === actor ? sourceItem?.id ?? "" : ""].filter(Boolean);
   const target = getCompatibleVirtualStackTarget(actor, itemData, targetItem, excludedIds, parentId);
+  const dimensions = getActorInventoryContextDimensions(actor, parentId);
+  const stackParts = createAnchoredItemStackPartsForQuantity({
+    itemData,
+    quantity,
+    preferredPlacement,
+    contextItems: getContextInventoryItems(parentId, actor.items),
+    columns: dimensions.columns,
+    rows: dimensions.rows,
+    allItems: actor.items,
+    excludeItemIds: excludedIds,
+    options: getActorInventoryContextOptions(actor, parentId)
+  });
+  if (!stackParts) throwInventoryNoSpace();
   const targetUpdates = [];
   const createData = [];
 
   if (target) {
-    const additionUpdate = createItemStackPartAdditionUpdate(target, quantity, null, preferredPlacement);
+    const additionUpdate = createItemStackPartAdditionUpdate(target, quantity, null, stackParts);
     if (additionUpdate) targetUpdates.push(additionUpdate);
   } else {
     const createDataEntry = createInventoryStackData(itemData, quantity, parentId, preferredPlacement);
-    const storedPlacement = createStoredPlacement(preferredPlacement, itemData);
-    const stackParts = createItemStackPartsForQuantity(itemData, quantity);
-    if (stackParts[0]) {
-      stackParts[0] = {
-        ...stackParts[0],
-        x: storedPlacement.x,
-        y: storedPlacement.y,
-        rotated: storedPlacement.rotated
-      };
-    }
     foundry.utils.setProperty(createDataEntry, "system.stackParts", stackParts);
+    const primaryPart = stackParts[0] ?? null;
+    if (primaryPart) {
+      foundry.utils.setProperty(createDataEntry, "system.placement.x", primaryPart.x);
+      foundry.utils.setProperty(createDataEntry, "system.placement.y", primaryPart.y);
+      foundry.utils.setProperty(createDataEntry, "system.placement.rotated", Boolean(primaryPart.rotated));
+    }
     createData.push(createDataEntry);
   }
 
