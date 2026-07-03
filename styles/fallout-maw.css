@@ -3911,6 +3911,22 @@ body #prosemirror-dropdown {
   margin-bottom: 0.5rem;
 }
 
+.fallout-maw-inventory-pane-header h2 {
+  margin-bottom: 0;
+}
+
+.fallout-maw-inventory-clear-button {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2rem;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
 .fallout-maw-container-title {
   align-items: center;
   display: inline-flex;
@@ -12908,6 +12924,10 @@ html.fallout-maw-token-action-hud-open #hotbar {
 .application.fallout-maw-actor-sheet .fallout-maw-panel-header {
   gap: 0.75rem;
   margin-bottom: 0.8rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-pane-header h2 {
+  margin-bottom: 0;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-empty-list,

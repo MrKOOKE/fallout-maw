@@ -259,6 +259,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         openActorLimbSilhouette: this.#onOpenActorLimbSilhouette,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
+        clearInventory: this.#onClearInventory,
         editActorImage: this.#onEditActorImage,
         selectLimb: this.#onSelectLimb,
         openLimbControl: this.#onOpenLimbControl,
@@ -797,6 +798,64 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#actorNameDraft = null;
     this.#freeEdit = !this.#freeEdit;
     return this.render({ force: true });
+  }
+
+  static async #onClearInventory(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#freeEdit || !this.actor?.isOwner || !this.isEditable) return undefined;
+
+    const inventoryItemIds = getInventoryBulkDeleteItemIds(this.actor);
+    const equippedItemIds = getInventoryBulkDeleteItemIds(this.actor, { equippedOnly: true });
+    if (!inventoryItemIds.length && !equippedItemIds.length) {
+      ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryClearEmpty"));
+      return undefined;
+    }
+
+    const result = await DialogV2.confirm({
+      window: {
+        icon: "fa-solid fa-trash",
+        title: game.i18n.localize("FALLOUTMAW.Actor.ClearInventoryTitle")
+      },
+      modal: true,
+      rejectClose: false,
+      content: `
+        <p>${game.i18n.format("FALLOUTMAW.Actor.ClearInventoryConfirm", {
+          actor: escapeHTML(this.actor.name),
+          count: inventoryItemIds.length
+        })}</p>
+        <label class="checkbox fallout-maw-inventory-clear-equipped-option">
+          <span>${game.i18n.format("FALLOUTMAW.Actor.ClearInventoryEquipped", {
+            count: equippedItemIds.length
+          })}</span>
+          <input type="checkbox" name="deleteEquipped" ${equippedItemIds.length ? "" : "disabled"}>
+        </label>
+      `,
+      yes: {
+        icon: "fa-solid fa-trash",
+        label: "FALLOUTMAW.Common.Delete",
+        callback: (_event, button) => ({
+          confirmed: true,
+          deleteEquipped: Boolean(button.form.elements.deleteEquipped?.checked)
+        })
+      },
+      no: {
+        label: "FALLOUTMAW.Common.Cancel"
+      }
+    });
+    if (!result?.confirmed) return undefined;
+
+    const itemIds = getInventoryBulkDeleteItemIds(this.actor, {
+      includeEquipped: Boolean(result.deleteEquipped)
+    });
+    if (!itemIds.length) {
+      ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryClearEmpty"));
+      return undefined;
+    }
+
+    await this.actor.deleteEmbeddedDocuments("Item", itemIds);
+    ui.notifications?.info?.(game.i18n.format("FALLOUTMAW.Messages.InventoryCleared", { count: itemIds.length }));
+    return this.render({ parts: ["inventory"] });
   }
 
   static async #onEditActorImage(event, target) {
@@ -5851,6 +5910,26 @@ function calculateActorLoad(items = []) {
       ? total
       : total + (Number(getItemActorLoadWeight(item, itemList)) || 0)
   ), 0).toFixed(1));
+}
+
+const INVENTORY_BULK_DELETE_EQUIPPED_MODES = new Set(["equipment", "weapon", "prosthesis", "implant"]);
+
+function getInventoryBulkDeleteItemIds(actor, { includeEquipped = false, equippedOnly = false } = {}) {
+  return Array.from(actor?.items ?? [])
+    .filter(item => isInventoryBulkDeleteItem(item, { includeEquipped, equippedOnly }))
+    .map(item => item.id);
+}
+
+function isInventoryBulkDeleteItem(item, { includeEquipped = false, equippedOnly = false } = {}) {
+  if (!item || item.type !== "gear" || isNaturalRaceItem(item)) return false;
+
+  const placementMode = String(item.system?.placement?.mode ?? "inventory");
+  if (placementMode === ITEM_FUNCTIONS.constructPart) return false;
+
+  const equipped = Boolean(item.system?.equipped) || INVENTORY_BULK_DELETE_EQUIPPED_MODES.has(placementMode);
+  if (equippedOnly) return equipped;
+  if (equipped) return includeEquipped;
+  return true;
 }
 
 function getActorLoadLimitExceededMessage() {

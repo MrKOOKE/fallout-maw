@@ -249,7 +249,14 @@
       {{/with}}
 
       <section class="fallout-maw-panel fallout-maw-inventory-pane">
-        <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
+        <div class="fallout-maw-panel-header fallout-maw-inventory-pane-header">
+          <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
+          {{#if freeEdit}}
+          <button type="button" class="fallout-maw-inventory-clear-button" data-action="clearInventory" title="{{localize 'FALLOUTMAW.Actor.ClearInventoryTitle'}}" aria-label="{{localize 'FALLOUTMAW.Actor.ClearInventoryTitle'}}">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+          {{/if}}
+        </div>
         <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll" data-scroll-key="inventory">
           <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="" style="{{inventory.grid.style}}">
             {{#each inventory.grid.items}}
