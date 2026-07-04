@@ -3,6 +3,7 @@ import { FalloutMaWActiveEffectSheet } from "./active-effect-sheet.mjs";
 import { FalloutMaWActorSheet } from "./actor-sheet.mjs";
 import { FalloutMaWItemSheet, registerItemSheetSourceSyncHooks } from "./item-sheet.mjs";
 import { PeriodicDamageRegionBehaviorConfig } from "./periodic-damage-region-behavior-config.mjs";
+import { AmbientLightConfig } from "../canvas/light-networks.mjs";
 
 export function registerSystemSheets() {
   const sheetConfig = foundry.applications.apps.DocumentSheetConfig;
@@ -21,6 +22,11 @@ export function registerSystemSheets() {
   });
 
   sheetConfig.registerSheet(ActiveEffect, FALLOUT_MAW.id, FalloutMaWActiveEffectSheet, {
+    label: "Fallout-MaW V2",
+    makeDefault: true
+  });
+
+  sheetConfig.registerSheet(CONFIG.AmbientLight.documentClass, "core", AmbientLightConfig, {
     label: "Fallout-MaW V2",
     makeDefault: true
   });

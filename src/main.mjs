@@ -7,6 +7,7 @@ import { registerCoverHooks, registerCoverSocket } from "./canvas/cover.mjs";
 import { registerTokenEquipmentHudHooks } from "./canvas/token-equipment-hud.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerTrapHooks } from "./canvas/traps.mjs";
+import { registerLightNetworkHooks, registerLightNetworkSocket } from "./canvas/light-networks.mjs";
 import { registerActorContainerHooks, registerActorContainerSocket } from "./canvas/actor-containers.mjs";
 import { registerMovementInterruptionHooks } from "./canvas/movement-interruptions.mjs";
 import {
@@ -153,6 +154,7 @@ Hooks.once("init", () => {
   registerHackingHooks();
   registerAnimationLibraryBrowserHooks();
   registerTrapPlacementControlHooks();
+  registerLightNetworkHooks();
   registerActorContainerHooks();
   registerStealthHooks();
   registerGlobalMapSystem();
@@ -327,6 +329,7 @@ Hooks.once("ready", async () => {
   registerWeaponAttackSocket();
   registerThrownItemHooks();
   registerTrapHooks();
+  registerLightNetworkSocket();
   registerActorContainerSocket();
   registerMedicineSocket();
   registerRepairSocket();

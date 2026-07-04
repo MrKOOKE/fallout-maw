@@ -2188,12 +2188,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
+    menu.dataset.pointerX = String(event.clientX);
+    menu.dataset.pointerY = String(event.clientY);
+    this.#applyOverlayUiScale(menu);
     menu.innerHTML = menuOptions
       .map(([action, icon, label, disabled = false]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
+    this.#syncInventoryTooltipLayer({ bringToFront: true });
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", async clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
@@ -2268,12 +2271,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
+    menu.dataset.pointerX = String(event.clientX);
+    menu.dataset.pointerY = String(event.clientY);
+    this.#applyOverlayUiScale(menu);
     menu.innerHTML = menuOptions
       .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeHTML(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
+    this.#syncInventoryTooltipLayer({ bringToFront: true });
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", async clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
@@ -2306,10 +2312,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
+    menu.dataset.pointerX = String(event.clientX);
+    menu.dataset.pointerY = String(event.clientY);
+    this.#applyOverlayUiScale(menu);
     menu.innerHTML = `<button type="button" data-action="tradePrimary"><i class="fa-solid fa-coins"></i>Сделать основной</button>`;
     document.body.append(menu);
+    this.#syncInventoryTooltipLayer({ bringToFront: true });
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
@@ -3358,7 +3367,34 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (game.tooltip?.element && this.#tooltipElement?.contains(game.tooltip.element)) {
       game.tooltip.tooltip.style.zIndex = String(baseZIndex + 3);
     }
-    if (bringToFront || this.#tooltipPinned) reserveOverlayZIndex(baseZIndex + 3);
+    const ownerDocument = this.element?.ownerDocument ?? document;
+    const menus = ownerDocument.querySelectorAll(".fallout-maw-inventory-context-menu");
+    for (const menu of menus) menu.style.zIndex = String(baseZIndex + 2);
+    if (bringToFront || this.#tooltipPinned || menus.length) reserveOverlayZIndex(baseZIndex + 3);
+  }
+
+  #applyOverlayUiScale(element) {
+    if (!element) return;
+    element.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
+  }
+
+  #positionOverlayAtPointer(element, pointer = {}, baseMargin = 14) {
+    if (!element) return;
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const rect = element.getBoundingClientRect();
+    const margin = Math.max(8, baseMargin * this.#uiScale);
+    const pointerX = Number(pointer?.x);
+    const pointerY = Number(pointer?.y);
+    const x = Math.min(
+      (Number.isFinite(pointerX) ? pointerX : 0) + margin,
+      viewportWidth - rect.width - margin
+    );
+    const y = Math.min(
+      (Number.isFinite(pointerY) ? pointerY : 0) + margin,
+      viewportHeight - rect.height - margin
+    );
+    element.style.left = `${Math.max(margin, x)}px`;
+    element.style.top = `${Math.max(margin, y)}px`;
   }
 
   #updateInventoryTooltipOverflowState(tooltip = this.#tooltipElement) {
@@ -3684,6 +3720,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
   const decorateItem = item => {
     if (!item) return item;
     const liveItem = actor.items.get(String(item.id));
+    const weaponProficiencyKey = getTradeCatalogWeaponProficiencyKey(liveItem);
     const offeredQuantity = isTrade && tradeOffer && !tradeOffer.completed
       ? getTradeOfferedSourceItemQuantity(item, tradeOffer, actor)
       : 0;
@@ -3695,6 +3732,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
       ...item,
       actorUuid,
       itemCategory: String(liveItem?.system?.itemCategory ?? item.itemCategory ?? ""),
+      tradeCatalogWeaponProficiencyKey: weaponProficiencyKey,
       quantity: displayedQuantity,
       draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer, actor) ? " trade-offered-source" : ""}` : "",
       tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent }) : ""
@@ -3794,35 +3832,21 @@ function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategor
     });
     y += 1;
 
-    let x = 1;
-    let rowHeight = 1;
-    for (const item of categoryItems) {
-      const footprint = getTradeCatalogItemFootprint(item, columns);
-      if (x > 1 && (x + footprint.width - 1) > columns) {
-        y += rowHeight;
-        x = 1;
-        rowHeight = 1;
+    for (const sectionItems of getTradeCatalogLayoutSections(categoryItems)) {
+      const placedItems = placeTradeCatalogItems(sectionItems, { columns, startY: y });
+      for (const { item, placement } of placedItems.items) {
+        gridItems.push({
+          ...item,
+          phantom: true,
+          draggableClass: canInteract ? String(item.draggableClass || "draggable") : "",
+          quantity: item.catalogQuantity,
+          showQuantity: Boolean(item.showQuantity || item.catalogQuantity > 1 || item.tradeCatalogAggregate),
+          placement,
+          gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
+        });
       }
-      const placement = {
-        x,
-        y,
-        width: footprint.width,
-        height: footprint.height,
-        rotated: Boolean(item?.placement?.rotated)
-      };
-      gridItems.push({
-        ...item,
-        phantom: true,
-        draggableClass: canInteract ? String(item.draggableClass || "draggable") : "",
-        quantity: item.catalogQuantity,
-        showQuantity: Boolean(item.showQuantity || item.catalogQuantity > 1 || item.tradeCatalogAggregate),
-        placement,
-        gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
-      });
-      x += footprint.width;
-      rowHeight = Math.max(rowHeight, footprint.height);
+      y = placedItems.nextY;
     }
-    y += rowHeight;
   }
 
   const rows = Math.max(1, y - 1);
@@ -3916,6 +3940,108 @@ function aggregateTradeCatalogItems(items = [], actor = null, tradeOffer = null)
     if (item.catalogQuantity <= 0) item.draggableClass = `${item.draggableClass || "draggable"} trade-offered-source`.trim();
   }
   return result;
+}
+
+function getTradeCatalogLayoutSections(items = []) {
+  if (!items.some(isTradeCatalogWeaponItem)) return [items];
+  const sections = [];
+  const weaponSections = new Map();
+  const nonWeaponItems = [];
+  for (const item of items) {
+    if (!isTradeCatalogWeaponItem(item)) {
+      nonWeaponItems.push(item);
+      continue;
+    }
+    const key = getTradeCatalogWeaponProficiencyKey(item);
+    if (!weaponSections.has(key)) weaponSections.set(key, []);
+    weaponSections.get(key).push(item);
+  }
+  sections.push(...weaponSections.values());
+  if (nonWeaponItems.length) sections.push(nonWeaponItems);
+  return sections.filter(section => section.length);
+}
+
+function isTradeCatalogWeaponItem(item = null) {
+  return Boolean(String(item?.tradeCatalogWeaponProficiencyKey ?? "").trim()) || getTradeWeaponDataList(item).length > 0;
+}
+
+function getTradeCatalogWeaponProficiencyKey(item = null) {
+  const preparedKey = String(item?.tradeCatalogWeaponProficiencyKey ?? "").trim();
+  if (preparedKey) return preparedKey;
+  const weaponData = getTradeWeaponDataList(item)[0] ?? null;
+  if (!weaponData) return "";
+  return String(weaponData?.proficiencyKey ?? "").trim() || "__none__";
+}
+
+function placeTradeCatalogItems(items = [], { columns = TRADE_OFFER_DEFAULT_COLUMNS, startY = 1 } = {}) {
+  const occupied = new Set();
+  const placed = [];
+  let maxY = startY - 1;
+  for (const item of getTradeCatalogPackingOrder(items, columns)) {
+    const footprint = getTradeCatalogItemFootprint(item, columns);
+    const placement = {
+      ...findTradeCatalogPlacement(occupied, footprint, columns, startY),
+      rotated: Boolean(item?.placement?.rotated)
+    };
+    markTradeCatalogPlacement(occupied, placement);
+    maxY = Math.max(maxY, placement.y + placement.height - 1);
+    placed.push({ item, placement });
+  }
+  return {
+    items: placed,
+    nextY: Math.max(startY, maxY + 1)
+  };
+}
+
+function getTradeCatalogPackingOrder(items = [], columns = TRADE_OFFER_DEFAULT_COLUMNS) {
+  return items
+    .map((item, index) => {
+      const footprint = getTradeCatalogItemFootprint(item, columns);
+      return {
+        item,
+        index,
+        area: footprint.width * footprint.height,
+        width: footprint.width,
+        height: footprint.height
+      };
+    })
+    .sort((left, right) => {
+      if (right.area !== left.area) return right.area - left.area;
+      if (right.height !== left.height) return right.height - left.height;
+      if (right.width !== left.width) return right.width - left.width;
+      return left.index - right.index;
+    })
+    .map(entry => entry.item);
+}
+
+function findTradeCatalogPlacement(occupied, footprint = {}, columns = TRADE_OFFER_DEFAULT_COLUMNS, startY = 1) {
+  const gridColumns = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  const width = Math.max(1, Math.min(gridColumns, toInteger(footprint.width) || 1));
+  const height = Math.max(1, toInteger(footprint.height) || 1);
+  const maxX = Math.max(1, gridColumns - width + 1);
+  for (let y = Math.max(1, toInteger(startY) || 1); ; y += 1) {
+    for (let x = 1; x <= maxX; x += 1) {
+      const placement = { x, y, width, height, rotated: Boolean(footprint.rotated) };
+      if (isTradeCatalogPlacementFree(occupied, placement)) return placement;
+    }
+  }
+}
+
+function isTradeCatalogPlacementFree(occupied, placement = {}) {
+  for (let y = placement.y; y < placement.y + placement.height; y += 1) {
+    for (let x = placement.x; x < placement.x + placement.width; x += 1) {
+      if (occupied.has(`${x}:${y}`)) return false;
+    }
+  }
+  return true;
+}
+
+function markTradeCatalogPlacement(occupied, placement = {}) {
+  for (let y = placement.y; y < placement.y + placement.height; y += 1) {
+    for (let x = placement.x; x < placement.x + placement.width; x += 1) {
+      occupied.add(`${x}:${y}`);
+    }
+  }
 }
 
 function getTradeCatalogCategoryLabels(items = []) {

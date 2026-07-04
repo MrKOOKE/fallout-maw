@@ -16599,3 +16599,115 @@ html.fallout-maw-token-action-hud-open #hotbar {
   cursor: not-allowed;
   opacity: 0.45;
 }
+
+.fallout-maw-light-network-entry button,
+.fallout-maw-light-network-placement-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.fallout-maw-light-network-placement-row .form-fields {
+  align-items: center;
+  gap: 8px;
+}
+
+.fallout-maw-light-network-placement-row file-picker {
+  flex: 1 1 260px;
+}
+
+.fallout-maw-light-network-interaction-dialog .window-content {
+  padding: 16px;
+}
+
+.fallout-maw-light-network-dialog-body {
+  display: grid;
+  gap: 14px;
+}
+
+.fallout-maw-light-network-dialog-body h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.fallout-maw-light-network-title-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.fallout-maw-light-network-switch {
+  --switch-padding: 4px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: var(--switch-padding);
+  border: 1px solid rgba(229, 206, 160, 0.55);
+  border-radius: 8px;
+  background: rgba(12, 10, 12, 0.72);
+  color: #eadfcb;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.fallout-maw-light-network-switch:focus-visible {
+  outline: 2px solid #d8b76c;
+  outline-offset: 2px;
+}
+
+.fallout-maw-light-network-switch-thumb {
+  position: absolute;
+  inset: var(--switch-padding) auto var(--switch-padding) var(--switch-padding);
+  width: calc((100% - (var(--switch-padding) * 2)) / 2);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 232, 176, 0.58);
+  background: linear-gradient(180deg, rgba(96, 135, 92, 0.9), rgba(45, 78, 52, 0.9));
+  box-shadow: 0 0 12px rgba(159, 215, 125, 0.22);
+  transition: transform 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+  pointer-events: none;
+}
+
+.fallout-maw-light-network-switch[data-state="on"] .fallout-maw-light-network-switch-thumb {
+  transform: translateX(100%);
+  background: linear-gradient(180deg, rgba(215, 171, 76, 0.95), rgba(130, 86, 36, 0.95));
+  box-shadow: 0 0 16px rgba(232, 186, 92, 0.35);
+}
+
+.fallout-maw-light-network-switch-option {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0 8px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.fallout-maw-light-network-delete {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border-color: rgba(218, 83, 70, 0.78);
+  color: #f0c7bf;
+}
+
+.fallout-maw-light-network-delete:hover,
+.fallout-maw-light-network-delete:focus-visible {
+  color: #fff0ed;
+  border-color: rgba(230, 83, 69, 0.95);
+  box-shadow: 0 0 10px rgba(230, 83, 69, 0.28);
+}

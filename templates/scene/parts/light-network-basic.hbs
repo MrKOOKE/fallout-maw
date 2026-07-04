@@ -1,0 +1,85 @@
+<section class="tab standard-form scrollable {{tabs.basic.cssClass}}"
+         data-tab="basic" data-group="{{tabs.basic.group}}">
+    <fieldset>
+        <legend>Сеть</legend>
+        <div class="form-group">
+            <label>Имя сети</label>
+            <div class="form-fields">
+                <input type="text" name="network.name" value="{{network.name}}" placeholder="Без названия">
+            </div>
+            <p class="hint">Пустое имя создаёт индивидуальную сеть только для этого источника. Одинаковое имя объединяет источники в одну сеть.</p>
+        </div>
+        <div class="form-group fallout-maw-light-network-place-action-row">
+            <label>Источник взаимодействия</label>
+            <div class="form-fields">
+                <button type="button" data-action="placeNetworkInteraction">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                    Установить
+                </button>
+            </div>
+            <p class="hint">Окно закроется, затем выберите место на сцене. Двойной клик по объекту откроет переключатель сети.</p>
+        </div>
+        <div class="form-group fallout-maw-light-network-placement-row">
+            <label>Изображение переключателя</label>
+            <div class="form-fields">
+                <file-picker type="image" name="network.interactionImage" value="{{network.interactionImage}}"></file-picker>
+            </div>
+        </div>
+        <div class="form-group fallout-maw-light-network-scale-row">
+            <label>Множитель размера</label>
+            <div class="form-fields">
+                <input type="number" name="network.interactionScale" value="{{network.interactionScale}}" min="0" step="0.05">
+            </div>
+        </div>
+    </fieldset>
+
+    {{formGroup fields.name value=source.name}}
+    <fieldset>
+        <legend>{{localize "AMBIENT_LIGHT.SECTIONS.placement"}}</legend>
+        {{formGroup fields.levels value=source.levels rootId=rootId input=inputs.createMultiSelectInput options=selectableLevels}}
+        <div class="form-group slim">
+            <label>{{localize "MEASUREMENT.Coordinates"}} <span class="units">({{localize "MEASUREMENT.Pixels"}})</span></label>
+            <div class="form-fields">
+                <label>{{fields.x.label}}</label>
+                {{formInput fields.x value=source.x}}
+                <label>{{fields.y.label}}</label>
+                {{formInput fields.y value=source.y}}
+            </div>
+        </div>
+
+        {{formGroup fields.elevation value=source.elevation classes="slim" units=gridUnits}}
+
+        <div class="form-group slim">
+            <label>{{localize "AMBIENT_LIGHT.LABELS.radius"}} <span class="units">({{gridUnits}})</span></label>
+            <div class="form-fields">
+                <label>{{fields.config.fields.dim.label}}</label>
+                {{formInput fields.config.fields.dim value=source.config.dim}}
+                <label>{{fields.config.fields.bright.label}}</label>
+                {{formInput fields.config.fields.bright value=source.config.bright}}
+            </div>
+            <p class="hint">{{localize "AMBIENT_LIGHT.LABELS.radiusHint"}}</p>
+        </div>
+
+        {{formGroup fields.walls value=source.walls classes="slim"}}
+        {{formGroup fields.config.fields.angle value=source.config.angle step=1 units=(localize "MEASUREMENT.Degrees")}}
+        {{formGroup fields.rotation value=source.rotation step=1 units=(localize "MEASUREMENT.Degrees")}}
+    </fieldset>
+
+    <fieldset>
+        <legend>{{localize "AMBIENT_LIGHT.SECTIONS.appearance"}}</legend>
+        {{formGroup fields.config.fields.negative value=source.config.negative}}
+        {{formGroup fields.config.fields.priority value=source.config.priority}}
+        {{formGroup fields.config.fields.color value=source.config.color}}
+        {{formGroup fields.config.fields.alpha value=source.config.alpha step=0.05}}
+        <div class="form-group slim">
+            <label>{{fields.config.fields.darkness.label}}</label>
+            <div class="form-fields">
+                <label>{{fields.config.fields.darkness.fields.min.label}}</label>
+                {{formInput fields.config.fields.darkness.fields.min value=source.config.darkness.min placeholder="0"}}
+                <label>{{fields.config.fields.darkness.fields.max.label}}</label>
+                {{formInput fields.config.fields.darkness.fields.max value=source.config.darkness.max placeholder="1"}}
+            </div>
+            <p class="hint">{{fields.config.fields.darkness.hint}}</p>
+        </div>
+    </fieldset>
+</section>

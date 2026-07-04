@@ -1,0 +1,24 @@
+<div class="fallout-maw-light-network-dialog-body">
+    <div class="fallout-maw-light-network-title-row">
+        <h2>{{networkLabel}}</h2>
+        {{#if canDelete}}
+            <button type="button"
+                    class="fallout-maw-light-network-delete"
+                    data-action="deleteInteraction"
+                    title="Удалить точку взаимодействия"
+                    aria-label="Удалить точку взаимодействия">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        {{/if}}
+    </div>
+    <button type="button"
+            class="fallout-maw-light-network-switch"
+            data-action="toggleNetwork"
+            data-state="{{#if enabled}}on{{else}}off{{/if}}"
+            role="switch"
+            aria-checked="{{#if enabled}}true{{else}}false{{/if}}">
+        <span class="fallout-maw-light-network-switch-thumb"></span>
+        <span class="fallout-maw-light-network-switch-option">Выключено</span>
+        <span class="fallout-maw-light-network-switch-option">Включено</span>
+    </button>
+</div>
