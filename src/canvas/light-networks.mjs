@@ -31,6 +31,10 @@ let activePlacement = null;
 let doubleClickRegistered = false;
 let socketRegistered = false;
 let networkTilePatchRegistered = false;
+let lightNetworkStateQueueProcessing = false;
+const lightNetworkStateQueue = [];
+const lightNetworkDialogs = new Set();
+const lightNetworkStateCache = new Map();
 
 export class AmbientLightConfig extends CoreAmbientLightConfig {
   static PARTS = {
@@ -159,6 +163,7 @@ class FalloutMaWLightNetworkConfig extends AmbientLightConfig {
 
 class LightNetworkInteractionDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   #tile = null;
+  #pendingEnabled = null;
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-light-network-interaction-{id}",
@@ -185,6 +190,7 @@ class LightNetworkInteractionDialog extends HandlebarsApplicationMixin(Applicati
   constructor({ tile } = {}) {
     super();
     this.#tile = tile;
+    lightNetworkDialogs.add(this);
   }
 
   get title() {
@@ -195,14 +201,11 @@ class LightNetworkInteractionDialog extends HandlebarsApplicationMixin(Applicati
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const interaction = getLightNetworkInteractionFlag(this.#tile);
+    const enabled = this.#getDisplayedNetworkEnabled(interaction);
     return {
       ...context,
       networkLabel: getNetworkDisplayName(interaction?.networkName),
-      enabled: isLightNetworkEnabled({
-        scene: this.#tile?.parent ?? canvas.scene,
-        networkName: interaction?.networkName,
-        sourceLightUuid: interaction?.sourceLightUuid
-      }),
+      enabled,
       canDelete: shouldShowGmInteractionDelete()
     };
   }
@@ -220,19 +223,23 @@ class LightNetworkInteractionDialog extends HandlebarsApplicationMixin(Applicati
     event.preventDefault();
     const interaction = getLightNetworkInteractionFlag(this.#tile);
     if (!interaction) return false;
-    const enabled = !isLightNetworkEnabled({
-      scene: this.#tile?.parent ?? canvas.scene,
-      networkName: interaction.networkName,
-      sourceLightUuid: interaction.sourceLightUuid
-    });
-    await requestLightNetworkState({
+    const enabled = !this.#getDisplayedNetworkEnabled(interaction);
+    const requested = await requestLightNetworkState({
       sceneId: this.#tile?.parent?.id ?? canvas.scene?.id ?? "",
       networkName: interaction.networkName,
       sourceLightUuid: interaction.sourceLightUuid,
       enabled
     });
+    if (requested) this.#pendingEnabled = enabled;
     await this.render({ force: true });
     return true;
+  }
+
+  syncNetworkState(state = {}) {
+    const interaction = getLightNetworkInteractionFlag(this.#tile);
+    if (!isMatchingLightNetworkState(interaction, state, this.#tile?.parent ?? canvas.scene)) return;
+    this.#pendingEnabled = null;
+    void this.render({ force: true });
   }
 
   static async #onDeleteInteraction(event) {
@@ -242,6 +249,23 @@ class LightNetworkInteractionDialog extends HandlebarsApplicationMixin(Applicati
     await this.close();
     refreshLightNetworkInteractionTileVisibility();
     return true;
+  }
+
+  _onClose(options) {
+    lightNetworkDialogs.delete(this);
+    super._onClose(options);
+  }
+
+  #getDisplayedNetworkEnabled(interaction) {
+    if (this.#pendingEnabled !== null) return this.#pendingEnabled;
+    const cached = getCachedLightNetworkState(interaction, this.#tile?.parent ?? canvas.scene);
+    if (cached) return cached.enabled;
+    const current = isLightNetworkEnabled({
+      scene: this.#tile?.parent ?? canvas.scene,
+      networkName: interaction?.networkName,
+      sourceLightUuid: interaction?.sourceLightUuid
+    });
+    return current;
   }
 }
 
@@ -485,13 +509,16 @@ function destroyLightNetworkPlacementPreview(placement) {
 }
 
 async function requestLightNetworkState({ sceneId = "", networkName = "", sourceLightUuid = "", enabled = false } = {}) {
-  const request = {
+  const request = normalizeLightNetworkStateRequest({
     sceneId,
-    networkName: normalizeNetworkName(networkName),
-    sourceLightUuid: String(sourceLightUuid ?? ""),
-    enabled: Boolean(enabled)
-  };
-  if (game.user?.isActiveGM) return applyLightNetworkState(request);
+    networkName,
+    sourceLightUuid,
+    enabled
+  });
+  if (game.user?.isActiveGM) {
+    enqueueLightNetworkStateRequest(request);
+    return true;
+  }
   const gm = getResponsibleGM();
   if (!gm) {
     ui.notifications.warn("Нет активного GM для переключения сети света.");
@@ -499,7 +526,7 @@ async function requestLightNetworkState({ sceneId = "", networkName = "", source
   }
   game.socket.emit(LIGHT_NETWORK_SOCKET, {
     scope: LIGHT_NETWORK_SOCKET_SCOPE,
-    action: "setLightNetworkState",
+    action: "requestLightNetworkState",
     gmUserId: gm.id,
     request
   });
@@ -508,9 +535,64 @@ async function requestLightNetworkState({ sceneId = "", networkName = "", source
 
 async function handleLightNetworkSocketMessage(message = {}) {
   if (message?.scope !== LIGHT_NETWORK_SOCKET_SCOPE) return;
+  if (message.action === "syncLightNetworkState") {
+    syncLightNetworkState(message.state);
+    return;
+  }
   if (message.gmUserId && message.gmUserId !== game.user?.id) return;
   if (!game.user?.isActiveGM) return;
-  if (message.action === "setLightNetworkState") await applyLightNetworkState(message.request);
+  if (message.action === "requestLightNetworkState") enqueueLightNetworkStateRequest(message.request);
+}
+
+function enqueueLightNetworkStateRequest(request = {}) {
+  lightNetworkStateQueue.push(normalizeLightNetworkStateRequest(request));
+  void processLightNetworkStateQueue();
+}
+
+async function processLightNetworkStateQueue() {
+  if (lightNetworkStateQueueProcessing) return;
+  lightNetworkStateQueueProcessing = true;
+  try {
+    while (lightNetworkStateQueue.length) {
+      const request = lightNetworkStateQueue.shift();
+      const scene = game.scenes?.get(request.sceneId) ?? canvas.scene;
+      if (!scene) continue;
+      const matching = getMatchingNetworkLights(scene, request);
+      if (!matching.length) continue;
+      const current = isLightNetworkEnabled({
+        scene,
+        networkName: request.networkName,
+        sourceLightUuid: request.sourceLightUuid
+      });
+      if (current !== request.enabled) await applyLightNetworkState(request);
+      broadcastLightNetworkState({
+        ...request,
+        enabled: isLightNetworkEnabled({
+          scene,
+          networkName: request.networkName,
+          sourceLightUuid: request.sourceLightUuid
+        })
+      });
+    }
+  } finally {
+    lightNetworkStateQueueProcessing = false;
+  }
+}
+
+function broadcastLightNetworkState(state = {}) {
+  const normalized = normalizeLightNetworkStateRequest(state);
+  syncLightNetworkState(normalized);
+  game.socket.emit(LIGHT_NETWORK_SOCKET, {
+    scope: LIGHT_NETWORK_SOCKET_SCOPE,
+    action: "syncLightNetworkState",
+    state: normalized
+  });
+}
+
+function syncLightNetworkState(state = {}) {
+  const normalized = normalizeLightNetworkStateRequest(state);
+  lightNetworkStateCache.set(getLightNetworkStateKey(normalized), normalized);
+  for (const dialog of lightNetworkDialogs) dialog.syncNetworkState(normalized);
 }
 
 async function applyLightNetworkState({ sceneId = "", networkName = "", sourceLightUuid = "", enabled = false } = {}) {
@@ -559,6 +641,41 @@ function getMatchingNetworkLights(scene, { networkName = "", sourceLightUuid = "
     return lights.filter(light => light.uuid === sourceLightUuid);
   }
   return lights.filter(light => normalizeNetworkName(getLightNetworkData(light).name) === normalizedName);
+}
+
+function normalizeLightNetworkStateRequest({ sceneId = "", networkName = "", sourceLightUuid = "", enabled = false } = {}) {
+  return {
+    sceneId: String(sceneId ?? ""),
+    networkName: normalizeNetworkName(networkName),
+    sourceLightUuid: String(sourceLightUuid ?? ""),
+    enabled: Boolean(enabled)
+  };
+}
+
+function getLightNetworkStateKey({ sceneId = "", networkName = "", sourceLightUuid = "" } = {}) {
+  const normalizedName = normalizeNetworkName(networkName);
+  const identity = normalizedName ? `network:${normalizedName}` : `source:${String(sourceLightUuid ?? "")}`;
+  return `${String(sceneId ?? "")}|${identity}`;
+}
+
+function getCachedLightNetworkState(interaction, scene) {
+  if (!interaction) return null;
+  return lightNetworkStateCache.get(getLightNetworkStateKey({
+    sceneId: scene?.id ?? canvas.scene?.id ?? "",
+    networkName: interaction.networkName,
+    sourceLightUuid: interaction.sourceLightUuid
+  })) ?? null;
+}
+
+function isMatchingLightNetworkState(interaction, state, scene) {
+  if (!interaction || !state) return false;
+  const left = getLightNetworkStateKey({
+    sceneId: scene?.id ?? canvas.scene?.id ?? "",
+    networkName: interaction.networkName,
+    sourceLightUuid: interaction.sourceLightUuid
+  });
+  const right = getLightNetworkStateKey(state);
+  return left === right;
 }
 
 function isLightNetworkEnabled({ scene = canvas.scene, networkName = "", sourceLightUuid = "" } = {}) {

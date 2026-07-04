@@ -14476,7 +14476,7 @@ html.fallout-maw-token-action-hud-open #hotbar {
   display: grid;
   flex: 0 0 auto;
   gap: 0.45rem;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   min-height: 0;
   min-width: 0;
   overflow: visible;
@@ -14524,6 +14524,66 @@ html.fallout-maw-token-action-hud-open #hotbar {
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-filter.active strong,
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-filter:hover strong,
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-filter:focus-visible strong {
+  color: #efeaa5;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-height: 0;
+  padding-left: 0.45rem;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group {
+  align-items: center;
+  background: rgba(8, 10, 7, 0.68);
+  border: 1px solid rgba(128, 119, 79, 0.42);
+  border-radius: 0;
+  color: rgba(239, 234, 165, 0.42);
+  cursor: pointer;
+  display: inline-grid;
+  font-family: var(--fallout-maw-actor-mono-font);
+  font-size: 0.7rem;
+  gap: 0.28rem;
+  grid-template-columns: auto minmax(0, auto) auto;
+  min-height: 1.35rem;
+  min-width: 0;
+  padding: 0 0.35rem;
+  transition: none;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group i {
+  color: rgba(239, 234, 165, 0.58);
+  font-size: 0.62rem;
+  width: 0.7rem;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group strong {
+  color: rgba(239, 234, 165, 0.54);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group.active,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:hover,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:focus-visible {
+  background: rgba(34, 43, 22, 0.84);
+  border-color: rgba(214, 231, 135, 0.68);
+  color: #d6e787;
+  transform: none;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group.active strong,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:hover strong,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-catalog-weapon-group:focus-visible strong {
   color: #efeaa5;
 }
 
@@ -16601,12 +16661,17 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-light-network-entry button,
+.fallout-maw-light-network-place-action-row button,
 .fallout-maw-light-network-placement-row button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-height: 30px;
+}
+
+.fallout-maw-light-network-place-action-row .form-fields {
+  justify-content: flex-end;
 }
 
 .fallout-maw-light-network-placement-row .form-fields {
@@ -16616,6 +16681,11 @@ html.fallout-maw-token-action-hud-open #hotbar {
 
 .fallout-maw-light-network-placement-row file-picker {
   flex: 1 1 260px;
+}
+
+.fallout-maw-light-network-scale-row input {
+  flex: 0 0 110px;
+  max-width: 110px;
 }
 
 .fallout-maw-light-network-interaction-dialog .window-content {

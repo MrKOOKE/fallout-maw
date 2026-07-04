@@ -146,6 +146,17 @@
                 <p class="fallout-maw-empty-list">Нет предметов для торговли.</p>
                 {{/each}}
               </div>
+              {{#if weaponGroups}}
+              <div class="fallout-maw-trade-catalog-weapon-group-list">
+                {{#each weaponGroups}}
+                <button type="button" class="fallout-maw-trade-catalog-weapon-group {{#if expanded}}active{{/if}}" data-trade-catalog-weapon-group="{{stateKey}}" data-trade-actor-uuid="{{../../uuid}}" aria-pressed="{{#if expanded}}true{{else}}false{{/if}}">
+                  <i class="fa-solid {{#if expanded}}fa-chevron-down{{else}}fa-chevron-right{{/if}}"></i>
+                  <span>{{label}}</span>
+                  <strong>{{count}}</strong>
+                </button>
+                {{/each}}
+              </div>
+              {{/if}}
               <div class="fallout-maw-trade-catalog-scroll">
                 <div class="fallout-maw-inventory-grid fallout-maw-trade-catalog-grid" data-trade-catalog-grid data-search-actor-uuid="{{../uuid}}" data-inventory-parent-id="" style="{{grid.style}}">
                   {{#each grid.dividers}}
