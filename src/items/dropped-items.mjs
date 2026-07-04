@@ -193,6 +193,13 @@ async function handleDroppedItemsSocketMessage(message = {}) {
     let result = null;
     if (message.action === "ensureDroppedItemsActor") {
       result = await performDroppedItemsActorEnsure(message.payload ?? {}, message.requesterUserId ?? "");
+    } else if (message.action === "cleanupDroppedItemsActor") {
+      const actor = await resolveDroppedActor(String(message.payload?.actorUuid ?? ""));
+      if (actor) await cleanupDroppedItemsActorIfEmpty(actor);
+      result = {
+        actorUuid: String(message.payload?.actorUuid ?? ""),
+        deleted: !game.actors?.get(actor?.id ?? "")
+      };
     }
     game.socket.emit(DROPPED_ITEMS_SOCKET, {
       scope: DROPPED_ITEMS_SOCKET_SCOPE,
@@ -467,7 +474,10 @@ function getActorDropPosition(actor) {
 function findNearbyDroppedItemsTile(scene, position) {
   const radius = getPixelsForMeters(scene, DROPPED_ITEMS_RADIUS_METERS);
   return scene.tiles?.contents
-    ?.filter(tile => getDroppedItemsFlag(tile).items.length)
+    ?.filter(tile => {
+      const state = getDroppedItemsFlag(tile);
+      return state.items.length || state.actorUuid;
+    })
     .map(tile => ({ tile, distance: getPointDistance(position, getTileCenter(tile)) }))
     .filter(candidate => candidate.distance <= radius)
     .sort((left, right) => left.distance - right.distance)
@@ -482,6 +492,8 @@ async function appendDroppedItemToTile(tile, droppedEntry) {
     if (createData.length) await actor.createEmbeddedDocuments("Item", createData, { keepId: true, render: false });
     await tile.update({
       name: "Выброшенные предметы",
+      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.actorUuid`]: actor.uuid,
+      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.items`]: [],
       [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.updatedAt`]: Date.now()
     });
     return tile;
@@ -561,7 +573,7 @@ async function createDroppedItemsActor(tile, requesterUserId = "") {
   const sceneId = String(tile.parent?.id ?? canvas?.scene?.id ?? "");
   const actor = await Actor.create({
     name: "Выброшенные предметы",
-    type: "character",
+    type: "construct",
     img: String(tile.texture?.src || DROPPED_ITEMS_FALLBACK_ICON),
     ownership,
     system: {
@@ -591,13 +603,43 @@ function getDroppedItemsActorFlag(actor) {
 }
 
 function scheduleDroppedItemsActorCleanup(actor) {
-  if (!game.user?.isGM || !isDroppedItemsActor(actor)) return;
-  window.setTimeout(() => void cleanupDroppedItemsActorIfEmpty(actor), 0);
+  if (!isDroppedItemsActor(actor)) return;
+  window.setTimeout(() => void requestDroppedItemsActorCleanup(actor), 0);
+}
+
+export async function requestDroppedItemsActorCleanup(actorOrUuid) {
+  const actorUuid = String(
+    (typeof actorOrUuid === "string" ? actorOrUuid : actorOrUuid?.uuid) ?? ""
+  );
+  if (!actorUuid) return { cleaned: false, deleted: false };
+
+  if (game.user?.isGM) {
+    const actor = (typeof actorOrUuid === "object" && actorOrUuid?.id
+      ? game.actors.get(actorOrUuid.id)
+      : null) ?? await resolveDroppedActor(actorUuid);
+    if (actor) {
+      await cleanupDroppedItemsActorIfEmpty(actor);
+      return { cleaned: true, deleted: !game.actors.get(actor.id) };
+    }
+    return { cleaned: false, deleted: !game.actors?.find?.(entry => entry.uuid === actorUuid) };
+  }
+
+  try {
+    const result = await requestDroppedItemsSocket("cleanupDroppedItemsActor", { actorUuid });
+    const deleted = Boolean(result?.deleted) || !game.actors?.find?.(entry => entry.uuid === actorUuid);
+    return { cleaned: true, deleted };
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Dropped items cleanup request failed`, error);
+    return { cleaned: false, deleted: false };
+  }
 }
 
 export async function cleanupDroppedItemsActorIfEmpty(actor) {
-  if (!game.user?.isGM || !isDroppedItemsActor(actor)) return;
-  if (droppedItemsActorHasContents(actor)) return;
+  if (!game.user?.isGM || !actor) return;
+  actor = game.actors.get(actor.id) ?? actor;
+  if (!isDroppedItemsActor(actor)) return;
+  const hasContents = droppedItemsActorHasContents(actor);
+  if (hasContents) return;
   const flag = getDroppedItemsActorFlag(actor);
   const scene = game.scenes?.get(String(flag.sceneId ?? "")) ?? canvas?.scene;
   const tile = scene?.tiles?.get(String(flag.tileId ?? ""));
@@ -615,10 +657,26 @@ export async function cleanupDroppedItemsActorIfEmpty(actor) {
   }
 }
 
+function countDroppedLootItems(actor) {
+  return (actor?.items?.contents ?? []).filter(item => (
+    !isDroppedLootSystemItem(item) && !isEmbeddedNaturalRaceItem(item)
+  )).length;
+}
+
+function isDroppedLootSystemItem(item) {
+  return ["ability", "trauma", "disease"].includes(String(item?.type ?? ""));
+}
+
+function isEmbeddedNaturalRaceItem(item) {
+  return Boolean(item?.getFlag?.(SYSTEM_ID, "naturalRaceItem") ?? item?.flags?.[SYSTEM_ID]?.naturalRaceItem);
+}
+
 function droppedItemsActorHasContents(actor) {
-  if ((actor?.items?.contents ?? []).length > 0) return true;
+  if (countDroppedLootItems(actor) > 0) return true;
   return getCurrencySettings().some(currency => Math.max(0, toInteger(actor?.system?.currencies?.[currency.key])) > 0);
 }
+
+export { droppedItemsActorHasContents };
 
 async function cleanupDroppedItemsTileForActor(actor) {
   if (!game.user?.isGM || !isDroppedItemsActor(actor)) return;

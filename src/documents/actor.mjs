@@ -1,4 +1,5 @@
-import { TEMPLATES } from "../constants.mjs";
+import { TEMPLATES, SYSTEM_ID } from "../constants.mjs";
+import { DROPPED_ITEMS_ACTOR_FLAG } from "../items/dropped-items.mjs";
 import { cloneActorDevelopment, normalizeActorDevelopment } from "../advancement/index.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
@@ -80,6 +81,7 @@ export class FalloutMaWActor extends Actor {
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
     if (!options?.pack) stampPrototypeUuid(this, data, "Actor");
+    if (foundry.utils.getProperty(data, `flags.${SYSTEM_ID}.${DROPPED_ITEMS_ACTOR_FLAG}`)) return undefined;
     if (!["character", "construct"].includes(this.type)) return undefined;
 
     await applyTokenPrototypeDefaults(this, data, options);

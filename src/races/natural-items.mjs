@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { DROPPED_ITEMS_ACTOR_FLAG } from "../items/dropped-items.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { createStoredPlacement, ROOT_CONTAINER_ID } from "../utils/inventory-containers.mjs";
@@ -181,6 +182,7 @@ export async function syncLoadedActorNaturalRaceItems() {
 
 export async function syncActorNaturalRaceItems(actor) {
   if (!actor || !game.user?.isActiveGM) return;
+  if (actor.getFlag?.(SYSTEM_ID, DROPPED_ITEMS_ACTOR_FLAG)) return;
   if (actor.type !== "character") return;
   if (naturalItemSyncActors.has(actor.uuid)) return;
 

@@ -101,11 +101,12 @@ import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs
 import { getItemInteractionState } from "../items/item-interactions.mjs";
 import {
   canDropItemsForActor,
-  cleanupDroppedItemsActorIfEmpty,
+  droppedItemsActorHasContents,
   dropActorInventoryItem,
   dropItemDataForActor,
   isDroppedItemsActor,
-  registerDroppedItemsSearchOpener
+  registerDroppedItemsSearchOpener,
+  requestDroppedItemsActorCleanup
 } from "../items/dropped-items.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -1449,6 +1450,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       } else {
         await requestSearchInventorySocket("stackItem", payload, responsibleGM);
       }
+      await this.#finalizeDroppedItemsSearchAfterTransfer(sourceActor);
       return true;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory stack failed`, error);
@@ -1471,6 +1473,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       } else {
         await requestSearchInventorySocket("transferItem", payload, responsibleGM);
       }
+      await this.#finalizeDroppedItemsSearchAfterTransfer(sourceActor);
       return true;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory transfer failed`, error);
@@ -1478,6 +1481,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ui.notifications.warn(error.message || "Не удалось перенести предмет.");
     }
     return false;
+  }
+
+  async #finalizeDroppedItemsSearchAfterTransfer(sourceActor) {
+    if (!sourceActor || !isDroppedItemsActor(sourceActor) || sourceActor.uuid !== this.#searchedActorUuid) return;
+    const result = await requestDroppedItemsActorCleanup(sourceActor.uuid);
+    const freshActor = game.actors.get(sourceActor.id);
+    const hasLoot = freshActor ? droppedItemsActorHasContents(freshActor) : false;
+    if (result?.deleted || !hasLoot) void this.close({ force: true });
   }
 
   #canInteract() {
@@ -4794,7 +4805,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     allowButchering: isItemInButcheringStorage(item)
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
-  await cleanupDroppedItemsActorIfEmpty(sourceActor);
+  await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return result;
 }
 
@@ -4920,7 +4931,7 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     targetStackIndex: Math.max(0, toInteger(payload.targetStackIndex))
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
-  await cleanupDroppedItemsActorIfEmpty(sourceActor);
+  await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return result;
 }
 
@@ -4949,7 +4960,7 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
   const targetAmount = Math.max(0, toInteger(targetActor.system?.currencies?.[currencyKey]));
   await sourceActor.update({ [`system.currencies.${currencyKey}`]: available - amount });
   await targetActor.update({ [`system.currencies.${currencyKey}`]: targetAmount + amount });
-  await cleanupDroppedItemsActorIfEmpty(sourceActor);
+  await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return { amount };
 }
 
