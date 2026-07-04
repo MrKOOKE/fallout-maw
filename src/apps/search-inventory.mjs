@@ -1,5 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getCurrencySettings, getItemCategorySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   FALLBACK_ICON,
   escapeHTML,
@@ -109,6 +109,7 @@ const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
 const TRADE_OFFER_DEFAULT_COLUMNS = 12;
 const TRADE_OFFER_MAX_ROWS = 60;
+const TRADE_UNCATEGORIZED_LABEL = "Без категории";
 const BUTCHERING_CONTAINER_FLAG = "butcheringContainer";
 
 let searchInventoryWindow = null;
@@ -251,6 +252,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #tradeSessionSnapshot = null;
   #tradeSessionRevision = 0;
   #tradeOffers = createEmptyTradeOffers();
+  #tradeCatalogEnabledCategories = new Map();
   #tradeCompletionInProgress = false;
   #tradeEquipmentCollapsed = true;
   #suppressCloseBroadcast = false;
@@ -371,6 +373,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeSessionSnapshot = null;
     this.#tradeSessionRevision = 0;
     this.#tradeOffers = createEmptyTradeOffers();
+    this.#tradeCatalogEnabledCategories.clear();
     if (tradeSnapshot) this.#applyTradeSessionSnapshot(tradeSnapshot, { render: false });
     this.#tradeCompletionInProgress = false;
     this.#tradeEquipmentCollapsed = this.#isTradeMode();
@@ -428,6 +431,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const selected = getTradeSnapshotSelectedActorUuids(this.#tradeSessionSnapshot, userId);
     this.#searcherActorUuid = selected.searcher || this.#searcherActorUuid;
     this.#searchedActorUuid = selected.searched || this.#searchedActorUuid;
+    this.#pruneTradeCatalogCategoryState();
     if (render && this.rendered) {
       this.#captureScrollPositions();
       void this.#renderPreservingWindowStack();
@@ -468,6 +472,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           mode: this.#mode,
           tradeCurrencyKey: this.#tradeCurrencyKey,
           tradeOffer: tradeContext?.offers?.searcher,
+          tradeCatalogEnabledCategories: this.#getTradeCatalogEnabledCategories(this.#searcherActor?.uuid ?? this.#searcherActorUuid),
           sideBarterValues: tradeSideBarterValues,
           equipmentCollapsed: this.#tradeEquipmentCollapsed,
           selector: searcherSelector,
@@ -481,6 +486,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           mode: this.#mode,
           tradeCurrencyKey: this.#tradeCurrencyKey,
           tradeOffer: tradeContext?.offers?.searched,
+          tradeCatalogEnabledCategories: this.#getTradeCatalogEnabledCategories(this.#searchedActor?.uuid ?? this.#searchedActorUuid),
           sideBarterValues: tradeSideBarterValues,
           equipmentCollapsed: this.#tradeEquipmentCollapsed,
           selector: searchedSelector,
@@ -757,6 +763,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const actorUuid = String(itemElement?.dataset?.searchActorUuid ?? "");
     const stackIndex = Math.max(0, toInteger(itemElement?.dataset?.stackIndex));
     const stackQuantity = Math.max(0, toInteger(itemElement?.dataset?.stackQuantity));
+    const tradeCatalogPhantom = itemElement?.dataset?.tradeCatalogPhantom !== undefined;
+    const tradeCatalogAggregate = itemElement?.dataset?.tradeCatalogAggregate !== undefined;
     const actor = this.#getActorByUuid(actorUuid);
     const item = actor?.items?.get(itemId);
     if (!item || !this.#canInteract()) return;
@@ -765,7 +773,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#draggedActorUuid = actor.uuid;
     this.#draggedItemData = item.toObject();
     if (usesVirtualInventoryStacks(item)) {
-      foundry.utils.setProperty(this.#draggedItemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
+      foundry.utils.setProperty(this.#draggedItemData, "system.quantity", tradeCatalogAggregate
+        ? (stackQuantity || getItemQuantity(item))
+        : (stackQuantity || getItemStackPartQuantity(item, stackIndex)));
     }
     this.#draggedTradeOfferKind = String(offerEntry?.dataset?.tradeOfferKind ?? "");
     this.#draggedTradeOfferKey = String(offerEntry?.dataset?.tradeOfferKey ?? "");
@@ -782,6 +792,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       tradeOfferSide: String(offerEntry?.dataset?.tradeOfferSide ?? ""),
       tradeOfferKind: String(offerEntry?.dataset?.tradeOfferKind ?? ""),
       tradeOfferKey: String(offerEntry?.dataset?.tradeOfferKey ?? ""),
+      falloutMawTradeCatalogPhantom: tradeCatalogPhantom,
+      falloutMawTradeCatalogAggregate: tradeCatalogAggregate,
       falloutMawSearchInventory: true
     }));
     event.currentTarget?.classList?.add("dragging");
@@ -794,6 +806,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#clearInventoryTooltip({ force: true });
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
+    const data = this.#getDragEventData(event);
+    if (this.#isTradeMode() && (data?.falloutMawTradeCatalogPhantom || (data?.falloutMawTradeOffer && !this.#tradeOffers.completed))) {
+      const tradeOfferZone = zone.dataset.tradeOfferActorUuid !== undefined || Boolean(zone.closest?.("[data-trade-offer-grid]"));
+      if (!tradeOfferZone) {
+        this.#clearInventoryHoverPreview();
+        return;
+      }
+    }
     this.#setInventoryHoverPreview(zone, event);
   }
 
@@ -822,9 +842,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!sourceActor || !item) return null;
       const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
       const sourceStackQuantity = Math.max(0, toInteger(data.stackQuantity));
+      const sourceAggregateStack = Boolean(data.falloutMawTradeCatalogAggregate);
       const draggedItemData = item.toObject();
       if (usesVirtualInventoryStacks(item)) {
-        foundry.utils.setProperty(draggedItemData, "system.quantity", sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex));
+        foundry.utils.setProperty(draggedItemData, "system.quantity", sourceAggregateStack
+          ? (sourceStackQuantity || getItemQuantity(item))
+          : (sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex)));
       }
 
       const zone = this.#getDropZone(event);
@@ -834,6 +857,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         if (this.#tradeOffers.completed) return await this.#addItemToCompletedTradeHub({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
         return await this.#addItemToTradeOffer({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
       }
+      if (this.#isTradeMode() && data.falloutMawTradeOffer && !this.#tradeOffers.completed) return null;
+      if (this.#isTradeMode() && data.falloutMawTradeCatalogPhantom) return null;
       const targetActorUuid = String(zone?.dataset?.searchActorUuid ?? zone?.closest?.("[data-search-actor-uuid]")?.dataset?.searchActorUuid ?? "");
       const targetActor = this.#getActorByUuid(targetActorUuid);
       if (!targetActor) return null;
@@ -1112,7 +1137,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     };
   }
 
-  async #addItemToTradeOffer({ sourceActor = null, item = null, offerActorUuid = "", event = null, zone = null, sourceStackIndex = null, sourceStackQuantity = null } = {}) {
+  async #addItemToTradeOffer({
+    sourceActor = null,
+    item = null,
+    offerActorUuid = "",
+    event = null,
+    zone = null,
+    sourceStackIndex = null,
+    sourceStackQuantity = null,
+    sourceWholeStack = false
+  } = {}) {
     if (!this.#isTradeMode() || !sourceActor || !item) return null;
     if (sourceActor.uuid !== offerActorUuid) {
       ui.notifications.warn("Предмет кладется в предложение своего владельца.");
@@ -1123,15 +1157,18 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#tradeOffers.completed) return null;
 
     const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
+    const aggregateVirtualStack = Boolean(sourceWholeStack || dragData?.falloutMawTradeCatalogAggregate) && usesVirtualInventoryStacks(item);
     const selectedStackIndex = Math.max(0, toInteger(sourceStackIndex ?? dragData?.stackIndex));
     const selectedStackQuantity = Math.max(0, toInteger(sourceStackQuantity ?? dragData?.stackQuantity));
     const alreadyOffered = getTradeOfferedItemQuantity(
       this.#tradeOffers[side],
       item.id,
       sourceActor.uuid,
-      usesVirtualInventoryStacks(item) ? selectedStackIndex : null
+      usesVirtualInventoryStacks(item) && !aggregateVirtualStack ? selectedStackIndex : null
     );
-    const sourceQuantity = usesVirtualInventoryStacks(item)
+    const sourceQuantity = aggregateVirtualStack
+      ? Math.max(1, getItemQuantity(item))
+      : usesVirtualInventoryStacks(item)
       ? Math.max(1, selectedStackQuantity || getItemStackPartQuantity(item, selectedStackIndex))
       : Math.max(1, getItemQuantity(item));
     const remaining = Math.max(0, sourceQuantity - alreadyOffered);
@@ -1161,13 +1198,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         itemId: item.id,
         quantity,
         sourceStackIndex: selectedStackIndex,
+        sourceWholeStack: aggregateVirtualStack,
         placement
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
       return result;
     }
     this.#tradeOffers = addTradeOfferItem(this.#tradeOffers, side, item, quantity, placement, sourceActor.uuid, {
-      sourceStackIndex: selectedStackIndex
+      sourceStackIndex: selectedStackIndex,
+      sourceWholeStack: aggregateVirtualStack
     });
     this.#resetTradeReady();
     this.#broadcastTradeOffers();
@@ -1403,6 +1442,24 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (side === "searcher") return this.#searcherActor;
     if (side === "searched") return this.#searchedActor;
     return null;
+  }
+
+  #getTradeCatalogEnabledCategories(actorUuid = "") {
+    const key = String(actorUuid ?? "");
+    let enabled = this.#tradeCatalogEnabledCategories.get(key);
+    if (!enabled) {
+      enabled = new Set();
+      this.#tradeCatalogEnabledCategories.set(key, enabled);
+    }
+    return enabled;
+  }
+
+  #pruneTradeCatalogCategoryState() {
+    const actorUuids = new Set([this.#searcherActorUuid, this.#searchedActorUuid].filter(Boolean));
+    for (const actorUuid of getTradeSnapshotActorUuids(this.#tradeSessionSnapshot)) actorUuids.add(actorUuid);
+    for (const key of this.#tradeCatalogEnabledCategories.keys()) {
+      if (!actorUuids.has(key)) this.#tradeCatalogEnabledCategories.delete(key);
+    }
   }
 
   #canControlTradeSide(side = "") {
@@ -1954,6 +2011,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return;
     }
 
+    const tradeCatalogCategory = event.target?.closest?.("[data-trade-catalog-category]");
+    if (tradeCatalogCategory && this.element?.contains(tradeCatalogCategory)) {
+      await this.#onTradeCatalogCategoryClick(event, tradeCatalogCategory);
+      return;
+    }
+
     const bulkButton = event.target?.closest?.("[data-search-bulk-transfer]");
     if (bulkButton && this.element?.contains(bulkButton)) {
       await this.#onSearchBulkTransferClick(event, bulkButton);
@@ -2010,14 +2073,29 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!actor || !item) return;
       const sourceStackIndex = Math.max(0, toInteger(itemElement.dataset.stackIndex));
       const sourceStackQuantity = Math.max(0, toInteger(itemElement.dataset.stackQuantity));
+      const sourceWholeStack = itemElement.dataset.tradeCatalogAggregate !== undefined;
       if (this.#tradeOffers.completed) {
         await this.#addItemToCompletedTradeHub({ sourceActor: actor, item, offerActorUuid: actor.uuid, event, sourceStackIndex, sourceStackQuantity });
         return;
       }
-      await this.#addItemToTradeOffer({ sourceActor: actor, item, offerActorUuid: actor.uuid, event, sourceStackIndex, sourceStackQuantity });
+      await this.#addItemToTradeOffer({ sourceActor: actor, item, offerActorUuid: actor.uuid, event, sourceStackIndex, sourceStackQuantity, sourceWholeStack });
       return;
     }
     await this.#transferItemToOppositeRoot(itemElement);
+  }
+
+  async #onTradeCatalogCategoryClick(event, button) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#isTradeMode() || this.#tradeOffers.completed) return;
+    const actorUuid = String(button?.dataset?.tradeActorUuid ?? "");
+    const category = normalizeTradeCatalogCategory(button?.dataset?.tradeCatalogCategory);
+    if (!actorUuid || !category) return;
+    const enabled = this.#getTradeCatalogEnabledCategories(actorUuid);
+    if (enabled.has(category)) enabled.delete(category);
+    else enabled.add(category);
+    this.#captureScrollPositions();
+    await this.#renderPreservingWindowStack();
   }
 
   async #onSearchRootChange(event) {
@@ -2047,6 +2125,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
     if (!itemElement || !this.element?.contains(itemElement) || !this.#canInteract()) return;
+    if (itemElement.dataset.tradeCatalogPhantom !== undefined) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const actor = this.#getActorByUuid(String(itemElement.dataset.searchActorUuid ?? ""));
     const item = actor?.items?.get(String(itemElement.dataset.itemId ?? ""));
     if (!actor || !item) return;
@@ -3298,6 +3381,7 @@ export function prepareSearchActorContext(actor, {
   mode = SEARCH_INVENTORY_MODE_SEARCH,
   tradeCurrencyKey = "",
   tradeOffer = null,
+  tradeCatalogEnabledCategories = null,
   sideBarterValues = null,
   equipmentCollapsed = false,
   selector = null,
@@ -3314,6 +3398,7 @@ export function prepareSearchActorContext(actor, {
     isTrade,
     tradeCurrencyKey: selectedTradeCurrencyKey,
     tradeOffer,
+    tradeCatalogEnabledCategories,
     side,
     sideBarterValues
   });
@@ -3350,7 +3435,14 @@ export function prepareSearchActorContext(actor, {
   };
 }
 
-function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = false, tradeCurrencyKey = "", tradeOffer = null, side = "", sideBarterValues = null } = {}) {
+function decorateInventoryForSearch(inventory, actor, canInteract, {
+  isTrade = false,
+  tradeCurrencyKey = "",
+  tradeOffer = null,
+  tradeCatalogEnabledCategories = null,
+  side = "",
+  sideBarterValues = null
+} = {}) {
   const actorUuid = actor.uuid;
   const oppositeSide = getOppositeTradeSide(side);
   const barterAdjustmentPercent = isTrade
@@ -3362,19 +3454,21 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
     const offeredQuantity = isTrade && tradeOffer && !tradeOffer.completed
       ? getTradeOfferedSourceItemQuantity(item, tradeOffer, actor)
       : 0;
+    const sourceQuantity = getTradeSourceItemQuantity(item);
     const displayedQuantity = offeredQuantity > 0
-      ? Math.max(0, Math.max(1, toInteger(item.quantity)) - offeredQuantity)
-      : item.quantity;
+      ? Math.max(0, sourceQuantity - offeredQuantity)
+      : sourceQuantity;
     return {
       ...item,
       actorUuid,
+      itemCategory: String(liveItem?.system?.itemCategory ?? item.itemCategory ?? ""),
       quantity: displayedQuantity,
       draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer, actor) ? " trade-offered-source" : ""}` : "",
       tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent }) : ""
     };
   };
 
-  return {
+  const decorated = {
     ...inventory,
     equipmentSlots: (inventory.equipmentSlots ?? []).map(slot => ({
       ...slot,
@@ -3422,6 +3516,199 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
         }
       }
       : null
+  };
+  return {
+    ...decorated,
+    tradeCatalog: isTrade && tradeOffer && !tradeOffer.completed
+      ? prepareTradeCatalogContext(decorated, actor, tradeCatalogEnabledCategories, { canInteract, tradeOffer })
+      : null
+  };
+}
+
+function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategoriesInput = null, { canInteract = false, tradeOffer = null } = {}) {
+  const columns = Math.max(TRADE_OFFER_DEFAULT_COLUMNS, toInteger(inventory.grid?.columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  const enabledCategories = enabledCategoriesInput instanceof Set
+    ? enabledCategoriesInput
+    : new Set(Array.isArray(enabledCategoriesInput) ? enabledCategoriesInput.map(normalizeTradeCatalogCategory) : []);
+  const allItems = aggregateTradeCatalogItems(collectTradeCatalogItems(inventory)
+    .map(item => ({
+      ...item,
+      categoryLabel: normalizeTradeCatalogCategory(item?.itemCategory),
+      catalogQuantity: getTradeCatalogItemQuantity(item),
+      catalogSourceQuantity: getTradeCatalogItemSourceQuantity(item)
+    })), actor, tradeOffer);
+  const categoryLabels = getTradeCatalogCategoryLabels(allItems);
+  const categories = categoryLabels.map(label => {
+    const items = allItems.filter(item => item.categoryLabel === label);
+    return {
+      label,
+      enabled: enabledCategories.has(label),
+      count: items.length
+    };
+  });
+
+  const gridItems = [];
+  const dividers = [];
+  let y = 1;
+  for (const category of categories) {
+    if (!category.enabled) continue;
+    const categoryItems = allItems.filter(item => item.categoryLabel === category.label);
+    if (!categoryItems.length) continue;
+    dividers.push({
+      label: category.label,
+      count: categoryItems.length,
+      style: `grid-column: 1 / span ${columns}; grid-row: ${y};`
+    });
+    y += 1;
+
+    let x = 1;
+    let rowHeight = 1;
+    for (const item of categoryItems) {
+      const footprint = getTradeCatalogItemFootprint(item, columns);
+      if (x > 1 && (x + footprint.width - 1) > columns) {
+        y += rowHeight;
+        x = 1;
+        rowHeight = 1;
+      }
+      const placement = {
+        x,
+        y,
+        width: footprint.width,
+        height: footprint.height,
+        rotated: Boolean(item?.placement?.rotated)
+      };
+      gridItems.push({
+        ...item,
+        phantom: true,
+        draggableClass: canInteract ? String(item.draggableClass || "draggable") : "",
+        quantity: item.catalogQuantity,
+        showQuantity: Boolean(item.showQuantity || item.catalogQuantity > 1 || item.tradeCatalogAggregate),
+        placement,
+        gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
+      });
+      x += footprint.width;
+      rowHeight = Math.max(rowHeight, footprint.height);
+    }
+    y += rowHeight;
+  }
+
+  const rows = Math.max(1, y - 1);
+  return {
+    categories,
+    grid: {
+      columns,
+      rows,
+      style: buildInventoryGridStyle(columns, rows),
+      dividers,
+      items: gridItems,
+      empty: !gridItems.length
+    }
+  };
+}
+
+function collectTradeCatalogItems(inventory = {}) {
+  const items = [];
+  const seen = new Set();
+  const addItem = (item = null, source = "") => {
+    if (!item?.id || item.phantom) return;
+    const key = [
+      String(item.actorUuid ?? ""),
+      String(item.id ?? ""),
+      Math.max(0, toInteger(item.stackIndex)),
+      String(item.parentId ?? ""),
+      source
+    ].join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  };
+
+  for (const slot of inventory.equipmentSlots ?? []) addItem(slot.item, "equipment");
+  for (const slot of inventory.prosthesisSlots ?? []) addItem(slot.item, "prosthesis");
+  for (const set of inventory.weaponSets ?? []) {
+    for (const slot of set.slots ?? []) if (!slot.phantom) addItem(slot.item, `weapon:${set.key}:${slot.key}`);
+  }
+  for (const item of inventory.grid?.items ?? []) addItem(item, "inventory");
+  for (const container of inventory.containers ?? []) {
+    addItem(container, "container");
+    for (const item of container.grid?.items ?? []) addItem(item, `container:${container.id}`);
+  }
+  return items;
+}
+
+function aggregateTradeCatalogItems(items = [], actor = null, tradeOffer = null) {
+  const result = [];
+  const virtualGroups = new Map();
+  for (const item of items) {
+    if (!item?.virtualStack) {
+      result.push(item);
+      continue;
+    }
+    const key = `${String(item.actorUuid ?? "")}|${String(item.id ?? "")}`;
+    const existing = virtualGroups.get(key);
+    if (!existing) {
+      const aggregate = {
+        ...item,
+        tradeCatalogAggregate: true,
+        stackIndex: 0,
+        catalogQuantity: Math.max(0, toInteger(item.catalogQuantity)),
+        catalogSourceQuantity: Math.max(0, toInteger(item.catalogSourceQuantity)),
+        stackQuantity: Math.max(0, toInteger(item.catalogQuantity))
+      };
+      virtualGroups.set(key, aggregate);
+      result.push(aggregate);
+      continue;
+    }
+    existing.catalogQuantity += Math.max(0, toInteger(item.catalogQuantity));
+    existing.catalogSourceQuantity += Math.max(0, toInteger(item.catalogSourceQuantity));
+    existing.stackQuantity = existing.catalogQuantity;
+  }
+  for (const item of virtualGroups.values()) {
+    const sourceTotal = Math.max(0, toInteger(item.catalogSourceQuantity));
+    const offeredTotal = tradeOffer
+      ? getTradeOfferedItemQuantity(tradeOffer, item.id, String(item.actorUuid ?? actor?.uuid ?? ""))
+      : Math.max(0, sourceTotal - toInteger(item.catalogQuantity));
+    item.catalogQuantity = Math.max(0, sourceTotal - offeredTotal);
+    item.quantity = item.catalogQuantity;
+    item.stackQuantity = item.catalogQuantity;
+    item.draggableClass = String(item.draggableClass ?? "draggable").replace(/\s*\btrade-offered-source\b/g, "");
+    if (item.catalogQuantity <= 0) item.draggableClass = `${item.draggableClass || "draggable"} trade-offered-source`.trim();
+  }
+  return result;
+}
+
+function getTradeCatalogCategoryLabels(items = []) {
+  const labels = [];
+  const addLabel = label => {
+    label = normalizeTradeCatalogCategory(label);
+    if (!labels.includes(label)) labels.push(label);
+  };
+  for (const category of getItemCategorySettings()) addLabel(category?.label ?? category);
+  for (const item of items) addLabel(item.categoryLabel);
+  return labels.filter(label => items.some(item => item.categoryLabel === label));
+}
+
+function normalizeTradeCatalogCategory(category = "") {
+  return String(category ?? "").trim() || TRADE_UNCATEGORIZED_LABEL;
+}
+
+function getTradeCatalogItemQuantity(item = null) {
+  if (!item) return 0;
+  if (item.virtualStack) return Math.max(0, Math.min(toInteger(item.stackQuantity), toInteger(item.quantity)));
+  return Math.max(0, toInteger(item.quantity));
+}
+
+function getTradeCatalogItemSourceQuantity(item = null) {
+  if (!item) return 0;
+  if (item.virtualStack) return Math.max(0, toInteger(item.stackQuantity));
+  return Math.max(0, toInteger(item.quantity));
+}
+
+function getTradeCatalogItemFootprint(item = null, columns = TRADE_OFFER_DEFAULT_COLUMNS) {
+  const placement = item?.placement ?? {};
+  return {
+    width: Math.max(1, Math.min(Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS), toInteger(placement.width) || 1)),
+    height: Math.max(1, toInteger(placement.height) || 1)
   };
 }
 
@@ -4128,8 +4415,9 @@ function validateTradeOfferSide(actor, offer = {}) {
     if (!item) throw new Error("Item not found.");
     assertSearchTransferableItem(item);
     const requested = Math.max(1, toInteger(entry.quantity));
+    const sourceStackIndex = toInteger(entry.sourceStackIndex);
     const available = usesVirtualInventoryStacks(item)
-      ? getItemStackPartQuantity(item, Math.max(0, toInteger(entry.sourceStackIndex)))
+      ? (sourceStackIndex < 0 ? Math.max(1, getItemQuantity(item)) : getItemStackPartQuantity(item, Math.max(0, sourceStackIndex)))
       : Math.max(1, getItemQuantity(item));
     if (!isContainerItem(item) && requested > available) throw new Error("Not enough item quantity.");
   }
@@ -4185,8 +4473,10 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
       const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
       await entrySourceActor.deleteEmbeddedDocuments("Item", deleteIds);
     } else {
+      const sourceStackIndex = toInteger(entry.sourceStackIndex);
       if (usesVirtualInventoryStacks(item)) {
-        await removeTransferredVirtualStackQuantity(entrySourceActor, item, quantity, Math.max(0, toInteger(entry.sourceStackIndex)));
+        if (sourceStackIndex < 0) await removeTransferredItemDocumentQuantity(entrySourceActor, item, quantity);
+        else await removeTransferredVirtualStackQuantity(entrySourceActor, item, quantity, Math.max(0, sourceStackIndex));
       } else {
         await removeTransferredItemQuantity(entrySourceActor, item, quantity);
       }
@@ -4344,6 +4634,16 @@ function getTransferItemQuantity(item, quantity = 0) {
 
 async function removeTransferredItemQuantity(actor, item, quantity = 0) {
   if (usesVirtualInventoryStacks(item)) return removeTransferredVirtualStackQuantity(actor, item, quantity, 0);
+  const sourceQuantity = Math.max(1, getItemQuantity(item));
+  const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
+  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id]);
+  return actor.updateEmbeddedDocuments("Item", [{
+    _id: item.id,
+    "system.quantity": sourceQuantity - transferQuantity
+  }]);
+}
+
+async function removeTransferredItemDocumentQuantity(actor, item, quantity = 0) {
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
   if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id]);
@@ -4624,7 +4924,7 @@ function normalizeTradeOffersState(state = {}) {
         entryId: String(entry?.entryId ?? entry?.offerKey ?? entry?.itemId ?? foundry.utils.randomID()),
         itemId: String(entry?.itemId ?? ""),
         sourceActorUuid: String(entry?.sourceActorUuid ?? ""),
-        sourceStackIndex: Math.max(0, toInteger(entry?.sourceStackIndex)),
+        sourceStackIndex: toInteger(entry?.sourceStackIndex),
         returnActorUuid: String(entry?.returnActorUuid ?? ""),
         quantity: Math.max(1, toInteger(entry?.quantity)),
         itemData: normalizeTradeOfferItemData(entry?.itemData),
@@ -4684,11 +4984,11 @@ function getTradeOfferedItemQuantity(offer = {}, itemId = "", actorUuid = "", so
   const key = String(itemId ?? "");
   const sourceActorUuid = String(actorUuid ?? "");
   const hasSourceStackIndex = sourceStackIndex !== null && sourceStackIndex !== undefined;
-  const normalizedStackIndex = Math.max(0, toInteger(sourceStackIndex));
+  const normalizedStackIndex = toInteger(sourceStackIndex);
   return (offer?.items ?? [])
     .filter(entry => String(entry.itemId ?? entry.id ?? entry.offerKey ?? "") === key)
     .filter(entry => !sourceActorUuid || String(entry.sourceActorUuid ?? entry.actorUuid ?? "") === sourceActorUuid)
-    .filter(entry => !hasSourceStackIndex || Math.max(0, toInteger(entry.sourceStackIndex)) === normalizedStackIndex)
+    .filter(entry => !hasSourceStackIndex || toInteger(entry.sourceStackIndex) === normalizedStackIndex)
     .reduce((total, entry) => total + Math.max(0, toInteger(entry.quantity)), 0);
 }
 
@@ -4752,7 +5052,7 @@ function normalizeTradeOfferPlacement(placement = null, fallback = null) {
   };
 }
 
-function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "", { sourceStackIndex = 0 } = {}) {
+function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, placement = null, sourceActorUuid = "", { sourceStackIndex = 0, sourceWholeStack = false } = {}) {
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side) || !item) return offers;
   const itemId = String(item.id ?? "");
@@ -4760,23 +5060,27 @@ function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, pla
   const stackIndex = Math.max(0, toInteger(sourceStackIndex));
   if (!sourceUuid) return offers;
   const virtualStack = usesVirtualInventoryStacks(item);
-  const stackLimit = virtualStack
+  const aggregateVirtualStack = virtualStack && Boolean(sourceWholeStack);
+  const stackLimit = aggregateVirtualStack
+    ? Math.max(1, getItemQuantity(item))
+    : virtualStack
     ? Math.max(1, getItemStackPartQuantity(item, stackIndex))
     : Math.max(1, getItemQuantity(item));
-  const alreadyOffered = getTradeOfferedItemQuantity(offers[side], itemId, sourceUuid, virtualStack ? stackIndex : null);
+  const alreadyOffered = getTradeOfferedItemQuantity(offers[side], itemId, sourceUuid, virtualStack && !aggregateVirtualStack ? stackIndex : null);
   const amount = Math.max(0, Math.min(Math.max(0, toInteger(quantity)), Math.max(0, stackLimit - alreadyOffered)));
   if (!amount) return offers;
+  const storedStackIndex = aggregateVirtualStack ? -1 : (virtualStack ? stackIndex : 0);
   const existing = offers[side].items.find(entry => (
     entry.itemId === itemId
     && String(entry.sourceActorUuid ?? "") === sourceUuid
-    && (!virtualStack || Math.max(0, toInteger(entry.sourceStackIndex)) === stackIndex)
+    && (!virtualStack || toInteger(entry.sourceStackIndex) === storedStackIndex)
   ));
   if (existing) existing.quantity += amount;
   else offers[side].items.push({
     entryId: foundry.utils.randomID(),
     itemId,
     sourceActorUuid: sourceUuid,
-    sourceStackIndex: virtualStack ? stackIndex : 0,
+    sourceStackIndex: storedStackIndex,
     quantity: amount,
     placement: normalizeTradeOfferPlacement(placement)
   });
@@ -7376,7 +7680,8 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     ensureTradeSessionActorOfferMutation(session, actor.uuid, requesterUserId);
     if (getTradeSessionActorSide(session, actor.uuid) !== payload.side) throw new Error("Trade offer side mismatch.");
     session.offers = addTradeOfferItem(session.offers, payload.side, item, payload.quantity, payload.placement, actor.uuid, {
-      sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex))
+      sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
+      sourceWholeStack: Boolean(payload.sourceWholeStack)
     });
     resetTradeSessionReady(session);
   } else if (action === "moveTradeOfferEntry") {

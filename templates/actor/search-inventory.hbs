@@ -134,6 +134,39 @@
           </section>
           {{/if}}
 
+            {{#with inventory.tradeCatalog}}
+            <section class="fallout-maw-panel fallout-maw-trade-catalog">
+              <div class="fallout-maw-trade-catalog-filter-list">
+                {{#each categories}}
+                <button type="button" class="fallout-maw-trade-catalog-filter {{#if enabled}}active{{/if}}" data-trade-catalog-category="{{label}}" data-trade-actor-uuid="{{../../uuid}}" aria-pressed="{{#if enabled}}true{{else}}false{{/if}}">
+                  <span>{{label}}</span>
+                  <strong>{{count}}</strong>
+                </button>
+                {{else}}
+                <p class="fallout-maw-empty-list">Нет предметов для торговли.</p>
+                {{/each}}
+              </div>
+              <div class="fallout-maw-trade-catalog-scroll">
+                <div class="fallout-maw-inventory-grid fallout-maw-trade-catalog-grid" data-trade-catalog-grid data-search-actor-uuid="{{../uuid}}" data-inventory-parent-id="" style="{{grid.style}}">
+                  {{#each grid.dividers}}
+                  <div class="fallout-maw-trade-catalog-divider" style="{{style}}">
+                    <span>{{label}}</span>
+                    <strong>{{count}}</strong>
+                  </div>
+                  {{/each}}
+                  {{#each grid.items}}
+                  <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item fallout-maw-trade-catalog-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-trade-catalog-phantom {{#if tradeCatalogAggregate}}data-trade-catalog-aggregate{{/if}} data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" {{#if tradePrice}}data-trade-price="{{tradePrice}}"{{/if}} style="{{gridStyle}}">
+                    <img src="{{img}}" alt="{{name}}">
+                    {{#if tradePrice}}<span class="fallout-maw-trade-price">{{tradePrice}}</span>{{/if}}
+                    {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+                  </article>
+                  {{/each}}
+                </div>
+              </div>
+            </section>
+            {{/with}}
+
+            {{#unless inventory.tradeCatalog}}
             <section class="fallout-maw-panel fallout-maw-equipment-pane fallout-maw-search-equipment-pane {{#if equipmentCollapsed}}collapsed{{/if}}">
               <h2 {{#if ../isTrade}}class="fallout-maw-trade-equipment-toggle" data-trade-equipment-toggle{{/if}}>
                 {{#if ../isTrade}}
@@ -265,6 +298,7 @@
                 {{/each}}
               </div>
             </section>
+            {{/unless}}
           </div>
         </section>
         {{/each}}
