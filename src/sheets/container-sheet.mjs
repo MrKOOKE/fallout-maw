@@ -26,6 +26,7 @@ import {
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
   prepareInventoryGridContext,
+  resetInventoryHoverCheckerCache,
   usesVirtualInventoryStacks,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
@@ -59,6 +60,7 @@ const { FormDataExtended } = foundry.applications.ux;
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #draggedItemData = null;
   #draggedItemId = "";
+  #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #dragDrop = null;
 
@@ -166,6 +168,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (!item) return;
     const stackIndex = Math.max(0, toInteger(event.currentTarget?.dataset?.stackIndex));
     const stackQuantity = Math.max(0, toInteger(event.currentTarget?.dataset?.stackQuantity));
+    resetInventoryHoverCheckerCache();
     this.#draggedItemId = item.id;
     this.#draggedItemData = item.toObject();
     if (usesVirtualInventoryStacks(item)) {
@@ -444,6 +447,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       return;
     }
 
+    const inputKey = `cell:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedItemId}`;
+    if (this.#hoverPreviewInputKey === inputKey) return;
+    this.#hoverPreviewInputKey = inputKey;
+
     const sourceItemId = this.#draggedItemId || "";
     const targetItem = this.#getTargetStackItem(zone, sourceItemId);
     const targetHasStackRoom = targetItem
@@ -507,6 +514,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   #clearInventoryHoverPreview() {
+    this.#hoverPreviewInputKey = "";
     this.#hoverPreviewKey = "";
     clearInventoryPlacementPreviews(this.element);
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {

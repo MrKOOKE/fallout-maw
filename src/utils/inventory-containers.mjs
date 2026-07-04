@@ -720,6 +720,46 @@ export function isInventoryPlacementAvailable(
   });
 }
 
+const _hoverPlacementCheckerCache = new Map();
+
+export function resetInventoryHoverCheckerCache() {
+  _hoverPlacementCheckerCache.clear();
+}
+
+export function createInventoryHoverPlacementChecker(
+  contextItems,
+  columns,
+  rows,
+  allItems = contextItems,
+  excludeItemIds = [],
+  options = {},
+  parentId = ROOT_CONTAINER_ID
+) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds.filter(Boolean) : []);
+  const cacheKey = [
+    String(parentId ?? ROOT_CONTAINER_ID),
+    columns,
+    rows,
+    String(options.placementMode ?? ""),
+    Boolean(options.allowOverflowRows),
+    excluded.size ? [...excluded].sort().join(",") : "",
+    getItemsArray(contextItems).length
+  ].join("|");
+  const cached = _hoverPlacementCheckerCache.get(cacheKey);
+  if (cached) return cached;
+
+  const filtered = getItemsArray(contextItems).filter(item => !excluded.has(getItemId(item)));
+  const resolved = resolveInventoryGridPlacements(filtered, columns, rows, allItems, options);
+  const occupied = resolved?.items?.filter(entry => !entry.phantom).map(entry => entry.placement) ?? [];
+  const checker = placement => {
+    if (!placement) return false;
+    if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
+    return !occupied.some(existing => inventoryPlacementsOverlap(placement, existing));
+  };
+  _hoverPlacementCheckerCache.set(cacheKey, checker);
+  return checker;
+}
+
 export function findFirstAvailableInventoryPlacement(
   contextItems,
   columns,

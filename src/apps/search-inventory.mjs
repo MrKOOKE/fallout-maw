@@ -23,6 +23,7 @@ import {
   createItemStackPartPlacementUpdate,
   createItemStackPartRemovalUpdate,
   createItemStackPartSplitUpdate,
+  createInventoryHoverPlacementChecker,
   createInventoryPlacement,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
@@ -48,6 +49,7 @@ import {
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
+  resetInventoryHoverCheckerCache,
   usesVirtualInventoryStacks,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
@@ -64,6 +66,7 @@ import {
   renderInventoryPlacementPreview,
   syncInventoryVirtualCell
 } from "../utils/inventory-grid-dom.mjs";
+import { resolveInventoryPointerPlacement } from "../utils/inventory-grid-hover.mjs";
 import {
   canUseWeaponSlotForItem,
   doesItemOccupyEquipmentSlot,
@@ -741,6 +744,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async _onDragStart(event) {
+    resetInventoryHoverCheckerCache();
     this.#clearInventoryTooltip({ force: true });
     this.#clearInventoryDropPreview();
     this.#draggedTradeOfferKind = "";
@@ -1820,10 +1824,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
     const targetItem = this.#getTargetStackItem(zone, actor, this.#draggedItemId, parentId);
-    const targetHasStackRoom = targetItem
+    const stackRoom = targetItem
       && areStackable(this.#draggedItemData, targetItem)
       && getItemQuantity(targetItem) < getItemMaxStack(targetItem);
-    if (targetHasStackRoom) {
+    if (stackRoom) {
       this.#applyInventoryStackPreview(actor, parentId, targetItem);
       return;
     }
@@ -1835,10 +1839,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       sourceItemId: this.#draggedItemId,
       parentId,
       event,
-      zone
+      zone,
+      findNearest: Boolean(targetItem)
     });
     if (!placement) {
+      if (this.#hoverPreviewKey === "none") return;
       this.#clearInventoryHoverPreviewClasses();
+      this.#hoverPreviewKey = "none";
       return;
     }
     this.#applyInventoryPlacementPreview(actor, parentId, placement);
@@ -6556,7 +6563,16 @@ function getRequestedTargetPlacement({
   return placement ? createContextInventoryPlacement(placement, targetParentId) : null;
 }
 
-export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor, sourceItemId = "", parentId = ROOT_CONTAINER_ID, event = null, zone = null } = {}) {
+export function getSearchDropPlacementForPointer({
+  actor,
+  itemData,
+  sourceActor,
+  sourceItemId = "",
+  parentId = ROOT_CONTAINER_ID,
+  event = null,
+  zone = null,
+  findNearest = true
+} = {}) {
   if (!actor || !itemData) return null;
   const grid = zone?.closest?.("[data-inventory-grid]");
   const pointer = getSearchInventoryGridPointerPosition(event, grid, actor, parentId);
@@ -6569,48 +6585,31 @@ export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor,
   if (!anchor.x || !anchor.y) return null;
 
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
-  const basePlacement = createInventoryPlacement(1, 1, itemData, actor.items);
-  if (isContainerItem(itemData) && sourceActor) {
-    const footprint = getItemFootprint(sourceActor.items?.get(sourceItemId) ?? itemData, sourceActor.items);
-    basePlacement.width = footprint.width;
-    basePlacement.height = footprint.height;
-  }
-
   const excludeItemIds = sourceActor?.uuid === actor.uuid && sourceItemId ? [sourceItemId] : [];
-  const allowOverflowRows = getActorInventoryContextOptions(actor, parentId).allowOverflowRows;
-  const maxX = Math.max(1, dimensions.columns - basePlacement.width + 1);
-  const maxY = allowOverflowRows
-    ? Math.max(1, dimensions.rows - basePlacement.height + 1, Math.ceil(anchor.y) + 64)
-    : Math.max(1, dimensions.rows - basePlacement.height + 1);
-  const preferredX = Math.max(1, Math.min(maxX, Math.round(anchor.x - ((basePlacement.width - 1) / 2))));
-  const preferredY = allowOverflowRows
-    ? Math.max(1, Math.round(anchor.y - ((basePlacement.height - 1) / 2)))
-    : Math.max(1, Math.min(maxY, Math.round(anchor.y - ((basePlacement.height - 1) / 2))));
-  const preferredPlacement = { ...basePlacement, x: preferredX, y: preferredY };
-  if (isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludeItemIds, [], { allowLockedDisplacement: true })) return preferredPlacement;
-
-  const candidates = [];
-  for (let y = 1; y <= maxY; y += 1) {
-    for (let x = 1; x <= maxX; x += 1) {
-      if (x === preferredX && y === preferredY) continue;
-      const placement = { ...basePlacement, x, y };
-      const centerX = x + ((placement.width - 1) / 2);
-      const centerY = y + ((placement.height - 1) / 2);
-      candidates.push({
-        placement,
-        distance: ((centerX - anchor.x) ** 2) + ((centerY - anchor.y) ** 2)
-      });
-    }
-  }
-
-  candidates.sort((left, right) => (
-    (left.distance - right.distance)
-    || (left.placement.y - right.placement.y)
-    || (left.placement.x - right.placement.x)
-  ));
-  return candidates.find(candidate => (
-    isActorInventoryPlacementAvailable(actor, parentId, candidate.placement, excludeItemIds, [], { allowLockedDisplacement: true })
-  ))?.placement ?? null;
+  const sourceItem = sourceItemId ? sourceActor?.items?.get(sourceItemId) ?? null : null;
+  const contextOptions = getActorInventoryContextOptions(actor, parentId);
+  const contextItems = getContextInventoryItems(parentId, actor.items)
+    .filter(item => contextOptions.allowLockedDisplacement && !isLockedStorageParentId(parentId) ? !isItemLocked(item) : true);
+  const isPlacementAvailable = createInventoryHoverPlacementChecker(
+    contextItems,
+    dimensions.columns,
+    dimensions.rows,
+    actor.items,
+    excludeItemIds,
+    contextOptions,
+    parentId
+  );
+  const result = resolveInventoryPointerPlacement({
+    anchor,
+    itemData,
+    items: actor.items,
+    dimensions,
+    options: contextOptions,
+    sourceItem,
+    findNearest,
+    isPlacementAvailable
+  });
+  return result;
 }
 
 export function getSearchInventoryGridPointerPosition(event = null, grid = null, actor = null, parentId = ROOT_CONTAINER_ID) {

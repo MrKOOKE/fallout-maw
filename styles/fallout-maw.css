@@ -4156,6 +4156,13 @@ body #prosemirror-dropdown {
   z-index: 2;
 }
 
+.fallout-maw-inventory-virtual-cell {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  opacity: 0;
+}
+
 .fallout-maw-inventory-placement-preview {
   background: rgba(132, 190, 105, 0.12);
   border: 1px solid rgba(148, 177, 111, 0.82);

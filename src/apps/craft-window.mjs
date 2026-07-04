@@ -56,6 +56,7 @@ import {
   isContainerItem,
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
+  resetInventoryHoverCheckerCache,
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import {
@@ -758,6 +759,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _onDragStart(event) {
+    resetInventoryHoverCheckerCache();
     this.#clearInventoryTooltip({ force: true });
     this.#clearInventoryDropPreview();
     const itemElement = event.currentTarget?.closest?.("[data-item-id][data-search-actor-uuid]");
@@ -992,10 +994,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       sourceItemId: this.#draggedItemId,
       parentId,
       event,
-      zone
+      zone,
+      findNearest: Boolean(targetItem)
     });
     if (!placement) {
+      if (this.#hoverPreviewKey === "none") return;
       this.#clearInventoryHoverPreviewClasses();
+      this.#hoverPreviewKey = "none";
       return;
     }
     this.#applyInventoryPlacementPreview(actor, parentId, placement);

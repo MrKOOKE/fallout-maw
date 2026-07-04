@@ -124,6 +124,7 @@ import {
   createItemStackPartSplitUpdate,
   createStoredPlacement,
   createInventoryPlacement as createInventoryPlacementHelper,
+  createInventoryHoverPlacementChecker,
   findFirstAvailableInventoryPlacement as findFirstAvailableInventoryPlacementHelper,
   getContainerContentsWeight,
   getContainerDimensions,
@@ -143,6 +144,7 @@ import {
   normalizeInventoryPlacement as normalizeInventoryPlacementHelper,
   placementContainsInventoryCell as placementContainsInventoryCellHelper,
   prepareInventoryGridContext,
+  resetInventoryHoverCheckerCache,
   usesVirtualInventoryStacks,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
@@ -205,6 +207,7 @@ import {
   renderInventoryPlacementPreview,
   syncInventoryVirtualCell
 } from "../utils/inventory-grid-dom.mjs";
+import { resolveInventoryPointerPlacement } from "../utils/inventory-grid-hover.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -720,6 +723,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return;
     }
     await super._onDragStart(event);
+    resetInventoryHoverCheckerCache();
     this.#clearInventoryTooltip({ force: true });
     this.#clearInventoryDropPreview();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
@@ -1730,26 +1734,40 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
     const targetItem = this.#getTargetStackItem(zone, sourceItemId, parentId);
-    const targetHasStackRoom = targetItem
+    const stackRoom = targetItem
       && this.#areStackable(this.#draggedItemData, targetItem)
       && (getItemQuantity(targetItem) < getItemMaxStack(targetItem));
-    if (targetHasStackRoom) {
+    if (stackRoom) {
       this.#applyInventoryStackPreview(targetItem, parentId);
       return;
     }
 
     const excludeItemIds = sourceItemId ? [sourceItemId] : [];
-    const placement = this.#getInventoryPointerPlacement(zone, this.#draggedItemData, excludeItemIds, parentId, event, {
-      findNearest: false
-    })
-      ?? createInventoryPlacement(
-        toInteger(zone.dataset.x),
-        toInteger(zone.dataset.y),
-        this.#draggedItemData,
-        this.actor.items
-      );
-    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, [], parentId)) {
+    const { columns, rows } = this.#getInventoryGridDimensions(parentId);
+    const gridOptions = this.#getInventoryGridOptions(parentId);
+    const isPlacementAvailable = createInventoryHoverPlacementChecker(
+      this.#getContextInventoryItems(parentId),
+      columns,
+      rows,
+      this.actor.items,
+      excludeItemIds,
+      gridOptions,
+      parentId
+    );
+    const placement = resolveInventoryPointerPlacement({
+      anchor: { x: toInteger(zone.dataset.x), y: toInteger(zone.dataset.y) },
+      itemData: this.#draggedItemData,
+      items: this.actor.items,
+      dimensions: { columns, rows },
+      options: gridOptions,
+      sourceItem: sourceItemId ? this.actor.items.get(sourceItemId) : null,
+      findNearest: Boolean(targetItem),
+      isPlacementAvailable
+    });
+    if (!placement) {
+      if (this.#hoverPreviewKey === "none") return;
       this.#clearInventoryHoverPreviewClasses();
+      this.#hoverPreviewKey = "none";
       return;
     }
     this.#applyInventoryPlacementPreview(placement, parentId);
