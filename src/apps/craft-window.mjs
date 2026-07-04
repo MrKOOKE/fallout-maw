@@ -113,49 +113,163 @@ const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 let craftWindow = null;
 let craftRecipeCache = null;
-let craftRecipeCacheTime = 0;
 let craftRecipeMissingCache = new Map();
 let craftRecipeMissingCacheKey = "";
 let craftAvailabilityCache = { actorUuid: "", index: null };
-let craftMissingCacheFingerprint = "";
-
-let craftMissingWarmIdleId = 0;
+const craftSourceProfileCache = new Map();
+const worldRecipeLayoutCache = new Map();
+let worldRecipeIndexOffset = 0;
+let worldRecipeIndexIdleId = 0;
+let worldRecipeIndexSummaries = null;
 
 function invalidateCraftRecipeAvailabilityCaches() {
   craftRecipeMissingCache = new Map();
   craftRecipeMissingCacheKey = "";
   craftAvailabilityCache = { actorUuid: "", index: null };
-  craftMissingCacheFingerprint = "";
 }
 
-function getCraftInventoryFingerprint(actor = null) {
-  let signature = 0;
-  for (const item of actor?.items?.contents ?? []) {
-    if (isNaturalRaceItem(item)) continue;
-    signature = ((signature << 5) - signature) + getItemQuantity(item);
-    signature = ((signature << 5) - signature) + String(item.id ?? "").length;
-    signature |= 0;
+function invalidateWorldRecipeLayoutCache() {
+  worldRecipeLayoutCache.clear();
+  craftSourceProfileCache.clear();
+  worldRecipeIndexOffset = 0;
+  worldRecipeIndexSummaries = null;
+  if (worldRecipeIndexIdleId) {
+    if (typeof cancelIdleCallback === "function") cancelIdleCallback(worldRecipeIndexIdleId);
+    else clearTimeout(worldRecipeIndexIdleId);
+    worldRecipeIndexIdleId = 0;
   }
-  return `${actor?.uuid ?? ""}:${actor?.items?.contents?.length ?? 0}:${signature}`;
 }
 
-function warmCraftRecipeMissingCache(actor = null, mode = CRAFT_MODE_CREATE, recipes = []) {
-  if (!actor) return { cached: true, computed: 0 };
-  mode = normalizeCraftMode(mode);
-  const fingerprint = `${getCraftInventoryFingerprint(actor)}:${mode}:${recipes.length}`;
-  if (craftMissingCacheFingerprint === fingerprint && craftRecipeMissingCache.size > 0) {
-    return { cached: true, computed: 0 };
+function getCraftItemSourceProfile(sourceUuid = "") {
+  const uuid = String(sourceUuid ?? "").trim();
+  if (!uuid) return { sourceKeys: new Set(), identity: "", fingerprint: "" };
+  if (craftSourceProfileCache.has(uuid)) return craftSourceProfileCache.get(uuid);
+  const source = resolveWorldItemSync(uuid);
+  const profile = {
+    sourceKeys: getCraftItemSourceKeys(source, uuid),
+    identity: getCraftItemIdentity(source ?? { itemUuid: uuid }),
+    fingerprint: source ? getCraftItemFingerprint(source) : ""
+  };
+  craftSourceProfileCache.set(uuid, profile);
+  return profile;
+}
+
+function getCraftNodesLite(item, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
+  return Array.from(getCraftRecipeData(item, mode, recipeId)?.nodes ?? [])
+    .map(normalizeCraftNode)
+    .filter(node => node.id);
+}
+
+function getCraftNodesWithRootLite(item, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
+  const nodes = getCraftNodesLite(item, mode, recipeId);
+  const rootIndex = nodes.findIndex(node => node.root);
+  const root = createCraftRootNode(item, rootIndex >= 0 ? nodes[rootIndex] : {});
+  if (rootIndex >= 0) {
+    nodes[rootIndex] = root;
+    return nodes;
   }
-  invalidateCraftRecipeAvailabilityCaches();
-  craftMissingCacheFingerprint = fingerprint;
-  const availability = getCraftAvailabilityIndex(actor);
-  let computed = 0;
-  for (const recipe of recipes) {
-    if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
-    isCraftRecipeMissing(recipe, actor, mode, availability);
-    computed += 1;
+  return [root, ...nodes];
+}
+
+function getCraftRequirementsFromNodes(nodes = [], { includeRoot = false } = {}) {
+  const requirements = [];
+  for (const node of nodes) {
+    if (node.root && !includeRoot) continue;
+    if (isCraftNodeToolRequirement(node)) continue;
+    const sourceUuid = getCraftNodeSourceUuid(node);
+    const quantity = Math.max(1, toInteger(node.quantity) || 1);
+    const profile = getCraftItemSourceProfile(sourceUuid);
+    const key = getCraftRequirementKey({
+      sourceKeys: profile.sourceKeys,
+      identity: profile.identity,
+      fingerprint: profile.fingerprint,
+      sourceUuid
+    });
+    const existing = requirements.find(requirement => requirement.key === key);
+    if (existing) {
+      existing.quantity += quantity;
+      existing.nodeIds.push(node.id);
+      continue;
+    }
+    requirements.push({
+      key,
+      sourceUuid,
+      sourceKeys: Array.from(profile.sourceKeys),
+      identity: profile.identity,
+      fingerprint: profile.fingerprint,
+      quantity,
+      nodeIds: [node.id]
+    });
   }
-  return { cached: false, computed };
+  return requirements;
+}
+
+function buildWorldRecipeLayoutCacheEntry(summary) {
+  const recipeId = summary?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID;
+  const entry = {};
+  for (const mode of [CRAFT_MODE_CREATE, CRAFT_MODE_DISASSEMBLY]) {
+    if (!hasCraftRecipeDataForMode(summary?.system?.craft, mode)) continue;
+    const nodes = getCraftNodesWithRootLite(summary, mode, recipeId);
+    entry[mode] = {
+      nodes,
+      materialRequirements: mode === CRAFT_MODE_DISASSEMBLY
+        ? getCraftRequirementsFromNodes(nodes.filter(node => node.root), { includeRoot: true })
+        : getCraftRequirementsFromNodes(getCraftBlockLimitedNodes(nodes))
+    };
+  }
+  return entry;
+}
+
+function ensureWorldRecipeLayout(recipeUuid = "", summary = null) {
+  const key = String(recipeUuid ?? "");
+  if (!key) return null;
+  if (worldRecipeLayoutCache.has(key)) return worldRecipeLayoutCache.get(key);
+  summary ??= craftRecipeCache?.find(recipe => recipe.uuid === key) ?? null;
+  if (!summary) return null;
+  const entry = buildWorldRecipeLayoutCacheEntry(summary);
+  worldRecipeLayoutCache.set(key, entry);
+  return entry;
+}
+
+function scheduleWorldRecipeIndexBuild() {
+  if (worldRecipeIndexIdleId) return;
+  const tick = deadline => {
+    worldRecipeIndexIdleId = 0;
+    if (!craftRecipeCache?.length) {
+      void getCraftRecipeSummaries().then(() => scheduleWorldRecipeIndexBuild());
+      return;
+    }
+    worldRecipeIndexSummaries ??= craftRecipeCache;
+    const chunkStart = performance.now();
+    while (worldRecipeIndexOffset < worldRecipeIndexSummaries.length) {
+      const summary = worldRecipeIndexSummaries[worldRecipeIndexOffset++];
+      if (!worldRecipeLayoutCache.has(summary.uuid)) {
+        worldRecipeLayoutCache.set(summary.uuid, buildWorldRecipeLayoutCacheEntry(summary));
+      }
+      const elapsed = performance.now() - chunkStart;
+      const timeLeft = typeof deadline?.timeRemaining === "function" ? deadline.timeRemaining() : 0;
+      if (worldRecipeIndexOffset < worldRecipeIndexSummaries.length && (timeLeft < 2 || elapsed > 12)) break;
+    }
+    const complete = worldRecipeIndexOffset >= worldRecipeIndexSummaries.length;
+    if (!complete) {
+      if (typeof requestIdleCallback === "function") {
+        worldRecipeIndexIdleId = requestIdleCallback(tick, { timeout: 1000 });
+      } else {
+        worldRecipeIndexIdleId = setTimeout(() => tick({ timeRemaining: () => 16 }), 0);
+      }
+      return;
+    }
+    craftWindow?.patchVisibleRecipeMissingIndicators?.();
+  };
+  if (typeof requestIdleCallback === "function") {
+    worldRecipeIndexIdleId = requestIdleCallback(tick, { timeout: 1000 });
+  } else {
+    worldRecipeIndexIdleId = setTimeout(() => tick({ timeRemaining: () => 16 }), 0);
+  }
+}
+
+export function initializeCraftRecipeWorldIndex() {
+  scheduleWorldRecipeIndexBuild();
 }
 
 function getCraftAvailabilityIndex(actor = null) {
@@ -187,7 +301,11 @@ export function openCraftWindow({ actor } = {}) {
   if (!actor) return undefined;
   craftWindow ??= new CraftWindowApplication();
   craftWindow.setActor(actor);
-  return craftWindow.render({ force: true });
+  const result = craftWindow.render({ force: true });
+  void result?.then?.(() => {
+    craftWindow?.patchVisibleRecipeMissingIndicators?.();
+  });
+  return result;
 }
 
 class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -386,7 +504,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#activateControls();
     this.#activateCraftViewer();
     this.#startPendingOperation();
-    this.#scheduleMissingCacheWarm();
   }
 
   #renderPreservingWindowStack(options = {}) {
@@ -395,11 +512,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _onClose(options) {
-    if (craftMissingWarmIdleId) {
-      if (typeof cancelIdleCallback === "function") cancelIdleCallback(craftMissingWarmIdleId);
-      else clearTimeout(craftMissingWarmIdleId);
-      craftMissingWarmIdleId = 0;
-    }
     await super._onClose(options);
     this.#unbindViewportResize();
     this.#resizeObserver?.disconnect();
@@ -521,40 +633,33 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return patched;
   }
 
-  #scheduleMissingCacheWarm() {
-    if (!this.#actor) return;
-    const actor = this.#actor;
-    const mode = this.#craftMode;
-    if (craftMissingWarmIdleId) {
-      if (typeof cancelIdleCallback === "function") cancelIdleCallback(craftMissingWarmIdleId);
-      else clearTimeout(craftMissingWarmIdleId);
-    }
-    const runWarm = async () => {
-      craftMissingWarmIdleId = 0;
-      if (!this.rendered || this.#actor !== actor) return;
-      const recipes = await getCraftRecipeSummaries();
-      warmCraftRecipeMissingCache(actor, mode, recipes);
-      this.#applyRecipeMissingDom();
-    };
-    if (typeof requestIdleCallback === "function") {
-      craftMissingWarmIdleId = requestIdleCallback(() => { void runWarm(); }, { timeout: 2000 });
-    } else {
-      craftMissingWarmIdleId = setTimeout(() => { void runWarm(); }, 0);
-    }
-  }
-
   #warmMissingForCategory(categoryKey = "") {
     if (!this.#actor || !categoryKey) return;
     const availability = getCraftAvailabilityIndex(this.#actor);
     for (const element of this.element?.querySelectorAll(`[data-craft-recipe-category="${CSS.escape(categoryKey)}"] [data-recipe-uuid]`) ?? []) {
       const recipeUuid = String(element.dataset.recipeUuid ?? "");
       if (!recipeUuid || craftRecipeMissingCache.has(recipeUuid)) continue;
-      const selection = resolveCraftRecipeSelection(recipeUuid);
-      const recipe = selection?.item;
+      const recipe = craftRecipeCache?.find(entry => entry.uuid === recipeUuid);
       if (!recipe) continue;
       isCraftRecipeMissing(recipe, this.#actor, this.#craftMode, availability);
     }
     this.#applyRecipeMissingDom(categoryKey);
+  }
+
+  patchVisibleRecipeMissingIndicators() {
+    if (!this.#actor || !this.rendered || !this.element) return 0;
+    const availability = getCraftAvailabilityIndex(this.#actor);
+    for (const element of this.element.querySelectorAll("[data-recipe-uuid]")) {
+      if (element.hidden) continue;
+      const category = element.closest("[data-craft-recipe-category]");
+      if (category?.classList.contains("collapsed")) continue;
+      const recipeUuid = String(element.dataset.recipeUuid ?? "");
+      if (!recipeUuid || craftRecipeMissingCache.has(recipeUuid)) continue;
+      const recipe = craftRecipeCache?.find(entry => entry.uuid === recipeUuid);
+      if (!recipe) continue;
+      isCraftRecipeMissing(recipe, this.#actor, this.#craftMode, availability);
+    }
+    return this.#applyRecipeMissingDom();
   }
 
   async #prepareCraftPanelContext() {
@@ -1662,6 +1767,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     if (!item.parent) {
       craftRecipeCache = null;
+      invalidateWorldRecipeLayoutCache();
       invalidateCraftRecipeAvailabilityCaches();
       if (!this.#busy) this.#renderRefresh?.();
     }
@@ -4418,7 +4524,8 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
   mode = normalizeCraftMode(mode);
   const normalizedSearch = normalizeCraftSearchText(search);
   const categories = new Map();
-  const availability = actor ? getCraftAvailabilityIndex(actor) : null;
+  let availability = null;
+  const getAvailability = () => availability ??= (actor ? getCraftAvailabilityIndex(actor) : null);
   for (const recipe of recipes) {
     if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
     const category = getCraftRecipeCategory(recipe);
@@ -4432,7 +4539,7 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
       if (cachedMissing !== undefined) {
         missing = cachedMissing;
       } else if (needsCompute) {
-        missing = isCraftRecipeMissing(recipe, actor, mode, availability);
+        missing = isCraftRecipeMissing(recipe, actor, mode, getAvailability());
       }
     }
     const entry = {
@@ -4465,10 +4572,14 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
 function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, availability = null) {
   if (!actor) return 0;
   mode = normalizeCraftMode(mode);
-  const nodes = getCraftNodesWithRoot(recipe, mode, recipe?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID);
-  const requirements = mode === CRAFT_MODE_DISASSEMBLY
-    ? getCraftRequirements(nodes.filter(node => node.root), { includeRoot: true })
-    : getCraftRequirements(getCraftBlockLimitedNodes(nodes));
+  const recipeId = recipe?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID;
+  const modeLayout = ensureWorldRecipeLayout(recipe?.uuid ?? "", recipe)?.[mode] ?? null;
+  const nodes = modeLayout?.nodes ?? getCraftNodesWithRoot(recipe, mode, recipeId);
+  const requirements = modeLayout?.materialRequirements ?? (
+    mode === CRAFT_MODE_DISASSEMBLY
+      ? getCraftRequirements(nodes.filter(node => node.root), { includeRoot: true })
+      : getCraftRequirements(getCraftBlockLimitedNodes(nodes))
+  );
   const index = availability ?? createCraftAvailabilityIndex(actor);
   const toolRequirements = getCraftToolRequirements(nodes, { index });
   const ownedByRequirement = getActorOwnedCraftRequirementsFromIndex(index, requirements);
@@ -4492,8 +4603,7 @@ function normalizeCraftSearchText(value = "") {
 }
 
 async function getCraftRecipeSummaries() {
-  const now = Date.now();
-  if (craftRecipeCache && (now - craftRecipeCacheTime) < 5000) return craftRecipeCache;
+  if (craftRecipeCache) return craftRecipeCache;
   const recipes = [];
   const seen = new Set();
 
@@ -4508,7 +4618,9 @@ async function getCraftRecipeSummaries() {
 
   recipes.sort((left, right) => left.name.localeCompare(right.name));
   craftRecipeCache = recipes;
-  craftRecipeCacheTime = now;
+  worldRecipeIndexOffset = 0;
+  worldRecipeIndexSummaries = recipes;
+  scheduleWorldRecipeIndexBuild();
   return recipes;
 }
 

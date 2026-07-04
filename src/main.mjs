@@ -53,6 +53,7 @@ import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mj
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerRepairSocket } from "./apps/repair-dialog.mjs";
 import { canStackItems, registerSearchInventorySocket } from "./apps/search-inventory.mjs";
+import { initializeCraftRecipeWorldIndex } from "./apps/craft-window.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
@@ -344,6 +345,7 @@ Hooks.once("ready", async () => {
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();
   await syncPeriodicDamageRegionEffects();
+  initializeCraftRecipeWorldIndex();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {
