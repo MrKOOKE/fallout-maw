@@ -7111,7 +7111,7 @@ export async function splitActorInventoryItem(actor, item, amount, { allowLocked
   return actor.createEmbeddedDocuments("Item", [data]);
 }
 
-async function stackActorInventoryItem({
+export async function stackActorInventoryItem({
   sourceActor,
   targetActor,
   sourceItem,

@@ -22,6 +22,7 @@ import {
   promptSearchItemStackQuantity,
   resolveActorPlacement,
   splitActorInventoryItem,
+  stackActorInventoryItem,
   transferItemBetweenActors
 } from "./search-inventory.mjs";
 import {
@@ -41,6 +42,7 @@ import {
   createAnchoredItemStackPartsForQuantity,
   createItemStackPartAdditionUpdate,
   createItemStackPartRemovalUpdate,
+  createItemStackPartSplitUpdate,
   createItemStackPartsForQuantity,
   createStoredPlacement,
   findFirstAvailableResolvedInventoryPlacement,
@@ -52,6 +54,7 @@ import {
   getItemId,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackPartQuantity,
   getItemTotalWeight,
   isContainerItem,
   normalizeInventoryPlacement,
@@ -764,14 +767,21 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#clearInventoryDropPreview();
     const itemElement = event.currentTarget?.closest?.("[data-item-id][data-search-actor-uuid]");
     const itemId = String(itemElement?.dataset?.itemId ?? "");
+    const stackIndex = Math.max(0, toInteger(itemElement?.dataset?.stackIndex));
+    const stackQuantity = Math.max(0, toInteger(itemElement?.dataset?.stackQuantity));
     const item = this.#actor?.items?.get(itemId);
     if (!item || !this._canDragStart()) return;
     this.#draggedItemId = item.id;
     this.#draggedItemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      foundry.utils.setProperty(this.#draggedItemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    }
     event.dataTransfer?.setData("text/plain", JSON.stringify({
       type: "Item",
       uuid: item.uuid,
       itemId: item.id,
+      stackIndex,
+      stackQuantity: stackQuantity || (usesVirtualInventoryStacks(item) ? getItemStackPartQuantity(item, stackIndex) : getItemQuantity(item)),
       actorUuid: this.#actor.uuid,
       sourceActorUuid: this.#actor.uuid,
       falloutMawSearchInventory: true
@@ -816,6 +826,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (data?.type !== "Item") return null;
       const item = this.#actor?.items?.get(String(data.itemId ?? ""));
       if (!item) return null;
+      const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
+      const sourceStackQuantity = Math.max(0, toInteger(data.stackQuantity));
+      const itemData = item.toObject();
+      if (usesVirtualInventoryStacks(item)) {
+        foundry.utils.setProperty(itemData, "system.quantity", sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex));
+      }
       const zone = this.#getInventoryDropZone(event);
       if (!zone) return null;
       this.#captureScrollPositions();
@@ -823,18 +839,36 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const parentId = (placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE)
         ? getDropZoneParentId(zone)
         : ROOT_CONTAINER_ID;
-      const targetItem = this.#getTargetStackItem(zone, item, parentId);
+      const targetElement = getCraftInventoryGridItemElementAtPointer(event, this.element)
+        ?? zone?.closest?.("[data-inventory-grid-item][data-item-id]");
+      const targetStackIndex = Math.max(0, toInteger(targetElement?.dataset?.stackIndex));
+      const targetItem = this.#getTargetStackItem(zone, item, parentId, { sourceStackIndex, targetStackIndex });
       let quantity;
-      if (canStackItems(item.toObject(), targetItem)) {
-        quantity = await this.#getCraftStackQuantity(item, targetItem, event);
+      if (canStackItems(itemData, targetItem)) {
+        quantity = await this.#getCraftStackQuantity(item, targetItem, event, { sourceStackIndex, sourceStackQuantity, targetStackIndex });
+        if (!quantity) return null;
+        const moved = await stackActorInventoryItem({
+          sourceActor: this.#actor,
+          targetActor: this.#actor,
+          sourceItem: item,
+          targetItem,
+          targetParentId: parentId,
+          quantity,
+          sourceStackIndex,
+          targetStackIndex
+        });
+        if (this.rendered) await this.#renderPreservingWindowStack();
+        return moved;
       } else {
-        quantity = Math.max(1, getItemQuantity(item));
+        quantity = usesVirtualInventoryStacks(item)
+          ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex))
+          : Math.max(1, getItemQuantity(item));
       }
       if (!quantity) return null;
       const pointerPlacement = (placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE)
         ? getSearchDropPlacementForPointer({
           actor: this.#actor,
-          itemData: item.toObject(),
+          itemData,
           sourceActor: this.#actor,
           sourceItemId: item.id,
           parentId,
@@ -855,6 +889,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         targetY: pointerPlacement?.y ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
         targetItemId: targetItem?.id ?? "",
         quantity,
+        sourceStackIndex,
         allowLocked: true
       });
       if (this.rendered) await this.#renderPreservingWindowStack();
@@ -898,9 +933,15 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  #getTargetStackItem(target, sourceItem, parentId = ROOT_CONTAINER_ID) {
+  #getTargetStackItem(target, sourceItem, parentId = ROOT_CONTAINER_ID, { sourceStackIndex = 0, targetStackIndex = 0 } = {}) {
     const itemElement = target?.closest?.("[data-item-id][data-search-actor-uuid]");
-    if (itemElement && itemElement.dataset.searchActorUuid === this.#actor?.uuid && itemElement.dataset.itemId !== sourceItem.id) {
+    const sameVirtualDocumentStack = Boolean(
+      sourceItem
+      && usesVirtualInventoryStacks(sourceItem)
+      && itemElement?.dataset?.itemId === sourceItem.id
+      && Math.max(0, toInteger(targetStackIndex)) !== Math.max(0, toInteger(sourceStackIndex))
+    );
+    if (itemElement && itemElement.dataset.searchActorUuid === this.#actor?.uuid && (itemElement.dataset.itemId !== sourceItem.id || sameVirtualDocumentStack)) {
       if (!itemElement.closest("[data-inventory-grid]")) return null;
       if (String(itemElement.dataset.inventoryParentId ?? ROOT_CONTAINER_ID) !== String(parentId ?? ROOT_CONTAINER_ID)) return null;
       return this.#actor.items.get(itemElement.dataset.itemId) ?? null;
@@ -924,12 +965,22 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const item = this.#actor?.items?.get(String(data.itemId ?? ""));
     if (!item) return null;
     this.#draggedItemId = item.id;
-    return item.toObject();
+    const itemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      const stackIndex = Math.max(0, toInteger(data.stackIndex));
+      const stackQuantity = Math.max(0, toInteger(data.stackQuantity));
+      foundry.utils.setProperty(itemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
+    }
+    return itemData;
   }
 
-  async #getCraftStackQuantity(sourceItem, targetItem, _event) {
-    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
-    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
+  async #getCraftStackQuantity(sourceItem, targetItem, _event, { sourceStackIndex = 0, sourceStackQuantity = 0, targetStackIndex = null } = {}) {
+    const sourceQuantity = usesVirtualInventoryStacks(sourceItem)
+      ? Math.max(1, sourceStackQuantity || getItemStackPartQuantity(sourceItem, sourceStackIndex))
+      : Math.max(1, getItemQuantity(sourceItem));
+    const availableSpace = usesVirtualInventoryStacks(targetItem)
+      ? Math.max(0, getItemMaxStack(targetItem) - getItemStackPartQuantity(targetItem, targetStackIndex))
+      : Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
     return maxTransfer > 0 ? maxTransfer : 0;
   }
@@ -1101,7 +1152,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item) return;
     event.preventDefault();
     event.stopPropagation();
-    this.#showInventoryContextMenu(item, event);
+    this.#showInventoryContextMenu(item, event, {
+      stackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
+      stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity))
+    });
   }
 
   #onInventoryTooltipPointerOver(event) {
@@ -1401,7 +1455,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
-  #showInventoryContextMenu(item, event) {
+  #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
     this.#clearInventoryTooltip({ force: true });
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
 
@@ -1435,7 +1489,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     } else {
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
-    if (getItemQuantity(item) > 1) {
+    const selectedQuantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
+    if (selectedQuantity > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
     if (game.user?.isGM && !isSlottedItem) {
@@ -1466,7 +1523,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (action === "rotate") return this.#rotateCraftItem(item);
       if (action === "equip") return this.#equipCraftItem(item);
       if (action === "unequip") return this.#unequipCraftItem(item);
-      if (action === "split") return this.#splitCraftItem(item);
+      if (action === "split") return this.#splitCraftItem(item, { stackIndex, stackQuantity: selectedQuantity });
       if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(this.#actor, item, { allowLocked: true });
       if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
@@ -1549,8 +1606,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  async #splitCraftItem(item) {
-    const quantity = getItemQuantity(item);
+  async #splitCraftItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    const quantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
     if (quantity <= 1) return null;
     const amount = await promptSearchItemStackQuantity({
       item,
@@ -1561,6 +1620,25 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     if (!amount) return null;
     try {
+      if (usesVirtualInventoryStacks(item)) {
+        const splitData = item.toObject();
+        foundry.utils.setProperty(splitData, "system.quantity", amount);
+        const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+          ? LOCKED_STORAGE_PARENT_ID
+          : getItemContainerParentId(item);
+        const placement = getFirstAvailableActorInventoryPlacement(this.#actor, parentId, splitData, [], []);
+        if (!placement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+        const updateData = createItemStackPartSplitUpdate(
+          item,
+          Math.max(0, toInteger(stackIndex)),
+          amount,
+          { ...placement, mode: parentId === LOCKED_STORAGE_PARENT_ID ? LOCKED_STORAGE_PLACEMENT_MODE : "inventory" }
+        );
+        if (!updateData) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+        const result = await this.#actor.updateEmbeddedDocuments("Item", [updateData]);
+        if (this.rendered) await this.#renderPreservingWindowStack();
+        return result;
+      }
       return await splitActorInventoryItem(this.#actor, item, amount, { allowLocked: true });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Craft inventory split failed`, error);
@@ -4505,6 +4583,16 @@ function escapeAttribute(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function getCraftInventoryGridItemElementAtPointer(event = null, root = null) {
+  const clientX = Number(event?.clientX);
+  const clientY = Number(event?.clientY);
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  const element = document.elementFromPoint(clientX, clientY);
+  const itemElement = element?.closest?.("[data-inventory-grid-item][data-item-id]") ?? null;
+  if (!itemElement || (root && !root.contains(itemElement))) return null;
+  return itemElement;
 }
 
 function createEmptyInventoryContext() {
