@@ -707,6 +707,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #activateCraftPanelControls() {
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
+      if (button.dataset.craftModeBound === "true") return;
+      button.dataset.craftModeBound = "true";
       button.addEventListener("click", event => {
         event.preventDefault();
         if (this.#busy) return;
@@ -720,7 +722,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         void this.#renderPreservingWindowStack();
       });
     });
-    this.element?.querySelector('[data-action="craft"]')?.addEventListener("click", event => this.#onCraft(event));
+    this.element?.querySelectorAll('[data-action="craft"]').forEach(button => {
+      if (button.dataset.craftActionBound === "true") return;
+      button.dataset.craftActionBound = "true";
+      button.addEventListener("click", event => this.#onCraft(event));
+    });
   }
 
   #activateControls() {
@@ -1265,7 +1271,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #onInventoryTooltipPointerOver(event) {
     if (this.#tooltipPinned) return;
-    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
+    const anchor = event.target?.closest?.("[data-craft-link-tooltip], [data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     this.#cancelInventoryTooltipClose();
     this.#tooltipCompareMode = Boolean(event.ctrlKey);
@@ -1274,23 +1280,23 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #onInventoryTooltipPointerOut(event) {
-    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
+    const anchor = event.target?.closest?.("[data-craft-link-tooltip], [data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     if (anchor.contains(event.relatedTarget) || this.#tooltipElement?.contains(event.relatedTarget)) return;
-    const nextAnchor = event.relatedTarget?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
+    const nextAnchor = event.relatedTarget?.closest?.("[data-craft-link-tooltip], [data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (nextAnchor && this.element?.contains(nextAnchor)) return;
     if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
   }
 
   #onInventoryTooltipMiddleMouseDown(event) {
     if (event.button !== 1) return;
-    if (!event.target?.closest?.("[data-tooltip-item], [data-tooltip-uuid], .fallout-maw-inventory-tooltip")) return;
+    if (!event.target?.closest?.("[data-craft-link-tooltip], [data-tooltip-item], [data-tooltip-uuid], .fallout-maw-inventory-tooltip")) return;
     event.preventDefault();
   }
 
   #onInventoryTooltipAuxClick(event) {
     if (event.button !== 1) return;
-    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
+    const anchor = event.target?.closest?.("[data-craft-link-tooltip], [data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1310,7 +1316,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       }
       this.#tooltipAnchorElement = anchor;
       this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
-      this.#tooltipDocumentUuid = String(anchor.dataset.tooltipUuid ?? "");
+      this.#tooltipDocumentUuid = getCraftLinkTooltipDocumentKey(anchor) || String(anchor.dataset.tooltipUuid ?? "");
       this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
       this.#tooltipWeaponTabIndex = 0;
       void this.#showInventoryTooltip(anchor, { refresh: true });
@@ -1321,7 +1327,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#tooltipCompareMode = Boolean(compareMode);
     this.#tooltipAnchorElement = anchor;
     this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
-    this.#tooltipDocumentUuid = String(anchor.dataset.tooltipUuid ?? "");
+    this.#tooltipDocumentUuid = getCraftLinkTooltipDocumentKey(anchor) || String(anchor.dataset.tooltipUuid ?? "");
     this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
     this.#tooltipWeaponTabIndex = 0;
     this.#tooltipTimer = view.setTimeout(() => {
@@ -1331,21 +1337,32 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false, refresh = false } = {}) {
-    const tooltipData = await this.#resolveTooltipItem(anchor);
-    if (!tooltipData?.item) return;
-    const { actor, item } = tooltipData;
-
-    const tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
-      activeWeaponIndex: this.#tooltipWeaponTabIndex,
-      baseMode: false,
-      compareActor: getInventoryTooltipCompareActor(),
-      compareMode: this.#tooltipCompareMode
-    });
-    const documentUuid = String(item.uuid ?? "");
+    let tooltipHTML = "";
+    let documentUuid = "";
+    let tooltipActorUuid = "";
+    let tooltipItemId = "";
+    const craftLinkTooltipData = getCraftLinkTooltipDataFromAnchor(anchor);
+    if (craftLinkTooltipData) {
+      tooltipHTML = renderCraftLinkTooltipHTML(craftLinkTooltipData);
+      documentUuid = getCraftLinkTooltipDocumentKey(anchor);
+    } else {
+      const tooltipData = await this.#resolveTooltipItem(anchor);
+      if (!tooltipData?.item) return;
+      const { actor, item } = tooltipData;
+      tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
+        activeWeaponIndex: this.#tooltipWeaponTabIndex,
+        baseMode: false,
+        compareActor: getInventoryTooltipCompareActor(),
+        compareMode: this.#tooltipCompareMode
+      });
+      documentUuid = String(item.uuid ?? "");
+      tooltipActorUuid = String(actor?.uuid ?? "");
+      tooltipItemId = item.id;
+    }
     if (refresh && (
       this.#tooltipDocumentUuid
         ? this.#tooltipDocumentUuid !== documentUuid
-        : ((this.#tooltipActorUuid !== String(actor?.uuid ?? "")) || (this.#tooltipItemId !== item.id))
+        : ((this.#tooltipActorUuid !== tooltipActorUuid) || (this.#tooltipItemId !== tooltipItemId))
     )) return;
 
     if (refresh && this.#tooltipElement && !this.#tooltipPinned && !pinned) {
@@ -1354,9 +1371,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#tooltipElement.style.pointerEvents = "none";
       this.#tooltipPinned = false;
       this.#tooltipAnchorElement = anchor;
-      this.#tooltipActorUuid = String(actor?.uuid ?? "");
+      this.#tooltipActorUuid = tooltipActorUuid;
       this.#tooltipDocumentUuid = documentUuid;
-      this.#tooltipItemId = item.id;
+      this.#tooltipItemId = tooltipItemId;
       this.#bindInventoryTooltipKeyMode();
       this.#positionInventoryTooltip();
       requestAnimationFrame(() => {
@@ -1369,7 +1386,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this.#clearInventoryTooltip({ keepAnchor: true });
     const tooltip = document.createElement("aside");
-    tooltip.className = "fallout-maw-inventory-tooltip";
+    tooltip.className = craftLinkTooltipData ? "fallout-maw-inventory-tooltip fallout-maw-craft-link-tooltip" : "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
@@ -1396,9 +1413,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#tooltipElement = tooltip;
     this.#tooltipPinned = Boolean(pinned);
     this.#tooltipAnchorElement = anchor;
-    this.#tooltipActorUuid = String(actor?.uuid ?? "");
+    this.#tooltipActorUuid = tooltipActorUuid;
     this.#tooltipDocumentUuid = documentUuid;
-    this.#tooltipItemId = item.id;
+    this.#tooltipItemId = tooltipItemId;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#bindInventoryTooltipKeyMode();
     this.#syncInventoryTooltipLayer({ bringToFront: pinned });
@@ -2754,6 +2771,56 @@ function getCraftCheckLabel(check) {
   return `${check.skillLabel}: Сложность ${check.difficulty}${suffix}`;
 }
 
+function getCraftSkillLabel(skillKey = "") {
+  const normalized = String(skillKey ?? "repair") || "repair";
+  return getSkillSettings().find(skill => skill.key === normalized)?.label ?? normalized;
+}
+
+function getCraftLinkTooltipData(link = null) {
+  if (!link || isCraftLinkFailureResult(link) || isCraftLinkNoCheck(link)) return null;
+  const skillKey = String(link.skillKey ?? "repair") || "repair";
+  return {
+    id: String(link.id ?? ""),
+    skillLabel: getCraftSkillLabel(skillKey),
+    difficulty: normalizeCraftLinkDifficulty(link.difficulty)
+  };
+}
+
+function getCraftLinkTooltipDataFromAnchor(anchor = null) {
+  if (!anchor?.dataset?.craftLinkTooltip) return null;
+  return {
+    id: String(anchor.dataset.craftLinkId ?? ""),
+    skillLabel: String(anchor.dataset.craftLinkSkillLabel ?? ""),
+    difficulty: Math.max(0, toInteger(anchor.dataset.craftLinkDifficulty))
+  };
+}
+
+function getCraftLinkTooltipDocumentKey(anchor = null) {
+  if (!anchor?.dataset?.craftLinkTooltip) return "";
+  return `craft-link:${anchor.dataset.craftRecipeUuid ?? ""}:${anchor.dataset.craftLinkId ?? ""}`;
+}
+
+function renderCraftLinkTooltipHTML({ skillLabel = "", difficulty = 0 } = {}) {
+  return `
+    <section class="content fallout-maw-craft-link-tooltip-content">
+      <section class="functions">
+        <div class="function-section">
+          <div class="function-grid">
+            <div class="function-row">
+              <span>Навык</span>
+              <strong>${escapeHTML(skillLabel)}</strong>
+            </div>
+            <div class="function-row">
+              <span>Сложность</span>
+              <strong>${escapeHTML(String(difficulty))}</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
 function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID, randomizeBlocks = false } = {}) {
   mode = normalizeCraftMode(mode);
   const index = actor ? getCraftAvailabilityIndex(actor) : null;
@@ -3891,6 +3958,17 @@ function appendCraftLinkPath(svg, geometry, link, { result = null, recipeUuid = 
     group.dataset.craftFlowResult = result.success ? "success" : "failure";
     group.dataset.craftFlowBreak = String(getCraftFailureBreakFraction(recipeUuid, linkKey || link.id));
   }
+  const tooltipData = getCraftLinkTooltipData(link);
+  if (tooltipData) {
+    group.dataset.craftLinkTooltip = "true";
+    group.dataset.craftLinkSkillLabel = tooltipData.skillLabel;
+    group.dataset.craftLinkDifficulty = String(tooltipData.difficulty);
+    group.setAttribute("aria-label", `${tooltipData.skillLabel}: Сложность ${tooltipData.difficulty}`);
+  }
+  const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  hitPath.classList.add("fallout-maw-craft-link-hit");
+  hitPath.setAttribute("d", geometry.centerPath);
+  group.appendChild(hitPath);
   for (const [className, pathData] of [
     ["fallout-maw-craft-link-shadow", geometry.centerPath],
     ["fallout-maw-craft-link-wall", geometry.centerPath],
@@ -4495,6 +4573,15 @@ function mixCraftFlowColor(from, to, amount) {
 function formatCraftFlowColor(color) {
   const alpha = Number.isFinite(color.a) ? color.a : 1;
   return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function getCraftFailureBreakFraction(recipeUuid = "", linkId = "") {

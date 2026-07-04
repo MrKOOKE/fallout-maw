@@ -1951,8 +1951,16 @@ body #prosemirror-dropdown {
 
 .fallout-maw-craft-modebar button.active,
 .fallout-maw-craft-modebar-tabs button.active {
-  border-color: rgba(244, 223, 145, 0.85);
-  color: #fff3d8;
+  background:
+    radial-gradient(circle at 72% 78%, rgba(34, 29, 17, 0.28), transparent 2.7rem),
+    linear-gradient(180deg, #b7aa82 0%, #c7bb92 100%);
+  border-color: rgba(82, 73, 51, 0.95);
+  box-shadow:
+    inset 4px 4px 0 rgba(0, 0, 0, 0.42),
+    inset -1px -1px 0 rgba(255, 248, 220, 0.24),
+    0 1px 0 rgba(0, 0, 0, 0.76);
+  color: #1f1b13;
+  transform: translateY(2px);
 }
 
 .fallout-maw-craft-reverse-button,
@@ -14921,9 +14929,8 @@ html.fallout-maw-token-action-hud-open #hotbar {
 
 .fallout-maw-craft-window-title-body {
   align-items: center;
-  display: grid;
+  display: block;
   gap: 1.25rem;
-  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -15036,14 +15043,78 @@ html.fallout-maw-token-action-hud-open #hotbar {
   padding: 0.75rem;
 }
 
-.fallout-maw-craft-window-recipes h2 {
-  border: 0;
-  color: #e8d488;
+.fallout-maw-craft-window-recipe-modes {
+  display: grid;
   flex: 0 0 auto;
-  font-size: 1.35rem;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-craft-window-recipe-modes button {
+  align-items: center;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 247, 214, 0.16), transparent 1.6rem),
+    radial-gradient(circle at 78% 68%, rgba(74, 59, 34, 0.22), transparent 2.7rem),
+    radial-gradient(circle at 52% 118%, rgba(58, 44, 24, 0.18), transparent 2.6rem),
+    linear-gradient(180deg, #cbc097 0%, #b3a57c 56%, #756a51 100%);
+  border: 2px solid rgba(88, 78, 55, 0.94);
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 248, 220, 0.38),
+    inset -3px -3px 0 rgba(44, 35, 20, 0.72),
+    0 3px 0 rgba(0, 0, 0, 0.72),
+    0 4px 7px rgba(0, 0, 0, 0.2);
+  color: #332d1f;
+  display: flex;
+  font-size: 1.08rem;
   font-weight: 700;
-  line-height: 1.15;
-  margin: 0;
+  justify-content: center;
+  line-height: 1.1;
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  position: relative;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255, 248, 220, 0.18);
+}
+
+.fallout-maw-craft-window-recipe-modes button::after {
+  background: transparent;
+  bottom: 0.24rem;
+  content: "";
+  height: 2px;
+  left: 0.65rem;
+  position: absolute;
+  right: 0.65rem;
+}
+
+.fallout-maw-craft-window-recipe-modes button:hover,
+.fallout-maw-craft-window-recipe-modes button:focus-visible {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 247, 214, 0.2), transparent 1.7rem),
+    radial-gradient(circle at 78% 68%, rgba(74, 59, 34, 0.2), transparent 2.8rem),
+    radial-gradient(circle at 52% 118%, rgba(58, 44, 24, 0.16), transparent 2.8rem),
+    linear-gradient(180deg, #d3c8a0 0%, #bcaf86 56%, #7d7358 100%);
+  color: #1a1710;
+}
+
+.fallout-maw-craft-window-recipe-modes button.active {
+  background:
+    radial-gradient(circle at 78% 70%, rgba(63, 51, 31, 0.2), transparent 2.6rem),
+    radial-gradient(circle at 28% 14%, rgba(255, 245, 209, 0.14), transparent 1.8rem),
+    linear-gradient(180deg, #b9ad83 0%, #c5b992 100%);
+  border-color: rgba(82, 73, 51, 0.95);
+  box-shadow:
+    inset 4px 4px 0 rgba(0, 0, 0, 0.42),
+    inset -1px -1px 0 rgba(255, 248, 220, 0.26),
+    0 1px 0 rgba(0, 0, 0, 0.76);
+  color: #1f1b13;
+  transform: translateY(2px);
+}
+
+.fallout-maw-craft-window-recipe-modes button.active::after {
+  background: rgba(48, 50, 39, 0.5);
+  box-shadow: none;
 }
 
 .fallout-maw-craft-window-recipe-search {
@@ -15204,6 +15275,21 @@ html.fallout-maw-token-action-hud-open #hotbar {
   border-color: #e8d488;
   box-shadow: 0 0 10px rgba(232, 212, 136, 0.3) inset;
   color: #e8d488;
+}
+
+.fallout-maw-inventory-tooltip.fallout-maw-craft-link-tooltip {
+  max-width: 420px;
+  min-width: 340px;
+  width: 380px;
+}
+
+.fallout-maw-inventory-tooltip.fallout-maw-craft-link-tooltip .content {
+  gap: 0.75rem;
+  padding: 1.1rem;
+}
+
+.fallout-maw-inventory-tooltip.fallout-maw-craft-link-tooltip .name {
+  font-size: 1.42rem;
 }
 
 .fallout-maw-craft-block.readonly {

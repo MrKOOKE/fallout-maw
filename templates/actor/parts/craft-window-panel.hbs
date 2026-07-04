@@ -8,21 +8,9 @@
           <strong data-tooltip-uuid="{{recipe.uuid}}">{{recipe.name}}</strong>
           <span>{{craft.summary}}</span>
         </div>
-        {{#if craft.checks.length}}
-        <div class="fallout-maw-craft-window-checks">
-          {{#each craft.checks}}
-          <span>{{label}}</span>
-          {{/each}}
-        </div>
-        {{/if}}
       </div>
     </div>
     <div class="fallout-maw-craft-window-actions">
-      <div class="fallout-maw-craft-modebar-tabs" role="tablist">
-        {{#each craftModes}}
-        <button type="button" class="{{#if selected}}active{{/if}}" data-craft-mode="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">{{label}}</button>
-        {{/each}}
-      </div>
       <button type="button" class="fallout-maw-craft-window-hammer" data-action="craft" title="{{craft.actionTitle}}" {{#unless craft.canCraft}}disabled{{/unless}}>
         <i class="fa-solid {{craft.actionIcon}}"></i>
       </button>

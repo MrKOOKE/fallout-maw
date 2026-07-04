@@ -142,7 +142,11 @@
     {{> "systems/fallout-maw/templates/actor/parts/craft-window-panel.hbs"}}
 
     <aside class="fallout-maw-craft-window-recipes">
-      <h2>Рецепты</h2>
+      <div class="fallout-maw-craft-window-recipe-modes fallout-maw-craft-modebar-tabs" role="tablist">
+        {{#each craftModes}}
+        <button type="button" class="{{#if selected}}active{{/if}}" data-craft-mode="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">{{label}}</button>
+        {{/each}}
+      </div>
       <label class="fallout-maw-craft-window-recipe-search">
         <input type="search" value="{{recipeSearch}}" placeholder="Поиск" data-craft-recipe-search>
       </label>
