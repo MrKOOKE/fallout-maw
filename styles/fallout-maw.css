@@ -14577,6 +14577,29 @@ html.fallout-maw-token-action-hud-open #hotbar {
   opacity: 0.34;
 }
 
+@keyframes fallout-maw-trade-compatibility-pulse {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 234, 104, 0.96),
+      0 0 10px rgba(255, 234, 104, 0.42);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 246, 148, 1),
+      0 0 18px rgba(255, 234, 104, 0.72);
+  }
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .trade-compatibility-highlight {
+  animation: fallout-maw-trade-compatibility-pulse 1.15s ease-in-out infinite;
+  border-color: rgba(255, 234, 104, 0.98) !important;
+  filter: none !important;
+  opacity: 1 !important;
+  z-index: 4;
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-item {
   cursor: grab;
   filter: none;

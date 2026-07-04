@@ -80,11 +80,19 @@ import {
 import { getInventoryTooltipCompareActor, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
-import { getConditionFunction, getEnabledToolFunctions, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import {
+  getConditionFunction,
+  getDamageSourceFunction,
+  getEnergyConsumerFunction,
+  getEnabledToolFunctions,
+  hasItemFunction,
+  ITEM_FUNCTIONS
+} from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
+import { energySourceMatchesConsumer } from "../items/light-source.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { getItemInteractionState } from "../items/item-interactions.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
@@ -109,6 +117,8 @@ const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
 const TRADE_OFFER_DEFAULT_COLUMNS = 12;
 const TRADE_OFFER_MAX_ROWS = 60;
+const TRADE_COMPATIBILITY_HIGHLIGHT_MS = 10000;
+const DAMAGE_SOURCE_PROTOTYPE_FLAG = "damageSourcePrototypeUuid";
 const TRADE_UNCATEGORIZED_LABEL = "Без категории";
 const BUTCHERING_CONTAINER_FLAG = "butcheringContainer";
 
@@ -253,6 +263,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #tradeSessionRevision = 0;
   #tradeOffers = createEmptyTradeOffers();
   #tradeCatalogEnabledCategories = new Map();
+  #tradeCompatibilityHighlight = null;
+  #tradeCompatibilityHighlightTimer = null;
   #tradeCompletionInProgress = false;
   #tradeEquipmentCollapsed = true;
   #suppressCloseBroadcast = false;
@@ -374,6 +386,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeSessionRevision = 0;
     this.#tradeOffers = createEmptyTradeOffers();
     this.#tradeCatalogEnabledCategories.clear();
+    this.#clearTradeCompatibilityHighlight();
     if (tradeSnapshot) this.#applyTradeSessionSnapshot(tradeSnapshot, { render: false });
     this.#tradeCompletionInProgress = false;
     this.#tradeEquipmentCollapsed = this.#isTradeMode();
@@ -525,6 +538,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#cancelInventoryTooltipClose();
     this.#restoreScrollPositions(() => this.#restoreInventoryTooltipAfterRender());
     this.#syncRenderedTradeOfferColumns();
+    this.#applyTradeCompatibilityHighlight();
   }
 
   #renderPreservingWindowStack(options = {}) {
@@ -538,6 +552,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     for (const [hookName, hookId] of this.#hookIds) Hooks.off(hookName, hookId);
     this.#hookIds = [];
     this.#clearInventoryDropPreview();
+    this.#clearTradeCompatibilityHighlight();
     this.#draggedItemData = null;
     this.#draggedItemId = "";
     this.#draggedActorUuid = "";
@@ -1475,7 +1490,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #canManageTradeOfferSide(side = "") {
     if (this.#tradeRole === TRADE_ROLE_OBSERVER) return false;
     if (this.#tradeSessionSnapshot) return canUserParticipateInTradeSession(this.#tradeSessionSnapshot, game.user?.id ?? "");
-    return this.#canControlTradeSide(side);
+    return TRADE_OFFER_SIDES.includes(side) && this.#canInteract();
   }
 
   #canConfirmTradeSide(side = "") {
@@ -2127,20 +2142,70 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
 
     const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
-    if (!itemElement || !this.element?.contains(itemElement) || !this.#canInteract()) return;
-    if (itemElement.dataset.tradeCatalogPhantom !== undefined) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
+    if (!itemElement || !this.element?.contains(itemElement)) return;
     const actor = this.#getActorByUuid(String(itemElement.dataset.searchActorUuid ?? ""));
     const item = actor?.items?.get(String(itemElement.dataset.itemId ?? ""));
     if (!actor || !item) return;
     event.preventDefault();
     event.stopPropagation();
+    if (this.#isTradeMode() && !this.#tradeOffers.completed) {
+      this.#showTradeInventoryContextMenu(actor, item, event, {
+        stackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
+        stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity)),
+        sourceWholeStack: itemElement.dataset.tradeCatalogAggregate !== undefined
+      });
+      return;
+    }
+    if (!this.#canInteract()) return;
     this.#showInventoryContextMenu(actor, item, event, {
       stackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
       stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity))
+    });
+  }
+
+  #showTradeInventoryContextMenu(actor, item, event, { stackIndex = 0, stackQuantity = 0, sourceWholeStack = false } = {}) {
+    if (!this.#isTradeMode() || this.#tradeOffers.completed || !actor || !item) return;
+    this.#clearInventoryTooltip({ force: true });
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+
+    const canOffer = Boolean(this.#isTradeMode() && !this.#tradeOffers.completed && this.#tradeRole !== TRADE_ROLE_OBSERVER);
+    const menuOptions = [
+      ["offer", "fa-cart-plus", "В предложение", !canOffer]
+    ];
+    if (canHighlightTradeAmmoCompatibility(item)) {
+      menuOptions.push(["highlightAmmo", "fa-crosshairs", "Подходящие боеприпасы"]);
+    }
+    if (canHighlightTradeEnergyCompatibility(item)) {
+      menuOptions.push(["highlightEnergy", "fa-bolt", "Подходящие источники энергии"]);
+    }
+
+    const menu = document.createElement("nav");
+    menu.className = "fallout-maw-inventory-context-menu";
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+    menu.innerHTML = menuOptions
+      .map(([action, icon, label, disabled = false]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .join("");
+    document.body.append(menu);
+
+    menu.addEventListener("click", async clickEvent => {
+      const action = clickEvent.target.closest("button")?.dataset.action;
+      if (!action) return;
+      clickEvent.preventDefault();
+      menu.remove();
+      if (action === "offer") {
+        return this.#addItemToTradeOffer({
+          sourceActor: actor,
+          item,
+          offerActorUuid: actor.uuid,
+          sourceStackIndex: Math.max(0, toInteger(stackIndex)),
+          sourceStackQuantity: Math.max(0, toInteger(stackQuantity)),
+          sourceWholeStack
+        });
+      }
+      if (action === "highlightAmmo") return this.#setTradeCompatibilityHighlight("ammo", actor, item);
+      if (action === "highlightEnergy") return this.#setTradeCompatibilityHighlight("energy", actor, item);
+      return undefined;
     });
   }
 
@@ -3375,6 +3440,164 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#tooltipItemId = "";
     }
   }
+
+  #setTradeCompatibilityHighlight(kind = "", actor = null, item = null) {
+    const normalizedKind = kind === "energy" ? "energy" : "ammo";
+    if (!this.#isTradeMode() || !actor || !item) return;
+    this.#tradeCompatibilityHighlight = {
+      kind: normalizedKind,
+      actorUuid: actor.uuid,
+      itemId: item.id,
+      expiresAt: Date.now() + TRADE_COMPATIBILITY_HIGHLIGHT_MS
+    };
+    if (this.#tradeCompatibilityHighlightTimer) {
+      window.clearTimeout(this.#tradeCompatibilityHighlightTimer);
+      this.#tradeCompatibilityHighlightTimer = null;
+    }
+    this.#applyTradeCompatibilityHighlight();
+    this.#tradeCompatibilityHighlightTimer = window.setTimeout(() => {
+      this.#tradeCompatibilityHighlightTimer = null;
+      this.#clearTradeCompatibilityHighlight();
+    }, TRADE_COMPATIBILITY_HIGHLIGHT_MS);
+  }
+
+  #clearTradeCompatibilityHighlight() {
+    if (this.#tradeCompatibilityHighlightTimer) {
+      window.clearTimeout(this.#tradeCompatibilityHighlightTimer);
+      this.#tradeCompatibilityHighlightTimer = null;
+    }
+    this.#tradeCompatibilityHighlight = null;
+    this.element?.querySelectorAll(".trade-compatibility-highlight").forEach(element => {
+      element.classList.remove("trade-compatibility-highlight");
+    });
+  }
+
+  #applyTradeCompatibilityHighlight() {
+    this.element?.querySelectorAll(".trade-compatibility-highlight").forEach(element => {
+      element.classList.remove("trade-compatibility-highlight");
+    });
+    const state = this.#tradeCompatibilityHighlight;
+    if (!this.#isTradeMode() || !state) return;
+    if (Date.now() >= Math.max(0, toInteger(state.expiresAt))) {
+      this.#clearTradeCompatibilityHighlight();
+      return;
+    }
+    const sourceActor = this.#getActorByUuid(String(state.actorUuid ?? ""));
+    const sourceItem = sourceActor?.items?.get(String(state.itemId ?? ""));
+    if (!sourceActor || !sourceItem) return;
+    for (const element of this.element?.querySelectorAll("[data-item-id][data-search-actor-uuid]") ?? []) {
+      const actor = this.#getActorByUuid(String(element.dataset.searchActorUuid ?? ""));
+      const item = actor?.items?.get(String(element.dataset.itemId ?? ""));
+      if (!actor || !item) continue;
+      const matches = state.kind === "energy"
+        ? isTradeEnergyCompatibleItem(sourceItem, item)
+        : isTradeAmmoCompatibleItem(sourceItem, item);
+      if (matches) element.classList.add("trade-compatibility-highlight");
+    }
+  }
+}
+
+function canHighlightTradeAmmoCompatibility(item = null) {
+  return Boolean(
+    getTradeItemMagazineSourceUuids(item).length
+    || hasItemFunction(item, ITEM_FUNCTIONS.damageSource, { ignoreBroken: true })
+  );
+}
+
+function canHighlightTradeEnergyCompatibility(item = null) {
+  return hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true });
+}
+
+function isTradeAmmoCompatibleItem(sourceItem = null, candidate = null) {
+  if (!sourceItem || !candidate || sourceItem.id === candidate.id) return false;
+  const sourceMagazineUuids = getTradeItemMagazineSourceUuids(sourceItem);
+  if (sourceMagazineUuids.length) {
+    return hasItemFunction(candidate, ITEM_FUNCTIONS.damageSource, { ignoreBroken: true })
+      && sourceMagazineUuids.some(uuid => tradeDamageSourceMatchesPrototype(candidate, uuid));
+  }
+  if (!hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource, { ignoreBroken: true })) return false;
+  const candidateMagazineUuids = getTradeItemMagazineSourceUuids(candidate);
+  return candidateMagazineUuids.some(uuid => tradeDamageSourceMatchesPrototype(sourceItem, uuid));
+}
+
+function isTradeEnergyCompatibleItem(sourceItem = null, candidate = null) {
+  if (!sourceItem || !candidate || sourceItem.id === candidate.id) return false;
+  if (!hasItemFunction(sourceItem, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return false;
+  if (!hasItemFunction(candidate, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) return false;
+  return energySourceMatchesConsumer(candidate, getEnergyConsumerFunction(sourceItem));
+}
+
+function getTradeItemMagazineSourceUuids(item = null) {
+  return Array.from(new Set(getTradeWeaponDataList(item)
+    .flatMap(weaponData => [
+      ...(Array.isArray(weaponData?.magazine?.sourceItemUuids) ? weaponData.magazine.sourceItemUuids : []),
+      String(weaponData?.magazine?.sourceItemUuid ?? "")
+    ])
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean)));
+}
+
+function getTradeWeaponDataList(item = null) {
+  const functions = item?.system?.functions ?? {};
+  const entries = [];
+  if (functions.weapon?.enabled) entries.push(functions.weapon);
+  const additional = functions.additionalWeapons;
+  if (additional && typeof additional === "object") {
+    entries.push(...Object.values(additional).filter(data => data?.enabled));
+  }
+  return entries;
+}
+
+function tradeDamageSourceMatchesPrototype(item = null, prototypeUuid = "") {
+  const uuid = String(prototypeUuid ?? "").trim();
+  if (!item || !uuid || !hasItemFunction(item, ITEM_FUNCTIONS.damageSource, { ignoreBroken: true })) return false;
+  if (item.uuid === uuid || item.id === uuid) return true;
+  const flagUuid = String(item.getFlag?.(SYSTEM_ID, DAMAGE_SOURCE_PROTOTYPE_FLAG) ?? item.getFlag?.("core", "sourceId") ?? "").trim();
+  if (flagUuid === uuid) return true;
+  const prototype = resolveWorldItemSync(uuid);
+  if (!prototype || !hasItemFunction(prototype, ITEM_FUNCTIONS.damageSource, { ignoreBroken: true })) return false;
+  if (item.name !== prototype.name) return false;
+  return areTradeDamageSourcesEqual(getDamageSourceFunction(item), getDamageSourceFunction(prototype));
+}
+
+function areTradeDamageSourcesEqual(left = {}, right = {}) {
+  if (String(left?.name ?? "") !== String(right?.name ?? "")) return false;
+  if (String(left?.damage ?? "0") !== String(right?.damage ?? "0")) return false;
+  if (String(left?.pellets ?? "1") !== String(right?.pellets ?? "1")) return false;
+  if (String(left?.damageTypeKey ?? "") !== String(right?.damageTypeKey ?? "")) return false;
+  if (String(left?.attackAnimationKey ?? "") !== String(right?.attackAnimationKey ?? "")) return false;
+  if (String(left?.accuracyBonus ?? "0") !== String(right?.accuracyBonus ?? "0")) return false;
+  if (String(left?.criticalChanceModifier ?? "0") !== String(right?.criticalChanceModifier ?? "0")) return false;
+  if (String(left?.criticalDamagePercent ?? "0") !== String(right?.criticalDamagePercent ?? "0")) return false;
+  if (String(left?.maxRangeMeters ?? "0") !== String(right?.maxRangeMeters ?? "0")) return false;
+  if (String(left?.effectiveRange?.value ?? "0") !== String(right?.effectiveRange?.value ?? "0")) return false;
+  if (String(left?.effectiveRange?.max ?? "0") !== String(right?.effectiveRange?.max ?? "0")) return false;
+  if (String(left?.penetration ?? "0") !== String(right?.penetration ?? "0")) return false;
+  if (normalizeTradeDamageSourceTypes(left?.damageTypes) !== normalizeTradeDamageSourceTypes(right?.damageTypes)) return false;
+  return normalizeTradeDamageSourceVolley(left?.volley) === normalizeTradeDamageSourceVolley(right?.volley);
+}
+
+function normalizeTradeDamageSourceTypes(entries = []) {
+  return (Array.isArray(entries) ? entries : [])
+    .map(entry => `${String(entry?.key ?? "")}:${toInteger(entry?.percent)}`)
+    .sort()
+    .join("|");
+}
+
+function normalizeTradeDamageSourceVolley(volley = {}) {
+  const regionDamage = (Array.isArray(volley?.regionDamageEntries) ? volley.regionDamageEntries : [])
+    .map(entry => `${String(entry?.damageTypeKey ?? "")}:${String(entry?.amount ?? "0")}`)
+    .sort()
+    .join("|");
+  return [
+    String(volley?.damageRadius ?? "0"),
+    String(volley?.regionRadius ?? "0"),
+    regionDamage,
+    String(volley?.regionDurationSeconds ?? "0"),
+    String(volley?.regionDelaySeconds ?? "0"),
+    String(volley?.regionRadiusDeltaMeters ?? "0"),
+    String(volley?.explosionAnimationKey ?? "")
+  ].join(";");
 }
 
 export function prepareSearchActorContext(actor, {
