@@ -17,6 +17,9 @@ import {
 } from "../utils/equipment-slots.mjs";
 import {
   ROOT_CONTAINER_ID,
+  createAnchoredItemStackPartsForQuantity,
+  createInventoryPlacement,
+  createItemStackPartAdditionUpdate,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
@@ -28,6 +31,7 @@ import {
   getItemTotalWeight,
   hasContainerCycle,
   isContainerItem,
+  usesVirtualInventoryStacks,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, normalizeImagePath } from "../utils/actor-display-data.mjs";
@@ -1227,26 +1231,26 @@ function planPersonalGeneratorItems(actor, itemsData) {
     let remainingQuantity = Math.max(1, getItemQuantity(itemData));
 
     if (maxStack > 1) {
-      for (const target of getProjectedStackTargets(projected, itemData)) {
-        if (remainingQuantity <= 0) break;
+      const [target] = getProjectedStackTargets(projected, itemData);
+      if (target) {
         const parentId = String(foundry.utils.getProperty(target, "system.container.parentId") ?? ROOT_CONTAINER_ID);
-        const available = Math.max(0, getItemMaxStack(target) - getItemQuantity(target));
-        const quantity = Math.min(remainingQuantity, available);
-        if (!quantity) continue;
-        const nextQuantity = getItemQuantity(target) + quantity;
-        const update = { _id: target._id ?? target.id, "system.quantity": nextQuantity };
+        const quantity = remainingQuantity;
+        const update = usesVirtualInventoryStacks(target)
+          ? createItemStackPartAdditionUpdate(target, quantity)
+          : { _id: target._id ?? target.id, "system.quantity": getItemQuantity(target) + quantity };
+        if (!update) continue;
         const nextProjected = cloneProjectedMap(projected);
-        foundry.utils.setProperty(nextProjected.get(update._id), "system.quantity", nextQuantity);
+        applyProjectedItemUpdate(nextProjected.get(update._id), update);
         if (!validateProjectedItems(actor, nextProjected)) continue;
         updates.push(update);
-        foundry.utils.setProperty(projected.get(update._id), "system.quantity", nextQuantity);
+        applyProjectedItemUpdate(projected.get(update._id), update);
         remainingQuantity -= quantity;
         if (parentId && !canContainerAcceptMoreWeight(projected, parentId)) break;
       }
     }
 
     while (remainingQuantity > 0) {
-      const quantity = Math.min(remainingQuantity, maxStack);
+      const quantity = maxStack > 1 ? remainingQuantity : Math.min(remainingQuantity, maxStack);
       const stackData = foundry.utils.deepClone(itemData);
       foundry.utils.setProperty(stackData, "system.quantity", quantity);
       const equipPlacement = getGeneratedEquipRequest(stackData)
@@ -1257,6 +1261,9 @@ function planPersonalGeneratorItems(actor, itemsData) {
           parentId: ROOT_CONTAINER_ID,
           placement: equipPlacement
         });
+        if (usesVirtualInventoryStacks(createData)) {
+          foundry.utils.setProperty(createData, "system.stackParts", createStackPartsForGeneratedPlacement(createData, equipPlacement));
+        }
         creates.push(createData);
         const syntheticId = `personal-generator-${creates.length}`;
         const projectedCreate = foundry.utils.deepClone(createData);
@@ -1270,6 +1277,9 @@ function planPersonalGeneratorItems(actor, itemsData) {
       const target = findFirstGeneratedItemPlacement(actor, projected, stackData, reservedPlacements);
       if (!target) break;
       const createData = createInventoryItemDataForPlacement(stackData, target);
+      if (usesVirtualInventoryStacks(createData)) {
+        foundry.utils.setProperty(createData, "system.stackParts", target.stackParts);
+      }
       creates.push(createData);
       const syntheticId = `personal-generator-${creates.length}`;
       const projectedCreate = foundry.utils.deepClone(createData);
@@ -1277,7 +1287,7 @@ function planPersonalGeneratorItems(actor, itemsData) {
       projectedCreate.id = syntheticId;
       projected.set(syntheticId, projectedCreate);
       if (!reservedPlacements.has(target.parentId)) reservedPlacements.set(target.parentId, []);
-      reservedPlacements.get(target.parentId).push(target.placement);
+      reservedPlacements.get(target.parentId).push(...(target.placements ?? [target.placement]));
       remainingQuantity -= quantity;
     }
   }
@@ -1292,6 +1302,37 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
     const dimensions = parentId ? getContainerDimensions(actor.items?.get(parentId)) : rootDimensions;
     if (parentId && !canProjectedContainerAcceptWeight(projectedMap, parentId, itemData)) continue;
     const contextItems = getContextInventoryItems(parentId, projectedItems);
+    if (usesVirtualInventoryStacks(itemData)) {
+      const stackParts = createAnchoredItemStackPartsForQuantity({
+        itemData,
+        quantity: getItemQuantity(itemData),
+        contextItems,
+        columns: dimensions.columns,
+        rows: dimensions.rows,
+        allItems: projectedItems,
+        reservedPlacements: reservedPlacements.get(parentId) ?? [],
+        options: getActorRootInventoryGridOptions(actor, parentId)
+      });
+      if (!stackParts?.length) continue;
+      const placements = stackParts.map(part => createInventoryPlacement(part.x, part.y, itemData, projectedItems));
+      const createData = createInventoryItemDataForPlacement(itemData, {
+        parentId,
+        placement: placements[0]
+      });
+      foundry.utils.setProperty(createData, "system.stackParts", stackParts);
+      const testProjected = cloneProjectedMap(projectedMap);
+      const syntheticId = `personal-generator-test-${foundry.utils.randomID()}`;
+      createData._id = syntheticId;
+      createData.id = syntheticId;
+      testProjected.set(syntheticId, createData);
+      if (validateProjectedItems(actor, testProjected)) return {
+        parentId,
+        placement: placements[0],
+        placements,
+        stackParts
+      };
+      continue;
+    }
     const placement = findFirstAvailableInventoryPlacement(
       contextItems,
       dimensions.columns,
@@ -1771,10 +1812,32 @@ function cloneProjectedMap(projectedMap) {
   return new Map(Array.from(projectedMap.entries()).map(([id, data]) => [id, foundry.utils.deepClone(data)]));
 }
 
+function applyProjectedItemUpdate(itemData, update = {}) {
+  if (!itemData || !update) return itemData;
+  for (const [key, value] of Object.entries(update)) {
+    if (key === "_id") continue;
+    foundry.utils.setProperty(itemData, key, value);
+  }
+  return itemData;
+}
+
 function validateProjectedItems(actor, projectedMap) {
   return validateInventoryTree(Array.from(projectedMap.values()), getActorRootDimensions(actor), {
     rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   }).valid;
+}
+
+function createStackPartsForGeneratedPlacement(itemData, placement) {
+  return createAnchoredItemStackPartsForQuantity({
+    itemData,
+    quantity: getItemQuantity(itemData),
+    preferredPlacement: placement,
+    contextItems: [],
+    columns: Math.max(1, toInteger(placement?.x) || 1),
+    rows: Math.max(1, toInteger(placement?.y) || 1),
+    allItems: [],
+    options: { allowOverflowRows: true }
+  }) ?? [];
 }
 
 function createInventoryItemDataForPlacement(itemData, target) {
@@ -1954,7 +2017,7 @@ async function resolveItem(uuid) {
 }
 
 function needsUniqueGeneratedItem(item) {
-  return getItemMaxStack(item) <= 1 || isContainerItem(item) || hasItemFunction(item, ITEM_FUNCTIONS.condition);
+  return getItemMaxStack(item) <= 1 || isContainerItem(item);
 }
 
 function getDefaultCurrencyKey() {

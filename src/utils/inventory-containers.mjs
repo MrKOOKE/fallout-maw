@@ -268,6 +268,13 @@ export function createAnchoredItemStackPartsForQuantity({
   if (!itemData || !usesVirtualInventoryStacks(itemData)) return createItemStackPartsForQuantity(itemData, quantity);
   const parts = createItemStackPartsForQuantity(itemData, quantity);
   const reserved = Array.isArray(reservedPlacements) ? [...reservedPlacements] : [];
+  const occupiedCells = createOccupiedInventoryCellSet([
+    ...createInventoryPlacementItems(getItemsArray(contextItems), allItems)
+      .filter(item => item._stackHasStoredPlacement !== false)
+      .map(item => normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems)),
+    ...reserved
+  ]);
+  const cursor = { x: 1, y: 1 };
   const anchored = [];
 
   for (let index = 0; index < parts.length; index += 1) {
@@ -282,21 +289,23 @@ export function createAnchoredItemStackPartsForQuantity({
     ) {
       placement = preferredPlacement;
     } else {
-      placement = findFirstAvailableInventoryPlacement(
-        contextItems,
+      placement = findFirstAvailableInventoryPlacementFromOccupied(
+        occupiedCells,
         columns,
         rows,
         partData,
         allItems,
-        excludeItemIds,
-        reserved,
-        options
+        options,
+        cursor
       );
     }
     if (!placement) return null;
     applyStackPartPlacement(part, placement);
     anchored.push(part);
     reserved.push(placement);
+    addInventoryPlacementCells(occupiedCells, placement);
+    cursor.x = placement.x;
+    cursor.y = placement.y;
   }
 
   return anchored;
@@ -850,13 +859,28 @@ function createOccupiedInventoryCellSet(placements = []) {
   const cells = new Set();
   for (const placement of placements) {
     if (!placement) continue;
-    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-        cells.add(getInventoryCellKey(x, y));
-      }
-    }
+    addInventoryPlacementCells(cells, placement);
   }
   return cells;
+}
+
+function addInventoryPlacementCells(cells, placement) {
+  if (!cells || !placement) return;
+  for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+    for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+      cells.add(getInventoryCellKey(x, y));
+    }
+  }
+}
+
+function isInventoryPlacementCellSetAvailable(placement, occupiedCells) {
+  if (!placement || !occupiedCells) return false;
+  for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+    for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+      if (occupiedCells.has(getInventoryCellKey(x, y))) return false;
+    }
+  }
+  return true;
 }
 
 function getInventoryCellKey(x, y) {
@@ -990,11 +1014,13 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
 
   const items = createInventoryPlacementItems(getItemsArray(contextItems), allItems);
   const reservedPlacements = [];
+  const occupiedCells = new Set();
   const resolvedItems = [];
   let visualColumns = columns;
   let visualRows = rows;
   const reservePlacement = (item, placement, phantom = false) => {
     reservedPlacements.push(placement);
+    addInventoryPlacementCells(occupiedCells, placement);
     resolvedItems.push({ item, placement, phantom });
     visualColumns = Math.max(visualColumns, placement.x + placement.width - 1);
     visualRows = Math.max(visualRows, placement.y + placement.height - 1);
@@ -1012,6 +1038,7 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
   const preferredItemSet = new Set(preferredItems);
   const deferredItems = items.filter(item => !preferredItemSet.has(item));
   const unresolvedItems = [];
+  const autoPlacementCursor = { x: 1, y: 1 };
 
   for (const item of preferredItems) {
     const preferredPlacement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
@@ -1024,12 +1051,22 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
 
   for (const item of [...unresolvedItems, ...deferredItems]) {
     let phantom = false;
-    let placement = findFirstAvailableInventoryPlacement([], columns, rows, item, allItems, [], reservedPlacements, options);
+    let placement = findFirstAvailableInventoryPlacementFromOccupied(
+      occupiedCells,
+      columns,
+      rows,
+      item,
+      allItems,
+      options,
+      autoPlacementCursor
+    );
     if (!placement) {
       placement = findFirstPhantomInventoryPlacement(item, allItems, columns, rows, reservedPlacements);
       phantom = true;
     }
     if (!placement) return null;
+    autoPlacementCursor.x = placement.x;
+    autoPlacementCursor.y = placement.y;
     reservePlacement(item, placement, phantom);
   }
 
@@ -1067,6 +1104,42 @@ function getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextIt
   ].reduce((max, placement) => Math.max(max, toInteger(placement?.y) + Math.max(1, toInteger(placement?.height)) - 1), rows);
   const growthRows = Math.max(64, (getItemsArray(contextItems).length + reservedPlacements.length + 1) * Math.max(1, footprint.height + 1));
   return Math.max(rows, existingRows) + growthRows;
+}
+
+function findFirstAvailableInventoryPlacementFromOccupied(
+  occupiedCells,
+  columns,
+  rows,
+  itemOrSystem = null,
+  allItems = [],
+  options = {},
+  cursor = { x: 1, y: 1 }
+) {
+  columns = Math.max(1, toInteger(columns) || 1);
+  rows = Math.max(1, toInteger(rows) || 1);
+  const footprint = getItemFootprint(itemOrSystem, allItems);
+  const maxX = Math.max(1, columns - footprint.width + 1);
+  const searchRows = options.allowOverflowRows
+    ? rows + Math.max(64, (occupiedCells?.size ?? 0) + footprint.height + 1)
+    : rows;
+  let startY = Math.max(1, toInteger(cursor?.y) || 1);
+  let startX = Math.max(1, Math.min(maxX, toInteger(cursor?.x) || 1));
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    const fromY = pass === 0 ? startY : 1;
+    const toY = pass === 0 ? searchRows : Math.max(0, startY - 1);
+    for (let y = fromY; y <= toY; y += 1) {
+      const fromX = pass === 0 && y === startY ? startX : 1;
+      for (let x = fromX; x <= maxX; x += 1) {
+        const placement = createInventoryPlacement(x, y, itemOrSystem, allItems);
+        if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) continue;
+        if (!isInventoryPlacementCellSetAvailable(placement, occupiedCells)) continue;
+        return placement;
+      }
+    }
+  }
+
+  return null;
 }
 
 function createInventoryPlacementItems(items = [], allItems = items) {
