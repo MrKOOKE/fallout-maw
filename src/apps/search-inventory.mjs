@@ -119,8 +119,21 @@ const SEARCH_INVENTORY_MODE_TRADE = "trade";
 const TRADE_OFFER_SIDES = Object.freeze(["searcher", "searched"]);
 const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
-const TRADE_OFFER_DEFAULT_COLUMNS = 12;
+const TRADE_OFFER_DEFAULT_COLUMNS = 14;
 const TRADE_OFFER_MAX_ROWS = 60;
+
+function getFixedTradeOfferGridColumns() {
+  return TRADE_OFFER_DEFAULT_COLUMNS;
+}
+
+function buildTradeOfferGridStyle(columns = TRADE_OFFER_DEFAULT_COLUMNS, rows = 1) {
+  const normalizedColumns = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  const normalizedRows = Math.max(1, toInteger(rows) || 1);
+  return [
+    `--fallout-maw-trade-offer-columns: ${normalizedColumns};`,
+    `--fallout-maw-trade-offer-rows: ${normalizedRows};`
+  ].join(" ");
+}
 const TRADE_COMPATIBILITY_HIGHLIGHT_MS = 10000;
 const DAMAGE_SOURCE_PROTOTYPE_FLAG = "damageSourcePrototypeUuid";
 const TRADE_UNCATEGORIZED_LABEL = "Без категории";
@@ -1349,12 +1362,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         kind,
         key,
         placement,
-        columns: this.#getTradeOfferGridColumns(zone)
+        columns: getFixedTradeOfferGridColumns()
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
       return result;
     }
-    this.#tradeOffers = updateTradeOfferEntryPlacement(this.#tradeOffers, side, kind, key, placement, this.#getTradeOfferGridColumns(zone));
+    this.#tradeOffers = updateTradeOfferEntryPlacement(this.#tradeOffers, side, kind, key, placement, getFixedTradeOfferGridColumns());
     if (!this.#tradeOffers.completed) this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
@@ -1587,32 +1600,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     };
   }
 
-  #getTradeOfferGridColumns(zone = null) {
-    const grid = this.#getTradeOfferGridElement(zone);
-    if (!grid) return TRADE_OFFER_DEFAULT_COLUMNS;
-    const container = grid?.parentElement ?? grid;
-    const containerStyles = container ? getComputedStyle(container) : null;
-    const horizontalPadding = (parseFloat(containerStyles?.paddingLeft) || 0) + (parseFloat(containerStyles?.paddingRight) || 0);
-    const width = Math.max(
-      0,
-      (Number(container?.clientWidth) || 0)
-      - horizontalPadding
-    );
-    const styles = grid ? getComputedStyle(grid) : null;
-    const gap = parseFloat(styles?.columnGap) || parseFloat(styles?.gap) || 0;
-    const cellSize = resolveCssLengthPixels(grid, styles?.getPropertyValue("--fallout-maw-inventory-cell-size"), 80);
-    if (!width || !cellSize) return TRADE_OFFER_DEFAULT_COLUMNS;
-    const pitch = Math.max(1, cellSize + gap);
-    let columns = Math.max(1, Math.floor((width + gap) / pitch));
-    while (columns > 1 && ((columns * cellSize) + ((columns - 1) * gap)) > width - 1) columns -= 1;
-    return columns;
+  #getTradeOfferGridColumns(_zone = null) {
+    return getFixedTradeOfferGridColumns();
   }
 
   #getTradeOfferDropPlacement({ side = "", zone = null, event = null, item = null, entryKind = "item", entryKey = "" } = {}) {
     const actor = this.#getActorForTradeSide(side);
     const grid = this.#getTradeOfferGridElement(zone)
       ?? (actor ? this.element?.querySelector(`[data-trade-offer-grid][data-trade-offer-actor-uuid="${CSS.escape(actor.uuid)}"]`) : null);
-    const columns = grid ? this.#getTradeOfferGridColumns(grid) : Math.max(1, toInteger(this.#tradeOffers?.[side]?.columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+    const columns = getFixedTradeOfferGridColumns();
     const footprint = entryKind === "currency" ? { width: 1, height: 1 } : getItemFootprint(item, this.#getActorForTradeSide(side)?.items);
     const width = Math.max(1, Math.min(columns, toInteger(footprint?.width) || 1));
     const height = Math.max(1, toInteger(footprint?.height) || 1);
@@ -1622,11 +1618,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (zone && !pointerPosition) return null;
     const pointer = getTradeOfferGridPointerPlacement(pointerPosition, { columns, width, height });
     const rows = Math.max(TRADE_OFFER_MAX_ROWS, pointer ? pointer.y + height : height);
-    if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, columns, rotated };
+    if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, rotated };
     const placement = pointer
       ? findNearestAvailableTradeOfferPlacement(occupied, columns, rows, { width, height }, pointer)
       : findFirstAvailableTradeOfferPlacement(occupied, columns, rows, { width, height });
-    return placement ? { ...placement, columns, rotated } : null;
+    return placement ? { ...placement, rotated } : null;
   }
 
   #getTradeOfferGridElement(zone = null) {
@@ -1638,14 +1634,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #syncRenderedTradeOfferColumns() {
-    if (!this.#isTradeMode() || !this.rendered) return;
-    for (const grid of this.element?.querySelectorAll("[data-trade-offer-grid][data-trade-offer-actor-uuid]") ?? []) {
-      const side = this.#getTradeSideForActor(String(grid.dataset.tradeOfferActorUuid ?? ""));
-      if (!side) continue;
-      const columns = this.#getTradeOfferGridColumns(grid);
-      if (!columns || this.#tradeOffers[side].columns === columns) continue;
-      this.#tradeOffers[side].columns = columns;
-    }
+    // Trade offer grid uses a fixed column count independent of inventory layout.
   }
 
   #resetTradeReady() {
@@ -3921,7 +3910,7 @@ function prepareTradeCatalogContext(inventory = {}, actor = null, enabledCategor
   tradeOffer = null,
   expandedWeaponGroups: expandedWeaponGroupsInput = null
 } = {}) {
-  const columns = Math.max(TRADE_OFFER_DEFAULT_COLUMNS, toInteger(inventory.grid?.columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  const columns = TRADE_OFFER_DEFAULT_COLUMNS;
   const enabledCategories = enabledCategoriesInput instanceof Set
     ? enabledCategoriesInput
     : new Set(Array.isArray(enabledCategoriesInput) ? enabledCategoriesInput.map(normalizeTradeCatalogCategory) : []);
@@ -4958,7 +4947,6 @@ async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sou
     containedItems,
     placement: normalizeTradeOfferPlacement(placement, getItemFootprint(item, sourceActor.items))
   });
-  if (placement?.columns) offers[side].columns = Math.max(1, toInteger(placement.columns));
   if (isContainerItem(item)) {
     const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
     await sourceActor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
@@ -5597,7 +5585,7 @@ function normalizeTradeOffersState(state = {}) {
     result[side].readyActors = (Array.isArray(source.readyActors) ? source.readyActors : [])
       .map(actorUuid => String(actorUuid ?? ""))
       .filter(Boolean);
-    result[side].columns = Math.max(1, toInteger(source.columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+    result[side].columns = TRADE_OFFER_DEFAULT_COLUMNS;
     result[side].items = (Array.isArray(source.items) ? source.items : [])
       .map(entry => ({
         entryId: String(entry?.entryId ?? entry?.offerKey ?? entry?.itemId ?? foundry.utils.randomID()),
@@ -5763,7 +5751,6 @@ function addTradeOfferItem(state = {}, side = "", item = null, quantity = 0, pla
     quantity: amount,
     placement: normalizeTradeOfferPlacement(placement)
   });
-  if (placement?.columns) offers[side].columns = Math.max(1, toInteger(placement.columns));
   return offers;
 }
 
@@ -5790,18 +5777,17 @@ function addTradeOfferCurrency(state = {}, side = "", currencyKey = "", amount =
       placement: normalizeTradeOfferPlacement(placement)
     });
   }
-  if (placement?.columns) offers[side].columns = Math.max(1, toInteger(placement.columns));
   return offers;
 }
 
-function updateTradeOfferEntryPlacement(state = {}, side = "", kind = "", key = "", placement = null, columns = TRADE_OFFER_DEFAULT_COLUMNS) {
+function updateTradeOfferEntryPlacement(state = {}, side = "", kind = "", key = "", placement = null, _columns = TRADE_OFFER_DEFAULT_COLUMNS) {
   const offers = normalizeTradeOffersState(state);
   if (!TRADE_OFFER_SIDES.includes(side)) return offers;
   const entries = kind === "currency" ? offers[side].currencies : offers[side].items;
   const entry = entries.find(candidate => getTradeOfferEntryKey(candidate, kind) === key);
   if (!entry) return offers;
   entry.placement = normalizeTradeOfferPlacement(placement);
-  offers[side].columns = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  offers[side].columns = TRADE_OFFER_DEFAULT_COLUMNS;
   return offers;
 }
 
@@ -5864,7 +5850,7 @@ function prepareTradeOffersContext(state = {}, { searcherActor = null, searchedA
 function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", tradeCurrencyKey = "", sideBarterValues = null) {
   const items = [];
   let total = 0;
-  const columns = Math.max(1, toInteger(offer.columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+  const columns = getFixedTradeOfferGridColumns();
   const occupiedPlacements = [];
   const buyerSide = getOppositeTradeSide(side);
   const barterAdjustmentPercent = getTradeBarterAdjustmentPercent(sideBarterValues?.[side], sideBarterValues?.[buyerSide]);
@@ -5939,10 +5925,7 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
   }
 
   const rows = Math.max(1, occupiedPlacements.reduce((max, entry) => Math.max(max, entry.placement.y + entry.placement.height - 1), 1));
-  const style = [
-    buildInventoryGridStyle(columns, rows),
-    `--fallout-maw-trade-offer-columns: ${columns};`
-  ].join(" ");
+  const style = buildTradeOfferGridStyle(columns, rows);
 
   return {
     side,

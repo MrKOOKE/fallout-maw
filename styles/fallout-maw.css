@@ -14327,6 +14327,8 @@ html.fallout-maw-token-action-hud-open #hotbar {
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer {
   flex: 0 0 auto;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-actor-select {
@@ -14447,11 +14449,15 @@ html.fallout-maw-token-action-hud-open #hotbar {
   display: grid;
   gap: var(--fallout-maw-inventory-grid-gap);
   grid-auto-rows: var(--fallout-maw-inventory-cell-size);
-  grid-template-columns: repeat(var(--fallout-maw-trade-offer-columns, 12), var(--fallout-maw-inventory-cell-size));
-  grid-template-rows: repeat(var(--fallout-maw-inventory-rows, 1), var(--fallout-maw-inventory-cell-size));
+  grid-template-columns: repeat(var(--fallout-maw-trade-offer-columns, 14), var(--fallout-maw-inventory-cell-size));
+  grid-template-rows: repeat(var(--fallout-maw-trade-offer-rows, 1), var(--fallout-maw-inventory-cell-size));
   isolation: isolate;
+  max-width: calc(
+    (var(--fallout-maw-trade-offer-columns, 14) * var(--fallout-maw-inventory-cell-size))
+    + ((var(--fallout-maw-trade-offer-columns, 14) - 1) * var(--fallout-maw-inventory-grid-gap))
+  );
   min-height: var(--fallout-maw-inventory-cell-size);
-  overflow: visible;
+  overflow: hidden;
   position: relative;
   width: max-content;
 }
