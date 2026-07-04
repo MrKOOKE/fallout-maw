@@ -142,7 +142,7 @@
     {{> "systems/fallout-maw/templates/actor/parts/craft-window-panel.hbs"}}
 
     <aside class="fallout-maw-craft-window-recipes">
-      <div class="fallout-maw-craft-window-recipe-modes fallout-maw-craft-modebar-tabs" role="tablist">
+      <div class="fallout-maw-craft-window-recipe-modes" role="tablist">
         {{#each craftModes}}
         <button type="button" class="{{#if selected}}active{{/if}}" data-craft-mode="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">{{label}}</button>
         {{/each}}

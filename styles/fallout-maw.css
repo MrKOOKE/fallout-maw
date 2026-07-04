@@ -1951,16 +1951,8 @@ body #prosemirror-dropdown {
 
 .fallout-maw-craft-modebar button.active,
 .fallout-maw-craft-modebar-tabs button.active {
-  background:
-    radial-gradient(circle at 72% 78%, rgba(34, 29, 17, 0.28), transparent 2.7rem),
-    linear-gradient(180deg, #b7aa82 0%, #c7bb92 100%);
-  border-color: rgba(82, 73, 51, 0.95);
-  box-shadow:
-    inset 4px 4px 0 rgba(0, 0, 0, 0.42),
-    inset -1px -1px 0 rgba(255, 248, 220, 0.24),
-    0 1px 0 rgba(0, 0, 0, 0.76);
-  color: #1f1b13;
-  transform: translateY(2px);
+  border-color: rgba(244, 223, 145, 0.85);
+  color: #fff3d8;
 }
 
 .fallout-maw-craft-reverse-button,

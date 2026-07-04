@@ -3844,6 +3844,7 @@ function collectTradeCatalogItems(inventory = {}) {
   const seen = new Set();
   const addItem = (item = null, source = "") => {
     if (!item?.id || item.phantom) return;
+    if (isEquippedTradeCatalogContainer(item, source)) return;
     const key = [
       String(item.actorUuid ?? ""),
       String(item.id ?? ""),
@@ -3863,10 +3864,17 @@ function collectTradeCatalogItems(inventory = {}) {
   }
   for (const item of inventory.grid?.items ?? []) addItem(item, "inventory");
   for (const container of inventory.containers ?? []) {
-    addItem(container, "container");
     for (const item of container.grid?.items ?? []) addItem(item, `container:${container.id}`);
   }
   return items;
+}
+
+function isEquippedTradeCatalogContainer(item = null, source = "") {
+  if (!isContainerItem(item)) return false;
+  const sourceKey = String(source ?? "");
+  if (sourceKey === "equipment" || sourceKey === "prosthesis" || sourceKey.startsWith("weapon:")) return true;
+  const placementMode = String(item?.placement?.mode ?? item?.system?.placement?.mode ?? "");
+  return Boolean(item?.equipped || item?.system?.equipped || (placementMode && placementMode !== "inventory"));
 }
 
 function aggregateTradeCatalogItems(items = [], actor = null, tradeOffer = null) {

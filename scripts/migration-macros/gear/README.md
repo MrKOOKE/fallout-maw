@@ -4,3 +4,4 @@
 
 - `00-ONE-MACRO-IMPORT-ALL-GEAR.js` — один макрос на всё
 - или по отдельности из папок `ammo/`, `modules/`, `weapons/`, `equipment/`
+- `00-repair-inventory-sizes-and-craft-pipes.js` — пост-миграционный ремонт размеров в инвентарной сетке и импортного вида линий крафта
