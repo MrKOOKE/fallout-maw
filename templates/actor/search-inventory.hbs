@@ -93,10 +93,12 @@
                   <span>Возобновить торговлю</span>
                 </button>
                 {{else}}
+                {{#if tradeOffer.showConfirm}}
                 <button type="button" class="fallout-maw-trade-ready-button {{#if tradeOffer.ready}}ready{{/if}}" data-trade-ready="{{tradeOffer.side}}" {{#unless tradeOffer.canConfirm}}disabled{{/unless}}>
                   <i class="fa-solid fa-check"></i>
                   <span>Подтвердить</span>
                 </button>
+                {{/if}}
                 {{/if}}
               </div>
             </header>

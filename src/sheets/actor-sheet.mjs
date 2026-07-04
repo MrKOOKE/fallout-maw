@@ -186,6 +186,7 @@ import {
 import { findOneTimeUseStudiedEffect, isOneTimeUseRepeatBlocked } from "../items/one-time-use.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
+import { dropActorInventoryItem } from "../items/dropped-items.mjs";
 import {
   getItemInteractionState,
   resolveActorInteractionToken
@@ -2942,6 +2943,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (getItemQuantity(item) > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
+    menuOptions.push(["drop", "fa-arrow-down", "Выбросить"]);
     if (game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
     }
@@ -2968,6 +2970,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (action === "equip") return this.#equipInventoryItem(item);
       if (action === "unequip") return this.#unequipInventoryItem(item);
       if (action === "split") return this.#splitInventoryItem(item, { stackIndex, stackQuantity });
+      if (action === "drop") return this.#dropInventoryItem(item, { stackIndex, stackQuantity });
       if (action === "copy" && game.user?.isGM) return this.#copyInventoryItem(item);
       if (action === "delete" && game.user?.isGM) return this.#deleteInventoryItem(item, { stackIndex, stackQuantity });
       return undefined;
@@ -3103,6 +3106,24 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#validateProjectedInventoryState({ updates: [updateData], creates: [data] })) return null;
     await item.update({ "system.quantity": quantity - amount });
     return this.actor.createEmbeddedDocuments("Item", [data]);
+  }
+
+  async #dropInventoryItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    const quantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
+    try {
+      await dropActorInventoryItem(this.actor, item, {
+        quantity,
+        stackIndex: Math.max(0, toInteger(stackIndex))
+      });
+      this.#clearInventoryTooltip({ force: true });
+      this.render({ force: true });
+    } catch (error) {
+      console.error("fallout-maw | Actor sheet item drop failed", error);
+      ui.notifications.warn(error.message || "Не удалось выбросить предмет.");
+    }
+    return null;
   }
 
   async #deleteInventoryItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {

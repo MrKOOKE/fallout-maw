@@ -14787,6 +14787,25 @@ html.fallout-maw-token-action-hud-open #hotbar {
   font-family: var(--fallout-maw-actor-mono-font);
 }
 
+.fallout-maw-trade-approval-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.fallout-maw-trade-approval-summary dt,
+.fallout-maw-trade-approval-summary dd {
+  margin: 0;
+}
+
+.fallout-maw-trade-approval-summary dd {
+  color: #bdf0a6;
+  font-family: var(--fallout-maw-actor-mono-font);
+  font-weight: 700;
+  text-align: right;
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-inventory-stack {
   display: flex;
   flex: 1 1 auto;

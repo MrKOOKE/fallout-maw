@@ -99,6 +99,14 @@ import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { energySourceMatchesConsumer } from "../items/light-source.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { getItemInteractionState } from "../items/item-interactions.mjs";
+import {
+  canDropItemsForActor,
+  cleanupDroppedItemsActorIfEmpty,
+  dropActorInventoryItem,
+  dropItemDataForActor,
+  isDroppedItemsActor,
+  registerDroppedItemsSearchOpener
+} from "../items/dropped-items.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
@@ -116,6 +124,8 @@ const SEARCH_INVENTORY_SOCKET_SCOPE = "fallout-maw.searchInventory";
 const SEARCH_INVENTORY_SOCKET_TIMEOUT = 10000;
 const SEARCH_INVENTORY_MODE_SEARCH = "search";
 const SEARCH_INVENTORY_MODE_TRADE = "trade";
+const SEARCH_INVENTORY_TRADE_KIND_REGULAR = "regular";
+const SEARCH_INVENTORY_TRADE_KIND_PERSONAL = "personal";
 const TRADE_OFFER_SIDES = Object.freeze(["searcher", "searched"]);
 const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
@@ -146,6 +156,7 @@ const searchInventoryOperationQueues = new Map();
 const activeSearchInventoryTradeSessions = new Map();
 
 export function registerSearchInventorySocket() {
+  registerDroppedItemsSearchOpener(openSearchInventoryWindow);
   game.socket.on(SEARCH_INVENTORY_SOCKET, handleSearchInventorySocketMessage);
   if (game.user?.isGM) {
     void migrateLegacyButcheringStorages();
@@ -180,6 +191,20 @@ export async function requestTradeInventoryWindow({ traderActor, tradeActor } = 
   if (!traderActor || !tradeActor) return undefined;
   if (traderActor.uuid === tradeActor.uuid) return undefined;
 
+  const tradeKind = await promptTradeKind();
+  if (!tradeKind) return undefined;
+  if (tradeKind === SEARCH_INVENTORY_TRADE_KIND_PERSONAL) {
+    return openTradeInventoryWindow({
+      searcherActor: traderActor,
+      searchedActor: tradeActor,
+      sessionId: "",
+      tradeCurrencyKey: getPrimaryTradeCurrencyKey(),
+      tradeRole: TRADE_ROLE_PARTICIPANT,
+      tradeSide: "searcher",
+      tradeKind: SEARCH_INVENTORY_TRADE_KIND_PERSONAL
+    });
+  }
+
   const existingSession = await requestTradeSessionJoin({ traderActor, tradeActor });
   if (existingSession?.snapshot) {
     const selected = getTradeSnapshotSelectedActorUuids(existingSession.snapshot, game.user?.id ?? "");
@@ -190,7 +215,8 @@ export async function requestTradeInventoryWindow({ traderActor, tradeActor } = 
       tradeCurrencyKey: existingSession.snapshot.tradeCurrencyKey,
       tradeRole: existingSession.role,
       tradeSide: existingSession.side,
-      tradeSnapshot: existingSession.snapshot
+      tradeSnapshot: existingSession.snapshot,
+      tradeKind: SEARCH_INVENTORY_TRADE_KIND_REGULAR
     });
   }
 
@@ -238,7 +264,8 @@ export async function requestTradeInventoryWindow({ traderActor, tradeActor } = 
     tradeCurrencyKey,
     tradeRole: TRADE_ROLE_PARTICIPANT,
     tradeSide: "searcher",
-    tradeSnapshot: snapshot
+    tradeSnapshot: snapshot,
+    tradeKind: SEARCH_INVENTORY_TRADE_KIND_REGULAR
   });
 }
 
@@ -249,7 +276,8 @@ async function openTradeInventoryWindow({
   tradeCurrencyKey = "",
   tradeRole = TRADE_ROLE_PARTICIPANT,
   tradeSide = "",
-  tradeSnapshot = null
+  tradeSnapshot = null,
+  tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR
 } = {}) {
   if (!searcherActor || !searchedActor) return undefined;
   if (searcherActor.uuid === searchedActor.uuid) return undefined;
@@ -261,9 +289,35 @@ async function openTradeInventoryWindow({
     tradeCurrencyKey: normalizeTradeCurrencyKey(tradeCurrencyKey),
     tradeRole,
     tradeSide,
-    tradeSnapshot
+    tradeSnapshot,
+    tradeKind
   });
   return searchInventoryWindow.render({ force: true });
+}
+
+async function promptTradeKind() {
+  const choice = await DialogV2.input({
+    window: { title: "Торговля" },
+    content: "<p>Выберите режим торговли.</p>",
+    ok: {
+      label: "Обычная",
+      icon: "fa-solid fa-handshake",
+      callback: () => SEARCH_INVENTORY_TRADE_KIND_REGULAR
+    },
+    buttons: [{
+      action: "personal",
+      label: "Личная",
+      icon: "fa-solid fa-user-check",
+      callback: () => SEARCH_INVENTORY_TRADE_KIND_PERSONAL
+    }, {
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    position: { width: 420 },
+    rejectClose: false
+  });
+  if (!choice || choice === "cancel") return "";
+  return String(choice);
 }
 
 class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -274,6 +328,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #mode = SEARCH_INVENTORY_MODE_SEARCH;
   #tradeSessionId = "";
   #tradeCurrencyKey = "";
+  #tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR;
   #tradeRole = TRADE_ROLE_PARTICIPANT;
   #tradeSide = "";
   #tradeSessionSnapshot = null;
@@ -390,7 +445,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tradeCurrencyKey = "",
     tradeRole = TRADE_ROLE_PARTICIPANT,
     tradeSide = "",
-    tradeSnapshot = null
+    tradeSnapshot = null,
+    tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR
   } = {}) {
     this.#searcherActorUuid = searcherActor?.uuid ?? "";
     this.#searchedActorUuid = searchedActor?.uuid ?? "";
@@ -399,6 +455,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#mode = mode === SEARCH_INVENTORY_MODE_TRADE ? SEARCH_INVENTORY_MODE_TRADE : SEARCH_INVENTORY_MODE_SEARCH;
     this.#tradeSessionId = String(sessionId ?? "");
     this.#tradeCurrencyKey = normalizeTradeCurrencyKey(tradeCurrencyKey);
+    this.#tradeKind = tradeKind === SEARCH_INVENTORY_TRADE_KIND_PERSONAL
+      ? SEARCH_INVENTORY_TRADE_KIND_PERSONAL
+      : SEARCH_INVENTORY_TRADE_KIND_REGULAR;
     this.#tradeRole = tradeRole === TRADE_ROLE_OBSERVER ? TRADE_ROLE_OBSERVER : TRADE_ROLE_PARTICIPANT;
     this.#tradeSide = TRADE_OFFER_SIDES.includes(tradeSide) ? tradeSide : "";
     this.#tradeSessionSnapshot = null;
@@ -513,7 +572,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const canManageSearcher = this.#tradeOffers.completed ? this.#canClaimCompletedTradeSide("searcher") : this.#canManageTradeOfferSide("searcher");
     const canManageSearched = this.#tradeOffers.completed ? this.#canClaimCompletedTradeSide("searched") : this.#canManageTradeOfferSide("searched");
     const canConfirmSearcher = this.#canConfirmTradeSide("searcher");
-    const canConfirmSearched = this.#canConfirmTradeSide("searched");
+    const canConfirmSearched = this.#isPersonalTradeMode() ? false : this.#canConfirmTradeSide("searched");
     return {
       ...context,
       canInteract,
@@ -536,7 +595,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           equipmentCollapsed: this.#tradeEquipmentCollapsed,
           selector: searcherSelector,
           canControl: canManageSearcher,
-          canConfirm: canConfirmSearcher
+          canConfirm: canConfirmSearcher,
+          showConfirm: true
         }),
         prepareSearchActorContext(this.#searchedActor, {
           side: "searched",
@@ -551,7 +611,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           equipmentCollapsed: this.#tradeEquipmentCollapsed,
           selector: searchedSelector,
           canControl: canManageSearched,
-          canConfirm: canConfirmSearched
+          canConfirm: canConfirmSearched,
+          showConfirm: !this.#isPersonalTradeMode()
         })
       ].filter(Boolean)
     };
@@ -566,7 +627,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }, 60);
     this.#hookIds = [
       ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
-      ["deleteActor", Hooks.on("deleteActor", actor => this.#scheduleRefreshForActor(actor))],
+      ["deleteActor", Hooks.on("deleteActor", actor => this.#handleActorDeleted(actor))],
       ["createItem", Hooks.on("createItem", item => this.#scheduleRefreshForActor(item?.parent))],
       ["updateItem", Hooks.on("updateItem", item => this.#scheduleRefreshForActor(item?.parent, item?.id))],
       ["deleteItem", Hooks.on("deleteItem", item => this.#scheduleRefreshForActor(item?.parent, item?.id))]
@@ -1434,6 +1495,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return this.#mode === SEARCH_INVENTORY_MODE_TRADE;
   }
 
+  #isPersonalTradeMode() {
+    return this.#isTradeMode() && this.#tradeKind === SEARCH_INVENTORY_TRADE_KIND_PERSONAL;
+  }
+
   #prepareSearchOperationPayload(payload = {}) {
     if (!this.#isTradeMode()) return payload;
     return {
@@ -1566,6 +1631,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #canConfirmTradeSide(side = "") {
+    if (this.#isPersonalTradeMode()) return TRADE_OFFER_SIDES.includes(side) && this.#canInteract();
     return this.#canControlTradeSide(side);
   }
 
@@ -1692,6 +1758,52 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
+  async #completePersonalTradeOffers() {
+    if (this.#tradeCompletionInProgress) return;
+    const tradeContext = this.#prepareTradeContext();
+    const searcherTotal = Math.max(0, toInteger(tradeContext?.offers?.searcher?.total));
+    const searchedTotal = Math.max(0, toInteger(tradeContext?.offers?.searched?.total));
+    const difference = Math.abs(searcherTotal - searchedTotal);
+    if (difference > 0) {
+      const approved = await requestPersonalTradeApproval({
+        searcherActor: this.#searcherActor,
+        searchedActor: this.#searchedActor,
+        searcherTotal,
+        searchedTotal,
+        tradeCurrencyKey: this.#tradeCurrencyKey
+      });
+      if (!approved) return;
+    }
+
+    this.beginTradeCompletionLock();
+    try {
+      const payload = {
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid,
+        tradeCurrencyKey: this.#tradeCurrencyKey,
+        offers: this.#tradeOffers
+      };
+      const responsibleGM = getResponsibleGM();
+      let result;
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        result = await requestSearchInventorySocket("completePersonalTrade", payload, responsibleGM);
+      } else {
+        result = await enqueueSearchInventoryOperation(() => performPersonalTradeComplete(payload, game.user?.id ?? ""));
+      }
+      this.#tradeOffers = createEmptyTradeOffers();
+      ui.notifications.info(result?.droppedCount
+        ? `Обмен совершен. Предметов выброшено: ${result.droppedCount}.`
+        : "Обмен совершен.");
+      await this.close({ force: true });
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Personal trade completion failed`, error);
+      ui.notifications.warn(error.message || "Не удалось завершить личную торговлю.");
+      await this.#renderPreservingWindowStack();
+    } finally {
+      this.endTradeCompletionLock({ render: false });
+    }
+  }
+
   #getActorByUuid(uuid) {
     const normalized = String(uuid ?? "");
     if (normalized === this.#searcherActor?.uuid) return this.#searcherActor;
@@ -1708,6 +1820,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (itemId && this.#shouldSuppressTradeOfferItemRefresh(itemId)) return;
     if (![this.#searcherActorUuid, this.#searchedActorUuid, ...getTradeSnapshotActorUuids(this.#tradeSessionSnapshot)].includes(actor.uuid)) return;
     this.#renderRefresh?.();
+  }
+
+  #handleActorDeleted(actor) {
+    if (!actor) return;
+    const actorUuids = [this.#searcherActorUuid, this.#searchedActorUuid, ...getTradeSnapshotActorUuids(this.#tradeSessionSnapshot)];
+    if (!actorUuids.includes(actor.uuid)) return;
+    if (isDroppedItemsActor(actor)) {
+      void this.close({ force: true });
+      return;
+    }
+    this.#scheduleRefreshForActor(actor);
   }
 
   #shouldSuppressTradeOfferItemRefresh(itemId = "") {
@@ -2350,6 +2473,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!isButcheringItem && selectedQuantity > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
+    if (!isButcheringItem) {
+      menuOptions.push(["drop", "fa-arrow-down", "Выбросить"]);
+    }
     if (!isButcheringItem && game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
     }
@@ -2383,6 +2509,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "equip") return this.#equipSearchItem(actor, item);
       if (action === "unequip") return this.#unequipSearchItem(actor, item);
       if (action === "split") return this.#splitSearchItem(actor, item, { stackIndex, stackQuantity: selectedQuantity });
+      if (action === "drop") return this.#dropSearchItem(actor, item, { stackIndex, stackQuantity: selectedQuantity });
       if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(actor, item);
       if (action === "delete" && game.user?.isGM) return this.#deleteSearchItem(actor, item, { stackIndex, stackQuantity: selectedQuantity });
       return undefined;
@@ -2423,6 +2550,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const side = String(button?.dataset?.tradeReady ?? "");
     if (!TRADE_OFFER_SIDES.includes(side) || !this.#canConfirmTradeSide(side)) return;
     if (this.#tradeOffers.completed) return;
+    if (this.#isPersonalTradeMode()) {
+      await this.#completePersonalTradeOffers();
+      return;
+    }
     if (this.#tradeSessionSnapshot) {
       const result = await requestTradeSessionAction("setTradeReady", this.#prepareTradeSessionActionPayload({
         side,
@@ -2963,6 +3094,30 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory split failed`, error);
       ui.notifications.warn(error.message || "Не удалось разделить предмет.");
+    }
+    return null;
+  }
+
+  async #dropSearchItem(actor, item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    if (!actor || !item) return null;
+    if (!game.user?.isGM && !actor.testUserPermission?.(game.user, "OWNER")) {
+      ui.notifications.warn("Нет прав на выбрасывание предметов этого актера.");
+      return null;
+    }
+    const quantity = usesVirtualInventoryStacks(item)
+      ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
+      : getItemQuantity(item);
+    try {
+      await dropActorInventoryItem(actor, item, {
+        quantity,
+        stackIndex: Math.max(0, toInteger(stackIndex))
+      });
+      this.#clearInventoryTooltip({ force: true });
+      this.#captureScrollPositions();
+      await this.#renderPreservingWindowStack();
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search inventory item drop failed`, error);
+      ui.notifications.warn(error.message || "Не удалось выбросить предмет.");
     }
     return null;
   }
@@ -3759,6 +3914,7 @@ export function prepareSearchActorContext(actor, {
   selector = null,
   canControl = false,
   canConfirm = false,
+  showConfirm = true,
   showLockedItems = false
 } = {}) {
   if (!actor) return null;
@@ -3796,7 +3952,7 @@ export function prepareSearchActorContext(actor, {
     img: normalizeImagePath(actor.img, "icons/svg/mystery-man.svg"),
     inventory: decoratedInventory,
     currencies,
-    tradeOffer: tradeOffer ? { ...tradeOffer, canControl, canConfirm } : tradeOffer,
+    tradeOffer: tradeOffer ? { ...tradeOffer, canControl, canConfirm, showConfirm } : tradeOffer,
     equipmentCollapsed: isTrade && equipmentCollapsed,
     load: {
       value: formatWeight(loadValue),
@@ -4638,6 +4794,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     allowButchering: isItemInButcheringStorage(item)
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
+  await cleanupDroppedItemsActorIfEmpty(sourceActor);
   return result;
 }
 
@@ -4763,6 +4920,7 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     targetStackIndex: Math.max(0, toInteger(payload.targetStackIndex))
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
+  await cleanupDroppedItemsActorIfEmpty(sourceActor);
   return result;
 }
 
@@ -4791,6 +4949,7 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
   const targetAmount = Math.max(0, toInteger(targetActor.system?.currencies?.[currencyKey]));
   await sourceActor.update({ [`system.currencies.${currencyKey}`]: available - amount });
   await targetActor.update({ [`system.currencies.${currencyKey}`]: targetAmount + amount });
+  await cleanupDroppedItemsActorIfEmpty(sourceActor);
   return { amount };
 }
 
@@ -4817,6 +4976,83 @@ async function performTradeComplete(payload = {}, requesterUserId = "") {
   applyLocalCompletedTradeOffers(sessionId, completedOffers);
   if (sessionId) broadcastTradeOffersState(sessionId, completedOffers);
   return { ok: true, offers: completedOffers };
+}
+
+async function performPersonalTradeComplete(payload = {}, requesterUserId = "") {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
+  validateSearchOrTradeRequester({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, requesterUserId, searcherActor, searchedActor);
+
+  const offers = normalizeTradeOffersState(payload.offers);
+  validateTradeOfferSide(searcherActor, offers.searcher);
+  validateTradeOfferSide(searchedActor, offers.searched);
+  const searchedReceived = prepareReceivedTradeOfferSide({ targetActor: searchedActor, offer: offers.searcher });
+  const searcherReceived = prepareReceivedTradeOfferSide({ targetActor: searcherActor, offer: offers.searched });
+  ensureTradeOfferSideCanBeDelivered(searchedActor, searchedReceived);
+  ensureTradeOfferSideCanBeDelivered(searcherActor, searcherReceived);
+  await consumeTradeOfferSide({ sourceActor: searcherActor, offer: offers.searcher });
+  await consumeTradeOfferSide({ sourceActor: searchedActor, offer: offers.searched });
+  const searchedResult = await deliverTradeOfferSideToActor(searchedActor, searchedReceived);
+  const searcherResult = await deliverTradeOfferSideToActor(searcherActor, searcherReceived);
+  return {
+    ok: true,
+    droppedCount: Math.max(0, toInteger(searchedResult?.droppedCount)) + Math.max(0, toInteger(searcherResult?.droppedCount))
+  };
+}
+
+function ensureTradeOfferSideCanBeDelivered(targetActor, offer = {}) {
+  for (const entry of offer?.items ?? []) {
+    const itemData = getTradeOfferEntryItemData(entry, null);
+    const quantity = Math.max(1, toInteger(entry?.quantity));
+    if (!itemData || !quantity) continue;
+    foundry.utils.setProperty(itemData, "system.quantity", quantity);
+    if (getCompletedTradeClaimTarget(targetActor, itemData, entry.containedItems ?? [], { quantity })) continue;
+    if (canDropItemsForActor(targetActor)) continue;
+    throw new Error("У получателя нет места в инвентаре и нет токена на сцене для дропа.");
+  }
+}
+
+async function deliverTradeOfferSideToActor(targetActor, offer = {}) {
+  let droppedCount = 0;
+  const currencyUpdates = {};
+  for (const entry of offer?.currencies ?? []) {
+    const currencyKey = String(entry.currencyKey ?? "");
+    const amount = Math.max(0, toInteger(entry.amount));
+    if (!currencyKey || !amount) continue;
+    const path = `system.currencies.${currencyKey}`;
+    currencyUpdates[path] = Math.max(0, toInteger(currencyUpdates[path] ?? getActorCurrencyAmount(targetActor, currencyKey))) + amount;
+  }
+  if (Object.keys(currencyUpdates).length) await targetActor.update(currencyUpdates, { render: false });
+
+  for (const entry of offer?.items ?? []) {
+    const itemData = getTradeOfferEntryItemData(entry, null);
+    const quantity = Math.max(1, toInteger(entry?.quantity));
+    if (!itemData || !quantity) continue;
+    foundry.utils.setProperty(itemData, "system.quantity", quantity);
+    const containedItems = entry.containedItems ?? [];
+    const target = getCompletedTradeClaimTarget(targetActor, itemData, containedItems, { quantity });
+    if (target) {
+      try {
+        await createCompletedTradeItem(targetActor, itemData, containedItems, {
+          targetMode: "inventory",
+          targetParentId: String(target.parentId ?? ROOT_CONTAINER_ID),
+          targetX: target.placement?.x,
+          targetY: target.placement?.y,
+          skipProjectedValidation: false
+        });
+        continue;
+      } catch (error) {
+        console.warn(`${SYSTEM_ID} | Personal trade item could not fit, dropping to scene`, error);
+      }
+    }
+    await dropItemDataForActor(targetActor, itemData, containedItems, {
+      quantity,
+      sourceActorUuid: String(entry.sourceActorUuid ?? "")
+    });
+    droppedCount += 1;
+  }
+  return { droppedCount };
 }
 
 async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "") {
@@ -8111,6 +8347,63 @@ async function requestTradeInviteSocket(payload = {}, recipientUser = null) {
   return promise;
 }
 
+async function requestPersonalTradeApproval({
+  searcherActor = null,
+  searchedActor = null,
+  searcherTotal = 0,
+  searchedTotal = 0,
+  tradeCurrencyKey = ""
+} = {}) {
+  const recipientUser = getPrimaryActorOwnerUser(searchedActor);
+  if (!recipientUser) {
+    ui.notifications.warn("Нет активного владельца актера для подтверждения личной торговли.");
+    return false;
+  }
+  const payload = {
+    searcherActorUuid: searcherActor?.uuid ?? "",
+    searchedActorUuid: searchedActor?.uuid ?? "",
+    searcherActorName: searcherActor?.name ?? "",
+    searchedActorName: searchedActor?.name ?? "",
+    searcherTotal: Math.max(0, toInteger(searcherTotal)),
+    searchedTotal: Math.max(0, toInteger(searchedTotal)),
+    tradeCurrencyKey: normalizeTradeCurrencyKey(tradeCurrencyKey),
+    requesterUserId: game.user?.id ?? "",
+    recipientUserId: recipientUser.id
+  };
+  if (recipientUser.id === game.user?.id) return confirmPersonalTradeApproval(payload);
+  try {
+    const response = await requestPersonalTradeApprovalSocket(payload, recipientUser);
+    return Boolean(response?.accepted);
+  } catch (error) {
+    ui.notifications.warn(error.message || "Личная торговля не подтверждена.");
+    return false;
+  }
+}
+
+async function requestPersonalTradeApprovalSocket(payload = {}, recipientUser = null) {
+  if (!recipientUser?.active) throw new Error("Владелец актера не в сети.");
+  const requestId = foundry.utils.randomID();
+  const requesterUserId = game.user?.id ?? "";
+
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingSearchInventorySocketRequests.delete(requestId);
+      reject(new Error("Владелец актера не ответил на личную торговлю."));
+    }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
+    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
+  });
+
+  game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+    scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+    type: "personalTradeApproval",
+    requestId,
+    requesterUserId,
+    recipientUserId: recipientUser.id,
+    payload
+  });
+  return promise;
+}
+
 function broadcastTradeSessionClose(sessionId = "") {
   if (!sessionId) return;
   game.socket.emit(SEARCH_INVENTORY_SOCKET, {
@@ -8192,9 +8485,26 @@ async function handleSearchInventorySocketMessage(message = {}) {
     return;
   }
 
+  if (message.type === "personalTradeApprovalResponse") {
+    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    const pending = pendingSearchInventorySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingSearchInventorySocketRequests.delete(message.requestId);
+    if (message.ok) pending.resolve(message.result);
+    else pending.reject(new Error(message.error || "Личная торговля отклонена."));
+    return;
+  }
+
   if (message.type === "tradeInvite") {
     if (message.recipientUserId !== game.user?.id) return;
     await handleTradeInviteSocketMessage(message);
+    return;
+  }
+
+  if (message.type === "personalTradeApproval") {
+    if (message.recipientUserId !== game.user?.id) return;
+    await handlePersonalTradeApprovalSocketMessage(message);
     return;
   }
 
@@ -8270,6 +8580,10 @@ async function handleSearchInventorySocketMessage(message = {}) {
       } finally {
         broadcastTradeCompletionLock(sessionId, false, { render: false });
       }
+    } else if (message.action === "completePersonalTrade") {
+      result = await enqueueSearchInventoryOperation(
+        () => performPersonalTradeComplete(message.payload ?? {}, message.requesterUserId ?? "")
+      );
     } else if ([
       "createTradeSession",
       "joinTradeSession",
@@ -8360,6 +8674,30 @@ async function handleTradeInviteSocketMessage(message = {}) {
     });
   } finally {
     pendingSearchInventoryTradeInvites.delete(inviteKey);
+  }
+}
+
+async function handlePersonalTradeApprovalSocketMessage(message = {}) {
+  try {
+    const accepted = await confirmPersonalTradeApproval(message.payload ?? {});
+    game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+      scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+      type: "personalTradeApprovalResponse",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: true,
+      result: { accepted }
+    });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Personal trade approval failed`, error);
+    game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+      scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+      type: "personalTradeApprovalResponse",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: false,
+      error: error.message
+    });
   }
 }
 
@@ -8952,6 +9290,33 @@ async function confirmTradeInvite(payload = {}) {
     },
     rejectClose: false,
     modal: true
+  });
+}
+
+async function confirmPersonalTradeApproval(payload = {}) {
+  const currency = getCurrencySettings().find(entry => entry.key === normalizeTradeCurrencyKey(payload.tradeCurrencyKey));
+  const currencyLabel = currency?.label ?? payload.tradeCurrencyKey ?? "";
+  return DialogV2.confirm({
+    window: { title: "Личная торговля" },
+    content: `
+      <p>Подтвердить личную сделку?</p>
+      <dl class="fallout-maw-trade-approval-summary">
+        <dt>${escapeHTML(payload.searcherActorName ?? "Сторона 1")}</dt>
+        <dd>${Math.max(0, toInteger(payload.searcherTotal))} ${escapeHTML(currencyLabel)}</dd>
+        <dt>${escapeHTML(payload.searchedActorName ?? "Сторона 2")}</dt>
+        <dd>${Math.max(0, toInteger(payload.searchedTotal))} ${escapeHTML(currencyLabel)}</dd>
+      </dl>
+    `,
+    yes: {
+      label: "Подтвердить",
+      icon: "fa-solid fa-check"
+    },
+    no: {
+      label: "Отклонить"
+    },
+    position: { width: 420 },
+    rejectClose: false,
+    modal: false
   });
 }
 
