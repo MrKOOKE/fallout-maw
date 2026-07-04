@@ -528,6 +528,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #renderPreservingWindowStack(options = {}) {
+    if (this.rendered) this.#captureScrollPositions();
     return this.render({ ...options, force: !this.rendered });
   }
 
@@ -673,7 +674,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const itemId = String(anchor.dataset.itemId ?? "");
       const parentId = String(anchor.dataset.inventoryParentId ?? "");
       if (!actorUuid || !itemId) return "";
-      return `[data-inventory-grid-item][data-inventory-parent-id="${CSS.escape(parentId)}"][data-search-actor-uuid="${CSS.escape(actorUuid)}"][data-item-id="${CSS.escape(itemId)}"]`;
+      const stackSelector = getStackAnchorSelector(anchor);
+      return `[data-inventory-grid-item][data-inventory-parent-id="${CSS.escape(parentId)}"][data-search-actor-uuid="${CSS.escape(actorUuid)}"][data-item-id="${CSS.escape(itemId)}"]${stackSelector}`;
     }
     if (anchor.matches("[data-trade-offer-entry][data-trade-offer-kind][data-trade-offer-side][data-trade-offer-key]")) {
       const side = String(anchor.dataset.tradeOfferSide ?? "");
@@ -686,7 +688,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const actorUuid = String(anchor.dataset.searchActorUuid ?? "");
       const itemId = String(anchor.dataset.itemId ?? "");
       if (!actorUuid || !itemId) return "";
-      return `[data-tooltip-item][data-search-actor-uuid="${CSS.escape(actorUuid)}"][data-item-id="${CSS.escape(itemId)}"]`;
+      const stackSelector = getStackAnchorSelector(anchor);
+      return `[data-tooltip-item][data-search-actor-uuid="${CSS.escape(actorUuid)}"][data-item-id="${CSS.escape(itemId)}"]${stackSelector}`;
     }
     return "";
   }
@@ -4524,7 +4527,7 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
   return received;
 }
 
-async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceItem, quantity = 0 } = {}) {
+async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceItem, quantity = 0, sourceStackIndex = 0 } = {}) {
   assertSearchTransferableItem(sourceItem);
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   const itemData = sourceItem.toObject();
@@ -4541,6 +4544,18 @@ async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceI
       preferredPlacement: placement
     });
     return createdRoot ? [createdRoot] : [];
+  }
+
+  if (usesVirtualInventoryStacks(itemData)) {
+    const placement = getFirstAvailableActorInventoryPlacement(targetActor, ROOT_CONTAINER_ID, itemData, [], [], { allowLockedDisplacement: true });
+    if (!placement) throwInventoryNoSpace();
+    const result = await insertVirtualStackItemIntoActorInventory(targetActor, itemData, placement, {
+      sourceActor,
+      sourceItem,
+      parentId: ROOT_CONTAINER_ID,
+      sourceStackIndex: Math.max(0, toInteger(sourceStackIndex))
+    });
+    return Array.isArray(result) ? result : (result ? [result] : []);
   }
 
   const maxStack = getItemMaxStack(itemData);
@@ -4585,6 +4600,11 @@ function validateSearchOrTradeRequester(payload = {}, requesterUserId = "", sear
   if (!searcherActor?.testUserPermission?.(requester, "OWNER")) {
     throw new Error("No searcher actor owner permission.");
   }
+}
+
+function getStackAnchorSelector(anchor = null) {
+  if (!anchor || !Object.prototype.hasOwnProperty.call(anchor.dataset ?? {}, "stackIndex")) return "";
+  return `[data-stack-index="${CSS.escape(String(anchor.dataset.stackIndex ?? ""))}"]`;
 }
 
 function getSearchOrTradeAllowedActorUuids(payload = {}, searcherActor = null, searchedActor = null, requesterUserId = "") {

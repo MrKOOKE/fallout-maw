@@ -38,6 +38,7 @@ import {
   INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
+  createAnchoredItemStackPartsForQuantity,
   createItemStackPartAdditionUpdate,
   createItemStackPartRemovalUpdate,
   createItemStackPartsForQuantity,
@@ -385,6 +386,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #renderPreservingWindowStack(options = {}) {
+    if (this.rendered) this.#captureScrollPositions();
     return this.render({ ...options, force: !this.rendered });
   }
 
@@ -2300,9 +2302,14 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
       if (!canCraftOutputIncreaseStack(target, stackQuantity, spec.data, planningItems)) continue;
 
       const nextQuantity = getItemQuantity(target) + stackQuantity;
-      const updateData = usesVirtualInventoryStacks(target)
-        ? createItemStackPartAdditionUpdate(target, stackQuantity)
-        : { _id: getItemId(target), "system.quantity": nextQuantity };
+      let updateData = null;
+      if (usesVirtualInventoryStacks(target)) {
+        const addedStackParts = createCraftOutputStackParts(actor, spec.data, stackQuantity, getItemContainerParentId(target), null, planningItems);
+        if (!addedStackParts) continue;
+        updateData = createItemStackPartAdditionUpdate(target, stackQuantity, null, addedStackParts);
+      } else {
+        updateData = { _id: getItemId(target), "system.quantity": nextQuantity };
+      }
       if (updateData) upsertCraftOutputUpdate(updates, target, updateData);
       foundry.utils.setProperty(target, "system.quantity", nextQuantity);
       if (updateData?.["system.stackParts"]) foundry.utils.setProperty(target, "system.stackParts", updateData["system.stackParts"]);
@@ -2310,18 +2317,34 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
     }
 
     while (remainingQuantity > 0) {
-      const stackQuantity = Math.min(remainingQuantity, maxStack);
+      const virtualStack = usesVirtualInventoryStacks(spec.data);
+      const stackQuantity = virtualStack ? remainingQuantity : Math.min(remainingQuantity, maxStack);
       const createData = foundry.utils.deepClone(spec.data);
       foundry.utils.setProperty(createData, "system.quantity", stackQuantity);
-      if (usesVirtualInventoryStacks(createData)) {
-        foundry.utils.setProperty(createData, "system.stackParts", createItemStackPartsForQuantity(createData, stackQuantity));
-      }
       const target = findCraftOutputTarget(actor, createData, planningItems);
       if (!target) {
         return {
           valid: false,
           message: "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта."
         };
+      }
+      if (virtualStack) {
+        const stackParts = createCraftOutputStackParts(actor, createData, stackQuantity, target.parentId, target.placement, planningItems);
+        if (!stackParts) {
+          return {
+            valid: false,
+            message: "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта."
+          };
+        }
+        foundry.utils.setProperty(createData, "system.stackParts", stackParts);
+        const primaryPart = stackParts[0] ?? null;
+        if (primaryPart) {
+          target.placement.x = primaryPart.x;
+          target.placement.y = primaryPart.y;
+          target.placement.rotated = Boolean(primaryPart.rotated);
+        }
+      } else if (usesVirtualInventoryStacks(createData)) {
+        foundry.utils.setProperty(createData, "system.stackParts", createItemStackPartsForQuantity(createData, stackQuantity));
       }
 
       const storedPlacement = createStoredPlacement(target.placement, createData);
@@ -2340,6 +2363,22 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
   }
 
   return { valid: true, updates, creates };
+}
+
+function createCraftOutputStackParts(actor, itemData, quantity, parentId, preferredPlacement = null, planningItems = []) {
+  if (!usesVirtualInventoryStacks(itemData)) return createItemStackPartsForQuantity(itemData, quantity);
+  const context = getCraftOutputContexts(actor, planningItems).find(entry => entry.parentId === parentId);
+  if (!context) return null;
+  return createAnchoredItemStackPartsForQuantity({
+    itemData,
+    quantity,
+    preferredPlacement,
+    contextItems: getContextInventoryItems(parentId, planningItems),
+    columns: context.dimensions.columns,
+    rows: context.dimensions.rows,
+    allItems: planningItems,
+    options: getActorRootInventoryGridOptions(actor, parentId)
+  });
 }
 
 function getCraftOutputStackTargets(actor, itemData, planningItems = []) {
