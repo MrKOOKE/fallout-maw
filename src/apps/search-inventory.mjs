@@ -27,6 +27,7 @@ import {
   createInventoryPlacement,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
+  findFirstAvailableResolvedInventoryPlacement,
   getAllContainedItems,
   getContainerContentsWeight,
   getContextInventoryItems,
@@ -284,6 +285,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #hoverPreviewKey = "";
   #hookIds = [];
   #renderRefresh = null;
+  #inventoryMutationDepth = 0;
   #scrollPositions = new Map();
   #tooltipAnchorElement = null;
   #tooltipActorUuid = "";
@@ -423,6 +425,31 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
+  applyCompletedTradeOffersState(state = {}) {
+    if (!this.#isTradeMode()) return;
+    this.#tradeOffers = normalizeTradeOffersState(state);
+    if (this.rendered) {
+      this.#captureScrollPositions();
+      void this.#renderPreservingWindowStack();
+    }
+  }
+
+  beginTradeCompletionLock() {
+    if (this.#tradeCompletionInProgress) return;
+    this.#tradeCompletionInProgress = true;
+    this.#beginInventoryMutation();
+  }
+
+  endTradeCompletionLock({ render = true } = {}) {
+    if (!this.#tradeCompletionInProgress) return;
+    this.#tradeCompletionInProgress = false;
+    this.#endInventoryMutation();
+    if (render && this.rendered) {
+      this.#captureScrollPositions();
+      void this.#renderPreservingWindowStack();
+    }
+  }
+
   setTradeSessionSnapshot(snapshot = {}) {
     this.#applyTradeSessionSnapshot(snapshot, { render: true });
   }
@@ -528,8 +555,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
       ["deleteActor", Hooks.on("deleteActor", actor => this.#scheduleRefreshForActor(actor))],
       ["createItem", Hooks.on("createItem", item => this.#scheduleRefreshForActor(item?.parent))],
-      ["updateItem", Hooks.on("updateItem", item => this.#scheduleRefreshForActor(item?.parent))],
-      ["deleteItem", Hooks.on("deleteItem", item => this.#scheduleRefreshForActor(item?.parent))]
+      ["updateItem", Hooks.on("updateItem", item => this.#scheduleRefreshForActor(item?.parent, item?.id))],
+      ["deleteItem", Hooks.on("deleteItem", item => this.#scheduleRefreshForActor(item?.parent, item?.id))]
     ];
   }
 
@@ -550,7 +577,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #renderPreservingWindowStack(options = {}) {
     if (this.rendered) this.#captureScrollPositions();
-    return this.render({ ...options, force: !this.rendered });
+    const result = this.render({ ...options, force: !this.rendered });
+    return result;
   }
 
   async _onClose(options) {
@@ -1054,9 +1082,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     });
 
     try {
+      this.#beginInventoryMutation();
       if (this.#tradeSessionSnapshot) {
         const result = await requestTradeSessionAction("claimCompletedTradeEntry", payload);
-        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
+        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: false });
+        this.#captureScrollPositions();
+        await this.#renderPreservingWindowStack();
         return result;
       }
       const result = await enqueueSearchInventoryOperation(() => performCompletedTradeEntryClaim(payload, game.user?.id ?? ""));
@@ -1069,6 +1100,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       console.error(`${SYSTEM_ID} | Completed trade claim failed`, error);
       ui.notifications.warn(error.message || "Не удалось перенести купленное.");
       return null;
+    } finally {
+      this.#endInventoryMutation();
     }
   }
 
@@ -1263,36 +1296,41 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item, entryKind: "item", entryKey: item.id });
     if (zone && !placement) return null;
-    if (this.#tradeSessionSnapshot) {
-      this.#captureScrollPositions();
-      const result = await requestTradeSessionAction("depositCompletedTradeItem", this.#prepareTradeSessionActionPayload({
-        side,
-        sourceActorUuid: sourceActor.uuid,
-        itemId: item.id,
-        quantity,
-        sourceStackIndex: selectedStackIndex,
-        placement
-      }));
-      if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
-      return result;
-    }
+    this.#beginInventoryMutation();
+    try {
+      if (this.#tradeSessionSnapshot) {
+        const result = await requestTradeSessionAction("depositCompletedTradeItem", this.#prepareTradeSessionActionPayload({
+          side,
+          sourceActorUuid: sourceActor.uuid,
+          itemId: item.id,
+          quantity,
+          sourceStackIndex: selectedStackIndex,
+          placement
+        }));
+        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: false });
+        this.#captureScrollPositions();
+        return await this.#renderPreservingWindowStack();
+      }
 
-    const result = await enqueueSearchInventoryOperation(() => performCompletedTradeHubDeposit({
-      ...this.#prepareSearchOperationPayload({
-        offers: this.#tradeOffers,
-        side,
-        sourceActorUuid: sourceActor.uuid,
-        itemId: item.id,
-        quantity,
-        sourceStackIndex: selectedStackIndex,
-        placement
-      }),
-      mode: SEARCH_INVENTORY_MODE_TRADE
-    }, game.user?.id ?? ""));
-    this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
-    this.#broadcastTradeOffers();
-    this.#captureScrollPositions();
-    return this.#renderPreservingWindowStack();
+      const result = await enqueueSearchInventoryOperation(() => performCompletedTradeHubDeposit({
+        ...this.#prepareSearchOperationPayload({
+          offers: this.#tradeOffers,
+          side,
+          sourceActorUuid: sourceActor.uuid,
+          itemId: item.id,
+          quantity,
+          sourceStackIndex: selectedStackIndex,
+          placement
+        }),
+        mode: SEARCH_INVENTORY_MODE_TRADE
+      }, game.user?.id ?? ""));
+      this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
+      this.#broadcastTradeOffers();
+      this.#captureScrollPositions();
+      return await this.#renderPreservingWindowStack();
+    } finally {
+      this.#endInventoryMutation();
+    }
   }
 
   async #moveTradeOfferEntry({ data = {}, item = null, zone = null, event = null } = {}) {
@@ -1633,7 +1671,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   async #completeTradeOffers() {
     if (this.#tradeCompletionInProgress) return;
-    this.#tradeCompletionInProgress = true;
+    this.beginTradeCompletionLock();
     try {
       const payload = {
         searcherActorUuid: this.#searcherActorUuid,
@@ -1661,7 +1699,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ui.notifications.warn(error.message || "Не удалось завершить обмен.");
       await this.#renderPreservingWindowStack();
     } finally {
-      this.#tradeCompletionInProgress = false;
+      this.endTradeCompletionLock({ render: false });
     }
   }
 
@@ -1674,10 +1712,34 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return null;
   }
 
-  #scheduleRefreshForActor(actor) {
+  #scheduleRefreshForActor(actor, itemId = "") {
     if (!actor) return;
+    if (this.#inventoryMutationDepth > 0) return;
+    if (this.#tradeCompletionInProgress) return;
+    if (itemId && this.#shouldSuppressTradeOfferItemRefresh(itemId)) return;
     if (![this.#searcherActorUuid, this.#searchedActorUuid, ...getTradeSnapshotActorUuids(this.#tradeSessionSnapshot)].includes(actor.uuid)) return;
     this.#renderRefresh?.();
+  }
+
+  #shouldSuppressTradeOfferItemRefresh(itemId = "") {
+    if (!this.#isTradeMode() || this.#tradeOffers.completed) return false;
+    if (!this.#tradeOffers.searcher.ready || !this.#tradeOffers.searched.ready) return false;
+    const normalized = String(itemId ?? "");
+    if (!normalized) return false;
+    for (const side of TRADE_OFFER_SIDES) {
+      for (const entry of this.#tradeOffers[side]?.items ?? []) {
+        if (String(entry.itemId ?? "") === normalized) return true;
+      }
+    }
+    return false;
+  }
+
+  #beginInventoryMutation() {
+    this.#inventoryMutationDepth += 1;
+  }
+
+  #endInventoryMutation() {
+    this.#inventoryMutationDepth = Math.max(0, this.#inventoryMutationDepth - 1);
   }
 
   #getDropZone(eventOrTarget) {
@@ -2438,22 +2500,27 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       key,
       targetActorUuid: targetActor.uuid,
       targetMode: "inventory",
-      targetParentId: ROOT_CONTAINER_ID,
-      targetX: null,
-      targetY: null,
-      autoTargetParent: true,
+      targetParentId: String(target.parentId ?? ROOT_CONTAINER_ID),
+      targetX: target.placement?.x ?? null,
+      targetY: target.placement?.y ?? null,
+      autoTargetParent: false,
       quantity
     });
-    if (this.#tradeSessionSnapshot) {
-      const result = await requestTradeSessionAction("claimCompletedTradeEntry", payload);
-      if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
-      return;
+    this.#beginInventoryMutation();
+    try {
+      if (this.#tradeSessionSnapshot) {
+        const result = await requestTradeSessionAction("claimCompletedTradeEntry", payload);
+        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: false });
+      } else {
+        const result = await enqueueSearchInventoryOperation(() => performCompletedTradeEntryClaim(payload, game.user?.id ?? ""));
+        this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
+        this.#broadcastTradeOffers();
+      }
+    } finally {
+      this.#endInventoryMutation();
+      this.#captureScrollPositions();
+      await this.#renderPreservingWindowStack();
     }
-    const result = await enqueueSearchInventoryOperation(() => performCompletedTradeEntryClaim(payload, game.user?.id ?? ""));
-    this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
-    this.#broadcastTradeOffers();
-    this.#captureScrollPositions();
-    await this.#renderPreservingWindowStack();
   }
 
   async #onTradeOfferRemoveClick(event, button) {
@@ -2524,6 +2591,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         quantity: Math.max(1, toInteger(entry.amount))
       }))
     ];
+    const batchEntries = [];
     for (const entry of entries) {
       const target = entry.kind === "item"
         ? getCompletedTradeClaimTarget(targetActor, entry.itemData, entry.containedItems, { quantity: entry.quantity })
@@ -2532,35 +2600,43 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
         break;
       }
-      const payload = this.#prepareTradeSessionActionPayload({
-        offers: this.#tradeOffers,
+      batchEntries.push({
         side,
         kind: entry.kind,
         key: entry.key,
         targetActorUuid: targetActor.uuid,
         targetMode: "inventory",
-        targetParentId: ROOT_CONTAINER_ID,
-        targetX: null,
-        targetY: null,
-        autoTargetParent: entry.kind === "item",
+        targetParentId: String(target?.parentId ?? ROOT_CONTAINER_ID),
+        targetX: target?.placement?.x ?? null,
+        targetY: target?.placement?.y ?? null,
+        autoTargetParent: false,
         quantity: entry.quantity
       });
-      try {
-        if (this.#tradeSessionSnapshot) {
-          const result = await requestTradeSessionAction("claimCompletedTradeEntry", payload);
-          if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: false });
-        } else {
-          const result = await enqueueSearchInventoryOperation(() => performCompletedTradeEntryClaim(payload, game.user?.id ?? ""));
-          this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
-        }
-      } catch (error) {
-        console.error(`${SYSTEM_ID} | Completed trade claim all failed`, error);
-        ui.notifications.warn(error.message || "Не удалось забрать все купленное.");
-        break;
-      }
     }
-    this.#captureScrollPositions();
-    await this.#renderPreservingWindowStack();
+    if (!batchEntries.length) return;
+    this.#beginInventoryMutation();
+    try {
+      if (this.#tradeSessionSnapshot) {
+        const result = await requestTradeSessionAction("claimCompletedTradeBatch", this.#prepareTradeSessionActionPayload({
+          offers: this.#tradeOffers,
+          entries: batchEntries
+        }));
+        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: false });
+      } else {
+        const result = await enqueueSearchInventoryOperation(() => performCompletedTradeBatchClaim({
+          ...this.#prepareTradeSessionActionPayload({ offers: this.#tradeOffers }),
+          entries: batchEntries
+        }, game.user?.id ?? ""));
+        this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
+      }
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Completed trade claim all failed`, error);
+      ui.notifications.warn(error.message || "Не удалось забрать все купленное.");
+    } finally {
+      this.#endInventoryMutation();
+      this.#captureScrollPositions();
+      await this.#renderPreservingWindowStack();
+    }
   }
 
   async #onTradeCurrencyClick(event, button) {
@@ -4739,16 +4815,19 @@ async function performTradeComplete(payload = {}, requesterUserId = "") {
   if (!offers.searcher.ready || !offers.searched.ready) throw new Error("Trade is not confirmed by both sides.");
   validateTradeOfferSide(searcherActor, offers.searcher);
   validateTradeOfferSide(searchedActor, offers.searched);
-  const searchedReceived = await applyTradeOfferSide({ sourceActor: searcherActor, targetActor: searchedActor, offer: offers.searcher });
-  const searcherReceived = await applyTradeOfferSide({ sourceActor: searchedActor, targetActor: searcherActor, offer: offers.searched });
-  return {
-    ok: true,
-    offers: normalizeTradeOffersState({
-      completed: true,
-      searcher: searcherReceived,
-      searched: searchedReceived
-    })
-  };
+  const searchedReceived = prepareReceivedTradeOfferSide({ targetActor: searchedActor, offer: offers.searcher });
+  const searcherReceived = prepareReceivedTradeOfferSide({ targetActor: searcherActor, offer: offers.searched });
+  const completedOffers = normalizeTradeOffersState({
+    completed: true,
+    searcher: searcherReceived,
+    searched: searchedReceived
+  });
+  const sessionId = String(payload.tradeSessionId ?? "");
+  await consumeTradeOfferSide({ sourceActor: searcherActor, offer: offers.searcher });
+  await consumeTradeOfferSide({ sourceActor: searchedActor, offer: offers.searched });
+  applyLocalCompletedTradeOffers(sessionId, completedOffers);
+  if (sessionId) broadcastTradeOffersState(sessionId, completedOffers);
+  return { ok: true, offers: completedOffers };
 }
 
 async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "") {
@@ -4805,11 +4884,23 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
     targetWeaponSlot: String(payload.targetWeaponSlot ?? ""),
     targetX: autoTarget?.placement?.x ?? payload.targetX,
     targetY: autoTarget?.placement?.y ?? payload.targetY,
-    targetItemId: String(payload.targetItemId ?? "")
+    targetItemId: String(payload.targetItemId ?? ""),
+    skipProjectedValidation: !payload.autoTargetParent && String(payload.targetMode ?? "inventory") === "inventory"
   });
   const reduced = reduceTradeOfferEntryQuantity(offers, side, "item", key, quantity);
   if (session) session.offers = reduced;
   return { ok: true, offers: reduced };
+}
+
+async function performCompletedTradeBatchClaim(payload = {}, requesterUserId = "") {
+  const entries = Array.isArray(payload.entries) ? payload.entries : [];
+  if (!entries.length) return { ok: true, offers: normalizeTradeOffersState(payload.offers) };
+  let offers = null;
+  for (const entry of entries) {
+    const result = await performCompletedTradeEntryClaim({ ...payload, ...entry, offers: offers ?? payload.offers }, requesterUserId);
+    offers = result?.offers ?? offers;
+  }
+  return { ok: true, offers: offers ?? normalizeTradeOffersState(payload.offers) };
 }
 
 async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "") {
@@ -4870,10 +4961,10 @@ async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sou
   if (placement?.columns) offers[side].columns = Math.max(1, toInteger(placement.columns));
   if (isContainerItem(item)) {
     const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
-    await sourceActor.deleteEmbeddedDocuments("Item", deleteIds);
+    await sourceActor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
   } else {
-    if (usesVirtualInventoryStacks(item)) await removeTransferredVirtualStackQuantity(sourceActor, item, amount, sourceStackIndex);
-    else await removeTransferredItemQuantity(sourceActor, item, amount);
+    if (usesVirtualInventoryStacks(item)) await removeTransferredVirtualStackQuantity(sourceActor, item, amount, sourceStackIndex, { render: false });
+    else await removeTransferredItemQuantity(sourceActor, item, amount, { render: false });
   }
   return offers;
 }
@@ -4913,7 +5004,7 @@ function validateTradeOfferSide(actor, offer = {}) {
   }
 }
 
-async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = {}) {
+function prepareReceivedTradeOfferSide({ targetActor = null, offer } = {}) {
   const received = {
     items: [],
     currencies: [],
@@ -4943,18 +5034,6 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
       containedItems,
       placement: normalizeTradeOfferPlacement(entry.placement, getItemFootprint(item, entrySourceActor.items))
     });
-    if (isContainerItem(item)) {
-      const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
-      await entrySourceActor.deleteEmbeddedDocuments("Item", deleteIds);
-    } else {
-      const sourceStackIndex = toInteger(entry.sourceStackIndex);
-      if (usesVirtualInventoryStacks(item)) {
-        if (sourceStackIndex < 0) await removeTransferredItemDocumentQuantity(entrySourceActor, item, quantity);
-        else await removeTransferredVirtualStackQuantity(entrySourceActor, item, quantity, Math.max(0, sourceStackIndex));
-      } else {
-        await removeTransferredItemQuantity(entrySourceActor, item, quantity);
-      }
-    }
   }
 
   for (const entry of offer?.currencies ?? []) {
@@ -4962,13 +5041,12 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
     if (entry.contributions?.length) {
       let amount = 0;
       for (const contribution of entry.contributions) {
-        const entrySourceActor = getCachedActorByUuid(contribution.actorUuid);
         const contributionAmount = Math.max(0, toInteger(contribution.amount));
         if (!currencyKey || !contributionAmount) continue;
+        const entrySourceActor = getCachedActorByUuid(contribution.actorUuid);
         if (!entrySourceActor) throw new Error("Trade currency source actor not found.");
         const available = getActorCurrencyAmount(entrySourceActor, currencyKey);
         if (available < contributionAmount) throw new Error("Not enough currency for trade.");
-        await entrySourceActor.update({ [`system.currencies.${currencyKey}`]: available - contributionAmount });
         amount += contributionAmount;
       }
       if (!amount) continue;
@@ -4983,9 +5061,6 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
     }
     const amount = Math.max(0, toInteger(entry.amount));
     if (!currencyKey || !amount) continue;
-    const available = getActorCurrencyAmount(sourceActor, currencyKey);
-    if (available < amount) throw new Error("Недостаточно валюты для обмена.");
-    await sourceActor.update({ [`system.currencies.${currencyKey}`]: available - amount });
     received.currencies.push({
       currencyKey,
       amount,
@@ -4995,6 +5070,119 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
     });
   }
 
+  return received;
+}
+
+function planTradeOfferItemConsumption(offer = {}) {
+  const deleteIdsByActor = new Map();
+  const sequentialOps = [];
+
+  const addDeleteId = (actor, itemId) => {
+    if (!actor || !itemId) return;
+    const actorUuid = String(actor.uuid ?? "");
+    if (!actorUuid) return;
+    if (!deleteIdsByActor.has(actorUuid)) deleteIdsByActor.set(actorUuid, new Set());
+    deleteIdsByActor.get(actorUuid).add(String(itemId));
+  };
+
+  for (const entry of offer?.items ?? []) {
+    const entrySourceActor = getCachedActorByUuid(entry.sourceActorUuid);
+    if (!entrySourceActor) throw new Error("Trade item source actor not found.");
+    const item = entrySourceActor.items?.get(String(entry.itemId ?? ""));
+    if (!item) throw new Error("Item not found.");
+    const quantity = getTransferItemQuantity(item, entry.quantity);
+    if (isContainerItem(item)) {
+      const containedItems = getAllContainedItems(item.id, entrySourceActor.items);
+      addDeleteId(entrySourceActor, item.id);
+      for (const contained of containedItems) addDeleteId(entrySourceActor, contained.id);
+      continue;
+    }
+    const sourceStackIndex = toInteger(entry.sourceStackIndex);
+    const sourceQuantity = Math.max(1, getItemQuantity(item));
+    const transferQuantity = Math.max(1, Math.min(sourceQuantity, quantity));
+    if (usesVirtualInventoryStacks(item)) {
+      sequentialOps.push(renderFlag => (
+        sourceStackIndex < 0
+          ? removeTransferredItemDocumentQuantity(entrySourceActor, item, quantity, { render: renderFlag })
+          : removeTransferredVirtualStackQuantity(entrySourceActor, item, quantity, Math.max(0, sourceStackIndex), { render: renderFlag })
+      ));
+      continue;
+    }
+    if (transferQuantity >= sourceQuantity) addDeleteId(entrySourceActor, item.id);
+    else sequentialOps.push(renderFlag => removeTransferredItemQuantity(entrySourceActor, item, quantity, { render: renderFlag }));
+  }
+
+  return { deleteIdsByActor, sequentialOps };
+}
+
+async function executeTradeOfferItemConsumption(plan = {}, consumeRender = { render: false }) {
+  const render = consumeRender?.render !== false ? consumeRender : { render: false };
+  let batchDeleteCount = 0;
+  for (const [actorUuid, deleteIds] of plan.deleteIdsByActor ?? []) {
+    const actor = getCachedActorByUuid(actorUuid);
+    if (!actor || !deleteIds?.size) continue;
+    const ids = [...deleteIds];
+    batchDeleteCount += ids.length;
+    await actor.deleteEmbeddedDocuments("Item", ids, render);
+  }
+  for (const operation of plan.sequentialOps ?? []) {
+    await operation(render.render);
+  }
+  return { batchDeleteCount, sequentialCount: plan.sequentialOps?.length ?? 0 };
+}
+
+async function consumeTradeOfferSide({ sourceActor, offer } = {}) {
+  const consumeRender = { render: false };
+  const plan = planTradeOfferItemConsumption(offer);
+  await executeTradeOfferItemConsumption(plan, consumeRender);
+
+  const currencyUpdatesByActor = new Map();
+  const queueCurrencyDeduction = (actor, currencyKey, amount) => {
+    if (!actor || !currencyKey || !amount) return;
+    const actorUuid = String(actor.uuid ?? "");
+    if (!actorUuid) return;
+    if (!currencyUpdatesByActor.has(actorUuid)) currencyUpdatesByActor.set(actorUuid, new Map());
+    const actorCurrencies = currencyUpdatesByActor.get(actorUuid);
+    actorCurrencies.set(currencyKey, Math.max(0, toInteger(actorCurrencies.get(currencyKey))) + amount);
+  };
+
+  for (const entry of offer?.currencies ?? []) {
+    const currencyKey = String(entry.currencyKey ?? "");
+    if (entry.contributions?.length) {
+      for (const contribution of entry.contributions) {
+        const entrySourceActor = getCachedActorByUuid(contribution.actorUuid);
+        const contributionAmount = Math.max(0, toInteger(contribution.amount));
+        if (!currencyKey || !contributionAmount) continue;
+        if (!entrySourceActor) throw new Error("Trade currency source actor not found.");
+        const available = getActorCurrencyAmount(entrySourceActor, currencyKey);
+        if (available < contributionAmount) throw new Error("Not enough currency for trade.");
+        queueCurrencyDeduction(entrySourceActor, currencyKey, contributionAmount);
+      }
+      continue;
+    }
+    const amount = Math.max(0, toInteger(entry.amount));
+    if (!currencyKey || !amount) continue;
+    const available = getActorCurrencyAmount(sourceActor, currencyKey);
+    if (available < amount) throw new Error("Недостаточно валюты для обмена.");
+    queueCurrencyDeduction(sourceActor, currencyKey, amount);
+  }
+
+  for (const [actorUuid, currencyDeductions] of currencyUpdatesByActor) {
+    const actor = getCachedActorByUuid(actorUuid);
+    if (!actor) throw new Error("Trade currency source actor not found.");
+    const updateData = {};
+    for (const [currencyKey, amount] of currencyDeductions) {
+      const available = getActorCurrencyAmount(actor, currencyKey);
+      if (available < amount) throw new Error("Not enough currency for trade.");
+      updateData[`system.currencies.${currencyKey}`] = available - amount;
+    }
+    if (Object.keys(updateData).length) await actor.update(updateData, consumeRender);
+  }
+}
+
+async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = {}) {
+  const received = prepareReceivedTradeOfferSide({ targetActor, offer });
+  await consumeTradeOfferSide({ sourceActor, offer });
   return received;
 }
 
@@ -5123,33 +5311,33 @@ function getTransferItemQuantity(item, quantity = 0) {
   return requested > 0 ? Math.max(1, Math.min(sourceQuantity, requested)) : sourceQuantity;
 }
 
-async function removeTransferredItemQuantity(actor, item, quantity = 0) {
-  if (usesVirtualInventoryStacks(item)) return removeTransferredVirtualStackQuantity(actor, item, quantity, 0);
+async function removeTransferredItemQuantity(actor, item, quantity = 0, { render = true } = {}) {
+  if (usesVirtualInventoryStacks(item)) return removeTransferredVirtualStackQuantity(actor, item, quantity, 0, { render });
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
-  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id]);
+  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id], { render });
   return actor.updateEmbeddedDocuments("Item", [{
     _id: item.id,
     "system.quantity": sourceQuantity - transferQuantity
-  }]);
+  }], { render });
 }
 
-async function removeTransferredItemDocumentQuantity(actor, item, quantity = 0) {
+async function removeTransferredItemDocumentQuantity(actor, item, quantity = 0, { render = true } = {}) {
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
-  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id]);
+  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id], { render });
   return actor.updateEmbeddedDocuments("Item", [{
     _id: item.id,
     "system.quantity": sourceQuantity - transferQuantity
-  }]);
+  }], { render });
 }
 
-async function removeTransferredVirtualStackQuantity(actor, item, quantity = 0, stackIndex = 0) {
+async function removeTransferredVirtualStackQuantity(actor, item, quantity = 0, stackIndex = 0, { render = true } = {}) {
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
   const updateData = createItemStackPartRemovalUpdate(item, transferQuantity, stackIndex);
-  if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return actor.deleteEmbeddedDocuments("Item", [item.id]);
-  return actor.updateEmbeddedDocuments("Item", [updateData]);
+  if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return actor.deleteEmbeddedDocuments("Item", [item.id], { render });
+  return actor.updateEmbeddedDocuments("Item", [updateData], { render });
 }
 
 function ensureTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, quantity = 1, barterAdjustmentPercent = null } = {}) {
@@ -5684,7 +5872,9 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
     const sourceActor = getCachedActorByUuid(entry.sourceActorUuid);
     if (!sourceActor) continue;
     const liveItem = sourceActor?.items?.get(String(entry.itemId ?? ""));
-    const itemData = liveItem?.toObject?.() ?? normalizeTradeOfferItemData(entry.itemData);
+    const itemData = offer.completed
+      ? (normalizeTradeOfferItemData(entry.itemData) ?? liveItem?.toObject?.())
+      : (liveItem?.toObject?.() ?? normalizeTradeOfferItemData(entry.itemData));
     if (!itemData) continue;
     const sourceQuantity = offer.completed ? Math.max(1, toInteger(entry.quantity)) : Math.max(1, getItemQuantity(liveItem ?? itemData));
     const quantity = Math.max(1, Math.min(sourceQuantity, toInteger(entry.quantity)));
@@ -6033,7 +6223,8 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
   targetWeaponSlot = "",
   targetX = null,
   targetY = null,
-  targetItemId = ""
+  targetItemId = "",
+  skipProjectedValidation = false
 } = {}) {
   validateTargetParent(targetActor, targetParentId);
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
@@ -6064,7 +6255,8 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
     return insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
       sourceItem: null,
       targetItem,
-      parentId: targetParentId
+      parentId: targetParentId,
+      skipProjectedValidation
     });
   }
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, preferredPlacement, {
@@ -6316,7 +6508,8 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   sourceItem = null,
   targetItem = null,
   parentId = ROOT_CONTAINER_ID,
-  sourceStackIndex = 0
+  sourceStackIndex = 0,
+  skipProjectedValidation = false
 } = {}) {
   if (usesVirtualInventoryStacks(itemData)) {
     return insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
@@ -6396,7 +6589,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   );
   const deletes = (!partialSourceTransfer && !sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [];
 
-  if (!validateActorProjectedInventoryState(actor, {
+  if (!skipProjectedValidation && !validateActorProjectedInventoryState(actor, {
     updates,
     deletes,
     creates: createData
@@ -6978,15 +7171,15 @@ function getCompletedTradeClaimTarget(targetActor, itemData = null, containedIte
   for (const parentId of candidateParentIds) {
     if (!canCompletedTradeClaimFitParent(targetActor, itemData, containedItems, parentId, { quantity: transferQuantity })) continue;
 
-    const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, [], [], { allowLockedDisplacement: true });
-    if (!placement) {
-      if (!isContainerItem(itemData) && getCompletedTradeClaimStackRoom(targetActor, itemData, parentId) >= transferQuantity) {
-        return { parentId, placement: null };
-      }
-      continue;
+    if (!isContainerItem(itemData) && getCompletedTradeClaimStackRoom(targetActor, itemData, parentId) >= transferQuantity) {
+      return { parentId, placement: null };
     }
 
-    if (!validateCompletedTradeClaimTarget(targetActor, itemData, containedItems, parentId, placement, { quantity: transferQuantity })) continue;
+    const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, [], [], { allowLockedDisplacement: true });
+    if (!placement) continue;
+
+    const needsFullValidation = isContainerItem(itemData) || (containedItems?.length > 0);
+    if (needsFullValidation && !validateCompletedTradeClaimTarget(targetActor, itemData, containedItems, parentId, placement, { quantity: transferQuantity })) continue;
     return { parentId, placement };
   }
 
@@ -7590,7 +7783,7 @@ export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemDa
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
   const contextItems = getContextInventoryItems(parentId, actor.items)
     .filter(item => allowLockedDisplacement && !isLockedStorageParentId(parentId) ? !isItemLocked(item) : true);
-  return findFirstAvailableInventoryPlacement(
+  const placement = findFirstAvailableResolvedInventoryPlacement(
     contextItems,
     dimensions.columns,
     dimensions.rows,
@@ -7600,6 +7793,7 @@ export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemDa
     reservedPlacements,
     getActorInventoryContextOptions(actor, parentId)
   );
+  return placement;
 }
 
 function isActorInventoryPlacementAvailable(actor, parentId, placement, excludeItemIds = [], reservedPlacements = [], { allowLockedDisplacement = false } = {}) {
@@ -7966,6 +8160,30 @@ function broadcastTradeOffersState(sessionId = "", state = {}) {
   });
 }
 
+function applyLocalCompletedTradeOffers(sessionId = "", state = {}) {
+  if (!searchInventoryWindow?.matchesTradeSession?.(sessionId)) return;
+  searchInventoryWindow.applyCompletedTradeOffersState(state);
+}
+
+function applyLocalTradeCompletionLock(sessionId = "", locked = false, { render = true } = {}) {
+  if (!searchInventoryWindow?.matchesTradeSession?.(sessionId)) return;
+  if (locked) searchInventoryWindow.beginTradeCompletionLock();
+  else searchInventoryWindow.endTradeCompletionLock({ render });
+}
+
+function broadcastTradeCompletionLock(sessionId = "", locked = false, { render = true } = {}) {
+  if (!sessionId) return;
+  applyLocalTradeCompletionLock(sessionId, locked, { render });
+  game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+    scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+    type: "tradeCompletionLock",
+    sessionId,
+    locked: Boolean(locked),
+    render,
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
 async function handleSearchInventorySocketMessage(message = {}) {
   if (message?.scope !== SEARCH_INVENTORY_SOCKET_SCOPE) return;
 
@@ -8012,7 +8230,15 @@ async function handleSearchInventorySocketMessage(message = {}) {
   if (message.type === "tradeOffers") {
     if (message.senderUserId === game.user?.id) return;
     if (!searchInventoryWindow?.matchesTradeSession?.(message.sessionId)) return;
-    searchInventoryWindow.setTradeOffersState(message.state);
+    if (message.state?.completed) searchInventoryWindow.applyCompletedTradeOffersState(message.state);
+    else searchInventoryWindow.setTradeOffersState(message.state);
+    return;
+  }
+
+  if (message.type === "tradeCompletionLock") {
+    if (!searchInventoryWindow?.matchesTradeSession?.(message.sessionId)) return;
+    if (message.locked) searchInventoryWindow.beginTradeCompletionLock();
+    else searchInventoryWindow.endTradeCompletionLock({ render: message.render !== false });
     return;
   }
 
@@ -8052,9 +8278,15 @@ async function handleSearchInventorySocketMessage(message = {}) {
         () => performActorButchering(message.payload ?? {}, message.requesterUserId ?? "")
       );
     } else if (message.action === "completeTrade") {
-      result = await enqueueSearchInventoryOperation(
-        () => performTradeComplete(message.payload ?? {}, message.requesterUserId ?? "")
-      );
+      const sessionId = String(message.payload?.tradeSessionId ?? "");
+      broadcastTradeCompletionLock(sessionId, true);
+      try {
+        result = await enqueueSearchInventoryOperation(
+          () => performTradeComplete(message.payload ?? {}, message.requesterUserId ?? "")
+        );
+      } finally {
+        broadcastTradeCompletionLock(sessionId, false, { render: false });
+      }
     } else if ([
       "createTradeSession",
       "joinTradeSession",
@@ -8065,6 +8297,7 @@ async function handleSearchInventorySocketMessage(message = {}) {
       "addTradeOfferCurrency",
       "removeTradeOfferEntry",
       "claimCompletedTradeEntry",
+      "claimCompletedTradeBatch",
       "reduceCompletedTradeEntry",
       "setTradeCurrency",
       "setTradeReady",
@@ -8197,6 +8430,14 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     ensureTradeSessionActorControl(session, targetActor.uuid, requesterUserId);
     if (getTradeSessionActorSide(session, targetActor.uuid) !== payload.side) throw new Error("Trade recipient side mismatch.");
     await performCompletedTradeEntryClaim(payload, requesterUserId);
+  } else if (action === "claimCompletedTradeBatch") {
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    if (!entries.length) return;
+    const targetActor = await resolveActor(entries[0]?.targetActorUuid ?? payload.targetActorUuid);
+    if (!targetActor) throw new Error("Actor not found.");
+    ensureTradeSessionActorControl(session, targetActor.uuid, requesterUserId);
+    if (getTradeSessionActorSide(session, targetActor.uuid) !== entries[0]?.side) throw new Error("Trade recipient side mismatch.");
+    await performCompletedTradeBatchClaim({ ...payload, entries }, requesterUserId);
   } else if (action === "reduceCompletedTradeEntry") {
     session.offers = reduceTradeOfferEntryQuantity(session.offers, payload.side, payload.kind, payload.key, payload.quantity);
   } else if (action === "setTradeCurrency") {
@@ -8422,14 +8663,23 @@ async function completeTradeSession(session = {}, requesterUserId = "") {
   const searcherTarget = getTradeSessionFirstActor(session, "searcher");
   const searchedTarget = getTradeSessionFirstActor(session, "searched");
   if (!searcherTarget || !searchedTarget) throw new Error("Trade participant not found.");
-  const searchedReceived = await applyTradeOfferSide({ sourceActor: searcherTarget, targetActor: searchedTarget, offer: offers.searcher });
-  const searcherReceived = await applyTradeOfferSide({ sourceActor: searchedTarget, targetActor: searcherTarget, offer: offers.searched });
-  session.completed = true;
-  session.offers = normalizeTradeOffersState({
-    completed: true,
-    searcher: searcherReceived,
-    searched: searchedReceived
-  });
+  const searchedReceived = prepareReceivedTradeOfferSide({ targetActor: searchedTarget, offer: offers.searcher });
+  const searcherReceived = prepareReceivedTradeOfferSide({ targetActor: searcherTarget, offer: offers.searched });
+  broadcastTradeCompletionLock(session.sessionId, true);
+  try {
+    await consumeTradeOfferSide({ sourceActor: searcherTarget, offer: offers.searcher });
+    await consumeTradeOfferSide({ sourceActor: searchedTarget, offer: offers.searched });
+    session.completed = true;
+    session.offers = normalizeTradeOffersState({
+      completed: true,
+      searcher: searcherReceived,
+      searched: searchedReceived
+    });
+    touchTradeSession(session);
+    broadcastTradeSessionSnapshot(createTradeSessionSnapshot(session));
+  } finally {
+    broadcastTradeCompletionLock(session.sessionId, false, { render: false });
+  }
 }
 
 async function reclaimCompletedTradeSessionRemainders(session = {}) {
