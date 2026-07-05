@@ -45,6 +45,7 @@ import {
 } from "../../utils/item-functions.mjs";
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { getAbilitySkillAdvancementBaseBonuses } from "../../abilities/evaluation.mjs";
+import { prepareActorEffectChangeForApplication } from "../../utils/active-effect-changes.mjs";
 
 const REACTION_RESOURCE_KEY = "reactionPoints";
 import { toInteger } from "../../utils/numbers.mjs";
@@ -258,6 +259,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       bonus: sourceResources?.[REACTION_RESOURCE_KEY]?.bonus
     };
     replaceObjectContents(this.resources, normalizeResourceMap(sourceResources, resourceSettings, resourceMaximums, {
+      actor: this.parent,
+      sourceResources: sourceSystem.resources,
       trackSpent: true
     }));
     ensureReactionResource(this.resources, reactionResource);
@@ -492,13 +495,27 @@ function developmentField() {
   });
 }
 
-function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}, { trackSpent = false, defaultToMin = false } = {}) {
+function normalizeResourceMap(
+  currentResources = {},
+  settings = [],
+  maximums = {},
+  { actor = null, sourceResources = {}, trackSpent = false, defaultToMin = false } = {}
+) {
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentResources?.[setting.key];
       const min = Math.max(0, toInteger(current?.min));
-      const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
-      const max = Math.max(min, toInteger(maximums?.[setting.key]) + bonus);
+      const baseMax = toInteger(maximums?.[setting.key]);
+      let bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
+      let max = Math.max(min, baseMax + bonus);
+      const overriddenMax = resolveResourceBonusOverrideMaximum(actor, setting.key, {
+        baseMax,
+        sourceBonus: toInteger(sourceResources?.[setting.key]?.bonus)
+      });
+      if (Number.isFinite(overriddenMax)) {
+        max = Math.max(min, Math.trunc(overriddenMax));
+        bonus = max - baseMax;
+      }
       const spent = trackSpent
         ? getTrackedResourceSpent(current, min, max)
         : Math.max(0, toInteger(current?.spent));
@@ -511,6 +528,53 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
       return [setting.key, { min, spent, bonus, value, max }];
     })
   );
+}
+
+function resolveResourceBonusOverrideMaximum(actor, resourceKey = "", { baseMax = 0, sourceBonus = 0 } = {}) {
+  const key = String(resourceKey ?? "").trim();
+  if (!actor || !key) return Number.NaN;
+
+  const changes = collectInitialResourceBonusChanges(actor, key);
+  if (!changes.some(change => change.type === "override")) return Number.NaN;
+
+  let value = toInteger(baseMax) + toInteger(sourceBonus);
+  for (const change of changes) {
+    const prepared = prepareActorEffectChangeForApplication(actor, change, { stage: "initial-active-effect" });
+    const amount = Number(prepared?.value);
+    if (!Number.isFinite(amount)) continue;
+
+    if (prepared.type === "multiply") value *= amount;
+    else if (prepared.type === "override") value = amount;
+    else if (prepared.type === "upgrade") value = Math.max(value, amount);
+    else if (prepared.type === "downgrade") value = Math.min(value, amount);
+    else value += amount;
+  }
+  return value;
+}
+
+function collectInitialResourceBonusChanges(actor, resourceKey = "") {
+  const acceptedKey = `system.resources.${resourceKey}.bonus`;
+  const changes = [];
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (!effect?.active || effect.disabled) continue;
+    for (const change of effect.system?.changes ?? []) {
+      if (String(change?.phase ?? "initial") !== "initial") continue;
+      if (String(change?.key ?? "").trim() !== acceptedKey) continue;
+      changes.push({
+        ...foundry.utils.deepClone(change),
+        effect,
+        priority: getEffectChangePriority(change)
+      });
+    }
+  }
+  return changes.sort((left, right) => getEffectChangePriority(left) - getEffectChangePriority(right));
+}
+
+function getEffectChangePriority(change = {}) {
+  const priority = Number(change?.priority);
+  if (Number.isFinite(priority)) return Math.trunc(priority);
+  const ActiveEffect = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
+  return toInteger(ActiveEffect?.CHANGE_TYPES?.[change?.type]?.defaultPriority);
 }
 
 function mergePreparedBonuses(source = {}, prepared = {}, { preparedBonusMode = "prepared" } = {}) {

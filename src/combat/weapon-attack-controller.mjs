@@ -9,7 +9,7 @@ import {
   createThrownItemTile,
   deleteDelayedThrownItemDocuments
 } from "../canvas/thrown-items.mjs";
-import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
+import { getActorPostureAction, getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import {
   ITEM_FUNCTIONS,
   WEAPON_SPECIAL_PROPERTIES,
@@ -1311,6 +1311,12 @@ class WeaponAttackController {
       weaponActionKey: this.actionKey,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
       weaponActionModifierState: this.getWeaponActionModifierState(),
+      ...getPostureAttackEdgeModifiers({
+        attackerToken: this.token,
+        targetToken,
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId
+      }),
       ...extra
     };
   }
@@ -6822,6 +6828,34 @@ function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponF
     getWeaponAttackData(weapon, weaponFunctionId),
     getTokenDistanceMeters(attackerToken, target)
   );
+}
+
+function getPostureAttackEdgeModifiers({ attackerToken = null, targetToken = null, weapon = null, weaponFunctionId = "" } = {}) {
+  if (!isVulnerableAttackPosture(getTokenAttackPosture(targetToken))) return {};
+
+  const rangeState = getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, weaponFunctionId);
+  if (rangeState === "inside") return { advantage: true, advantageCount: 1 };
+  if (rangeState === "outside") return { disadvantage: true, disadvantageCount: 1 };
+  return {};
+}
+
+function getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const range = getEffectiveRangeBounds(weaponData?.effectiveRange);
+  if (!range) return "";
+
+  const distance = getTokenDistanceMeters(attackerToken, targetToken);
+  if (!Number.isFinite(distance)) return "";
+  return distance >= range.min && distance <= range.max ? "inside" : "outside";
+}
+
+function getTokenAttackPosture(token) {
+  const direct = String(token?.document?._source?.movementAction ?? token?.document?.movementAction ?? "").trim();
+  return direct || getActorPostureAction(token?.actor);
+}
+
+function isVulnerableAttackPosture(action = "") {
+  return ["burrow", "knocked"].includes(String(action ?? "").trim());
 }
 
 function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMeters = 0) {

@@ -72,6 +72,12 @@ const STATUS_EFFECTS = Object.freeze({
   unconscious: "unconscious",
   blind: "blind"
 });
+const INCAPACITATING_DODGE_OVERRIDE_STATUSES = new Set([
+  STATUS_EFFECTS.dead,
+  STATUS_EFFECTS.unconscious
+]);
+const DODGE_RESOURCE_BONUS_EFFECT_KEY = "system.resources.dodge.bonus";
+const INCAPACITATING_DODGE_OVERRIDE_PRIORITY = 9999;
 const OVERLAY_STATUS_EFFECTS = new Set([
   STATUS_EFFECTS.dead,
   STATUS_EFFECTS.unconscious
@@ -2405,7 +2411,7 @@ function calculateShockRecoveryTarget(actor) {
 async function setActorStatus(actor, statusId = "", active = false, options = {}) {
   if (!statusId || !actor) return;
   if (actor.statuses?.has?.(statusId) === active) {
-    if (active) await ensureActorStatusOverlay(actor, getActorStatusEffectIds(actor, CONFIG.statusEffects?.[statusId]), statusId, options);
+    if (active) await ensureActorStatusEffectData(actor, getActorStatusEffectIds(actor, CONFIG.statusEffects?.[statusId]), statusId, options);
     return;
   }
   try {
@@ -2428,7 +2434,7 @@ async function setActorStatusEffect(actor, statusId = "", active = false, option
 
   if (existing.length) {
     if (active) {
-      await ensureActorStatusOverlay(actor, existing, statusId, options);
+      await ensureActorStatusEffectData(actor, existing, statusId, options);
       return true;
     }
     await actor.deleteEmbeddedDocuments("ActiveEffect", existing, animationOptions);
@@ -2439,6 +2445,7 @@ async function setActorStatusEffect(actor, statusId = "", active = false, option
   const ActiveEffect = getDocumentClass("ActiveEffect");
   const effect = await ActiveEffect.fromStatusEffect(statusId);
   if (isOverlayStatusEffect(statusId)) effect.updateSource({ "flags.core.overlay": true });
+  prepareIncapacitatingStatusDodgeOverride(effect, statusId);
   return ActiveEffect.implementation.create(effect, {
     parent: actor,
     keepId: true,
@@ -2446,16 +2453,45 @@ async function setActorStatusEffect(actor, statusId = "", active = false, option
   });
 }
 
-async function ensureActorStatusOverlay(actor, effectIds = [], statusId = "", options = {}) {
-  if (!isOverlayStatusEffect(statusId)) return;
+async function ensureActorStatusEffectData(actor, effectIds = [], statusId = "", options = {}) {
   const updates = effectIds
     .map(effectId => actor?.effects?.get(effectId))
-    .filter(effect => effect && !effect.flags?.core?.overlay)
-    .map(effect => ({
-      _id: effect.id,
-      "flags.core.overlay": true
-    }));
+    .filter(Boolean)
+    .map(effect => buildStatusEffectDataUpdate(effect, statusId))
+    .filter(update => Object.keys(update).length);
   if (updates.length) await actor.updateEmbeddedDocuments("ActiveEffect", updates, getStatusAnimationOptions(statusId, options));
+}
+
+function buildStatusEffectDataUpdate(effect, statusId = "") {
+  const update = { _id: effect.id };
+  if (isOverlayStatusEffect(statusId) && !effect.flags?.core?.overlay) update["flags.core.overlay"] = true;
+
+  const changes = ensureIncapacitatingDodgeOverrideChanges(effect.system?.changes ?? [], statusId);
+  if (changes && JSON.stringify(changes) !== JSON.stringify(effect.system?.changes ?? [])) {
+    update["system.changes"] = changes;
+  }
+  return Object.keys(update).length > 1 ? update : {};
+}
+
+function prepareIncapacitatingStatusDodgeOverride(effect, statusId = "") {
+  const changes = ensureIncapacitatingDodgeOverrideChanges(effect.system?.changes ?? [], statusId);
+  if (changes) effect.updateSource({ "system.changes": changes });
+}
+
+function ensureIncapacitatingDodgeOverrideChanges(changes = [], statusId = "") {
+  if (!INCAPACITATING_DODGE_OVERRIDE_STATUSES.has(statusId)) return null;
+  const retained = (Array.isArray(changes) ? changes : [])
+    .filter(change => String(change?.key ?? "").trim() !== DODGE_RESOURCE_BONUS_EFFECT_KEY);
+  return [
+    ...retained,
+    {
+      key: DODGE_RESOURCE_BONUS_EFFECT_KEY,
+      type: "override",
+      value: "0",
+      phase: "initial",
+      priority: INCAPACITATING_DODGE_OVERRIDE_PRIORITY
+    }
+  ];
 }
 
 function isOverlayStatusEffect(statusId = "") {
