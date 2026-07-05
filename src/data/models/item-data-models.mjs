@@ -294,7 +294,29 @@ function containerFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     loadReduction: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
-    extraWeaponSlots: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    extraWeaponSlots: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    specialGrids: containerSpecialGridsField()
+  });
+}
+
+function containerSpecialGridsField() {
+  return new SchemaField({
+    blocks: new ArrayField(containerSpecialGridBlockField(), { required: true, initial: [] }),
+    viewport: new SchemaField({
+      x: new NumberField({ required: true, integer: true, initial: 0 }),
+      y: new NumberField({ required: true, integer: true, initial: 0 }),
+      zoom: new NumberField({ required: true, min: 0.1, initial: 1 })
+    })
+  });
+}
+
+function containerSpecialGridBlockField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    x: new NumberField({ required: true, initial: 0 }),
+    y: new NumberField({ required: true, initial: 0 }),
+    width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    height: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
   });
 }
 

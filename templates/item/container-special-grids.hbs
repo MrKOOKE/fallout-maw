@@ -1,0 +1,58 @@
+<div class="fallout-maw-container-special-grid-app">
+  <div class="fallout-maw-container-special-grid-toolbar">
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.ContainerSpecialGridColumns"}}</span>
+      <input type="number" value="{{form.width}}" min="1" step="1" data-container-special-grid-width>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.ContainerSpecialGridRows"}}</span>
+      <input type="number" value="{{form.height}}" min="1" step="1" data-container-special-grid-height>
+    </label>
+    <button type="button" data-container-special-grid-add>
+      <i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}
+    </button>
+  </div>
+
+  <div class="fallout-maw-craft-editor fallout-maw-container-special-grid-editor" data-container-special-grid-workspace style="{{viewportStyle}}">
+    <div class="fallout-maw-craft-world" data-container-special-grid-world style="{{viewportStyle}}">
+      <div class="fallout-maw-craft-snap-preview" data-container-special-grid-snap-preview hidden></div>
+      {{#if baseBlock}}
+      <button type="button" class="fallout-maw-craft-block fallout-maw-container-special-grid-base {{#if baseBlock.selected}}selected{{/if}}" data-container-special-grid-base-id="{{baseBlock.id}}" data-craft-x="{{baseBlock.x}}" data-craft-y="{{baseBlock.y}}" data-craft-width="{{baseBlock.width}}" data-craft-height="{{baseBlock.height}}" style="{{baseBlock.style}}" aria-label="{{baseBlock.label}}">
+        <span class="fallout-maw-container-special-grid-size">{{baseBlock.width}} x {{baseBlock.height}}</span>
+      </button>
+      <div class="fallout-maw-craft-block-frame fallout-maw-container-special-grid-base-frame {{#if baseBlock.selected}}selected{{/if}}" data-container-special-grid-base-frame-id="{{baseBlock.id}}" data-craft-x="{{baseBlock.x}}" data-craft-y="{{baseBlock.y}}" data-craft-width="{{baseBlock.width}}" data-craft-height="{{baseBlock.height}}" style="{{baseBlock.style}}" aria-hidden="true"></div>
+      {{/if}}
+      {{#each blocks}}
+      <button type="button" class="fallout-maw-craft-block fallout-maw-container-special-grid-block {{#if selected}}selected{{/if}}" data-container-special-grid-block-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-label="{{label}}">
+        <span class="fallout-maw-container-special-grid-size">{{width}} x {{height}}</span>
+      </button>
+      {{/each}}
+      {{#each blocks}}
+      <div class="fallout-maw-craft-block-frame fallout-maw-container-special-grid-block-frame {{#if selected}}selected{{/if}}" data-container-special-grid-block-frame-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-hidden="true"></div>
+      {{/each}}
+    </div>
+
+    {{#if selectedBlock}}
+    <div class="fallout-maw-craft-popover" data-container-special-grid-popover>
+      <section class="fallout-maw-craft-popover-section">
+        <h3>{{localize "FALLOUTMAW.Item.ContainerSpecialGridBlock"}}</h3>
+        <div class="fallout-maw-container-special-grid-size-form">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.ContainerSpecialGridColumns"}}</span>
+            <input type="number" value="{{selectedBlock.width}}" min="1" step="1" data-container-special-grid-selected-width="{{selectedBlock.id}}">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.ContainerSpecialGridRows"}}</span>
+            <input type="number" value="{{selectedBlock.height}}" min="1" step="1" data-container-special-grid-selected-height="{{selectedBlock.id}}">
+          </label>
+        </div>
+        {{#unless selectedBlock.isBase}}
+        <button type="button" data-container-special-grid-delete="{{selectedBlock.id}}">
+          <i class="fa-solid fa-trash"></i> {{localize "FALLOUTMAW.Common.Delete"}}
+        </button>
+        {{/unless}}
+      </section>
+    </div>
+    {{/if}}
+  </div>
+</div>

@@ -2164,7 +2164,10 @@
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Item.FunctionContainer"}}</h2>
-      <button type="button" data-remove-item-function="container" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-open-container-special-grids title="{{localize 'FALLOUTMAW.Item.ContainerSpecialGrid'}}"><i class="fa-solid fa-border-all"></i> {{localize "FALLOUTMAW.Item.ContainerSpecialGrid"}}</button>
+        <button type="button" data-remove-item-function="container" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
     </div>
     <div class="fallout-maw-list-grid three-columns">
       <label>

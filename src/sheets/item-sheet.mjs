@@ -102,7 +102,7 @@ import {
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
-const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
@@ -138,6 +138,7 @@ let itemSheetSourceSyncHooksRegistered = false;
 let activeWeaponSoundPickerPreview = null;
 const activeCraftModes = new WeakMap();
 const activeCraftRecipeIds = new WeakMap();
+const activeContainerSpecialGridApps = new WeakMap();
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #scrollPositions = new Map();
@@ -911,6 +912,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       input.addEventListener("input", event => this.#onContainerLoadReductionInput(event));
       input.addEventListener("change", event => this.#onContainerLoadReductionChange(event));
     });
+    this.element?.querySelector("[data-open-container-special-grids]")?.addEventListener("click", event => this.#onOpenContainerSpecialGrids(event));
     this.element?.querySelector("[data-add-actor-container-slot]")?.addEventListener("click", event => this.#onAddActorContainerSlot(event));
     this.element?.querySelectorAll("[data-delete-actor-container-slot]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteActorContainerSlot(event));
@@ -3073,6 +3075,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.actorContainer.slots": slots });
   }
 
+  #onOpenContainerSpecialGrids(event) {
+    event.preventDefault();
+    let app = activeContainerSpecialGridApps.get(this.item);
+    if (!app) {
+      app = new ContainerSpecialGridApplication(this.item);
+      activeContainerSpecialGridApps.set(this.item, app);
+    }
+    return app.render({ force: true });
+  }
+
   #onAddImplantLimb(event) {
     event.preventDefault();
     const current = this.#getSubmittedImplantLimbKeys();
@@ -3218,7 +3230,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.itemFunction": "",
         "system.functions.container.enabled": false,
         "system.functions.container.loadReduction": 0,
-        "system.functions.container.extraWeaponSlots": 0
+        "system.functions.container.extraWeaponSlots": 0,
+        "system.functions.container.specialGrids.blocks": [],
+        "system.functions.container.specialGrids.viewport": { x: 0, y: 0, zoom: 1 }
       });
     }
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
@@ -4671,6 +4685,478 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 }
 
+class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(ApplicationV2) {
+  #item = null;
+  #itemUuid = "";
+  #formWidth = 1;
+  #formHeight = 1;
+  #selection = null;
+  #panDrag = null;
+  #blockDrag = null;
+  #viewportOverride = null;
+  #resizeObserver = null;
+  #hookIds = [];
+
+  static DEFAULT_OPTIONS = {
+    classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-container-special-grid-window"],
+    position: {
+      width: 760,
+      height: 620
+    },
+    window: {
+      resizable: true
+    }
+  };
+
+  static PARTS = {
+    body: {
+      template: TEMPLATES.itemContainerSpecialGrids
+    }
+  };
+
+  constructor(item, options = {}) {
+    super({
+      id: `fallout-maw-container-special-grids-${item?.id ?? foundry.utils.randomID()}`,
+      ...options
+    });
+    this.#item = item ?? null;
+    this.#itemUuid = String(item?.uuid ?? "");
+  }
+
+  get title() {
+    const name = String(this.item?.name ?? "");
+    return name ? `${game.i18n.localize("FALLOUTMAW.Item.ContainerSpecialGrid")}: ${name}` : game.i18n.localize("FALLOUTMAW.Item.ContainerSpecialGrid");
+  }
+
+  get item() {
+    if (this.#itemUuid) {
+      const item = globalThis.fromUuidSync?.(this.#itemUuid) ?? foundry.utils.fromUuidSync?.(this.#itemUuid);
+      if (item?.documentName === "Item" || (globalThis.Item && item instanceof globalThis.Item)) this.#item = item;
+    }
+    return this.#item;
+  }
+
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    const item = this.item;
+    const blocks = getContainerSpecialGridBlocks(item);
+    const viewport = this.#getViewport();
+    const baseBlock = getContainerSpecialGridBaseBlock(item);
+    const selectedBlock = this.#selection?.type === "base"
+      ? { ...baseBlock, isBase: true }
+      : blocks.find(block => block.id === this.#selection?.id) ?? null;
+    return {
+      ...context,
+      item,
+      form: {
+        width: Math.max(1, toInteger(this.#formWidth) || 1),
+        height: Math.max(1, toInteger(this.#formHeight) || 1)
+      },
+      baseBlock: baseBlock
+        ? {
+          ...baseBlock,
+          label: game.i18n.localize("FALLOUTMAW.Item.ContainerSettings"),
+          style: buildCraftNodeStyle(baseBlock),
+          selected: this.#selection?.type === "base"
+        }
+        : null,
+      blocks: blocks.map(block => ({
+        ...block,
+        label: `${game.i18n.localize("FALLOUTMAW.Item.ContainerSpecialGridBlock")} ${block.width} x ${block.height}`,
+        style: buildCraftNodeStyle(block),
+        selected: this.#selection?.type === "block" && this.#selection.id === block.id
+      })),
+      selectedBlock,
+      viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`
+    };
+  }
+
+  async _onFirstRender(context, options) {
+    await super._onFirstRender(context, options);
+    this.#hookIds = [
+      ["updateItem", Hooks.on("updateItem", item => {
+        if (item?.uuid !== this.#itemUuid) return;
+        this.#item = item;
+        if (this.rendered) void this.render({ force: true });
+      })],
+      ["deleteItem", Hooks.on("deleteItem", item => {
+        if (item?.uuid === this.#itemUuid) void this.close();
+      })]
+    ];
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this.#activate();
+  }
+
+  async _onClose(options) {
+    await super._onClose(options);
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    for (const [hook, id] of this.#hookIds) Hooks.off(hook, id);
+    this.#hookIds = [];
+    if (this.#item) activeContainerSpecialGridApps.delete(this.#item);
+  }
+
+  #activate() {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    const workspace = this.element?.querySelector("[data-container-special-grid-workspace]");
+    if (!workspace) return;
+    workspace.addEventListener("contextmenu", event => event.preventDefault());
+    workspace.addEventListener("pointerdown", event => this.#onWorkspacePointerDown(event));
+    workspace.addEventListener("wheel", event => this.#onWheel(event), { passive: false });
+    this.element?.querySelector("[data-container-special-grid-add]")?.addEventListener("click", event => this.#onAddBlock(event));
+    this.element?.querySelector("[data-container-special-grid-base-id]")?.addEventListener("pointerdown", event => this.#onBasePointerDown(event));
+    this.element?.querySelectorAll("[data-container-special-grid-block-id]").forEach(block => {
+      block.addEventListener("pointerdown", event => this.#onBlockPointerDown(event));
+    });
+    this.element?.querySelector("[data-container-special-grid-delete]")?.addEventListener("click", event => this.#onDeleteBlock(event));
+    this.element?.querySelectorAll("[data-container-special-grid-selected-width], [data-container-special-grid-selected-height]").forEach(input => {
+      input.addEventListener("change", event => this.#onSelectedSizeChange(event));
+    });
+    this.#syncBlockLayouts();
+    this.#setViewportStyle(this.#getViewport().x, this.#getViewport().y, this.#getViewport().zoom);
+    this.#positionPopover();
+    if (typeof ResizeObserver === "function") {
+      this.#resizeObserver = new ResizeObserver(() => {
+        this.#syncBlockLayouts();
+        this.#positionPopover();
+      });
+      this.#resizeObserver.observe(workspace);
+    }
+  }
+
+  #onAddBlock(event) {
+    event.preventDefault();
+    const widthInput = this.element?.querySelector("[data-container-special-grid-width]");
+    const heightInput = this.element?.querySelector("[data-container-special-grid-height]");
+    this.#formWidth = Math.max(1, toInteger(widthInput?.value) || 1);
+    this.#formHeight = Math.max(1, toInteger(heightInput?.value) || 1);
+    const blocks = getContainerSpecialGridBlocks(this.item);
+    const block = normalizeContainerSpecialGridBlock({
+      id: foundry.utils.randomID(),
+      width: this.#formWidth,
+      height: this.#formHeight,
+      x: 0,
+      y: 0
+    });
+    const position = findNearestFreeCraftNodePosition(block, getContainerSpecialGridBlockers(this.item));
+    blocks.push({ ...block, ...position });
+    this.#selection = null;
+    return this.#updateSpecialGrids({ blocks });
+  }
+
+  #onDeleteBlock(event) {
+    event.preventDefault();
+    const blockId = String(event.currentTarget?.dataset?.containerSpecialGridDelete ?? "");
+    if (!blockId) return undefined;
+    const blocks = getContainerSpecialGridBlocks(this.item).filter(block => block.id !== blockId);
+    if (this.#selection?.id === blockId) this.#selection = null;
+    return this.#updateSpecialGrids({ blocks });
+  }
+
+  #onWorkspacePointerDown(event) {
+    if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    if (event.button === 0) {
+      if (!this.#selection) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.#selection = null;
+      return this.render({ force: true });
+    }
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#startPanDrag(event);
+  }
+
+  #onBasePointerDown(event) {
+    if (![0, 2].includes(event.button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button === 2) {
+      this.#startPanDrag(event);
+      return;
+    }
+    this.#selection = { type: "base", id: "__base__" };
+    return this.render({ force: true });
+  }
+
+  #onBlockPointerDown(event) {
+    if (![0, 2].includes(event.button)) return;
+    const blockElement = event.currentTarget;
+    const blockId = String(blockElement.dataset.containerSpecialGridBlockId ?? "");
+    if (!blockId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button === 2) {
+      this.#startPanDrag(event);
+      return;
+    }
+    const block = getContainerSpecialGridBlocks(this.item).find(entry => entry.id === blockId);
+    if (!block) return;
+    this.#blockDrag = {
+      pointerId: event.pointerId,
+      blockId,
+      element: blockElement,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      previewX: block.x,
+      previewY: block.y,
+      previewWidth: block.width,
+      previewHeight: block.height,
+      moved: false
+    };
+    const onMove = moveEvent => this.#onBlockMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onBlockEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #startPanDrag(event) {
+    const viewport = this.#getViewport();
+    this.#panDrag = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: viewport.x,
+      startY: viewport.y,
+      moved: false
+    };
+    const onMove = moveEvent => this.#onPanMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onPanEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onPanMove(event) {
+    const drag = this.#panDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    drag.moved = true;
+    this.#setViewportStyle(
+      drag.startX + (event.clientX - drag.startClientX),
+      drag.startY + (event.clientY - drag.startClientY)
+    );
+  }
+
+  #onPanEnd(event) {
+    const drag = this.#panDrag;
+    this.#panDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId || !drag.moved) return undefined;
+    this.#setViewportStyle(
+      Math.round(drag.startX + (event.clientX - drag.startClientX)),
+      Math.round(drag.startY + (event.clientY - drag.startClientY))
+    );
+    return undefined;
+  }
+
+  #onWheel(event) {
+    if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    event.preventDefault();
+    const workspace = this.element?.querySelector("[data-container-special-grid-workspace]");
+    const rect = workspace?.getBoundingClientRect();
+    if (!rect) return undefined;
+    const viewport = this.#getViewport();
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    const nextZoom = clampCraftZoom(viewport.zoom * factor);
+    if (Math.abs(nextZoom - viewport.zoom) < 0.001) return undefined;
+    const pointerX = event.clientX - rect.left - (rect.width / 2);
+    const pointerY = event.clientY - rect.top - (rect.height / 2);
+    const worldX = (pointerX - viewport.x) / viewport.zoom;
+    const worldY = (pointerY - viewport.y) / viewport.zoom;
+    this.#setViewportStyle(pointerX - (worldX * nextZoom), pointerY - (worldY * nextZoom), nextZoom);
+    return undefined;
+  }
+
+  #onBlockMove(event) {
+    const drag = this.#blockDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - drag.startClientX;
+    const dy = event.clientY - drag.startClientY;
+    if (!drag.moved && Math.hypot(dx, dy) < CRAFT_DRAG_THRESHOLD_PX) return;
+    drag.moved = true;
+    this.#setDraggingState(drag, true);
+    const step = getCraftGridStep(this.element?.querySelector("[data-container-special-grid-workspace]"));
+    const zoom = this.#getViewport().zoom;
+    const deltaX = Math.round(dx / (step * zoom));
+    const deltaY = Math.round(dy / (step * zoom));
+    const nodes = getContainerSpecialGridNodesWithBase(this.item);
+    const resolved = resolveCraftDragPlacement(nodes, [drag.blockId], { deltaX, deltaY });
+    drag.deltaX = resolved.deltaX;
+    drag.deltaY = resolved.deltaY;
+    this.#showSnapPreview({
+      x: drag.previewX + resolved.deltaX,
+      y: drag.previewY + resolved.deltaY,
+      width: drag.previewWidth,
+      height: drag.previewHeight
+    });
+  }
+
+  #onBlockEnd(event) {
+    const drag = this.#blockDrag;
+    this.#blockDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId) return undefined;
+    this.#setDraggingState(drag, false);
+    this.#hideSnapPreview();
+    if (!drag.moved) {
+      this.#selection = { type: "block", id: drag.blockId };
+      return this.render({ force: true });
+    }
+    const deltaX = Number(drag.deltaX) || 0;
+    const deltaY = Number(drag.deltaY) || 0;
+    const blocks = getContainerSpecialGridBlocks(this.item).map(block => (
+      block.id === drag.blockId ? { ...block, x: block.x + deltaX, y: block.y + deltaY } : block
+    ));
+    this.#selection = null;
+    return this.#updateSpecialGrids({ blocks });
+  }
+
+  #onSelectedSizeChange(event) {
+    event.preventDefault();
+    const popover = event.currentTarget?.closest?.("[data-container-special-grid-popover]");
+    const widthInput = popover?.querySelector("[data-container-special-grid-selected-width]");
+    const heightInput = popover?.querySelector("[data-container-special-grid-selected-height]");
+    const id = String(widthInput?.dataset?.containerSpecialGridSelectedWidth || heightInput?.dataset?.containerSpecialGridSelectedHeight || "");
+    if (!id) return undefined;
+    const width = Math.max(1, toInteger(widthInput?.value) || 1);
+    const height = Math.max(1, toInteger(heightInput?.value) || 1);
+
+    if (id === "__base__") {
+      const baseBlock = normalizeContainerSpecialGridBlock({ ...getContainerSpecialGridBaseBlock(this.item), width, height });
+      const blocks = resolveContainerSpecialGridBlockLayout(getContainerSpecialGridBlocks(this.item), baseBlock);
+      return this.item?.update({
+        "system.container.columns": width,
+        "system.container.rows": height,
+        "system.functions.container.specialGrids.blocks": blocks
+      });
+    }
+
+    const blocks = getContainerSpecialGridBlocks(this.item);
+    const nextBlocks = blocks.map(block => (
+      block.id === id
+        ? normalizeContainerSpecialGridBlock({ ...block, width, height })
+        : block
+    ));
+    const target = nextBlocks.find(block => block.id === id);
+    if (!target) return undefined;
+    const position = findNearestFreeCraftNodePosition(target, getContainerSpecialGridBlockers(this.item, { excludeBlockIds: new Set([id]) }));
+    const placedBlocks = nextBlocks.map(block => block.id === id ? { ...block, ...position } : block);
+    return this.#updateSpecialGrids({ blocks: placedBlocks });
+  }
+
+  #getViewport() {
+    return this.#viewportOverride ?? getContainerSpecialGridViewport(this.item);
+  }
+
+  #setViewportStyle(x, y, zoom = this.#getViewport().zoom) {
+    const workspace = this.element?.querySelector("[data-container-special-grid-workspace]");
+    const world = this.element?.querySelector("[data-container-special-grid-world]");
+    const viewport = clampCraftViewportToVisibleNode(
+      normalizeCraftViewport({ x, y, zoom }),
+      workspace,
+      getContainerSpecialGridNodesWithBase(this.item)
+    );
+    this.#viewportOverride = viewport;
+    workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+    workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+    workspace?.style.setProperty("--craft-zoom", String(viewport.zoom));
+    workspace?.style.setProperty("--fallout-maw-craft-scaled-step", `${Math.round(getCraftGridStep(workspace) * viewport.zoom)}px`);
+    world?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+    world?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+    world?.style.setProperty("--craft-zoom", String(viewport.zoom));
+    return viewport;
+  }
+
+  #syncBlockLayouts() {
+    this.element?.querySelectorAll("[data-container-special-grid-base-id], [data-container-special-grid-base-frame-id], [data-container-special-grid-block-id], [data-container-special-grid-block-frame-id]").forEach(element => {
+      this.#applyBlockLayout(element, {
+        x: Number(element.dataset.craftX) || 0,
+        y: Number(element.dataset.craftY) || 0,
+        width: Number(element.dataset.craftWidth) || 1,
+        height: Number(element.dataset.craftHeight) || 1
+      });
+    });
+  }
+
+  #applyBlockLayout(element, { x = 0, y = 0, width = 1, height = 1 } = {}) {
+    const metrics = getCraftGridMetrics(this.element?.querySelector("[data-container-special-grid-workspace]"));
+    const normalizedWidth = Math.max(1, toInteger(width) || 1);
+    const normalizedHeight = Math.max(1, toInteger(height) || 1);
+    const widthPx = (normalizedWidth * metrics.cell) + ((normalizedWidth - 1) * metrics.gap);
+    const heightPx = (normalizedHeight * metrics.cell) + ((normalizedHeight - 1) * metrics.gap);
+    element.style.setProperty("--craft-offset-x", `${(Number(x) || 0) * metrics.step}px`);
+    element.style.setProperty("--craft-offset-y", `${(Number(y) || 0) * metrics.step}px`);
+    element.style.setProperty("--craft-node-width", `${widthPx}px`);
+    element.style.setProperty("--craft-node-height", `${heightPx}px`);
+    element.style.setProperty("--craft-node-half-width", `${widthPx / 2}px`);
+    element.style.setProperty("--craft-node-half-height", `${heightPx / 2}px`);
+  }
+
+  #showSnapPreview(bounds = {}) {
+    const preview = this.element?.querySelector("[data-container-special-grid-snap-preview]");
+    if (!preview) return;
+    this.#applyBlockLayout(preview, bounds);
+    preview.removeAttribute("hidden");
+  }
+
+  #hideSnapPreview() {
+    this.element?.querySelector("[data-container-special-grid-snap-preview]")?.setAttribute("hidden", "");
+  }
+
+  #setDraggingState(drag, enabled) {
+    const method = enabled ? "add" : "remove";
+    drag.element?.classList?.[method]?.("dragging");
+    const workspace = this.element?.querySelector("[data-container-special-grid-workspace]");
+    workspace?.querySelector(`[data-container-special-grid-block-frame-id="${CSS.escape(drag.blockId)}"]`)?.classList?.[method]?.("dragging");
+  }
+
+  #positionPopover() {
+    const workspace = this.element?.querySelector("[data-container-special-grid-workspace]");
+    const popover = workspace?.querySelector("[data-container-special-grid-popover]");
+    if (!workspace || !popover || !this.#selection?.id) return;
+    const target = this.#selection.type === "base"
+      ? (
+        workspace.querySelector(`[data-container-special-grid-base-frame-id="${CSS.escape(this.#selection.id)}"]`)
+        ?? workspace.querySelector(`[data-container-special-grid-base-id="${CSS.escape(this.#selection.id)}"]`)
+      )
+      : (
+        workspace.querySelector(`[data-container-special-grid-block-frame-id="${CSS.escape(this.#selection.id)}"]`)
+        ?? workspace.querySelector(`[data-container-special-grid-block-id="${CSS.escape(this.#selection.id)}"]`)
+      );
+    if (!target) return;
+    const workspaceRect = workspace.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const popoverWidth = popover.offsetWidth || 220;
+    const popoverHeight = popover.offsetHeight || 130;
+    let left = targetRect.right - workspaceRect.left + 12;
+    if ((left + popoverWidth + 8) > workspaceRect.width) left = (targetRect.left - workspaceRect.left) - popoverWidth - 12;
+    left = Math.max(8, Math.min(workspaceRect.width - popoverWidth - 8, left));
+    const top = Math.max(8, Math.min(workspaceRect.height - popoverHeight - 8, targetRect.top - workspaceRect.top));
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+  }
+
+  #updateSpecialGrids({ blocks = null, viewport = null } = {}) {
+    const updateData = {};
+    if (blocks) updateData["system.functions.container.specialGrids.blocks"] = blocks.map(normalizeContainerSpecialGridBlock);
+    if (viewport) updateData["system.functions.container.specialGrids.viewport"] = normalizeCraftViewport(viewport);
+    if (!Object.keys(updateData).length) return undefined;
+    return this.item?.update(updateData);
+  }
+}
+
 export function registerItemSheetSourceSyncHooks() {
   if (itemSheetSourceSyncHooksRegistered) return;
   itemSheetSourceSyncHooksRegistered = true;
@@ -4748,6 +5234,70 @@ function createActorContainerSlotData() {
     height: 1,
     quantity: 1
   });
+}
+
+function getContainerSpecialGridData(itemOrData = null) {
+  const data = itemOrData?.system ?? itemOrData ?? {};
+  return data.functions?.container?.specialGrids ?? {};
+}
+
+function getContainerSpecialGridBlocks(itemOrData = null) {
+  return Array.from(getContainerSpecialGridData(itemOrData)?.blocks ?? [])
+    .map(normalizeContainerSpecialGridBlock)
+    .filter(block => block.id);
+}
+
+function normalizeContainerSpecialGridBlock(block = {}) {
+  const width = Math.max(1, toInteger(block.width) || 1);
+  const height = Math.max(1, toInteger(block.height) || 1);
+  return {
+    id: String(block.id || foundry.utils.randomID()),
+    x: snapCraftGridCoordinate(block.x, width),
+    y: snapCraftGridCoordinate(block.y, height),
+    width,
+    height
+  };
+}
+
+function getContainerSpecialGridViewport(itemOrData = null) {
+  return normalizeCraftViewport(getContainerSpecialGridData(itemOrData)?.viewport ?? {});
+}
+
+function getContainerSpecialGridBaseBlock(itemOrData = null) {
+  const data = itemOrData?.system ?? itemOrData ?? {};
+  return normalizeContainerSpecialGridBlock({
+    id: "__base__",
+    x: 0,
+    y: 0,
+    width: Math.max(1, toInteger(data.container?.columns) || 1),
+    height: Math.max(1, toInteger(data.container?.rows) || 1)
+  });
+}
+
+function getContainerSpecialGridNodesWithBase(itemOrData = null) {
+  return [
+    getContainerSpecialGridBaseBlock(itemOrData),
+    ...getContainerSpecialGridBlocks(itemOrData)
+  ].filter(Boolean);
+}
+
+function getContainerSpecialGridBlockers(itemOrData = null, { excludeBlockIds = new Set() } = {}) {
+  const excluded = excludeBlockIds instanceof Set ? excludeBlockIds : new Set(excludeBlockIds ?? []);
+  return getContainerSpecialGridNodesWithBase(itemOrData)
+    .filter(block => !excluded.has(block.id))
+    .map(craftNodeToBounds);
+}
+
+function resolveContainerSpecialGridBlockLayout(blocks = [], baseBlock = null) {
+  const placed = [];
+  const blockers = baseBlock ? [craftNodeToBounds(baseBlock)] : [];
+  for (const block of blocks.map(normalizeContainerSpecialGridBlock)) {
+    const position = findNearestFreeCraftNodePosition(block, blockers);
+    const placedBlock = { ...block, ...position };
+    placed.push(placedBlock);
+    blockers.push(craftNodeToBounds(placedBlock));
+  }
+  return placed;
 }
 
 function normalizeActorContainerSlotData(slot = {}) {
