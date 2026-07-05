@@ -5,12 +5,17 @@ import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movemen
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture as setActorTokensPostureDirect } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { ALL_COMBAT_DISADVANTAGE_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
 import { isActorUnableToAct } from "./reaction-hub.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
+
+const { DialogV2 } = foundry.applications.api;
 
 export const GRAPPLE_TARGET_FLAG = "grappleTargetTokenId";
 export const GRAPPLE_GRAPPLER_FLAG = "grappleGrapplerTokenId";
 export const GRAPPLE_ACTION_POINT_COST = 4;
+
+const GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT = 1;
 
 const ACTIVE_ACTION_SOCKET = `system.${SYSTEM_ID}`;
 const ACTIVE_ACTION_SOCKET_SCOPE = "fallout-maw.activeActions";
@@ -45,6 +50,14 @@ export function getGrappleTargetId(tokenOrDocument) {
 
 export function getGrapplerId(tokenOrDocument) {
   return String(getTokenDocument(tokenOrDocument)?.getFlag?.(SYSTEM_ID, GRAPPLE_GRAPPLER_FLAG) ?? "");
+}
+
+export function isActorGrappled(actor) {
+  if (!actor) return false;
+  if (actor.statuses?.has?.("grappled")) return true;
+  return (actor.effects ?? []).some(effect => (
+    !effect.disabled && effect.getFlag?.(SYSTEM_ID, GRAPPLE_EFFECT_FLAG)
+  ));
 }
 
 export function appendGrappleFollowMovement(updates, movement, grapplerTokenOrDocument, grapplerPath = [], options = {}) {
@@ -1483,7 +1496,15 @@ async function syncGrappleEffect(actor, active = false, grapplerDocument = null)
         }
       }
     },
-    system: { changes: [] }
+    system: {
+      changes: [{
+        key: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+        type: "add",
+        value: String(GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT),
+        phase: "initial",
+        priority: null
+      }]
+    }
   };
   if (existing) {
     const { type: _type, ...updateData } = data;

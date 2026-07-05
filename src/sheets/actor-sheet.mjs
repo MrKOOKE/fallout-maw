@@ -44,6 +44,8 @@ import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
@@ -6488,6 +6490,8 @@ function buildEffectPathLabelMap({
   map.set(ALL_SKILLS_BONUS_EFFECT_KEY, "Все навыки");
   map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, "Преимущество: все навыки");
   map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, "Помеха: все навыки");
+  map.set(ALL_COMBAT_ADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllAdvantage"));
+  map.set(ALL_COMBAT_DISADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllDisadvantage"));
   map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, "Расход энергии на способность");
   map.set(ONE_TIME_SKILL_MODIFIER_EFFECT_KEY, "Следующая проверка выбранного навыка");
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess, "Подтасовка: критический успех");

@@ -13,6 +13,8 @@ const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
 export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
 export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
+export const ALL_COMBAT_ADVANTAGE_EFFECT_KEY = "system.combat.all.advantage";
+export const ALL_COMBAT_DISADVANTAGE_EFFECT_KEY = "system.combat.all.disadvantage";
 export const INITIATIVE_ADVANTAGE_EFFECT_KEY = "system.attributes.initiative.advantage";
 export const INITIATIVE_DISADVANTAGE_EFFECT_KEY = "system.attributes.initiative.disadvantage";
 export const ALL_LIMB_MAX_BONUS_EFFECT_KEY = "system.limbs.all.maxBonus";
@@ -192,6 +194,35 @@ export function getActorSmartFudgeResult(actor, { requester = "", check = null }
 export function getSmartFudgeResultForEffectKey(key = "") {
   const path = String(key ?? "").trim();
   return SMART_FUDGE_RESULT_ORDER.find(result => SMART_FUDGE_RESULT_EFFECT_KEYS[result] === path) ?? "";
+}
+
+export function getCombatAttackAdvantageEffectKey(actionKey = "") {
+  const key = String(actionKey ?? "").trim();
+  return key ? `system.combat.actions.${key}.advantage` : "";
+}
+
+export function getCombatAttackDisadvantageEffectKey(actionKey = "") {
+  const key = String(actionKey ?? "").trim();
+  return key ? `system.combat.actions.${key}.disadvantage` : "";
+}
+
+export function getActorCombatAttackEdgeCount(actor, weaponActionKey = "", kind = "disadvantage") {
+  const actionKey = String(weaponActionKey ?? "").trim();
+  if (!actionKey) return 0;
+  const specificKey = kind === "advantage"
+    ? getCombatAttackAdvantageEffectKey(actionKey)
+    : getCombatAttackDisadvantageEffectKey(actionKey);
+  const allKey = kind === "advantage" ? ALL_COMBAT_ADVANTAGE_EFFECT_KEY : ALL_COMBAT_DISADVANTAGE_EFFECT_KEY;
+  const acceptedKeys = new Set([specificKey, allKey]);
+  let total = 0;
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    for (const change of effect?.system?.changes ?? []) {
+      if (!acceptedKeys.has(String(change?.key ?? "").trim())) continue;
+      total += Math.max(0, toInteger(evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 })));
+    }
+  }
+  return total;
 }
 
 function isAllOrNothingSmartFudgeApplicable(data = {}, check = null, effect = null) {

@@ -1,4 +1,5 @@
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
+import { ATTACKING_WEAPON_ACTION_KEYS } from "../abilities/runtime-state.mjs";
 import {
   DODGE_LOSS_MODIFIER_EFFECT_KEY,
   DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
@@ -8,6 +9,8 @@ import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
@@ -268,6 +271,48 @@ export function buildInitiativeDisadvantageEffectKeyToken() {
   });
 }
 
+export function buildAllCombatAdvantageEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allCombatAdvantage",
+    key: "allCombatAdvantage",
+    label: game.i18n.localize("FALLOUTMAW.Effects.CombatAllAdvantage"),
+    path: ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+  });
+}
+
+export function buildAllCombatDisadvantageEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allCombatDisadvantage",
+    key: "allCombatDisadvantage",
+    label: game.i18n.localize("FALLOUTMAW.Effects.CombatAllDisadvantage"),
+    path: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+  });
+}
+
+export function buildCombatAttackAdvantageEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.CombatGroup");
+  return getAttackingWeaponActionEntries().map(entry => createEffectKeyToken({
+    code: `${entry.key}:adv`,
+    key: `${entry.key}.advantage`,
+    label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatAdvantage")}: ${entry.label}`,
+    path: `system.combat.actions.${entry.key}.advantage`,
+    group
+  })).filter(Boolean);
+}
+
+export function buildCombatAttackDisadvantageEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.CombatGroup");
+  return getAttackingWeaponActionEntries().map(entry => createEffectKeyToken({
+    code: `${entry.key}:dis`,
+    key: `${entry.key}.disadvantage`,
+    label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatDisadvantage")}: ${entry.label}`,
+    path: `system.combat.actions.${entry.key}.disadvantage`,
+    group
+  })).filter(Boolean);
+}
+
 export function buildActionCostEffectKeyTokens() {
   return getWeaponActionCostEntries().map(entry => createEffectKeyToken({
     code: entry.code,
@@ -336,15 +381,20 @@ export function buildActionPenetrationEffectKeyTokens() {
 
 export function getWeaponActionCostEntries() {
   return [
-    { key: "aimedShot", code: "aimedShotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", "Прицельный выстрел")}: стоимость` },
-    { key: "snapshot", code: "snapshotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", "Выстрел на вскидку")}: стоимость` },
-    { key: "burst", code: "burstCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", "Очередь")}: стоимость` },
-    { key: "volley", code: "volleyCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп")}: стоимость` },
-    { key: "meleeAttack", code: "meleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака")}: стоимость` },
-    { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака")}: стоимость` },
-    { key: "push", code: "pushCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", "Толчок")}: стоимость` },
-    { key: "reload", code: "reloadCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка")}: стоимость` }
+    { key: "aimedShot", code: "aimedShotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", "Прицельный выстрел")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", "Прицельный выстрел") },
+    { key: "snapshot", code: "snapshotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", "Выстрел на вскидку")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", "Выстрел на вскидку") },
+    { key: "burst", code: "burstCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", "Очередь")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", "Очередь") },
+    { key: "volley", code: "volleyCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп") },
+    { key: "meleeAttack", code: "meleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака") },
+    { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака") },
+    { key: "push", code: "pushCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", "Толчок")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", "Толчок") },
+    { key: "reload", code: "reloadCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка")}: стоимость`, actionLabel: localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка") }
   ];
+}
+
+function getAttackingWeaponActionEntries() {
+  const attackingKeys = new Set(ATTACKING_WEAPON_ACTION_KEYS);
+  return getWeaponActionCostEntries().filter(entry => attackingKeys.has(entry.key));
 }
 
 function getPostureEffectKeyEntries() {
@@ -405,6 +455,10 @@ function buildAbilityRuntimeEffectKeyTokens() {
 
 export function buildCombatEffectKeyTokens() {
   return [
+    buildAllCombatAdvantageEffectKeyToken(),
+    buildAllCombatDisadvantageEffectKeyToken(),
+    ...buildCombatAttackAdvantageEffectKeyTokens(),
+    ...buildCombatAttackDisadvantageEffectKeyTokens(),
     createEffectKeyToken({
       code: "accuracy",
       key: "accuracy",

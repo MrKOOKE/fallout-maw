@@ -1,9 +1,10 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { isAttackingWeaponAction } from "../abilities/runtime-state.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
+import { getActorCombatAttackEdgeCount, getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -826,6 +827,14 @@ function createMutableCheck(actor, skill, data) {
     baseValue: skill.disadvantage,
     alternateKeys: ["system.skills.all.disadvantage"]
   });
+  const weaponActionKey = String(data.weaponActionKey ?? context.weaponActionKey ?? "").trim();
+  const isAttackingWeaponCheck = String(data.requester ?? "") === "weaponAttack" && isAttackingWeaponAction(weaponActionKey);
+  const combatAdvantage = isAttackingWeaponCheck
+    ? getActorCombatAttackEdgeCount(actor, weaponActionKey, "advantage")
+    : 0;
+  const combatDisadvantage = isAttackingWeaponCheck
+    ? getActorCombatAttackEdgeCount(actor, weaponActionKey, "disadvantage")
+    : 0;
   return {
     actor,
     skill: { ...skill, value: toInteger(skillValue) },
@@ -833,8 +842,12 @@ function createMutableCheck(actor, skill, data) {
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus),
     criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus),
-    advantageCount: Math.max(0, toInteger(data.advantageCount)) + Math.max(0, toInteger(skillAdvantage)),
-    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)) + Math.max(0, toInteger(skillDisadvantage)),
+    advantageCount: Math.max(0, toInteger(data.advantageCount))
+      + Math.max(0, toInteger(skillAdvantage))
+      + Math.max(0, toInteger(combatAdvantage)),
+    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount))
+      + Math.max(0, toInteger(skillDisadvantage))
+      + Math.max(0, toInteger(combatDisadvantage)),
     forcedResult: "",
     smartFudgeResult: String(data.smartFudgeResult ?? ""),
     requester: String(data.requester ?? ""),
