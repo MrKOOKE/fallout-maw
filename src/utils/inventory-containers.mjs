@@ -405,6 +405,74 @@ export function getContainerDimensions(itemOrSystem = null) {
   };
 }
 
+export function normalizeContainerSpecialGridBlock(block = null) {
+  const width = Math.max(1, toInteger(block?.width) || 1);
+  const height = Math.max(1, toInteger(block?.height) || 1);
+  const x = Number(block?.x);
+  const y = Number(block?.y);
+  return {
+    id: String(block?.id || foundry.utils.randomID()),
+    x: snapContainerSpecialGridCoordinate(x, width),
+    y: snapContainerSpecialGridCoordinate(y, height),
+    width,
+    height
+  };
+}
+
+function snapContainerSpecialGridCoordinate(value, size = 1) {
+  const number = Number(value);
+  const offset = (Math.max(1, toInteger(size) || 1) - 1) / 2;
+  return (Number.isFinite(number) ? Math.round(number - offset) : 0) + offset;
+}
+
+export function getContainerSpecialGridBlocks(itemOrSystem = null) {
+  const blocks = getItemSystem(itemOrSystem)?.functions?.container?.specialGrids?.blocks;
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .map(normalizeContainerSpecialGridBlock)
+    .filter(block => block.width > 0 && block.height > 0);
+}
+
+export function getContainerInventoryGridOptions(itemOrSystem = null) {
+  const dimensions = getContainerDimensions(itemOrSystem);
+  const extraBlocks = getContainerSpecialGridBlocks(itemOrSystem);
+  if (!extraBlocks.length) return { ...dimensions };
+
+  const baseZone = {
+    id: "base",
+    x: 1,
+    y: 1,
+    width: dimensions.columns,
+    height: dimensions.rows,
+    base: true
+  };
+  const baseLeft = -(dimensions.columns / 2);
+  const baseTop = -(dimensions.rows / 2);
+  const zones = [
+    baseZone,
+    ...extraBlocks
+      .map(block => ({
+        id: block.id,
+        x: Math.floor((block.x - (block.width / 2)) - baseLeft) + 1,
+        y: Math.floor((block.y - (block.height / 2)) - baseTop) + 1,
+        width: block.width,
+        height: block.height,
+        base: false
+      }))
+      .filter(zone => zone.x >= 1 && zone.y >= 1)
+  ];
+
+  const columns = zones.reduce((max, zone) => Math.max(max, zone.x + zone.width - 1), dimensions.columns);
+  const rows = zones.reduce((max, zone) => Math.max(max, zone.y + zone.height - 1), dimensions.rows);
+  return {
+    columns,
+    rows,
+    baseColumns: dimensions.columns,
+    baseRows: dimensions.rows,
+    zones
+  };
+}
+
 export function getContainerMaxLoad(itemOrSystem = null) {
   return Math.max(0, Number(getItemSystem(itemOrSystem)?.container?.maxLoad) || 0);
 }
@@ -634,13 +702,26 @@ export function createStoredPlacement(placement = {}, itemOrSystem = null) {
   };
 }
 
-export function isInventoryPlacementWithinBounds(placement, columns, rows, { allowOverflowRows = false } = {}) {
+export function isInventoryPlacementWithinBounds(placement, columns, rows, { allowOverflowRows = false, zones = [] } = {}) {
   if (!placement) return false;
-  return (
+  const withinRect = (
     placement.x >= 1
     && placement.y >= 1
     && (placement.x + placement.width - 1) <= columns
     && (allowOverflowRows || (placement.y + placement.height - 1) <= rows)
+  );
+  if (!withinRect) return false;
+  if (allowOverflowRows || !Array.isArray(zones) || !zones.length) return true;
+  return zones.some(zone => placementFitsInventoryZone(placement, zone));
+}
+
+function placementFitsInventoryZone(placement, zone) {
+  if (!placement || !zone) return false;
+  return (
+    placement.x >= zone.x
+    && placement.y >= zone.y
+    && (placement.x + placement.width - 1) <= (zone.x + zone.width - 1)
+    && (placement.y + placement.height - 1) <= (zone.y + zone.height - 1)
   );
 }
 
@@ -742,6 +823,7 @@ export function createInventoryHoverPlacementChecker(
     rows,
     String(options.placementMode ?? ""),
     Boolean(options.allowOverflowRows),
+    getInventoryZoneCacheKey(options.zones),
     excluded.size ? [...excluded].sort().join(",") : "",
     getItemsArray(contextItems).length
   ].join("|");
@@ -847,6 +929,13 @@ export function buildInventoryGridStyle(columns, rows, { baseColumns = columns, 
   ].join(" ");
 }
 
+export function buildInventoryGridZoneStyle(zone = {}) {
+  return [
+    `grid-column: ${Math.max(1, toInteger(zone.x) || 1)} / span ${Math.max(1, toInteger(zone.width) || 1)};`,
+    `grid-row: ${Math.max(1, toInteger(zone.y) || 1)} / span ${Math.max(1, toInteger(zone.height) || 1)};`
+  ].join(" ");
+}
+
 function buildInventorySpanLengthStyle(span) {
   span = Math.max(1, toInteger(span) || 1);
   const cells = Array.from({ length: span }, () => "var(--fallout-maw-inventory-cell-size)");
@@ -858,6 +947,9 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
   const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options);
   const reservedPlacements = resolved.placements;
   const placedItems = [];
+  const zones = prepareInventoryGridZones(options.zones);
+  const baseColumns = Math.max(1, toInteger(options.baseColumns) || columns);
+  const baseRows = Math.max(1, toInteger(options.baseRows) || rows);
 
   for (const entry of resolved.items) {
     placedItems.push({
@@ -886,13 +978,42 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
   return {
     columns: resolved.columns,
     rows: resolved.rows,
-    baseColumns: columns,
-    baseRows: rows,
-    style: buildInventoryGridStyle(resolved.columns, resolved.rows, { baseColumns: columns, baseRows: rows }),
+    baseColumns,
+    baseRows,
+    style: buildInventoryGridStyle(resolved.columns, resolved.rows, { baseColumns, baseRows }),
+    hasZones: zones.length > 0,
+    zones,
     hasPhantomItems: resolved.items.some(item => item.phantom),
     cells,
     items: placedItems
   };
+}
+
+function prepareInventoryGridZones(zones = []) {
+  if (!Array.isArray(zones) || !zones.length) return [];
+  return zones.map(zone => ({
+    id: String(zone.id ?? ""),
+    x: Math.max(1, toInteger(zone.x) || 1),
+    y: Math.max(1, toInteger(zone.y) || 1),
+    width: Math.max(1, toInteger(zone.width) || 1),
+    height: Math.max(1, toInteger(zone.height) || 1),
+    base: Boolean(zone.base),
+    style: buildInventoryGridZoneStyle(zone)
+  }));
+}
+
+function getInventoryZoneCacheKey(zones = []) {
+  if (!Array.isArray(zones) || !zones.length) return "";
+  return zones
+    .map(zone => [
+      String(zone.id ?? ""),
+      toInteger(zone.x),
+      toInteger(zone.y),
+      toInteger(zone.width),
+      toInteger(zone.height),
+      Boolean(zone.base) ? 1 : 0
+    ].join(":"))
+    .join(",");
 }
 
 function createOccupiedInventoryCellSet(placements = []) {
@@ -963,9 +1084,9 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
 
   for (const container of itemsArray) {
     if (!isContainerItem(container)) continue;
-    const { columns, rows } = getContainerDimensions(container);
+    const gridOptions = getContainerInventoryGridOptions(container);
     const contents = contextItemsByParent.get(container.id) ?? [];
-    if (!validateContextPlacements(contents, columns, rows, itemsArray)) {
+    if (!validateContextPlacements(contents, gridOptions.columns, gridOptions.rows, itemsArray, gridOptions)) {
       return { valid: false, reason: "no-space", parentId: container.id, itemId: container.id };
     }
 

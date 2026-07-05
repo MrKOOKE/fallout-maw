@@ -5,7 +5,7 @@ import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContextInventoryItems,
   getItemContainerParentId,
   isContainerItem,
@@ -521,15 +521,20 @@ function findFirstActorDropPlacement(actor, itemData) {
     {
       parentId: ROOT_CONTAINER_ID,
       items: getContextInventoryItems(ROOT_CONTAINER_ID, allItems),
-      dimensions: rootDimensions
+      dimensions: rootDimensions,
+      options: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
     },
     ...allItems
       .filter(candidate => isContainerItem(candidate) && !getItemContainerParentId(candidate) && candidate.system?.equipped)
-      .map(container => ({
-        parentId: container.id,
-        items: getContextInventoryItems(container.id, allItems),
-        dimensions: getContainerDimensions(container)
-      }))
+      .map(container => {
+        const dimensions = getContainerInventoryGridOptions(container);
+        return {
+          parentId: container.id,
+          items: getContextInventoryItems(container.id, allItems),
+          dimensions,
+          options: dimensions
+        };
+      })
   ];
 
   for (const context of contexts) {
@@ -541,7 +546,7 @@ function findFirstActorDropPlacement(actor, itemData) {
       allItems,
       [],
       [],
-      getActorRootInventoryGridOptions(actor, context.parentId)
+      context.options
     );
     if (!placement) continue;
 

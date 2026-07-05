@@ -80,7 +80,7 @@ import {
   createItemStackPartAdditionUpdate,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContextInventoryItems,
   getItemContainerParentId,
   getItemMaxStack,
@@ -614,15 +614,20 @@ function getActorDropInventoryContexts(actor) {
     {
       parentId: ROOT_CONTAINER_ID,
       items: getContextInventoryItems(ROOT_CONTAINER_ID, allItems),
-      dimensions: rootDimensions
+      dimensions: rootDimensions,
+      options: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
     },
     ...allItems
       .filter(candidate => isContainerItem(candidate) && !getItemContainerParentId(candidate) && candidate.system?.equipped)
-      .map(container => ({
-        parentId: container.id,
-        items: getContextInventoryItems(container.id, allItems),
-        dimensions: getContainerDimensions(container)
-      }))
+      .map(container => {
+        const dimensions = getContainerInventoryGridOptions(container);
+        return {
+          parentId: container.id,
+          items: getContextInventoryItems(container.id, allItems),
+          dimensions,
+          options: dimensions
+        };
+      })
   ];
 }
 
@@ -639,7 +644,7 @@ function findFirstActorDropPlacement(actor, itemData, reservedPlacements = new M
       allItems,
       [],
       reservedPlacements.get(context.parentId) ?? [],
-      getActorRootInventoryGridOptions(actor, context.parentId)
+      context.options
     );
     if (!placement) continue;
 

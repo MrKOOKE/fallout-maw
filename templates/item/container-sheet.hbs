@@ -14,7 +14,10 @@
 
   <section class="fallout-maw-panel fallout-maw-container-panel" data-container-drop-surface data-container-id="{{item.id}}" data-drop-zone>
     <h2>{{localize "FALLOUTMAW.Item.FunctionContainer"}}</h2>
-    <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid style="{{grid.style}}">
+    <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid style="{{grid.style}}">
+      {{#each grid.zones}}
+      <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
+      {{/each}}
       {{#each grid.items}}
       <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
         <img src="{{img}}" alt="{{name}}">

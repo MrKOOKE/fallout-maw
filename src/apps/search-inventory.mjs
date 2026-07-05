@@ -31,7 +31,7 @@ import {
   getAllContainedItems,
   getContainerContentsWeight,
   getContextInventoryItems,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getItemActorLoadWeight,
   getItemContainerParentId,
@@ -7696,6 +7696,7 @@ function getActorInventoryContextOptions(actor, parentId = ROOT_CONTAINER_ID) {
       preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
     };
   }
+  if (parentId) return getContainerInventoryGridOptions(actor.items?.get(parentId));
   return getActorRootInventoryGridOptions(actor, parentId);
 }
 
@@ -8047,7 +8048,7 @@ function getActorInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID)
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
     return getActorInventoryGridDimensions(actor, race);
   }
-  if (parentId) return getContainerDimensions(actor.items?.get(parentId));
+  if (parentId) return getContainerInventoryGridOptions(actor.items?.get(parentId));
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
   return getActorInventoryGridDimensions(actor, race);
 }

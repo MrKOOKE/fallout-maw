@@ -235,7 +235,10 @@
       {{#if grid.items.length}}
       <section class="fallout-maw-panel fallout-maw-butchering-storage-section">
         <h2>Разделка</h2>
-        <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
+        <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
+          {{#each grid.zones}}
+          <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
+          {{/each}}
           {{#each grid.items}}
           <article class="fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
             <img src="{{img}}" alt="{{name}}">
@@ -258,7 +261,10 @@
           {{/if}}
         </div>
         <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll" data-scroll-key="inventory">
-          <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="" style="{{inventory.grid.style}}">
+          <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if inventory.grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="" style="{{inventory.grid.style}}">
+            {{#each inventory.grid.zones}}
+            <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
+            {{/each}}
             {{#each inventory.grid.items}}
             <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
               <img src="{{img}}" alt="{{name}}">
@@ -281,7 +287,10 @@
                 </div>
               </div>
             </div>
-            <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
+            <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
+              {{#each grid.zones}}
+              <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
+              {{/each}}
               {{#each grid.items}}
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                 <img src="{{img}}" alt="{{name}}">
@@ -301,7 +310,10 @@
                 <strong class="fallout-maw-container-overview-name">{{localize "FALLOUTMAW.Common.Locked"}}</strong>
               </div>
             </div>
-            <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
+            <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}} {{#if grid.hasZones}}has-zones{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
+              {{#each grid.zones}}
+              <div class="fallout-maw-inventory-grid-zone {{#if base}}base{{/if}}" style="{{style}}"></div>
+              {{/each}}
               {{#each grid.items}}
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item locked {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-stack-index="{{stackIndex}}" data-stack-quantity="{{stackQuantity}}" data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                 <img src="{{img}}" alt="{{name}}">

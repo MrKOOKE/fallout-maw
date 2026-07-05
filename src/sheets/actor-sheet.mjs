@@ -129,7 +129,7 @@ import {
   createInventoryHoverPlacementChecker,
   findFirstAvailableInventoryPlacement as findFirstAvailableInventoryPlacementHelper,
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getContextInventoryItems,
   getItemActorLoadWeight,
@@ -1972,7 +1972,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return getInventoryGridDimensions(this.#getCurrentRace(), this.actor);
     }
     if (parentId && (parentId !== ROOT_CONTAINER_ID)) {
-      return getContainerDimensions(this.actor.items.get(parentId));
+      return getContainerInventoryGridOptions(this.actor.items.get(parentId));
     }
     return getInventoryGridDimensions(this.#getCurrentRace(), this.actor);
   }
@@ -1985,6 +1985,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
         preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
       };
+    }
+    if (parentId && (parentId !== ROOT_CONTAINER_ID)) {
+      return getContainerInventoryGridOptions(this.actor.items.get(parentId));
     }
     return getActorRootInventoryGridOptions(this.actor, parentId);
   }
@@ -6266,17 +6269,17 @@ function prepareInventoryContext(actor, race) {
     .filter(item => item.isContainer && item.equipped)
     .map(item => {
       const containerDocument = actor.items.get(item.id);
-      const dimensions = getContainerDimensions(containerDocument);
+      const gridOptions = getContainerInventoryGridOptions(containerDocument);
       const contents = getContextInventoryItems(item.id, allItems);
       const containerLoadValue = Math.max(0, Number(getContainerContentsWeight(containerDocument, allItems)) || 0);
       const containerLoadMax = Math.max(0, Number(getContainerMaxLoad(containerDocument)) || 0);
       const containerLoadRatio = containerLoadMax > 0 ? (containerLoadValue / containerLoadMax) : 0;
       return {
         ...item,
-        grid: prepareInventoryGridContext(contents, dimensions.columns, dimensions.rows, allItems, (childItem, placement) => ({
+        grid: prepareInventoryGridContext(contents, gridOptions.columns, gridOptions.rows, allItems, (childItem, placement) => ({
           ...createInventoryItemData(childItem, allItems, currencies, placement),
           gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
-        })),
+        }), gridOptions),
         load: {
           value: formatWeight(containerLoadValue),
           max: formatWeight(containerLoadMax),

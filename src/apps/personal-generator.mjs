@@ -23,7 +23,7 @@ import {
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getContextInventoryItems,
   getItemMaxStack,
@@ -1299,7 +1299,8 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
   const rootDimensions = getActorRootDimensions(actor);
   const projectedItems = Array.from(projectedMap.values());
   for (const parentId of getGeneratedItemParentCandidates(actor, projectedItems, itemData)) {
-    const dimensions = parentId ? getContainerDimensions(actor.items?.get(parentId)) : rootDimensions;
+    const dimensions = parentId ? getContainerInventoryGridOptions(actor.items?.get(parentId)) : rootDimensions;
+    const options = parentId ? dimensions : getActorRootInventoryGridOptions(actor, parentId);
     if (parentId && !canProjectedContainerAcceptWeight(projectedMap, parentId, itemData)) continue;
     const contextItems = getContextInventoryItems(parentId, projectedItems);
     if (usesVirtualInventoryStacks(itemData)) {
@@ -1311,7 +1312,7 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
         rows: dimensions.rows,
         allItems: projectedItems,
         reservedPlacements: reservedPlacements.get(parentId) ?? [],
-        options: getActorRootInventoryGridOptions(actor, parentId)
+        options
       });
       if (!stackParts?.length) continue;
       const placements = stackParts.map(part => createInventoryPlacement(part.x, part.y, itemData, projectedItems));
@@ -1341,7 +1342,7 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
       projectedItems,
       [],
       reservedPlacements.get(parentId) ?? [],
-      getActorRootInventoryGridOptions(actor, parentId)
+      options
     );
     if (!placement) continue;
     const createData = createInventoryItemDataForPlacement(itemData, { parentId, placement });

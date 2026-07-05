@@ -122,7 +122,7 @@ import {
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getItemContainerParentId,
   getItemMaxStack,
@@ -3112,12 +3112,12 @@ function getFirstAvailableHudInventoryPlacement(actor, itemData = null, excludeI
     actor.items,
     excludeItemIds,
     reservedPlacements,
-    getActorRootInventoryGridOptions(actor, parentId)
+    parentId ? dimensions : getActorRootInventoryGridOptions(actor, parentId)
   );
 }
 
 function getHudInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID) {
-  if (parentId) return getContainerDimensions(actor.items?.get(parentId));
+  if (parentId) return getContainerInventoryGridOptions(actor.items?.get(parentId));
   return getActorRootInventoryDimensions(actor);
 }
 

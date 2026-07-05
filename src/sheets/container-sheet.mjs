@@ -13,7 +13,7 @@ import {
   createInventoryPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getContextInventoryItems,
   getItemContainerParentId,
@@ -114,7 +114,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const actor = this.actor;
     const allItems = actor?.items?.contents ?? [];
     const actorInteractionToken = resolveActorInteractionToken(actor);
-    const dimensions = getContainerDimensions(this.item);
+    const dimensions = getContainerInventoryGridOptions(this.item);
     const grid = prepareInventoryGridContext(
       getContextInventoryItems(this.item.id, allItems),
       dimensions.columns,
@@ -123,7 +123,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       (item, placement) => ({
         ...createInventoryItemData(item, allItems, placement, { actor, token: actorInteractionToken }),
         gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
-      })
+      }),
+      dimensions
     );
 
     return foundry.utils.mergeObject(context, {
@@ -371,7 +372,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   #getFirstAvailableInventoryPlacement(itemData = null, excludeItemIds = [], reservedPlacements = []) {
-    const { columns, rows } = getContainerDimensions(this.item);
+    const { columns, rows } = getContainerInventoryGridOptions(this.item);
     return findFirstAvailableInventoryPlacement(
       getContextInventoryItems(this.item.id, this.actor.items),
       columns,
@@ -379,12 +380,13 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       itemData,
       this.actor.items,
       excludeItemIds,
-      reservedPlacements
+      reservedPlacements,
+      getContainerInventoryGridOptions(this.item)
     );
   }
 
   #isInventoryPlacementAvailable(placement, excludeItemIds = [], reservedPlacements = []) {
-    const { columns, rows } = getContainerDimensions(this.item);
+    const { columns, rows } = getContainerInventoryGridOptions(this.item);
     return isInventoryPlacementAvailable(
       placement,
       getContextInventoryItems(this.item.id, this.actor.items),
@@ -392,7 +394,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       rows,
       this.actor.items,
       excludeItemIds,
-      reservedPlacements
+      reservedPlacements,
+      getContainerInventoryGridOptions(this.item)
     );
   }
 
@@ -711,7 +714,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
     const excludedIds = [sourceOwned ? sourceItem?.id ?? "" : ""].filter(Boolean);
     const target = this.#getCompatibleVirtualStackTarget(itemData, targetItem, excludedIds);
-    const { columns, rows } = getContainerDimensions(this.item);
+    const { columns, rows } = getContainerInventoryGridOptions(this.item);
     const stackParts = createAnchoredItemStackPartsForQuantity({
       itemData,
       quantity,
@@ -720,7 +723,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       columns,
       rows,
       allItems: this.actor.items,
-      excludeItemIds: excludedIds
+      excludeItemIds: excludedIds,
+      options: getContainerInventoryGridOptions(this.item)
     });
     if (!stackParts) {
       this.#warnValidation({ reason: "no-space" });
@@ -958,7 +962,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   #resolveInventoryRotation(item) {
-    const { columns, rows } = getContainerDimensions(this.item);
+    const { columns, rows } = getContainerInventoryGridOptions(this.item);
     return resolveInventoryItemRotation({
       item,
       parentId: this.item.id,
@@ -966,7 +970,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       columns,
       rows,
       allItems: this.actor.items,
-      excludeItemIds: [item.id]
+      excludeItemIds: [item.id],
+      options: getContainerInventoryGridOptions(this.item)
     });
   }
 

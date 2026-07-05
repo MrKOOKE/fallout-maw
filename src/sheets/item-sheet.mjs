@@ -29,6 +29,10 @@ import {
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
+  getContainerSpecialGridBlocks,
+  normalizeContainerSpecialGridBlock
+} from "../utils/inventory-containers.mjs";
+import {
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
@@ -5239,24 +5243,6 @@ function createActorContainerSlotData() {
 function getContainerSpecialGridData(itemOrData = null) {
   const data = itemOrData?.system ?? itemOrData ?? {};
   return data.functions?.container?.specialGrids ?? {};
-}
-
-function getContainerSpecialGridBlocks(itemOrData = null) {
-  return Array.from(getContainerSpecialGridData(itemOrData)?.blocks ?? [])
-    .map(normalizeContainerSpecialGridBlock)
-    .filter(block => block.id);
-}
-
-function normalizeContainerSpecialGridBlock(block = {}) {
-  const width = Math.max(1, toInteger(block.width) || 1);
-  const height = Math.max(1, toInteger(block.height) || 1);
-  return {
-    id: String(block.id || foundry.utils.randomID()),
-    x: snapCraftGridCoordinate(block.x, width),
-    y: snapCraftGridCoordinate(block.y, height),
-    width,
-    height
-  };
 }
 
 function getContainerSpecialGridViewport(itemOrData = null) {

@@ -14,7 +14,7 @@ import {
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getContextInventoryItems,
   getItemContainerParentId,
@@ -322,8 +322,8 @@ function canFitItemWeightInParent(actor, itemData = null, parentId = ROOT_CONTAI
 
 function getFirstAvailableInventoryPlacement(actor, parentId = ROOT_CONTAINER_ID, itemData = null, excludeItemIds = [], reservedPlacements = []) {
   const race = getActorRace(actor);
-  const dimensions = parentId ? getContainerDimensions(actor.items.get(parentId)) : getActorInventoryGridDimensions(actor, race);
-  const options = parentId ? {} : getActorRootInventoryGridOptions(actor, parentId);
+  const dimensions = parentId ? getContainerInventoryGridOptions(actor.items.get(parentId)) : getActorInventoryGridDimensions(actor, race);
+  const options = parentId ? dimensions : getActorRootInventoryGridOptions(actor, parentId);
   return findFirstAvailableInventoryPlacement(
     getContextInventoryItems(parentId, actor.items),
     dimensions.columns,

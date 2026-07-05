@@ -47,7 +47,7 @@ import {
   createStoredPlacement,
   findFirstAvailableResolvedInventoryPlacement,
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getContextInventoryItems,
   getItemContainerParentId,
@@ -1665,7 +1665,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ? LOCKED_STORAGE_PARENT_ID
       : getItemContainerParentId(item);
     const dimensions = parentId && parentId !== LOCKED_STORAGE_PARENT_ID
-      ? getContainerDimensions(this.#actor.items.get(parentId))
+      ? getContainerInventoryGridOptions(this.#actor.items.get(parentId))
       : getActorInventoryGridDimensions(this.#actor, getActorRace(this.#actor));
     const options = parentId === LOCKED_STORAGE_PARENT_ID
       ? {
@@ -1674,7 +1674,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
         preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
       }
-      : getActorRootInventoryGridOptions(this.#actor, parentId);
+      : (parentId ? getContainerInventoryGridOptions(this.#actor.items.get(parentId)) : getActorRootInventoryGridOptions(this.#actor, parentId));
     return resolveInventoryItemRotation({
       item,
       parentId,
@@ -2638,7 +2638,7 @@ function findCraftOutputTarget(actor, itemData, planningItems = []) {
       planningItems,
       [],
       [],
-      getActorRootInventoryGridOptions(actor, context.parentId)
+      context.options
     );
     if (placement) return { parentId: context.parentId, placement };
   }
@@ -2653,16 +2653,19 @@ function getCraftOutputContexts(actor, planningItems = []) {
     dimensions: {
       columns: Math.max(1, toInteger(inventorySize.columns)),
       rows: Math.max(1, toInteger(inventorySize.rows))
-    }
+    },
+    options: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
   }];
 
   for (const item of planningItems) {
     if (!isContainerItem(item) || !item.system?.equipped) continue;
     const containerId = getItemId(item);
     if (!containerId) continue;
+    const gridOptions = getContainerInventoryGridOptions(item);
     contexts.push({
       parentId: containerId,
-      dimensions: getContainerDimensions(item)
+      dimensions: gridOptions,
+      options: gridOptions
     });
   }
   return contexts;
@@ -4940,7 +4943,7 @@ function getCraftInventoryDimensions(actor, parentId = ROOT_CONTAINER_ID) {
   }
   if (parentId) {
     const container = actor?.items?.get(parentId);
-    if (container) return getContainerDimensions(container);
+    if (container) return getContainerInventoryGridOptions(container);
   }
   const race = getActorRace(actor);
   const inventorySize = race?.inventorySize ?? createDefaultInventorySize();

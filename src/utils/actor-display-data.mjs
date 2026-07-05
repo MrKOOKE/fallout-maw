@@ -10,7 +10,7 @@ import {
 import { getLimbHealingCap } from "../combat/damage-hub.mjs";
 import {
   getContainerContentsWeight,
-  getContainerDimensions,
+  getContainerInventoryGridOptions,
   getContainerMaxLoad,
   getItemContainerParentId,
   getItemFootprint,
@@ -295,17 +295,17 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     .filter(item => item.isContainer && item.equipped)
     .map(item => {
       const containerDocument = actor.items.get(item.id);
-      const dimensions = getContainerDimensions(containerDocument);
+      const gridOptions = getContainerInventoryGridOptions(containerDocument);
       const contents = actor.items.contents.filter(child => getItemContainerParentId(child) === item.id);
       const containerLoadValue = Math.max(0, Number(getContainerContentsWeight(containerDocument, allItems)) || 0);
       const containerLoadMax = Math.max(0, Number(getContainerMaxLoad(containerDocument)) || 0);
       const containerLoadRatio = containerLoadMax > 0 ? (containerLoadValue / containerLoadMax) : 0;
       return {
         ...item,
-        grid: prepareInventoryGridContext(contents, dimensions.columns, dimensions.rows, allItems, (childItem, placement) => ({
+        grid: prepareInventoryGridContext(contents, gridOptions.columns, gridOptions.rows, allItems, (childItem, placement) => ({
           ...createInventoryItemData(childItem, allItems, currencies, placement, itemDisplayOptions),
           gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
-        })),
+        }), gridOptions),
         load: {
           value: formatWeight(containerLoadValue),
           max: formatWeight(containerLoadMax),
