@@ -29,8 +29,12 @@ import {
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
+  computeContainerSpecialGridBaseAnchorSeed,
+  finalizeContainerSpecialGridBlock,
+  getContainerDimensions,
+  getContainerSpecialGridBaseAnchor,
   getContainerSpecialGridBlocks,
-  normalizeContainerSpecialGridBlock
+  hasPersistedContainerSpecialGridBaseAnchor
 } from "../utils/inventory-containers.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -3236,6 +3240,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.container.loadReduction": 0,
         "system.functions.container.extraWeaponSlots": 0,
         "system.functions.container.specialGrids.blocks": [],
+        "system.functions.container.specialGrids.baseAnchor": null,
         "system.functions.container.specialGrids.viewport": { x: 0, y: 0, zoom: 1 }
       });
     }
@@ -4777,6 +4782,7 @@ class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(Applica
 
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
+    await this.#ensureBaseAnchorPersisted();
     this.#hookIds = [
       ["updateItem", Hooks.on("updateItem", item => {
         if (item?.uuid !== this.#itemUuid) return;
@@ -4839,7 +4845,7 @@ class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(Applica
     this.#formWidth = Math.max(1, toInteger(widthInput?.value) || 1);
     this.#formHeight = Math.max(1, toInteger(heightInput?.value) || 1);
     const blocks = getContainerSpecialGridBlocks(this.item);
-    const block = normalizeContainerSpecialGridBlock({
+    const block = finalizeContainerSpecialGridBlock({
       id: foundry.utils.randomID(),
       width: this.#formWidth,
       height: this.#formHeight,
@@ -4847,7 +4853,7 @@ class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(Applica
       y: 0
     });
     const position = findNearestFreeCraftNodePosition(block, getContainerSpecialGridBlockers(this.item));
-    blocks.push({ ...block, ...position });
+    blocks.push(finalizeContainerSpecialGridBlock({ ...block, ...position }));
     this.#selection = null;
     return this.#updateSpecialGrids({ blocks });
   }
@@ -5036,28 +5042,19 @@ class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(Applica
     if (!id) return undefined;
     const width = Math.max(1, toInteger(widthInput?.value) || 1);
     const height = Math.max(1, toInteger(heightInput?.value) || 1);
+    const result = resolveContainerSpecialGridSizeChange(this.item, id, width, height);
+    if (!result) return undefined;
 
-    if (id === "__base__") {
-      const baseBlock = normalizeContainerSpecialGridBlock({ ...getContainerSpecialGridBaseBlock(this.item), width, height });
-      const blocks = resolveContainerSpecialGridBlockLayout(getContainerSpecialGridBlocks(this.item), baseBlock);
+    if (result.base) {
       return this.item?.update({
-        "system.container.columns": width,
-        "system.container.rows": height,
-        "system.functions.container.specialGrids.blocks": blocks
+        "system.container.columns": result.base.columns,
+        "system.container.rows": result.base.rows,
+        "system.functions.container.specialGrids.blocks": result.blocks,
+        "system.functions.container.specialGrids.baseAnchor": result.baseAnchor
       });
     }
 
-    const blocks = getContainerSpecialGridBlocks(this.item);
-    const nextBlocks = blocks.map(block => (
-      block.id === id
-        ? normalizeContainerSpecialGridBlock({ ...block, width, height })
-        : block
-    ));
-    const target = nextBlocks.find(block => block.id === id);
-    if (!target) return undefined;
-    const position = findNearestFreeCraftNodePosition(target, getContainerSpecialGridBlockers(this.item, { excludeBlockIds: new Set([id]) }));
-    const placedBlocks = nextBlocks.map(block => block.id === id ? { ...block, ...position } : block);
-    return this.#updateSpecialGrids({ blocks: placedBlocks });
+    return this.#updateSpecialGrids({ blocks: result.blocks });
   }
 
   #getViewport() {
@@ -5154,10 +5151,17 @@ class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(Applica
 
   #updateSpecialGrids({ blocks = null, viewport = null } = {}) {
     const updateData = {};
-    if (blocks) updateData["system.functions.container.specialGrids.blocks"] = blocks.map(normalizeContainerSpecialGridBlock);
+    if (blocks) updateData["system.functions.container.specialGrids.blocks"] = blocks.map(finalizeContainerSpecialGridBlock);
     if (viewport) updateData["system.functions.container.specialGrids.viewport"] = normalizeCraftViewport(viewport);
     if (!Object.keys(updateData).length) return undefined;
     return this.item?.update(updateData);
+  }
+
+  async #ensureBaseAnchorPersisted() {
+    const item = this.item;
+    if (!item || hasPersistedContainerSpecialGridBaseAnchor(item)) return;
+    const anchor = computeContainerSpecialGridBaseAnchorSeed(getContainerDimensions(item));
+    await item.update({ "system.functions.container.specialGrids.baseAnchor": anchor });
   }
 }
 
@@ -5251,12 +5255,15 @@ function getContainerSpecialGridViewport(itemOrData = null) {
 
 function getContainerSpecialGridBaseBlock(itemOrData = null) {
   const data = itemOrData?.system ?? itemOrData ?? {};
-  return normalizeContainerSpecialGridBlock({
+  const width = Math.max(1, toInteger(data.container?.columns) || 1);
+  const height = Math.max(1, toInteger(data.container?.rows) || 1);
+  const anchor = getContainerSpecialGridBaseAnchor(itemOrData);
+  return finalizeContainerSpecialGridBlock({
     id: "__base__",
-    x: 0,
-    y: 0,
-    width: Math.max(1, toInteger(data.container?.columns) || 1),
-    height: Math.max(1, toInteger(data.container?.rows) || 1)
+    x: anchor.left + (width / 2),
+    y: anchor.top + (height / 2),
+    width,
+    height
   });
 }
 
@@ -5274,16 +5281,207 @@ function getContainerSpecialGridBlockers(itemOrData = null, { excludeBlockIds = 
     .map(craftNodeToBounds);
 }
 
-function resolveContainerSpecialGridBlockLayout(blocks = [], baseBlock = null) {
-  const placed = [];
-  const blockers = baseBlock ? [craftNodeToBounds(baseBlock)] : [];
-  for (const block of blocks.map(normalizeContainerSpecialGridBlock)) {
-    const position = findNearestFreeCraftNodePosition(block, blockers);
-    const placedBlock = { ...block, ...position };
-    placed.push(placedBlock);
-    blockers.push(craftNodeToBounds(placedBlock));
+function resizeContainerSpecialGridBlockFromTopLeft(block = {}, width, height) {
+  const oldWidth = Math.max(1, toInteger(block.width) || 1);
+  const oldHeight = Math.max(1, toInteger(block.height) || 1);
+  const centerX = Number(block.x) || 0;
+  const centerY = Number(block.y) || 0;
+  const left = centerX - (oldWidth / 2);
+  const top = centerY - (oldHeight / 2);
+  const nextWidth = Math.max(1, toInteger(width) || 1);
+  const nextHeight = Math.max(1, toInteger(height) || 1);
+  return finalizeContainerSpecialGridBlock({
+    ...block,
+    id: String(block?.id ?? ""),
+    x: left + (nextWidth / 2),
+    y: top + (nextHeight / 2),
+    width: nextWidth,
+    height: nextHeight
+  });
+}
+
+function getContainerSpecialGridPushDelta(bounds, blockers = []) {
+  let dx = 0;
+  let dy = 0;
+  for (const blocker of blockers) {
+    if (!craftBoundsOverlap(bounds, blocker)) continue;
+    const pushDown = blocker.bottom - bounds.top;
+    const pushRight = blocker.right - bounds.left;
+    if (pushDown > 0) dy = Math.max(dy, pushDown);
+    if (pushRight > 0) dx = Math.max(dx, pushRight);
   }
-  return placed;
+  return { dx, dy };
+}
+
+function getContainerSpecialGridExpansion(oldBounds, newBounds) {
+  return {
+    grewRight: newBounds.right > oldBounds.right,
+    grewBottom: newBounds.bottom > oldBounds.bottom,
+    grewTop: newBounds.top < oldBounds.top,
+    grewLeft: newBounds.left < oldBounds.left,
+    oldBounds,
+    newBounds
+  };
+}
+
+function hasContainerSpecialGridExpansion(expansion) {
+  return Boolean(expansion?.grewRight || expansion?.grewBottom || expansion?.grewTop || expansion?.grewLeft);
+}
+
+function blockOverlapsContainerSpecialGridExpansion(bounds, expansion) {
+  const { oldBounds, newBounds } = expansion;
+  if (!hasContainerSpecialGridExpansion(expansion)) return false;
+  if (expansion.grewBottom && newBounds.bottom > oldBounds.bottom) {
+    const overlapsBottomStrip = bounds.top < newBounds.bottom
+      && bounds.bottom > oldBounds.bottom
+      && bounds.left < newBounds.right
+      && bounds.right > newBounds.left;
+    if (overlapsBottomStrip) return true;
+  }
+  if (expansion.grewTop && newBounds.top < oldBounds.top) {
+    const overlapsTopStrip = bounds.bottom > newBounds.top
+      && bounds.top < oldBounds.top
+      && bounds.left < newBounds.right
+      && bounds.right > newBounds.left;
+    if (overlapsTopStrip) return true;
+  }
+  if (expansion.grewRight && newBounds.right > oldBounds.right) {
+    const overlapsRightStrip = bounds.left < newBounds.right
+      && bounds.right > oldBounds.right
+      && bounds.top < newBounds.bottom
+      && bounds.bottom > newBounds.top;
+    if (overlapsRightStrip) return true;
+  }
+  if (expansion.grewLeft && newBounds.left < oldBounds.left) {
+    const overlapsLeftStrip = bounds.right > newBounds.left
+      && bounds.left < oldBounds.left
+      && bounds.top < newBounds.bottom
+      && bounds.bottom > newBounds.top;
+    if (overlapsLeftStrip) return true;
+  }
+  return false;
+}
+
+function getContainerSpecialGridExpansionPushDelta(bounds, expansion) {
+  const { oldBounds, newBounds } = expansion;
+  let dx = 0;
+  let dy = 0;
+  if (!blockOverlapsContainerSpecialGridExpansion(bounds, expansion)) return { dx, dy };
+  if (expansion.grewBottom && bounds.top < newBounds.bottom) {
+    dy = Math.max(dy, newBounds.bottom - bounds.top);
+  }
+  if (expansion.grewTop && bounds.bottom > newBounds.top) {
+    dy = Math.min(dy, oldBounds.top - bounds.bottom);
+  }
+  if (expansion.grewRight && bounds.left < newBounds.right) {
+    dx = Math.max(dx, newBounds.right - bounds.left);
+  }
+  if (expansion.grewLeft && bounds.right > newBounds.left) {
+    dx = Math.min(dx, oldBounds.left - bounds.right);
+  }
+  return { dx, dy };
+}
+
+function getContainerSpecialGridResizePushDelta(nodeBounds, nodeId, blocks, fixedId, expansion) {
+  let dx = 0;
+  let dy = 0;
+  for (const other of blocks) {
+    if (other.id === nodeId) continue;
+    const otherBounds = craftNodeToBounds(other);
+    if (!craftBoundsOverlap(nodeBounds, otherBounds)) continue;
+    if (other.id === fixedId) {
+      const delta = getContainerSpecialGridExpansionPushDelta(nodeBounds, expansion);
+      dx = Math.max(dx, delta.dx);
+      dy = Math.max(dy, delta.dy);
+      continue;
+    }
+    const pushDown = otherBounds.bottom - nodeBounds.top;
+    const pushRight = otherBounds.right - nodeBounds.left;
+    if (pushDown > 0) dy = Math.max(dy, pushDown);
+    if (pushRight > 0) dx = Math.max(dx, pushRight);
+  }
+  return { dx, dy };
+}
+
+function resolveContainerSpecialGridPushLayout(nodes = [], fixedId = null, oldFixedBounds = null) {
+  let blocks = nodes.map(node => ({ ...node }));
+  const movableIds = new Set(
+    fixedId === "__base__"
+      ? blocks.filter(node => node.id !== "__base__").map(node => node.id)
+      : blocks.filter(node => node.id !== fixedId && node.id !== "__base__").map(node => node.id)
+  );
+  const fixed = blocks.find(node => node.id === fixedId);
+  const expansion = fixed && oldFixedBounds
+    ? getContainerSpecialGridExpansion(oldFixedBounds, craftNodeToBounds(fixed))
+    : null;
+
+  if (!expansion || !hasContainerSpecialGridExpansion(expansion)) {
+    return blocks;
+  }
+
+  const pushMovableBlocks = () => {
+    let changed = false;
+    const movable = blocks
+      .filter(node => movableIds.has(node.id))
+      .sort((a, b) => (a.y - b.y) || (a.x - b.x) || String(a.id).localeCompare(String(b.id)));
+    for (const node of movable) {
+      const nodeBounds = craftNodeToBounds(node);
+      if (!blockOverlapsContainerSpecialGridExpansion(nodeBounds, expansion)
+        && !blocks.some(other => other.id !== node.id
+          && other.id !== fixedId
+          && craftBoundsOverlap(nodeBounds, craftNodeToBounds(other)))) {
+        continue;
+      }
+      const { dx, dy } = getContainerSpecialGridResizePushDelta(nodeBounds, node.id, blocks, fixedId, expansion);
+      if (!dx && !dy) continue;
+      const index = blocks.findIndex(entry => entry.id === node.id);
+      blocks[index] = { ...node, x: node.x + dx, y: node.y + dy };
+      changed = true;
+    }
+    return changed;
+  };
+
+  for (let iteration = 0; iteration < 64; iteration += 1) {
+    if (!pushMovableBlocks()) break;
+  }
+
+  return blocks;
+}
+
+function resolveContainerSpecialGridSizeChange(itemOrData = null, blockId = "", width = 1, height = 1) {
+  const nextWidth = Math.max(1, toInteger(width) || 1);
+  const nextHeight = Math.max(1, toInteger(height) || 1);
+  const baseBlock = getContainerSpecialGridBaseBlock(itemOrData);
+  const blocks = getContainerSpecialGridBlocks(itemOrData);
+
+  if (blockId === "__base__") {
+    const oldBaseBounds = craftNodeToBounds(baseBlock);
+    const resizedBase = resizeContainerSpecialGridBlockFromTopLeft(baseBlock, nextWidth, nextHeight);
+    const newBaseBounds = craftNodeToBounds(resizedBase);
+    const resolved = resolveContainerSpecialGridPushLayout([resizedBase, ...blocks], "__base__", oldBaseBounds);
+    return {
+      base: { columns: nextWidth, rows: nextHeight },
+      baseAnchor: { left: newBaseBounds.left, top: newBaseBounds.top },
+      blocks: resolved
+        .filter(node => node.id !== "__base__")
+        .map(finalizeContainerSpecialGridBlock)
+    };
+  }
+
+  const current = blocks.find(block => block.id === blockId);
+  if (!current) return null;
+  const oldBlockBounds = craftNodeToBounds(current);
+  const resized = resizeContainerSpecialGridBlockFromTopLeft(current, nextWidth, nextHeight);
+  const resolved = resolveContainerSpecialGridPushLayout(
+    [baseBlock, ...blocks.map(block => (block.id === blockId ? resized : block))],
+    blockId,
+    oldBlockBounds
+  );
+  return {
+    blocks: resolved
+      .filter(node => node.id !== "__base__")
+      .map(finalizeContainerSpecialGridBlock)
+  };
 }
 
 function normalizeActorContainerSlotData(slot = {}) {

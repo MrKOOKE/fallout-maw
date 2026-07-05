@@ -419,6 +419,63 @@ export function normalizeContainerSpecialGridBlock(block = null) {
   };
 }
 
+export function finalizeContainerSpecialGridBlock(block = null) {
+  return {
+    id: String(block?.id || foundry.utils.randomID()),
+    x: Number(block?.x) || 0,
+    y: Number(block?.y) || 0,
+    width: Math.max(1, toInteger(block?.width) || 1),
+    height: Math.max(1, toInteger(block?.height) || 1)
+  };
+}
+
+function getContainerSpecialGridData(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem)?.functions?.container?.specialGrids ?? {};
+}
+
+export function computeContainerSpecialGridBaseAnchorSeed(dimensions = {}) {
+  const columns = Math.max(1, toInteger(dimensions.columns) || 1);
+  const rows = Math.max(1, toInteger(dimensions.rows) || 1);
+  const seeded = normalizeContainerSpecialGridBlock({
+    id: "__base__",
+    x: 0,
+    y: 0,
+    width: columns,
+    height: rows
+  });
+  return {
+    left: seeded.x - (columns / 2),
+    top: seeded.y - (rows / 2)
+  };
+}
+
+export function hasPersistedContainerSpecialGridBaseAnchor(itemOrSystem = null) {
+  const item = itemOrSystem?.documentName === "Item" ? itemOrSystem : null;
+  if (item) {
+    return foundry.utils.hasProperty(
+      item._source?.system ?? {},
+      "functions.container.specialGrids.baseAnchor"
+    );
+  }
+  return foundry.utils.hasProperty(
+    getItemSystem(itemOrSystem) ?? {},
+    "functions.container.specialGrids.baseAnchor"
+  );
+}
+
+export function getContainerSpecialGridBaseAnchor(itemOrSystem = null) {
+  const dimensions = getContainerDimensions(itemOrSystem);
+  const defaultAnchor = computeContainerSpecialGridBaseAnchorSeed(dimensions);
+  if (!hasPersistedContainerSpecialGridBaseAnchor(itemOrSystem)) {
+    return defaultAnchor;
+  }
+  const anchor = getContainerSpecialGridData(itemOrSystem)?.baseAnchor ?? {};
+  const left = Number(anchor.left);
+  const top = Number(anchor.top);
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return defaultAnchor;
+  return { left, top };
+}
+
 function snapContainerSpecialGridCoordinate(value, size = 1) {
   const number = Number(value);
   const offset = (Math.max(1, toInteger(size) || 1) - 1) / 2;
@@ -429,7 +486,7 @@ export function getContainerSpecialGridBlocks(itemOrSystem = null) {
   const blocks = getItemSystem(itemOrSystem)?.functions?.container?.specialGrids?.blocks;
   if (!Array.isArray(blocks)) return [];
   return blocks
-    .map(normalizeContainerSpecialGridBlock)
+    .map(finalizeContainerSpecialGridBlock)
     .filter(block => block.width > 0 && block.height > 0);
 }
 
@@ -446,8 +503,9 @@ export function getContainerInventoryGridOptions(itemOrSystem = null) {
     height: dimensions.rows,
     base: true
   };
-  const baseLeft = -(dimensions.columns / 2);
-  const baseTop = -(dimensions.rows / 2);
+  const baseAnchor = getContainerSpecialGridBaseAnchor(itemOrSystem);
+  const baseLeft = baseAnchor.left;
+  const baseTop = baseAnchor.top;
   const extraZones = extraBlocks.map(block => ({
     id: block.id,
     x: Math.floor((block.x - (block.width / 2)) - baseLeft) + 1,

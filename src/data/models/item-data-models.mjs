@@ -302,6 +302,10 @@ function containerFunctionField() {
 function containerSpecialGridsField() {
   return new SchemaField({
     blocks: new ArrayField(containerSpecialGridBlockField(), { required: true, initial: [] }),
+    baseAnchor: new SchemaField({
+      left: new NumberField({ required: false }),
+      top: new NumberField({ required: false })
+    }, { required: false, nullable: true }),
     viewport: new SchemaField({
       x: new NumberField({ required: true, integer: true, initial: 0 }),
       y: new NumberField({ required: true, integer: true, initial: 0 }),
