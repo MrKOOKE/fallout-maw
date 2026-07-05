@@ -3,7 +3,7 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCombatSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
-import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture } from "../canvas/posture-movement.mjs";
+import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture as setActorTokensPostureDirect } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { isActorUnableToAct } from "./reaction-hub.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
@@ -69,6 +69,8 @@ export function appendGrappleFollowMovement(updates, movement, grapplerTokenOrDo
     ui.notifications.warn(localizeHud("GrappledTargetCannotMove"));
     return false;
   }
+
+  if (!game.user?.isGM) return true;
 
   const sourceMovement = movement[grapplerDocument.id] ?? {};
   updates.push({ _id: targetDocument.id });
@@ -213,10 +215,10 @@ async function startGrappleTargetSelection(grapplerDocument) {
   }
   const targetDocument = await chooseGrappleTarget(candidates, { restoreControlledToken: grapplerDocument });
   if (!targetDocument) return undefined;
-  return attemptGrapple(grapplerDocument, targetDocument);
+  return requestAttemptGrapple(grapplerDocument, targetDocument);
 }
 
-async function attemptGrapple(grapplerDocument, targetDocument) {
+async function attemptGrapple(grapplerDocument, targetDocument, options = {}) {
   if (!targetDocument) return undefined;
   if (!areTokensAdjacent(grapplerDocument, targetDocument)) {
     ui.notifications.warn(localizeHud("GrappleTargetAdjacent"));
@@ -228,7 +230,9 @@ async function attemptGrapple(grapplerDocument, targetDocument) {
   }
   if (!canSpendActionPoints(grapplerDocument.actor, GRAPPLE_ACTION_POINT_COST)) return undefined;
 
-  const uncontested = isUnableToResist(targetDocument) || await requestOwnerGrappleConsent(grapplerDocument, targetDocument);
+  const uncontested = isUnableToResist(targetDocument) || await requestOwnerGrappleConsent(grapplerDocument, targetDocument, {
+    allowGmLocalPrompt: options.allowGmLocalPrompt !== false
+  });
   await spendActionPoints(grapplerDocument.actor, GRAPPLE_ACTION_POINT_COST);
   if (isActorUnableToAct(grapplerDocument.actor)) return false;
   if (uncontested) return linkGrappleAndAnnounce(grapplerDocument, targetDocument);
@@ -252,6 +256,16 @@ async function attemptGrapple(grapplerDocument, targetDocument) {
     return false;
   }
   return linkGrappleAndAnnounce(grapplerDocument, targetDocument);
+}
+
+async function requestAttemptGrapple(grapplerDocument, targetDocument) {
+  if (!grapplerDocument || !targetDocument) return false;
+  if (game.user?.isGM) return attemptGrapple(grapplerDocument, targetDocument);
+  return requestActiveActionGMOperation("attemptGrapple", {
+    sceneId: grapplerDocument.parent?.id ?? targetDocument.parent?.id ?? canvas.scene?.id ?? "",
+    grapplerTokenId: grapplerDocument.id,
+    targetTokenId: targetDocument.id
+  });
 }
 
 async function escapeGrapple(targetDocument, grapplerDocument) {
@@ -278,9 +292,21 @@ async function escapeGrapple(targetDocument, grapplerDocument) {
     return false;
   }
 
-  await setActorTokensPosture(targetDocument.actor, "walk");
+  await requestSetActorTokensPosture(targetDocument.actor, "walk");
   await createActionMessage(formatHud("GrappleEscaped", { target: targetDocument.name, grappler: grapplerDocument.name }), targetDocument.actor);
   return requestUnlinkGrapple(grapplerDocument, targetDocument);
+}
+
+async function requestSetActorTokensPosture(actor, action = "walk") {
+  if (!actor?.uuid) return false;
+  if (game.user?.isGM) {
+    await setActorTokensPostureDirect(actor, action);
+    return true;
+  }
+  return requestActiveActionGMOperation("setActorTokensPosture", {
+    actorUuid: actor.uuid,
+    action
+  });
 }
 
 async function linkGrappleAndAnnounce(grapplerDocument, targetDocument) {
@@ -382,7 +408,12 @@ async function handleActiveActionSocketMessage(message = {}) {
 
   if (!game.user?.isGM) return;
   if (message.targetUserId && message.targetUserId !== game.user.id) return;
-  const ok = await executeActiveActionGMOperation(message.action, message.payload ?? {});
+  let ok = false;
+  try {
+    ok = await executeActiveActionGMOperation(message.action, message.payload ?? {});
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Active action socket operation failed`, error);
+  }
   if (message.requestId) {
     game.socket.emit(ACTIVE_ACTION_SOCKET, {
       scope: ACTIVE_ACTION_SOCKET_SCOPE,
@@ -396,11 +427,28 @@ async function handleActiveActionSocketMessage(message = {}) {
 }
 
 async function executeActiveActionGMOperation(action, payload = {}) {
+  if (action === "attemptGrapple") return attemptGrappleDocuments(payload);
   if (action === "linkGrapple") return linkGrappleDocuments(payload);
   if (action === "unlinkGrapple") return unlinkGrappleDocuments(payload);
   if (action === "moveGrappledTarget") return moveGrappledTargetDocument(payload);
+  if (action === "setActorTokensPosture") return setActorTokensPostureDocument(payload);
   if (action === "pushKnockback" || action === "knockback") return knockbackDocument(payload);
   return false;
+}
+
+async function setActorTokensPostureDocument({ actorUuid = "", action = "walk" } = {}) {
+  const actor = await fromUuid(String(actorUuid ?? ""));
+  if (!actor) return false;
+  await setActorTokensPostureDirect(actor, action);
+  return true;
+}
+
+async function attemptGrappleDocuments({ sceneId = "", grapplerTokenId = "", targetTokenId = "" } = {}) {
+  const scene = getScene(sceneId);
+  const grappler = scene?.tokens?.get(grapplerTokenId);
+  const target = scene?.tokens?.get(targetTokenId);
+  if (!scene || !grappler || !target || grappler.id === target.id) return false;
+  return attemptGrapple(grappler, target, { allowGmLocalPrompt: false });
 }
 
 async function linkGrappleDocuments({ sceneId = "", grapplerTokenId = "", targetTokenId = "" } = {}) {
@@ -585,9 +633,10 @@ function getGrappleCandidate(grapplerDocument) {
   return null;
 }
 
-async function requestOwnerGrappleConsent(grapplerDocument, targetDocument) {
-  if (targetDocument?.actor?.testUserPermission?.(game.user, "OWNER")) return promptGrappleConsent(targetDocument);
+async function requestOwnerGrappleConsent(grapplerDocument, targetDocument, { allowGmLocalPrompt = true } = {}) {
   const owner = getResponsibleOwner(targetDocument?.actor);
+  if (!game.user?.isGM && targetDocument?.actor?.testUserPermission?.(game.user, "OWNER")) return promptGrappleConsent(targetDocument);
+  if (allowGmLocalPrompt && game.user?.isGM && !owner && targetDocument?.actor?.testUserPermission?.(game.user, "OWNER")) return promptGrappleConsent(targetDocument);
   if (!owner) return false;
 
   const requestId = foundry.utils.randomID();

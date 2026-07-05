@@ -1493,6 +1493,7 @@ export async function prepareActorDamageUpdate(actor, changes = {}, options = {}
 }
 
 export function handleActorDamageUpdate(actor, changes = {}, options = {}) {
+  if (!canApplyDamageLocally(actor)) return undefined;
   const healingDelta = Math.max(0, roundDamageAmount(options?.falloutMawShockHealingDelta));
   if (healingDelta > 0) void advanceShockUnconsciousRecovery(actor, healingDelta);
   if (!options?.falloutMawLimbCapSync) void synchronizeActorLimbValueCaps(actor);
