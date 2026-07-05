@@ -126,6 +126,7 @@ import {
   createItemStackPartSplitUpdate,
   createStoredPlacement,
   createInventoryPlacement as createInventoryPlacementHelper,
+  createInventoryTreePlacementRepairUpdates,
   createInventoryHoverPlacementChecker,
   findFirstAvailableInventoryPlacement as findFirstAvailableInventoryPlacementHelper,
   getContainerContentsWeight,
@@ -1598,7 +1599,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           if (isItemInButcheringStorage(item)) return;
           this.#closeInventoryContextMenu();
           this.#clearInventoryTooltip({ force: true });
-          await this.#cycleInventoryItemContainer(item);
+          await this.#cycleInventoryItemContainer(item, {
+            sourceStackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
+            sourceStackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity))
+          });
           return;
         }
       }
@@ -1992,7 +1996,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return getActorRootInventoryGridOptions(this.actor, parentId);
   }
 
-  #getFirstAvailableInventoryPlacement(itemData = null, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
+  #getFirstAvailableInventoryPlacement(itemData = null, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID, options = {}) {
     const { columns, rows } = this.#getInventoryGridDimensions(parentId);
     return findFirstAvailableInventoryPlacement(
       this.#getContextInventoryItems(parentId),
@@ -2002,7 +2006,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.actor.items,
       excludeItemIds,
       reservedPlacements,
-      this.#getInventoryGridOptions(parentId)
+      { ...this.#getInventoryGridOptions(parentId), ...options }
     );
   }
 
@@ -2578,6 +2582,35 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     this.#warnInventoryValidation(validation);
     return false;
+  }
+
+  async #repairInventoryTreePlacements() {
+    const repairUpdates = createInventoryTreePlacementRepairUpdates(
+      this.actor.items.contents,
+      getInventoryGridDimensions(this.#getCurrentRace(), this.actor),
+      {
+        rootOptions: this.#getInventoryGridOptions(ROOT_CONTAINER_ID)
+      }
+    );
+    const projectedItems = repairUpdates
+      ? this.#projectInventoryState({ updates: repairUpdates })
+      : [];
+    const validation = repairUpdates
+      ? validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace(), this.actor), {
+        rootOptions: this.#getInventoryGridOptions(ROOT_CONTAINER_ID)
+      })
+      : { valid: false, reason: "placement-repair" };
+    if (!Array.isArray(repairUpdates)) {
+      this.#warnInventoryValidation(validation);
+      return false;
+    }
+    if (!validation.valid) {
+      this.#warnInventoryValidation(validation);
+      return false;
+    }
+    if (!repairUpdates.length) return true;
+    await this.actor.updateEmbeddedDocuments("Item", repairUpdates);
+    return true;
   }
 
   #projectInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
@@ -3218,9 +3251,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.actor.items.get(item.id) ?? null;
   }
 
-  async #cycleInventoryItemContainer(item) {
+  async #cycleInventoryItemContainer(item, { sourceStackIndex = 0, sourceStackQuantity = 0 } = {}) {
+    if (item.system?.placement?.mode !== "inventory") return null;
+    if (!await this.#repairInventoryTreePlacements()) return null;
+    item = this.actor.items.get(item.id) ?? item;
     if (item.system?.placement?.mode !== "inventory") return null;
 
+    const itemData = item.toObject();
+    if (usesVirtualInventoryStacks(item)) {
+      foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex)));
+    }
     const currentParentId = getItemContainerParentId(item);
     const candidates = this.#getInventoryPlacementParentCandidates(item, [item.id]);
     if (candidates.length < 2) {
@@ -3233,9 +3273,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     for (let offset = 0; offset < candidates.length; offset += 1) {
       const parentId = candidates[(startIndex + offset) % candidates.length];
       if (String(parentId ?? ROOT_CONTAINER_ID) === currentParentId) continue;
-      if (!this.#canFitItemWeightInParent(item, parentId)) continue;
-      const placement = this.#getFirstAvailableInventoryPlacement(item, [item.id], [], parentId);
+      const weightOk = this.#canFitItemWeightInParent(item, parentId);
+      if (!weightOk) continue;
+      const placement = this.#getFirstAvailableInventoryPlacement(itemData, [item.id], [], parentId);
       if (!placement) continue;
+
+      if (usesVirtualInventoryStacks(item)) {
+        const moved = await this.#insertItemIntoInventory(itemData, placement, {
+          sourceItem: item,
+          parentId,
+          sourceStackIndex
+        });
+        return moved ?? null;
+      }
 
       const updateData = this.#createInventoryPlacementUpdate(item, { parentId, placement });
       if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;

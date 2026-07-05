@@ -4178,8 +4178,8 @@ body #prosemirror-dropdown {
   background:
     var(--fallout-maw-inventory-grid-texture),
     var(--fallout-maw-inventory-grid-background);
-  border: 2px solid rgba(33, 83, 48, 0.88);
-  box-shadow: inset 0 0 0 1px rgba(72, 128, 72, 0.24), 0 0 10px rgba(19, 72, 38, 0.18);
+  border: 2px solid var(--fallout-maw-inventory-grid-line-color);
+  box-shadow: inset 0 0 0 1px rgba(131, 119, 74, 0.2), 0 0 10px rgba(0, 0, 0, 0.18);
   box-sizing: border-box;
   isolation: isolate;
   pointer-events: none;
@@ -4192,13 +4192,13 @@ body #prosemirror-dropdown {
     linear-gradient(
       90deg,
       transparent 0 var(--fallout-maw-inventory-cell-size),
-      rgba(54, 96, 49, 0.78) var(--fallout-maw-inventory-cell-size) calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)),
+      var(--fallout-maw-inventory-grid-line-color) var(--fallout-maw-inventory-cell-size) calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)),
       transparent calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)) 100%
     ),
     linear-gradient(
       180deg,
       transparent 0 var(--fallout-maw-inventory-cell-size),
-      rgba(54, 96, 49, 0.78) var(--fallout-maw-inventory-cell-size) calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)),
+      var(--fallout-maw-inventory-grid-line-color) var(--fallout-maw-inventory-cell-size) calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)),
       transparent calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)) 100%
     );
   background-repeat: repeat;
@@ -4207,11 +4207,6 @@ body #prosemirror-dropdown {
   inset: 0;
   pointer-events: none;
   position: absolute;
-}
-
-.fallout-maw-inventory-grid-zone.base {
-  border-color: rgba(42, 103, 55, 0.95);
-  box-shadow: inset 0 0 0 1px rgba(84, 137, 76, 0.26), 0 0 12px rgba(22, 83, 42, 0.2);
 }
 
 .fallout-maw-actor-container-slot-table {
