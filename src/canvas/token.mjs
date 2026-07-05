@@ -4,7 +4,7 @@ import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs"
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { isTokenEquipmentHudEnabled, openTokenHudForInteraction } from "./token-equipment-hud.mjs";
-import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
+import { appendGrappleFollowMovement, commitGrappleFollowOrchestrations, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION } from "../combat/active-actions.mjs";
 import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import {
   isBlockTurnOrderEnabled,
@@ -161,6 +161,30 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
     const posY = index === 0 ? height - bh : 0;
     bar.position.set(0, posY);
+  }
+
+  /** @override */
+  _onDragLeftDrop(event) {
+    const { clones } = event.interactionData;
+    if (!clones) return false;
+
+    let result = this._prepareDragLeftDropUpdates(event);
+    if (!result) return;
+    if (!Array.isArray(result[0])) result = [result];
+    const [updates, options = {}] = result;
+    const orchestrations = options[GRAPPLE_FOLLOW_ORCHESTRATION_OPTION];
+
+    event.interactionData.clearPreviewContainer = false;
+    if (!game.user?.isGM && orchestrations?.length) {
+      void commitGrappleFollowOrchestrations(orchestrations).finally(() => {
+        this.layer.clearPreviewContainer();
+      });
+      return;
+    }
+
+    canvas.scene.updateEmbeddedDocuments("Token", updates, options).finally(() => {
+      this.layer.clearPreviewContainer();
+    });
   }
 
   /** @override */

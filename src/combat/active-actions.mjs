@@ -1,4 +1,4 @@
-import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, SYSTEM_ID } from "../constants.mjs";
+import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION, SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCombatSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
@@ -26,12 +26,12 @@ const SKILL_ALIASES = Object.freeze({
   prc: "resilience"
 });
 const pendingActiveActionSocketRequests = new Map();
-const pendingGrappleFollowMoves = new Map();
 const activeGrappleEscapePromptTokenIds = new Set();
+
+export { GRAPPLE_FOLLOW_ORCHESTRATION_OPTION };
 
 export function registerActiveActionHooks() {
   Hooks.on("preUpdateToken", onPreUpdateTokenGrapple);
-  Hooks.on("updateToken", onUpdateTokenGrapple);
   Hooks.on("deleteToken", onDeleteTokenGrapple);
 }
 
@@ -58,31 +58,40 @@ export function appendGrappleFollowMovement(updates, movement, grapplerTokenOrDo
     return false;
   }
 
-  const path = normalizeGrappleFollowPath(grapplerDocument, grapplerPath);
-  if (path.length <= 1) return true;
+  const orchestration = prepareGrappleFollowOrchestration(grapplerDocument, targetDocument, grapplerPath, movement, options);
+  if (orchestration === false) return false;
+  if (!orchestration) return true;
 
-  const waypoints = buildGrappleFollowWaypoints(grapplerDocument, targetDocument, path);
-  if (!waypoints.length) return true;
-
-  const destination = waypoints.at(-1);
-  if (!validateTokenDestination(targetDocument, destination, { ignoreIds: [grapplerDocument.id, targetDocument.id] })) {
-    ui.notifications.warn(localizeHud("GrappledTargetCannotMove"));
-    return false;
+  if (!game.user?.isGM) {
+    options[GRAPPLE_FOLLOW_ORCHESTRATION_OPTION] ??= [];
+    options[GRAPPLE_FOLLOW_ORCHESTRATION_OPTION].push(orchestration);
+    return true;
   }
-
-  if (!game.user?.isGM) return true;
 
   const sourceMovement = movement[grapplerDocument.id] ?? {};
   updates.push({ _id: targetDocument.id });
   movement[targetDocument.id] = {
-    waypoints,
-    method: sourceMovement.method ?? options.method ?? "api",
+    waypoints: orchestration.targetWaypoints,
+    method: orchestration.method,
     autoRotate: false,
     showRuler: false,
     constrainOptions: { ignoreCost: true }
   };
   options[GRAPPLE_FOLLOW_MOVEMENT_OPTION] ??= {};
   options[GRAPPLE_FOLLOW_MOVEMENT_OPTION][targetDocument.id] = grapplerDocument.id;
+  return true;
+}
+
+export async function requestGrappleFollowMove(orchestration = {}) {
+  if (game.user?.isGM) return executeGrappleFollowMoveDocument(orchestration);
+  return requestActiveActionGMOperation("grappleFollowMove", orchestration);
+}
+
+export async function commitGrappleFollowOrchestrations(orchestrations = []) {
+  for (const orchestration of orchestrations) {
+    const ok = await requestGrappleFollowMove(orchestration);
+    if (!ok) return false;
+  }
   return true;
 }
 
@@ -246,7 +255,7 @@ async function attemptGrapple(grapplerDocument, targetDocument, options = {}) {
       difficulty: 50 + attackerAthletics + size.difficultyModifier,
       situationalModifier: size.resistanceModifier
     },
-    animate: true,
+    animate: false,
     createMessage: true,
     prompt: false,
     requester: "grappleResistance"
@@ -282,7 +291,7 @@ async function escapeGrapple(targetDocument, grapplerDocument) {
       difficulty: 50 + getActorSkillValue(grapplerDocument.actor, "ath") + size.difficultyModifier,
       situationalModifier: size.escapeModifier
     },
-    animate: true,
+    animate: false,
     createMessage: true,
     prompt: false,
     requester: "grappleEscape"
@@ -431,6 +440,7 @@ async function executeActiveActionGMOperation(action, payload = {}) {
   if (action === "linkGrapple") return linkGrappleDocuments(payload);
   if (action === "unlinkGrapple") return unlinkGrappleDocuments(payload);
   if (action === "moveGrappledTarget") return moveGrappledTargetDocument(payload);
+  if (action === "grappleFollowMove") return executeGrappleFollowMoveDocument(payload);
   if (action === "setActorTokensPosture") return setActorTokensPostureDocument(payload);
   if (action === "pushKnockback" || action === "knockback") return knockbackDocument(payload);
   return false;
@@ -537,10 +547,55 @@ async function moveGrappledTargetDocument({ sceneId = "", targetTokenId = "", x 
   const scene = getScene(sceneId);
   const target = scene?.tokens?.get(targetTokenId);
   if (!target) return false;
-  const destination = { x: Number(x), y: Number(y) };
+  const destination = snapTokenPosition(target, { x: Number(x), y: Number(y) });
   if (!validateTokenDestination(target, destination, { ignoreIds: [target.id, getGrapplerId(target)].filter(Boolean) })) return false;
   await target.update(destination, { [GRAPPLE_SYNC_OPTION]: true });
   return true;
+}
+
+async function executeGrappleFollowMoveDocument({
+  sceneId = "",
+  grapplerTokenId = "",
+  targetTokenId = "",
+  grapplerWaypoints = [],
+  targetWaypoints = [],
+  method = "keyboard",
+  planned = false,
+  autoRotate = false,
+  showRuler = false,
+  grapplerConstrainOptions = null,
+  terrainOptions = null,
+  measureOptions = null
+} = {}) {
+  const scene = getScene(sceneId);
+  const grappler = scene?.tokens?.get(grapplerTokenId);
+  const target = scene?.tokens?.get(targetTokenId);
+  if (!scene || !grappler || !target || !grapplerWaypoints.length || !targetWaypoints.length) return false;
+
+  const moveOptions = {
+    [GRAPPLE_FOLLOW_MOVEMENT_OPTION]: { [target.id]: grappler.id }
+  };
+  const results = await scene.moveTokens({
+    [grappler.id]: {
+      waypoints: grapplerWaypoints,
+      method,
+      planned,
+      autoRotate,
+      showRuler,
+      constrainOptions: grapplerConstrainOptions ?? undefined,
+      terrainOptions: terrainOptions ?? undefined,
+      measureOptions: measureOptions ?? undefined
+    },
+    [target.id]: {
+      waypoints: targetWaypoints,
+      method,
+      autoRotate: false,
+      showRuler: false,
+      constrainOptions: { ignoreCost: true }
+    }
+  }, moveOptions);
+
+  return Boolean(results?.[grappler.id] && results?.[target.id]);
 }
 
 async function knockbackDocument({ sceneId = "", attackerTokenId = "", targetTokenId = "", distanceCells = 1, reason = "" } = {}) {
@@ -562,53 +617,14 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
   if (!moves) return true;
 
   const targetGrapplerId = getGrapplerId(tokenDocument);
-  if (targetGrapplerId) {
-    if (getFollowMovementGrapplerId(options, tokenDocument.id) === targetGrapplerId) {
-      return hasPassedMovement(options?._movement?.[targetGrapplerId]) ? true : false;
-    }
-    void promptGrappleEscapeOnMoveAttempt(tokenDocument, targetGrapplerId);
-    return false;
-  }
+  if (!targetGrapplerId) return true;
 
-  const grappleTargetId = getGrappleTargetId(tokenDocument);
-  const targetDocument = getSceneToken(tokenDocument, grappleTargetId);
-  if (!targetDocument) return true;
-  if (getFollowMovementGrapplerId(options, targetDocument.id) === tokenDocument.id) {
-    pendingGrappleFollowMoves.delete(tokenDocument.id);
-    return true;
-  }
+  const isFollow = getFollowMovementGrapplerId(options, tokenDocument.id) === targetGrapplerId;
+  const passed = hasPassedMovement(options?._movement?.[targetGrapplerId]);
+  if (isFollow) return passed ? true : false;
 
-  const nextX = Number(foundry.utils.getProperty(changes, "x") ?? tokenDocument.x);
-  const nextY = Number(foundry.utils.getProperty(changes, "y") ?? tokenDocument.y);
-  const dx = nextX - tokenDocument.x;
-  const dy = nextY - tokenDocument.y;
-  if (Math.abs(dx) <= 0.5 && Math.abs(dy) <= 0.5) return true;
-
-  const targetDestination = { x: targetDocument.x + dx, y: targetDocument.y + dy };
-  if (!validateTokenDestination(targetDocument, targetDestination, { ignoreIds: [tokenDocument.id, targetDocument.id] })) {
-    ui.notifications.warn(localizeHud("GrappledTargetCannotMove"));
-    return false;
-  }
-  pendingGrappleFollowMoves.set(tokenDocument.id, {
-    sceneId: tokenDocument.parent?.id ?? tokenDocument.scene?.id ?? canvas.scene?.id ?? "",
-    targetTokenId: targetDocument.id,
-    x: targetDestination.x,
-    y: targetDestination.y
-  });
-  return true;
-}
-
-function onUpdateTokenGrapple(tokenDocument, changes, options) {
-  if (options?.[GRAPPLE_SYNC_OPTION]) return;
-  if (options?.[GRAPPLE_FOLLOW_MOVEMENT_OPTION]) {
-    pendingGrappleFollowMoves.delete(tokenDocument.id);
-    return;
-  }
-  if (!foundry.utils.hasProperty(changes, "x") && !foundry.utils.hasProperty(changes, "y")) return;
-  const pending = pendingGrappleFollowMoves.get(tokenDocument.id);
-  if (!pending) return;
-  pendingGrappleFollowMoves.delete(tokenDocument.id);
-  void requestActiveActionGMOperation("moveGrappledTarget", pending);
+  void promptGrappleEscapeOnMoveAttempt(tokenDocument, targetGrapplerId);
+  return false;
 }
 
 function onDeleteTokenGrapple(tokenDocument) {
@@ -1096,6 +1112,54 @@ function validateTokenDestination(tokenDocument, destination, { ignoreIds = [] }
   return true;
 }
 
+function prepareGrappleFollowOrchestration(grapplerDocument, targetDocument, grapplerPath = [], movement = {}, options = {}) {
+  const path = normalizeGrappleFollowPath(grapplerDocument, grapplerPath);
+  if (path.length <= 1) return null;
+
+  const targetWaypoints = buildGrappleFollowWaypoints(grapplerDocument, targetDocument, path);
+  if (!targetWaypoints.length) return null;
+
+  const destination = targetWaypoints.at(-1);
+  if (!validateTokenDestination(targetDocument, destination, { ignoreIds: [grapplerDocument.id, targetDocument.id] })) {
+    ui.notifications.warn(localizeHud("GrappledTargetCannotMove"));
+    return false;
+  }
+
+  const sourceMovement = movement[grapplerDocument.id] ?? {};
+  return {
+    sceneId: grapplerDocument.parent?.id ?? grapplerDocument.scene?.id ?? canvas.scene?.id ?? "",
+    grapplerTokenId: grapplerDocument.id,
+    targetTokenId: targetDocument.id,
+    grapplerWaypoints: path.slice(1).map(waypoint => cloneFollowWaypoint(waypoint)).filter(Boolean),
+    targetWaypoints,
+    method: sourceMovement.method ?? options.method ?? "api",
+    planned: Boolean(sourceMovement.planned),
+    autoRotate: Boolean(sourceMovement.autoRotate ?? options.autoRotate),
+    showRuler: Boolean(sourceMovement.showRuler ?? options.showRuler),
+    grapplerConstrainOptions: sourceMovement.constrainOptions ?? options.constrainOptions ?? null,
+    terrainOptions: sourceMovement.terrainOptions ?? options.terrainOptions ?? null,
+    measureOptions: sourceMovement.measureOptions ?? options.measureOptions ?? null
+  };
+}
+
+function cloneFollowWaypoint(waypoint = {}) {
+  const normalized = normalizeMovementWaypoint(waypoint);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    action: waypoint.action,
+    snapped: waypoint.snapped,
+    explicit: waypoint.explicit,
+    checkpoint: waypoint.checkpoint ?? true,
+    elevation: waypoint.elevation,
+    width: waypoint.width,
+    height: waypoint.height,
+    depth: waypoint.depth,
+    shape: waypoint.shape,
+    level: waypoint.level
+  };
+}
+
 function normalizeGrappleFollowPath(grapplerDocument, path = []) {
   const origin = getTokenMovementOrigin(grapplerDocument);
   const waypoints = Array.isArray(path)
@@ -1108,13 +1172,17 @@ function normalizeGrappleFollowPath(grapplerDocument, path = []) {
 }
 
 function buildGrappleFollowWaypoints(grapplerDocument, targetDocument, grapplerPath) {
-  const origin = grapplerPath[0];
   const targetOrigin = getTokenMovementOrigin(targetDocument);
+  let currentTarget = { x: targetOrigin.x, y: targetOrigin.y };
   const waypoints = [];
+  let prevGrappler = grapplerPath[0];
+
   for (const waypoint of grapplerPath.slice(1)) {
+    const dx = Number(waypoint.x) - Number(prevGrappler.x);
+    const dy = Number(waypoint.y) - Number(prevGrappler.y);
     const shifted = {
-      x: targetOrigin.x + (waypoint.x - origin.x),
-      y: targetOrigin.y + (waypoint.y - origin.y)
+      x: currentTarget.x + dx,
+      y: currentTarget.y + dy
     };
     const snapped = snapTokenPosition(targetDocument, shifted);
     const targetWaypoint = {
@@ -1132,10 +1200,13 @@ function buildGrappleFollowWaypoints(grapplerDocument, targetDocument, grapplerP
       checkpoint: waypoint.checkpoint ?? true
     };
     if (Number.isFinite(Number(targetOrigin.elevation)) || Number.isFinite(Number(waypoint.elevation))) {
-      const originElevation = Number(origin.elevation) || 0;
-      targetWaypoint.elevation = (Number(targetOrigin.elevation) || 0) + ((Number(waypoint.elevation) || originElevation) - originElevation);
+      const originElevation = Number(targetOrigin.elevation) || 0;
+      const prevElevation = Number(prevGrappler.elevation) || originElevation;
+      targetWaypoint.elevation = (Number(targetOrigin.elevation) || 0) + ((Number(waypoint.elevation) || prevElevation) - prevElevation);
     }
     waypoints.push(targetWaypoint);
+    currentTarget = snapped;
+    prevGrappler = waypoint;
   }
   return waypoints;
 }

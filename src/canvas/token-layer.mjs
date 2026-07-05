@@ -1,6 +1,38 @@
-import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
+import {
+  appendGrappleFollowMovement,
+  commitGrappleFollowOrchestrations,
+  GRAPPLE_FOLLOW_ORCHESTRATION_OPTION
+} from "../combat/active-actions.mjs";
 
 export class FalloutMaWTokenLayer extends foundry.canvas.layers.TokenLayer {
+  /** @override */
+  async moveMany({ dx = 0, dy = 0, dz = 0, rotate = false, ids, includeLocked = false } = {}) {
+    if (rotate || game.user?.isGM) return super.moveMany({ dx, dy, dz, rotate, ids, includeLocked });
+
+    if (![-1, 0, 1].includes(dx) || ![-1, 0, 1].includes(dy) || ![-1, 0, 1].includes(dz)) {
+      return super.moveMany({ dx, dy, dz, rotate, ids, includeLocked });
+    }
+    if (!dx && !dy && !dz) return [];
+    if (game.paused && !game.user.isGM) {
+      ui.notifications.warn("GAME.PausedWarning", { localize: true });
+      return [];
+    }
+
+    const objects = this._getMovableObjects(ids, includeLocked);
+    if (!objects.length) return objects;
+
+    this.hud?.close();
+    const [updateData, updateOptions = {}] = this._prepareKeyboardMovementUpdates(objects, dx, dy, dz);
+    const orchestrations = updateOptions[GRAPPLE_FOLLOW_ORCHESTRATION_OPTION];
+    if (orchestrations?.length) {
+      const ok = await commitGrappleFollowOrchestrations(orchestrations);
+      return ok ? objects : [];
+    }
+
+    await canvas.scene.updateEmbeddedDocuments(this.constructor.documentName, updateData, updateOptions);
+    return objects;
+  }
+
   /** @override */
   _prepareKeyboardMovementUpdates(objects, dx, dy, dz) {
     const [updates, options = {}] = super._prepareKeyboardMovementUpdates(objects, dx, dy, dz);
