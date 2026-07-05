@@ -1,4 +1,4 @@
-﻿import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
+﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
@@ -8337,7 +8337,7 @@ function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficu
   const difficulty = getDodgeDifficulty(targetActor)
     + Math.max(0, toInteger(difficultyBonus))
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
-  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context));
 }
 
 function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBonus = 0, actionKey = "", weaponFunctionId = "" } = {}) {
@@ -8354,7 +8354,7 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
     + rangeDifficultyBonus
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
     + Math.max(0, toInteger(difficultyBonus));
-  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context));
 }
 
 function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "", actionKey = "", options = {}) {
@@ -8370,7 +8370,7 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
     blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId),
     options
   );
-  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context));
 }
 
 function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "", accuracyBonus = 0 } = {}) {
@@ -8386,7 +8386,7 @@ function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { action
     Boolean(limbKey),
     difficultyBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
   );
-  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId, context));
 }
 
 function getContextualAttackSkillValue(actor, skillKey = "", context = {}) {
@@ -8397,21 +8397,8 @@ function getContextualAttackSkillValue(actor, skillKey = "", context = {}) {
   });
 }
 
-function getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty) {
-  if ((difficulty - finalSkillValue) >= 100) return 0;
-  const gambling = toInteger(attackerActor.system?.skills?.gambling?.value);
-  const criticalFailureMaximum = clamp(5, 0, 100);
-  const criticalSuccessMinimum = Math.ceil(101 - clamp(4 + (gambling / 20), 0, 100));
-  let successes = 0;
-  for (let roll = 1; roll <= 100; roll += 1) {
-    if (criticalFailureMaximum > 0 && roll <= criticalFailureMaximum) continue;
-    if (criticalSuccessMinimum <= 100 && roll >= criticalSuccessMinimum) {
-      successes += 1;
-      continue;
-    }
-    if (finalSkillValue + roll >= difficulty) successes += 1;
-  }
-  return clamp(successes, 0, 100);
+function getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, criticalModifiers = {}) {
+  return calculateSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, criticalModifiers);
 }
 
 function getAimedChanceClass(chance) {
