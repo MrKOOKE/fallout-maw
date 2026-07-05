@@ -1,3 +1,4 @@
+import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
@@ -22,6 +23,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeGrapplingMasterSettings,
   normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -437,6 +439,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration,
       fixedSettings: normalizeHeightenedConcentrationSettings()
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster,
+    label: "Мастер по скручиванию",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster,
+      fixedSettings: normalizeGrapplingMasterSettings()
+    })
   })
 ]);
 
@@ -498,6 +509,9 @@ export function registerFixedAbilityFunctionHooks() {
   });
   Hooks.on("fallout-maw.skillCheckResolved", outcome => {
     void updateFourLeafCloverCharges(outcome);
+  });
+  Hooks.on(GRAPPLE_MODIFIER_HOOK, state => {
+    applyGrapplingMasterGrappleModifiers(state);
   });
 }
 
@@ -5442,6 +5456,35 @@ function getActorDefensiveTacticsEntries(actor) {
     }
   }
   return entries;
+}
+
+function getActorGrapplingMasterEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeGrapplingMasterSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
+}
+
+function applyGrapplingMasterGrappleModifiers(state = {}) {
+  const grapplerActor = state?.grapplerActor ?? null;
+  if (!grapplerActor) return;
+  const kind = String(state.kind ?? "").trim();
+  for (const entry of getActorGrapplingMasterEntries(grapplerActor)) {
+    if (kind === GRAPPLE_MODIFIER_KINDS.resistance || kind === GRAPPLE_MODIFIER_KINDS.escape) {
+      state.checkDifficultyBonus += Math.max(0, toInteger(entry.settings.checkDifficultyBonus));
+    }
+    if (kind === GRAPPLE_MODIFIER_KINDS.effect) {
+      state.targetAttackDisadvantageBonus += Math.max(0, toInteger(entry.settings.targetAttackDisadvantageBonus));
+    }
+  }
 }
 
 async function processLastChanceLethalDamage({ actor = null, amount = 0 } = {}) {

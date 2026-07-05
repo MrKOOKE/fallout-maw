@@ -6,6 +6,12 @@ import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture as setActorTokensPostureDirect } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { ALL_COMBAT_DISADVANTAGE_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
+import {
+  DEFAULT_GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT,
+  getGrappleCheckDifficultyBonus,
+  getGrappleTargetAttackDisadvantageAmount,
+  GRAPPLE_MODIFIER_KINDS
+} from "./grapple-modifiers.mjs";
 import { isActorUnableToAct } from "./reaction-hub.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
 
@@ -15,7 +21,7 @@ export const GRAPPLE_TARGET_FLAG = "grappleTargetTokenId";
 export const GRAPPLE_GRAPPLER_FLAG = "grappleGrapplerTokenId";
 export const GRAPPLE_ACTION_POINT_COST = 4;
 
-const GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT = 1;
+const GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT = DEFAULT_GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT;
 
 const ACTIVE_ACTION_SOCKET = `system.${SYSTEM_ID}`;
 const ACTIVE_ACTION_SOCKET_SCOPE = "fallout-maw.activeActions";
@@ -261,11 +267,18 @@ async function attemptGrapple(grapplerDocument, targetDocument, options = {}) {
 
   const attackerAthletics = getActorSkillValue(grapplerDocument.actor, "ath");
   const size = getGrappleSizeModifiers(grapplerDocument, targetDocument);
+  const grappleDifficultyBonus = getGrappleCheckDifficultyBonus({
+    grapplerActor: grapplerDocument.actor,
+    targetActor: targetDocument.actor,
+    grapplerDocument,
+    targetDocument,
+    kind: GRAPPLE_MODIFIER_KINDS.resistance
+  });
   const outcome = await requestSkillCheck({
     actor: targetDocument.actor,
     skillKey: resolveSkillKey(targetDocument.actor, "prc"),
     data: {
-      difficulty: 50 + attackerAthletics + size.difficultyModifier,
+      difficulty: 50 + attackerAthletics + size.difficultyModifier + grappleDifficultyBonus,
       situationalModifier: size.resistanceModifier
     },
     animate: false,
@@ -297,11 +310,18 @@ async function escapeGrapple(targetDocument, grapplerDocument) {
   if (isActorUnableToAct(targetDocument.actor)) return false;
 
   const size = getGrappleEscapeSizeModifiers(grapplerDocument, targetDocument);
+  const grappleDifficultyBonus = getGrappleCheckDifficultyBonus({
+    grapplerActor: grapplerDocument.actor,
+    targetActor: targetDocument.actor,
+    grapplerDocument,
+    targetDocument,
+    kind: GRAPPLE_MODIFIER_KINDS.escape
+  });
   const outcome = await requestSkillCheck({
     actor: targetDocument.actor,
     skillKey: resolveSkillKey(targetDocument.actor, "ath"),
     data: {
-      difficulty: 50 + getActorSkillValue(grapplerDocument.actor, "ath") + size.difficultyModifier,
+      difficulty: 50 + getActorSkillValue(grapplerDocument.actor, "ath") + size.difficultyModifier + grappleDifficultyBonus,
       situationalModifier: size.escapeModifier
     },
     animate: false,
@@ -1478,6 +1498,12 @@ async function syncGrappleEffect(actor, active = false, grapplerDocument = null)
   }
   const name = localizeHud("GrappledEffectName");
   const existing = effects.at(0);
+  const attackDisadvantageAmount = getGrappleTargetAttackDisadvantageAmount({
+    grapplerActor: grapplerDocument?.actor ?? null,
+    targetActor: actor,
+    grapplerDocument,
+    baseAmount: GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT
+  });
   const data = {
     type: "base",
     name,
@@ -1500,7 +1526,7 @@ async function syncGrappleEffect(actor, active = false, grapplerDocument = null)
       changes: [{
         key: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
         type: "add",
-        value: String(GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT),
+        value: String(attackDisadvantageAmount),
         phase: "initial",
         priority: null
       }]

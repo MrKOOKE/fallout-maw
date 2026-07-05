@@ -45,7 +45,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   fullForce: "fullForce",
   twoHands: "twoHands",
   commandBasics: "commandBasics",
-  heightenedConcentration: "heightenedConcentration"
+  heightenedConcentration: "heightenedConcentration",
+  grapplingMaster: "grapplingMaster"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -784,6 +785,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return normalizeHeightenedConcentrationSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.grapplingMaster) {
+    return normalizeGrapplingMasterSettings(value);
+  }
   return {};
 }
 
@@ -832,6 +836,13 @@ export function normalizeReaperSettings(value = {}) {
   return {
     killChanceFormula: String(value?.killChanceFormula ?? "50+gambling/10").trim() || "50+gambling/10",
     attackChanceFormula: String(value?.attackChanceFormula ?? "10+gambling/15").trim() || "10+gambling/15"
+  };
+}
+
+export function normalizeGrapplingMasterSettings(value = {}) {
+  return {
+    checkDifficultyBonus: Math.max(0, toInteger(value?.checkDifficultyBonus ?? 50)),
+    targetAttackDisadvantageBonus: Math.max(0, toInteger(value?.targetAttackDisadvantageBonus ?? 1))
   };
 }
 
