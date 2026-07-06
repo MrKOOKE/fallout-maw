@@ -1182,9 +1182,10 @@ class WeaponAttackController {
     this.beforeExecuteCompleted = false;
     this.container = new PIXI.Container();
     this.shape = new PIXI.Graphics();
+    this.meleeDirectionPreview = new PIXI.Graphics();
     this.targetMarkers = new PIXI.Graphics();
     this.focusedTargetMarker = new PIXI.Graphics();
-    this.container.addChild(this.shape, this.targetMarkers, this.focusedTargetMarker);
+    this.container.addChild(this.shape, this.meleeDirectionPreview, this.targetMarkers, this.focusedTargetMarker);
     this.targets = [];
     this.geometry = null;
     this.pointer = null;
@@ -1486,6 +1487,7 @@ class WeaponAttackController {
   suppressPreview() {
     this.previewSuppressed = true;
     this.shape.clear();
+    this.meleeDirectionPreview.clear();
     this.clearTargetMarkers();
     this.removeLimbMenu();
     this.removeChanceMenu();
@@ -3358,10 +3360,12 @@ class WeaponAttackController {
     if (this.destroyed) return;
     if (this.previewSuppressed) {
       this.shape.clear();
+      this.meleeDirectionPreview.clear();
       this.clearTargetMarkers();
       return;
     }
     this.shape.clear();
+    this.meleeDirectionPreview.clear();
     if (!this.pointer && !this.lockedGeometry && !isWhirlwindAttackModifier(this.attackModifier)) {
       this.syncAttackAutoCover([]);
       this.clearTargetMarkers();
@@ -3424,6 +3428,7 @@ class WeaponAttackController {
       locked: this.processing || this.pushStrengthMaximum > 0 || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
       hasTargets: this.targets.length > 0
     });
+    this.drawMeleeDirectionHoverPreview();
     const markerPreview = this.getTargetMarkerPreview(forceBroadcast || this.processing);
     this.drawTargetMarkersForPreview(markerPreview, {
       force: forceBroadcast || this.processing,
@@ -3796,6 +3801,28 @@ class WeaponAttackController {
       const key = button.dataset.limbKey ?? button.dataset.attackDirection ?? button.dataset.pushStrength ?? "";
       button.classList.toggle("hover", key === this.hoveredLimbKey);
     }
+    this.drawMeleeDirectionHoverPreview();
+  }
+
+  drawMeleeDirectionHoverPreview() {
+    this.meleeDirectionPreview.clear();
+    if (
+      this.previewSuppressed
+      || this.processing
+      || !this.meleeAction
+      || this.aimedMode !== "direction"
+      || !this.selectedTarget
+    ) return;
+
+    const direction = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId)
+      .find(entry => entry.key === this.hoveredLimbKey);
+    if (!direction || direction.mode !== "swing") return;
+
+    const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
+    const points = buildSwingDirectionPreviewPoints(this.selectedTarget, direction.key, geometry);
+    if (points.length < 3) return;
+
+    drawSwingDirectionPreview(this.meleeDirectionPreview, points);
   }
 
   removeLimbMenu() {
@@ -7430,6 +7457,85 @@ function formatBurstBulletRange(range = {}) {
   const min = Math.max(0, toInteger(range.min));
   const max = Math.max(min, toInteger(range.max));
   return min === max ? String(max) : `${min}-${max}`;
+}
+
+function buildSwingDirectionPreviewPoints(selectedTarget, directionKey = "", geometry = null) {
+  if (!selectedTarget || !geometry || geometry.halfAngle <= 0) return [];
+  const attackPoints = getAttackPolygonPoints(geometry);
+  if (!Array.isArray(attackPoints) || attackPoints.length < 3) return [];
+
+  const selectedSpan = getTokenSwingArcSpan(selectedTarget, geometry);
+  if (!selectedSpan) return [];
+
+  const movingLeft = directionKey === "rightToLeft";
+  const targetCenter = getTokenCenter(selectedTarget);
+  const lateralBoundary = targetCenter
+    ? getSwingLateralOffset(targetCenter, geometry)
+    : selectedSpan.lateralCenter;
+  return clipPolygonToSwingSide(attackPoints, geometry, lateralBoundary, { movingLeft });
+}
+
+function drawSwingDirectionPreview(graphics, points = []) {
+  const values = points.flatMap(point => [point.x, point.y]);
+  if (values.length < 6) return;
+  graphics.lineStyle(2, 0xfff1a8, 0.95);
+  graphics.beginFill(0xff5a36, 0.34);
+  graphics.drawPolygon(values);
+  graphics.endFill();
+}
+
+function clipPolygonToSwingSide(points = [], geometry = null, lateralBoundary = 0, { movingLeft = false } = {}) {
+  const sign = movingLeft ? -1 : 1;
+  const sideValue = point => sign * (getSwingLateralOffset(point, geometry) - lateralBoundary);
+  const isInside = point => sideValue(point) >= -GEOMETRY_EPSILON;
+  const clipped = [];
+
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const currentInside = isInside(current);
+    const nextInside = isInside(next);
+
+    if (currentInside) addUniquePoint(clipped, current);
+    if (currentInside === nextInside) continue;
+
+    const intersection = getSwingBoundaryIntersection(current, next, sideValue);
+    if (intersection) addUniquePoint(clipped, intersection);
+  }
+
+  return removeSequentialDuplicatePoints(clipped);
+}
+
+function getSwingBoundaryIntersection(start, end, sideValue) {
+  const startValue = sideValue(start);
+  const endValue = sideValue(end);
+  const denominator = startValue - endValue;
+  if (Math.abs(denominator) <= GEOMETRY_EPSILON) return null;
+  const t = clamp(startValue / denominator, 0, 1);
+  return {
+    x: start.x + ((end.x - start.x) * t),
+    y: start.y + ((end.y - start.y) * t),
+    elevation: Number.isFinite(Number(start.elevation)) || Number.isFinite(Number(end.elevation))
+      ? (Number(start.elevation) || 0) + (((Number(end.elevation) || 0) - (Number(start.elevation) || 0)) * t)
+      : undefined
+  };
+}
+
+function removeSequentialDuplicatePoints(points = []) {
+  const result = [];
+  for (const point of points) {
+    if (result.length && arePointsClose(result.at(-1), point)) continue;
+    result.push(point);
+  }
+  if (result.length > 1 && arePointsClose(result[0], result.at(-1))) result.pop();
+  return result;
+}
+
+function arePointsClose(left, right) {
+  return Math.hypot(
+    (Number(left?.x) || 0) - (Number(right?.x) || 0),
+    (Number(left?.y) || 0) - (Number(right?.y) || 0)
+  ) <= GEOMETRY_EPSILON;
 }
 
 function getSwingTargetSequence(selectedTarget, directionKey, targets = [], geometry = null) {
