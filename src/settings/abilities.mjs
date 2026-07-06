@@ -116,7 +116,7 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
         locked: true,
-        abilities: [createTwoHandsAbilityCatalogEntry(), createCommandBasicsAbilityCatalogEntry(), createHeightenedConcentrationAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry(), createFullControlAbilityCatalogEntry()]
+        abilities: []
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
