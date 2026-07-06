@@ -3026,7 +3026,6 @@
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionVolley"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.volley" value="{{system.functions.module.weapon.actionPointCosts.volley}}" step="1"></label>
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionMeleeAttack"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.meleeAttack" value="{{system.functions.module.weapon.actionPointCosts.meleeAttack}}" step="1"></label>
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.aimedMeleeAttack" value="{{system.functions.module.weapon.actionPointCosts.aimedMeleeAttack}}" step="1"></label>
-      <label><span>{{localize "FALLOUTMAW.Item.WeaponActionPush"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.push" value="{{system.functions.module.weapon.actionPointCosts.push}}" step="1"></label>
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionReload"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.reload" value="{{system.functions.module.weapon.actionPointCosts.reload}}" step="1"></label>
     </div>
   </section>
@@ -4081,20 +4080,6 @@
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponBurstDifficultyPerShot"}}</span>
             <input type="number" name="{{../path}}.burst.difficultyPerShot" value="{{burstDifficultyPerShot}}" min="0" step="1">
-          </label>
-          {{/if}}
-          {{#if isPush}}
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponPushMaxRange"}}</span>
-            <input type="number" name="{{../path}}.push.maxRangeMeters" value="{{maxRangeMeters}}" min="0" step="1">
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponPushAccuracyModifier"}}</span>
-            <input type="number" name="{{../path}}.push.accuracyModifier" value="{{accuracyModifier}}" step="1">
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponPushDifficultyModifier"}}</span>
-            <input type="number" name="{{../path}}.push.pushDifficultyModifier" value="{{pushDifficultyModifier}}" step="1">
           </label>
           {{/if}}
         </div>

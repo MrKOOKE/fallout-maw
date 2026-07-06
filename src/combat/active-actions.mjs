@@ -1,6 +1,7 @@
 import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION, SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCombatSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { createDodgeAttackExposureTracker } from "./dodge-resource.mjs";
 import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture as setActorTokensPostureDirect } from "../canvas/posture-movement.mjs";
@@ -20,6 +21,7 @@ const { DialogV2 } = foundry.applications.api;
 export const GRAPPLE_TARGET_FLAG = "grappleTargetTokenId";
 export const GRAPPLE_GRAPPLER_FLAG = "grappleGrapplerTokenId";
 export const GRAPPLE_ACTION_POINT_COST = 4;
+export const PUSH_ACTION_POINT_COST = 4;
 
 const GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT = DEFAULT_GRAPPLED_ATTACK_DISADVANTAGE_AMOUNT;
 
@@ -29,6 +31,7 @@ const ACTIVE_ACTION_SOCKET_TIMEOUT = 10000;
 const GRAPPLE_SYNC_OPTION = "falloutMawGrappleSync";
 const GRAPPLE_DRAG_PREVIEW_NAME = "fallout-maw-grapple-drag-preview";
 const GRAPPLE_TARGET_PREVIEW_NAME = "fallout-maw-grapple-target-preview";
+const PUSH_TARGET_PREVIEW_NAME = "fallout-maw-push-target-preview";
 const GRAPPLE_EFFECT_FLAG = "grappleEffect";
 const GRAPPLE_EFFECT_ICON = "systems/fallout-maw/icons/statuses/grappled.svg";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -126,6 +129,13 @@ export async function useGrappleAction(token) {
   if (grapplerId) return escapeGrapple(tokenDocument, getSceneToken(tokenDocument, grapplerId));
 
   return startGrappleTargetSelection(tokenDocument);
+}
+
+export async function usePushAction(token) {
+  const attackerDocument = getTokenDocument(token);
+  const actor = attackerDocument?.actor;
+  if (!attackerDocument || !actor?.isOwner || isActorUnableToAct(actor)) return undefined;
+  return startPushTargetSelection(attackerDocument);
 }
 
 export async function startGrappleReposition(token) {
@@ -244,6 +254,81 @@ async function startGrappleTargetSelection(grapplerDocument) {
   const targetDocument = await chooseGrappleTarget(candidates, { restoreControlledToken: grapplerDocument });
   if (!targetDocument) return undefined;
   return requestAttemptGrapple(grapplerDocument, targetDocument);
+}
+
+async function startPushTargetSelection(attackerDocument) {
+  const candidates = (canvas.tokens?.placeables ?? [])
+    .map(token => token.document)
+    .filter(document => document?.id !== attackerDocument.id && document.actor && areTokensAdjacent(attackerDocument, document));
+  if (!candidates.length) {
+    ui.notifications.warn(localizeHud("NoAdjacentPushTarget"));
+    return undefined;
+  }
+  const targetDocument = await chooseTokenTarget(candidates, {
+    restoreControlledToken: attackerDocument,
+    previewName: PUSH_TARGET_PREVIEW_NAME,
+    color: 0xff8f3d
+  });
+  if (!targetDocument) return undefined;
+  if (!canSpendActionPoints(attackerDocument.actor, PUSH_ACTION_POINT_COST)) return undefined;
+  const maximumStrength = getKnockbackMaximumStrength(getPushDifficulty(attackerDocument));
+  const selectedStrength = maximumStrength > 1 ? await choosePushStrength(maximumStrength) : 1;
+  if (!selectedStrength) return undefined;
+  return requestAttemptPush(attackerDocument, targetDocument, { selectedStrength });
+}
+
+async function requestAttemptPush(attackerDocument, targetDocument, { selectedStrength = 1 } = {}) {
+  if (!attackerDocument || !targetDocument) return false;
+  if (game.user?.isGM) return attemptPush(attackerDocument, targetDocument, { selectedStrength });
+  return requestActiveActionGMOperation("attemptPush", {
+    sceneId: attackerDocument.parent?.id ?? targetDocument.parent?.id ?? canvas.scene?.id ?? "",
+    attackerTokenId: attackerDocument.id,
+    targetTokenId: targetDocument.id,
+    selectedStrength
+  });
+}
+
+async function attemptPush(attackerDocument, targetDocument, { selectedStrength = 1 } = {}) {
+  if (!targetDocument?.actor || attackerDocument?.id === targetDocument.id) return false;
+  if (!areTokensAdjacent(attackerDocument, targetDocument)) {
+    ui.notifications.warn(localizeHud("PushTargetAdjacent"));
+    return false;
+  }
+  if (!canSpendActionPoints(attackerDocument.actor, PUSH_ACTION_POINT_COST)) return undefined;
+
+  const maximumStrength = getKnockbackMaximumStrength(getPushDifficulty(attackerDocument));
+  const strength = Math.max(1, Math.min(maximumStrength, toInteger(selectedStrength)));
+
+  await spendActionPoints(attackerDocument.actor, PUSH_ACTION_POINT_COST);
+  if (isActorUnableToAct(attackerDocument.actor)) return false;
+
+  const dodgeExposure = createDodgeAttackExposureTracker();
+  dodgeExposure.begin(1);
+  dodgeExposure.record(targetDocument.actor);
+  const outcome = await requestSkillCheck({
+    actor: attackerDocument.actor,
+    skillKey: resolveSkillKey(attackerDocument.actor, "meleeCombat"),
+    data: {
+      difficulty: getDodgeDifficulty(targetDocument.actor),
+      actorToken: attackerDocument.object ?? attackerDocument,
+      targetToken: targetDocument.object ?? targetDocument
+    },
+    animate: false,
+    createMessage: true,
+    prompt: false,
+    requester: "activePush"
+  });
+  await dodgeExposure.flush();
+  if (!isSuccessfulCheck(outcome)) return false;
+
+  return resolveKnockback({
+    attackerToken: attackerDocument,
+    targetToken: targetDocument,
+    difficulty: getPushDifficulty(attackerDocument),
+    maximumStrength: strength,
+    reason: localizeHud("Push"),
+    requester: "activePushResistance"
+  });
 }
 
 async function attemptGrapple(grapplerDocument, targetDocument, options = {}) {
@@ -469,6 +554,7 @@ async function handleActiveActionSocketMessage(message = {}) {
 }
 
 async function executeActiveActionGMOperation(action, payload = {}) {
+  if (action === "attemptPush") return attemptPushDocuments(payload);
   if (action === "attemptGrapple") return attemptGrappleDocuments(payload);
   if (action === "linkGrapple") return linkGrappleDocuments(payload);
   if (action === "unlinkGrapple") return unlinkGrappleDocuments(payload);
@@ -477,6 +563,14 @@ async function executeActiveActionGMOperation(action, payload = {}) {
   if (action === "setActorTokensPosture") return setActorTokensPostureDocument(payload);
   if (action === "pushKnockback" || action === "knockback") return knockbackDocument(payload);
   return false;
+}
+
+async function attemptPushDocuments({ sceneId = "", attackerTokenId = "", targetTokenId = "", selectedStrength = 1 } = {}) {
+  const scene = getScene(sceneId);
+  const attacker = scene?.tokens?.get(attackerTokenId);
+  const target = scene?.tokens?.get(targetTokenId);
+  if (!scene || !attacker || !target || attacker.id === target.id) return false;
+  return attemptPush(attacker, target, { selectedStrength });
 }
 
 async function setActorTokensPostureDocument({ actorUuid = "", action = "walk" } = {}) {
@@ -739,7 +833,7 @@ async function promptGrappleEscapeOnMoveAttempt(targetDocument, grapplerId = "")
         label: localizeHud("EscapeGrapple")
       },
       no: {
-        label: game.i18n.localize("Cancel")
+        label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
       },
       rejectClose: false,
       modal: true
@@ -835,6 +929,14 @@ function getGrappleEscapeSizeModifiers(grapplerDocument, targetDocument) {
 
 function getActorSkillValue(actor, skillKey = "") {
   return toInteger(actor?.system?.skills?.[resolveSkillKey(actor, skillKey)]?.value);
+}
+
+function getPushDifficulty(attackerDocument) {
+  return 50 + getActorSkillValue(attackerDocument?.actor, "ath");
+}
+
+function getDodgeDifficulty(actor) {
+  return Math.max(0, toInteger(actor?.system?.resources?.dodge?.value));
 }
 
 function resolveSkillKey(actor, skillKey = "") {
@@ -1006,13 +1108,21 @@ function getDestinationPreviewCells(candidates = [], tokenDocument) {
 }
 
 function chooseGrappleTarget(candidates = [], { restoreControlledToken = null } = {}) {
+  return chooseTokenTarget(candidates, { restoreControlledToken });
+}
+
+function chooseTokenTarget(candidates = [], {
+  restoreControlledToken = null,
+  previewName = GRAPPLE_TARGET_PREVIEW_NAME,
+  color = 0xffd166
+} = {}) {
   const layer = getDragPreviewLayer();
   const graphics = new PIXI.Graphics();
-  graphics.name = GRAPPLE_TARGET_PREVIEW_NAME;
+  graphics.name = previewName;
   for (const candidate of candidates) {
     const rect = getTokenRect(candidate);
-    graphics.lineStyle(3, 0xffd166, 0.95);
-    graphics.beginFill(0xffd166, 0.16);
+    graphics.lineStyle(3, color, 0.95);
+    graphics.beginFill(color, 0.16);
     graphics.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
     graphics.endFill();
   }
@@ -1022,6 +1132,33 @@ function chooseGrappleTarget(candidates = [], { restoreControlledToken = null } 
     restoreControlledToken,
     resolvePoint: point => candidates.find(document => isPointInRect(point, getTokenRect(document)))
   });
+}
+
+async function choosePushStrength(maximumStrength = 1) {
+  const max = Math.max(1, toInteger(maximumStrength));
+  if (max <= 1) return 1;
+  const result = await DialogV2.wait({
+    window: { title: localizeHud("PushStrengthTitle") },
+    content: `<p>${escapeHtml(formatHud("PushStrengthPrompt", { max }))}</p>`,
+    buttons: [
+      ...Array.from({ length: max }, (_entry, index) => {
+        const strength = index + 1;
+        return {
+          action: String(strength),
+          label: String(strength),
+          callback: () => strength
+        };
+      }),
+      {
+        action: "cancel",
+        label: game.i18n.localize("FALLOUTMAW.Common.Cancel"),
+        callback: () => null
+      }
+    ],
+    rejectClose: false,
+    modal: true
+  });
+  return Math.max(0, Math.min(max, toInteger(result)));
 }
 
 function chooseCanvasPoint({ preview = null, restoreControlledToken = null, resolvePoint } = {}) {

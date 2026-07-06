@@ -36,7 +36,8 @@ import {
   getGrappleTargetId,
   getGrapplerId,
   startGrappleReposition,
-  useGrappleAction
+  useGrappleAction,
+  usePushAction
 } from "../combat/active-actions.mjs";
 import {
   POSTURE_EFFECT_CHANGE_ROOT,
@@ -160,7 +161,7 @@ const ACTION_POINT_COST_TOOLTIP_DELAY_MS = 200;
 const HUD_WEAPON_DISABLED_NOTIFICATION = "Поврежденные конечности не позволяют использовать данное оружие.";
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
-const DUAL_WEAPON_ACTION_KEYS = new Set(["aimedShot", "snapshot", "burst", "volley", "meleeAttack", "aimedMeleeAttack", "push"]);
+const DUAL_WEAPON_ACTION_KEYS = new Set(["aimedShot", "snapshot", "burst", "volley", "meleeAttack", "aimedMeleeAttack"]);
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
 const TOKEN_ACTION_HUD_SCALE_MAX = 100;
@@ -1199,17 +1200,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return this.render({ force: true });
     }
     if (key === "push") {
-      const push = resolveHudPushAction(this.actor);
-      if (!push) {
-        ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Settings.HUD.NoPushWeapon"));
-        return undefined;
-      }
-      return startWeaponAttack({
-        token: this.token,
-        weapon: push.weapon,
-        actionKey: "push",
-        weaponFunctionId: push.weaponFunctionId
-      });
+      await usePushAction(this.token);
+      return this.render({ force: true });
     }
     return undefined;
   }
@@ -2607,7 +2599,6 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
   const grappleLabel = grappleTargetId
     ? game.i18n.localize("FALLOUTMAW.Settings.HUD.ReleaseGrapple")
     : (grapplerId ? game.i18n.localize("FALLOUTMAW.Settings.HUD.EscapeGrapple") : game.i18n.localize("FALLOUTMAW.Settings.HUD.Grapple"));
-  const push = resolveHudPushAction(actor, weaponSet, selectedWeapon, selectedWeaponDisabled);
   return [
     {
       key: "grapple",
@@ -2630,7 +2621,7 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
       img: normalizeImagePath(hudIcons.activeActions?.push, normalizeImagePath(hudIcons.weaponActions?.push, "icons/svg/impact.svg")),
       action: "useActiveAction",
       datasetKey: "activeActionKey",
-      disabled: !push || !actor?.isOwner
+      disabled: !actor?.isOwner
     },
     {
       key: "stealth",
@@ -3153,50 +3144,11 @@ function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "") {
   return resolvedId ? actor.items.get(resolvedId) ?? null : null;
 }
 
-function resolveHudPushAction(actor, weaponSet = null, selectedWeapon = null, selectedWeaponDisabled = false) {
-  if (!actor) return null;
-  const selected = selectedWeapon ?? resolveSelectedHudWeapon(actor);
-  const selectedDisabled = selectedWeapon ? selectedWeaponDisabled : isHudWeaponDisabled(actor, selected);
-  const selectedPush = selectedDisabled ? null : getFirstWeaponPushFunction(actor, selected);
-  if (selectedPush) return selectedPush;
-
-  const set = weaponSet ?? resolveActivePreparedHudWeaponSet(actor);
-  for (const slot of getUniqueHudWeaponSlots(set?.slots ?? [])) {
-    const weapon = actor.items.get(slot.item?.id ?? "");
-    if (!weapon || slot.useDisabled || isHudWeaponDisabled(actor, weapon)) continue;
-    const push = getFirstWeaponPushFunction(actor, weapon);
-    if (push) return push;
-  }
-  return null;
-}
-
-function resolveSelectedHudWeapon(actor) {
-  const hudWeaponSets = getHudWeaponSetsForActor(actor);
-  const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
-  return getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
-}
-
 function resolveActivePreparedHudWeaponSet(actor) {
   const hudWeaponSets = getHudWeaponSetsForActor(actor);
   const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
   const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
   return prepareHudWeaponSet(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", getTokenActionHudIcons());
-}
-
-function getFirstWeaponPushFunction(actor, weapon) {
-  if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return null;
-  for (const weaponFunction of getEnabledWeaponFunctions(weapon)) {
-    const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
-      moduleSlots: getWeaponFunctionModuleSlots(weapon, weaponFunction?.id)
-    });
-    if (!weaponData?.availableActions?.push) continue;
-    if (getWeaponActionBlockState(actor, "push").blocked) continue;
-    return {
-      weapon,
-      weaponFunctionId: weaponFunction.id
-    };
-  }
-  return null;
 }
 
 function isMiddleMouseClick(event) {
@@ -3391,7 +3343,6 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), configured: Boolean(actions.meleeAttack) },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) },
-    { key: "push", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush"), configured: Boolean(actions.push), visible: Boolean(actions.push) },
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
