@@ -3,6 +3,7 @@ import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 
 const EFFECT_KEY_INPUT_SELECTOR = "input[data-effect-key-autocomplete]";
 const TOKEN_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
+const MENU_MAX_HEIGHT = 220;
 const MENU_VIEWPORT_PADDING = 12;
 
 export function activateEffectKeyAutocomplete(html, tokens = [], { selector = EFFECT_KEY_INPUT_SELECTOR } = {}) {
@@ -40,6 +41,7 @@ class EffectKeyAutocomplete {
     this.matches = [];
     this.activeIndex = 0;
     this.menu = null;
+    this.opensUp = false;
     this.abortController = new AbortController();
     const { signal } = this.abortController;
 
@@ -145,7 +147,9 @@ class EffectKeyAutocomplete {
     }
 
     this.menu.innerHTML = "";
-    this.matches.forEach((token, index) => {
+    const entries = this.matches.map((token, index) => ({ token, index }));
+    if (this.opensUp) entries.reverse();
+    for (const { token, index } of entries) {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "fallout-maw-formula-autocomplete-option";
@@ -159,9 +163,9 @@ class EffectKeyAutocomplete {
         this.#insert(token);
       });
       this.menu.appendChild(option);
-    });
+    }
 
-    this.#setActive(0);
+    this.#setActive(this.activeIndex);
     this.menu.hidden = false;
   }
 
@@ -170,7 +174,6 @@ class EffectKeyAutocomplete {
     const rect = this.input.getBoundingClientRect();
     const owner = this.input.closest(".application, .window-app") ?? this.input;
     this.menu.style.zIndex = String(getOverlayBaseZIndex(owner) + 10);
-    this.menu.style.top = `${rect.bottom + 2}px`;
     const minWidth = Math.max(rect.width, 300);
     const maxWidth = Math.max(minWidth, window.innerWidth - (MENU_VIEWPORT_PADDING * 2));
 
@@ -183,6 +186,23 @@ class EffectKeyAutocomplete {
     const left = Math.min(Math.max(rect.left, MENU_VIEWPORT_PADDING), leftMax);
     this.menu.style.left = `${Math.max(MENU_VIEWPORT_PADDING, left)}px`;
     this.menu.style.width = `${width}px`;
+
+    const availableBelow = Math.max(0, window.innerHeight - rect.bottom - MENU_VIEWPORT_PADDING);
+    const availableAbove = Math.max(0, rect.top - MENU_VIEWPORT_PADDING);
+    const desiredHeight = Math.min(this.menu.scrollHeight, MENU_MAX_HEIGHT);
+    const opensUp = availableBelow < desiredHeight && availableAbove > availableBelow;
+    if (opensUp !== this.opensUp) {
+      this.opensUp = opensUp;
+      this.#render();
+    }
+
+    const availableHeight = Math.max(40, Math.min(desiredHeight, opensUp ? availableAbove : availableBelow));
+    this.menu.classList.toggle("upward", opensUp);
+    this.menu.style.maxHeight = `${availableHeight}px`;
+    this.menu.style.top = opensUp
+      ? `${Math.max(MENU_VIEWPORT_PADDING, rect.top - availableHeight - 2)}px`
+      : `${rect.bottom + 2}px`;
+    this.menu.scrollTop = opensUp ? this.menu.scrollHeight : 0;
   }
 
   #setActive(index) {
@@ -191,6 +211,7 @@ class EffectKeyAutocomplete {
     for (const option of this.menu.querySelectorAll(".fallout-maw-formula-autocomplete-option")) {
       option.classList.toggle("active", Number(option.dataset.index) === this.activeIndex);
     }
+    this.menu.querySelector(".fallout-maw-formula-autocomplete-option.active")?.scrollIntoView({ block: "nearest" });
   }
 
   #insert(token) {

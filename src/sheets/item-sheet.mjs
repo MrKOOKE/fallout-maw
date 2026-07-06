@@ -645,6 +645,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
+    normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
     normalizeSubmittedNeedChangeDurations(form, submitData);
     preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
@@ -656,6 +657,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
+    normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
     normalizeSubmittedNeedChangeDurations(form, submitData);
     preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
@@ -6549,6 +6551,16 @@ function normalizeSubmittedNeedChangeDurations(form = null, submitData = {}) {
       durationPartsToSeconds(durationAmount.value, form.querySelector("[data-need-change-duration-unit]")?.value)
     );
   }
+}
+
+function normalizeSubmittedFirstAidCheckboxes(form = null, submitData = {}) {
+  const healingIsPercentage = form?.querySelector?.("input[type='checkbox'][name='system.functions.firstAid.healingIsPercentage']");
+  if (!healingIsPercentage) return;
+  foundry.utils.setProperty(
+    submitData,
+    "system.functions.firstAid.healingIsPercentage",
+    Boolean(healingIsPercentage.checked)
+  );
 }
 
 function normalizeSubmittedFirstAidDurations(form = null, submitData = {}) {
