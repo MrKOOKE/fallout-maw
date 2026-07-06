@@ -7471,7 +7471,22 @@ function getQuickTransferParentCandidates(actor) {
 }
 
 function getBulkTransferSourceItemIds(actor) {
-  const items = (actor?.items?.contents ?? []).filter(item => isSearchTransferableItem(item, { allowButchering: true }));
+  const inventory = prepareInventoryContext(actor, getActorRace(actor), { includeLocked: false });
+  const itemIds = new Set();
+  const addGridItems = (grid = null) => {
+    for (const item of grid?.items ?? []) {
+      if (!item?.id || item.phantom) continue;
+      itemIds.add(String(item.id));
+    }
+  };
+
+  addGridItems(inventory.grid);
+  addGridItems(inventory.butcheringStorage?.grid);
+  for (const container of inventory.containers ?? []) addGridItems(container.grid);
+
+  const items = Array.from(itemIds)
+    .map(itemId => actor?.items?.get?.(itemId))
+    .filter(item => isSearchTransferableItem(item, { allowButchering: true }));
   const itemMap = new Map(items.map(item => [item.id, item]));
   const selectedIds = new Set(items.map(item => item.id));
   return items
