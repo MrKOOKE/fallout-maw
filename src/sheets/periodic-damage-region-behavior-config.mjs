@@ -3,6 +3,10 @@ import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  preserveTextSelectionBeforePartSync,
+  restoreTextSelectionAfterPartSync
+} from "../utils/application-focus-state.mjs";
 
 export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.sheets.RegionBehaviorConfig {
   static DEFAULT_OPTIONS = foundry.utils.mergeObject(super.DEFAULT_OPTIONS, {
@@ -23,6 +27,16 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
       template: "templates/generic/form-footer.hbs"
     }
   };
+
+  _preSyncPartState(partId, newElement, priorElement, state) {
+    super._preSyncPartState(partId, newElement, priorElement, state);
+    preserveTextSelectionBeforePartSync(priorElement, state);
+  }
+
+  _syncPartState(partId, newElement, priorElement, state) {
+    super._syncPartState(partId, newElement, priorElement, state);
+    restoreTextSelectionAfterPartSync(newElement, state);
+  }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);

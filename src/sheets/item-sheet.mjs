@@ -108,6 +108,10 @@ import {
   isWeaponModuleItem
 } from "../utils/weapon-modules.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import {
+  preserveTextSelectionBeforePartSync,
+  restoreTextSelectionAfterPartSync
+} from "../utils/application-focus-state.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -200,6 +204,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   get item() {
     return this.document;
+  }
+
+  _preSyncPartState(partId, newElement, priorElement, state) {
+    super._preSyncPartState(partId, newElement, priorElement, state);
+    preserveTextSelectionBeforePartSync(priorElement, state);
+  }
+
+  _syncPartState(partId, newElement, priorElement, state) {
+    super._syncPartState(partId, newElement, priorElement, state);
+    restoreTextSelectionAfterPartSync(newElement, state);
   }
 
   render(options = {}) {

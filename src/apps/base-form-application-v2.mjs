@@ -1,4 +1,8 @@
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
+import {
+  preserveTextSelectionBeforePartSync,
+  restoreTextSelectionAfterPartSync
+} from "../utils/application-focus-state.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -39,6 +43,16 @@ export class FalloutMaWFormApplicationV2 extends HandlebarsApplicationMixin(Appl
 
   get form() {
     return this.element instanceof HTMLFormElement ? this.element : this.element?.querySelector("form");
+  }
+
+  _preSyncPartState(partId, newElement, priorElement, state) {
+    super._preSyncPartState(partId, newElement, priorElement, state);
+    preserveTextSelectionBeforePartSync(priorElement, state);
+  }
+
+  _syncPartState(partId, newElement, priorElement, state) {
+    super._syncPartState(partId, newElement, priorElement, state);
+    restoreTextSelectionAfterPartSync(newElement, state);
   }
 
   render(options = {}) {
