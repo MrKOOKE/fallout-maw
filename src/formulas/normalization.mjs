@@ -32,7 +32,12 @@ const DEFAULT_RESOURCE_LIMIT_RESOURCES = Object.freeze([
   Object.freeze({ resourceKey: "actionPoints", percent: 100 }),
   Object.freeze({ resourceKey: "movementPoints", percent: 100 })
 ]);
-const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "protected + unconditional";
+const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "blocked";
+const LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS = Object.freeze({
+  "protected + unconditional": "blocked",
+  "protected * 1,5 + unconditional": "blocked * 1,5",
+  "protected * 3 + unconditional": "blocked * 3"
+});
 const BLEEDING_DAMAGE_TYPE = Object.freeze({
   key: BLEEDING_DAMAGE_TYPE_KEY,
   label: "Кровотечение",
@@ -174,7 +179,7 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   acid: Object.freeze({
     equipmentConditionDamage: Object.freeze({
       enabled: true,
-      formula: "protected * 3 + unconditional"
+      formula: "blocked * 3"
     })
   }),
   cryo: Object.freeze({
@@ -641,10 +646,20 @@ function normalizeDamageTypeBehavior(settings = {}, key = "") {
     },
     equipmentConditionDamage: {
       enabled: Boolean(source.equipmentConditionDamage?.enabled ?? defaults.equipmentConditionDamage.enabled),
-      formula: String(source.equipmentConditionDamage?.formula ?? defaults.equipmentConditionDamage.formula ?? DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA).trim()
-        || DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA
+      formula: normalizeEquipmentConditionDamageFormula(
+        source.equipmentConditionDamage?.formula,
+        defaults.equipmentConditionDamage.formula
+      )
     }
   };
+}
+
+function normalizeEquipmentConditionDamageFormula(value, fallback = DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA) {
+  const formula = String(value ?? fallback ?? DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA).trim()
+    || DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA;
+  const legacyKey = formula.replace(/\s+/g, " ");
+  return LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS[legacyKey]
+    ?? formula.replace(/\bunconditional\b/g, "0");
 }
 
 function normalizeResourceLimitEntries(entries, defaults = []) {

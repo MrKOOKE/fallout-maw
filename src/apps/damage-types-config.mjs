@@ -12,6 +12,12 @@ import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-ap
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 const { FormDataExtended } = foundry.applications.ux;
+const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "blocked";
+const LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS = Object.freeze({
+  "protected + unconditional": "blocked",
+  "protected * 1,5 + unconditional": "blocked * 1,5",
+  "protected * 3 + unconditional": "blocked * 3"
+});
 
 export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -318,10 +324,17 @@ function normalizeSettingsFromForm(settings = {}) {
     },
     equipmentConditionDamage: {
       enabled: toBoolean(settings.equipmentConditionDamage?.enabled, true),
-      formula: String(settings.equipmentConditionDamage?.formula ?? "protected + unconditional").trim()
-        || "protected + unconditional"
+      formula: normalizeEquipmentConditionDamageFormula(settings.equipmentConditionDamage?.formula)
     }
   };
+}
+
+function normalizeEquipmentConditionDamageFormula(value, fallback = DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA) {
+  const formula = String(value ?? fallback ?? DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA).trim()
+    || DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA;
+  const legacyKey = formula.replace(/\s+/g, " ");
+  return LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS[legacyKey]
+    ?? formula.replace(/\bunconditional\b/g, "0");
 }
 
 function normalizeSettingsFromCurrentForm(form, fallback = {}) {

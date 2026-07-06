@@ -60,7 +60,6 @@ const ROUND_SECONDS = 6;
 const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
 const HEALING_NUMBER_COLOR = "#62d96b";
-const EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO = 0.2;
 const DAMAGE_MITIGATION_PENETRATION_FLAT_STEP = 1;
 const RESISTANCE_OVERHEAT_DURATION_SECONDS = 24;
 const RESISTANCE_OVERHEAT_RATIO = 0.1;
@@ -106,7 +105,6 @@ const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "blocked",
   "protected",
   "penetrated",
-  "unconditional",
   "condition",
   "conditionMax",
   "mitigation",
@@ -5864,7 +5862,6 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
     blocked: resistanceBlocked
   });
   remaining = Math.max(0, remaining - resistanceBlocked);
-  addEquipmentUnconditionalWear(itemWear, equipmentSources, incomingDamage);
   const finalAmount = remaining;
   const overheatAmount = options.includeResistanceOverheat
     ? roundHalfUp(resistanceBlocked * RESISTANCE_OVERHEAT_RATIO)
@@ -5966,18 +5963,6 @@ function addEquipmentProtectionWear(itemWear, sources = [], { incoming = 0, prot
   }
 }
 
-function addEquipmentUnconditionalWear(itemWear, sources = [], incomingDamage = 0) {
-  const amount = Math.floor(Math.max(0, Number(incomingDamage) || 0) * EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO);
-  if (!amount || !sources.length) return;
-
-  const allocations = allocateIntegerByWeight(amount, sources, () => 1);
-  for (const source of sources) {
-    const allocated = allocations.get(source.itemId) ?? 0;
-    if (!allocated) continue;
-    getOrCreateEquipmentWear(itemWear, source).unconditional += allocated;
-  }
-}
-
 function getOrCreateEquipmentWear(itemWear, source) {
   let entry = itemWear.get(source.itemId);
   if (!entry) {
@@ -5987,7 +5972,6 @@ function getOrCreateEquipmentWear(itemWear, source) {
       protected: 0,
       blocked: 0,
       penetrated: 0,
-      unconditional: 0,
       mitigation: 0
     };
     itemWear.set(source.itemId, entry);
@@ -6206,7 +6190,6 @@ function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damage
         blocked: wear.blocked,
         protected: wear.protected,
         penetrated: wear.penetrated,
-        unconditional: wear.unconditional,
         condition,
         conditionMax,
         mitigation: wear.mitigation,
