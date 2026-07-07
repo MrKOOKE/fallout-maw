@@ -1,5 +1,3 @@
-import { resolveWorldItemReference } from "./document-references.mjs";
-
 export function isCompendiumUuid(value = "") {
   return String(value ?? "").trim().startsWith("Compendium.");
 }
@@ -18,9 +16,7 @@ export function resolveWorldItemSync(value = "") {
     if (direct) return direct;
   }
 
-  return resolveWorldItemReference(uuid)
-    ?? game.items?.contents?.find(item => item.uuid === uuid || item.id === uuid)
-    ?? null;
+  return game.items?.contents?.find(item => item.uuid === uuid || item.id === uuid) ?? null;
 }
 
 function getWorldItemIdFromUuid(uuid = "") {

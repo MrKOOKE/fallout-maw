@@ -686,23 +686,31 @@ function isTargetInFirstAidRange(sourceToken, targetToken, firstAid = {}) {
 }
 
 function getTokenDistance(leftToken, rightToken) {
-  const left = getTokenCenter(leftToken);
-  const right = getTokenCenter(rightToken);
-  const pixels = Math.hypot(right.x - left.x, right.y - left.y);
-  const gridDistance = Math.max(0.0001, Number(canvas.scene?.grid?.distance ?? canvas.grid?.distance) || 1);
-  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
-  return Math.max(0, pixels) * (gridDistance / gridSize);
+  const leftDoc = leftToken?.document ?? leftToken;
+  const rightDoc = rightToken?.document ?? rightToken;
+  return measureTokenGridDistance(leftDoc, rightDoc);
 }
 
-function getTokenCenter(token) {
-  const center = token?.document?.getCenterPoint?.(token.document._source) ?? token?.center ?? {
-    x: (Number(token?.x) || 0) + ((Number(token?.w) || 0) / 2),
-    y: (Number(token?.y) || 0) + ((Number(token?.h) || 0) / 2)
-  };
-  return {
-    x: Number(center.x) || 0,
-    y: Number(center.y) || 0
-  };
+function measureTokenGridDistance(leftDoc, rightDoc) {
+  const grid = canvas?.grid;
+  if (!leftDoc || !rightDoc || !grid) return Infinity;
+  if (grid.isGridless) {
+    return grid.measurePath([leftDoc.getCenterPoint(), rightDoc.getCenterPoint()]).distance;
+  }
+
+  const leftOffsets = leftDoc.getOccupiedGridSpaceOffsets();
+  const rightOffsets = rightDoc.getOccupiedGridSpaceOffsets();
+  let min = Infinity;
+  for (const leftOffset of leftOffsets) {
+    for (const rightOffset of rightOffsets) {
+      const segmentDistance = grid.measurePath([
+        grid.getCenterPoint(leftOffset),
+        grid.getCenterPoint(rightOffset)
+      ]).distance;
+      if (segmentDistance < min) min = segmentDistance;
+    }
+  }
+  return min;
 }
 
 async function applyCriticalFailureDamage(actor, firstAid = {}, source = {}) {

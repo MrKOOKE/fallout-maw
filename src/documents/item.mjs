@@ -8,7 +8,6 @@ import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
 import { handleItemDamageUpdate } from "../combat/damage-hub.mjs";
-import { rewriteItemReferenceData, stampPrototypeUuid } from "../utils/document-references.mjs";
 import {
   cleanBooleanSlotSelections,
   getCreatureEquipmentSlotSelectionKeys,
@@ -47,7 +46,6 @@ export class FalloutMaWItem extends Item {
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
     this.updateSource(getCleanSlotRequirementSource(this));
-    if (!options?.pack) stampPrototypeUuid(this, data, "Item");
     if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
       ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
       return false;
@@ -95,10 +93,6 @@ export class FalloutMaWItem extends Item {
           }
         }
       });
-    }
-    if (!this.parent && !options?.pack) {
-      const referenceUpdates = rewriteItemReferenceData(this.system ?? {});
-      if (!foundry.utils.isEmpty(referenceUpdates)) this.updateSource(referenceUpdates);
     }
     if (isContainerItem(data ?? this)) {
       this.updateSource({

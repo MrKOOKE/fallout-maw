@@ -1,0 +1,2 @@
+{"sessionId":"b93a6e","runId":"post-fix","location":"first-aid.mjs:getTokenDistance","message":"distance breakdown","data":{"distance":1,"left":{"x":5200,"y":2700,"width":1,"height":1},"right":{"x":5200,"y":2800,"width":1,"height":1}},"timestamp":1783435839685,"hypothesisId":"H5"}
+{"sessionId":"b93a6e","runId":"post-fix","location":"first-aid.mjs:isTargetInFirstAidRange","message":"first aid range check","data":{"maxDistance":1,"distance":1,"passed":true,"sourceName":"Артур Уокер","targetName":"Аарон Уилсон"},"timestamp":1783435839685,"hypothesisId":"H5"}

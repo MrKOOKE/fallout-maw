@@ -34,7 +34,6 @@ import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 import { expandActorEffectChangeKeys, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
-import { stampPrototypeUuid } from "../utils/document-references.mjs";
 const actorLoadPreparationCache = new WeakMap();
 
 export class FalloutMaWActor extends Actor {
@@ -80,7 +79,6 @@ export class FalloutMaWActor extends Actor {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
-    if (!options?.pack) stampPrototypeUuid(this, data, "Actor");
     if (foundry.utils.getProperty(data, `flags.${SYSTEM_ID}.${DROPPED_ITEMS_ACTOR_FLAG}`)) return undefined;
     if (!["character", "construct"].includes(this.type)) return undefined;
 
