@@ -239,15 +239,22 @@ function indexDisassemblyRecipeOutputs(recipe) {
   }
 }
 
-function collectAcquisitionRecipeCandidates(targetItem, index = craftAcquisitionOutputIndex) {
+function findAcquisitionRecipesForItem(targetItem) {
+  const index = craftAcquisitionOutputIndex;
+  if (!index?.complete) return { recipes: [], targetProfile: getCraftItemMatchProfile(targetItem) };
   const targetProfile = getCraftItemMatchProfile(targetItem);
   const candidates = new Set();
-  if (!index) return { candidates, targetProfile, indexComplete: false };
   collectCraftRecipeSourceIndexCandidates(index, index.byOutputUuid, targetItem.uuid, candidates);
   for (const key of targetProfile.sourceKeys) {
     collectCraftRecipeSourceIndexCandidates(index, index.bySourceKey, key, candidates);
   }
-  return { candidates, targetProfile, indexComplete: index.complete };
+  const recipes = Array.from(candidates).filter(recipe => recipeProducesTargetItem(recipe, targetItem, targetProfile));
+  return { recipes, targetProfile };
+}
+
+function hasAcquisitionWaysForItem(targetItem) {
+  if (!targetItem) return false;
+  return findAcquisitionRecipesForItem(targetItem).recipes.length > 0;
 }
 
 function recipeProducesTargetItem(recipe, targetItem, targetProfile = null) {
@@ -256,37 +263,6 @@ function recipeProducesTargetItem(recipe, targetItem, targetProfile = null) {
   const layout = ensureWorldRecipeLayout(recipe.uuid, recipe)?.[CRAFT_MODE_DISASSEMBLY];
   const nodes = layout?.nodes ?? getCraftNodesWithRoot(recipe, CRAFT_MODE_DISASSEMBLY, recipe.recipeId);
   return getCraftOutputs(nodes).some(output => craftOutputMatchesItem(targetItem, output, targetProfile));
-}
-
-function findAcquisitionRecipesForItem(targetItem, recipes = []) {
-  const lookup = collectAcquisitionRecipeCandidates(targetItem);
-  if (lookup.candidates.size) {
-    const verified = Array.from(lookup.candidates).filter(recipe => recipeProducesTargetItem(recipe, targetItem, lookup.targetProfile));
-    return { recipes: verified, targetProfile: lookup.targetProfile };
-  }
-  if (lookup.indexComplete) {
-    return { recipes: [], targetProfile: lookup.targetProfile };
-  }
-
-  const matches = [];
-  for (const recipe of recipes) {
-    if (recipeProducesTargetItem(recipe, targetItem, lookup.targetProfile)) matches.push(recipe);
-  }
-  return { recipes: matches, targetProfile: lookup.targetProfile };
-}
-
-function hasAcquisitionWaysForItem(targetItem) {
-  if (!targetItem) return false;
-  const lookup = collectAcquisitionRecipeCandidates(targetItem);
-  if (lookup.candidates.size) {
-    for (const recipe of lookup.candidates) {
-      if (recipeProducesTargetItem(recipe, targetItem, lookup.targetProfile)) return true;
-    }
-    if (lookup.indexComplete) return false;
-    return null;
-  }
-  if (lookup.indexComplete) return false;
-  return null;
 }
 
 function buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes = [], actor = null, availability = null) {
@@ -352,31 +328,19 @@ function collectCraftRecipeSourceIndexCandidates(index, map, key, candidates) {
   for (const recipe of bucket) candidates.add(recipe);
 }
 
-function findCraftRecipesForItem(item, recipes = []) {
-  const itemProfile = getCraftItemMatchProfile(item);
+function findCraftRecipesForItem(item) {
   const index = craftRecipeSourceIndex;
-  if (index) {
-    const candidates = new Set();
-    collectCraftRecipeSourceIndexCandidates(index, index.byItemUuid, item.uuid, candidates);
-    for (const key of itemProfile.sourceKeys) {
-      collectCraftRecipeSourceIndexCandidates(index, index.byItemUuid, key, candidates);
-      collectCraftRecipeSourceIndexCandidates(index, index.bySourceKey, key, candidates);
-    }
-    collectCraftRecipeSourceIndexCandidates(index, index.byIdentity, itemProfile.identity, candidates);
-    collectCraftRecipeSourceIndexCandidates(index, index.byFingerprint, itemProfile.fingerprint, candidates);
-    if (candidates.size) {
-      return Array.from(candidates).filter(recipe => craftItemMatchesRecipeSource(item, recipe, itemProfile));
-    }
-    if (index.complete) return [];
+  if (!index?.complete) return [];
+  const itemProfile = getCraftItemMatchProfile(item);
+  const candidates = new Set();
+  collectCraftRecipeSourceIndexCandidates(index, index.byItemUuid, item.uuid, candidates);
+  for (const key of itemProfile.sourceKeys) {
+    collectCraftRecipeSourceIndexCandidates(index, index.byItemUuid, key, candidates);
+    collectCraftRecipeSourceIndexCandidates(index, index.bySourceKey, key, candidates);
   }
-
-  const matches = [];
-  for (const recipe of recipes) {
-    const recipeProfile = recipe.sourceProfile ?? getCraftItemSourceProfile(recipe.itemUuid);
-    if (!recipe.sourceProfile) indexCraftRecipeSourceProfile(recipe, recipeProfile);
-    if (craftItemMatchesRecipeSource(item, recipe, itemProfile, recipeProfile)) matches.push(recipe);
-  }
-  return matches;
+  collectCraftRecipeSourceIndexCandidates(index, index.byIdentity, itemProfile.identity, candidates);
+  collectCraftRecipeSourceIndexCandidates(index, index.byFingerprint, itemProfile.fingerprint, candidates);
+  return Array.from(candidates).filter(recipe => craftItemMatchesRecipeSource(item, recipe, itemProfile));
 }
 
 function getCraftNodesLite(item, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
@@ -465,13 +429,18 @@ function scheduleWorldRecipeIndexBuild() {
       return;
     }
     worldRecipeIndexSummaries ??= craftRecipeCache;
+    ensureCraftRecipeSourceIndex();
+    ensureCraftAcquisitionOutputIndex();
     const chunkStart = performance.now();
     while (worldRecipeIndexOffset < worldRecipeIndexSummaries.length) {
       const summary = worldRecipeIndexSummaries[worldRecipeIndexOffset++];
       if (!worldRecipeLayoutCache.has(summary.uuid)) {
         worldRecipeLayoutCache.set(summary.uuid, buildWorldRecipeLayoutCacheEntry(summary));
       }
-      if (!summary.sourceProfile) indexCraftRecipeSourceProfile(summary);
+      if (!summary.sourceProfileIndexed) {
+        indexCraftRecipeSourceProfile(summary);
+        summary.sourceProfileIndexed = true;
+      }
       if (!summary.acquisitionOutputsIndexed) {
         indexDisassemblyRecipeOutputs(summary);
         summary.acquisitionOutputsIndexed = true;
@@ -481,10 +450,6 @@ function scheduleWorldRecipeIndexBuild() {
       if (worldRecipeIndexOffset < worldRecipeIndexSummaries.length && (timeLeft < 2 || elapsed > 12)) break;
     }
     const complete = worldRecipeIndexOffset >= worldRecipeIndexSummaries.length;
-    if (complete) {
-      ensureCraftRecipeSourceIndex().complete = true;
-      ensureCraftAcquisitionOutputIndex().complete = true;
-    }
     if (!complete) {
       if (typeof requestIdleCallback === "function") {
         worldRecipeIndexIdleId = requestIdleCallback(tick, { timeout: 1000 });
@@ -493,6 +458,8 @@ function scheduleWorldRecipeIndexBuild() {
       }
       return;
     }
+    if (craftRecipeSourceIndex) craftRecipeSourceIndex.complete = true;
+    if (craftAcquisitionOutputIndex) craftAcquisitionOutputIndex.complete = true;
     craftWindow?.patchVisibleRecipeMissingIndicators?.();
   };
   if (typeof requestIdleCallback === "function") {
@@ -503,7 +470,7 @@ function scheduleWorldRecipeIndexBuild() {
 }
 
 export function initializeCraftRecipeWorldIndex() {
-  scheduleWorldRecipeIndexBuild();
+  void getCraftRecipeSummaries();
 }
 
 function getCraftAvailabilityIndex(actor = null) {
@@ -545,8 +512,8 @@ export function openCraftWindow({ actor, selection = null } = {}) {
 
 export async function getCraftWindowOpenOptionsForItem(item) {
   if (!item || item.type !== "gear") return [];
-  const recipes = await getCraftRecipeSummaries();
-  const matchingRecipes = findCraftRecipesForItem(item, recipes);
+  await getCraftRecipeSummaries();
+  const matchingRecipes = findCraftRecipesForItem(item);
   const createOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_CREATE);
   const disassemblyOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_DISASSEMBLY);
   return [...createOptions, ...disassemblyOptions];
@@ -910,7 +877,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
-    const acquisition = acquisitionTarget ? await this.#prepareAcquisitionWaysContext(acquisitionTarget, recipes) : null;
+    const acquisition = acquisitionTarget ? await this.#prepareAcquisitionWaysContext(acquisitionTarget) : null;
     if (acquisition) {
       craft.acquisition = acquisition;
       craft.canShowAcquisitionWays = false;
@@ -918,7 +885,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#craftLinkData = { nodes: [], links: [] };
     } else {
       const hasWays = selectedRecipe ? hasAcquisitionWaysForItem(selectedRecipe) : false;
-      craft.canShowAcquisitionWays = hasWays === null ? Boolean(selectedRecipe) : hasWays;
+      craft.canShowAcquisitionWays = hasWays;
       this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     }
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
@@ -1176,7 +1143,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#craftLinkData = { nodes: [], links: [] };
     } else {
       const hasWays = selectedRecipe ? hasAcquisitionWaysForItem(selectedRecipe) : false;
-      craft.canShowAcquisitionWays = hasWays === null ? Boolean(selectedRecipe) : hasWays;
+      craft.canShowAcquisitionWays = hasWays;
       this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     }
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
@@ -1194,10 +1161,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     };
   }
 
-  async #prepareAcquisitionWaysContext(targetItem, recipes = null) {
+  async #prepareAcquisitionWaysContext(targetItem) {
     if (!targetItem) return null;
-    recipes ??= await getCraftRecipeSummaries();
-    const { recipes: candidateRecipes, targetProfile } = findAcquisitionRecipesForItem(targetItem, recipes);
+    await getCraftRecipeSummaries();
+    const { recipes: candidateRecipes, targetProfile } = findAcquisitionRecipesForItem(targetItem);
     const availability = this.#actor ? getCraftAvailabilityIndex(this.#actor) : null;
     const entries = buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes, this.#actor, availability);
 
@@ -5475,7 +5442,12 @@ function normalizeCraftSearchText(value = "") {
 }
 
 async function getCraftRecipeSummaries() {
-  if (craftRecipeCache) return craftRecipeCache;
+  if (craftRecipeCache) {
+    if (!craftRecipeSourceIndex?.complete || !craftAcquisitionOutputIndex?.complete) {
+      scheduleWorldRecipeIndexBuild();
+    }
+    return craftRecipeCache;
+  }
   const recipes = [];
   const seen = new Set();
 
