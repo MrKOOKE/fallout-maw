@@ -2,11 +2,13 @@
   <nav class="fallout-maw-craft-window-tabs" aria-label="Вкладки крафта">
     <div class="fallout-maw-craft-window-tab-list" role="tablist">
       {{#each craftTabs}}
-      <button type="button" class="fallout-maw-craft-window-tab {{#if active}}active{{/if}}" data-craft-tab-id="{{id}}" role="tab" aria-selected="{{#if active}}true{{else}}false{{/if}}">
-        <i class="fa-solid {{icon}}"></i>
-        <span data-craft-tab-name title="{{name}}">{{name}}</span>
-        <span class="fallout-maw-craft-window-tab-close {{#unless canClose}}disabled{{/unless}}" data-craft-tab-close="{{id}}" title="Закрыть вкладку" aria-hidden="true">&times;</span>
-      </button>
+      <div class="fallout-maw-craft-window-tab-shell {{#if active}}active{{/if}}" data-craft-tab-shell="{{id}}">
+        <button type="button" class="fallout-maw-craft-window-tab {{#if active}}active{{/if}}" data-craft-tab-id="{{id}}" role="tab" aria-selected="{{#if active}}true{{else}}false{{/if}}">
+          <i class="fa-solid {{icon}}"></i>
+          <span data-craft-tab-name title="{{name}}">{{name}}</span>
+        </button>
+        <button type="button" class="fallout-maw-craft-window-tab-close {{#unless canClose}}disabled{{/unless}}" data-craft-tab-close="{{id}}" title="Закрыть вкладку" aria-label="Закрыть вкладку" {{#unless canClose}}aria-disabled="true" tabindex="-1"{{/unless}}><i class="fa-solid fa-xmark"></i></button>
+      </div>
       {{/each}}
       <button type="button" class="fallout-maw-craft-window-tab-add" data-craft-tab-add title="Новая вкладка" aria-label="Новая вкладка">
         <i class="fa-solid fa-plus"></i>

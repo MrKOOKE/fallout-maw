@@ -532,8 +532,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const tabElement of this.element?.querySelectorAll("[data-craft-tab-id]") ?? []) {
       const tab = tabs.find(entry => entry.id === tabElement.dataset.craftTabId);
       if (!tab) continue;
+      const shell = tabElement.closest("[data-craft-tab-shell]");
       tabElement.classList.toggle("active", tab.active);
       tabElement.setAttribute("aria-selected", tab.active ? "true" : "false");
+      shell?.classList.toggle("active", tab.active);
       const name = tabElement.querySelector("[data-craft-tab-name]");
       if (name) {
         name.textContent = tab.name;
@@ -560,7 +562,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       button.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        if (this.#busy) return;
+        if (this.#busy || button.classList.contains("disabled")) return;
         this.#closeCraftTab(String(button.dataset.craftTabClose ?? ""));
       });
     });
