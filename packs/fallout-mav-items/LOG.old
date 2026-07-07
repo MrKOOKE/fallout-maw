@@ -1,19 +1,9 @@
-2026/07/06-20:40:47.101 3a7d0 Recovering log #317
-2026/07/06-20:40:47.102 3a7d0 Level-0 table #327: started
-2026/07/06-20:40:47.106 3a7d0 Level-0 table #327: 102205 bytes OK
-2026/07/06-20:40:47.113 3a7d0 Delete type=0 #317
-2026/07/06-20:40:47.113 3a7d0 Delete type=3 #311
-2026/07/06-20:40:47.143 389e4 Compacting 1@0 + 5@1 files
-2026/07/06-20:40:47.170 389e4 Generated table #329@0: 540 keys, 2116451 bytes
-2026/07/06-20:40:47.195 389e4 Generated table #330@0: 476 keys, 2118892 bytes
-2026/07/06-20:40:47.222 389e4 Generated table #331@0: 484 keys, 2116284 bytes
-2026/07/06-20:40:47.245 389e4 Generated table #332@0: 487 keys, 2117075 bytes
-2026/07/06-20:40:47.254 389e4 Generated table #333@0: 104 keys, 458577 bytes
-2026/07/06-20:40:47.254 389e4 Compacted 1@0 + 5@1 files => 8927279 bytes
-2026/07/06-20:40:47.255 389e4 compacted to: files[ 0 5 2 0 0 0 0 ]
-2026/07/06-20:40:47.256 389e4 Delete type=2 #321
-2026/07/06-20:40:47.256 389e4 Delete type=2 #322
-2026/07/06-20:40:47.256 389e4 Delete type=2 #323
-2026/07/06-20:40:47.256 389e4 Delete type=2 #324
-2026/07/06-20:40:47.257 389e4 Delete type=2 #325
-2026/07/06-20:40:47.257 389e4 Delete type=2 #327
+2026/07/06-21:25:48.504 379cc Recovering log #328
+2026/07/06-21:25:48.511 379cc Delete type=0 #328
+2026/07/06-21:25:48.511 379cc Delete type=3 #326
+2026/07/06-23:57:22.471 3f3b8 Compacting 1@1 + 2@2 files
+2026/07/06-23:57:22.497 3f3b8 Generated table #336@1: 843 keys, 2119406 bytes
+2026/07/06-23:57:22.524 3f3b8 Generated table #337@1: 480 keys, 2118588 bytes
+2026/07/06-23:57:22.549 3f3b8 Generated table #338@1: 474 keys, 2118758 bytes
+2026/07/06-23:57:22.549 3f3b8 Compacted 1@1 + 2@2 files => 6356752 bytes
+2026/07/06-23:57:22.551 3f3b8 compacted to: files[ 0 4 3 0 0 0 0 ]

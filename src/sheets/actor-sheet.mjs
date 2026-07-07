@@ -2927,7 +2927,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return Boolean(getWeaponSlotRequirement(itemData).selectedKeys.size);
   }
 
-  #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
+  async #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
     this.#clearInventoryTooltip({ force: true });
     this.#closeInventoryContextMenu();
     this.#inventoryContextMenuOpen = true;
@@ -2974,8 +2974,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       });
       return;
     }
+    const { getCraftWindowOpenOptionsForItem, openCraftWindow } = await import("../apps/craft-window.mjs");
+    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
+    }
+    for (const [index, option] of craftOpenOptions.entries()) {
+      menuOptions.push([`craft-open-${index}`, option.icon, option.label]);
     }
     const interactionState = getItemInteractionState(this.actor, item, { token: resolveActorInteractionToken(this.actor) });
     if (interactionState.hasInteraction) {
@@ -3016,6 +3021,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#closeInventoryContextMenu();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openContainerSheet(item);
+      if (action.startsWith("craft-open-")) {
+        const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
+        if (!option) return undefined;
+        return openCraftWindow({ actor: this.actor, selection: option });
+      }
       if (action === "interact") return openItemInteractionDialog({ actor: this.actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "rotate") return this.#rotateInventoryItem(item);

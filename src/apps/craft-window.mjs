@@ -109,6 +109,7 @@ const CRAFT_LEGACY_BEND_PIXEL_THRESHOLD = 80;
 const DEFAULT_CRAFT_RECIPE_ID = "recipe1";
 const DEFAULT_CRAFT_RECIPE_NAME = "Рецепт_1";
 const CRAFT_RECIPE_SELECTION_SEPARATOR = "::recipe:";
+const DEFAULT_CRAFT_TAB_NAME = "Вкладка";
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 let craftWindow = null;
@@ -297,15 +298,25 @@ function isCraftRecipeMissing(recipe, actor, mode = CRAFT_MODE_CREATE, availabil
   return missing;
 }
 
-export function openCraftWindow({ actor } = {}) {
+export function openCraftWindow({ actor, selection = null } = {}) {
   if (!actor) return undefined;
   craftWindow ??= new CraftWindowApplication();
   craftWindow.setActor(actor);
+  if (selection) craftWindow.openSelection(selection);
   const result = craftWindow.render({ force: true });
   void result?.then?.(() => {
     craftWindow?.patchVisibleRecipeMissingIndicators?.();
   });
   return result;
+}
+
+export async function getCraftWindowOpenOptionsForItem(item) {
+  if (!item || item.type !== "gear") return [];
+  const recipes = await getCraftRecipeSummaries();
+  const matchingRecipes = recipes.filter(recipe => craftItemMatchesRecipeSource(item, recipe));
+  const createOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_CREATE);
+  const disassemblyOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_DISASSEMBLY);
+  return [...createOptions, ...disassemblyOptions];
 }
 
 class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -328,6 +339,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #craftViewportOverride = null;
   #craftGridStep = CRAFT_GRID_FALLBACK_STEP;
   #craftLinkData = { nodes: [], links: [] };
+  #craftTabs = [];
+  #activeCraftTabId = "";
   #expandedRecipeCategories = new Set();
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
@@ -375,6 +388,29 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return "Крафт";
   }
 
+  openSelection(selection = {}) {
+    this.#ensureCraftTabs();
+    this.#saveActiveCraftTabState();
+    const activeTab = this.#getActiveCraftTab();
+    const useActiveTab = !this.#selectedRecipeUuid && activeTab;
+    const tab = useActiveTab ? activeTab : this.#createCraftTab();
+    if (!useActiveTab) {
+      this.#craftTabs.push(tab);
+      this.#activeCraftTabId = tab.id;
+    }
+    this.#loadCraftTabState(tab);
+    this.#craftMode = normalizeCraftMode(selection.mode);
+    this.#selectedRecipeUuid = String(selection.recipeSelectionUuid ?? selection.recipeUuid ?? "");
+    this.#selectedRecipeId = parseCraftRecipeSelectionUuid(this.#selectedRecipeUuid).recipeId;
+    this.#selectedRecipe = null;
+    this.#recipeSearch = "";
+    this.#expandedRecipeCategories = new Set();
+    this.#craftViewportOverride = null;
+    this.#craftToolPickerNodeId = "";
+    this.#updateActiveCraftTabTitle();
+    this.#saveActiveCraftTabState();
+  }
+
   setActor(actor) {
     const actorUuid = String(actor?.uuid ?? "");
     if (actorUuid !== this.#actorUuid && this.#actorUuid) {
@@ -384,11 +420,187 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#pendingOperation = null;
       this.#startedOperationId = "";
       this.#animatingOperationId = "";
+      this.#resetCraftTabs();
     } else if (actorUuid === this.#actorUuid) {
       this.#selectedRecipe = null;
     }
     this.#actorUuid = actorUuid;
     this.#actor = actor ?? null;
+    this.#ensureCraftTabs();
+  }
+
+  #resetCraftTabs() {
+    this.#selectedRecipeUuid = "";
+    this.#selectedRecipeId = DEFAULT_CRAFT_RECIPE_ID;
+    this.#selectedRecipe = null;
+    this.#craftMode = CRAFT_MODE_CREATE;
+    this.#craftToolPickerNodeId = "";
+    this.#craftViewportOverride = null;
+    this.#expandedRecipeCategories = new Set();
+    this.#recipeSearch = "";
+    const tab = this.#createCraftTab();
+    this.#craftTabs = [tab];
+    this.#activeCraftTabId = tab.id;
+    this.#loadCraftTabState(tab);
+  }
+
+  #ensureCraftTabs() {
+    if (this.#craftTabs.length && this.#craftTabs.some(tab => tab.id === this.#activeCraftTabId)) return;
+    const tab = this.#createCraftTab();
+    this.#craftTabs = [tab];
+    this.#activeCraftTabId = tab.id;
+    this.#loadCraftTabState(tab);
+  }
+
+  #createCraftTab(data = {}) {
+    const index = this.#craftTabs.length + 1;
+    const id = String(data.id ?? foundry.utils.randomID());
+    return {
+      id,
+      name: String(data.name ?? `${DEFAULT_CRAFT_TAB_NAME} ${index}`),
+      mode: normalizeCraftMode(data.mode),
+      selectedRecipeUuid: String(data.selectedRecipeUuid ?? ""),
+      selectedRecipeId: String(data.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID,
+      recipeSearch: String(data.recipeSearch ?? ""),
+      expandedRecipeCategories: Array.from(data.expandedRecipeCategories ?? []),
+      craftViewportOverride: data.craftViewportOverride ? foundry.utils.deepClone(data.craftViewportOverride) : null,
+      craftToolPickerNodeId: String(data.craftToolPickerNodeId ?? "")
+    };
+  }
+
+  #getActiveCraftTab() {
+    this.#ensureCraftTabs();
+    return this.#craftTabs.find(tab => tab.id === this.#activeCraftTabId) ?? this.#craftTabs[0] ?? null;
+  }
+
+  #saveActiveCraftTabState() {
+    const tab = this.#craftTabs.find(entry => entry.id === this.#activeCraftTabId);
+    if (!tab) return;
+    tab.mode = this.#craftMode;
+    tab.selectedRecipeUuid = this.#selectedRecipeUuid;
+    tab.selectedRecipeId = this.#selectedRecipeId;
+    tab.recipeSearch = this.#recipeSearch;
+    tab.expandedRecipeCategories = Array.from(this.#expandedRecipeCategories);
+    tab.craftViewportOverride = this.#craftViewportOverride ? foundry.utils.deepClone(this.#craftViewportOverride) : null;
+    tab.craftToolPickerNodeId = this.#craftToolPickerNodeId;
+    this.#updateCraftTabTitle(tab);
+  }
+
+  #loadCraftTabState(tab = this.#getActiveCraftTab()) {
+    if (!tab) return;
+    this.#activeCraftTabId = tab.id;
+    this.#craftMode = normalizeCraftMode(tab.mode);
+    this.#selectedRecipeUuid = String(tab.selectedRecipeUuid ?? "");
+    this.#selectedRecipeId = String(tab.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID;
+    this.#selectedRecipe = null;
+    this.#recipeSearch = String(tab.recipeSearch ?? "");
+    this.#expandedRecipeCategories = new Set(Array.from(tab.expandedRecipeCategories ?? []));
+    this.#craftViewportOverride = tab.craftViewportOverride ? foundry.utils.deepClone(tab.craftViewportOverride) : null;
+    this.#craftToolPickerNodeId = String(tab.craftToolPickerNodeId ?? "");
+  }
+
+  #updateActiveCraftTabTitle(recipe = this.#selectedRecipe) {
+    this.#updateCraftTabTitle(this.#getActiveCraftTab(), recipe);
+  }
+
+  #updateCraftTabTitle(tab = null, recipe = null) {
+    if (!tab) return;
+    const selection = tab.selectedRecipeUuid ? resolveCraftRecipeSelection(tab.selectedRecipeUuid) : null;
+    const source = recipe ?? selection?.item ?? null;
+    if (!source) {
+      tab.name = `${DEFAULT_CRAFT_TAB_NAME} ${Math.max(1, this.#craftTabs.indexOf(tab) + 1)}`;
+      return;
+    }
+    const summary = craftRecipeCache?.find(entry => entry.uuid === tab.selectedRecipeUuid) ?? source;
+    tab.name = getCraftRecipeDisplayName(summary);
+  }
+
+  #getCraftTabsContext() {
+    this.#ensureCraftTabs();
+    return this.#craftTabs.map((tab, index) => ({
+      id: tab.id,
+      name: tab.name || `${DEFAULT_CRAFT_TAB_NAME} ${index + 1}`,
+      active: tab.id === this.#activeCraftTabId,
+      mode: normalizeCraftMode(tab.mode),
+      icon: normalizeCraftMode(tab.mode) === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
+      canClose: this.#craftTabs.length > 1
+    }));
+  }
+
+  #syncCraftTabsDom() {
+    const tabs = this.#getCraftTabsContext();
+    for (const tabElement of this.element?.querySelectorAll("[data-craft-tab-id]") ?? []) {
+      const tab = tabs.find(entry => entry.id === tabElement.dataset.craftTabId);
+      if (!tab) continue;
+      tabElement.classList.toggle("active", tab.active);
+      tabElement.setAttribute("aria-selected", tab.active ? "true" : "false");
+      const name = tabElement.querySelector("[data-craft-tab-name]");
+      if (name) {
+        name.textContent = tab.name;
+        name.setAttribute("title", tab.name);
+      }
+      const icon = tabElement.querySelector("i");
+      if (icon) {
+        icon.classList.toggle("fa-hammer", tab.icon === "fa-hammer");
+        icon.classList.toggle("fa-screwdriver-wrench", tab.icon === "fa-screwdriver-wrench");
+      }
+    }
+  }
+
+  #activateCraftTabs() {
+    this.element?.querySelectorAll("[data-craft-tab-id]").forEach(button => {
+      button.addEventListener("click", event => {
+        if (event.target?.closest?.("[data-craft-tab-close]")) return;
+        event.preventDefault();
+        if (this.#busy) return;
+        this.#selectCraftTab(String(button.dataset.craftTabId ?? ""));
+      });
+    });
+    this.element?.querySelectorAll("[data-craft-tab-close]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (this.#busy) return;
+        this.#closeCraftTab(String(button.dataset.craftTabClose ?? ""));
+      });
+    });
+    this.element?.querySelector("[data-craft-tab-add]")?.addEventListener("click", event => {
+      event.preventDefault();
+      if (this.#busy) return;
+      this.#addCraftTab();
+    });
+  }
+
+  #selectCraftTab(tabId = "") {
+    const tab = this.#craftTabs.find(entry => entry.id === tabId);
+    if (!tab || tab.id === this.#activeCraftTabId) return;
+    this.#saveActiveCraftTabState();
+    this.#loadCraftTabState(tab);
+    this.#clearInventoryTooltip({ force: true });
+    void this.#renderPreservingWindowStack();
+  }
+
+  #addCraftTab(data = {}) {
+    this.#saveActiveCraftTabState();
+    const tab = this.#createCraftTab(data);
+    this.#craftTabs.push(tab);
+    this.#loadCraftTabState(tab);
+    this.#clearInventoryTooltip({ force: true });
+    void this.#renderPreservingWindowStack();
+  }
+
+  #closeCraftTab(tabId = "") {
+    if (this.#craftTabs.length <= 1) return;
+    const index = this.#craftTabs.findIndex(tab => tab.id === tabId);
+    if (index < 0) return;
+    const closingActive = this.#activeCraftTabId === tabId;
+    this.#craftTabs.splice(index, 1);
+    if (closingActive) {
+      const next = this.#craftTabs[Math.min(index, this.#craftTabs.length - 1)] ?? this.#craftTabs[0];
+      this.#loadCraftTabState(next);
+    }
+    this.#clearInventoryTooltip({ force: true });
+    void this.#renderPreservingWindowStack();
   }
 
   get _dragDrop() {
@@ -418,6 +630,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
+    this.#ensureCraftTabs();
     this.#actor = await resolveActor(this.#actorUuid);
     const recipes = await getCraftRecipeSummaries();
     const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode));
@@ -448,6 +661,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
     const selectedRecipeSummary = recipes.find(recipe => recipe.uuid === this.#selectedRecipeUuid) ?? null;
+    this.#updateActiveCraftTabTitle(selectedRecipeSummary ?? selectedRecipe);
+    this.#saveActiveCraftTabState();
 
     const recipeCategories = prepareCraftRecipeCategories(recipes, this.#actor, {
       expandedCategories: this.#expandedRecipeCategories,
@@ -459,6 +674,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       ...context,
       actor: actorContext,
+      craftTabs: this.#getCraftTabsContext(),
       recipeCategories,
       recipeSearch: this.#recipeSearch,
       recipe: selectedRecipe ? {
@@ -501,6 +717,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#bindInventoryListeners();
     this.#activateWeaponSlotAspectSizing();
     this.#restoreScrollPositions();
+    this.#activateCraftTabs();
     this.#activateControls();
     this.#activateCraftViewer();
     this.#startPendingOperation();
@@ -508,6 +725,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #renderPreservingWindowStack(options = {}) {
     if (this.rendered) this.#captureScrollPositions();
+    this.#saveActiveCraftTabState();
     return this.render({ ...options, force: !this.rendered });
   }
 
@@ -615,6 +833,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.element?.querySelectorAll("[data-recipe-uuid]").forEach(element => {
       element.classList.toggle("selected", element.dataset.recipeUuid === this.#selectedRecipeUuid);
     });
+    this.#syncCraftTabsDom();
   }
 
   #applyRecipeMissingDom(categoryKey = "") {
@@ -679,6 +898,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       : createEmptyCraftContext(this.#busy);
     this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
+    this.#updateActiveCraftTabTitle(selectedRecipe);
+    this.#saveActiveCraftTabState();
     return {
       recipe: selectedRecipe ? {
         uuid: selectedRecipe.uuid,
@@ -718,6 +939,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
+        this.#saveActiveCraftTabState();
         this.#captureScrollPositions();
         void this.#renderPreservingWindowStack();
       });
@@ -733,6 +955,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const search = this.element?.querySelector("[data-craft-recipe-search]");
     search?.addEventListener("input", event => {
       this.#recipeSearch = String(event.currentTarget?.value ?? "");
+      this.#saveActiveCraftTabState();
       this.#filterRecipeList();
     });
     this.element?.querySelectorAll("[data-craft-recipe-category-toggle]").forEach(button => {
@@ -747,6 +970,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         } else {
           this.#expandedRecipeCategories.delete(category);
         }
+        this.#saveActiveCraftTabState();
         const section = event.currentTarget?.closest("[data-craft-recipe-category]");
         section?.classList.toggle("collapsed", !expanding);
         const icon = event.currentTarget?.querySelector("i");
@@ -770,6 +994,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
+        this.#updateActiveCraftTabTitle();
+        this.#saveActiveCraftTabState();
         this.#syncRecipeSelectionDom();
         void this.#updateCraftPanel();
       });
@@ -829,12 +1055,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       event.preventDefault();
       event.stopPropagation();
       this.#craftToolPickerNodeId = String(toolNode.dataset.craftNodeId ?? "");
+      this.#saveActiveCraftTabState();
       this.#clearInventoryTooltip({ force: true });
       void this.#updateCraftPanel();
       return;
     }
     if (!this.#craftToolPickerNodeId) return;
     this.#craftToolPickerNodeId = "";
+    this.#saveActiveCraftTabState();
     void this.#updateCraftPanel();
   }
 
@@ -845,6 +1073,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const instrumentId = String(event.currentTarget?.dataset?.instrumentId ?? "");
     if (!requirementKey || !instrumentId || !this.#selectedRecipeUuid) return;
     this.#craftToolSelections.set(getCraftToolSelectionStorageKey(this.#selectedRecipeUuid, this.#craftMode, requirementKey), instrumentId);
+    this.#saveActiveCraftTabState();
     void this.#updateCraftPanel();
   }
 
@@ -1577,7 +1806,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
-  #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
+  async #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
     this.#clearInventoryTooltip({ force: true });
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
 
@@ -1587,6 +1816,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
+    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
     const menuOptions = [];
 
     if (game.user?.isGM) {
@@ -1594,6 +1824,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
+    }
+    for (const [index, option] of craftOpenOptions.entries()) {
+      menuOptions.push([`craft-open-${index}`, option.icon, option.label]);
     }
     if (getItemInteractionState(this.#actor, item).hasInteraction) {
       menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
@@ -1640,6 +1873,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openCraftContainerSheet(item);
+      if (action.startsWith("craft-open-")) {
+        const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
+        if (!option) return undefined;
+        this.openSelection(option);
+        return this.#renderPreservingWindowStack();
+      }
       if (action === "interact") return openItemInteractionDialog({ actor: this.#actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.#actor, item, application: this });
       if (action === "rotate") return this.#rotateCraftItem(item);
@@ -2004,6 +2243,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       : [];
     const viewport = clampCraftViewportToVisibleNode(normalizeCraftViewport({ x, y, zoom }), workspace, nodes);
     this.#craftViewportOverride = viewport;
+    this.#saveActiveCraftTabState();
     workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
     workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
     workspace?.style.setProperty("--craft-zoom", String(viewport.zoom));
@@ -4721,6 +4961,39 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
     }))
     .sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang));
   return result;
+}
+
+function buildCraftOpenOptionsForMode(recipes = [], mode = CRAFT_MODE_CREATE) {
+  mode = normalizeCraftMode(mode);
+  const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, mode));
+  const multiple = modeRecipes.length > 1;
+  const icon = mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer";
+  const baseLabel = mode === CRAFT_MODE_DISASSEMBLY ? "Открыть разбор" : "Открыть крафт";
+  return modeRecipes.map(recipe => ({
+    action: `${mode}:${recipe.uuid}`,
+    icon,
+    label: multiple ? `${baseLabel}: ${getCraftRecipeDisplayName(recipe)}` : baseLabel,
+    mode,
+    recipeSelectionUuid: recipe.uuid
+  }));
+}
+
+function craftItemMatchesRecipeSource(item = null, recipe = null) {
+  if (!item || !recipe?.itemUuid) return false;
+  if (item.uuid === recipe.itemUuid) return true;
+
+  const recipeProfile = getCraftItemSourceProfile(recipe.itemUuid);
+  const itemKeys = getCraftItemSourceKeys(item);
+  const recipeKeys = recipeProfile.sourceKeys ?? new Set();
+  const itemIdentity = getCraftItemIdentity(item);
+  if (recipeKeys.size && itemKeys.size && setsIntersect(recipeKeys, itemKeys)) {
+    return !recipeProfile.identity || recipeProfile.identity === itemIdentity;
+  }
+
+  if (recipeProfile.identity && recipeProfile.identity === itemIdentity) return true;
+  const fingerprint = getCraftItemFingerprint(item);
+  if (recipeProfile.fingerprint && recipeProfile.fingerprint !== fingerprint) return false;
+  return Boolean(recipeProfile.fingerprint);
 }
 
 function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, availability = null) {

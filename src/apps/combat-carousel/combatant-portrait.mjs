@@ -1,10 +1,11 @@
 import { MODULE_ID } from "./main.mjs";
 import {
-    BLOCK_TURN_COMBATANT_OPTION,
     isBlockTurnOrderEnabled,
     isCombatantCompletedInActiveBlock,
     isCombatantInActiveBlock
 } from "../../combat/turn-order-blocks.mjs";
+import { TURN_CONVERSION_MODES } from "../../combat/reaction-resources.mjs";
+import { requestEndCombatTurnOperation } from "../token-action-hud.mjs";
 import { generateDescription, getInitiativeDisplay, getSystemIcons } from "./systems.mjs";
 
 export class CombatantPortrait {
@@ -122,7 +123,11 @@ export class CombatantPortrait {
         event.preventDefault();
 
         if (event.target.dataset.action === "player-pass") {
-            return this.combat.nextTurn({ [BLOCK_TURN_COMBATANT_OPTION]: this.combatant.id });
+            return requestEndCombatTurnOperation({
+                combat: this.combat,
+                actor: this.actor,
+                conversionMode: TURN_CONVERSION_MODES.dodge
+            });
         }
 
         if (!event.target.classList.contains("combatant-wrapper")) return;

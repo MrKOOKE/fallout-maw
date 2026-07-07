@@ -181,6 +181,11 @@ export class FalloutMaWCombat extends Combat {
     return this;
   }
 
+  _onUpdate(changed, options, userId) {
+    super._onUpdate(changed, options, userId);
+    if (isBlockTurnOrderEnabled(this) && isBlockTurnStateUpdate(changed)) this._updateTurnMarkers();
+  }
+
   _updateTurnMarkers() {
     if (!isBlockTurnOrderEnabled(this)) return super._updateTurnMarkers();
     if (!canvas.ready) return;
@@ -240,6 +245,11 @@ export class FalloutMaWCombat extends Combat {
     await foundry.documents.ChatMessage.implementation.create(messages);
     return this;
   }
+}
+
+function isBlockTurnStateUpdate(changed = {}) {
+  return foundry.utils.getProperty(changed, `flags.${SYSTEM_ID}.${BLOCK_TURN_STATE_FLAG}`) !== undefined
+    || changed.flags?.[SYSTEM_ID]?.[BLOCK_TURN_STATE_FLAG] !== undefined;
 }
 
 function normalizeCombatantIdSet(value) {

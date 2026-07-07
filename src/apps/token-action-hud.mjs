@@ -22,6 +22,7 @@ import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostMod
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import {
   REACTION_RESOURCE_KEY,
+  TURN_CONVERSION_MODES,
   decorateActionPointHudEntry,
   promptEndTurnConversion
 } from "../combat/reaction-resources.mjs";
@@ -751,10 +752,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#activeTray = "";
     const conversionMode = await promptEndTurnConversion(this.actor);
     if (!conversionMode) return this.render({ force: true });
-    await combat.nextTurn({
-      falloutMawConversionMode: conversionMode,
-      [BLOCK_TURN_ACTOR_OPTION]: this.actor?.uuid
-    });
+    try {
+      await requestEndCombatTurnOperation({
+        combat,
+        actor: this.actor,
+        conversionMode
+      });
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | End combat turn request failed`, error);
+      ui.notifications.error(error.message || "Не удалось завершить ход.");
+    }
     return this.render({ force: true });
   }
 
@@ -4244,6 +4251,35 @@ async function requestWeaponReloadOperation({ actor = null, weapon = null, weapo
   return requestTokenActionHudSocket("weaponReload", payload, gm);
 }
 
+export async function requestEndCombatTurnOperation({ combat = null, actor = null, conversionMode = "" } = {}) {
+  if (!combat?.started || !actor?.isOwner) return undefined;
+  const payload = {
+    combatId: combat.id,
+    actorUuid: actor.uuid,
+    conversionMode: normalizeTurnConversionMode(conversionMode)
+  };
+  if (game.user?.isGM) return performEndCombatTurnOperation(payload, game.user?.id ?? "");
+  const gm = getResponsibleGM();
+  if (!gm) throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoGM"));
+  return requestTokenActionHudSocket("endCombatTurn", payload, gm);
+}
+
+async function performEndCombatTurnOperation({ combatId = "", actorUuid = "", conversionMode = "" } = {}, requesterUserId = "") {
+  const combat = game.combats?.get(combatId) ?? game.combat;
+  if (!combat?.started || combat.id !== combatId) throw new Error("Combat not found.");
+  const actor = await fromUuid(actorUuid);
+  if (!actor) throw new Error("Actor not found.");
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (requester && !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
+  if (!isActorTurnTarget(actor, combat)) throw new Error("Actor is not active in the current combat turn.");
+
+  await combat.nextTurn({
+    falloutMawConversionMode: normalizeTurnConversionMode(conversionMode),
+    [BLOCK_TURN_ACTOR_OPTION]: actor.uuid
+  });
+  return true;
+}
+
 async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", weaponFunctionId = "", action = "", sourceUuid = "" } = {}, requesterUserId = "") {
   const actor = await fromUuid(actorUuid);
   if (!actor) throw new Error("Actor not found.");
@@ -4685,6 +4721,7 @@ async function handleTokenActionHudSocketMessage(message = {}) {
 }
 
 async function handleTokenActionHudSocketRequest(action, payload = {}, requesterUserId = "") {
+  if (action === "endCombatTurn") return performEndCombatTurnOperation(payload, requesterUserId);
   if (action === "weaponReload") return performWeaponReloadOperation(payload, requesterUserId);
   return undefined;
 }
@@ -4694,6 +4731,18 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+function isActorTurnTarget(actor, combat) {
+  if (!actor?.uuid || !combat?.started) return false;
+  if (combat.round < 1 || combat.turn === null) return false;
+  if (isBlockTurnOrderEnabled(combat)) return isActorPendingInActiveBlock(actor, combat);
+  return combat.combatant?.actor?.uuid === actor.uuid;
+}
+
+function normalizeTurnConversionMode(value) {
+  const mode = String(value ?? "");
+  return Object.values(TURN_CONVERSION_MODES).includes(mode) ? mode : TURN_CONVERSION_MODES.none;
 }
 
 function escapeHTML(value) {
