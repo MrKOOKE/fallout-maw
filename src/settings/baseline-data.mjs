@@ -2781,6 +2781,53 @@ export const SETTINGS_BASELINE = Object.freeze({
                     }
                   ]
                 }
+              },
+              {
+                "id": "fixed-knock-off-balance",
+                "name": "Выбить из колеи",
+                "img": "icons/svg/daze.svg",
+                "visible": true,
+                "description": "<p>Стоимость активации: 20 энергии. Перегрузка: 20 энергии на 12 секунд.</p><p>После активации можно выбрать до [[2+speech/50]] целей, чей интеллект выше 0. Цели проходят проверку Науки со сложностью [[50+speech]]. При провале на 12 секунд получают помеху на все атакующие действия и -[[10+speech/5]] к точности.</p>",
+                "system": {
+                  "cost": 3000,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech",
+                    "difficulty": 150
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "fixed-knock-off-balance-speech",
+                      "type": "skill",
+                      "skillKey": "speech",
+                      "value": 100
+                    }
+                  ],
+                  "functions": [
+                    {
+                      "id": "fixed-knock-off-balance-function",
+                      "type": "fixed",
+                      "fixedKey": "knockOffBalance",
+                      "fixedSettings": {
+                        "energyCost": 20,
+                        "overloadEnergyCost": 20,
+                        "overloadDurationSeconds": 12,
+                        "targetLimitFormula": "2+speech/50",
+                        "difficultyFormula": "50+speech",
+                        "targetSkillKey": "science",
+                        "attackDisadvantageCount": 1,
+                        "attackPenaltyFormula": "10+speech/5",
+                        "debuffDurationSeconds": 12
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
               }
             ]
           },

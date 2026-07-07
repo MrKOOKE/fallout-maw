@@ -904,6 +904,78 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedKnockOffBalanceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Выбить из колеи</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Стоимость активации, энергия</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedKnockOffBalanceSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Лимит целей</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.targetLimitFormula" value="{{fixedKnockOffBalanceSettings.targetLimitFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Сложность проверки</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.difficultyFormula" value="{{fixedKnockOffBalanceSettings.difficultyFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Навык цели</span>
+            <select name="{{functionPath}}.{{functionIndex}}.fixedSettings.targetSkillKey">
+              {{#each fixedKnockOffBalanceSettings.targetSkillChoices}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedKnockOffBalanceSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedKnockOffBalanceSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-knock-off-balance-overload-duration-amount>
+              <select data-fixed-knock-off-balance-overload-duration-unit>
+                {{#each fixedKnockOffBalanceSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Дебаф</strong>
+          <label>
+            <span>Помех атакующим действиям</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackDisadvantageCount" value="{{fixedKnockOffBalanceSettings.attackDisadvantageCount}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Штраф точности</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackPenaltyFormula" value="{{fixedKnockOffBalanceSettings.attackPenaltyFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedKnockOffBalanceSettings.debuffDurationAmount}}" min="0" step="1" data-fixed-knock-off-balance-debuff-duration-amount>
+              <select data-fixed-knock-off-balance-debuff-duration-unit>
+                {{#each fixedKnockOffBalanceSettings.debuffDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedHeightenedConcentrationSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

@@ -28,6 +28,7 @@ import {
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
+  normalizeKnockOffBalanceSettings,
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
   normalizeReaperSettings,
@@ -77,6 +78,7 @@ import {
 import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
@@ -104,7 +106,7 @@ import {
   ONE_TIME_SKILL_MODIFIER_FLAG_KEY,
   getPendingOneTimeSkillModifierEffects
 } from "../rolls/one-time-skill-modifiers.mjs";
-import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
 import { registerCombatResourceSpendingProvider, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
@@ -134,6 +136,7 @@ import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
 import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
+import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -148,6 +151,7 @@ const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const HEIGHTENED_CONCENTRATION_EFFECT_SOURCE = "heightenedConcentration";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
+const KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY = "knockOffBalance";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
@@ -429,6 +433,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
       fixedSettings: normalizeCommandBasicsSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance,
+    label: "Выбить из колеи",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance,
+      fixedSettings: normalizeKnockOffBalanceSettings()
     })
   }),
   Object.freeze({
@@ -820,6 +833,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
+    const used = await useKnockOffBalance(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     const used = await useHeightenedConcentration(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -993,71 +1012,12 @@ async function requestCommandBasicsChoice({ abilityName = "Основы кома
 
 function selectCommandBasicsTargets({ commander = null, command = "", limit = 1, abilityName = "Основы командования" } = {}) {
   const rows = collectCommandBasicsTargetRows(commander, command);
-  const selectable = rows.filter(row => row.selectable);
-  if (!selectable.length) {
-    ui.notifications.warn(`${abilityName}: нет подходящих исполнителей.`);
-    return Promise.resolve([]);
-  }
-
-  return new Promise(resolve => {
-    const layer = getCommandBasicsPreviewLayer();
-    const graphics = new PIXI.Graphics();
-    const selected = new Set();
-    layer.addChild(graphics);
-    drawCommandBasicsTargetRows(graphics, rows, selected);
-    ui.notifications.info(`${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`);
-
-    const cleanup = () => {
-      window.removeEventListener("keydown", onKeyDown, { capture: true });
-      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
-      graphics.destroy();
-    };
-    const finish = value => {
-      cleanup();
-      resolve(value);
-    };
-    const getSelection = () => {
-      const seen = new Set();
-      return rows.filter(row => {
-        if (!selected.has(row.actorUuid) || seen.has(row.actorUuid)) return false;
-        seen.add(row.actorUuid);
-        return true;
-      });
-    };
-    const confirm = () => {
-      const selection = getSelection();
-      if (!selection.length) return;
-      finish(selection);
-    };
-    const onKeyDown = event => {
-      if (event.key !== "Escape" && event.key !== "Enter") return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      if (event.key === "Escape") finish([]);
-      else confirm();
-    };
-    const onPointerDown = event => {
-      if (event.button !== 0) return;
-      if (!isCanvasViewEventForCommandBasics(event)) return;
-      const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-      const row = getCommandBasicsRowAtPoint(rows, point);
-      if (!row) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      if (!row.selectable) {
-        if (row.reason) ui.notifications.warn(`${row.token?.name ?? row.token?.actor?.name ?? "Цель"}: ${row.reason}`);
-        return;
-      }
-      if (selected.has(row.actorUuid)) selected.delete(row.actorUuid);
-      else if (selected.size < limit) selected.add(row.actorUuid);
-      drawCommandBasicsTargetRows(graphics, rows, selected);
-      if (selected.size >= limit) confirm();
-    };
-
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    document.addEventListener("pointerdown", onPointerDown, { capture: true });
+  return requestCustomTokenSelection({
+    rows,
+    limit,
+    title: abilityName,
+    noneWarning: `${abilityName}: нет подходящих исполнителей.`,
+    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`
   });
 }
 
@@ -1165,66 +1125,242 @@ function isCommandBasicsAlly(left, right) {
     || normalizedLeft.some(faction => getRelationTo(right, faction) === "ally");
 }
 
-function drawCommandBasicsTargetRows(graphics, rows = [], selected = new Set()) {
-  graphics.clear();
-  for (const row of rows) {
-    const rect = getCommandBasicsTokenRect(row.token);
-    const selectedRow = selected.has(row.actorUuid);
-    const color = row.selectable ? 0x36d06f : 0xd64b4b;
-    const lineWidth = selectedRow ? 5 : 3;
-    const alpha = selectedRow ? 0.28 : 0.14;
-    graphics.lineStyle(lineWidth, color, 0.95);
-    graphics.beginFill(color, alpha);
-    graphics.drawRect(rect.x, rect.y, rect.width, rect.height);
-    graphics.endFill();
-  }
-}
-
-function getCommandBasicsRowAtPoint(rows = [], point = null) {
-  return rows
-    .slice()
-    .reverse()
-    .find(row => isCommandBasicsPointInToken(point, row.token)) ?? null;
-}
-
-function isCommandBasicsPointInToken(point, token) {
-  const rect = getCommandBasicsTokenRect(token);
-  return point
-    && point.x >= rect.x
-    && point.x <= rect.x + rect.width
-    && point.y >= rect.y
-    && point.y <= rect.y + rect.height;
-}
-
-function getCommandBasicsTokenRect(token) {
-  const document = token?.document ?? token;
-  const size = document?.getSize?.() ?? {
-    width: Math.max(1, Number(document?.width) || 1) * canvas.grid.size,
-    height: Math.max(1, Number(document?.height) || 1) * canvas.grid.size
-  };
-  return {
-    x: Number(document?.x ?? token?.x) || 0,
-    y: Number(document?.y ?? token?.y) || 0,
-    width: Math.max(1, Number(size.width) || canvas.grid.size),
-    height: Math.max(1, Number(size.height) || canvas.grid.size)
-  };
-}
-
-function getCommandBasicsPreviewLayer() {
-  return canvas.controls._rulerPaths;
-}
-
-function isCanvasViewEventForCommandBasics(event) {
-  const view = canvas.app?.view;
-  if (!view) return false;
-  return event.target === view || Array.from(event.composedPath?.() ?? []).includes(view);
-}
-
 function getCommandBasicsCommandLabel(command = "") {
   if (command === "shoot") return "Цельсь, пли";
   if (command === "strike") return "Коли";
   if (command === "duck") return "Ложись";
   return "Команда";
+}
+
+async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const settings = normalizeKnockOffBalanceSettings(abilityFunction.fixedSettings);
+  if (!getSkillSettings().some(skill => skill.key === settings.targetSkillKey)) {
+    ui.notifications.warn(`${abilityName}: навык проверки цели не настроен.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для применения дебафа.`);
+    return false;
+  }
+
+  const limit = Math.max(1, Math.floor(evaluateActorFormula(settings.targetLimitFormula, actor, {
+    fallback: 2,
+    minimum: 1,
+    context: "knock off balance target limit"
+  })));
+  const selection = await selectKnockOffBalanceTargets({ actor, limit, abilityName });
+  if (!selection?.length) return false;
+
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+
+  const difficulty = Math.max(0, Math.floor(evaluateActorFormula(settings.difficultyFormula, actor, {
+    fallback: 50,
+    minimum: 0,
+    context: "knock off balance difficulty"
+  })));
+  const checks = await requestSkillCheckBatch({
+    skillKey: settings.targetSkillKey,
+    entries: selection.map(entry => ({
+      actor: entry.token?.actor,
+      data: { difficulty }
+    })),
+    requester: "knockOffBalance",
+    title: `${abilityName}: проверка`
+  });
+  const outcomes = checks?.outcomes ?? [];
+  const failed = outcomes.filter(outcome => !["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? "")));
+  if (!failed.length) {
+    await createAbilityChatMessage(actor, abilityItem, "Все цели устояли.");
+    return true;
+  }
+
+  const attackPenalty = Math.max(0, Math.floor(evaluateActorFormula(settings.attackPenaltyFormula, actor, {
+    fallback: 10,
+    minimum: 0,
+    context: "knock off balance attack penalty"
+  })));
+  const applied = await requestKnockOffBalanceDebuffOperation({
+    actorUuid: actor.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    targetActorUuids: failed.map(outcome => outcome.actor?.uuid).filter(Boolean),
+    attackDisadvantageCount: settings.attackDisadvantageCount,
+    attackPenalty,
+    durationSeconds: settings.debuffDurationSeconds,
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!applied) {
+    ui.notifications.warn(`${abilityName}: не удалось применить дебаф.`);
+    return false;
+  }
+
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `${failed.length} целей выбито из колеи: помеха атакам и -${attackPenalty} к точности на ${formatDuration(settings.debuffDurationSeconds)}.`
+  );
+  return true;
+}
+
+function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = "Выбить из колеи" } = {}) {
+  const rows = collectKnockOffBalanceTargetRows(actor);
+  return requestCustomTokenSelection({
+    rows,
+    limit,
+    title: abilityName,
+    noneWarning: `${abilityName}: нет подходящих целей.`,
+    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`
+  });
+}
+
+function collectKnockOffBalanceTargetRows(actor) {
+  return (canvas.tokens?.placeables ?? [])
+    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token.actor.uuid !== actor?.uuid)
+    .map(token => createKnockOffBalanceTargetRow(token));
+}
+
+function createKnockOffBalanceTargetRow(token) {
+  const actor = token?.actor ?? null;
+  const row = {
+    token,
+    actorUuid: actor?.uuid ?? "",
+    selectable: false,
+    reason: ""
+  };
+  if (getActorIntelligence(actor) <= 0) {
+    row.reason = "интеллект 0 или ниже.";
+    return row;
+  }
+  row.selectable = true;
+  return row;
+}
+
+function getActorIntelligence(actor) {
+  return toInteger(actor?.system?.characteristics?.intelligence);
+}
+
+async function requestKnockOffBalanceDebuffOperation(payload = {}) {
+  if (game.user?.isGM) return processKnockOffBalanceDebuffOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DISARM_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performKnockOffBalanceDebuff",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+async function processKnockOffBalanceDebuffSocketRequest(message = {}) {
+  const applied = await processKnockOffBalanceDebuffOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "knockOffBalanceDebuffResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { applied: Boolean(applied) }
+  });
+}
+
+async function processKnockOffBalanceDebuffOperation(payload = {}) {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!actor || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const targetActorUuids = Array.from(new Set((payload.targetActorUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  const targets = (await Promise.all(targetActorUuids.map(uuid => fromUuid(uuid))))
+    .filter(target => target && getActorIntelligence(target) > 0);
+  if (!targets.length) return false;
+
+  const attackDisadvantageCount = Math.max(1, toInteger(payload.attackDisadvantageCount));
+  const attackPenalty = Math.max(0, toInteger(payload.attackPenalty));
+  const durationSeconds = Math.max(0, toInteger(payload.durationSeconds));
+  const startTime = Number(game.time?.worldTime) || 0;
+  const effectData = {
+    type: "base",
+    name: getAbilityDisplayName(abilityItem),
+    img: abilityItem.img || "icons/svg/daze.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: durationSeconds,
+      startTime
+    },
+    system: {
+      changes: [
+        {
+          key: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+          type: "add",
+          value: String(attackDisadvantageCount),
+          phase: "initial",
+          priority: null
+        },
+        {
+          key: "system.combat.accuracy",
+          type: "add",
+          value: String(-attackPenalty),
+          phase: "initial",
+          priority: null
+        }
+      ]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          createdAt: startTime
+        }
+      }
+    }
+  };
+  for (const target of targets) {
+    await target.createEmbeddedDocuments("ActiveEffect", [foundry.utils.deepClone(effectData)], { animate: false });
+  }
+  return true;
 }
 
 async function requestCommandBasicsDodgeOperation(payload = {}) {
@@ -4756,6 +4892,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processCommandBasicsDodgeSocketRequest(message);
     return;
   }
+  if (message.action === "performKnockOffBalanceDebuff") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processKnockOffBalanceDebuffSocketRequest(message);
+    return;
+  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -4773,6 +4914,14 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pending.resolve(Boolean(message.result?.applied));
   }
   if (message.action === "commandBasicsDodgeResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
+  }
+  if (message.action === "knockOffBalanceDebuffResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;

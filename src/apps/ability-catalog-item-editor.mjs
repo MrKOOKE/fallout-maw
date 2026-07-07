@@ -46,6 +46,7 @@ import {
   normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeHeightenedConcentrationSettings,
+  normalizeKnockOffBalanceSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
@@ -914,6 +915,25 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.knockOffBalance.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.knockOffBalance.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.knockOffBalance.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.knockOffBalance.overloadDurationUnit']")?.value
+      ),
+      targetLimitFormula: row.querySelector("[data-field='fixed.knockOffBalance.targetLimitFormula']")?.value,
+      difficultyFormula: row.querySelector("[data-field='fixed.knockOffBalance.difficultyFormula']")?.value,
+      targetSkillKey: row.querySelector("[data-field='fixed.knockOffBalance.targetSkillKey']")?.value,
+      attackDisadvantageCount: row.querySelector("[data-field='fixed.knockOffBalance.attackDisadvantageCount']")?.value,
+      attackPenaltyFormula: row.querySelector("[data-field='fixed.knockOffBalance.attackPenaltyFormula']")?.value,
+      debuffDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.knockOffBalance.debuffDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.knockOffBalance.debuffDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return {
       energyCost: row.querySelector("[data-field='fixed.heightenedConcentration.energyCost']")?.value,
@@ -1219,6 +1239,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedCommandBasicsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics
     ? prepareCommandBasicsSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedKnockOffBalanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance
+    ? prepareKnockOffBalanceSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1265,6 +1288,7 @@ function prepareFunctionForDisplay(entry) {
     fixedFullForceSettings,
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
+    fixedKnockOffBalanceSettings,
     fixedHeightenedConcentrationSettings,
     fixedRageSettings,
     fixedDisarmSettings,
@@ -1461,6 +1485,20 @@ function prepareCommandBasicsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     dodgeDurationAmount: dodgeDuration.amount,
     dodgeDurationUnitChoices: buildDurationUnitChoices(dodgeDuration.unit)
+  };
+}
+
+function prepareKnockOffBalanceSettingsForDisplay(settings = {}) {
+  const normalized = normalizeKnockOffBalanceSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const debuffDuration = splitDurationSeconds(normalized.debuffDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    debuffDurationAmount: debuffDuration.amount,
+    debuffDurationUnitChoices: buildDurationUnitChoices(debuffDuration.unit),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
   };
 }
 

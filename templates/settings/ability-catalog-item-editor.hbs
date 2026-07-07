@@ -755,6 +755,76 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedKnockOffBalanceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Выбить из колеи</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Стоимость активации, энергия</span>
+            <input type="number" data-field="fixed.knockOffBalance.energyCost" value="{{fixedKnockOffBalanceSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Лимит целей</span>
+            <input type="text" data-field="fixed.knockOffBalance.targetLimitFormula" value="{{fixedKnockOffBalanceSettings.targetLimitFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Сложность проверки</span>
+            <input type="text" data-field="fixed.knockOffBalance.difficultyFormula" value="{{fixedKnockOffBalanceSettings.difficultyFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Навык цели</span>
+            <select data-field="fixed.knockOffBalance.targetSkillKey">
+              {{#each fixedKnockOffBalanceSettings.targetSkillChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.knockOffBalance.overloadEnergyCost" value="{{fixedKnockOffBalanceSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.knockOffBalance.overloadDurationAmount" value="{{fixedKnockOffBalanceSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.knockOffBalance.overloadDurationUnit">
+                {{#each fixedKnockOffBalanceSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Дебаф</strong>
+          <label>
+            <span>Помех атакующим действиям</span>
+            <input type="number" data-field="fixed.knockOffBalance.attackDisadvantageCount" value="{{fixedKnockOffBalanceSettings.attackDisadvantageCount}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Штраф точности</span>
+            <input type="text" data-field="fixed.knockOffBalance.attackPenaltyFormula" value="{{fixedKnockOffBalanceSettings.attackPenaltyFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.knockOffBalance.debuffDurationAmount" value="{{fixedKnockOffBalanceSettings.debuffDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.knockOffBalance.debuffDurationUnit">
+                {{#each fixedKnockOffBalanceSettings.debuffDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedHeightenedConcentrationSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Повышенная концентрация</h3>

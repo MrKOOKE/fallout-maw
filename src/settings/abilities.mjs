@@ -45,6 +45,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   fullForce: "fullForce",
   twoHands: "twoHands",
   commandBasics: "commandBasics",
+  knockOffBalance: "knockOffBalance",
   heightenedConcentration: "heightenedConcentration",
   grapplingMaster: "grapplingMaster"
 });
@@ -187,6 +188,38 @@ export function createCommandBasicsAbilityCatalogEntry() {
           type: ABILITY_FUNCTION_TYPES.fixed,
           fixedKey: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
           fixedSettings: normalizeCommandBasicsSettings(),
+          changes: [],
+          conditions: [],
+          penalties: []
+        }
+      ]
+    }
+  });
+}
+
+export function createKnockOffBalanceAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-knock-off-balance",
+    name: "Выбить из колеи",
+    img: "icons/svg/daze.svg",
+    visible: true,
+    description: "<p>Стоимость активации: 20 энергии. Перегрузка: 20 энергии на 12 секунд.</p><p>После активации можно выбрать до [[2+speech/50]] целей с интеллектом выше 0. Они проходят проверку Науки со сложностью [[50+speech]]. При провале на 12 секунд получают помеху на все атакующие действия и -[[10+speech/5]] к точности.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: {
+        onlyFree: false,
+        onlyManual: false,
+        skillKey: "speech",
+        difficulty: 60
+      },
+      acquisitionRequirements: [],
+      functions: [
+        {
+          id: "fixed-knock-off-balance-function",
+          type: ABILITY_FUNCTION_TYPES.fixed,
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance,
+          fixedSettings: normalizeKnockOffBalanceSettings(),
           changes: [],
           conditions: [],
           penalties: []
@@ -782,6 +815,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics) {
     return normalizeCommandBasicsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
+    return normalizeKnockOffBalanceSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return normalizeHeightenedConcentrationSettings(value);
   }
@@ -1188,6 +1224,20 @@ export function normalizeCommandBasicsSettings(value = {}) {
     targetLimitFormula: String(value?.targetLimitFormula ?? "2+speech/50").trim() || "2+speech/50",
     dodgeBonusFormula: String(value?.dodgeBonusFormula ?? "10+speech/10").trim() || "10+speech/10",
     dodgeDurationSeconds: Math.max(0, toInteger(value?.dodgeDurationSeconds ?? 12))
+  };
+}
+
+export function normalizeKnockOffBalanceSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    targetLimitFormula: String(value?.targetLimitFormula ?? "2+speech/50").trim() || "2+speech/50",
+    difficultyFormula: String(value?.difficultyFormula ?? "50+speech").trim() || "50+speech",
+    targetSkillKey: String(value?.targetSkillKey ?? "science").trim() || "science",
+    attackDisadvantageCount: Math.max(1, toInteger(value?.attackDisadvantageCount ?? 1)),
+    attackPenaltyFormula: String(value?.attackPenaltyFormula ?? "10+speech/5").trim() || "10+speech/5",
+    debuffDurationSeconds: Math.max(0, toInteger(value?.debuffDurationSeconds ?? 12))
   };
 }
 

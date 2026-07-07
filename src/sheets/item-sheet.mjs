@@ -71,6 +71,7 @@ import {
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
+  normalizeKnockOffBalanceSettings,
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
@@ -5735,6 +5736,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedCommandBasicsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics
     ? prepareCommandBasicsSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedKnockOffBalanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance
+    ? prepareKnockOffBalanceSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -5780,6 +5784,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedFullForceSettings,
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
+    fixedKnockOffBalanceSettings,
     fixedHeightenedConcentrationSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
@@ -5992,6 +5997,20 @@ function prepareCommandBasicsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     dodgeDurationAmount: dodgeDuration.amount,
     dodgeDurationUnitChoices: buildAbilityDurationUnitChoices(dodgeDuration.unit)
+  };
+}
+
+function prepareKnockOffBalanceSettingsForDisplay(settings = {}) {
+  const normalized = normalizeKnockOffBalanceSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const debuffDuration = splitAbilityDurationSeconds(normalized.debuffDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    debuffDurationAmount: debuffDuration.amount,
+    debuffDurationUnitChoices: buildAbilityDurationUnitChoices(debuffDuration.unit),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
   };
 }
 
@@ -6814,6 +6833,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.dodgeDurationSeconds`, dodgeDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-knock-off-balance-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-knock-off-balance-overload-duration-unit]")?.value
+      );
+      const debuffDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-knock-off-balance-debuff-duration-amount]")?.value,
+        row.querySelector("[data-fixed-knock-off-balance-debuff-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.debuffDurationSeconds`, debuffDurationSeconds);
       continue;
     }
 
