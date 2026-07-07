@@ -15351,6 +15351,27 @@ html.fallout-maw-token-action-hud-open #hotbar {
   width: 5.5rem;
 }
 
+.fallout-maw-craft-window-secondary-action {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-content: center;
+  line-height: 1.1;
+  min-height: 3rem;
+  min-width: 0;
+  padding: 0.45rem 0.75rem;
+  white-space: normal;
+}
+
+.fallout-maw-craft-window-secondary-action i {
+  flex: 0 0 auto;
+}
+
+.fallout-maw-craft-window-secondary-action span {
+  max-width: 12rem;
+  overflow-wrap: anywhere;
+}
+
 .fallout-maw-craft-window-actions {
   align-items: center;
   display: flex;
@@ -15377,6 +15398,214 @@ html.fallout-maw-token-action-hud-open #hotbar {
   --fallout-maw-craft-cell-step: calc(var(--fallout-maw-craft-cell-size) + var(--fallout-maw-craft-grid-gap));
   --fallout-maw-craft-scaled-step: var(--fallout-maw-craft-cell-step);
   min-height: 0;
+}
+
+.fallout-maw-craft-acquisition {
+  background:
+    repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.018) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(6, 9, 7, 0.98), rgba(12, 14, 9, 0.96));
+  border: 2px solid rgba(131, 119, 74, 0.44);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.12),
+    0 3px 0 rgba(0, 0, 0, 0.68);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 0.85rem;
+}
+
+.fallout-maw-craft-acquisition-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(210, 185, 145, 0.22);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding-bottom: 0.65rem;
+}
+
+.fallout-maw-craft-acquisition-header h2 {
+  color: #e8d488;
+  font-size: 1.15rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.fallout-maw-craft-acquisition-header span {
+  color: rgba(226, 216, 180, 0.78);
+  display: block;
+  font-size: 0.92rem;
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-craft-acquisition-header strong {
+  border: 1px solid rgba(232, 212, 136, 0.42);
+  color: #f4e6ba;
+  font-size: 1rem;
+  min-width: 2.4rem;
+  padding: 0.25rem 0.55rem;
+  text-align: center;
+}
+
+.fallout-maw-craft-acquisition-list {
+  display: grid;
+  gap: 0.65rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.fallout-maw-craft-acquisition-entry {
+  align-items: start;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(210, 185, 145, 0.28);
+  box-shadow: inset 0 0 0 0 transparent;
+  cursor: pointer;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  min-width: 0;
+  padding: 0.7rem;
+}
+
+.fallout-maw-craft-acquisition-entry.ready {
+  background:
+    linear-gradient(90deg, rgba(82, 168, 76, 0.16), rgba(0, 0, 0, 0.24) 42%),
+    rgba(0, 0, 0, 0.24);
+  border-color: rgba(112, 210, 102, 0.82);
+  box-shadow:
+    inset 0 0 0 1px rgba(175, 235, 132, 0.28),
+    0 0 12px rgba(82, 168, 76, 0.18);
+}
+
+.fallout-maw-craft-acquisition-entry:hover,
+.fallout-maw-craft-acquisition-entry:focus-visible {
+  background: rgba(232, 212, 136, 0.08);
+  border-color: rgba(232, 212, 136, 0.48);
+  outline: none;
+}
+
+.fallout-maw-craft-acquisition-entry.ready:hover,
+.fallout-maw-craft-acquisition-entry.ready:focus-visible {
+  background:
+    linear-gradient(90deg, rgba(105, 205, 90, 0.22), rgba(232, 212, 136, 0.08) 48%),
+    rgba(0, 0, 0, 0.24);
+  border-color: rgba(154, 235, 118, 0.94);
+}
+
+.fallout-maw-craft-acquisition-entry > img {
+  aspect-ratio: 1;
+  border: 1px solid rgba(238, 214, 135, 0.42);
+  height: 4rem;
+  object-fit: contain;
+  width: 4rem;
+}
+
+.fallout-maw-craft-acquisition-entry-body {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fallout-maw-craft-acquisition-entry-title {
+  align-items: start;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.fallout-maw-craft-acquisition-entry-title strong {
+  color: #e8d488;
+  font-size: 1.05rem;
+  line-height: 1.15;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-craft-acquisition-entry-title span {
+  border: 1px solid rgba(210, 185, 145, 0.32);
+  color: rgba(226, 216, 180, 0.82);
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  padding: 0.22rem 0.45rem;
+  text-align: center;
+}
+
+.fallout-maw-craft-acquisition-entry-title span.ready {
+  background: rgba(82, 168, 76, 0.16);
+  border-color: rgba(112, 210, 102, 0.72);
+  color: #c9f5bc;
+}
+
+.fallout-maw-craft-acquisition-entry-title span.missing {
+  border-color: rgba(203, 92, 77, 0.52);
+  color: #f2b4a7;
+}
+
+.fallout-maw-craft-acquisition-entry-meta {
+  color: rgba(226, 216, 180, 0.72);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  gap: 0.45rem 0.75rem;
+}
+
+.fallout-maw-craft-acquisition-outputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fallout-maw-craft-acquisition-chip {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(210, 185, 145, 0.28);
+  color: rgba(226, 216, 180, 0.86);
+  display: inline-flex;
+  gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.4rem;
+}
+
+.fallout-maw-craft-acquisition-chip.target {
+  background: rgba(232, 212, 136, 0.1);
+  border-color: rgba(232, 212, 136, 0.62);
+  color: #f4e6ba;
+}
+
+.fallout-maw-craft-acquisition-chip img {
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  height: 1.65rem;
+  object-fit: contain;
+  width: 1.65rem;
+}
+
+.fallout-maw-craft-acquisition-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-craft-acquisition-chip strong {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+}
+
+.fallout-maw-craft-acquisition-empty {
+  align-items: center;
+  color: rgba(226, 216, 180, 0.72);
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  text-align: center;
 }
 
 .fallout-maw-craft-window-empty {

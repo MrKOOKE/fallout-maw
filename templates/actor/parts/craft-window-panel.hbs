@@ -11,12 +11,64 @@
       </div>
     </div>
     <div class="fallout-maw-craft-window-actions">
+      {{#if craft.acquisition}}
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к схеме">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>Вернуться</span>
+      </button>
+      {{else}}
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="showAcquisitionWays" title="Показать способы получения" {{#unless craft.canShowAcquisitionWays}}disabled{{/unless}}>
+        <i class="fa-solid fa-route"></i>
+        <span>Показать способы получения</span>
+      </button>
       <button type="button" class="fallout-maw-craft-window-hammer" data-action="craft" title="{{craft.actionTitle}}" {{#unless craft.canCraft}}disabled{{/unless}}>
         <i class="fa-solid {{craft.actionIcon}}"></i>
       </button>
+      {{/if}}
     </div>
   </header>
 
+  {{#if craft.acquisition}}
+  <div class="fallout-maw-craft-acquisition">
+    <header class="fallout-maw-craft-acquisition-header">
+      <div>
+        <h2>Показать способы получения</h2>
+        <span>{{craft.acquisition.targetName}}</span>
+      </div>
+      <strong>{{craft.acquisition.entries.length}}</strong>
+    </header>
+    {{#if craft.acquisition.entries.length}}
+    <div class="fallout-maw-craft-acquisition-list">
+      {{#each craft.acquisition.entries}}
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" role="button" tabindex="0">
+        <img src="{{img}}" alt="{{name}}">
+        <div class="fallout-maw-craft-acquisition-entry-body">
+          <div class="fallout-maw-craft-acquisition-entry-title">
+            <strong>{{name}}</strong>
+            <span class="{{statusClass}}">{{statusLabel}}</span>
+          </div>
+          <div class="fallout-maw-craft-acquisition-entry-meta">
+            <span>{{category}}</span>
+            <span>{{targetQuantityLabel}}</span>
+          </div>
+          <div class="fallout-maw-craft-acquisition-outputs">
+            {{#each outputs}}
+            <span class="fallout-maw-craft-acquisition-chip {{#if target}}target{{/if}}" data-tooltip-uuid="{{uuid}}">
+              <img src="{{img}}" alt="{{name}}">
+              <span>{{name}}</span>
+              <strong>{{quantityLabel}}</strong>
+            </span>
+            {{/each}}
+          </div>
+        </div>
+      </article>
+      {{/each}}
+    </div>
+    {{else}}
+    <div class="fallout-maw-craft-acquisition-empty">Нет разборов, которые дают этот предмет.</div>
+    {{/if}}
+  </div>
+  {{else}}
   <div class="fallout-maw-craft-editor fallout-maw-craft-viewer fallout-maw-craft-mode-{{craft.mode}}" data-craft-workspace style="{{craft.viewportStyle}}">
     <div class="fallout-maw-craft-world" data-craft-world style="{{craft.viewportStyle}}">
       <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>
@@ -59,7 +111,8 @@
       {{/each}}
     </div>
   </div>
+  {{/if}}
   {{else}}
-  <div class="fallout-maw-craft-window-empty">Выберете рецепт</div>
+  <div class="fallout-maw-craft-window-empty">Выберите рецепт</div>
   {{/if}}
 </section>

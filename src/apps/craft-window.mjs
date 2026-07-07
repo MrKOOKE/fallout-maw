@@ -166,6 +166,24 @@ function getCraftItemMatchProfile(item = null) {
   };
 }
 
+function resolveCraftAcquisitionTargetItem(uuid = "") {
+  const text = String(uuid ?? "").trim();
+  if (!text) return null;
+  let direct = null;
+  try {
+    direct = globalThis.fromUuidSync?.(text) ?? foundry.utils.fromUuidSync?.(text) ?? null;
+  } catch {
+    direct = null;
+  }
+  if (direct?.documentName === "Item" || direct?.constructor?.documentName === "Item") return direct;
+  return resolveWorldItemSync(text);
+}
+
+function craftOutputMatchesItem(item = null, output = null, itemProfile = null) {
+  if (!item || !output?.sourceUuid) return false;
+  return craftItemMatchesRecipeSource(item, { itemUuid: output.sourceUuid }, itemProfile);
+}
+
 function addRecipeToCraftSourceIndexBucket(map, key, recipe) {
   const normalized = String(key ?? "").trim();
   if (!normalized) return;
@@ -408,6 +426,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #selectedRecipeUuid = "";
   #selectedRecipeId = DEFAULT_CRAFT_RECIPE_ID;
   #selectedRecipe = null;
+  #acquisitionTargetUuid = "";
   #craftMode = CRAFT_MODE_CREATE;
   #craftToolPickerNodeId = "";
   #craftToolSelections = new Map();
@@ -486,6 +505,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#selectedRecipeUuid = String(selection.recipeSelectionUuid ?? selection.recipeUuid ?? "");
     this.#selectedRecipeId = parseCraftRecipeSelectionUuid(this.#selectedRecipeUuid).recipeId;
     this.#selectedRecipe = null;
+    this.#acquisitionTargetUuid = "";
     this.#recipeSearch = "";
     this.#expandedRecipeCategories = new Set();
     this.#craftViewportOverride = null;
@@ -516,6 +536,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#selectedRecipeUuid = "";
     this.#selectedRecipeId = DEFAULT_CRAFT_RECIPE_ID;
     this.#selectedRecipe = null;
+    this.#acquisitionTargetUuid = "";
     this.#craftMode = CRAFT_MODE_CREATE;
     this.#craftToolPickerNodeId = "";
     this.#craftViewportOverride = null;
@@ -544,6 +565,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       mode: normalizeCraftMode(data.mode),
       selectedRecipeUuid: String(data.selectedRecipeUuid ?? ""),
       selectedRecipeId: String(data.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID,
+      acquisitionTargetUuid: String(data.acquisitionTargetUuid ?? ""),
       recipeSearch: String(data.recipeSearch ?? ""),
       expandedRecipeCategories: Array.from(data.expandedRecipeCategories ?? []),
       craftViewportOverride: data.craftViewportOverride ? foundry.utils.deepClone(data.craftViewportOverride) : null,
@@ -562,6 +584,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     tab.mode = this.#craftMode;
     tab.selectedRecipeUuid = this.#selectedRecipeUuid;
     tab.selectedRecipeId = this.#selectedRecipeId;
+    tab.acquisitionTargetUuid = this.#acquisitionTargetUuid;
     tab.recipeSearch = this.#recipeSearch;
     tab.expandedRecipeCategories = Array.from(this.#expandedRecipeCategories);
     tab.craftViewportOverride = this.#craftViewportOverride ? foundry.utils.deepClone(this.#craftViewportOverride) : null;
@@ -576,6 +599,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#selectedRecipeUuid = String(tab.selectedRecipeUuid ?? "");
     this.#selectedRecipeId = String(tab.selectedRecipeId ?? DEFAULT_CRAFT_RECIPE_ID) || DEFAULT_CRAFT_RECIPE_ID;
     this.#selectedRecipe = null;
+    this.#acquisitionTargetUuid = String(tab.acquisitionTargetUuid ?? "");
     this.#recipeSearch = String(tab.recipeSearch ?? "");
     this.#expandedRecipeCategories = new Set(Array.from(tab.expandedRecipeCategories ?? []));
     this.#craftViewportOverride = tab.craftViewportOverride ? foundry.utils.deepClone(tab.craftViewportOverride) : null;
@@ -588,6 +612,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #updateCraftTabTitle(tab = null, recipe = null) {
     if (!tab) return;
+    const acquisitionTarget = tab.acquisitionTargetUuid ? resolveCraftAcquisitionTargetItem(tab.acquisitionTargetUuid) : null;
+    if (acquisitionTarget) {
+      tab.name = `Способы: ${String(acquisitionTarget.name ?? "").trim() || "предмет"}`;
+      return;
+    }
     const selection = tab.selectedRecipeUuid ? resolveCraftRecipeSelection(tab.selectedRecipeUuid) : null;
     const source = recipe ?? selection?.item ?? null;
     if (!source) {
@@ -721,6 +750,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode));
     if (this.#selectedRecipeUuid && !modeRecipes.some(recipe => recipe.uuid === this.#selectedRecipeUuid)) {
       this.#selectedRecipeUuid = "";
+      this.#selectedRecipe = null;
+    }
+    let acquisitionTarget = this.#acquisitionTargetUuid ? resolveCraftAcquisitionTargetItem(this.#acquisitionTargetUuid) : null;
+    if (this.#acquisitionTargetUuid && !acquisitionTarget) {
+      this.#acquisitionTargetUuid = "";
+      acquisitionTarget = null;
     }
 
     const selectedSelection = this.#selectedRecipeUuid ? resolveCraftRecipeSelection(this.#selectedRecipeUuid) : null;
@@ -743,7 +778,16 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
-    this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
+    const acquisition = acquisitionTarget ? await this.#prepareAcquisitionWaysContext(acquisitionTarget, recipes) : null;
+    if (acquisition) {
+      craft.acquisition = acquisition;
+      craft.canShowAcquisitionWays = false;
+      craft.summary = `${acquisition.entries.length} способов получения`;
+      this.#craftLinkData = { nodes: [], links: [] };
+    } else {
+      craft.canShowAcquisitionWays = Boolean(selectedRecipe);
+      this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
+    }
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
     const selectedRecipeSummary = recipes.find(recipe => recipe.uuid === this.#selectedRecipeUuid) ?? null;
     this.#updateActiveCraftTabTitle(selectedRecipeSummary ?? selectedRecipe);
@@ -762,10 +806,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       craftTabs: this.#getCraftTabsContext(),
       recipeCategories,
       recipeSearch: this.#recipeSearch,
-      recipe: selectedRecipe ? {
-        uuid: selectedRecipe.uuid,
-        name: getCraftRecipeDisplayName(selectedRecipeSummary ?? selectedRecipe),
-        img: normalizeImagePath(selectedRecipe.img, FALLBACK_ICON)
+      recipe: acquisitionTarget || selectedRecipe ? {
+        uuid: acquisitionTarget?.uuid ?? selectedRecipe.uuid,
+        name: acquisitionTarget
+          ? String(acquisitionTarget.name ?? "")
+          : getCraftRecipeDisplayName(selectedRecipeSummary ?? selectedRecipe),
+        img: normalizeImagePath(acquisitionTarget?.img ?? selectedRecipe?.img, FALLBACK_ICON)
       } : null,
       inventory: actorContext.inventory,
       craftMode: this.#craftMode,
@@ -970,6 +1016,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#actor ??= await resolveActor(this.#actorUuid);
     const selectedSelection = this.#selectedRecipeUuid ? resolveCraftRecipeSelection(this.#selectedRecipeUuid) : null;
     const selectedRecipe = selectedSelection?.item ?? null;
+    let acquisitionTarget = this.#acquisitionTargetUuid ? resolveCraftAcquisitionTargetItem(this.#acquisitionTargetUuid) : null;
+    if (this.#acquisitionTargetUuid && !acquisitionTarget) {
+      this.#acquisitionTargetUuid = "";
+      acquisitionTarget = null;
+    }
     this.#selectedRecipeId = selectedSelection?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID;
     this.#selectedRecipe = selectedRecipe;
     const craft = selectedRecipe
@@ -981,19 +1032,86 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
-    this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
+    const acquisition = acquisitionTarget ? await this.#prepareAcquisitionWaysContext(acquisitionTarget) : null;
+    if (acquisition) {
+      craft.acquisition = acquisition;
+      craft.canShowAcquisitionWays = false;
+      craft.summary = `${acquisition.entries.length} способов получения`;
+      this.#craftLinkData = { nodes: [], links: [] };
+    } else {
+      craft.canShowAcquisitionWays = Boolean(selectedRecipe);
+      this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
+    }
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
     this.#updateActiveCraftTabTitle(selectedRecipe);
     this.#saveActiveCraftTabState();
     return {
-      recipe: selectedRecipe ? {
-        uuid: selectedRecipe.uuid,
-        name: getCraftRecipeDisplayName(selectedRecipe),
-        img: normalizeImagePath(selectedRecipe.img, FALLBACK_ICON)
+      recipe: acquisitionTarget || selectedRecipe ? {
+        uuid: acquisitionTarget?.uuid ?? selectedRecipe.uuid,
+        name: acquisitionTarget ? String(acquisitionTarget.name ?? "") : getCraftRecipeDisplayName(selectedRecipe),
+        img: normalizeImagePath(acquisitionTarget?.img ?? selectedRecipe?.img, FALLBACK_ICON)
       } : null,
       craft,
       craftModes: getCraftModeChoices(this.#craftMode),
       craftMode: this.#craftMode
+    };
+  }
+
+  async #prepareAcquisitionWaysContext(targetItem, recipes = null) {
+    if (!targetItem) return null;
+    recipes ??= await getCraftRecipeSummaries();
+    const targetProfile = getCraftItemMatchProfile(targetItem);
+    const availability = this.#actor ? getCraftAvailabilityIndex(this.#actor) : null;
+    const entries = [];
+
+    for (const recipe of recipes) {
+      if (!hasCraftRecipeDataForMode(recipe.system?.craft, CRAFT_MODE_DISASSEMBLY)) continue;
+      const layout = ensureWorldRecipeLayout(recipe.uuid, recipe)?.[CRAFT_MODE_DISASSEMBLY] ?? null;
+      const nodes = layout?.nodes ?? getCraftNodesWithRoot(recipe, CRAFT_MODE_DISASSEMBLY, recipe.recipeId);
+      const outputs = getCraftOutputs(nodes);
+      if (!outputs.length) continue;
+
+      let targetQuantity = 0;
+      const outputChips = outputs.map(output => {
+        const source = resolveWorldItemSync(output.sourceUuid);
+        const quantity = Math.max(1, toInteger(output.quantity) || 1);
+        const target = craftOutputMatchesItem(targetItem, output, targetProfile);
+        if (target) targetQuantity += quantity;
+        return {
+          uuid: source?.uuid ?? output.sourceUuid,
+          name: String(source?.name ?? "Неизвестный предмет"),
+          img: normalizeImagePath(source?.img, FALLBACK_ICON),
+          quantityLabel: `x${quantity}`,
+          target
+        };
+      });
+
+      if (targetQuantity < 1) continue;
+      const missing = isCraftRecipeMissing(recipe, this.#actor, CRAFT_MODE_DISASSEMBLY, availability);
+      entries.push({
+        recipeSelectionUuid: recipe.uuid,
+        name: getCraftRecipeDisplayName(recipe),
+        recipeName: String(recipe.recipeName ?? ""),
+        category: getCraftRecipeCategory(recipe),
+        img: normalizeImagePath(recipe.img, FALLBACK_ICON),
+        targetQuantityLabel: `x${targetQuantity}`,
+        available: !missing,
+        statusLabel: missing ? "Недоступно: нет предмета или инструмента" : "Доступно: можно разобрать",
+        statusClass: missing ? "missing" : "ready",
+        outputs: outputChips
+      });
+    }
+
+    entries.sort((left, right) => {
+      if (left.available !== right.available) return left.available ? -1 : 1;
+      return left.name.localeCompare(right.name, game.i18n.lang);
+    });
+    return {
+      targetUuid: targetItem.uuid,
+      targetName: String(targetItem.name ?? ""),
+      targetImg: normalizeImagePath(targetItem.img, FALLBACK_ICON),
+      entries,
+      empty: entries.length < 1
     };
   }
 
@@ -1022,6 +1140,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         if (mode === this.#craftMode) return;
         this.#craftMode = mode;
         this.#selectedRecipe = null;
+        this.#acquisitionTargetUuid = "";
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
         this.#saveActiveCraftTabState();
@@ -1033,6 +1152,41 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (button.dataset.craftActionBound === "true") return;
       button.dataset.craftActionBound = "true";
       button.addEventListener("click", event => this.#onCraft(event));
+    });
+    this.element?.querySelectorAll('[data-action="showAcquisitionWays"]').forEach(button => {
+      if (button.dataset.acquisitionWaysBound === "true") return;
+      button.dataset.acquisitionWaysBound = "true";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        const item = this.#selectedRecipe ?? resolveCraftAcquisitionTargetItem(this.#acquisitionTargetUuid);
+        void this.#showAcquisitionWaysForItem(item);
+      });
+    });
+    this.element?.querySelectorAll('[data-action="hideAcquisitionWays"]').forEach(button => {
+      if (button.dataset.acquisitionBackBound === "true") return;
+      button.dataset.acquisitionBackBound = "true";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        this.#acquisitionTargetUuid = "";
+        this.#saveActiveCraftTabState();
+        void this.#renderPreservingWindowStack();
+      });
+    });
+    this.element?.querySelectorAll("[data-acquisition-recipe-uuid]").forEach(entry => {
+      if (entry.dataset.acquisitionRecipeBound === "true") return;
+      entry.dataset.acquisitionRecipeBound = "true";
+      const open = event => {
+        event.preventDefault();
+        const recipeUuid = String(entry.dataset.acquisitionRecipeUuid ?? "");
+        if (!recipeUuid) return;
+        this.openSelection({ mode: CRAFT_MODE_DISASSEMBLY, recipeSelectionUuid: recipeUuid });
+        void this.#renderPreservingWindowStack();
+      };
+      entry.addEventListener("click", open);
+      entry.addEventListener("keydown", event => {
+        if (!["Enter", " "].includes(event.key)) return;
+        open(event);
+      });
     });
   }
 
@@ -1074,9 +1228,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         event.preventDefault();
         if (this.#busy) return;
         const recipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
-        if (recipeUuid === this.#selectedRecipeUuid) return;
+        if (recipeUuid === this.#selectedRecipeUuid && !this.#acquisitionTargetUuid) return;
         this.#selectedRecipeUuid = recipeUuid;
         this.#selectedRecipe = null;
+        this.#acquisitionTargetUuid = "";
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
         this.#updateActiveCraftTabTitle();
@@ -1957,6 +2112,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const [index, option] of craftOpenOptions.entries()) {
       menuOptions.push([`craft-open-${index}`, option.icon, option.label]);
     }
+    if (item?.type === "gear") {
+      menuOptions.push(["show-acquisition", "fa-route", "Показать способы получения"]);
+    }
     if (getItemInteractionState(this.#actor, item).hasInteraction) {
       menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
     }
@@ -2008,6 +2166,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.openSelection(option);
         return this.#renderPreservingWindowStack();
       }
+      if (action === "show-acquisition") return this.#showAcquisitionWaysForItem(item);
       if (action === "interact") return openItemInteractionDialog({ actor: this.#actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.#actor, item, application: this });
       if (action === "rotate") return this.#rotateCraftItem(item);
@@ -2023,29 +2182,49 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   async #showCraftOpenContextMenu(item, event) {
     this.#clearCraftContextOverlays();
     const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
-    if (!craftOpenOptions.length) return;
+    const menuOptions = craftOpenOptions.map((option, index) => ({
+      action: `craft-open-${index}`,
+      icon: option.icon,
+      label: option.label
+    }));
+    if (item?.type === "gear") {
+      menuOptions.push({ action: "show-acquisition", icon: "fa-route", label: "Показать способы получения" });
+    }
+    if (!menuOptions.length) return;
 
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
     menu.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
-    menu.innerHTML = craftOpenOptions
-      .map((option, index) => `<button type="button" data-action="craft-open-${index}"><i class="fa-solid ${option.icon}"></i>${option.label}</button>`)
+    menu.innerHTML = menuOptions
+      .map(option => `<button type="button" data-action="${option.action}"><i class="fa-solid ${option.icon}"></i>${option.label}</button>`)
       .join("");
     document.body.append(menu);
     this.#syncInventoryTooltipLayer({ bringToFront: true });
 
     menu.addEventListener("click", async clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
-      if (!action?.startsWith("craft-open-")) return;
+      if (!action) return;
       clickEvent.preventDefault();
       menu.remove();
+      if (action === "show-acquisition") return this.#showAcquisitionWaysForItem(item);
+      if (!action.startsWith("craft-open-")) return undefined;
       const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
       if (!option) return undefined;
       this.openSelection(option);
       return this.#renderPreservingWindowStack();
     });
+  }
+
+  #showAcquisitionWaysForItem(item) {
+    if (!item?.uuid) return undefined;
+    this.#clearCraftContextOverlays();
+    this.#acquisitionTargetUuid = String(item.uuid);
+    this.#craftToolPickerNodeId = "";
+    this.#craftViewportOverride = null;
+    this.#saveActiveCraftTabState();
+    return this.#renderPreservingWindowStack();
   }
 
   #clearCraftContextOverlays() {
