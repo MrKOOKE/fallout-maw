@@ -1115,7 +1115,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#resizeObserver = null;
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     if (!workspace) return;
-    workspace.addEventListener("contextmenu", event => event.preventDefault());
+    workspace.addEventListener("contextmenu", event => this.#onCraftWorkspaceContextMenu(event));
     workspace.addEventListener("pointerdown", event => this.#onCraftWorkspacePointerDown(event));
     workspace.addEventListener("click", event => this.#onCraftWorkspaceClick(event));
     workspace.addEventListener("wheel", event => this.#onCraftWheel(event), { passive: false });
@@ -1170,7 +1170,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     root.addEventListener("pointerout", event => this.#onInventoryTooltipPointerOut(event));
     root.addEventListener("mousedown", event => this.#onInventoryTooltipMiddleMouseDown(event));
     root.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
-    root.addEventListener("contextmenu", event => this.#onInventoryContextMenu(event));
+    root.addEventListener("contextmenu", event => this.#onCraftRootContextMenu(event));
     root.addEventListener("click", event => {
       if (!event.target?.closest?.(".fallout-maw-inventory-context-menu")) {
         document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
@@ -1570,17 +1570,59 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
+  #onCraftRootContextMenu(event) {
+    if (this.#onInventoryContextMenu(event)) return;
+    this.#onCraftRecipeContextMenu(event);
+  }
+
+  #onCraftWorkspaceContextMenu(event) {
+    if (this.#onCraftRecipeContextMenu(event)) return;
+    event.preventDefault();
+  }
+
   #onInventoryContextMenu(event) {
     const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
-    if (!itemElement || !this.element?.contains(itemElement) || !this.#actor?.isOwner || this.#busy) return;
+    if (!itemElement || !this.element?.contains(itemElement) || !this.#actor?.isOwner || this.#busy) return false;
     const item = this.#actor.items.get(String(itemElement.dataset.itemId ?? ""));
-    if (!item) return;
+    if (!item) return false;
     event.preventDefault();
     event.stopPropagation();
     this.#showInventoryContextMenu(item, event, {
       stackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
       stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity))
     });
+    return true;
+  }
+
+  #onCraftRecipeContextMenu(event) {
+    const item = this.#resolveCraftContextMenuItem(event);
+    if (!item) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.#showCraftOpenContextMenu(item, event);
+    return true;
+  }
+
+  #resolveCraftContextMenuItem(event) {
+    if (event.target?.closest?.("[data-craft-tool-picker], .fallout-maw-inventory-context-menu")) return null;
+    const anchor = event.target?.closest?.("[data-recipe-uuid], [data-tooltip-uuid], [data-tooltip-item][data-search-actor-uuid]");
+    if (!anchor || !this.element?.contains(anchor)) return null;
+    if (anchor.closest("[data-item-id][data-search-actor-uuid]")) return null;
+
+    const recipeUuid = String(anchor.dataset.recipeUuid ?? "").trim();
+    if (recipeUuid) return resolveCraftRecipeSelection(recipeUuid)?.item ?? null;
+
+    const documentUuid = String(anchor.dataset.tooltipUuid ?? "").trim();
+    if (documentUuid) {
+      const selection = documentUuid.includes(CRAFT_RECIPE_SELECTION_SEPARATOR) ? resolveCraftRecipeSelection(documentUuid) : null;
+      return selection?.item ?? resolveWorldItemSync(documentUuid);
+    }
+
+    const actorUuid = String(anchor.dataset.searchActorUuid ?? "").trim();
+    const itemId = String(anchor.dataset.tooltipItem ?? "").trim();
+    if (!itemId) return null;
+    const actor = actorUuid === this.#actor?.uuid ? this.#actor : null;
+    return actor?.items?.get(itemId) ?? null;
   }
 
   #onInventoryTooltipPointerOver(event) {
@@ -1792,7 +1834,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (game.tooltip?.element && this.#tooltipElement?.contains(game.tooltip.element)) {
       game.tooltip.tooltip.style.zIndex = String(baseZIndex + 3);
     }
-    if (bringToFront || this.#tooltipPinned) reserveOverlayZIndex(baseZIndex + 3);
+    const ownerDocument = this.element?.ownerDocument ?? document;
+    const menus = ownerDocument.querySelectorAll(".fallout-maw-inventory-context-menu");
+    for (const menu of menus) menu.style.zIndex = String(baseZIndex + 2);
+    if (bringToFront || this.#tooltipPinned || menus.length) reserveOverlayZIndex(baseZIndex + 3);
   }
 
   async #resolveTooltipItem(anchor = this.#tooltipAnchorElement) {
@@ -1892,8 +1937,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
-    this.#clearInventoryTooltip({ force: true });
-    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+    this.#clearCraftContextOverlays();
 
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
@@ -1973,6 +2017,44 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(this.#actor, item, { allowLocked: true });
       if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
+    });
+  }
+
+  async #showCraftOpenContextMenu(item, event) {
+    this.#clearCraftContextOverlays();
+    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
+    if (!craftOpenOptions.length) return;
+
+    const menu = document.createElement("nav");
+    menu.className = "fallout-maw-inventory-context-menu";
+    menu.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+    menu.innerHTML = craftOpenOptions
+      .map((option, index) => `<button type="button" data-action="craft-open-${index}"><i class="fa-solid ${option.icon}"></i>${option.label}</button>`)
+      .join("");
+    document.body.append(menu);
+    this.#syncInventoryTooltipLayer({ bringToFront: true });
+
+    menu.addEventListener("click", async clickEvent => {
+      const action = clickEvent.target.closest("button")?.dataset.action;
+      if (!action?.startsWith("craft-open-")) return;
+      clickEvent.preventDefault();
+      menu.remove();
+      const option = craftOpenOptions[toInteger(action.slice("craft-open-".length))];
+      if (!option) return undefined;
+      this.openSelection(option);
+      return this.#renderPreservingWindowStack();
+    });
+  }
+
+  #clearCraftContextOverlays() {
+    this.#clearInventoryTooltip({ force: true });
+    game.tooltip?.clearPending?.();
+    game.tooltip?.deactivate?.();
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+    document.querySelectorAll(".fallout-maw-inventory-tooltip").forEach(tooltip => {
+      if (tooltip !== this.#tooltipElement) tooltip.remove();
     });
   }
 
