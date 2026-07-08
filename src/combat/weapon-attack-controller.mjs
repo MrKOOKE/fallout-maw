@@ -5195,10 +5195,11 @@ function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, wea
 
 function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "") {
   const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
-  const maxRangeMeters = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters, attackerToken?.actor, {
+  const configuredMaxRangeMeters = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters, attackerToken?.actor, {
     minimum: 0,
     context: "volley max range"
-  }) + rangeBonusMeters;
+  });
+  const maxRangeMeters = configuredMaxRangeMeters > 0 ? configuredMaxRangeMeters + rangeBonusMeters : 0;
   const maxDistancePixels = metersToPixels(maxRangeMeters);
   const radiusPixels = metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId));
   const dx = pointer.x - origin.x;

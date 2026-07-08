@@ -484,9 +484,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     await this.#ensureDraft();
     this.#syncDraftFromForm();
 
+    const currentExperience = Math.max(0, toInteger(this.#draft.development?.experience));
     const resetData = this.actor.prepareDevelopmentResetData({
       level: 1,
-      experience: 0
+      experience: currentExperience
     });
 
     this.#draft.level = 1;
