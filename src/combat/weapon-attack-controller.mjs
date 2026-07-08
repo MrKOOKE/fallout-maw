@@ -3104,7 +3104,7 @@ class WeaponAttackController {
   async resolveVolleyBlastPoint(geometry, { checkBatch = null, difficultyBonus = 0 } = {}) {
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
       getWeaponAttackData(this.weapon, this.weaponFunctionId),
-      pixelsToMeters(geometry.distance)
+      getAttackGeometryDistanceMeters(geometry)
     );
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
@@ -4668,6 +4668,7 @@ function serializeGeometry(geometry) {
     end: serializePoint(geometry.end),
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
+    rangeBonusMeters: Number(geometry.rangeBonusMeters) || 0,
     halfAngle: Number(geometry.halfAngle) || 0,
     radiusPixels: Number(geometry.radiusPixels) || 0,
     aimPoint: geometry.aimPoint ? serializePoint(geometry.aimPoint) : null,
@@ -4686,6 +4687,7 @@ function deserializeGeometry(geometry) {
     end: deserializePoint(geometry.end),
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
+    rangeBonusMeters: Number(geometry.rangeBonusMeters) || 0,
     halfAngle: Number(geometry.halfAngle) || 0,
     radiusPixels: Number(geometry.radiusPixels) || 0,
     aimPoint: geometry.aimPoint ? deserializePoint(geometry.aimPoint) : null,
@@ -5164,7 +5166,8 @@ function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, we
   if (!origin || !pointer) return null;
   if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId);
 
-  const maxDistancePixels = metersToPixels(getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId));
+  const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
+  const maxDistancePixels = metersToPixels(getSizeScaledActionMaxRangeMeters(weapon, actionKey, attackerToken, weaponFunctionId));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
   const angle = Math.atan2(dy, dx);
@@ -5172,12 +5175,13 @@ function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, we
   const halfAngle = getActionAttackConeRadians(weapon, actionKey, weaponFunctionId) / 2;
   const end = getWallClippedEndpoint(attackerToken, origin, angle, distance).point;
   const shapePoints = buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle });
-  return { origin, angle, distance, halfAngle, end, shapePoints };
+  return { origin, angle, distance, rangeBonusMeters, halfAngle, end, shapePoints };
 }
 
 function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, weaponFunctionId = "") {
   if (!origin) return null;
-  const distance = Math.max(1, metersToPixels(getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId)));
+  const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
+  const distance = Math.max(1, metersToPixels(getSizeScaledActionMaxRangeMeters(weapon, actionKey, attackerToken, weaponFunctionId)));
   const angle = 0;
   const halfAngle = Math.PI;
   const end = {
@@ -5186,14 +5190,16 @@ function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, wea
     elevation: origin.elevation
   };
   const shapePoints = buildClippedCirclePoints(attackerToken, { origin, distance });
-  return { origin, angle, distance, halfAngle, end, shapePoints };
+  return { origin, angle, distance, rangeBonusMeters, halfAngle, end, shapePoints };
 }
 
 function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "") {
-  const maxDistancePixels = metersToPixels(evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters, attackerToken?.actor, {
+  const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
+  const maxRangeMeters = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters, attackerToken?.actor, {
     minimum: 0,
     context: "volley max range"
-  }));
+  }) + rangeBonusMeters;
+  const maxDistancePixels = metersToPixels(maxRangeMeters);
   const radiusPixels = metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
@@ -5206,6 +5212,7 @@ function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponF
     origin,
     angle,
     distance: clipped.distance,
+    rangeBonusMeters,
     halfAngle: 0,
     end: clipped.point,
     radiusPixels,
@@ -5241,6 +5248,21 @@ function getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId = "") {
     minimum: 0,
     context: "weapon max range"
   });
+}
+
+function getSizeScaledActionMaxRangeMeters(weapon, actionKey, attackerToken = null, weaponFunctionId = "") {
+  return getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId) + getTokenAttackRangeBonusMeters(attackerToken);
+}
+
+function getTokenAttackRangeBonusMeters(token) {
+  const document = token?.document ?? token;
+  const width = Math.max(1, Number(document?._source?.width ?? document?.width) || 1);
+  const height = Math.max(1, Number(document?._source?.height ?? document?.height) || 1);
+  return Math.max(0, Math.round(Math.max(width, height)) - 1);
+}
+
+function getAttackGeometryDistanceMeters(geometry = null) {
+  return Math.max(0, pixelsToMeters(geometry?.distance) - Math.max(0, Number(geometry?.rangeBonusMeters) || 0));
 }
 
 function metersToPixels(meters) {
@@ -6916,7 +6938,8 @@ function getTokenDistanceMeters(leftToken, rightToken) {
   const left = getTokenAimPoint(leftToken);
   const right = getTokenAimPoint(rightToken);
   if (!left || !right) return Infinity;
-  return pixelsToMeters(Math.hypot(right.x - left.x, right.y - left.y));
+  const centerDistance = pixelsToMeters(Math.hypot(right.x - left.x, right.y - left.y));
+  return Math.max(0, centerDistance - getTokenAttackRangeBonusMeters(leftToken));
 }
 
 function getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId = "") {
@@ -8454,7 +8477,7 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
     + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
   const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
     weaponData,
-    pixelsToMeters(geometry.distance)
+    getAttackGeometryDistanceMeters(geometry)
   );
   const difficulty = BASE_VOLLEY_DIFFICULTY
     + rangeDifficultyBonus
