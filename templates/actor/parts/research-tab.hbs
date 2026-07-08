@@ -36,10 +36,12 @@
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Research.Title"}}</h2>
+      {{#if canManageResearchControls}}
       <button type="button" data-action="createResearch">
         <i class="fa-solid fa-flask"></i>
         {{localize "FALLOUTMAW.Research.Start"}}
       </button>
+      {{/if}}
     </div>
 
     <div class="fallout-maw-research-list">
@@ -73,6 +75,7 @@
           </div>
         </button>
 
+        {{#if ../canManageResearchControls}}
         <div class="fallout-maw-research-actions">
           <button
             type="button"
@@ -92,6 +95,7 @@
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
+        {{/if}}
       </article>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Research.Empty"}}</p>

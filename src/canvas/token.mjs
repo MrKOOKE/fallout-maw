@@ -366,7 +366,7 @@ function registerMiddleClickGuard() {
   middleClickGuardRegistered = true;
 }
 
-function buildEffectTooltipHTML(effect, actor = null) {
+export function buildEffectTooltipHTML(effect, actor = null) {
   const name = localizeDocumentName(effect.name);
   const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
   const duration = getEffectDurationLabel(effect);
@@ -450,14 +450,14 @@ function formatDamageEffectChange(change) {
   const kind = String(data.kind ?? "");
   if (kind === "bleedingDamage") {
     const label = getDamageTypeLabel(BLEEDING_DAMAGE_TYPE_KEY);
-    return `<strong>${escapeHTML(formatDamageEffectLabel(label, data.limbKey))}:</strong><span>${escapeHTML(formatTickDamage(data))}</span>`;
+    return `<strong>${escapeHTML(formatDamageEffectLabel(label, data.limbKey, actor))}:</strong><span>${escapeHTML(formatTickDamage(data))}</span>`;
   }
   if (kind === "periodicDamage") {
     const label = getDamageTypeLabel(data.damageTypeKey) || String(data.damageTypeKey ?? "");
-    return `<strong>${escapeHTML(formatDamageEffectLabel(label, data.limbKey))}:</strong><span>${escapeHTML(formatPeriodicDamage(data))}</span>`;
+    return `<strong>${escapeHTML(formatDamageEffectLabel(label, data.limbKey, actor))}:</strong><span>${escapeHTML(formatPeriodicDamage(data))}</span>`;
   }
   if (kind === "limbLoss") {
-    return `<strong>${escapeHTML(localize("FALLOUTMAW.Effects.LimbLoss"))}:</strong><span>${escapeHTML(getLimbLabel(data.limbKey))}</span>`;
+    return `<strong>${escapeHTML(localize("FALLOUTMAW.Effects.LimbLoss"))}:</strong><span>${escapeHTML(getLimbLabel(data.limbKey, actor))}</span>`;
   }
   return "";
 }
@@ -475,8 +475,8 @@ function parseDamageEffectChange(change) {
   }
 }
 
-function formatDamageEffectLabel(label, limbKey) {
-  const limbLabel = getLimbLabel(limbKey);
+function formatDamageEffectLabel(label, limbKey, actor = null) {
+  const limbLabel = getLimbLabel(limbKey, actor);
   return limbLabel ? `${label} (${limbLabel})` : label;
 }
 
@@ -499,11 +499,11 @@ function getDamageTypeLabel(key) {
   return String(damageType?.label || key || "");
 }
 
-function getLimbLabel(key) {
+function getLimbLabel(key, actor = null) {
   const limbKey = String(key ?? "").trim();
   if (!limbKey) return "";
-  const actor = activeEffectTooltipToken?.actor;
-  return String(actor?.system?.limbs?.[limbKey]?.label || limbKey);
+  const sourceActor = actor ?? activeEffectTooltipToken?.actor;
+  return String(sourceActor?.system?.limbs?.[limbKey]?.label || limbKey);
 }
 
 function getChangeKeyLabel(key) {

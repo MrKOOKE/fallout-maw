@@ -22,6 +22,7 @@ import { registerReactionHubConfig, registerReactionHubSocket } from "./combat/r
 import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import { FalloutMaWActor, FalloutMaWCombat, FalloutMaWItem } from "./documents/index.mjs";
+import { registerAdvancementMediaSocket } from "./advancement/media.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
 import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
 import {
@@ -170,6 +171,7 @@ Hooks.once("ready", async () => {
   registerSkillCheckSocket();
   registerDamageSocket();
   registerReactionHubSocket();
+  registerAdvancementMediaSocket();
   registerAttackAnimationSocket();
   registerCombatDodgeSocket();
   registerCombatEndResolutionSocket();

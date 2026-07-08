@@ -5,13 +5,22 @@
       <h2>{{label}}</h2>
       <div class="fallout-maw-effect-list">
         {{#each effects}}
-        <article class="fallout-maw-effect-row" data-effect-id="{{id}}" data-effect-uuid="{{uuid}}" data-effect-parent-item-id="{{parentItemId}}">
+        <article
+          class="fallout-maw-effect-row"
+          data-effect-id="{{id}}"
+          data-effect-uuid="{{uuid}}"
+          data-effect-parent-item-id="{{parentItemId}}"
+          data-tooltip-html="{{tooltipHTML}}"
+          data-tooltip-class="fallout-maw-effect-tooltip"
+          data-tooltip-direction="LEFT"
+        >
           <img src="{{img}}" alt="{{name}}">
           <div class="fallout-maw-effect-name">
             <strong>{{name}}</strong>
             {{#if duration}}<span>{{duration}}</span>{{/if}}
           </div>
           <span class="fallout-maw-effect-count">{{changes}}</span>
+          {{#if ../../canManageEffectControls}}
           <div class="fallout-maw-effect-controls">
             <button type="button" data-action="toggleEffect" title="{{#if disabled}}{{localize 'FALLOUTMAW.Effects.Enable'}}{{else}}{{localize 'FALLOUTMAW.Effects.Disable'}}{{/if}}">
               <i class="fa-solid fa-toggle-{{#if disabled}}off{{else}}on{{/if}}"></i>
@@ -19,6 +28,7 @@
             <button type="button" data-action="editEffect" title="{{localize 'FALLOUTMAW.Common.Edit'}}"><i class="fa-solid fa-pen-to-square"></i></button>
             <button type="button" data-action="deleteEffect" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
+          {{/if}}
         </article>
         {{else}}
         <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.EmptyCategory"}}</p>
@@ -28,7 +38,9 @@
     {{/each}}
   </div>
 
+  {{#if canManageEffectControls}}
   <button type="button" class="fallout-maw-floating-add" data-action="createEffect" title="{{localize 'FALLOUTMAW.Effects.Create'}}">
     <i class="fa-solid fa-plus"></i>
   </button>
+  {{/if}}
 </section>

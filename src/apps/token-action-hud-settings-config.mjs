@@ -62,6 +62,14 @@ const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "lightRecharge", labelKey: "FALLOUTMAW.Item.LightSourceRecharge" }
 ]);
 
+const EXPERIENCE_AWARD_ROWS = Object.freeze([
+  { key: "experienceSoundPath", labelKey: "FALLOUTMAW.Settings.HUD.ExperienceAwardSound", type: "audio" },
+  { key: "levelUpSoundPath", labelKey: "FALLOUTMAW.Settings.HUD.LevelUpSound", type: "audio" },
+  { key: "levelUpAnimationKey", labelKey: "FALLOUTMAW.Settings.HUD.LevelUpAnimation", type: "animation" }
+]);
+
+let activeHudSoundPickerPreview = null;
+
 export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
@@ -85,7 +93,8 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       closeOnSubmit: true
     },
     actions: {
-      browseHudImage: this.#onBrowseHudImage
+      browseHudImage: this.#onBrowseHudImage,
+      browseHudAudio: this.#onBrowseHudAudio
     }
   };
 
@@ -107,6 +116,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       activeActionIconRows: this.#prepareIconRows("activeActions", ACTIVE_ACTION_ICON_ROWS),
       serviceActionIconRows: this.#prepareServiceActionIconRows(),
       combatEndIconRows: this.#prepareIconRows("combatEnd", COMBAT_END_ICON_ROWS),
+      experienceAwardRows: this.#prepareExperienceAwardRows(),
       weaponActionIconRows: this.#prepareIconRows("weaponActions", WEAPON_ACTION_ICON_ROWS.map(row => ({
         ...row,
         label: row.label ?? game.i18n.localize(row.labelKey)
@@ -128,6 +138,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, _formData) {
     this.icons = this.#readIconsFromForm();
+    this.#readExperienceAwardFromForm(this.icons);
     this.systemActions = this.#readSystemActionsFromForm();
     await setTokenActionHudIcons(this.icons);
     await setSystemActionSettings(this.systemActions);
@@ -140,8 +151,16 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     return this.#browseImagePath(row.dataset.hudIconSection, row.dataset.hudIconKey);
   }
 
+  static async #onBrowseHudAudio(event, target) {
+    event.preventDefault();
+    const row = target.closest("[data-hud-experience-key]");
+    if (!row) return undefined;
+    return this.#browseAudioPath(row.dataset.hudExperienceKey);
+  }
+
   async #browseImagePath(section, key) {
     this.icons = this.#readIconsFromForm();
+    this.#readExperienceAwardFromForm(this.icons);
     this.systemActions = this.#readSystemActionsFromForm();
     const current = this.#getIconValue(section, key);
     const picker = new foundry.applications.apps.FilePicker.implementation({
@@ -157,6 +176,25 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     return picker.render({ force: true });
   }
 
+  async #browseAudioPath(key) {
+    this.icons = this.#readIconsFromForm();
+    this.#readExperienceAwardFromForm(this.icons);
+    this.systemActions = this.#readSystemActionsFromForm();
+    const current = this.#getExperienceAwardValue(key);
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "audio",
+      current,
+      callback: path => {
+        this.#setExperienceAwardValue(key, path);
+        this.forceRender();
+      }
+    });
+
+    activateHudSoundPickerPreview(picker);
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
+  }
+
   #readIconsFromForm() {
     const icons = foundry.utils.deepClone(this.icons);
     for (const input of this.form?.querySelectorAll("[data-hud-icon-input]") ?? []) {
@@ -166,6 +204,16 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       this.#setIconValue(row.dataset.hudIconSection, row.dataset.hudIconKey, input.value?.trim() ?? "", icons);
     }
     return icons;
+  }
+
+  #readExperienceAwardFromForm(target = this.icons) {
+    target.experienceAward ??= {};
+    for (const input of this.form?.querySelectorAll("[data-hud-experience-input]") ?? []) {
+      const key = String(input.dataset.hudExperienceInput ?? "");
+      if (!key) continue;
+      target.experienceAward[key] = input.value?.trim() ?? "";
+    }
+    return target.experienceAward;
   }
 
   #readSystemActionsFromForm() {
@@ -207,6 +255,15 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     ];
   }
 
+  #prepareExperienceAwardRows() {
+    return EXPERIENCE_AWARD_ROWS.map(row => ({
+      ...row,
+      label: game.i18n.localize(row.labelKey),
+      value: this.#getExperienceAwardValue(row.key),
+      isAudio: row.type === "audio"
+    }));
+  }
+
   #prepareIconRows(section, rows) {
     return rows.map(row => ({
       ...row,
@@ -219,6 +276,15 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     if (section === "root") return source[key] ?? "";
     if (section === "systemActions") return this.systemActions.find(action => action.key === key)?.img ?? "";
     return source[section]?.[key] ?? "";
+  }
+
+  #getExperienceAwardValue(key, source = this.icons) {
+    return source.experienceAward?.[key] ?? "";
+  }
+
+  #setExperienceAwardValue(key, value, target = this.icons) {
+    target.experienceAward ??= {};
+    target.experienceAward[key] = value;
   }
 
   #setIconValue(section, key, value, target = this.icons) {
@@ -240,5 +306,45 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     const preview = row?.querySelector("[data-hud-icon-preview]");
     if (!preview) return;
     preview.src = input.value?.trim() || "icons/svg/hazard.svg";
+  }
+}
+
+function activateHudSoundPickerPreview(picker) {
+  const bindPreview = () => {
+    const files = picker.element?.querySelector?.("[data-files]");
+    if (!files || files.dataset.falloutMawHudSoundPreview) return;
+    files.dataset.falloutMawHudSoundPreview = "1";
+    files.addEventListener("click", event => {
+      const row = event.target?.closest?.("[data-file][data-path]");
+      if (!row || !files.contains(row)) return;
+      previewHudSoundPickerPath(row.dataset.path);
+    });
+  };
+  picker.addEventListener?.("render", bindPreview);
+  picker.addEventListener?.("close", stopActiveHudSoundPickerPreview, { once: true });
+}
+
+async function previewHudSoundPickerPath(path = "") {
+  const src = String(path ?? "").trim();
+  if (!src) return;
+  await stopActiveHudSoundPickerPreview();
+  try {
+    activeHudSoundPickerPreview = await game.audio?.play?.(src, {
+      context: game.audio?.interface,
+      loop: false,
+      volume: 0.8
+    }) ?? null;
+  } catch (error) {
+    console.warn(`Fallout MaW | Failed to preview HUD sound "${src}".`, error);
+  }
+}
+
+async function stopActiveHudSoundPickerPreview() {
+  const sound = activeHudSoundPickerPreview;
+  activeHudSoundPickerPreview = null;
+  try {
+    await sound?.stop?.();
+  } catch (error) {
+    console.warn("Fallout MaW | Failed to stop HUD sound preview.", error);
   }
 }

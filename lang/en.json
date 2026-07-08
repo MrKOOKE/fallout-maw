@@ -706,7 +706,11 @@
         "InsufficientActionPoints": "{actor}: not enough {resource} for the action ({cost} > {available}).",
         "InsufficientMovementAction": "{actor}: not enough {movement}/{action} to drag ({cost} > {available}).",
         "DamageReductionIcon": "Damage reduction icon",
-        "DamageBlockedIcon": "Full block icon"
+        "DamageBlockedIcon": "Full block icon",
+        "ExperienceAwardSection": "Experience Award",
+        "ExperienceAwardSound": "Experience award sound",
+        "LevelUpSound": "Level-up sound",
+        "LevelUpAnimation": "Level-up animation"
       },
       "Characteristics": {
         "Create": "Create Characteristic",

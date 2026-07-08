@@ -51,6 +51,7 @@ import {
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
+import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
   import {
     completeResearch,
@@ -470,16 +471,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
+    const canManageSheetDocuments = Boolean(game.user?.isGM);
     const loadValue = Math.max(0, Number(actor.system.load?.value) || 0);
     const loadMax = Math.max(0, Number(actor.system.load?.max) || 0);
     const loadRatio = loadMax > 0 ? (loadValue / loadMax) : 0;
     const loadPercent = Math.max(0, Math.min(100, loadRatio * 100));
-    const nextThreshold = level >= maxLevel
-      ? getLevelThreshold(levelSettings, Math.max(1, level))
-      : getLevelThreshold(levelSettings, Math.max(1, level));
-    const progressionPercent = nextThreshold > 0
-      ? Math.max(0, Math.min(100, (currentExperience / nextThreshold) * 100))
-      : 0;
+    const currentThreshold = level <= 1
+      ? 0
+      : getLevelThreshold(levelSettings, Math.max(0, level - 1));
+    const nextThreshold = getLevelThreshold(levelSettings, Math.max(1, level));
+    const progressionRange = Math.max(1, nextThreshold - currentThreshold);
+    const progressionPercent = level >= maxLevel
+      ? 100
+      : Math.max(0, Math.min(100, ((currentExperience - currentThreshold) / progressionRange) * 100));
 
     const _mergedContext = foundry.utils.mergeObject(context, {
       actor,
@@ -491,6 +495,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       editable: this.isEditable,
       freeEdit: this.#freeEdit,
       editLockAttribute: this.#freeEdit ? "" : "disabled",
+      canManageResearchControls: canManageSheetDocuments,
+      canManageEffectControls: canManageSheetDocuments,
       actorName: this.#actorNameDraft ?? actor.name,
       load: {
         value: formatWeight(loadValue),
@@ -593,7 +599,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       }),
       travelGroup: await prepareTravelGroupSheetContext(actor),
       inventory,
-      effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor))
+      effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor), actor)
     }, { inplace: false });
     return _mergedContext;
   }
@@ -1260,11 +1266,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   static #onCreateResearch(event) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     return openCreateResearchDialog(this.actor);
   }
 
   static #onManageResearch(event, target) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     const researchId = target.closest("[data-research-id]")?.dataset.researchId ?? "";
     if (!researchId) return undefined;
     return openManageResearchDialog(this.actor, researchId);
@@ -1272,6 +1280,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   static #onDeleteResearch(event, target) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     const researchId = target.closest("[data-research-id]")?.dataset.researchId ?? "";
     if (!researchId) return undefined;
     return deleteResearchWithConfirm(this.actor, researchId);
@@ -1290,6 +1299,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   static async #onCreateEffect(event) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     const [effect] = await this.actor.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
       name: game.i18n.localize("FALLOUTMAW.Effects.NewEffect"),
@@ -1310,18 +1320,21 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   static #onEditEffect(event, target) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     const effect = getEffectFromTarget(this.actor, target);
     return effect?.sheet?.render(true);
   }
 
   static #onToggleEffect(event, target) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     const effect = getEffectFromTarget(this.actor, target);
     return effect?.update({ disabled: !effect.disabled });
   }
 
   static #onDeleteEffect(event, target) {
     event.preventDefault();
+    if (!game.user?.isGM) return undefined;
     const effect = getEffectFromTarget(this.actor, target);
     return effect?.delete();
   }
@@ -6775,7 +6788,7 @@ function getEffectFromTarget(actor, target) {
   return actor.effects.get(effectId);
 }
 
-function prepareEffectCategories(effects = []) {
+function prepareEffectCategories(effects = [], actor = null) {
   const categories = [
     {
       key: "temporary",
@@ -6811,7 +6824,8 @@ function prepareEffectCategories(effects = []) {
       img: effect.img,
       disabled: effect.disabled,
       changes: effect.system?.changes?.length ?? effect.changes?.length ?? 0,
-      duration: getEffectDurationLabel(effect)
+      duration: getEffectDurationLabel(effect),
+      tooltipHTML: buildEffectTooltipHTML(effect, actor)
     });
   }
 

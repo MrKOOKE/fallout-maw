@@ -766,7 +766,11 @@
         "InsufficientActionPoints": "{actor}: не хватает {resource} для действия ({cost} > {available}).",
         "InsufficientMovementAction": "{actor}: не хватает {movement}/{action} для перетаскивания ({cost} > {available}).",
         "DamageReductionIcon": "Иконка снижения урона",
-        "DamageBlockedIcon": "Иконка полного блокирования урона"
+        "DamageBlockedIcon": "Иконка полного блокирования урона",
+        "ExperienceAwardSection": "Выдача опыта",
+        "ExperienceAwardSound": "Звук выдачи опыта",
+        "LevelUpSound": "Звук повышения уровня",
+        "LevelUpAnimation": "Анимация повышения уровня"
       },
       "Characteristics": {
         "Create": "Создать характеристику",

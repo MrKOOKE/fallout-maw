@@ -85,8 +85,15 @@ export const DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS = Object.freeze({
   levelUpIcon: "icons/svg/upgrade.svg"
 });
 
+export const DEFAULT_TOKEN_ACTION_HUD_EXPERIENCE_AWARD = Object.freeze({
+  experienceSoundPath: `systems/${FALLOUT_MAW.id}/audio/Experience/fallout-4-experience-up-made-with-Voicemod.mp3`,
+  levelUpSoundPath: `systems/${FALLOUT_MAW.id}/audio/Experience/fallout-level-up-made-with-Voicemod.mp3`,
+  levelUpAnimationKey: "fallout-maw.generic.energy.energy_field_bot_02_regular_yellow"
+});
+
 export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
   ...DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS,
+  experienceAward: DEFAULT_TOKEN_ACTION_HUD_EXPERIENCE_AWARD,
   mainActions: Object.freeze({
     weapon: "icons/svg/combat.svg",
     items: "icons/svg/item-bag.svg",
@@ -172,7 +179,17 @@ export function normalizeTokenActionHudIcons(value = {}) {
     postures: normalizeImageSettingMap(source.postures, defaults.postures),
     combatEnd: normalizeImageSettingMap(source.combatEnd, defaults.combatEnd),
     skillIcons: normalizeImageSettingMap(source.skillIcons, defaults.skillIcons),
-    emptyWeaponSlotIcon: normalizeImageSettingPath(source.emptyWeaponSlotIcon, defaults.emptyWeaponSlotIcon)
+    emptyWeaponSlotIcon: normalizeImageSettingPath(source.emptyWeaponSlotIcon, defaults.emptyWeaponSlotIcon),
+    experienceAward: normalizeTokenActionHudExperienceAward(source.experienceAward, defaults.experienceAward)
+  };
+}
+
+export function normalizeTokenActionHudExperienceAward(value = {}, defaults = DEFAULT_TOKEN_ACTION_HUD_EXPERIENCE_AWARD) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    experienceSoundPath: normalizeMediaSettingPath(source.experienceSoundPath, defaults.experienceSoundPath),
+    levelUpSoundPath: normalizeMediaSettingPath(source.levelUpSoundPath, defaults.levelUpSoundPath),
+    levelUpAnimationKey: normalizeMediaSettingPath(source.levelUpAnimationKey, defaults.levelUpAnimationKey)
   };
 }
 
@@ -187,6 +204,10 @@ function normalizeImageSettingMap(value, defaults = {}) {
 }
 
 function normalizeImageSettingPath(value, fallback) {
+  return normalizeMediaSettingPath(value, fallback);
+}
+
+function normalizeMediaSettingPath(value, fallback) {
   const path = String(value ?? "").trim();
   return path || fallback;
 }
@@ -680,6 +701,10 @@ export function getTokenActionHudIcons() {
   } catch (_error) {
     return normalizeTokenActionHudIcons();
   }
+}
+
+export function getTokenActionHudExperienceAwardSettings() {
+  return getTokenActionHudIcons().experienceAward;
 }
 
 export async function setTokenActionHudDamageIcons(value) {

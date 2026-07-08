@@ -5,6 +5,7 @@ import {
   getCreatureOptions,
   getActorNeedSettings,
   getDamageTypeSettings,
+  getLevelSettings,
   getProficiencyInfluenceSettings,
   getProficiencySettings,
   getResourceSettings,
@@ -141,6 +142,7 @@ import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { getWeaponTooltipModuleSlotsTabIndex, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
+import { getActorsCrossingLevelThreshold, playExperienceAwardMedia } from "../advancement/media.mjs";
 import {
   applyWeaponModuleModifiers,
   getWeaponModuleDisplayName,
@@ -831,10 +833,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const amount = Math.max(0, toInteger(formData.experience));
     if (!amount) return undefined;
+    const levelSettings = getLevelSettings();
+    const leveledActors = getActorsCrossingLevelThreshold(actors, amount, levelSettings);
     for (const actor of actors) {
       const current = Math.max(0, toInteger(actor.system?.development?.experience));
       await actor.update({ "system.development.experience": current + amount });
     }
+    await playExperienceAwardMedia({ leveledActors, playExperienceSound: true });
     return this.render({ force: true });
   }
 

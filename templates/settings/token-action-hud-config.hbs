@@ -76,6 +76,25 @@
       </section>
 
       <section>
+        <h3>{{localize "FALLOUTMAW.Settings.HUD.ExperienceAwardSection"}}</h3>
+        <div class="fallout-maw-settings-table fallout-maw-token-action-hud-media-table">
+          {{#each experienceAwardRows}}
+          <div class="fallout-maw-settings-row" data-hud-experience-key="{{key}}">
+            <span>{{label}}</span>
+            <div class="fallout-maw-image-picker-field">
+              <input type="text" data-hud-experience-input="{{key}}" value="{{value}}">
+              {{#if isAudio}}
+              <button type="button" data-action="browseHudAudio" title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+              {{else}}
+              <span></span>
+              {{/if}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+
+      <section>
         <h3>Кнопки действий оружия</h3>
         <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
           {{#each weaponActionIconRows}}
