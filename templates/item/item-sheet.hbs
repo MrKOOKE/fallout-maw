@@ -273,10 +273,6 @@
     <div class="fallout-maw-panel-header">
       <h2>{{typeLabel}}</h2>
       <div class="fallout-maw-inline-controls">
-        {{#if canConfigureChanges}}
-        <button type="button" data-add-ability-change><i class="fa-solid fa-plus"></i> Добавить строку</button>
-        <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
-        {{/if}}
         <button type="button" class="fallout-maw-icon-button" data-delete-ability-function title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
     </div>
@@ -1392,6 +1388,10 @@
     {{#if canConfigureChanges}}
     <fieldset class="fallout-maw-fieldset">
       <legend>Изменения</legend>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-add-ability-change><i class="fa-solid fa-plus"></i> Добавить строку</button>
+        <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
+      </div>
       <div data-ability-changes>
         {{#each changes}}
         <div class="fallout-maw-ability-change-card" data-ability-change-row data-change-index="{{index}}">
@@ -1430,7 +1430,6 @@
       <div class="fallout-maw-panel-header">
         <h3>Условие</h3>
         <div class="fallout-maw-inline-controls">
-          <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
           <button type="button" data-add-ability-penalty {{#unless canAddPenalty}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить штраф за невыполнение</button>
         </div>
       </div>

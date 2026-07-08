@@ -181,6 +181,7 @@ const STATUS_EFFECTS = Object.freeze({
 });
 const pendingFixedAbilitySocketRequests = new Map();
 const actorEnergyMutationQueue = new Map();
+const activeApplicationEffectSyncTimers = new Map();
 
 const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   Object.freeze({
@@ -468,6 +469,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
 ]);
 
 export function registerFixedAbilityFunctionHooks() {
+  Hooks.on("updateActor", actor => queueActiveApplicationEffectSync(actor));
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
   registerOversightReactionProvider();
@@ -1135,9 +1137,9 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
     const targetActor = target.actor;
     if (!targetActor) continue;
     const changes = getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target)
-      .map(change => prepareEffectChangeForApplication(sourceActor, change))
+      .map(change => prepareEffectChangeForApplication(targetActor, change))
       .filter(change => change.key && change.value !== "");
-    if (!changes.length) continue;
+    const signature = JSON.stringify(changes);
     await targetActor.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",
       name: getAbilityDisplayName(abilityItem),
@@ -1158,6 +1160,8 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
             abilityItemId: abilityItem.id,
             abilitySourceId: getAbilitySourceId(abilityItem),
             sourceActorUuid: sourceActor.uuid,
+            functionData: foundry.utils.deepClone(abilityFunction),
+            signature,
             functionId: abilityFunction.id,
             createdAt: startTime
           }
@@ -1168,6 +1172,7 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
 }
 
 function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target = {}) {
+  const subjectActor = target.actor ?? sourceActor;
   const context = {
     abilityItemId: abilityItem.id,
     functionId: abilityFunction.id,
@@ -1177,9 +1182,55 @@ function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunc
     allowContextual: true
   };
   if (!abilityFunction.conditions?.length) return abilityFunction.changes ?? [];
-  return abilityConditionsApply(sourceActor, abilityFunction.conditions, context)
+  return abilityConditionsApply(subjectActor, abilityFunction.conditions, context)
     ? abilityFunction.changes ?? []
     : abilityFunction.penalties ?? [];
+}
+
+function queueActiveApplicationEffectSync(actor) {
+  const actorUuid = actor?.uuid;
+  if (!actorUuid || !game.user?.isActiveGM) return;
+  globalThis.clearTimeout(activeApplicationEffectSyncTimers.get(actorUuid));
+  activeApplicationEffectSyncTimers.set(actorUuid, globalThis.setTimeout(() => {
+    activeApplicationEffectSyncTimers.delete(actorUuid);
+    void syncActorActiveApplicationEffects(actor);
+  }, 40));
+}
+
+async function syncActorActiveApplicationEffects(actor) {
+  if (!actor || !game.user?.isActiveGM) return;
+  const effects = actor.effects?.filter(effect => effect.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)) ?? [];
+  for (const effect of effects) {
+    const flag = effect.getFlag(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY);
+    const abilityFunction = normalizeAbilityFunctions([flag?.functionData])[0];
+    if (!abilityFunction) continue;
+    const sourceActor = await fromUuid(String(flag?.sourceActorUuid ?? "")) ?? actor;
+    const abilityItem = {
+      id: String(flag?.abilityItemId ?? ""),
+      name: effect.name,
+      img: effect.img,
+      uuid: effect.origin,
+      flags: {
+        [SYSTEM_ID]: {
+          abilitySource: {
+            id: String(flag?.abilitySourceId ?? "")
+          }
+        }
+      }
+    };
+    const changes = getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, {
+      actor,
+      token: getPrimaryActorToken(actor)
+    })
+      .map(change => prepareEffectChangeForApplication(actor, change))
+      .filter(change => change.key && change.value !== "");
+    const signature = JSON.stringify(changes);
+    if (signature === String(flag?.signature ?? "")) continue;
+    await effect.update({
+      "system.changes": changes,
+      [`flags.${SYSTEM_ID}.${ACTIVE_APPLICATION_EFFECT_FLAG_KEY}.signature`]: signature
+    });
+  }
 }
 
 function collectCommandBasicsTargetRows(commander, command = "") {
