@@ -6,6 +6,7 @@ import {
   ABILITY_FUNCTION_TYPES,
   createAbilityFunction,
   getAbilitySourceId,
+  normalizeActiveApplicationSettings,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
@@ -87,6 +88,7 @@ import {
   SMART_FUDGE_RESULT_EFFECT_KEYS,
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
+import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
   ABILITY_FREE_MOVEMENT_OPTION,
@@ -152,6 +154,7 @@ const HEIGHTENED_CONCENTRATION_EFFECT_SOURCE = "heightenedConcentration";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY = "knockOffBalance";
+const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
@@ -565,6 +568,14 @@ export function isFixedAbilityFunctionActive(abilityFunction = {}) {
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.active);
 }
 
+export function isActiveApplicationAbilityFunction(abilityFunction = {}) {
+  return abilityFunction?.type === ABILITY_FUNCTION_TYPES.activeApplication;
+}
+
+export function isActiveAbilityFunction(abilityFunction = {}) {
+  return isFixedAbilityFunctionActive(abilityFunction) || isActiveApplicationAbilityFunction(abilityFunction);
+}
+
 export function isFixedAbilityFunctionToggleable(abilityFunction = {}) {
   if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.fixed) return false;
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.toggleable);
@@ -583,6 +594,11 @@ export function getFixedAbilityToggleState(item) {
 export function hasActiveFixedAbilityFunction(item) {
   if (item?.type !== "ability") return false;
   return normalizeAbilityFunctions(item.system?.functions ?? []).some(isFixedAbilityFunctionActive);
+}
+
+export function hasActiveAbilityFunction(item) {
+  if (item?.type !== "ability") return false;
+  return normalizeAbilityFunctions(item.system?.functions ?? []).some(isActiveAbilityFunction);
 }
 
 export function getFixedAbilityFunctionProgressEntries(abilityItem) {
@@ -1019,6 +1035,151 @@ function selectCommandBasicsTargets({ commander = null, command = "", limit = 1,
     noneWarning: `${abilityName}: нет подходящих исполнителей.`,
     instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`
   });
+}
+
+export async function useAbilityFunctionItem({ actor = null, item = null, application = null } = {}) {
+  if (isReactionSystemLocked()) {
+    ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
+    return false;
+  }
+  if (!actor?.isOwner || item?.type !== "ability") return false;
+  const abilityFunction = normalizeAbilityFunctions(item.system?.functions ?? [])
+    .find(entry => isActiveAbilityFunction(entry));
+  if (!abilityFunction) return false;
+  if (isActiveApplicationAbilityFunction(abilityFunction)) {
+    const used = await useActiveApplicationAbilityFunction(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+  return useFixedAbilityFunctionItem({ actor, item, application });
+}
+
+async function useActiveApplicationAbilityFunction(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const targets = await resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings);
+  if (!targets.length) return false;
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, settings, targets);
+  if (settings.overloadEnergyCost > 0) {
+    await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+      name: getAbilityOverloadName(abilityItem),
+      energyCost: settings.overloadEnergyCost,
+      durationSeconds: settings.overloadDurationSeconds
+    });
+  }
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    settings.overloadEnergyCost > 0
+      ? `Применено. Перегрузка: +${settings.overloadEnergyCost} на ${formatDuration(settings.overloadDurationSeconds)}.`
+      : "Применено."
+  );
+  return true;
+}
+
+async function resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings) {
+  if (settings.targetMode !== "others") {
+    return [{ actor, token: getPrimaryActorToken(actor), selected: true }];
+  }
+  const rows = collectActiveApplicationTargetRows(actor, settings);
+  const selection = await requestCustomTokenSelection({
+    rows,
+    limit: settings.targetLimit,
+    title: getAbilityDisplayName(abilityItem),
+    noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
+    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${settings.targetLimit} целей. Enter подтверждает, Esc отменяет.`
+  });
+  return selection.map(row => ({ actor: row.token.actor, token: row.token })).filter(row => row.actor);
+}
+
+function collectActiveApplicationTargetRows(sourceActor, settings) {
+  const accepted = new Set(settings.targetGroups ?? []);
+  return (canvas?.tokens?.placeables ?? [])
+    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .map(token => {
+      const isSelf = token.actor.uuid === sourceActor?.uuid;
+      const relation = getActiveApplicationTargetRelation(sourceActor, token.actor);
+      const selectable = (!settings.excludeSelf || !isSelf) && accepted.has(relation);
+      return {
+        token,
+        actorUuid: token.actor.uuid,
+        selectable,
+        reason: selectable ? "" : "тип цели не подходит"
+      };
+    });
+}
+
+function getActiveApplicationTargetRelation(sourceActor, targetActor) {
+  if (!sourceActor || !targetActor) return "neutral";
+  if (sourceActor.uuid === targetActor.uuid) return "ally";
+  const targetFactions = getActorFactionBelongs(targetActor);
+  const factions = targetFactions.length ? targetFactions : [DEFAULT_FACTION_NAME];
+  if (factions.some(faction => getRelationTo(sourceActor, faction) === "ally")) return "ally";
+  if (factions.some(faction => getRelationTo(sourceActor, faction) === "enemy")) return "enemy";
+  return "neutral";
+}
+
+function getPrimaryActorToken(actor) {
+  return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? null;
+}
+
+async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, settings, targets = []) {
+  const startTime = Number(game.time?.worldTime) || 0;
+  for (const target of targets) {
+    const targetActor = target.actor;
+    if (!targetActor) continue;
+    const changes = getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target)
+      .map(change => prepareEffectChangeForApplication(sourceActor, change))
+      .filter(change => change.key && change.value !== "");
+    if (!changes.length) continue;
+    await targetActor.createEmbeddedDocuments("ActiveEffect", [{
+      type: "base",
+      name: getAbilityDisplayName(abilityItem),
+      img: abilityItem.img || "icons/svg/aura.svg",
+      origin: abilityItem.uuid,
+      transfer: false,
+      disabled: false,
+      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+      duration: {
+        seconds: settings.durationSeconds,
+        startTime
+      },
+      system: { changes },
+      flags: {
+        [SYSTEM_ID]: {
+          kind: "temporary",
+          [ACTIVE_APPLICATION_EFFECT_FLAG_KEY]: {
+            abilityItemId: abilityItem.id,
+            abilitySourceId: getAbilitySourceId(abilityItem),
+            sourceActorUuid: sourceActor.uuid,
+            functionId: abilityFunction.id,
+            createdAt: startTime
+          }
+        }
+      }
+    }], { animate: false });
+  }
+}
+
+function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target = {}) {
+  const context = {
+    abilityItemId: abilityItem.id,
+    functionId: abilityFunction.id,
+    actorToken: getPrimaryActorToken(sourceActor),
+    targetActor: target.actor,
+    targetToken: target.token,
+    allowContextual: true
+  };
+  if (!abilityFunction.conditions?.length) return abilityFunction.changes ?? [];
+  return abilityConditionsApply(sourceActor, abilityFunction.conditions, context)
+    ? abilityFunction.changes ?? []
+    : abilityFunction.penalties ?? [];
 }
 
 function collectCommandBasicsTargetRows(commander, command = "") {

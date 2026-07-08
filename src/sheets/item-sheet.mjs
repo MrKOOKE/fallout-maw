@@ -38,6 +38,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
+  ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_CHANGE_TYPES,
@@ -51,6 +52,7 @@ import {
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
+  normalizeActiveApplicationSettings,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
@@ -393,6 +395,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         label: "Фиксированные функции"
       },
       {
+        value: ABILITY_FUNCTION_TYPES.activeApplication,
+        label: "Активное применение"
+      },
+      {
         value: ABILITY_FUNCTION_TYPES.effectChanges,
         label: "Свободная настройка"
       },
@@ -659,6 +665,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       foundry.utils.setProperty(submitData, "system.functions.trap.recharge.value", null);
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
+    normalizeSubmittedActiveApplicationFunctions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
@@ -671,6 +678,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const submitData = super._processFormData(event, form, formData);
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
+    normalizeSubmittedActiveApplicationFunctions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
@@ -2520,7 +2528,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]) return undefined;
-    if (functions[functionIndex].type === ABILITY_FUNCTION_TYPES.fixed) return undefined;
+    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(functions[functionIndex].type)) return undefined;
     functions[functionIndex].changes.push(createAbilityChange());
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
@@ -2543,7 +2551,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]) return undefined;
-    if (functions[functionIndex].type === ABILITY_FUNCTION_TYPES.fixed) return undefined;
+    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(functions[functionIndex].type)) return undefined;
     functions[functionIndex].conditions.push(createAbilityCondition(""));
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
@@ -5650,8 +5658,12 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
   const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = type === ABILITY_FUNCTION_TYPES.effectChanges;
+  const isActiveApplication = type === ABILITY_FUNCTION_TYPES.activeApplication;
   const isFixed = type === ABILITY_FUNCTION_TYPES.fixed;
   const fixedKey = String(entry?.fixedKey ?? "");
+  const activeApplicationSettings = isActiveApplication
+    ? prepareActiveApplicationSettingsForDisplay(entry?.activeSettings)
+    : null;
   const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     ? prepareDeusExMachinaSettingsForDisplay(entry?.fixedSettings, entry, item)
     : null;
@@ -5744,7 +5756,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
-    allowLimitedChanges: isEffectChanges,
+    allowLimitedChanges: isEffectChanges || isActiveApplication,
     functionPath
   }));
   const hasRuntimeConditions = (entry?.conditions ?? []).some(condition => isAbilityRuntimeCondition(condition?.type));
@@ -5754,8 +5766,11 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     functionPath,
     isAcquisitionChanges,
     isEffectChanges,
+    isActiveApplication,
     isFixed,
+    canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
     fixedKey,
+    activeApplicationSettings,
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
@@ -5786,7 +5801,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
     fixedHeightenedConcentrationSettings,
-    typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
+    typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
     conditionGroups: buildAbilityConditionDisplayGroups(conditions),
@@ -5806,6 +5821,47 @@ function prepareAbilityChangeForDisplay(change, functionIndex, index, functionPa
     priority: change?.priority ?? "",
     typeChoices: buildAbilityChangeTypeChoices(change?.type)
   };
+}
+
+function getAbilityFunctionTypeLabel(entry = {}, fixedKey = "") {
+  const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
+  if (type === ABILITY_FUNCTION_TYPES.fixed) return getFixedAbilityFunctionLabel(fixedKey);
+  if (type === ABILITY_FUNCTION_TYPES.activeApplication) return "Активное применение";
+  if (type === ABILITY_FUNCTION_TYPES.acquisitionChanges) return "Разовое изменение при приобретении";
+  return "Свободная настройка";
+}
+
+function prepareActiveApplicationSettingsForDisplay(settings = {}) {
+  const normalized = normalizeActiveApplicationSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    targetModeChoices: [
+      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
+      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
+    ],
+    isTargetOthers: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
+    targetGroupChoices: buildActiveApplicationTargetGroupChoices(normalized.targetGroups)
+  };
+}
+
+function buildActiveApplicationTargetGroupChoices(value = []) {
+  const selected = normalizeAbilityConditionValues(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  const labels = {
+    ally: "Союзник",
+    enemy: "Враг",
+    neutral: "Нейтрал"
+  };
+  return ABILITY_AURA_TARGET_GROUPS.map(group => ({
+    value: group,
+    label: labels[group] ?? group,
+    selected: selected.includes(group)
+  }));
 }
 
 function prepareAbilityPenaltyForDisplay(change, functionIndex, index, functionPath = "system.functions") {
@@ -6711,6 +6767,24 @@ function normalizeSubmittedAbilityItemUseConditions(form = null, submitData = {}
 
     foundry.utils.setProperty(submitData, `${conditionPath}.itemCategories`, categories);
     foundry.utils.setProperty(submitData, `${conditionPath}.durationSeconds`, durationSeconds);
+  }
+}
+
+function normalizeSubmittedActiveApplicationFunctions(form = null, submitData = {}) {
+  for (const row of form?.querySelectorAll?.("[data-ability-function-row][data-function-type='activeApplication']") ?? []) {
+    const functionPath = String(row.dataset.functionPath ?? "");
+    const functionIndex = Number(row.dataset.functionIndex ?? -1);
+    if (!functionPath || functionIndex < 0) continue;
+    const overloadDurationSeconds = abilityDurationPartsToSeconds(
+      row.querySelector("[data-active-application-overload-duration-amount]")?.value,
+      row.querySelector("[data-active-application-overload-duration-unit]")?.value
+    );
+    const durationSeconds = abilityDurationPartsToSeconds(
+      row.querySelector("[data-active-application-duration-amount]")?.value,
+      row.querySelector("[data-active-application-duration-unit]")?.value
+    );
+    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.overloadDurationSeconds`, overloadDurationSeconds);
+    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.durationSeconds`, durationSeconds);
   }
 }
 

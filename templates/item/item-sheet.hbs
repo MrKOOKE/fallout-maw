@@ -273,10 +273,10 @@
     <div class="fallout-maw-panel-header">
       <h2>{{typeLabel}}</h2>
       <div class="fallout-maw-inline-controls">
-        {{#unless isFixed}}
+        {{#if canConfigureChanges}}
         <button type="button" data-add-ability-change><i class="fa-solid fa-plus"></i> Добавить строку</button>
         <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
-        {{/unless}}
+        {{/if}}
         <button type="button" class="fallout-maw-icon-button" data-delete-ability-function title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
     </div>
@@ -1310,38 +1310,120 @@
     </div>
     {{/if}}
     {{/if}}
-    {{#unless isFixed}}
-    <div data-ability-changes>
-      {{#each changes}}
-      <div class="fallout-maw-ability-change-card" data-ability-change-row data-change-index="{{index}}">
-        <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.id" value="{{id}}">
-        <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.phase" value="initial">
-        <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
-          <span>Ключ</span>
-          <span>Тип</span>
-          <span>Значение</span>
-          <span>Приоритет</span>
-          <span></span>
+    {{#if activeApplicationSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <fieldset class="fallout-maw-fieldset fallout-maw-active-application-energy">
+        <legend>Энергия</legend>
+        <div class="fallout-maw-fixed-settings-row">
+          <label>
+            <span>Стоимость</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.energyCost" value="{{activeApplicationSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Перегрузка</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.overloadEnergyCost" value="{{activeApplicationSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{activeApplicationSettings.overloadDurationAmount}}" min="1" step="1" data-active-application-overload-duration-amount>
+              <select data-active-application-overload-duration-unit>
+                {{#each activeApplicationSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
         </div>
-        <div class="fallout-maw-trauma-effect-row">
-          <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.key" value="{{key}}" data-effect-key-autocomplete {{#if ../isAcquisitionChanges}}data-ability-acquisition-change-key{{/if}}>
-          <select name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.type">
-            {{#each typeChoices}}
-            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-            {{/each}}
-          </select>
-          <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
-          <input type="number" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
-          <div class="fallout-maw-inline-controls">
-            <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </fieldset>
+      <fieldset class="fallout-maw-fieldset fallout-maw-active-application-targets">
+        <legend>Цели применения</legend>
+        <div class="fallout-maw-fixed-settings-row">
+          <label>
+            <span>Режим</span>
+            <select name="{{functionPath}}.{{functionIndex}}.activeSettings.targetMode">
+              {{#each activeApplicationSettings.targetModeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          {{#if activeApplicationSettings.isTargetOthers}}
+          <label>
+            <span>Число целей</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.targetLimit" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1">
+          </label>
+          <label class="fallout-maw-inline-checkbox">
+            <span>Исключить себя</span>
+            <input type="hidden" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" value="false">
+            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" value="true" {{checked activeApplicationSettings.excludeSelf}}>
+          </label>
+          <div class="fallout-maw-item-use-category-field">
+            <div class="fallout-maw-item-use-category-header">
+              <span>Типы целей</span>
+            </div>
+            <div class="fallout-maw-item-use-category-list">
+              {{#each activeApplicationSettings.targetGroupChoices}}
+              <label class="fallout-maw-checkbox-row">
+                <span>{{label}}</span>
+                <input type="checkbox" name="{{../functionPath}}.{{../functionIndex}}.activeSettings.targetGroups.{{@index}}" value="{{value}}" {{checked selected}}>
+              </label>
+              {{/each}}
+            </div>
+          </div>
+          {{/if}}
+        </div>
+      </fieldset>
+      <fieldset class="fallout-maw-fieldset fallout-maw-active-application-duration">
+        <legend>Длительность</legend>
+        <label>
+          <span>Длительность</span>
+          <div class="fallout-maw-split-number-field-control">
+            <input type="number" value="{{activeApplicationSettings.durationAmount}}" min="1" step="1" data-active-application-duration-amount>
+            <select data-active-application-duration-unit>
+              {{#each activeApplicationSettings.durationUnitChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </div>
+        </label>
+      </fieldset>
+    </div>
+    {{/if}}
+    {{#if canConfigureChanges}}
+    <fieldset class="fallout-maw-fieldset">
+      <legend>Изменения</legend>
+      <div data-ability-changes>
+        {{#each changes}}
+        <div class="fallout-maw-ability-change-card" data-ability-change-row data-change-index="{{index}}">
+          <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.id" value="{{id}}">
+          <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.phase" value="initial">
+          <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+            <span>Ключ</span>
+            <span>Тип</span>
+            <span>Значение</span>
+            <span>Приоритет</span>
+            <span></span>
+          </div>
+          <div class="fallout-maw-trauma-effect-row">
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.key" value="{{key}}" data-effect-key-autocomplete {{#if ../isAcquisitionChanges}}data-ability-acquisition-change-key{{/if}}>
+            <select name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.type">
+              {{#each typeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
+            <div class="fallout-maw-inline-controls">
+              <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
           </div>
         </div>
+        {{else}}
+        <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
+        {{/each}}
       </div>
-      {{else}}
-      <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
-      {{/each}}
-    </div>
-    {{/unless}}
+    </fieldset>
+    {{/if}}
 
     {{#if hasConditions}}
     <div class="fallout-maw-ability-subsection">

@@ -7,6 +7,7 @@ export const ABILITY_SOURCE_FLAG = "abilitySource";
 
 export const ABILITY_FUNCTION_TYPES = Object.freeze({
   effectChanges: "effectChanges",
+  activeApplication: "activeApplication",
   acquisitionChanges: "acquisitionChanges",
   characteristicBonus: "characteristicBonus",
   skillBonus: "skillBonus",
@@ -74,6 +75,11 @@ export const ABILITY_AURA_MODES = Object.freeze({
 });
 
 export const ABILITY_AURA_TARGET_GROUPS = Object.freeze(["ally", "enemy", "neutral"]);
+
+export const ABILITY_ACTIVE_APPLICATION_TARGET_MODES = Object.freeze({
+  self: "self",
+  others: "others"
+});
 
 export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
   self: "self",
@@ -283,6 +289,7 @@ export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChange
     type,
     fixedKey: options?.fixedKey,
     fixedSettings: options?.fixedSettings,
+    activeSettings: options?.activeSettings,
     changes: [],
     conditions: [],
     penalties: []
@@ -393,6 +400,9 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     fixedSettings: type === ABILITY_FUNCTION_TYPES.fixed
       ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
       : {},
+    activeSettings: type === ABILITY_FUNCTION_TYPES.activeApplication
+      ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
+      : {},
     changes: isLegacy
       ? legacyFunctionToChanges(value)
       : normalizeAbilityChanges(value?.changes ?? value?.effects),
@@ -422,6 +432,24 @@ function legacyFunctionToChanges(value = {}) {
 function normalizeAbilityChanges(value = []) {
   return (Array.isArray(value) ? value : Object.values(value ?? {}))
     .map(normalizeAbilityChange);
+}
+
+export function normalizeActiveApplicationSettings(value = {}) {
+  const targetMode = String(value?.targetMode ?? "").trim() === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others
+    ? ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others
+    : ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self;
+  const targetGroups = normalizeStringList(value?.targetGroups)
+    .filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 0)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 0)),
+    overloadDurationSeconds: Math.max(1, toInteger(value?.overloadDurationSeconds ?? 12) || 12),
+    targetMode,
+    targetLimit: Math.max(1, toInteger(value?.targetLimit ?? 1) || 1),
+    targetGroups: targetGroups.length ? targetGroups : ["ally"],
+    excludeSelf: value?.excludeSelf === undefined ? true : Boolean(value.excludeSelf),
+    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 12) || 12)
+  };
 }
 
 function normalizeAbilityChange(value = {}) {

@@ -3,6 +3,7 @@ import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getIte
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
+  ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_CHANGE_TYPES,
@@ -30,6 +31,7 @@ import {
   normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeDefensiveTacticsSettings,
+  normalizeActiveApplicationSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -215,6 +217,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='conditionAuraMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
+    this.element?.querySelectorAll?.("[data-field='active.targetMode']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onActiveApplicationTargetModeChange(event));
+    });
     this.element?.querySelectorAll?.("[data-field='acquisitionRequirementType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onAcquisitionRequirementTypeChange(event));
     });
@@ -291,7 +296,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       this.#activeTab = "functions";
       return this.#persist({ render: true, sync: false });
     }
-    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(selected)) return undefined;
+    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(selected)) return undefined;
     this.ability.system.functions.push(createAbilityFunction(selected));
     this.#functionPickerActive = false;
     this.#fixedFunctionPickerActive = false;
@@ -349,6 +354,14 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  #onActiveApplicationTargetModeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.#syncFromForm();
+    this.#activeTab = "functions";
+    return this.#persist({ render: true, sync: false });
+  }
+
   static #onDeleteFunction(event, target) {
     event.preventDefault();
     this.#syncFromForm();
@@ -363,7 +376,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     const entry = this.ability.system.functions[functionIndex];
-    if (entry?.type !== ABILITY_FUNCTION_TYPES.fixed) entry?.changes?.push(createAbilityChange());
+    if ([ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(entry?.type)) entry?.changes?.push(createAbilityChange());
     return this.#persist({ render: true, sync: false });
   }
 
@@ -382,7 +395,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionRow = target.closest("[data-ability-function-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
     const entry = this.ability.system.functions[functionIndex];
-    if (entry?.type !== ABILITY_FUNCTION_TYPES.fixed) entry?.conditions?.push(createAbilityCondition(""));
+    if ([ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(entry?.type)) entry?.conditions?.push(createAbilityCondition(""));
     return this.#persist({ render: true, sync: false });
   }
 
@@ -730,10 +743,31 @@ function readAbilityFunctions(root) {
     type: row.dataset.functionType,
     fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
     fixedSettings: readFixedFunctionSettings(row),
-    changes: readAbilityChanges(row.querySelector(":scope > [data-ability-changes]"), "[data-ability-change-row]"),
+    activeSettings: readActiveApplicationSettings(row),
+    changes: readAbilityChanges(row.querySelector("[data-ability-changes]"), "[data-ability-change-row]"),
     conditions: readAbilityConditions(row.querySelector("[data-ability-conditions]")),
     penalties: readAbilityChanges(row.querySelector("[data-ability-penalties]"), "[data-ability-penalty-row]")
   }));
+}
+
+function readActiveApplicationSettings(row) {
+  if (row?.dataset?.functionType !== ABILITY_FUNCTION_TYPES.activeApplication) return {};
+  return {
+    energyCost: row.querySelector("[data-field='active.energyCost']")?.value,
+    overloadEnergyCost: row.querySelector("[data-field='active.overloadEnergyCost']")?.value,
+    overloadDurationSeconds: durationPartsToSeconds(
+      row.querySelector("[data-field='active.overloadDurationAmount']")?.value,
+      row.querySelector("[data-field='active.overloadDurationUnit']")?.value
+    ),
+    targetMode: row.querySelector("[data-field='active.targetMode']")?.value,
+    targetLimit: row.querySelector("[data-field='active.targetLimit']")?.value,
+    targetGroups: readFieldValues(row, "[data-field='active.targetGroup']"),
+    excludeSelf: readBooleanField(row.querySelector("[data-field='active.excludeSelf']"), true),
+    durationSeconds: durationPartsToSeconds(
+      row.querySelector("[data-field='active.durationAmount']")?.value,
+      row.querySelector("[data-field='active.durationUnit']")?.value
+    )
+  };
 }
 
 function syncFixedRescueCountVisibility(select) {
@@ -1159,8 +1193,12 @@ function prepareFunctionForDisplay(entry) {
   const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
   const isAcquisitionChanges = normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = normalized.type === ABILITY_FUNCTION_TYPES.effectChanges;
+  const isActiveApplication = normalized.type === ABILITY_FUNCTION_TYPES.activeApplication;
   const isFixed = normalized.type === ABILITY_FUNCTION_TYPES.fixed;
   const fixedKey = String(normalized.fixedKey ?? "");
+  const activeApplicationSettings = isActiveApplication
+    ? prepareActiveApplicationSettingsForDisplay(normalized.activeSettings)
+    : null;
   const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     ? prepareDeusExMachinaSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1253,15 +1291,18 @@ function prepareFunctionForDisplay(entry) {
     : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
-    allowLimitedChanges: isEffectChanges
+    allowLimitedChanges: isEffectChanges || isActiveApplication
   }));
   const hasRuntimeConditions = normalized.conditions.some(condition => isRuntimeCondition(condition.type));
   return {
     ...normalized,
     isAcquisitionChanges,
     isEffectChanges,
+    isActiveApplication,
     isFixed,
+    canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
     fixedKey,
+    activeApplicationSettings,
     fixedWhereAreYouGoingSettings,
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
@@ -1292,7 +1333,7 @@ function prepareFunctionForDisplay(entry) {
     fixedHeightenedConcentrationSettings,
     fixedRageSettings,
     fixedDisarmSettings,
-    typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
+    typeLabel: getAbilityFunctionTypeLabel(normalized, fixedKey),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
     conditionGroups: buildConditionDisplayGroups(conditions),
@@ -1473,6 +1514,46 @@ function prepareFullForceSettingsForDisplay(settings = {}) {
     ...normalized,
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
+}
+
+function getAbilityFunctionTypeLabel(entry, fixedKey = "") {
+  if (entry.type === ABILITY_FUNCTION_TYPES.fixed) return getFixedAbilityFunctionLabel(fixedKey);
+  if (entry.type === ABILITY_FUNCTION_TYPES.activeApplication) return "Активное применение";
+  if (entry.type === ABILITY_FUNCTION_TYPES.acquisitionChanges) return "Разовое изменение при приобретении";
+  return "Свободная настройка";
+}
+
+function prepareActiveApplicationSettingsForDisplay(settings = {}) {
+  const normalized = normalizeActiveApplicationSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    targetModeChoices: [
+      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
+      { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
+    ],
+    isTargetOthers: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
+    targetGroupChoices: buildTargetGroupChoices(normalized.targetGroups)
+  };
+}
+
+function buildTargetGroupChoices(value = []) {
+  const selected = normalizeConditionValues(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  const labels = {
+    ally: "Союзник",
+    enemy: "Враг",
+    neutral: "Нейтрал"
+  };
+  return ABILITY_AURA_TARGET_GROUPS.map(group => ({
+    value: group,
+    label: labels[group] ?? group,
+    selected: selected.includes(group)
+  }));
 }
 
 function prepareCommandBasicsSettingsForDisplay(settings = {}) {
@@ -1698,6 +1779,7 @@ function buildFunctionChoices() {
   return [
     { value: "", label: "Выберите функцию", disabled: true, selected: true },
     { value: ABILITY_FUNCTION_TYPES.fixed, label: "Фиксированные функции" },
+    { value: ABILITY_FUNCTION_TYPES.activeApplication, label: "Активное применение" },
     { value: ABILITY_FUNCTION_TYPES.effectChanges, label: "Свободная настройка" },
     { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: "Разовое изменение при приобретении" }
   ];

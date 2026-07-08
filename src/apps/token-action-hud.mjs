@@ -95,10 +95,10 @@ import {
   canSpendActorTwoHandsEnergy,
   getActorTwoHandsEntry,
   getFixedAbilityToggleState,
-  hasActiveFixedAbilityFunction,
+  hasActiveAbilityFunction,
   hasActorTwoHandsActive,
   spendActorTwoHandsEnergy,
-  useFixedAbilityFunctionItem
+  useAbilityFunctionItem
 } from "../abilities/fixed-functions.mjs";
 import {
   canUseWeaponSlotForItem,
@@ -1187,8 +1187,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
-    if (!hasActiveFixedAbilityFunction(item)) return undefined;
-    return useFixedAbilityFunctionItem({
+    if (!hasActiveAbilityFunction(item)) return undefined;
+    return useAbilityFunctionItem({
       actor: this.actor,
       token: this.token,
       item,
@@ -2572,7 +2572,7 @@ function prepareAbilityGroups(abilities = []) {
 
 function isActiveAbility(item) {
   const system = item?.system ?? {};
-  return Boolean(system.active || system.activation?.enabled || system.use?.enabled || hasActiveFixedAbilityFunction(item));
+  return Boolean(system.active || system.activation?.enabled || system.use?.enabled || hasActiveAbilityFunction(item));
 }
 
 function prepareSystemActionButtons(hudIcons = {}) {

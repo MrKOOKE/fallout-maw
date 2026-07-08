@@ -172,6 +172,8 @@ import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
+  ABILITY_FUNCTION_TYPES,
+  normalizeActiveApplicationSettings,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
@@ -4259,7 +4261,18 @@ function buildAbilityTooltipFunctionSections(item, actor = null) {
 
 function buildAbilityEnergyCostRows(item, actor = null) {
   if (!actor || item?.type !== "ability") return [];
-  const entry = normalizeAbilityFunctions(item.system?.functions ?? [])
+  const functions = normalizeAbilityFunctions(item.system?.functions ?? []);
+  const activeApplicationEntry = functions.find(abilityFunction => abilityFunction.type === ABILITY_FUNCTION_TYPES.activeApplication);
+  if (activeApplicationEntry) {
+    const settings = normalizeActiveApplicationSettings(activeApplicationEntry.activeSettings);
+    return [
+      ["Стоимость: базовый расход", String(settings.energyCost)],
+      ["Стоимость: итог", String(getFixedAbilityEnergyCost(actor, item, activeApplicationEntry, settings.energyCost))],
+      ["Перегрузка", `${settings.overloadEnergyCost} на ${formatDurationShort(settings.overloadDurationSeconds)}`],
+      ["Длительность", formatDurationShort(settings.durationSeconds)]
+    ];
+  }
+  const entry = functions
     .find(abilityFunction => (
       abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
