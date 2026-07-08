@@ -10,7 +10,7 @@ const STATIC_ANIMATION_DURATION_MS = 600;
 const MIN_ANIMATION_DURATION_MS = 120;
 const MAX_ANIMATION_DURATION_MS = 12000;
 const DISTANCE_FILE_PATTERN = /(?:^|[_\-\s])\d{1,3}(?:ft|m)(?=$|[_\-\s.])/i;
-const MELEE_FILE_PATTERN = /(?:^|\/)Generic\/Weapon_Attacks\/Melee(?:\/|$)/i;
+const MELEE_FILE_PATTERN = /(?:^|\/)Generic\/(?:Weapon_Attacks\/Melee|Creature)(?:\/|$)|(?:^|[_\/])(?:CreatureAttack|Dmg_(?:Bludgeoning|Slashing|Piercing))[^/]*\.webm$/i;
 const CONE_FILE_PATTERN = /(?:^|\/)(?:1st_Level\/Burning_Hands|5th_Level\/Cone_Of_Cold|Generic\/Template\/Cone)(?:\/|$)|(?:^|[_\/])(?:BreathWeapon|BurningHands|ConeOfCold|DetectMagicCone)[^/]*\.webm$/i;
 const RANGED_TEMPLATE = Object.freeze({
   type: "ranged",

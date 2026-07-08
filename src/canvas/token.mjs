@@ -408,7 +408,7 @@ function getEffectChanges(effect) {
 }
 
 function formatEffectChange(change, actor = null, effect = null) {
-  const damageEffect = formatDamageEffectChange(change);
+  const damageEffect = formatDamageEffectChange(change, actor);
   if (damageEffect) return damageEffect;
 
   const key = String(change?.key ?? "");
@@ -443,7 +443,7 @@ function getEffectChangePreparationStage(change = {}) {
   return String(change?.phase ?? "") === "initial" ? "initial-active-effect" : "prepared";
 }
 
-function formatDamageEffectChange(change) {
+function formatDamageEffectChange(change, actor = null) {
   const data = parseDamageEffectChange(change);
   if (!data) return "";
 

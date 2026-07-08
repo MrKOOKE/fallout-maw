@@ -1547,6 +1547,16 @@ class WeaponAttackController {
     return !this.attackCanceledByReaction || this.attackCheckCount > 0;
   }
 
+  async playAttemptWeaponAnimations(trajectories = [], { delayMs = null } = {}) {
+    await playWeaponAttackAnimations({
+      weapon: this.weapon,
+      weaponFunctionId: this.weaponFunctionId,
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
+      trajectories,
+      delayMs: delayMs ?? getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
+    });
+  }
+
   async spendCurrentAttackCosts({ attackCount = 1, trajectories = [], point = null, createSpentQuantityTile = true, delayedThrownItemId = "" } = {}) {
     this.spentQuantityItemData = null;
     if (this.shouldSpendWeaponResourcesForAttempt()) {
@@ -1946,13 +1956,7 @@ class WeaponAttackController {
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(trajectories);
     }
     if (!this.attackCanceledByReaction && damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
@@ -2045,13 +2049,7 @@ class WeaponAttackController {
     }
     await checkBatch.publish({ forceBatch: targets.length > 1 || duplicatePlan.cycles > 1 });
     if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(trajectories);
     }
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
@@ -2119,13 +2117,7 @@ class WeaponAttackController {
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(trajectories);
     }
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
@@ -2228,13 +2220,7 @@ class WeaponAttackController {
       });
     }
     if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(trajectories);
     }
     this.completeProcessingCycle();
   }
@@ -2333,13 +2319,7 @@ class WeaponAttackController {
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(trajectories);
     }
     if (!this.attackCanceledByReaction && damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
@@ -2453,13 +2433,7 @@ class WeaponAttackController {
     });
     await checkBatch?.publish({ forceBatch: duplicatePlan.cycles > 1 });
     if (this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories: allTrajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(allTrajectories);
     }
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
@@ -2576,13 +2550,7 @@ class WeaponAttackController {
     }
     await checkBatch.publish({ forceBatch: duplicatePlan.cycles > 1 });
     if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories,
-        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
-      });
+      await this.playAttemptWeaponAnimations(trajectories);
     }
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
@@ -3163,13 +3131,7 @@ class WeaponAttackController {
       if (index > 0 && delayMs > 0) await sleep(index * delayMs);
       const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
       if (includeProjectile) {
-        await playWeaponAttackAnimations({
-          weapon: this.weapon,
-          weaponFunctionId: this.weaponFunctionId,
-          weaponData,
-          trajectories: [buildVolleyAnimationTrajectory(geometry)],
-          delayMs: 0
-        });
+        await this.playAttemptWeaponAnimations([buildVolleyAnimationTrajectory(geometry)], { delayMs: 0 });
       }
       if (includeExplosion) {
         await playWeaponExplosionAnimation({
