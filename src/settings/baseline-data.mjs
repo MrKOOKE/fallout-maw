@@ -2839,7 +2839,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                                         "name": "Издевка",
                                         "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                                         "visible": true,
-                                        "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.</p><p>Вы мастерски овладели искусством выбивать из колеи кого угодно. После активации можно выбрать до [[2+speech/50]] целей и до [[1+speech/100]] навыков. Цели проходят проверку Науки со сложностью [[50+speech]]. В случае провала они получают помеху на все атакующие действия и двойную помеху к выбранным навыкам.<br>Длительность: 12 секунд.<br><br>Нельзя выбрать тех, чей интеллект &lt;=0</p>",
+                                        "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.</p><p>Вы мастерски овладели искусством выбивать из колеи кого угодно. После активации можно выбрать до [[2+speech/50]] целей и до [[1+speech/100]] навыков. Цели проходят проверку Науки со сложностью [[50+speech]]. В случае провала они получают двойную помеху к выбранным навыкам.<br>Длительность: 12 секунд.<br><br>Нельзя выбрать тех, чей интеллект &lt;=0</p>",
                                         "system": {
                                               "cost": 3000,
                                               "formula": "",
@@ -2869,7 +2869,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                                                                 "targetLimitFormula": "2+speech/50",
                                                                 "difficultyFormula": "50+speech",
                                                                 "targetSkillKey": "science",
-                                                                "attackDisadvantageCount": 1,
                                                                 "skillLimitFormula": "1+speech/100",
                                                                 "skillDisadvantageCount": 2,
                                                                 "debuffDurationSeconds": 12

@@ -79,7 +79,6 @@ import {
 import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
-  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
@@ -1415,7 +1414,6 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
     abilityItemId: abilityItem.id,
     abilityFunctionId: abilityFunction.id,
     targetActorUuids: failed.map(outcome => outcome.actor?.uuid).filter(Boolean),
-    attackDisadvantageCount: settings.attackDisadvantageCount,
     selectedSkillKeys: selectedSkills.map(skill => skill.key),
     skillDisadvantageCount: settings.skillDisadvantageCount,
     durationSeconds: settings.debuffDurationSeconds,
@@ -1429,7 +1427,7 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${failed.length} целей выбито из колеи: помеха атакам и ${settings.skillDisadvantageCount} помехи к навыкам (${selectedSkills.map(skill => skill.label).join(", ")}) на ${formatDuration(settings.debuffDurationSeconds)}.`
+    `${failed.length} целей выбито из колеи: ${settings.skillDisadvantageCount} помехи к навыкам (${selectedSkills.map(skill => skill.label).join(", ")}) на ${formatDuration(settings.debuffDurationSeconds)}.`
   );
   return true;
 }
@@ -1493,15 +1491,16 @@ async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выби�
   const formData = await DialogV2.input({
     window: { title: `${abilityName}: выбор навыков` },
     content: `
-      <form class="fallout-maw-knock-off-balance-skill-dialog" data-knock-off-balance-skill-limit="${Math.max(1, toInteger(limit))}">
+      <div class="fallout-maw-knock-off-balance-skill-dialog" data-knock-off-balance-skill-limit="${Math.max(1, toInteger(limit))}">
         <p class="hint">Выберите до ${Math.max(1, toInteger(limit))} навыков. Цели при провале получат двойную помеху к выбранным навыкам.</p>
         <div class="fallout-maw-knock-off-balance-skill-grid">${options}</div>
-      </form>
+      </div>
     `,
     render: (_event, dialog) => {
       const root = dialog?.element?.querySelector?.(".fallout-maw-knock-off-balance-skill-dialog");
-      root?.querySelectorAll?.('input[name="skillKeys"]').forEach(input => {
-        input.addEventListener("change", () => syncKnockOffBalanceSkillChoices(dialog));
+      root?.addEventListener?.("change", event => {
+        const input = event.target?.matches?.('input[name="skillKeys"]') ? event.target : null;
+        if (input) syncKnockOffBalanceSkillChoices(dialog, input);
       });
       syncKnockOffBalanceSkillChoices(dialog);
     },
@@ -1524,12 +1523,19 @@ async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выби�
   return result.length ? result : null;
 }
 
-function syncKnockOffBalanceSkillChoices(dialog) {
+function syncKnockOffBalanceSkillChoices(dialog, changedInput = null) {
   const root = dialog?.element?.querySelector?.(".fallout-maw-knock-off-balance-skill-dialog");
   if (!root) return;
   const limit = Math.max(1, toInteger(root.dataset.knockOffBalanceSkillLimit));
   const inputs = Array.from(root.querySelectorAll('input[name="skillKeys"]') ?? []);
-  const selectedCount = inputs.filter(input => input.checked).length;
+  let selectedCount = inputs.filter(input => input.checked).length;
+  if (selectedCount > limit) {
+    if (changedInput?.checked) changedInput.checked = false;
+    else inputs.filter(input => input.checked).slice(limit).forEach(input => {
+      input.checked = false;
+    });
+    selectedCount = inputs.filter(input => input.checked).length;
+  }
   for (const input of inputs) {
     input.disabled = !input.checked && selectedCount >= limit;
     input.closest("[data-knock-off-balance-skill-choice]")?.classList.toggle("disabled", input.disabled);
@@ -1591,7 +1597,6 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
     .filter(target => target && getActorIntelligence(target) > 0);
   if (!targets.length) return false;
 
-  const attackDisadvantageCount = Math.max(1, toInteger(payload.attackDisadvantageCount));
   const skillDisadvantageCount = Math.max(1, toInteger(payload.skillDisadvantageCount ?? 2));
   const validSkillKeys = new Set(getSkillSettings().map(skill => String(skill?.key ?? "").trim()).filter(Boolean));
   const selectedSkillKeys = Array.from(new Set((payload.selectedSkillKeys ?? [])
@@ -1600,22 +1605,13 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
   if (!selectedSkillKeys.length) return false;
   const durationSeconds = Math.max(0, toInteger(payload.durationSeconds));
   const startTime = Number(game.time?.worldTime) || 0;
-  const changes = [
-    {
-      key: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
-      type: "add",
-      value: String(attackDisadvantageCount),
-      phase: "initial",
-      priority: null
-    },
-    ...selectedSkillKeys.map(skillKey => ({
+  const changes = selectedSkillKeys.map(skillKey => ({
       key: `system.skills.${skillKey}.disadvantage`,
       type: "add",
       value: String(skillDisadvantageCount),
       phase: "initial",
       priority: null
-    }))
-  ];
+    }));
   const effectData = {
     type: "base",
     name: getAbilityDisplayName(abilityItem),

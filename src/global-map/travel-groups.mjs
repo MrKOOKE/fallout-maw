@@ -1398,6 +1398,8 @@ function buildVehicleSeatGroups(vehicle, members) {
         }));
       instances.push({
         id: `${seat.slotId}:${slotIndex}`,
+        slotId: seat.slotId,
+        slotIndex,
         columns: seat.width,
         rows: seat.height,
         style: buildInventoryGridStyle(seat.width, seat.height),

@@ -5895,6 +5895,7 @@ function getWeaponResourceCostRows(data = {}, baseData = {}, { baseMode = false,
 function getWeaponResourceTypeLabel(type = "") {
   if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
   if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  if (type === "energyConsumer") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy");
   if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
   return String(type || "—");
 }

@@ -437,7 +437,7 @@
       "WeaponCostMagazine": "Magazine",
       "WeaponCostQuantity": "Item Quantity",
       "WeaponCostCondition": "Condition Cost",
-      "WeaponCostEnergy": "Energy",
+      "WeaponCostEnergy": "Energy Consumption",
       "WeaponAvailableActions": "Available Actions",
       "WeaponActionAimedShot": "Aimed Shot",
       "WeaponActionSnapshot": "Snapshot",

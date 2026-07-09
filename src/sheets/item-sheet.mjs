@@ -3295,8 +3295,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.energyConsumer": createDefaultEnergyConsumerFunctionData({ enabled: false }),
         "system.functions.lightSource.resourceCosts": (this.item.system?.functions?.lightSource?.resourceCosts ?? [])
           .filter(cost => cost.type !== "energyConsumer"),
-        "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
-          .filter(cost => cost.type !== "energyConsumer"),
+        "system.functions.weapon": removeWeaponResourceCostTypeFromWeaponData(
+          this.item.system?.functions?.weapon ?? {},
+          "energyConsumer"
+        ),
         "system.functions.additionalWeapons": additionalWeapons,
         "system.functions.module.additionalWeapons": moduleWeapons
       });
@@ -7861,11 +7863,36 @@ function buildWeaponResourceTypeChoices(selected, hasConditionFunction, hasEnerg
 function removeWeaponResourceCostTypeFromEntries(entries = [], type = "") {
   return Object.fromEntries(entries.map(({ id, data }) => [
     id,
-    {
-      ...foundry.utils.deepClone(data),
-      resourceCosts: (data?.resourceCosts ?? []).filter(cost => cost.type !== type)
-    }
+    removeWeaponResourceCostTypeFromWeaponData(data, type)
   ]));
+}
+
+function removeWeaponResourceCostTypeFromWeaponData(weaponData = {}, type = "") {
+  const normalizedType = String(type ?? "").trim();
+  const data = foundry.utils.deepClone(weaponData ?? {});
+  if (!normalizedType || !data || typeof data !== "object") return data;
+
+  data.resourceCosts = (Array.isArray(data.resourceCosts) ? data.resourceCosts : Object.values(data.resourceCosts ?? {}))
+    .filter(cost => String(cost?.type ?? "") !== normalizedType);
+
+  if (Array.isArray(data.specialProperties)) {
+    data.specialProperties = data.specialProperties.map(property => {
+      const next = foundry.utils.deepClone(property ?? {});
+      if (Array.isArray(next.attackPower?.resourceCosts)) {
+        next.attackPower.resourceCosts = next.attackPower.resourceCosts
+          .filter(cost => String(cost?.type ?? "") !== normalizedType);
+      }
+      return next;
+    });
+  }
+
+  for (const value of Object.values(data)) {
+    if (!Array.isArray(value?.criticalFailureConsequences)) continue;
+    value.criticalFailureConsequences = value.criticalFailureConsequences
+      .filter(consequence => String(consequence?.resourceType ?? "") !== normalizedType);
+  }
+
+  return data;
 }
 
 function buildWeaponActionChoices(item, damageTypeSettings = []) {

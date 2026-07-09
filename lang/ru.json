@@ -497,7 +497,7 @@
       "WeaponCostMagazine": "Магазин",
       "WeaponCostQuantity": "Штучность предмета",
       "WeaponCostCondition": "Расход состояния",
-      "WeaponCostEnergy": "Энергия",
+      "WeaponCostEnergy": "Потребление энергии",
       "WeaponAvailableActions": "Доступные действия",
       "WeaponActionAimedShot": "Прицельный выстрел",
       "WeaponActionSnapshot": "Выстрел на вскидку",

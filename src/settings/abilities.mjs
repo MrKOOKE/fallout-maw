@@ -210,7 +210,7 @@ export function createKnockOffBalanceAbilityCatalogEntry() {
     name: "Выбить из колеи",
     img: "icons/svg/daze.svg",
     visible: true,
-    description: "<p>Стоимость активации: 20 энергии. Перегрузка: 20 энергии на 12 секунд.</p><p>После активации можно выбрать до [[2+speech/50]] целей с интеллектом выше 0, затем до [[1+speech/100]] навыков. Цели проходят проверку Науки со сложностью [[50+speech]]. При провале на 12 секунд получают помеху на все атакующие действия и двойную помеху к выбранным навыкам.</p>",
+    description: "<p>Стоимость активации: 20 энергии. Перегрузка: 20 энергии на 12 секунд.</p><p>После активации можно выбрать до [[2+speech/50]] целей с интеллектом выше 0, затем до [[1+speech/100]] навыков. Цели проходят проверку Науки со сложностью [[50+speech]]. При провале на 12 секунд получают двойную помеху к выбранным навыкам.</p>",
     system: {
       cost: 0,
       formula: "",
@@ -1264,7 +1264,6 @@ export function normalizeKnockOffBalanceSettings(value = {}) {
     targetLimitFormula: String(value?.targetLimitFormula ?? "2+speech/50").trim() || "2+speech/50",
     difficultyFormula: String(value?.difficultyFormula ?? "50+speech").trim() || "50+speech",
     targetSkillKey: String(value?.targetSkillKey ?? "science").trim() || "science",
-    attackDisadvantageCount: Math.max(1, toInteger(value?.attackDisadvantageCount ?? 1)),
     skillLimitFormula: String(value?.skillLimitFormula ?? "1+speech/100").trim() || "1+speech/100",
     skillDisadvantageCount: Math.max(1, toInteger(value?.skillDisadvantageCount ?? 2)),
     debuffDurationSeconds: Math.max(0, toInteger(value?.debuffDurationSeconds ?? 12))
