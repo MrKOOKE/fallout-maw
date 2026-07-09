@@ -23,6 +23,7 @@ export class SettingsBaselineConfig extends HandlebarsApplicationMixin(Applicati
     actions: {
       copy: SettingsBaselineConfig.#onCopy,
       download: SettingsBaselineConfig.#onDownload,
+      import: SettingsBaselineConfig.#onImport,
       refresh: SettingsBaselineConfig.#onRefresh
     }
   };
@@ -54,6 +55,42 @@ export class SettingsBaselineConfig extends HandlebarsApplicationMixin(Applicati
   static #onDownload(event) {
     event.preventDefault();
     downloadSettingsBaselineSnapshot();
+  }
+
+  static #onImport(event) {
+    event.preventDefault();
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      let snapshot;
+      try {
+        snapshot = JSON.parse(await foundry.utils.readTextFromFile(file));
+      } catch (_error) {
+        ui.notifications.error(`${SYSTEM_TITLE}: failed to read settings baseline JSON.`);
+        return;
+      }
+
+      const confirmed = await foundry.applications.api.DialogV2.confirm({
+        window: { title: `${SYSTEM_TITLE}: Apply Settings Baseline` },
+        content: "<p>This will replace registered world and client settings from the selected JSON snapshot. Continue?</p>",
+        rejectClose: false,
+        modal: true
+      });
+      if (!confirmed) return;
+
+      try {
+        await applySettingsBaselineSnapshot(snapshot);
+        return this.render({ force: true });
+      } catch (error) {
+        ui.notifications.error(error.message || `${SYSTEM_TITLE}: failed to apply settings baseline.`);
+        return undefined;
+      }
+    }, { once: true });
+    input.click();
+    return undefined;
   }
 
   static #onRefresh(event) {
@@ -156,6 +193,9 @@ export async function applySettingsBaselineSnapshot(snapshot, {
   includeInternal = false
 } = {}) {
   if (!game.user?.isGM) throw new Error("Only a GM can apply Fallout-MaW settings baseline snapshots.");
+  if (snapshot?.system && snapshot.system !== SYSTEM_ID) {
+    throw new Error(`Cannot apply ${snapshot.system} settings baseline to ${SYSTEM_ID}.`);
+  }
   const entries = normalizeSnapshotEntries(snapshot);
   const scopes = new Set([
     includeClient ? "client" : null,

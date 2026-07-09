@@ -35,6 +35,7 @@ import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActo
 import { migrateActorData } from "../migrations/documents.mjs";
 import { expandActorEffectChangeKeys, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 const actorLoadPreparationCache = new WeakMap();
+const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
 export class FalloutMaWActor extends Actor {
   static migrateData(source) {
@@ -54,7 +55,10 @@ export class FalloutMaWActor extends Actor {
 
     return super.createDialog(
       data,
-      createOptions,
+      {
+        ...createOptions,
+        [INITIALIZE_ACTOR_DEFAULTS_OPTION]: true
+      },
       {
         ...dialogOptions,
         template: TEMPLATES.actorCreateDialog,
@@ -83,9 +87,11 @@ export class FalloutMaWActor extends Actor {
     if (!["character", "construct"].includes(this.type)) return undefined;
 
     await applyTokenPrototypeDefaults(this, data, options);
-    if (this.type === "character") applyCreatureRaceDefaults(this);
-    else clearCreatureSelection(this);
-    applyNewActorResourceDefaults(this);
+    if (options?.[INITIALIZE_ACTOR_DEFAULTS_OPTION]) {
+      if (this.type === "character") applyCreatureRaceDefaults(this);
+      else clearCreatureSelection(this);
+      applyNewActorResourceDefaults(this);
+    }
     return undefined;
   }
 

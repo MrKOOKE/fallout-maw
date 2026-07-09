@@ -12105,6 +12105,11 @@ html.fallout-maw-token-action-hud-open #hotbar {
   margin-top: 0.65rem;
 }
 
+.fallout-maw-creature-options-toolbar {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
 .fallout-maw-equipment-config-grid {
   display: grid;
   gap: 0.75rem;
