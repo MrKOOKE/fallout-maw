@@ -48,6 +48,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   twoHands: "twoHands",
   commandBasics: "commandBasics",
   knockOffBalance: "knockOffBalance",
+  look: "look",
   heightenedConcentration: "heightenedConcentration",
   grapplingMaster: "grapplingMaster"
 });
@@ -847,6 +848,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
     return normalizeKnockOffBalanceSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.look) {
+    return normalizeLookSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return normalizeHeightenedConcentrationSettings(value);
   }
@@ -1267,6 +1271,18 @@ export function normalizeKnockOffBalanceSettings(value = {}) {
     skillLimitFormula: String(value?.skillLimitFormula ?? "1+speech/100").trim() || "1+speech/100",
     skillDisadvantageCount: Math.max(1, toInteger(value?.skillDisadvantageCount ?? 2)),
     debuffDurationSeconds: Math.max(0, toInteger(value?.debuffDurationSeconds ?? 12))
+  };
+}
+
+export function normalizeLookSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    difficultyFormula: String(value?.difficultyFormula ?? "50+speech").trim() || "50+speech",
+    targetSkillKey: String(value?.targetSkillKey ?? "science").trim() || "science",
+    failureResourceLoss: Math.max(0, toInteger(value?.failureResourceLoss ?? 3)),
+    criticalFailureResourceLoss: Math.max(0, toInteger(value?.criticalFailureResourceLoss ?? 6))
   };
 }
 

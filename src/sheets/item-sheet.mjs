@@ -74,6 +74,7 @@ import {
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
   normalizeKnockOffBalanceSettings,
+  normalizeLookSettings,
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
@@ -5753,6 +5754,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedKnockOffBalanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance
     ? prepareKnockOffBalanceSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedLookSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look
+    ? prepareLookSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -5802,6 +5806,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
+    fixedLookSettings,
     fixedHeightenedConcentrationSettings,
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
@@ -6068,6 +6073,17 @@ function prepareKnockOffBalanceSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     debuffDurationAmount: debuffDuration.amount,
     debuffDurationUnitChoices: buildAbilityDurationUnitChoices(debuffDuration.unit),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
+  };
+}
+
+function prepareLookSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLookSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
   };
 }
@@ -6923,6 +6939,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.debuffDurationSeconds`, debuffDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-look-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-look-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       continue;
     }
 

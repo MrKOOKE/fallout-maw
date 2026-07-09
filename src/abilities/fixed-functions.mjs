@@ -30,6 +30,7 @@ import {
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
   normalizeKnockOffBalanceSettings,
+  normalizeLookSettings,
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
   normalizeReaperSettings,
@@ -92,6 +93,7 @@ import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
   ABILITY_FREE_MOVEMENT_OPTION,
   ACTION_RESOURCE_KEY,
+  MOVEMENT_RESOURCE_KEY,
   applyCombatMovementCostModifier,
   hasActorCombatMovementInCurrentTurn
 } from "../combat/movement-resources.mjs";
@@ -110,7 +112,7 @@ import {
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
-import { registerCombatResourceSpendingProvider, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
+import { notifyCombatResourcesSpent, registerCombatResourceSpendingProvider, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
 import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
@@ -445,6 +447,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance,
       fixedSettings: normalizeKnockOffBalanceSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.look,
+    label: "Смотри!",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.look,
+      fixedSettings: normalizeLookSettings()
     })
   }),
   Object.freeze({
@@ -852,6 +863,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
     const used = await useKnockOffBalance(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look) {
+    const used = await useLook(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -1643,6 +1660,219 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
     await target.createEmbeddedDocuments("ActiveEffect", [foundry.utils.deepClone(effectData)], { animate: false });
   }
   return true;
+}
+
+async function useLook(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const settings = normalizeLookSettings(abilityFunction.fixedSettings);
+  if (!getSkillSettings().some(skill => skill.key === settings.targetSkillKey)) {
+    ui.notifications.warn(`${abilityName}: навык проверки цели не настроен.`);
+    return false;
+  }
+  const sourceToken = getActorSceneToken(actor);
+  if (!sourceToken) {
+    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для списания ресурсов цели.`);
+    return false;
+  }
+
+  const selection = await selectLookTarget({ actor, sourceToken, abilityName });
+  const targetToken = selection?.[0]?.token ?? null;
+  if (!targetToken?.actor) return false;
+  if (!targetToken.actor.system?.skills?.[settings.targetSkillKey]) {
+    ui.notifications.warn(`${abilityName}: у цели нет навыка проверки.`);
+    return false;
+  }
+
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+
+  const difficulty = Math.max(0, Math.floor(evaluateActorFormula(settings.difficultyFormula, actor, {
+    fallback: 50,
+    minimum: 0,
+    context: "look difficulty"
+  })));
+  const outcome = await requestSkillCheck({
+    actor: targetToken.actor,
+    skillKey: settings.targetSkillKey,
+    animate: false,
+    data: {
+      difficulty,
+      actorToken: targetToken.object ?? targetToken,
+      targetToken: sourceToken.document ?? sourceToken,
+      targetActor: actor
+    },
+    requester: "look",
+    messageData: { title: `${abilityName}: проверка` }
+  });
+  if (!outcome) {
+    ui.notifications.warn(`${abilityName}: проверка цели не выполнена.`);
+    return false;
+  }
+  const resultKey = String(outcome?.result?.key ?? "");
+  if (["success", "criticalSuccess"].includes(resultKey)) {
+    await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} устоял.`);
+    return true;
+  }
+
+  const resourceLoss = resultKey === "criticalFailure"
+    ? settings.criticalFailureResourceLoss
+    : settings.failureResourceLoss;
+  const applied = await requestLookResourceLossOperation({
+    actorUuid: actor.uuid,
+    actorTokenUuid: sourceToken.document?.uuid ?? sourceToken.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    targetTokenUuid: targetToken.document?.uuid ?? targetToken.uuid,
+    resourceLoss,
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!applied) {
+    ui.notifications.warn(`${abilityName}: не удалось списать ресурсы цели.`);
+    return false;
+  }
+
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `${targetToken.actor.name} теряет до ${resourceLoss} ОД и до ${resourceLoss} ОП.`
+  );
+  return true;
+}
+
+function selectLookTarget({ actor = null, sourceToken = null, abilityName = "Смотри!" } = {}) {
+  const rows = (canvas.tokens?.placeables ?? [])
+    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token.actor.uuid !== actor?.uuid)
+    .map(token => createLookTargetRow(token, sourceToken));
+  return requestCustomTokenSelection({
+    rows,
+    limit: 1,
+    title: abilityName,
+    noneWarning: `${abilityName}: нет видимых целей.`,
+    instructions: `${abilityName}: выберите одну цель в пределах видимости. Enter подтверждает, Esc/ПКМ отменяет.`
+  });
+}
+
+function createLookTargetRow(token, sourceToken = null) {
+  const row = {
+    token,
+    actorUuid: token?.actor?.uuid ?? "",
+    selectable: false,
+    reason: ""
+  };
+  if (!sourceToken || !canTokenPhysicallySeeTarget(sourceToken, token)) {
+    row.reason = "цель не видна.";
+    return row;
+  }
+  row.selectable = true;
+  return row;
+}
+
+async function requestLookResourceLossOperation(payload = {}) {
+  if (game.user?.isGM) return processLookResourceLossOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DISARM_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performLookResourceLoss",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+async function processLookResourceLossSocketRequest(message = {}) {
+  const applied = await processLookResourceLossOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "lookResourceLossResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { applied: Boolean(applied) }
+  });
+}
+
+async function processLookResourceLossOperation(payload = {}) {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  const actorToken = await fromUuid(String(payload.actorTokenUuid ?? ""));
+  const targetToken = await fromUuid(String(payload.targetTokenUuid ?? ""));
+  const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!actor || !actorToken || !targetToken?.actor || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+  if (actorToken.actor?.uuid !== actor.uuid || targetToken.actor.uuid === actor.uuid) return false;
+  if (!canTokenPhysicallySeeTarget(actorToken.object ?? actorToken, targetToken.object ?? targetToken)) return false;
+
+  const resourceLoss = Math.max(0, toInteger(payload.resourceLoss));
+  await spendActorActionAndMovement(targetToken.actor, resourceLoss);
+  return true;
+}
+
+async function spendActorActionAndMovement(actor, amount = 0) {
+  const cost = Math.max(0, toInteger(amount));
+  if (!actor || cost <= 0) return { actionSpent: 0, movementSpent: 0 };
+  const action = actor.system?.resources?.[ACTION_RESOURCE_KEY];
+  const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
+  const actionCurrent = Math.max(0, toInteger(action?.value));
+  const movementCurrent = Math.max(0, toInteger(movement?.value));
+  const actionSpent = Math.min(cost, actionCurrent);
+  const movementSpent = Math.min(cost, movementCurrent);
+  const updates = {};
+  if (actionSpent > 0) {
+    const nextAction = Math.max(0, actionCurrent - actionSpent);
+    updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = nextAction;
+    if (action && Object.hasOwn(action, "spent")) {
+      updates[`system.resources.${ACTION_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(action.max) - nextAction);
+    }
+  }
+  if (movementSpent > 0) {
+    const nextMovement = Math.max(0, movementCurrent - movementSpent);
+    updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = nextMovement;
+    if (movement && Object.hasOwn(movement, "spent")) {
+      updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(movement.max) - nextMovement);
+    }
+  }
+  if (Object.keys(updates).length) await actor.update(updates);
+  await notifyCombatResourcesSpent(actor, {
+    [ACTION_RESOURCE_KEY]: actionSpent,
+    [MOVEMENT_RESOURCE_KEY]: movementSpent
+  }, { type: "ability" });
+  return { actionSpent, movementSpent };
 }
 
 async function requestCommandBasicsDodgeOperation(payload = {}) {
@@ -5179,6 +5409,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processKnockOffBalanceDebuffSocketRequest(message);
     return;
   }
+  if (message.action === "performLookResourceLoss") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processLookResourceLossSocketRequest(message);
+    return;
+  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -5204,6 +5439,14 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pending.resolve(Boolean(message.result?.applied));
   }
   if (message.action === "knockOffBalanceDebuffResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
+  }
+  if (message.action === "lookResourceLossResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;

@@ -972,6 +972,63 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedLookSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Смотри!</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Стоимость активации/реакции, энергия</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedLookSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Сложность проверки</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.difficultyFormula" value="{{fixedLookSettings.difficultyFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Навык цели</span>
+            <select name="{{functionPath}}.{{functionIndex}}.fixedSettings.targetSkillKey">
+              {{#each fixedLookSettings.targetSkillChoices}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedLookSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedLookSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-look-overload-duration-amount>
+              <select data-fixed-look-overload-duration-unit>
+                {{#each fixedLookSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Потеря ресурсов цели</strong>
+          <label>
+            <span>Провал: ОД и ОП</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.failureResourceLoss" value="{{fixedLookSettings.failureResourceLoss}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Критический провал: ОД и ОП</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.criticalFailureResourceLoss" value="{{fixedLookSettings.criticalFailureResourceLoss}}" min="0" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedHeightenedConcentrationSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

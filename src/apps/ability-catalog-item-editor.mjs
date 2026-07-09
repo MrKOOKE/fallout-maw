@@ -36,6 +36,7 @@ import {
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
+  normalizeLookSettings,
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
@@ -968,6 +969,20 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.look.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.look.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.look.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.look.overloadDurationUnit']")?.value
+      ),
+      difficultyFormula: row.querySelector("[data-field='fixed.look.difficultyFormula']")?.value,
+      targetSkillKey: row.querySelector("[data-field='fixed.look.targetSkillKey']")?.value,
+      failureResourceLoss: row.querySelector("[data-field='fixed.look.failureResourceLoss']")?.value,
+      criticalFailureResourceLoss: row.querySelector("[data-field='fixed.look.criticalFailureResourceLoss']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return {
       energyCost: row.querySelector("[data-field='fixed.heightenedConcentration.energyCost']")?.value,
@@ -1280,6 +1295,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedKnockOffBalanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance
     ? prepareKnockOffBalanceSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedLookSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look
+    ? prepareLookSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1330,6 +1348,7 @@ function prepareFunctionForDisplay(entry) {
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
+    fixedLookSettings,
     fixedHeightenedConcentrationSettings,
     fixedRageSettings,
     fixedDisarmSettings,
@@ -1579,6 +1598,17 @@ function prepareKnockOffBalanceSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     debuffDurationAmount: debuffDuration.amount,
     debuffDurationUnitChoices: buildDurationUnitChoices(debuffDuration.unit),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
+  };
+}
+
+function prepareLookSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLookSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
   };
 }
