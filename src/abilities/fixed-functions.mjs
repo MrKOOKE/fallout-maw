@@ -1374,6 +1374,14 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
   const selection = await selectKnockOffBalanceTargets({ actor, limit, abilityName });
   if (!selection?.length) return false;
 
+  const skillLimit = Math.max(1, Math.floor(evaluateActorFormula(settings.skillLimitFormula, actor, {
+    fallback: 1,
+    minimum: 1,
+    context: "knock off balance skill limit"
+  })));
+  const selectedSkills = await selectKnockOffBalanceSkills({ limit: skillLimit, abilityName });
+  if (!selectedSkills?.length) return false;
+
   if (!(await spendEnergy(actor, energyCost))) return false;
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
     name: getAbilityOverloadName(abilityItem),
@@ -1402,18 +1410,14 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
     return true;
   }
 
-  const attackPenalty = Math.max(0, Math.floor(evaluateActorFormula(settings.attackPenaltyFormula, actor, {
-    fallback: 10,
-    minimum: 0,
-    context: "knock off balance attack penalty"
-  })));
   const applied = await requestKnockOffBalanceDebuffOperation({
     actorUuid: actor.uuid,
     abilityItemId: abilityItem.id,
     abilityFunctionId: abilityFunction.id,
     targetActorUuids: failed.map(outcome => outcome.actor?.uuid).filter(Boolean),
     attackDisadvantageCount: settings.attackDisadvantageCount,
-    attackPenalty,
+    selectedSkillKeys: selectedSkills.map(skill => skill.key),
+    skillDisadvantageCount: settings.skillDisadvantageCount,
     durationSeconds: settings.debuffDurationSeconds,
     senderUserId: game.user?.id ?? ""
   });
@@ -1425,7 +1429,7 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    `${failed.length} целей выбито из колеи: помеха атакам и -${attackPenalty} к точности на ${formatDuration(settings.debuffDurationSeconds)}.`
+    `${failed.length} целей выбито из колеи: помеха атакам и ${settings.skillDisadvantageCount} помехи к навыкам (${selectedSkills.map(skill => skill.label).join(", ")}) на ${formatDuration(settings.debuffDurationSeconds)}.`
   );
   return true;
 }
@@ -1466,6 +1470,70 @@ function createKnockOffBalanceTargetRow(token) {
 
 function getActorIntelligence(actor) {
   return toInteger(actor?.system?.characteristics?.intelligence);
+}
+
+async function selectKnockOffBalanceSkills({ limit = 1, abilityName = "Выбить из колеи" } = {}) {
+  const skills = getSkillSettings()
+    .map(skill => ({
+      key: String(skill?.key ?? "").trim(),
+      label: String(skill?.label ?? skill?.key ?? "").trim()
+    }))
+    .filter(skill => skill.key);
+  if (!skills.length) {
+    ui.notifications.warn(`${abilityName}: навыки не настроены.`);
+    return null;
+  }
+
+  const options = skills.map(skill => `
+    <label class="fallout-maw-radio-card" data-knock-off-balance-skill-choice>
+      <input type="checkbox" name="skillKeys" value="${escapeAttribute(skill.key)}">
+      <span><strong>${escapeHTML(skill.label)}</strong></span>
+    </label>
+  `).join("");
+  const formData = await DialogV2.input({
+    window: { title: `${abilityName}: выбор навыков` },
+    content: `
+      <form class="fallout-maw-knock-off-balance-skill-dialog" data-knock-off-balance-skill-limit="${Math.max(1, toInteger(limit))}">
+        <p class="hint">Выберите до ${Math.max(1, toInteger(limit))} навыков. Цели при провале получат двойную помеху к выбранным навыкам.</p>
+        <div class="fallout-maw-knock-off-balance-skill-grid">${options}</div>
+      </form>
+    `,
+    render: (_event, dialog) => {
+      const root = dialog?.element?.querySelector?.(".fallout-maw-knock-off-balance-skill-dialog");
+      root?.querySelectorAll?.('input[name="skillKeys"]').forEach(input => {
+        input.addEventListener("change", () => syncKnockOffBalanceSkillChoices(dialog));
+      });
+      syncKnockOffBalanceSkillChoices(dialog);
+    },
+    ok: {
+      label: "Выбрать",
+      icon: "fa-solid fa-check",
+      callback: (_event, button) => ({
+        skillKeys: Array.from(button.form?.querySelectorAll?.('input[name="skillKeys"]:checked') ?? [])
+          .map(input => String(input.value ?? "").trim())
+          .filter(Boolean)
+      })
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 620 },
+    rejectClose: false
+  });
+  const selected = new Set((formData?.skillKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
+  const result = skills.filter(skill => selected.has(skill.key)).slice(0, Math.max(1, toInteger(limit)));
+  if (!result.length) ui.notifications.warn(`${abilityName}: не выбраны навыки.`);
+  return result.length ? result : null;
+}
+
+function syncKnockOffBalanceSkillChoices(dialog) {
+  const root = dialog?.element?.querySelector?.(".fallout-maw-knock-off-balance-skill-dialog");
+  if (!root) return;
+  const limit = Math.max(1, toInteger(root.dataset.knockOffBalanceSkillLimit));
+  const inputs = Array.from(root.querySelectorAll('input[name="skillKeys"]') ?? []);
+  const selectedCount = inputs.filter(input => input.checked).length;
+  for (const input of inputs) {
+    input.disabled = !input.checked && selectedCount >= limit;
+    input.closest("[data-knock-off-balance-skill-choice]")?.classList.toggle("disabled", input.disabled);
+  }
 }
 
 async function requestKnockOffBalanceDebuffOperation(payload = {}) {
@@ -1524,9 +1592,30 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
   if (!targets.length) return false;
 
   const attackDisadvantageCount = Math.max(1, toInteger(payload.attackDisadvantageCount));
-  const attackPenalty = Math.max(0, toInteger(payload.attackPenalty));
+  const skillDisadvantageCount = Math.max(1, toInteger(payload.skillDisadvantageCount ?? 2));
+  const validSkillKeys = new Set(getSkillSettings().map(skill => String(skill?.key ?? "").trim()).filter(Boolean));
+  const selectedSkillKeys = Array.from(new Set((payload.selectedSkillKeys ?? [])
+    .map(key => String(key ?? "").trim())
+    .filter(key => validSkillKeys.has(key))));
+  if (!selectedSkillKeys.length) return false;
   const durationSeconds = Math.max(0, toInteger(payload.durationSeconds));
   const startTime = Number(game.time?.worldTime) || 0;
+  const changes = [
+    {
+      key: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+      type: "add",
+      value: String(attackDisadvantageCount),
+      phase: "initial",
+      priority: null
+    },
+    ...selectedSkillKeys.map(skillKey => ({
+      key: `system.skills.${skillKey}.disadvantage`,
+      type: "add",
+      value: String(skillDisadvantageCount),
+      phase: "initial",
+      priority: null
+    }))
+  ];
   const effectData = {
     type: "base",
     name: getAbilityDisplayName(abilityItem),
@@ -1540,22 +1629,7 @@ async function processKnockOffBalanceDebuffOperation(payload = {}) {
       startTime
     },
     system: {
-      changes: [
-        {
-          key: ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
-          type: "add",
-          value: String(attackDisadvantageCount),
-          phase: "initial",
-          priority: null
-        },
-        {
-          key: "system.combat.accuracy",
-          type: "add",
-          value: String(-attackPenalty),
-          phase: "initial",
-          priority: null
-        }
-      ]
+      changes
     },
     flags: {
       [SYSTEM_ID]: {

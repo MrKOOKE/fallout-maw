@@ -961,7 +961,8 @@ function readFixedFunctionSettings(row) {
       difficultyFormula: row.querySelector("[data-field='fixed.knockOffBalance.difficultyFormula']")?.value,
       targetSkillKey: row.querySelector("[data-field='fixed.knockOffBalance.targetSkillKey']")?.value,
       attackDisadvantageCount: row.querySelector("[data-field='fixed.knockOffBalance.attackDisadvantageCount']")?.value,
-      attackPenaltyFormula: row.querySelector("[data-field='fixed.knockOffBalance.attackPenaltyFormula']")?.value,
+      skillLimitFormula: row.querySelector("[data-field='fixed.knockOffBalance.skillLimitFormula']")?.value,
+      skillDisadvantageCount: row.querySelector("[data-field='fixed.knockOffBalance.skillDisadvantageCount']")?.value,
       debuffDurationSeconds: durationPartsToSeconds(
         row.querySelector("[data-field='fixed.knockOffBalance.debuffDurationAmount']")?.value,
         row.querySelector("[data-field='fixed.knockOffBalance.debuffDurationUnit']")?.value

@@ -9,6 +9,7 @@ export const GLOBAL_MAP_TRAVEL_SPEED_FORMULA_DEFAULT = "mov / 2";
 export const GLOBAL_MAP_LAYER = "falloutMaWGlobalMap";
 export const GLOBAL_MAP_SOCKET = `system.${FALLOUT_MAW.id}`;
 export const GLOBAL_MAP_BYPASS_OPTION = "falloutMaWGlobalMapBypass";
+export const GLOBAL_MAP_TRANSITIONS_FOLDER_NAME = "\u041f\u0435\u0440\u0435\u0445\u043e\u0434\u044b";
 export const TRAVEL_GROUP_FLAG = "travelGroup";
 export const TRAVEL_GROUP_FOLDER_FLAG = "travelGroupFolder";
 export const TRAVEL_GROUP_TOKEN_FLAG = "travelGroupToken";
@@ -19,6 +20,7 @@ export const GLOBAL_MAP_ROLES = Object.freeze({
   ROOT_SCENE: "rootScene",
   LOCATION_FOLDER: "locationFolder",
   LOCATION_SCENE: "locationScene",
+  TRANSITIONS_FOLDER: "transitionsFolder",
   ZONE_SCENE: "zoneScene"
 });
 

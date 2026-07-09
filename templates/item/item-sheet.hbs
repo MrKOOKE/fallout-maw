@@ -954,8 +954,12 @@
             <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackDisadvantageCount" value="{{fixedKnockOffBalanceSettings.attackDisadvantageCount}}" min="1" step="1">
           </label>
           <label>
-            <span>Штраф точности</span>
-            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackPenaltyFormula" value="{{fixedKnockOffBalanceSettings.attackPenaltyFormula}}" data-formula-autocomplete="all">
+            <span>Лимит выбранных навыков</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.skillLimitFormula" value="{{fixedKnockOffBalanceSettings.skillLimitFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Помех выбранным навыкам</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.skillDisadvantageCount" value="{{fixedKnockOffBalanceSettings.skillDisadvantageCount}}" min="1" step="1">
           </label>
           <label>
             <span>Длительность</span>

@@ -9,6 +9,8 @@ import { deleteCollectionEntry, getGlobalMapFlag, getSceneState, saveCollectionE
 import { getConnectedCellKeyGroups } from "./geometry.mjs";
 import {
   deleteLocationTree,
+  deleteTransitionTargetStructure,
+  ensureTransitionTargetStructure,
   ensureLocationStructure,
   getOrCreateGlobalMap,
   validateGlobalMapStructure
@@ -511,6 +513,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
 
   async _processFormData(_event, _form, formData) {
     const values = getExpandedFormData(formData).transition ?? {};
+    const previousTargetSceneId = String(this.data.targetSceneId ?? "").trim() || null;
     const transition = {
       ...this.data,
       ...values,
@@ -532,7 +535,11 @@ export class TransitionEditor extends GlobalMapEditorBase {
       return;
     }
     await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("transitions", transition.id);
+    await ensureTransitionTargetStructure(this.scene, transition);
     await saveCollectionEntry(this.scene, "transitions", transition);
+    if (previousTargetSceneId && previousTargetSceneId !== transition.targetSceneId) {
+      await deleteTransitionTargetStructure({ ...transition, targetSceneId: previousTargetSceneId });
+    }
     this.data = transition;
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
@@ -598,10 +605,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
 
   async _deleteEntry() {
     if (!this.data.id) return this.close();
-    if (this.data.targetOwned && this.data.targetSceneId) {
-      const target = game.scenes?.get(this.data.targetSceneId);
-      await target?.delete?.({ falloutMaWGlobalMapBypass: true });
-    }
+    await deleteTransitionTargetStructure(this.data);
     await deleteCollectionEntry(this.scene, "transitions", this.data.id);
     await this.close();
     canvas.falloutMaWGlobalMap?.refresh?.();

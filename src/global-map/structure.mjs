@@ -4,7 +4,8 @@ import {
   GLOBAL_MAP_BYPASS_OPTION,
   GLOBAL_MAP_FLAG,
   GLOBAL_MAP_ROOT_SCENE_SETTING,
-  GLOBAL_MAP_ROLES
+  GLOBAL_MAP_ROLES,
+  GLOBAL_MAP_TRANSITIONS_FOLDER_NAME
 } from "./constants.mjs";
 import {
   findLocation,
@@ -177,9 +178,7 @@ export async function ensureLocationStructure(parentScene, location, {
 
 export async function createZoneScene(parentScene, transition) {
   const parentFlag = getGlobalMapFlag(parentScene);
-  const folder = parentFlag?.role === GLOBAL_MAP_ROLES.ROOT_SCENE
-    ? getRootFolder(parentFlag.mapId)
-    : getLocationFolder(parentFlag.nodeId);
+  const folder = await ensureTransitionsFolder(parentScene);
   if (!parentFlag?.mapId || !folder) throw new Error("Global-map parent folder was not found.");
   return Scene.create({
     name: transition.name || "Зона перехода",
@@ -210,6 +209,43 @@ export async function createZoneScene(parentScene, transition) {
   });
 }
 
+export async function ensureTransitionTargetStructure(parentScene, transition) {
+  const parentFlag = getGlobalMapFlag(parentScene);
+  const targetScene = transition?.targetSceneId ? game.scenes?.get(transition.targetSceneId) : null;
+  if (!parentFlag?.mapId || !targetScene || !transition?.id) return targetScene;
+
+  const targetFlag = getGlobalMapFlag(targetScene);
+  if (targetFlag?.role && targetFlag.role !== GLOBAL_MAP_ROLES.ZONE_SCENE) return targetScene;
+  if (targetFlag?.nodeId && targetFlag.nodeId !== transition.id) return targetScene;
+
+  const folder = await ensureTransitionsFolder(parentScene);
+  if (!folder) throw new Error("Global-map transitions folder was not found.");
+
+  const originalFolderId = targetFlag?.originalFolderId ?? documentFolderId(targetScene);
+  await targetScene.update({
+    folder: folder.id,
+    [`flags.${FALLOUT_MAW.id}.${GLOBAL_MAP_FLAG}`]: createManagedFlag({
+      mapId: parentFlag.mapId,
+      role: GLOBAL_MAP_ROLES.ZONE_SCENE,
+      nodeId: transition.id,
+      parentNodeId: parentFlag.nodeId,
+      parentSceneId: parentScene.id,
+      owned: targetFlag?.owned ?? Boolean(transition.targetOwned),
+      originalFolderId,
+      state: targetFlag?.state ?? {}
+    })
+  }, { [GLOBAL_MAP_BYPASS_OPTION]: true });
+  return targetScene;
+}
+
+export async function deleteTransitionTargetStructure(transition) {
+  const targetScene = transition?.targetSceneId ? game.scenes?.get(transition.targetSceneId) : null;
+  const targetFlag = getGlobalMapFlag(targetScene);
+  if (targetFlag?.role !== GLOBAL_MAP_ROLES.ZONE_SCENE || targetFlag.nodeId !== transition?.id) return;
+  if (targetFlag.owned) await targetScene.delete({ [GLOBAL_MAP_BYPASS_OPTION]: true });
+  else await detachManagedScene(targetScene);
+}
+
 export async function deleteLocationTree(parentScene, locationId, { deleteMarker = true } = {}) {
   const folder = getLocationFolder(locationId);
   if (folder) {
@@ -221,6 +257,9 @@ export async function deleteLocationTree(parentScene, locationId, { deleteMarker
       const childFlag = getGlobalMapFlag(child);
       const childParent = game.scenes?.get(childFlag?.parentSceneId);
       if (childParent) await deleteLocationTree(childParent, childFlag.nodeId);
+    }
+    for (const child of getTransitionFoldersForParent(folder.id)) {
+      await deleteTransitionFolder(child);
     }
     for (const scene of [...(folder.contents ?? [])]) {
       const flag = getGlobalMapFlag(scene);
@@ -256,6 +295,9 @@ export async function deleteWholeGlobalMap() {
     if (flag.owned) await scene.delete({ [GLOBAL_MAP_BYPASS_OPTION]: true });
     else await detachManagedScene(scene);
   }
+  for (const folder of getManagedFoldersByRole(rootFlag.mapId, GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER).sort(sortFoldersDeepestFirst)) {
+    await folder.delete({ [GLOBAL_MAP_BYPASS_OPTION]: true });
+  }
   if (rootFolder) await rootFolder.delete({ [GLOBAL_MAP_BYPASS_OPTION]: true });
   await game.settings.set(FALLOUT_MAW.id, GLOBAL_MAP_ROOT_SCENE_SETTING, "");
 }
@@ -276,6 +318,13 @@ export function validateGlobalMapStructure() {
     const expected = flag.parentNodeId === rootFlag?.nodeId
       ? rootFolder
       : getLocationFolder(flag.parentNodeId);
+    if (!expected || documentFolderId(folder) !== expected.id) issues.push(`Нарушено положение папки ${folder.name}.`);
+  }
+  for (const folder of game.folders ?? []) {
+    const flag = getGlobalMapFlag(folder);
+    if (flag?.role !== GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER) continue;
+    const parentScene = game.scenes?.get(flag.parentSceneId);
+    const expected = getGlobalMapParentFolder(parentScene);
     if (!expected || documentFolderId(folder) !== expected.id) issues.push(`Нарушено положение папки ${folder.name}.`);
   }
   return { valid: issues.length === 0, issues };
@@ -311,6 +360,7 @@ function interceptManagedFolderDelete(folder, options) {
   void confirmManagedDelete(flag.role === GLOBAL_MAP_ROLES.ROOT_FOLDER).then(async confirmed => {
     if (!confirmed) return;
     if (flag.role === GLOBAL_MAP_ROLES.ROOT_FOLDER) await deleteWholeGlobalMap();
+    else if (flag.role === GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER) await deleteTransitionFolder(folder);
     else {
       const parentScene = game.scenes?.get(flag.parentSceneId);
       await deleteLocationTree(parentScene, flag.nodeId);
@@ -345,6 +395,94 @@ function interceptManagedSceneDelete(scene, options) {
     }
   });
   return false;
+}
+
+async function ensureTransitionsFolder(parentScene) {
+  const parentFlag = getGlobalMapFlag(parentScene);
+  const currentFolder = parentScene?.folder ?? null;
+  if (parentFlag?.role === GLOBAL_MAP_ROLES.ZONE_SCENE
+    && getGlobalMapFlag(currentFolder)?.role === GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER) {
+    return currentFolder;
+  }
+
+  const parentFolder = getGlobalMapParentFolder(parentScene);
+  if (!parentFlag?.mapId || !parentFolder) return null;
+
+  let folder = getTransitionFoldersForParent(parentFolder.id)
+    .find(candidate => getGlobalMapFlag(candidate)?.parentSceneId === parentScene.id);
+  if (folder) {
+    if (folder.name !== GLOBAL_MAP_TRANSITIONS_FOLDER_NAME) {
+      await folder.update({ name: GLOBAL_MAP_TRANSITIONS_FOLDER_NAME }, { [GLOBAL_MAP_BYPASS_OPTION]: true });
+    }
+    return folder;
+  }
+
+  folder = await Folder.create({
+    name: GLOBAL_MAP_TRANSITIONS_FOLDER_NAME,
+    type: "Scene",
+    folder: parentFolder.id,
+    color: "#7c4dff",
+    flags: {
+      [FALLOUT_MAW.id]: {
+        [GLOBAL_MAP_FLAG]: createManagedFlag({
+          mapId: parentFlag.mapId,
+          role: GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER,
+          nodeId: parentFlag.nodeId,
+          parentNodeId: parentFlag.parentNodeId,
+          parentSceneId: parentScene.id,
+          owned: true
+        })
+      }
+    }
+  });
+  return folder;
+}
+
+function getGlobalMapParentFolder(scene) {
+  const flag = getGlobalMapFlag(scene);
+  if (!flag?.mapId) return null;
+  return flag.role === GLOBAL_MAP_ROLES.ROOT_SCENE
+    ? getRootFolder(flag.mapId)
+    : getLocationFolder(flag.nodeId);
+}
+
+function getTransitionFoldersForParent(parentFolderId) {
+  return (game.folders ?? []).filter(candidate => {
+    const flag = getGlobalMapFlag(candidate);
+    return flag?.role === GLOBAL_MAP_ROLES.TRANSITIONS_FOLDER
+      && documentFolderId(candidate) === parentFolderId;
+  });
+}
+
+function getManagedFoldersByRole(mapId, role) {
+  return (game.folders ?? []).filter(folder => {
+    const flag = getGlobalMapFlag(folder);
+    return flag?.mapId === mapId && flag.role === role;
+  });
+}
+
+async function deleteTransitionFolder(folder) {
+  for (const scene of [...(folder?.contents ?? [])]) {
+    const flag = getGlobalMapFlag(scene);
+    if (!flag) continue;
+    if (flag.owned) await scene.delete({ [GLOBAL_MAP_BYPASS_OPTION]: true });
+    else await detachManagedScene(scene);
+  }
+  await folder?.delete?.({ [GLOBAL_MAP_BYPASS_OPTION]: true });
+}
+
+function sortFoldersDeepestFirst(left, right) {
+  return getFolderDepth(right) - getFolderDepth(left);
+}
+
+function getFolderDepth(folder) {
+  let depth = 0;
+  let current = folder;
+  while (current) {
+    depth += 1;
+    current = current.folder ?? null;
+  }
+  return depth;
 }
 
 function confirmManagedDelete(root) {
