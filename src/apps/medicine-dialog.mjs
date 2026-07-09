@@ -1,4 +1,5 @@
-import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { applyDestroyedLimbConsequences, clearLimbLossState, deleteHealedTraumas, getActorHealingModifierPercent, requestDamageApplication, setLimbMissingState } from "../combat/damage-hub.mjs";
 import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -25,8 +26,16 @@ export async function requestMedicineTarget(sourceToken) {
   if (!sourceActor) return undefined;
 
   const action = getSystemActionSettings().find(entry => entry.key === "medicine");
-  const targetToken = getTargetedToken() ?? sourceToken;
-  if (!targetToken?.actor) return undefined;
+  const selected = await requestCustomActorTokenSelection({
+    sourceActor,
+    sourceToken,
+    includeSelf: true,
+    title: "Медицина",
+    noneWarning: "Нет подходящих целей для медицины.",
+    instructions: "Медицина: выберите цель. Esc/ПКМ отменяет."
+  });
+  const targetToken = selected?.token ?? null;
+  if (!selected?.actor || !targetToken) return undefined;
 
   const targetContext = await getMedicineTargetContext(targetToken);
   if (!targetContext) return undefined;
@@ -51,10 +60,6 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   #activeTab = "trauma";
   #activeImplantLimbKey = "";
   #activeProsthesisLimbKey = "";
-  #targetRefreshTimeout = null;
-  #targetRefreshInFlight = false;
-  #targetRefreshQueued = false;
-  #boundOnTargetToken = this.#onTargetToken.bind(this);
 
   constructor({ sourceActor, sourceToken, targetContext, targetToken, toolKey = "medical" } = {}, options = {}) {
     super(options);
@@ -187,60 +192,6 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     this.#activeProsthesisLimbKey = limbKey;
     this.#activeTab = "prosthesis";
     return this.render({ force: true });
-  }
-
-  async _onFirstRender(context, options) {
-    await super._onFirstRender(context, options);
-    Hooks.on("targetToken", this.#boundOnTargetToken);
-  }
-
-  async _onClose(options) {
-    await super._onClose(options);
-    Hooks.off("targetToken", this.#boundOnTargetToken);
-    if (this.#targetRefreshTimeout) window.clearTimeout(this.#targetRefreshTimeout);
-    this.#targetRefreshTimeout = null;
-  }
-
-  #onTargetToken(user) {
-    if (user?.id !== game.user?.id) return;
-    if (this.#targetRefreshTimeout) window.clearTimeout(this.#targetRefreshTimeout);
-    this.#targetRefreshTimeout = window.setTimeout(() => {
-      this.#targetRefreshTimeout = null;
-      void this.#refreshTargetFromSelection();
-    }, 0);
-  }
-
-  async #refreshTargetFromSelection() {
-    if (this.#targetRefreshInFlight) {
-      this.#targetRefreshQueued = true;
-      return;
-    }
-    this.#targetRefreshInFlight = true;
-    try {
-      const nextTargetToken = getTargetedToken() ?? this.#sourceToken;
-      if (!nextTargetToken?.actor) return;
-      const nextTargetContext = await getMedicineTargetContext(nextTargetToken);
-      if (!nextTargetContext) return;
-
-      const currentActorUuid = String(this.#targetContext?.actorUuid ?? "");
-      const nextActorUuid = String(nextTargetContext.actorUuid ?? "");
-      if (currentActorUuid !== nextActorUuid) this.#activeTreatmentId = "";
-      else if (this.#activeTreatmentId && !getTargetTreatments(nextTargetContext, this.#activeTreatmentType).some(item => item.id === this.#activeTreatmentId)) {
-        this.#activeTreatmentId = "";
-      }
-
-      this.#targetToken = nextTargetToken;
-      this.#targetContext = nextTargetContext;
-      const result = await this.render({ force: true });
-      this.#syncWindowTitle();
-      return result;
-    } finally {
-      this.#targetRefreshInFlight = false;
-      if (this.#targetRefreshQueued) {
-        this.#targetRefreshQueued = false;
-        void this.#refreshTargetFromSelection();
-      }
-    }
   }
 
   #isSelfTreatment() {
@@ -2023,9 +1974,4 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
-}
-
-function getTargetedToken() {
-  const targets = Array.from(game.user?.targets ?? []);
-  return targets.find(token => token?.actor) ?? null;
 }

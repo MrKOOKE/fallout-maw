@@ -170,10 +170,13 @@ import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } fr
 import { getAbilityItemUseProgressEntries, getActorAtRandomActionPointCostReduction } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
+import { actorHasAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
+  ABILITY_CATALOG_DRAG_TYPE,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
+  getAbilitySourceId,
   normalizeActiveApplicationSettings,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
@@ -634,6 +637,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async _onDrop(event) {
     const data = this.#getDragEventData(event);
     if (data?.type === "ActorContainerPassenger") return this.#onDropActorContainerPassenger(event, data);
+    if (data?.type === ABILITY_CATALOG_DRAG_TYPE) return this.#onDropCatalogAbility(data);
     if (data?.type !== "Item") return super._onDrop(event);
 
     const passengerElement = event.target?.closest?.("[data-actor-container-passenger]");
@@ -646,6 +650,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryDropPreview();
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
+    if (dropped.itemData?.type === "ability") return this.#onDropAbilityItem(dropped);
 
     const zone = this.#getDropZone(event);
     const parentId = this.#getInventoryContextParentId(zone);
@@ -705,8 +710,56 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.#createOrStackDroppedItem(itemData, placement, targetItem, parentId);
   }
 
+  async #onDropCatalogAbility(data = {}) {
+    const sourceId = String(data.sourceId ?? "").trim();
+    if (!sourceId || !this.actor?.isOwner) return null;
+    const abilityName = String(data.name ?? "").trim() || "Способность";
+    if (actorHasAbility(this.actor, sourceId)) {
+      ui.notifications.warn(`${this.actor.name} уже имеет способность: ${abilityName}.`);
+      return null;
+    }
+    const item = await grantCatalogAbility(this.actor, sourceId);
+    if (item) {
+      ui.notifications.info(`${this.actor.name}: добавлена способность ${item.name}.`);
+      return item;
+    }
+    ui.notifications.warn(`Не удалось добавить способность: ${abilityName}.`);
+    return null;
+  }
+
+  async #onDropAbilityItem(dropped = {}) {
+    if (!this.actor?.isOwner) return null;
+    const itemData = foundry.utils.deepClone(dropped.itemData ?? {});
+    const sourceId = getAbilitySourceId(dropped.item ?? itemData);
+    const abilityName = String(itemData.name ?? dropped.item?.name ?? "").trim() || "Способность";
+
+    if (sourceId) {
+      if (actorHasAbility(this.actor, sourceId)) {
+        ui.notifications.warn(`${this.actor.name} уже имеет способность: ${abilityName}.`);
+        return null;
+      }
+      const item = await grantCatalogAbility(this.actor, sourceId);
+      if (item) {
+        ui.notifications.info(`${this.actor.name}: добавлена способность ${item.name}.`);
+        return item;
+      }
+    }
+
+    delete itemData._id;
+    delete itemData.id;
+    const [created] = await this.actor.createEmbeddedDocuments("Item", [itemData]);
+    if (created) ui.notifications.info(`${this.actor.name}: добавлена способность ${created.name}.`);
+    return created ?? null;
+  }
+
   _onDragOver(event) {
     const data = this.#getDragEventData(event);
+    if (data?.type === ABILITY_CATALOG_DRAG_TYPE) {
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      this.#clearActorContainerDropPreview();
+      this.#clearInventoryDropPreview();
+      return;
+    }
     if (data?.type === "ActorContainerPassenger") {
       const cell = this.#getActorContainerCellAtPointer(event);
       this.#clearActorContainerDropPreview();

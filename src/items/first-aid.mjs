@@ -676,12 +676,12 @@ function isActorInCombat(actor) {
   return Boolean(game.combat?.started && game.combat.combatants.some(combatant => combatant.actor?.uuid === actor.uuid));
 }
 
-function isTargetInFirstAidRange(sourceToken, targetToken, firstAid = {}) {
+export function isTargetInFirstAidRange(sourceToken, targetToken, firstAid = {}, { warn = true } = {}) {
   const maxDistance = Number(firstAid.maxDistance) || 0;
   if (maxDistance <= 0 || !sourceToken || !targetToken || sourceToken === targetToken) return true;
   const distance = getTokenDistance(sourceToken, targetToken);
   if (distance <= maxDistance) return true;
-  ui.notifications.warn(`Цель слишком далеко (${Math.round(distance)}; максимум: ${maxDistance}).`);
+  if (warn) ui.notifications.warn(`Цель слишком далеко (${Math.round(distance)}; максимум: ${maxDistance}).`);
   return false;
 }
 

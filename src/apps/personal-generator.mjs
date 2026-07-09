@@ -1,5 +1,12 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
+import { actorHasAbility, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import {
+  ABILITY_CATALOG_DRAG_TYPE,
+  getAbilitySourceCategoryId,
+  getAbilitySourceId,
+  prepareAbilityItemData
+} from "../settings/abilities.mjs";
 import {
   PERSONAL_GENERATOR_PRESETS_SETTING,
   PERSONAL_NAME_RANDOMIZER_SETTING
@@ -79,11 +86,17 @@ const PERSONAL_GENERATOR_DEFAULTS = Object.freeze({
     includeCurrent: true,
     paths: []
   },
+  abilities: {
+    enabled: false,
+    entries: []
+  },
   items: {
     enabled: false,
     blocks: []
   }
 });
+
+const PERSONAL_GENERATOR_DROPZONE_SELECTOR = "[data-pg-block-drop], [data-pg-ability-drop]";
 
 let personalGeneratorWindow = null;
 
@@ -276,6 +289,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       previewNames: this.#onPreviewNames,
       togglePrototypeTokenLink: this.#onTogglePrototypeTokenLink,
       openItemEntry: this.#onOpenItemEntry,
+      deleteAbilityEntry: this.#onDeleteAbilityEntry,
       toggleItemLock: this.#onToggleItemLock,
       chainItemEntry: this.#onChainItemEntry
     }
@@ -299,7 +313,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   get _dragDrop() {
     return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
       dragSelector: null,
-      dropSelector: "[data-pg-block-drop]",
+      dropSelector: PERSONAL_GENERATOR_DROPZONE_SELECTOR,
       permissions: {
         drop: () => true
       },
@@ -464,6 +478,17 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return document?.sheet?.render?.(true);
   }
 
+  static async #onDeleteAbilityEntry(event, target) {
+    event.preventDefault();
+    const entries = Array.from(this.element?.querySelectorAll("[data-pg-ability-entry]") ?? []);
+    const index = entries.indexOf(target.closest("[data-pg-ability-entry]"));
+    if (index < 0) return undefined;
+    this.#config = this.#readConfigFromForm();
+    this.#config.abilities.entries.splice(index, 1);
+    await this.#saveCurrentConfig();
+    return this.render({ force: true });
+  }
+
   static async #onToggleItemLock(event, target) {
     event.preventDefault();
     const entry = target.closest("[data-pg-entry]");
@@ -502,7 +527,8 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   }
 
   async #onDropItem(event) {
-    this.#clearDropzoneHighlight(event.target?.closest?.("[data-pg-block-drop]"));
+    this.#clearDropzoneHighlight(event.target?.closest?.(PERSONAL_GENERATOR_DROPZONE_SELECTOR));
+    if (event.target?.closest?.("[data-pg-ability-drop]")) return this.#onDropAbility(event);
     const internalDrop = this.#getInternalEntryDropData(event);
     if (internalDrop) return this.#moveInternalEntryDrop(event, internalDrop);
 
@@ -510,14 +536,17 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     const blockIndex = getRowIndex(blockElement, "[data-pg-block]");
     if (blockIndex < 0) return undefined;
 
-    let item = null;
-    try {
-      const data = JSON.parse(event.dataTransfer?.getData("text/plain") || "{}");
-      if (data?.type !== "Item") return undefined;
-      item = resolveWorldItemSync(data.uuid);
-    } catch (_error) {
-      return undefined;
+    const data = this.#getDragEventData(event);
+    const abilityEntry = await createAbilityEntryFromDropData(data);
+    if (abilityEntry) {
+      this.#config = this.#readConfigFromForm();
+      this.#config.items.blocks[blockIndex]?.entries.push(createItemEntryFromAbilityEntry(abilityEntry));
+      await this.#saveCurrentConfig();
+      return this.render({ force: true });
     }
+
+    if (data?.type !== "Item") return undefined;
+    const item = await resolveItemDocumentFromDropData(data);
     if (!item) return undefined;
 
     this.#config = this.#readConfigFromForm();
@@ -526,15 +555,31 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return this.render({ force: true });
   }
 
+  async #onDropAbility(event) {
+    const data = this.#getDragEventData(event);
+    const entry = await createAbilityEntryFromDropData(data);
+    if (!entry) return undefined;
+
+    this.#config = this.#readConfigFromForm();
+    const entries = this.#config.abilities.entries;
+    const duplicate = entries.some(existing => (
+      (entry.sourceId && existing.sourceId === entry.sourceId)
+      || (!entry.sourceId && entry.uuid && existing.uuid === entry.uuid)
+    ));
+    if (!duplicate) entries.push(entry);
+    await this.#saveCurrentConfig();
+    return this.render({ force: true });
+  }
+
   #onDropzoneDragEnter(event) {
-    const dropzone = event.target?.closest?.("[data-pg-block-drop]");
+    const dropzone = event.target?.closest?.(PERSONAL_GENERATOR_DROPZONE_SELECTOR);
     if (!dropzone || !this.element?.contains(dropzone)) return;
     dropzone.dataset.dragDepth = String((toInteger(dropzone.dataset.dragDepth) || 0) + 1);
     dropzone.classList.add("drag-over");
   }
 
   #onDropzoneDragLeave(event) {
-    const dropzone = event.target?.closest?.("[data-pg-block-drop]");
+    const dropzone = event.target?.closest?.(PERSONAL_GENERATOR_DROPZONE_SELECTOR);
     if (!dropzone || !this.element?.contains(dropzone)) return;
     const depth = Math.max(0, (toInteger(dropzone.dataset.dragDepth) || 0) - 1);
     dropzone.dataset.dragDepth = String(depth);
@@ -542,10 +587,17 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   }
 
   #onDropzoneDragOver(event) {
-    const dropzone = event.target?.closest?.("[data-pg-block-drop]");
+    const dropzone = event.target?.closest?.(PERSONAL_GENERATOR_DROPZONE_SELECTOR);
     if (!dropzone || !this.element?.contains(dropzone)) return;
     event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = this.#getDropEffectForEvent(event);
     dropzone.classList.add("drag-over");
+  }
+
+  #getDropEffectForEvent(event) {
+    const data = this.#getDragEventData(event);
+    if (data?.type === "fallout-maw-personal-generator-entry") return data.copy === true || event.shiftKey === true ? "copy" : "move";
+    return "copy";
   }
 
   #clearDropzoneHighlight(dropzone) {
@@ -601,6 +653,31 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     } catch (_error) {
       return null;
     }
+  }
+
+  #getDragEventData(event) {
+    const cachedPayload = CONFIG.ux.DragDrop?.getPayload?.();
+    if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
+
+    try {
+      const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
+      const data = textEditor.getDragEventData(event);
+      if (data && (typeof data === "object")) return data;
+    } catch (_error) {
+      // Fall through to explicit transfer payloads.
+    }
+
+    for (const type of ["application/json", "text/plain"]) {
+      const raw = event.dataTransfer?.getData(type);
+      if (!raw) continue;
+      try {
+        return JSON.parse(raw);
+      } catch (_error) {
+        continue;
+      }
+    }
+
+    return null;
   }
 
   async #moveInternalEntryDrop(event, data) {
@@ -841,6 +918,10 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
         includeCurrent: getChecked(form, "images.includeCurrent"),
         paths: readImagePaths(form)
       },
+      abilities: {
+        enabled: getChecked(form, "abilities.enabled"),
+        entries: readAbilityEntries(form)
+      },
       items: {
         enabled: getChecked(form, "items.enabled"),
         blocks: readItemBlocks(form)
@@ -1057,7 +1138,11 @@ async function applyPersonalGeneratorTokenItems(document) {
   if (!config.enabled || !config.items.enabled) return undefined;
   if (document.getFlag?.(SYSTEM_ID, "personalGeneratorItemsApplied")) return undefined;
 
-  const rolledItems = await rollPersonalItemBlocks(config.items);
+  const rolledEntries = await rollPersonalItemBlocks(config.items);
+  const rolledAbilities = rolledEntries.filter(entry => entry?.type === "ability");
+  const rolledItems = rolledEntries.filter(entry => entry?.type !== "ability");
+  if (rolledAbilities.length) await createPersonalGeneratorAbilityItems(actor, rolledAbilities);
+
   if (!rolledItems.length) {
     await document.setFlag?.(SYSTEM_ID, "personalGeneratorItemsApplied", true);
     return undefined;
@@ -1080,9 +1165,60 @@ async function applyPersonalGeneratorTokenItems(document) {
   return undefined;
 }
 
+async function applyPersonalGeneratorTokenAbilities(document) {
+  if (!document || document.actorLink) return undefined;
+
+  let actor = document.actor;
+  if (!actor) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    actor = document.actor;
+  }
+  if (!actor) return undefined;
+
+  const baseActor = document.actorId ? game.actors?.get(document.actorId) : null;
+  if (!baseActor) return undefined;
+
+  const config = getPersonalGeneratorConfig(baseActor);
+  if (!config.enabled || !config.abilities.enabled) return undefined;
+  if (document.getFlag?.(SYSTEM_ID, "personalGeneratorAbilitiesApplied")) return undefined;
+
+  const abilitiesData = [];
+  for (const entry of normalizeAbilityEntries(config.abilities.entries)) {
+    const itemData = await createEmbeddedAbilityData({ ...entry, kind: "ability" });
+    if (itemData) abilitiesData.push(itemData);
+  }
+  await createPersonalGeneratorAbilityItems(actor, abilitiesData);
+
+  await document.setFlag?.(SYSTEM_ID, "personalGeneratorAbilitiesApplied", true);
+  return undefined;
+}
+
+async function createPersonalGeneratorAbilityItems(actor, abilitiesData = []) {
+  if (!actor || !abilitiesData.length) return [];
+
+  const creates = [];
+  for (const sourceData of abilitiesData) {
+    if (sourceData?.type !== "ability") continue;
+    const sourceId = getAbilitySourceId(sourceData);
+    if (sourceId) {
+      if (actorHasAbility(actor, sourceId)) continue;
+      const item = await grantCatalogAbility(actor, sourceId);
+      if (item) continue;
+    }
+
+    const itemData = foundry.utils.deepClone(sourceData);
+    delete itemData._id;
+    delete itemData.id;
+    creates.push(itemData);
+  }
+
+  return creates.length ? actor.createEmbeddedDocuments("Item", creates, { render: false }) : [];
+}
+
 async function finalizePersonalGeneratorToken(document) {
   await syncPersonalGeneratorTokenActorPortrait(document);
-  return applyPersonalGeneratorTokenItems(document);
+  await applyPersonalGeneratorTokenItems(document);
+  return applyPersonalGeneratorTokenAbilities(document);
 }
 
 async function syncPersonalGeneratorTokenActorPortrait(document) {
@@ -1108,7 +1244,7 @@ async function rollPersonalItemBlocks(itemsConfig = {}) {
 
   const selectedBlocks = selectBlocksFromExclusionGroups(blocks, buildExclusionGroups(blocks));
   for (const block of selectedBlocks) {
-    const entries = normalizeItemEntries(block.entries).filter(entry => entry.uuid);
+    const entries = normalizeItemEntries(block.entries).filter(entry => entry.kind === "ability" ? (entry.sourceId || entry.uuid) : entry.uuid);
     if (!entries.length) continue;
 
     const pickMode = normalizePickMode(block.pickMode);
@@ -1201,6 +1337,14 @@ async function buildRolledItemData(entries, quantities) {
   for (const [index, entry] of entries.entries()) {
     const quantity = Math.max(0, toInteger(quantities[index]));
     if (!quantity) continue;
+    if (entry.kind === "ability") {
+      const abilityData = await createEmbeddedAbilityData(entry);
+      if (!abilityData) continue;
+      foundry.utils.setProperty(abilityData, `flags.${SYSTEM_ID}.personalGeneratorAbility`, true);
+      output.push(abilityData);
+      continue;
+    }
+
     const item = entry.doc ?? await resolveItem(entry.uuid);
     if (!item) continue;
     const splitQuantity = needsUniqueGeneratedItem(item);
@@ -1505,9 +1649,52 @@ function createPersonalGeneratorConfig(config = {}) {
     .map(path => String(path ?? "").trim())
     .filter(Boolean)));
 
+  output.abilities ??= { enabled: false, entries: [] };
+  output.abilities.enabled = output.abilities?.enabled === true;
+  output.abilities.entries = normalizeAbilityEntries(output.abilities?.entries);
+
   output.items.enabled = output.items.enabled === true;
   output.items.blocks = (Array.isArray(output.items.blocks) ? output.items.blocks : []).map(normalizeItemBlock);
   return output;
+}
+
+async function createEmbeddedAbilityData(entry = {}) {
+  const sourceId = String(entry.sourceId ?? "").trim();
+  if (sourceId) {
+    const catalogEntry = findCatalogAbility(sourceId);
+    if (!catalogEntry) return null;
+    return prepareAbilityItemData(catalogEntry.ability, {
+      categoryId: String(entry.categoryId ?? catalogEntry.category?.id ?? "").trim()
+    });
+  }
+
+  const item = entry.uuid ? await resolveItem(entry.uuid) : null;
+  if (!(item instanceof Item) || item.type !== "ability") return null;
+  const itemData = item.toObject();
+  delete itemData._id;
+  delete itemData.id;
+  return itemData;
+}
+
+function normalizeAbilityEntries(entries = []) {
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const sourceId = String(entry.sourceId ?? entry.id ?? "").trim();
+    const uuid = String(entry.uuid ?? "").trim();
+    if (!sourceId && !uuid) continue;
+    const key = sourceId ? `source:${sourceId}` : `uuid:${uuid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({
+      sourceId,
+      categoryId: String(entry.categoryId ?? "").trim(),
+      uuid,
+      name: String(entry.name ?? "").trim(),
+      img: normalizeImagePath(entry.img || "icons/svg/aura.svg")
+    });
+  }
+  return normalized;
 }
 
 function normalizeItemBlock(block = {}) {
@@ -1528,10 +1715,15 @@ function normalizeItemBlock(block = {}) {
 
 function normalizeItemEntries(entries = []) {
   return (Array.isArray(entries) ? entries : []).map(entry => {
+    const sourceId = String(entry.sourceId ?? entry.abilitySourceId ?? "").trim();
     let uuid = String(entry.uuid ?? entry.itemUuid ?? "").trim();
     const legacyItemId = String(entry.itemId ?? "").trim();
     if (!uuid && legacyItemId) uuid = `Item.${legacyItemId}`;
+    const kind = String(entry.kind ?? entry.type ?? "").trim() === "ability" || sourceId ? "ability" : "item";
     return {
+      kind,
+      sourceId,
+      categoryId: String(entry.categoryId ?? "").trim(),
       uuid,
       name: String(entry.name ?? "").trim(),
       img: String(entry.img ?? "").trim(),
@@ -1562,11 +1754,21 @@ function createItemBlock() {
 }
 
 function createItemEntry() {
-  return normalizeItemEntries([{ uuid: "", name: "", img: "", min: 1, max: 1, weight: 100, condMin: 100, condMax: 100 }])[0]
-    ?? { uuid: "", name: "", img: "", equip: false, hasCondition: false, chain: "", min: 1, max: 1, condMin: 100, condMax: 100, weight: 100, itemTradeLocked: false };
+  return normalizeItemEntries([{ kind: "item", uuid: "", name: "", img: "", min: 1, max: 1, weight: 100, condMin: 100, condMax: 100 }])[0]
+    ?? { kind: "item", sourceId: "", categoryId: "", uuid: "", name: "", img: "", equip: false, hasCondition: false, chain: "", min: 1, max: 1, condMin: 100, condMax: 100, weight: 100, itemTradeLocked: false };
 }
 
 function createItemEntryFromItem(item) {
+  if (item?.type === "ability") {
+    return createItemEntryFromAbilityEntry({
+      sourceId: getAbilitySourceId(item),
+      categoryId: getAbilitySourceCategoryId(item),
+      uuid: item.uuid,
+      name: item.name,
+      img: item.img
+    });
+  }
+
   return {
     ...createItemEntry(),
     uuid: item.uuid,
@@ -1575,6 +1777,58 @@ function createItemEntryFromItem(item) {
     hasCondition: hasItemFunction(item, ITEM_FUNCTIONS.condition),
     itemTradeLocked: Boolean(item.system?.locked || item.getFlag?.(SYSTEM_ID, "itemTradeLocked"))
   };
+}
+
+function createItemEntryFromAbilityEntry(entry = {}) {
+  return {
+    ...createItemEntry(),
+    kind: "ability",
+    sourceId: String(entry.sourceId ?? "").trim(),
+    categoryId: String(entry.categoryId ?? "").trim(),
+    uuid: String(entry.uuid ?? "").trim(),
+    name: String(entry.name ?? "").trim() || "Способность",
+    img: normalizeImagePath(entry.img || "icons/svg/aura.svg"),
+    equip: false,
+    hasCondition: false,
+    hasDurability: false
+  };
+}
+
+async function createAbilityEntryFromDropData(data = {}) {
+  if (data?.type === ABILITY_CATALOG_DRAG_TYPE) {
+    const sourceId = String(data.sourceId ?? "").trim();
+    if (!sourceId) return null;
+    const catalogEntry = findCatalogAbility(sourceId);
+    const ability = catalogEntry?.ability ?? data;
+    return normalizeAbilityEntries([{
+      sourceId,
+      categoryId: String(data.categoryId ?? catalogEntry?.category?.id ?? "").trim(),
+      name: ability.name,
+      img: ability.img
+    }])[0] ?? null;
+  }
+
+  if (data?.type !== "Item") return null;
+  const item = await resolveItemDocumentFromDropData(data);
+  if (!(item instanceof Item) || item.type !== "ability") return null;
+  return normalizeAbilityEntries([{
+    sourceId: getAbilitySourceId(item),
+    categoryId: getAbilitySourceCategoryId(item),
+    uuid: item.uuid,
+    name: item.name,
+    img: item.img
+  }])[0] ?? null;
+}
+
+async function resolveItemDocumentFromDropData(data = {}) {
+  const item = data.uuid ? resolveWorldItemSync(data.uuid) : null;
+  if (item) return item;
+
+  try {
+    return await Item.implementation.fromDropData(data);
+  } catch (_error) {
+    return null;
+  }
 }
 
 function linkItemEntriesInBlock(block, sourceIndex, targetIndex) {
@@ -1621,6 +1875,7 @@ function getPrototypeTokenLinkContext(actor) {
 function preparePersonalGeneratorContext(config) {
   return {
     ...config,
+    abilityEntries: prepareAbilityEntriesForDisplay(config.abilities.entries),
     itemBlocks: config.items.blocks.map(block => ({
       ...block,
       exclusionsText: (block.exclusions ?? []).join(", "),
@@ -1640,6 +1895,19 @@ function preparePersonalGeneratorContext(config) {
       itemGroups: createItemEntryGroups(block.entries ?? [])
     }))
   };
+}
+
+function prepareAbilityEntriesForDisplay(entries = []) {
+  return normalizeAbilityEntries(entries).map(entry => {
+    const catalogEntry = entry.sourceId ? findCatalogAbility(entry.sourceId) : null;
+    const item = !catalogEntry && entry.uuid ? resolveWorldItemSync(entry.uuid) : null;
+    const ability = catalogEntry?.ability ?? item ?? entry;
+    return {
+      ...entry,
+      name: String(ability?.name ?? entry.name ?? "").trim() || "Способность",
+      img: normalizeImagePath(ability?.img ?? entry.img ?? "icons/svg/aura.svg")
+    };
+  });
 }
 
 function createItemEntryGroups(entries = []) {
@@ -2069,6 +2337,16 @@ function readImagePaths(form) {
     .filter(Boolean);
 }
 
+function readAbilityEntries(form) {
+  return normalizeAbilityEntries(Array.from(form.querySelectorAll("[data-pg-ability-entry]")).map(entry => ({
+    sourceId: String(entry.querySelector("[data-field='sourceId']")?.value ?? "").trim(),
+    categoryId: String(entry.querySelector("[data-field='categoryId']")?.value ?? "").trim(),
+    uuid: String(entry.querySelector("[data-field='uuid']")?.value ?? "").trim(),
+    name: String(entry.querySelector("[data-field='name']")?.value ?? "").trim(),
+    img: String(entry.querySelector("[data-field='img']")?.value ?? "").trim()
+  })));
+}
+
 function readItemBlocks(form) {
   return Array.from(form.querySelectorAll("[data-pg-block]")).map(block => ({
     id: String(block.dataset.blockId || foundry.utils.randomID()).trim(),
@@ -2078,6 +2356,9 @@ function readItemBlocks(form) {
     pickCurrency: String(block.querySelector("[data-field='pickCurrency']")?.value ?? getDefaultCurrencyKey()).trim(),
     exclusions: splitComma(block.querySelector("[data-field='exclusions']")?.value),
     entries: Array.from(block.querySelectorAll("[data-pg-entry]")).map(entry => ({
+      kind: String(entry.querySelector("[data-field='kind']")?.value ?? "item").trim(),
+      sourceId: String(entry.querySelector("[data-field='sourceId']")?.value ?? "").trim(),
+      categoryId: String(entry.querySelector("[data-field='categoryId']")?.value ?? "").trim(),
       uuid: String(entry.querySelector("[data-field='uuid']")?.value ?? "").trim(),
       name: String(entry.querySelector("[data-field='name']")?.value ?? "").trim(),
       img: String(entry.querySelector("[data-field='img']")?.value ?? "").trim(),

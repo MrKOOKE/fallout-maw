@@ -4,6 +4,7 @@ import { toInteger } from "../utils/numbers.mjs";
 export const LOCKED_FEATURES_CATEGORY_ID = "features";
 export const GENERAL_ABILITY_CATEGORY_ID = "general";
 export const ABILITY_SOURCE_FLAG = "abilitySource";
+export const ABILITY_CATALOG_DRAG_TYPE = "fallout-maw-ability-catalog-entry";
 
 export const ABILITY_FUNCTION_TYPES = Object.freeze({
   effectChanges: "effectChanges",

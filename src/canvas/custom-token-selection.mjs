@@ -1,3 +1,7 @@
+import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+
+const RIGHT_CLICK_CANCEL_DISTANCE_PX = 10;
+
 export function requestCustomTokenSelection({
   rows = [],
   limit = 1,
@@ -22,18 +26,30 @@ export function requestCustomTokenSelection({
     const layer = getCustomTokenSelectionLayer();
     const graphics = new PIXI.Graphics();
     const selected = new Set();
+    const canvasView = canvas.app?.view ?? null;
+    const previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     layer.addChild(graphics);
     drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
 
-    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. Enter подтверждает, Esc отменяет.`;
+    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`;
     ui.notifications.info(prompt);
 
+    let finished = false;
+    let rightClickCandidate = null;
     const cleanup = () => {
       window.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.removeEventListener("mousemove", onMouseMove, { capture: true });
       document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      document.removeEventListener("pointermove", onPointerMove, { capture: true });
+      canvas.stage?.off?.("mousemove", onCanvasMouseMove);
+      if (canvasView && canvasView.oncontextmenu === onContextMenu) {
+        canvasView.oncontextmenu = previousViewContextMenu;
+      }
       graphics.destroy();
     };
     const finish = value => {
+      if (finished) return;
+      finished = true;
       cleanup();
       resolve(value);
     };
@@ -59,8 +75,17 @@ export function requestCustomTokenSelection({
       else confirm();
     };
     const onPointerDown = event => {
-      if (event.button !== 0) return;
       if (!isCanvasViewEvent(event)) return;
+      if (event.button === 2) {
+        rightClickCandidate = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          dragged: false
+        };
+        return;
+      }
+      if (event.button !== 0) return;
       const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
       const row = getCustomTokenSelectionRowAtPoint(normalizedRows, point);
       if (!row) return;
@@ -76,10 +101,144 @@ export function requestCustomTokenSelection({
       drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
       if (selected.size >= selectionLimit) confirm();
     };
+    const onPointerMove = event => {
+      if (!rightClickCandidate || event.pointerId !== rightClickCandidate.pointerId) return;
+      updateRightClickDragCandidate(event);
+    };
+    const onMouseMove = event => {
+      if (!rightClickCandidate || !(event.buttons & 2)) return;
+      updateRightClickDragCandidate(event);
+    };
+    const onCanvasMouseMove = event => {
+      if (!rightClickCandidate) return;
+      updateRightClickDragCandidate(getClientPointFromCanvasEvent(event));
+    };
+    const onContextMenu = event => {
+      if (!isCanvasViewEvent(event)) return;
+      if (isRightClickDragRelease(event)) {
+        rightClickCandidate = null;
+        if (typeof previousViewContextMenu === "function") return previousViewContextMenu.call(canvasView, event);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      rightClickCandidate = null;
+      finish([]);
+    };
+    const updateRightClickDragCandidate = event => {
+      if (!rightClickCandidate) return;
+      if (getPointerDistance(event, rightClickCandidate) >= getFoundryDragResistance()) {
+        rightClickCandidate.dragged = true;
+      }
+    };
+    const isRightClickDragRelease = event => {
+      if (canvas.mouseInteractionManager?._dragRight && canvas.mouseInteractionManager?.state >= 4) return true;
+      if (!rightClickCandidate) return false;
+      return rightClickCandidate.dragged || getPointerDistance(event, rightClickCandidate) >= getFoundryDragResistance();
+    };
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("mousemove", onMouseMove, { capture: true });
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
+    document.addEventListener("pointermove", onPointerMove, { capture: true });
+    canvas.stage?.on?.("mousemove", onCanvasMouseMove);
+    if (canvasView) canvasView.oncontextmenu = onContextMenu;
   });
+}
+
+function getPointerDistance(event, origin = {}) {
+  return Math.hypot(
+    (Number(event?.clientX) || 0) - (Number(origin.x) || 0),
+    (Number(event?.clientY) || 0) - (Number(origin.y) || 0)
+  );
+}
+
+function getFoundryDragResistance() {
+  return Math.max(1, Number(foundry.canvas?.interaction?.MouseInteractionManager?.DEFAULT_DRAG_RESISTANCE_PX) || RIGHT_CLICK_CANCEL_DISTANCE_PX);
+}
+
+function getClientPointFromCanvasEvent(event) {
+  return {
+    clientX: Number(event?.clientX ?? event?.client?.x ?? event?.nativeEvent?.clientX) || 0,
+    clientY: Number(event?.clientY ?? event?.client?.y ?? event?.nativeEvent?.clientY) || 0
+  };
+}
+
+export async function requestCustomActorTokenSelection({
+  sourceActor = null,
+  sourceToken = null,
+  includeSelf = true,
+  title = "Выбор цели",
+  noneWarning = "Нет подходящих целей.",
+  instructions = "",
+  getReason = null
+} = {}) {
+  const sourceActorUuid = String(sourceActor?.uuid ?? "");
+  const rows = getCanvasActorSelectionTokens(sourceToken)
+    .filter(token => isActorSelectionTokenVisibleToSource(token, sourceToken, sourceActorUuid))
+    .map(token => {
+      const actor = token?.actor ?? token?.document?.actor ?? null;
+      const actorUuid = String(actor?.uuid ?? "");
+      const isSelf = Boolean(sourceActorUuid && actorUuid === sourceActorUuid);
+      const reason = !actor
+        ? "У токена нет актера."
+        : (!includeSelf && isSelf ? "Нужна другая цель." : String(getReason?.({ token, actor, isSelf }) ?? ""));
+      return {
+        token,
+        actor,
+        actorUuid,
+        selectable: Boolean(actor && !reason),
+        reason
+      };
+    });
+
+  const selected = await requestCustomTokenSelection({
+    rows,
+    limit: 1,
+    title,
+    noneWarning,
+    instructions,
+    getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.id ?? row?.actorUuid ?? ""),
+    getRowLabel: row => String(row?.token?.name ?? row?.actor?.name ?? "Цель")
+  });
+  return selected.at(0) ?? null;
+}
+
+function getCanvasActorSelectionTokens(sourceToken = null) {
+  const tokens = [];
+  const seen = new Set();
+  const addToken = token => {
+    if (!token) return;
+    const id = String(token?.document?.uuid ?? token?.id ?? token?.uuid ?? "");
+    if (id && seen.has(id)) return;
+    if (id) seen.add(id);
+    tokens.push(token);
+  };
+
+  for (const token of canvas?.tokens?.placeables ?? []) addToken(token);
+  addToken(sourceToken?.object ?? sourceToken);
+  return tokens;
+}
+
+function isActorSelectionTokenVisibleToSource(token = null, sourceToken = null, sourceActorUuid = "") {
+  if (!token?.actor && !token?.document?.actor) return false;
+  if (token.visible === false || token.renderable === false) return false;
+  const actorUuid = String((token.actor ?? token.document?.actor)?.uuid ?? "");
+  if (sourceActorUuid && actorUuid === sourceActorUuid) return true;
+
+  const sourceObject = getTokenObjectForActorSelection(sourceToken, { requireSight: true });
+  const targetObject = getTokenObjectForActorSelection(token);
+  if (!sourceObject) return true;
+  if (sourceObject === targetObject) return true;
+  return canTokenPhysicallySeeTarget(sourceObject, targetObject);
+}
+
+function getTokenObjectForActorSelection(token = null, { requireSight = false } = {}) {
+  const object = token?.object ?? token;
+  if (!object) return null;
+  if (requireSight && typeof object._getVisionSourceData !== "function") return null;
+  return object;
 }
 
 function drawCustomTokenSelectionRows(graphics, rows = [], selected = new Set()) {

@@ -1,4 +1,5 @@
-import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
@@ -29,8 +30,16 @@ export async function requestRepairTarget(sourceToken) {
 
   const action = getSystemActionSettings().find(entry => entry.key === "repair");
   const toolKey = action?.toolKey ?? "repair";
-  const targetToken = getTargetedToken() ?? sourceToken;
-  if (!targetToken?.actor) return undefined;
+  const selected = await requestCustomActorTokenSelection({
+    sourceActor,
+    sourceToken,
+    includeSelf: true,
+    title: "Ремонт",
+    noneWarning: "Нет подходящих целей для ремонта.",
+    instructions: "Ремонт: выберите цель. Esc/ПКМ отменяет."
+  });
+  const targetToken = selected?.token ?? null;
+  if (!selected?.actor || !targetToken) return undefined;
 
   const targetContext = await getRepairTargetContext(targetToken, toolKey);
   if (!targetContext) return undefined;
@@ -51,11 +60,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   #targetToken = null;
   #toolKey = "repair";
   #activeItemId = "";
-  #targetRefreshTimeout = null;
-  #targetRefreshInFlight = false;
-  #targetRefreshQueued = false;
   #repairInFlight = false;
-  #boundOnTargetToken = this.#onTargetToken.bind(this);
 
   constructor({ sourceActor, sourceToken, targetContext, targetToken, toolKey = "repair" } = {}, options = {}) {
     super(options);
@@ -115,21 +120,9 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     };
   }
 
-  async _onFirstRender(context, options) {
-    await super._onFirstRender(context, options);
-    Hooks.on("targetToken", this.#boundOnTargetToken);
-  }
-
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#syncWindowTitle();
-  }
-
-  async _onClose(options) {
-    await super._onClose(options);
-    Hooks.off("targetToken", this.#boundOnTargetToken);
-    if (this.#targetRefreshTimeout) window.clearTimeout(this.#targetRefreshTimeout);
-    this.#targetRefreshTimeout = null;
   }
 
   static #onStartRepair(event, target) {
@@ -188,48 +181,6 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#repairInFlight = false;
     }
     return this.render({ force: true });
-  }
-
-  #onTargetToken(user) {
-    if (user?.id !== game.user?.id) return;
-    if (this.#targetRefreshTimeout) window.clearTimeout(this.#targetRefreshTimeout);
-    this.#targetRefreshTimeout = window.setTimeout(() => {
-      this.#targetRefreshTimeout = null;
-      void this.#refreshTargetFromSelection();
-    }, 0);
-  }
-
-  async #refreshTargetFromSelection() {
-    if (this.#targetRefreshInFlight) {
-      this.#targetRefreshQueued = true;
-      return;
-    }
-    this.#targetRefreshInFlight = true;
-    try {
-      const nextTargetToken = getTargetedToken() ?? this.#sourceToken;
-      if (!nextTargetToken?.actor) return;
-      const nextTargetContext = await getRepairTargetContext(nextTargetToken, this.#toolKey);
-      if (!nextTargetContext) return;
-
-      const currentActorUuid = String(this.#targetContext?.actorUuid ?? "");
-      const nextActorUuid = String(nextTargetContext.actorUuid ?? "");
-      if (currentActorUuid !== nextActorUuid) this.#activeItemId = "";
-      else if (this.#activeItemId && !nextTargetContext.items.some(item => item.id === this.#activeItemId)) {
-        this.#activeItemId = "";
-      }
-
-      this.#targetToken = nextTargetToken;
-      this.#targetContext = nextTargetContext;
-      const result = await this.render({ force: true });
-      this.#syncWindowTitle();
-      return result;
-    } finally {
-      this.#targetRefreshInFlight = false;
-      if (this.#targetRefreshQueued) {
-        this.#targetRefreshQueued = false;
-        void this.#refreshTargetFromSelection();
-      }
-    }
   }
 
   #isSelfRepair() {
@@ -1043,9 +994,4 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
-}
-
-function getTargetedToken() {
-  const targets = Array.from(game.user?.targets ?? []);
-  return targets.find(token => token?.actor) ?? null;
 }

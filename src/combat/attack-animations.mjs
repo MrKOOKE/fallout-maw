@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   resolveAnimationLibraryFile
 } from "../utils/animation-library.mjs";
+import { getAnimationTemplate } from "../utils/animation-templates.mjs";
 import { ITEM_FUNCTIONS, getWeaponFunctionById } from "../utils/item-functions.mjs";
 
 const ATTACK_ANIMATION_SOCKET = `system.${SYSTEM_ID}`;
@@ -9,33 +10,6 @@ const ATTACK_ANIMATION_SOCKET_SCOPE = "weaponAttackAnimation";
 const STATIC_ANIMATION_DURATION_MS = 600;
 const MIN_ANIMATION_DURATION_MS = 120;
 const MAX_ANIMATION_DURATION_MS = 12000;
-const DISTANCE_FILE_PATTERN = /(?:^|[_\-\s])\d{1,3}(?:ft|m)(?=$|[_\-\s.])/i;
-const MELEE_FILE_PATTERN = /(?:^|\/)Generic\/(?:Weapon_Attacks\/Melee|Creature)(?:\/|$)|(?:^|[_\/])(?:CreatureAttack|Dmg_(?:Bludgeoning|Slashing|Piercing))[^/]*\.webm$/i;
-const CONE_FILE_PATTERN = /(?:^|\/)(?:1st_Level\/Burning_Hands|5th_Level\/Cone_Of_Cold|Generic\/Template\/Cone)(?:\/|$)|(?:^|[_\/])(?:BreathWeapon|BurningHands|ConeOfCold|DetectMagicCone)[^/]*\.webm$/i;
-const RANGED_TEMPLATE = Object.freeze({
-  type: "ranged",
-  gridSize: 200,
-  startPoint: 200,
-  endPoint: 200
-});
-const MELEE_TEMPLATE = Object.freeze({
-  type: "melee",
-  gridSize: 200,
-  startPoint: 300,
-  endPoint: 300
-});
-const CONE_TEMPLATE = Object.freeze({
-  type: "cone",
-  gridSize: 100,
-  startPoint: 0,
-  endPoint: 0
-});
-const RAY_TEMPLATE = Object.freeze({
-  type: "ray",
-  gridSize: 100,
-  startPoint: 0,
-  endPoint: 0
-});
 
 export function registerAttackAnimationSocket() {
   game.socket.on(ATTACK_ANIMATION_SOCKET, handleAttackAnimationSocketMessage);
@@ -310,7 +284,7 @@ function getAttackAnimationLayer() {
 }
 
 function applySequencerStylePlacement(sprite, texture, entry) {
-  const template = getAnimationTemplate(entry.file) ?? RAY_TEMPLATE;
+  const template = getAnimationTemplate(entry.file);
 
   if (template.type === "cone") {
     applyConeTemplatePlacement(sprite, texture, entry);
@@ -319,10 +293,10 @@ function applySequencerStylePlacement(sprite, texture, entry) {
 
   const textureWidth = Math.max(1, Number(texture.width) || 1);
   const textureHeight = Math.max(1, Number(texture.height) || 1);
-  const startPoint = Math.max(0, Math.min(textureWidth, Number(template.startPoint) || 0));
-  const endPoint = Math.max(0, Math.min(textureWidth - startPoint, Number(template.endPoint) || 0));
-  const widthWithoutPadding = Math.max(1, textureWidth - (startPoint + endPoint));
-  const scale = Math.max(0.001, (Number(entry.distance) || 0) / widthWithoutPadding);
+  const startPoint = Number(template.startPoint) || 0;
+  const endPoint = Number(template.endPoint) || 0;
+  const widthWithoutPadding = textureWidth - (startPoint + endPoint);
+  const scale = Math.max(0.001, (Number(entry.distance) || 0) / Math.max(1, widthWithoutPadding));
 
   sprite.anchor.set(startPoint / textureWidth, 0.5);
   sprite.scale.set(scale, scale);
@@ -344,14 +318,6 @@ function getConeAngleScale(entry) {
   if (halfAngle <= 0) return 1;
   const fullAngleDegrees = halfAngle * 2 * (180 / Math.PI);
   return Math.max(0.35, Math.min(2, fullAngleDegrees / 60));
-}
-
-function getAnimationTemplate(file) {
-  const path = String(file ?? "");
-  if (CONE_FILE_PATTERN.test(path)) return CONE_TEMPLATE;
-  if (MELEE_FILE_PATTERN.test(path)) return MELEE_TEMPLATE;
-  if (!DISTANCE_FILE_PATTERN.test(path)) return null;
-  return RANGED_TEMPLATE;
 }
 
 function serializePoint(point) {

@@ -65,6 +65,8 @@ import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
 import { registerFixedAbilityFunctionHooks, registerFixedAbilityFunctionSocket } from "./abilities/fixed-functions.mjs";
 import { registerDangerSenseSocket } from "./abilities/danger-sense.mjs";
+import { actorHasAbility, grantCatalogAbility } from "./abilities/purchase.mjs";
+import { ABILITY_CATALOG_DRAG_TYPE, getAbilitySourceId } from "./settings/abilities.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
@@ -203,6 +205,11 @@ Hooks.once("ready", async () => {
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {
+  if (data?.type === ABILITY_CATALOG_DRAG_TYPE) return dropAbilityOnCanvasToken(canvas, data);
+
+  const droppedAbility = data?.type === "Item" ? await resolveDroppedAbilityItem(data) : null;
+  if (droppedAbility) return dropAbilityItemOnCanvasToken(canvas, data, droppedAbility);
+
   if (data?.type !== "Item") return undefined;
 
   const target = getDropTargetToken(canvas, data);
@@ -233,6 +240,71 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
   if (dropPlan.creates.length) await actor.createEmbeddedDocuments("Item", dropPlan.creates);
   return false;
 });
+
+async function dropAbilityOnCanvasToken(canvas, data = {}) {
+  const target = getDropTargetToken(canvas, data);
+  const actor = target?.actor;
+  if (!actor) return undefined;
+  if (!actor.isOwner) {
+    ui.notifications.warn(`Нет прав на добавление способности актеру ${actor.name}.`);
+    return false;
+  }
+
+  const sourceId = String(data.sourceId ?? "").trim();
+  const abilityName = String(data.name ?? "").trim() || "Способность";
+  if (!sourceId) return false;
+  if (actorHasAbility(actor, sourceId)) {
+    ui.notifications.warn(`${actor.name} уже имеет способность: ${abilityName}.`);
+    return false;
+  }
+
+  const item = await grantCatalogAbility(actor, sourceId);
+  if (item) ui.notifications.info(`${actor.name}: добавлена способность ${item.name}.`);
+  else ui.notifications.warn(`Не удалось добавить способность: ${abilityName}.`);
+  return false;
+}
+
+async function dropAbilityItemOnCanvasToken(canvas, data = {}, item = null) {
+  const target = getDropTargetToken(canvas, data);
+  const actor = target?.actor;
+  if (!actor) return undefined;
+  if (!actor.isOwner) {
+    ui.notifications.warn(`Нет прав на добавление способности актеру ${actor.name}.`);
+    return false;
+  }
+
+  const sourceId = getAbilitySourceId(item);
+  const abilityName = String(item?.name ?? "").trim() || "Способность";
+  if (sourceId) {
+    if (actorHasAbility(actor, sourceId)) {
+      ui.notifications.warn(`${actor.name} уже имеет способность: ${abilityName}.`);
+      return false;
+    }
+    const created = await grantCatalogAbility(actor, sourceId);
+    if (created) ui.notifications.info(`${actor.name}: добавлена способность ${created.name}.`);
+    else ui.notifications.warn(`Не удалось добавить способность: ${abilityName}.`);
+    return false;
+  }
+
+  const itemData = item.toObject();
+  delete itemData._id;
+  delete itemData.id;
+  const [created] = await actor.createEmbeddedDocuments("Item", [itemData]);
+  if (created) ui.notifications.info(`${actor.name}: добавлена способность ${created.name}.`);
+  return false;
+}
+
+async function resolveDroppedAbilityItem(data = {}) {
+  const worldItem = data.uuid ? resolveWorldItemSync(data.uuid) : null;
+  if (worldItem) return worldItem.type === "ability" ? worldItem : null;
+
+  try {
+    const item = await Item.implementation.fromDropData(data);
+    return item?.type === "ability" ? item : null;
+  } catch (_error) {
+    return null;
+  }
+}
 
 async function promptActorDropItemQuantity(itemData) {
   const initial = Math.max(1, getItemQuantity(itemData));

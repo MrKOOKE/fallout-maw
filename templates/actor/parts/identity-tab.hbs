@@ -128,7 +128,7 @@
     <h2>Способности</h2>
     <div class="fallout-maw-ability-card-grid">
       {{#each abilities}}
-      <article class="fallout-maw-ability-card" data-ability-id="{{id}}" data-tooltip-item="{{id}}">
+      <article class="fallout-maw-ability-card draggable" data-ability-id="{{id}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" draggable="true">
         <img src="{{img}}" alt="" width="42" height="42">
         <strong>{{name}}</strong>
         {{#if ../freeEdit}}

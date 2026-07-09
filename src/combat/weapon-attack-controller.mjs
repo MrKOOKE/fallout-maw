@@ -1210,7 +1210,7 @@ class WeaponAttackController {
     this.pushStrengthMaximum = 0;
     this.limbMenu = null;
     this.chanceMenu = null;
-    this.suppressNextContextMenu = false;
+    this.rightClickCancelCandidate = null;
     this.attackId = foundry.utils.randomID();
     this.autoCoverActorUuids = new Set();
     this.lastAutoCoverSignature = "";
@@ -1547,6 +1547,11 @@ class WeaponAttackController {
     return !this.attackCanceledByReaction || this.attackCheckCount > 0;
   }
 
+  async playAttackAnimationsIfNeeded(trajectories = [], { attempted = true, delayMs = null } = {}) {
+    if (!attempted || !this.shouldPlayWeaponAnimationForAttempt()) return;
+    await this.playAttemptWeaponAnimations(trajectories, { delayMs });
+  }
+
   async playAttemptWeaponAnimations(trajectories = [], { delayMs = null } = {}) {
     await playWeaponAttackAnimations({
       weapon: this.weapon,
@@ -1727,6 +1732,7 @@ class WeaponAttackController {
 
   onMove(event) {
     if (this.processing || this.isInteractionLocked()) return;
+    this.updateRightClickCancelCandidate(event);
     event.stopPropagation();
     if (this.pushStrengthMaximum > 0) {
       this.refreshPushStrengthMenu();
@@ -1748,9 +1754,13 @@ class WeaponAttackController {
       event.stopImmediatePropagation?.();
       return false;
     }
-    if (event.button === 2 && event.ctrlKey && isCanvasViewEvent(event)) return;
     if (this.handleLimbMenuPointerDown(event)) return;
     if (!isCanvasViewEvent(event)) return;
+
+    if (event.button === 2) {
+      this.startRightClickCancelCandidate(event);
+      return false;
+    }
 
     event.preventDefault();
     event.stopPropagation();
@@ -1758,20 +1768,6 @@ class WeaponAttackController {
     event.cancelBubble = true;
     if (event.button === 0 && this.pushStrengthMaximum > 0) return false;
     this.updatePointerFromClientEvent(event);
-    if (event.button === 2) {
-      this.suppressNextContextMenu = true;
-      if (this.attackModifier?.preventCancel) return false;
-      if (this.pushStrengthMaximum > 0) {
-        this.cancelPushStrengthSelection();
-        return false;
-      }
-      if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
-        this.unlockAimedTarget();
-        return false;
-      }
-      cancelWeaponAttack();
-      return false;
-    }
     return this.onConfirm(event);
   }
 
@@ -1817,18 +1813,12 @@ class WeaponAttackController {
   onCancel(event) {
     event?.preventDefault?.();
     if (this.isInteractionLocked()) return false;
-    if (this.processing) {
-      this.suppressNextContextMenu = false;
+    if (this.processing) return false;
+    if (this.isRightClickDragCancel(event)) {
+      this.rightClickCancelCandidate = null;
       return false;
     }
-    if (event?.ctrlKey) {
-      this.suppressNextContextMenu = false;
-      return false;
-    }
-    if (this.suppressNextContextMenu) {
-      this.suppressNextContextMenu = false;
-      return false;
-    }
+    this.rightClickCancelCandidate = null;
     if (this.attackModifier?.preventCancel) return false;
     if (this.pushStrengthMaximum > 0) {
       this.cancelPushStrengthSelection();
@@ -1840,6 +1830,28 @@ class WeaponAttackController {
     }
     cancelWeaponAttack();
     return false;
+  }
+
+  startRightClickCancelCandidate(event) {
+    this.rightClickCancelCandidate = {
+      pointerId: event.pointerId,
+      x: Number(event.clientX) || 0,
+      y: Number(event.clientY) || 0,
+      dragged: false
+    };
+  }
+
+  updateRightClickCancelCandidate(event) {
+    const candidate = this.rightClickCancelCandidate;
+    if (!candidate) return;
+    const pointerId = event?.pointerId ?? event?.nativeEvent?.pointerId;
+    if (pointerId !== undefined && candidate.pointerId !== undefined && pointerId !== candidate.pointerId) return;
+    if (getPointerDistanceFromEvent(event, candidate) >= getFoundryDragResistance()) candidate.dragged = true;
+  }
+
+  isRightClickDragCancel(event) {
+    this.updateRightClickCancelCandidate(event);
+    return Boolean(this.rightClickCancelCandidate?.dragged);
   }
 
   onTick() {
@@ -1955,9 +1967,7 @@ class WeaponAttackController {
       });
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
-    if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(trajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
@@ -2048,9 +2058,7 @@ class WeaponAttackController {
       });
     }
     await checkBatch.publish({ forceBatch: targets.length > 1 || duplicatePlan.cycles > 1 });
-    if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(trajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -2116,9 +2124,7 @@ class WeaponAttackController {
       });
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
-    if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(trajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -2219,9 +2225,7 @@ class WeaponAttackController {
         point: getAttackLandingPoint(trajectories, this.pointer)
       });
     }
-    if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(trajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     this.completeProcessingCycle();
   }
 
@@ -2318,9 +2322,7 @@ class WeaponAttackController {
       });
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
-    if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(trajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
@@ -2432,9 +2434,7 @@ class WeaponAttackController {
       point: allTrajectories[0]?.end ?? trajectories[0]?.end ?? getTokenAimPoint(target)
     });
     await checkBatch?.publish({ forceBatch: duplicatePlan.cycles > 1 });
-    if (this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(allTrajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(allTrajectories);
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -2549,9 +2549,7 @@ class WeaponAttackController {
       });
     }
     await checkBatch.publish({ forceBatch: duplicatePlan.cycles > 1 });
-    if (attempted && this.shouldPlayWeaponAnimationForAttempt()) {
-      await this.playAttemptWeaponAnimations(trajectories);
-    }
+    await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -3131,7 +3129,7 @@ class WeaponAttackController {
       if (index > 0 && delayMs > 0) await sleep(index * delayMs);
       const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
       if (includeProjectile) {
-        await this.playAttemptWeaponAnimations([buildVolleyAnimationTrajectory(geometry)], { delayMs: 0 });
+        await this.playAttackAnimationsIfNeeded([buildVolleyAnimationTrajectory(geometry)], { delayMs: 0 });
       }
       if (includeExplosion) {
         await playWeaponExplosionAnimation({
@@ -8659,6 +8657,25 @@ function isCanvasViewEvent(event) {
   if (!view) return false;
   if (event.target === view) return true;
   return Array.from(event.composedPath?.() ?? []).includes(view);
+}
+
+function getPointerDistanceFromEvent(event, origin = {}) {
+  const point = getClientPointFromEvent(event);
+  return Math.hypot(
+    point.x - (Number(origin.x) || 0),
+    point.y - (Number(origin.y) || 0)
+  );
+}
+
+function getClientPointFromEvent(event) {
+  return {
+    x: Number(event?.clientX ?? event?.client?.x ?? event?.nativeEvent?.clientX) || 0,
+    y: Number(event?.clientY ?? event?.client?.y ?? event?.nativeEvent?.clientY) || 0
+  };
+}
+
+function getFoundryDragResistance() {
+  return Math.max(1, Number(foundry.canvas?.interaction?.MouseInteractionManager?.DEFAULT_DRAG_RESISTANCE_PX) || 10);
 }
 
 function getAttackPreviewLayer() {

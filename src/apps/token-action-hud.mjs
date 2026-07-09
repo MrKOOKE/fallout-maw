@@ -1,4 +1,4 @@
-import { FALLOUT_MAW } from "../config/system-config.mjs";
+﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
@@ -48,6 +48,7 @@ import {
   isPostureEffectApplicableToActor,
   setActorTokensPosture
 } from "../canvas/posture-movement.mjs";
+import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
@@ -418,15 +419,6 @@ function getSelectedHudActors() {
     actors.push(actor);
   }
   return actors;
-}
-
-function getFirstHudTarget() {
-  const token = Array.from(game.user?.targets ?? [])
-    .find(target => target?.actor) ?? null;
-  return {
-    token,
-    actor: token?.actor ?? null
-  };
 }
 
 function prepareEndTurnAction(token) {
@@ -1263,41 +1255,43 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return requestMedicineTarget(this.token);
   }
 
-  #openSearchInventory() {
-    const targetData = getFirstHudTarget();
-    const targetActor = targetData.actor;
-    if (!targetActor) {
-      ui.notifications.warn("Для обыска выберите цель.");
-      return undefined;
-    }
-    if (targetActor.uuid === this.actor?.uuid) {
-      ui.notifications.warn("Нужна другая цель для обыска.");
+  async #openSearchInventory() {
+    const target = await requestCustomActorTokenSelection({
+      sourceActor: this.actor,
+      sourceToken: this.token,
+      includeSelf: false,
+      title: "Обыск",
+      noneWarning: "Нет подходящих целей для обыска.",
+      instructions: "Обыск: выберите цель. Esc/ПКМ отменяет."
+    });
+    if (!target?.actor) {
       return undefined;
     }
 
     void this.render({ force: true });
     return openSearchInventoryWindow({
       searcherActor: this.actor,
-      searchedActor: targetActor
+      searchedActor: target.actor
     });
   }
 
-  #requestTradeInventory() {
-    const targetData = getFirstHudTarget();
-    const targetActor = targetData.actor;
-    if (!targetActor) {
-      ui.notifications.warn("Для торговли выберите цель.");
-      return undefined;
-    }
-    if (targetActor.uuid === this.actor?.uuid) {
-      ui.notifications.warn("Нужна другая цель для торговли.");
+  async #requestTradeInventory() {
+    const target = await requestCustomActorTokenSelection({
+      sourceActor: this.actor,
+      sourceToken: this.token,
+      includeSelf: false,
+      title: "Торговля",
+      noneWarning: "Нет подходящих целей для торговли.",
+      instructions: "Торговля: выберите цель. Esc/ПКМ отменяет."
+    });
+    if (!target?.actor) {
       return undefined;
     }
 
     void this.render({ force: true });
     return requestTradeInventoryWindow({
       traderActor: this.actor,
-      tradeActor: targetActor
+      tradeActor: target.actor
     });
   }
 

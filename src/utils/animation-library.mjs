@@ -1,4 +1,9 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import {
+  getAnimationGridSizeDifference,
+  getAnimationTemplate,
+  ANIMATION_TEMPLATES
+} from "../utils/animation-templates.mjs";
 
 export const ANIMATION_LIBRARY_ROOT = `systems/${SYSTEM_ID}/Library-animation`;
 
@@ -45,7 +50,10 @@ export async function resolveAnimationLibraryFile(key, { distance = 0, mediaType
 
   const typedEntries = group.entries.filter(entry => entry.mediaType === mediaType);
   const entries = typedEntries.length ? typedEntries : group.entries;
-  return selectEntryByDistance(entries, distance)?.path ?? "";
+  const template = entries.some(entry => entry.distanceLabel)
+    ? getAnimationTemplate(entries[0]?.path ?? "")
+    : ANIMATION_TEMPLATES.default;
+  return selectEntryByDistance(entries, distance, template)?.path ?? "";
 }
 
 export function normalizeAnimationKey(key) {
@@ -153,30 +161,42 @@ function createEmptyAnimationLibraryIndex() {
   };
 }
 
-function selectEntryByDistance(entries = [], distance = 0) {
+function selectEntryByDistance(entries = [], distance = 0, template = ANIMATION_TEMPLATES.default) {
   const visibleEntries = entries.filter(entry => !entry.isThumb);
   const candidates = visibleEntries.length ? visibleEntries : entries;
   if (!candidates.length) return null;
 
+  const gridSizeDiff = getAnimationGridSizeDifference(template);
   const ranged = candidates
-    .map(entry => ({ entry, threshold: getSequencerDistanceThreshold(entry) }))
-    .filter(range => Number.isFinite(range.threshold))
-    .sort((left, right) => left.threshold - right.threshold || left.entry.path.localeCompare(right.entry.path));
+    .map(entry => ({
+      entry,
+      minDistance: getSequencerDistanceThreshold(entry, gridSizeDiff)
+    }))
+    .filter(range => Number.isFinite(range.minDistance))
+    .sort((left, right) => left.minDistance - right.minDistance || left.entry.path.localeCompare(right.entry.path));
   if (!ranged.length) return candidates[0];
 
-  const targetDistance = Math.max(0, Number(distance) || 0);
-  let selectedThreshold = ranged.at(-1).threshold;
-  for (let index = 0; index < ranged.length; index += 1) {
-    const current = ranged[index];
-    const next = ranged[index + 1];
-    if (targetDistance >= current.threshold && (!next || targetDistance < next.threshold)) {
-      selectedThreshold = current.threshold;
-      break;
+  const uniqueDistances = [...new Set(ranged.map(range => range.minDistance))].sort((left, right) => left - right);
+  const min = uniqueDistances[0];
+  const max = uniqueDistances.at(-1);
+  const buckets = ranged.map(range => ({
+    entry: range.entry,
+    distances: {
+      min: range.minDistance === min ? 0 : range.minDistance,
+      max: range.minDistance === max
+        ? Infinity
+        : uniqueDistances[uniqueDistances.indexOf(range.minDistance) + 1]
     }
-  }
+  }));
 
-  const sameDistance = ranged.filter(range => range.threshold === selectedThreshold).map(range => range.entry);
-  return sameDistance[Math.floor(Math.random() * sameDistance.length)];
+  const relativeDistance = Math.max(0, Number(distance) || 0) / gridSizeDiff;
+  const matches = buckets.filter(bucket => (
+    relativeDistance >= bucket.distances.min
+    && relativeDistance < bucket.distances.max
+  ));
+  if (!matches.length) return ranged[0]?.entry ?? candidates[0];
+
+  return matches[Math.floor(Math.random() * matches.length)].entry;
 }
 
 function selectRepresentativeEntry(entries = []) {
@@ -185,18 +205,19 @@ function selectRepresentativeEntry(entries = []) {
   return selectEntryByDistance(videos.length ? videos : visibleEntries, getGridSize() * 5);
 }
 
-function getSequencerDistanceThreshold(entry) {
+function getSequencerDistanceThreshold(entry, gridSizeDiff = 1) {
+  const scale = Math.max(0.0001, Number(gridSizeDiff) || 1);
   if (entry.distanceUnit === "ft") {
     const gridSize = getGridSize();
     if (entry.distanceValue === 5) return 0;
-    if (entry.distanceValue === 15) return gridSize * 2;
-    if (entry.distanceValue === 30) return gridSize * 5;
-    if (entry.distanceValue === 60) return gridSize * 9;
-    if (entry.distanceValue === 90) return gridSize * 15;
+    if (entry.distanceValue === 15) return (gridSize * 2) / scale;
+    if (entry.distanceValue === 30) return (gridSize * 5) / scale;
+    if (entry.distanceValue === 60) return (gridSize * 9) / scale;
+    if (entry.distanceValue === 90) return (gridSize * 15) / scale;
   }
   if (entry.distanceUnit === "m") {
     const gridDistance = Math.max(0.0001, Number(canvas.scene?.grid?.distance ?? canvas.grid?.distance) || 1);
-    return entry.distanceValue * (getGridSize() / gridDistance);
+    return (entry.distanceValue * (getGridSize() / gridDistance)) / scale;
   }
   return Number.NaN;
 }

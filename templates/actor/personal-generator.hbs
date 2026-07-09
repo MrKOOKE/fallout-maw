@@ -122,6 +122,44 @@
     </div>
   </section>
 
+  <section class="fallout-maw-panel fallout-maw-pg-abilities-section">
+    <header class="fallout-maw-panel-header">
+      <h2>Способности</h2>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="abilities.enabled" {{#if config.abilities.enabled}}checked{{/if}}>
+        <span>Включить</span>
+      </label>
+    </header>
+
+    <div class="fallout-maw-pg-dropzone" data-pg-ability-drop>
+      <div class="fallout-maw-pg-dropzone-header">
+        <span>Способности генератора</span>
+      </div>
+
+      <div class="fallout-maw-pg-entry-list">
+        {{#each config.abilityEntries}}
+        <article class="fallout-maw-pg-entry fallout-maw-pg-ability-entry" data-pg-ability-entry data-index="{{@index}}">
+          <input type="hidden" data-field="sourceId" value="{{sourceId}}">
+          <input type="hidden" data-field="categoryId" value="{{categoryId}}">
+          <input type="hidden" data-field="uuid" value="{{uuid}}">
+          <input type="hidden" data-field="name" value="{{name}}">
+          <input type="hidden" data-field="img" value="{{img}}">
+
+          <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="">
+          <div class="fallout-maw-pg-entry-content">
+            <strong class="fallout-maw-pg-entry-name">{{name}}</strong>
+          </div>
+          <div class="fallout-maw-pg-entry-actions">
+            <button type="button" data-action="deleteAbilityEntry" title="Удалить способность"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">Перетащите способности сюда.</p>
+        {{/each}}
+      </div>
+    </div>
+  </section>
+
   <section class="fallout-maw-panel fallout-maw-pg-items-section">
     <header class="fallout-maw-panel-header">
       <h2>Предметы</h2>
@@ -179,6 +217,9 @@
             <div class="fallout-maw-pg-chain" data-pg-chain="{{chain}}">
               {{#each entries}}
               <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+                <input type="hidden" data-field="kind" value="{{kind}}">
+                <input type="hidden" data-field="sourceId" value="{{sourceId}}">
+                <input type="hidden" data-field="categoryId" value="{{categoryId}}">
                 <input type="hidden" data-field="uuid" value="{{uuid}}">
                 <input type="hidden" data-field="img" value="{{img}}">
                 <input type="hidden" data-field="equip" value="{{#if equip}}1{{else}}0{{/if}}">
@@ -213,6 +254,9 @@
             {{else}}
             {{#each entries}}
             <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+              <input type="hidden" data-field="kind" value="{{kind}}">
+              <input type="hidden" data-field="sourceId" value="{{sourceId}}">
+              <input type="hidden" data-field="categoryId" value="{{categoryId}}">
               <input type="hidden" data-field="uuid" value="{{uuid}}">
               <input type="hidden" data-field="img" value="{{img}}">
               <input type="hidden" data-field="equip" value="{{#if equip}}1{{else}}0{{/if}}">

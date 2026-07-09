@@ -1,4 +1,4 @@
-import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
+﻿import { GRAPPLE_MODIFIER_HOOK, GRAPPLE_MODIFIER_KINDS } from "../combat/grapple-modifiers.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
@@ -1035,7 +1035,7 @@ function selectCommandBasicsTargets({ commander = null, command = "", limit = 1,
     limit,
     title: abilityName,
     noneWarning: `${abilityName}: нет подходящих исполнителей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`
+    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
   });
 }
 
@@ -1095,7 +1095,7 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     limit: settings.targetLimit,
     title: getAbilityDisplayName(abilityItem),
     noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
-    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${settings.targetLimit} целей. Enter подтверждает, Esc отменяет.`
+    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${settings.targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
   });
   return selection.map(row => ({ actor: row.token.actor, token: row.token })).filter(row => row.actor);
 }
@@ -1437,7 +1437,7 @@ function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = "
     limit,
     title: abilityName,
     noneWarning: `${abilityName}: нет подходящих целей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc отменяет.`
+    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
   });
 }
 

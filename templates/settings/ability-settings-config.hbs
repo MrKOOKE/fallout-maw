@@ -30,7 +30,7 @@
 
         <div class="fallout-maw-ability-compact-list" data-ability-category-collapse-body>
           {{#each abilities}}
-          <div class="fallout-maw-ability-compact-row{{#if isFeature}} feature{{/if}}{{#unless visible}} hidden-from-advancement{{/unless}}" data-ability-row data-ability-id="{{id}}">
+          <div class="fallout-maw-ability-compact-row draggable{{#if isFeature}} feature{{/if}}{{#unless visible}} hidden-from-advancement{{/unless}}" data-ability-row data-ability-id="{{id}}" draggable="true">
             <img src="{{img}}" alt="" width="34" height="34">
             <input type="hidden" data-field="abilityImg" value="{{img}}">
             <input type="hidden" data-field="abilityVisible" value="{{#if visible}}true{{else}}false{{/if}}">

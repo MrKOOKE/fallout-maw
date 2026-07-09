@@ -411,6 +411,10 @@ body #prosemirror-dropdown {
   outline: 2px solid rgba(232, 212, 136, 0.85);
 }
 
+.fallout-maw-pg-ability-entry {
+  cursor: default;
+}
+
 .fallout-maw-pg-entry-img {
   width: 3rem;
   height: 3rem;

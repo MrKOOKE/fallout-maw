@@ -1,6 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getAbilityCatalog, getSkillSettings, resetAbilityCatalog, setAbilityCatalog } from "../settings/accessors.mjs";
-import { LOCKED_FEATURES_CATEGORY_ID, normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
+import { ABILITY_CATALOG_DRAG_TYPE, LOCKED_FEATURES_CATEGORY_ID, normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { AbilityCatalogItemEditor } from "./ability-catalog-item-editor.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -11,6 +11,7 @@ const { FormDataExtended } = foundry.applications.ux;
 
 export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
   #expandedCategoryIds = new Set();
+  #dragDrop = null;
 
   constructor(options = {}) {
     super(options);
@@ -82,6 +83,57 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     activateSettingsReorder(this.element, "[data-ability-category-row]");
+    this._dragDrop.bind(this.element);
+  }
+
+  get _dragDrop() {
+    return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
+      dragSelector: "[data-ability-row]",
+      permissions: {
+        dragstart: () => true
+      },
+      callbacks: {
+        dragstart: this.#onAbilityDragStart.bind(this),
+        dragend: this.#onAbilityDragEnd.bind(this)
+      }
+    });
+  }
+
+  #onAbilityDragStart(event) {
+    if (event.target?.closest?.("button, input, select, textarea")) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const abilityRow = event.currentTarget?.closest?.("[data-ability-row]");
+    const categoryRow = abilityRow?.closest?.("[data-ability-category-row]");
+    const categoryId = categoryRow?.dataset.categoryId ?? "";
+    const abilityId = abilityRow?.dataset.abilityId ?? "";
+    if (!categoryId || !abilityId) return;
+
+    const catalog = this.readCatalogFromForm();
+    const category = catalog.categories.find(entry => entry.id === categoryId);
+    const ability = category?.abilities?.find(entry => entry.id === abilityId);
+    if (!ability) return;
+
+    const dragData = {
+      type: ABILITY_CATALOG_DRAG_TYPE,
+      sourceId: ability.id,
+      categoryId,
+      name: ability.name,
+      img: ability.img
+    };
+    const serialized = JSON.stringify(dragData);
+    event.dataTransfer?.setData("application/json", serialized);
+    event.dataTransfer?.setData("text/plain", serialized);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
+    abilityRow.classList.add("dragging");
+  }
+
+  #onAbilityDragEnd() {
+    this.element?.querySelectorAll("[data-ability-row].dragging")
+      .forEach(row => row.classList.remove("dragging"));
   }
 
   async _processFormData(_event, _form, _formData) {
