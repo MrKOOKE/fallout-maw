@@ -20,6 +20,10 @@ export const INITIATIVE_DISADVANTAGE_EFFECT_KEY = "system.attributes.initiative.
 export const ALL_LIMB_MAX_BONUS_EFFECT_KEY = "system.limbs.all.maxBonus";
 export const ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimitBonus";
 export const ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY = "fallout-maw.ability.overload.energyCost";
+export const TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY = "fallout-maw.suppression.traumas.count";
+export const DISEASE_SUPPRESSION_COUNT_EFFECT_KEY = "fallout-maw.suppression.diseases.count";
+export const TRAUMA_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.traumas.all";
+export const DISEASE_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.diseases.all";
 export const ONE_TIME_SKILL_MODIFIER_EFFECT_KEY = "fallout-maw.skillCheck.nextSkillModifier";
 export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
   criticalSuccess: "fallout-maw.skillCheck.smartFudge.criticalSuccess",
@@ -36,6 +40,14 @@ const ALL_SKILLS_EFFECT_FIELDS = Object.freeze({
 });
 const LEGACY_ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimit";
 const LEGACY_LIMB_IMPLANT_LIMIT_EFFECT_KEY_PATTERN = /^system\.limbs\.([^.]+)\.implantLimit$/;
+const SUPPRESSION_COUNT_KEYS = Object.freeze({
+  trauma: TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY,
+  disease: DISEASE_SUPPRESSION_COUNT_EFFECT_KEY
+});
+const SUPPRESSION_ALL_KEYS = Object.freeze({
+  trauma: TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
+  disease: DISEASE_SUPPRESSION_ALL_EFFECT_KEY
+});
 
 export function expandActorEffectChangeKeys(actor, change = {}) {
   const key = String(change?.key ?? "");
@@ -82,6 +94,7 @@ export function expandActorEffectChangeKeys(actor, change = {}) {
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
   const prepared = prepareActorEffectChangeValue(actor, change, options);
   if (!prepared) return null;
+  if (isTraumaDiseaseSuppressionEffectKey(prepared.key)) return null;
   if (getCoverKeyFromBonusPercentEffectKey(prepared.key)) return null;
   if (isDodgeAmountModifierEffectKey(prepared.key)) return null;
 
@@ -168,6 +181,107 @@ export function evaluateActorEffectChangeNumber(actor, change = {}, { fallback =
   if (!prepared) return fallback;
   const value = Number(prepared.value);
   return Number.isFinite(value) ? value : fallback;
+}
+
+export function isTraumaDiseaseSuppressionEffectKey(key = "") {
+  const path = String(key ?? "").trim();
+  return path === TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY
+    || path === DISEASE_SUPPRESSION_COUNT_EFFECT_KEY
+    || path === TRAUMA_SUPPRESSION_ALL_EFFECT_KEY
+    || path === DISEASE_SUPPRESSION_ALL_EFFECT_KEY;
+}
+
+export function getActorSuppressedTraumaDiseaseIds(actor) {
+  return {
+    trauma: getSuppressedActorItemIds(actor, "trauma"),
+    disease: getSuppressedActorItemIds(actor, "disease")
+  };
+}
+
+export function isActorTraumaDiseaseEffectSuppressed(actor, effect = null, suppressedIds = null) {
+  const item = effect?.parent;
+  const type = item?.type;
+  if (type !== "trauma" && type !== "disease") return false;
+  const ids = suppressedIds ?? getActorSuppressedTraumaDiseaseIds(actor);
+  return ids?.[type]?.has?.(item.id) ?? false;
+}
+
+function getSuppressedActorItemIds(actor, type = "") {
+  const itemType = type === "disease" ? "disease" : "trauma";
+  const items = (actor?.items?.filter?.(item => item.type === itemType) ?? [])
+    .filter(item => String(item?.id ?? "").trim());
+  if (!items.length) return new Set();
+
+  const allCount = evaluateSuppressionKey(actor, SUPPRESSION_ALL_KEYS[itemType]);
+  if (allCount > 0) return new Set(items.map(item => item.id));
+
+  const count = Math.max(0, Math.min(items.length, evaluateSuppressionKey(actor, SUPPRESSION_COUNT_KEYS[itemType])));
+  if (count <= 0) return new Set();
+
+  return new Set(
+    items
+      .map(item => ({
+        id: item.id,
+        score: stableHash(`${actor?.uuid ?? actor?.id ?? ""}:${itemType}:${item.id}:${getSuppressionSeed(actor, itemType)}`)
+      }))
+      .sort((left, right) => left.score - right.score || left.id.localeCompare(right.id))
+      .slice(0, count)
+      .map(entry => entry.id)
+  );
+}
+
+function evaluateSuppressionKey(actor, key = "") {
+  const changes = [];
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    const parentType = effect?.parent?.type;
+    if (parentType === "trauma" || parentType === "disease") continue;
+    for (const change of effect?.system?.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== key) continue;
+      changes.push({
+        ...foundry.utils.deepClone(change),
+        effect,
+        priority: getEffectChangePriority(change)
+      });
+    }
+  }
+
+  changes.sort((left, right) => getEffectChangePriority(left) - getEffectChangePriority(right));
+  let value = 0;
+  for (const change of changes) {
+    const prepared = prepareActorEffectChangeValue(actor, change);
+    const amount = Number(prepared?.value);
+    if (!Number.isFinite(amount)) continue;
+    if (change.type === "multiply") value *= amount;
+    else if (change.type === "override") value = amount;
+    else if (change.type === "upgrade") value = Math.max(value, amount);
+    else if (change.type === "downgrade") value = Math.min(value, amount);
+    else value += amount;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+
+function getSuppressionSeed(actor, type = "") {
+  return Array.from(actor?.allApplicableEffects?.() ?? actor?.effects ?? [])
+    .filter(effect => {
+      if (effect?.disabled || effect?.active === false) return false;
+      const parentType = effect?.parent?.type;
+      if (parentType === "trauma" || parentType === "disease") return false;
+      return (effect?.system?.changes ?? []).some(change => {
+        const key = String(change?.key ?? "").trim();
+        return key === SUPPRESSION_COUNT_KEYS[type] || key === SUPPRESSION_ALL_KEYS[type];
+      });
+    })
+    .map(effect => String(effect?.uuid ?? effect?.id ?? ""))
+    .sort()
+    .join("|");
+}
+
+function getEffectChangePriority(change = {}) {
+  const priority = Number(change?.priority);
+  if (Number.isFinite(priority)) return Math.trunc(priority);
+  const ActiveEffect = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
+  return toInteger(ActiveEffect?.CHANGE_TYPES?.[change?.type]?.defaultPriority);
 }
 
 export function getActorSmartFudgeResult(actor, { requester = "", check = null } = {}) {

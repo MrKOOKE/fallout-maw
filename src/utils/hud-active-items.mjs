@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { prepareHudWeaponSetsContext } from "./actor-display-data.mjs";
+import { isTraumaDiseaseSuppressionEffectKey } from "./active-effect-changes.mjs";
 import { getItemContainerParentId } from "./inventory-containers.mjs";
 import { getActorInstalledModuleItems } from "./item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
@@ -64,8 +65,25 @@ function getHudWeaponSetsCacheSignature(actor) {
     String(actor.getFlag?.(SYSTEM_ID, SELECTED_HUD_WEAPON_SET_FLAG) ?? ""),
     String(actor.getFlag?.(SYSTEM_ID, SELECTED_HUD_WEAPON_FLAG) ?? "")
   ];
+  for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
+    parts.push([
+      "limb",
+      limbKey,
+      limb?.max ?? "",
+      limb?.missing ? 1 : 0
+    ].join(":"));
+  }
   for (const item of getActorItemDocuments(actor)) {
-    if (["ability", "trauma", "disease"].includes(item.type) || isNaturalRaceItem(item)) continue;
+    if (item.type === "trauma") {
+      parts.push([
+        "trauma",
+        item.id,
+        item.system?.limbKey ?? "",
+        item.system?.thresholdPercent ?? ""
+      ].join(":"));
+      continue;
+    }
+    if (item.type === "disease" || item.type === "ability" || isNaturalRaceItem(item)) continue;
     if (getItemContainerParentId(item)) continue;
     const system = item.system ?? {};
     const placement = system.placement ?? {};
@@ -79,6 +97,24 @@ function getHudWeaponSetsCacheSignature(actor) {
       placement.constructPartOrder,
       system.equipped ? 1 : 0,
       container.extraWeaponSlots ?? 0
+    ].join(":"));
+  }
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    const changes = (effect?.system?.changes ?? [])
+      .filter(change => isTraumaDiseaseSuppressionEffectKey(change?.key))
+      .map(change => [
+        change.key,
+        change.type ?? "",
+        change.value ?? "",
+        change.phase ?? "",
+        change.priority ?? ""
+      ].join(","));
+    if (!changes.length) continue;
+    parts.push([
+      "suppression",
+      effect.uuid ?? effect.id ?? "",
+      ...changes
     ].join(":"));
   }
   return parts.join("|");

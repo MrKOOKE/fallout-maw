@@ -224,6 +224,9 @@ export function registerTokenActionHudHooks() {
   Hooks.on("updateItem", scheduleTokenActionHudRefreshForUpdatedItem);
   Hooks.on("createItem", scheduleTokenActionHudRefreshForItem);
   Hooks.on("deleteItem", scheduleTokenActionHudRefreshForItem);
+  Hooks.on("createActiveEffect", scheduleTokenActionHudRefreshForEffect);
+  Hooks.on("updateActiveEffect", scheduleTokenActionHudRefreshForEffect);
+  Hooks.on("deleteActiveEffect", scheduleTokenActionHudRefreshForEffect);
   Hooks.on("updateToken", scheduleTokenActionHudRefresh);
   Hooks.on("updateCombat", scheduleTokenActionHudRefresh);
   Hooks.on("deleteCombat", scheduleTokenActionHudRefresh);
@@ -301,6 +304,12 @@ function scheduleTokenActionHudRefreshForUpdatedItem(item, changes) {
   }
   if (isHudSilentItemUpdate(changes)) return;
   scheduleTokenActionHudRefreshForItem(item);
+}
+
+function scheduleTokenActionHudRefreshForEffect(effect) {
+  const parent = effect?.parent;
+  const actor = parent?.documentName === "Actor" ? parent : parent?.actor;
+  scheduleTokenActionHudRefreshForActor(actor);
 }
 
 function isActiveHudDamageSourcePrototype(item) {

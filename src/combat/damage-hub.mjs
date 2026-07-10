@@ -24,7 +24,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
-import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
+import { evaluateActorEffectChangeNumber, getActorSuppressedTraumaDiseaseIds } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
@@ -1312,8 +1312,10 @@ export function getLimbHealingCap(actor, limbKey = "") {
   if (hasInstalledProsthesis(actor, limbKey)) return 0;
   if (isLimbPhysicallyMissing(actor, limbKey)) return 0;
   const max = toInteger(limb.max);
+  const suppressedTraumas = getActorSuppressedTraumaDiseaseIds(actor).trauma;
   return getActorTraumas(actor)
     .filter(item => item.system?.limbKey === limbKey)
+    .filter(item => !suppressedTraumas.has(item.id))
     .reduce((cap, item) => Math.min(cap, getTraumaLimbHealingCap(item, max)), max);
 }
 

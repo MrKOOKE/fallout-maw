@@ -14,10 +14,14 @@ import {
   ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
+  DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
   INITIATIVE_DISADVANTAGE_EFFECT_KEY,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
-  SMART_FUDGE_RESULT_EFFECT_KEYS
+  SMART_FUDGE_RESULT_EFFECT_KEYS,
+  TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
+  TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY
 } from "./active-effect-changes.mjs";
 import {
   getCharacteristicSettings,
@@ -130,6 +134,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildAbilityRuntimeEffectKeyTokens(),
     ...buildCoverBonusPercentEffectKeyTokens(),
     ...buildDodgeResourceEffectKeyTokens(),
+    ...buildSuppressionEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ];
 
@@ -530,6 +535,40 @@ export function buildCombatEffectKeyTokens() {
       group: "Лечение"
     })
   ].filter(Boolean);
+}
+
+export function buildSuppressionEffectKeyTokens() {
+  const group = "Подавление";
+  return [
+    createEffectKeyToken({
+      code: "suppressTraumas",
+      key: "suppressTraumas",
+      label: "Травмы: подавить случайные",
+      path: TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "suppressDiseases",
+      key: "suppressDiseases",
+      label: "Болезни: подавить случайные",
+      path: DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "suppressAllTraumas",
+      key: "suppressAllTraumas",
+      label: "Травмы: подавить все",
+      path: TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
+      group
+    }),
+    createEffectKeyToken({
+      code: "suppressAllDiseases",
+      key: "suppressAllDiseases",
+      label: "Болезни: подавить все",
+      path: DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
+      group
+    })
+  ];
 }
 
 export function buildDamageMitigationEffectKeyTokens() {

@@ -33,7 +33,12 @@ import {
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
-import { expandActorEffectChangeKeys, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
+import {
+  expandActorEffectChangeKeys,
+  getActorSuppressedTraumaDiseaseIds,
+  isActorTraumaDiseaseEffectSuppressed,
+  prepareActorEffectChangeForApplication
+} from "../utils/active-effect-changes.mjs";
 const actorLoadPreparationCache = new WeakMap();
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
@@ -160,8 +165,10 @@ export class FalloutMaWActor extends Actor {
 
     const changes = [];
     const tokenChanges = [];
+    const suppressedTraumaDiseaseIds = getActorSuppressedTraumaDiseaseIds(this);
     for (const effect of this.allApplicableEffects()) {
       if (!effect.active) continue;
+      if (isActorTraumaDiseaseEffectSuppressed(this, effect, suppressedTraumaDiseaseIds)) continue;
       for (const change of effect.system.changes) {
         if ((change.key === "") || (change.phase !== phase)) continue;
         const copy = foundry.utils.deepClone(change);

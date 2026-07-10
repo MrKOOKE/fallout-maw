@@ -47,6 +47,7 @@ import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  getActorSuppressedTraumaDiseaseIds,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
@@ -6523,11 +6524,14 @@ function prepareAbilityEffectSummaries(functions = [], characteristicLabels = ne
 function prepareTraumaEntries(actor, settings = {}) {
   const pathLabels = buildEffectPathLabelMap(settings);
   const skillLabels = new Map((settings.skillSettings ?? []).map(skill => [skill.key, skill.label]));
+  const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor).trauma;
   return getActorTraumas(actor).map(item => ({
     id: item.id,
     uuid: item.uuid,
     name: item.name,
     img: item.img,
+    suppressed: suppressedIds.has(item.id),
+    suppressedLabel: "Временно подавлена",
     limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
     damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
     sources: prepareTraumaSourceEntries(item),
@@ -6545,6 +6549,7 @@ function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
   const pathLabels = buildEffectPathLabelMap(settings);
   const skillLabels = new Map((settings.skillSettings ?? []).map(skill => [skill.key, skill.label]));
   const diseases = Array.isArray(diseaseSettings?.diseases) ? diseaseSettings.diseases : [];
+  const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor).disease;
   return actor.items.filter(item => item.type === "disease").map(item => {
     const diseaseProfile = diseases.find(entry => entry.id === item.system?.diseaseId);
     const stageProfile = diseaseProfile?.stages?.find(stage => stage.id === item.system?.stageId);
@@ -6556,6 +6561,8 @@ function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
       uuid: item.uuid,
       name: diseaseProfile?.name || item.name,
       img: diseaseProfile?.img || item.img,
+      suppressed: suppressedIds.has(item.id),
+      suppressedLabel: "Временно подавлена",
       stageLabel: level ? `${stageName} (${level})` : stageName,
       worseningProgressLabel: formatProgress(item.system?.worseningProgress),
       worseningProgressMax: Math.max(1, toInteger(item.system?.worseningProgressMax) || 100),

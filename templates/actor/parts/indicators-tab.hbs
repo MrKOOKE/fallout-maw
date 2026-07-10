@@ -57,7 +57,7 @@
       <h2>{{localize "FALLOUTMAW.Common.Traumas"}}</h2>
       <div class="fallout-maw-trauma-list">
         {{#each traumas}}
-        <article class="fallout-maw-trauma-row" data-trauma-id="{{id}}">
+        <article class="fallout-maw-trauma-row{{#if suppressed}} suppressed{{/if}}" data-trauma-id="{{id}}" data-suppressed-label="{{suppressedLabel}}">
           <div class="fallout-maw-trauma-title">
             <img src="{{img}}" alt="{{name}}">
             <div class="fallout-maw-trauma-summary">
@@ -94,7 +94,7 @@
       <h2>{{localize "FALLOUTMAW.Common.Diseases"}}</h2>
       <div class="fallout-maw-trauma-list fallout-maw-disease-list">
         {{#each diseases}}
-        <article class="fallout-maw-trauma-row fallout-maw-disease-row" data-disease-id="{{id}}">
+        <article class="fallout-maw-trauma-row fallout-maw-disease-row{{#if suppressed}} suppressed{{/if}}" data-disease-id="{{id}}" data-suppressed-label="{{suppressedLabel}}">
           <div class="fallout-maw-trauma-title">
             <img src="{{img}}" alt="{{name}}">
             <div class="fallout-maw-trauma-summary">
@@ -158,7 +158,7 @@
     <h2>{{localize "FALLOUTMAW.Common.Traumas"}}</h2>
     <div class="fallout-maw-trauma-list">
       {{#each traumas}}
-      <article class="fallout-maw-trauma-row" data-trauma-id="{{id}}">
+      <article class="fallout-maw-trauma-row{{#if suppressed}} suppressed{{/if}}" data-trauma-id="{{id}}" data-suppressed-label="{{suppressedLabel}}">
         <div class="fallout-maw-trauma-title">
           <img src="{{img}}" alt="{{name}}">
           <div class="fallout-maw-trauma-summary">
@@ -195,7 +195,7 @@
     <h2>{{localize "FALLOUTMAW.Common.Diseases"}}</h2>
     <div class="fallout-maw-trauma-list fallout-maw-disease-list">
       {{#each diseases}}
-      <article class="fallout-maw-trauma-row fallout-maw-disease-row" data-disease-id="{{id}}">
+      <article class="fallout-maw-trauma-row fallout-maw-disease-row{{#if suppressed}} suppressed{{/if}}" data-disease-id="{{id}}" data-suppressed-label="{{suppressedLabel}}">
         <div class="fallout-maw-trauma-title">
           <img src="{{img}}" alt="{{name}}">
           <div class="fallout-maw-trauma-summary">
