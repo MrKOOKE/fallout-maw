@@ -154,6 +154,7 @@ import {
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
+  applyInventoryDragRotation,
   canShowInventoryRotateAction,
   createInventoryRotationUpdate,
   getInventoryRotationUnavailableLabel,
@@ -1820,7 +1821,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const sourceItemId = this.#draggedItemId || "";
     const parentId = this.#getInventoryContextParentId(zone);
-    const inputKey = `inventory:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${sourceItemId}:${this.#dragPreviewSourceKey}`;
+    const inputKey = `inventory:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${sourceItemId}:${this.#dragPreviewSourceKey}:${Boolean(this.#draggedItemData?.system?.placement?.rotated)}`;
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
     const targetItem = this.#getTargetStackItem(zone, sourceItemId, parentId);
@@ -1873,12 +1874,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #applyInventoryPlacementPreview(placement, parentId = ROOT_CONTAINER_ID) {
     if (!placement) return;
-    const previewKey = `placement:${parentId}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    const previewKey = `placement:${parentId}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${Boolean(placement.rotated)}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
     const grid = this.#getInventoryGridElement(parentId);
-    renderInventoryPlacementPreview(grid, placement, { className: "drop-preview", kind: "placement" });
+    renderInventoryPlacementPreview(grid, placement, {
+      className: "drop-preview",
+      kind: "placement"
+    });
   }
 
   #applyInventoryStackPreview(targetItem, parentId = ROOT_CONTAINER_ID) {
@@ -2111,11 +2115,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (data?.type !== "Item") return null;
 
     const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
-    if (ownedItem) return { item: ownedItem, itemData: ownedItem.toObject() };
+    if (ownedItem) return { item: ownedItem, itemData: applyInventoryDragRotation(ownedItem.toObject(), data) };
 
     const item = data.uuid ? resolveWorldItemSync(data.uuid) : null;
     if (!(item instanceof Item)) return null;
-    return { item, itemData: item.toObject() };
+    return { item, itemData: applyInventoryDragRotation(item.toObject(), data) };
   }
 
   #getPreviewItemData(event) {
@@ -2126,20 +2130,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
 
     const sourceKey = this.#getDragPreviewSourceKey(data);
-    if (this.#draggedItemData && sourceKey && (sourceKey === this.#dragPreviewSourceKey)) return this.#draggedItemData;
+    if (this.#draggedItemData && sourceKey && (sourceKey === this.#dragPreviewSourceKey)) {
+      return applyInventoryDragRotation(this.#draggedItemData, data);
+    }
 
     const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
     if (ownedItem) {
       this.#draggedItemId = ownedItem.id;
       this.#dragPreviewSourceKey = sourceKey;
-      this.#draggedItemData = ownedItem.toObject();
+      this.#draggedItemData = applyInventoryDragRotation(ownedItem.toObject(), data);
       return this.#draggedItemData;
     }
 
     const droppedDocument = data.uuid ? resolveWorldItemSync(data.uuid) : null;
     if (droppedDocument instanceof Item) {
       this.#dragPreviewSourceKey = sourceKey;
-      this.#draggedItemData = droppedDocument.toObject();
+      this.#draggedItemData = applyInventoryDragRotation(droppedDocument.toObject(), data);
       return this.#draggedItemData;
     }
     this.#clearDragPreviewCache();
@@ -2201,6 +2207,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #moveOwnedItem(item, placement, targetItem = null, parentId = ROOT_CONTAINER_ID, sourceStackIndex = 0) {
     if (placement.mode === "inventory" || placement.mode === LOCKED_STORAGE_PLACEMENT_MODE) {
       const itemData = item.toObject();
+      foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(placement.rotated));
       if (usesVirtualInventoryStacks(item)) {
         foundry.utils.setProperty(itemData, "system.quantity", getItemStackPartQuantity(item, sourceStackIndex));
       }

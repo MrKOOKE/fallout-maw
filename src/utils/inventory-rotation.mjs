@@ -9,6 +9,20 @@ import { toInteger } from "./numbers.mjs";
 
 const ROTATABLE_PLACEMENT_MODES = new Set(["inventory", "lockedStorage"]);
 
+export const INVENTORY_DRAG_ROTATION_KEY = "falloutMawInventoryRotated";
+
+export function getInventoryDragRotation(dragData = null) {
+  if (!dragData || !Object.hasOwn(dragData, INVENTORY_DRAG_ROTATION_KEY)) return null;
+  return Boolean(dragData[INVENTORY_DRAG_ROTATION_KEY]);
+}
+
+export function applyInventoryDragRotation(itemData = null, dragData = null) {
+  const rotated = getInventoryDragRotation(dragData);
+  if (!itemData || rotated === null) return itemData;
+  foundry.utils.setProperty(itemData, "system.placement.rotated", rotated);
+  return itemData;
+}
+
 export function canShowInventoryRotateAction(itemOrSystem = null) {
   const system = getItemSystem(itemOrSystem);
   return ROTATABLE_PLACEMENT_MODES.has(String(system?.placement?.mode ?? "inventory"));

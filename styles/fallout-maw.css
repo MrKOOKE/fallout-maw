@@ -4525,6 +4525,37 @@ body #prosemirror-dropdown {
   opacity: 0.45;
 }
 
+.fallout-maw-pointer-drag-preview {
+  margin: 0 !important;
+  opacity: 0.82 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  position: fixed !important;
+  z-index: 100000 !important;
+}
+
+.fallout-maw-pointer-drag-preview > img {
+  display: block !important;
+  height: var(--fallout-maw-pointer-drag-image-height) !important;
+  inset: var(--fallout-maw-pointer-drag-image-inset, 0.2rem) !important;
+  max-height: none !important;
+  max-width: none !important;
+  object-fit: contain !important;
+  position: absolute !important;
+  transform: none !important;
+  width: var(--fallout-maw-pointer-drag-image-width) !important;
+}
+
+.fallout-maw-pointer-drag-preview.rotated > img {
+  height: var(--fallout-maw-pointer-drag-image-height) !important;
+  inset: auto !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) rotate(90deg) !important;
+  transform-origin: center !important;
+  width: var(--fallout-maw-pointer-drag-image-width) !important;
+}
+
 .fallout-maw-draggable-item {
   cursor: grab;
 }

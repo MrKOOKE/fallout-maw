@@ -63,6 +63,7 @@ import {
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import {
+  applyInventoryDragRotation,
   canShowInventoryRotateAction,
   createInventoryRotationUpdate,
   getInventoryRotationUnavailableLabel,
@@ -1476,6 +1477,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const sourceStackIndex = Math.max(0, toInteger(data.stackIndex));
       const sourceStackQuantity = Math.max(0, toInteger(data.stackQuantity));
       const itemData = item.toObject();
+      applyInventoryDragRotation(itemData, data);
       if (usesVirtualInventoryStacks(item)) {
         foundry.utils.setProperty(itemData, "system.quantity", sourceStackQuantity || getItemStackPartQuantity(item, sourceStackIndex));
       }
@@ -1534,6 +1536,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         targetWeaponSlot: placementRequest.weaponSlot,
         targetX: pointerPlacement?.x ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
         targetY: pointerPlacement?.y ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
+        targetRotated: Boolean(itemData.system?.placement?.rotated),
         targetItemId: targetItem?.id ?? "",
         quantity,
         sourceStackIndex,
@@ -1606,9 +1609,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #getPreviewItemData(event) {
-    if (this.#draggedItemData) return this.#draggedItemData;
     const data = getDragEventData(event);
     if (data?.type !== "Item") return null;
+    if (this.#draggedItemData) return applyInventoryDragRotation(this.#draggedItemData, data);
     const item = this.#actor?.items?.get(String(data.itemId ?? ""));
     if (!item) return null;
     this.#draggedItemId = item.id;
@@ -1618,7 +1621,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const stackQuantity = Math.max(0, toInteger(data.stackQuantity));
       foundry.utils.setProperty(itemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
     }
-    return itemData;
+    return applyInventoryDragRotation(itemData, data);
   }
 
   async #getCraftStackQuantity(sourceItem, targetItem, _event, { sourceStackIndex = 0, sourceStackQuantity = 0, targetStackIndex = null } = {}) {
@@ -1675,7 +1678,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const parentId = getDropZoneParentId(zone);
-    const inputKey = `inventory:${actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#actor?.uuid ?? ""}:${this.#draggedItemId}`;
+    const inputKey = `inventory:${actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#actor?.uuid ?? ""}:${this.#draggedItemId}:${Boolean(this.#draggedItemData?.system?.placement?.rotated)}`;
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
     const sourceItem = this.#actor?.items.get(this.#draggedItemId);
@@ -1714,7 +1717,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #applyInventoryPlacementPreview(actor, parentId, placement) {
     if (!placement) return;
-    const previewKey = `inventory:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    const previewKey = `inventory:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${Boolean(placement.rotated)}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;

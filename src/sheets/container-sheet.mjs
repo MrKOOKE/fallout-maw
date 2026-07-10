@@ -31,6 +31,7 @@ import {
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
+  applyInventoryDragRotation,
   canShowInventoryRotateAction,
   createInventoryRotationUpdate,
   getInventoryRotationUnavailableLabel,
@@ -315,7 +316,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       if (usesVirtualInventoryStacks(ownedItem)) {
         foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(ownedItem, Math.max(0, toInteger(data.stackIndex)))));
       }
-      return { item: ownedItem, itemData };
+      return { item: ownedItem, itemData: applyInventoryDragRotation(itemData, data) };
     }
 
     const item = data.uuid ? resolveWorldItemSync(data.uuid) : null;
@@ -324,13 +325,13 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (usesVirtualInventoryStacks(item)) {
       foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(item, Math.max(0, toInteger(data.stackIndex)))));
     }
-    return { item, itemData };
+    return { item, itemData: applyInventoryDragRotation(itemData, data) };
   }
 
   #getPreviewItemData(event) {
-    if (this.#draggedItemData) return this.#draggedItemData;
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return null;
+    if (this.#draggedItemData) return applyInventoryDragRotation(this.#draggedItemData, data);
 
     const ownedItem = data.itemId ? this.actor?.items?.get(data.itemId) : null;
     if (ownedItem) {
@@ -339,7 +340,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       if (usesVirtualInventoryStacks(ownedItem)) {
         foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(ownedItem, Math.max(0, toInteger(data.stackIndex)))));
       }
-      return itemData;
+      return applyInventoryDragRotation(itemData, data);
     }
 
     const droppedDocument = data.uuid ? resolveWorldItemSync(data.uuid) : null;
@@ -348,7 +349,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       if (usesVirtualInventoryStacks(droppedDocument)) {
         foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(data.stackQuantity) || getItemStackPartQuantity(droppedDocument, Math.max(0, toInteger(data.stackIndex)))));
       }
-      return itemData;
+      return applyInventoryDragRotation(itemData, data);
     }
     return null;
   }
@@ -464,7 +465,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       return;
     }
 
-    const inputKey = `cell:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedItemId}`;
+    const inputKey = `cell:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedItemId}:${Boolean(this.#draggedItemData?.system?.placement?.rotated)}`;
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
 
@@ -502,7 +503,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   #applyInventoryPlacementPreview(placement) {
     if (!placement) return;
-    const previewKey = `placement:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    const previewKey = `placement:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${Boolean(placement.rotated)}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreview();
     this.#hoverPreviewKey = previewKey;
@@ -552,6 +553,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   async #moveOwnedItem(item, placement, targetItem = null, { sourceStackIndex = 0 } = {}) {
     const itemData = item.toObject();
+    foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(placement.rotated));
     if (usesVirtualInventoryStacks(item)) {
       foundry.utils.setProperty(itemData, "system.quantity", getItemStackPartQuantity(item, sourceStackIndex));
     }

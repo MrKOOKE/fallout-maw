@@ -55,6 +55,8 @@ import {
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
+  applyInventoryDragRotation,
+  INVENTORY_DRAG_ROTATION_KEY,
   canShowInventoryRotateAction,
   createInventoryRotationUpdate,
   getInventoryRotationUnavailableLabel,
@@ -882,6 +884,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         tradeOfferSide: side,
         tradeOfferKind: kind,
         tradeOfferKey: key,
+        [INVENTORY_DRAG_ROTATION_KEY]: Boolean(itemData?.system?.placement?.rotated),
         falloutMawSearchInventory: true
       }));
       event.currentTarget?.classList?.add("dragging");
@@ -973,6 +976,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const sourceStackQuantity = Math.max(0, toInteger(data.stackQuantity));
       const sourceAggregateStack = Boolean(data.falloutMawTradeCatalogAggregate);
       const draggedItemData = item.toObject();
+      applyInventoryDragRotation(draggedItemData, data);
       if (usesVirtualInventoryStacks(item)) {
         foundry.utils.setProperty(draggedItemData, "system.quantity", sourceAggregateStack
           ? (sourceStackQuantity || getItemQuantity(item))
@@ -1063,6 +1067,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         targetWeaponSlot: placementRequest.weaponSlot,
         targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
         targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
+        targetRotated: Boolean(draggedItemData.system?.placement?.rotated),
         targetItemId: targetItem?.id ?? "",
         sourceStackIndex,
         quantity
@@ -1291,6 +1296,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#tradeOffers.completed) return null;
 
     const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
+    const placementItemData = applyInventoryDragRotation(item.toObject(), dragData);
     const aggregateVirtualStack = Boolean(sourceWholeStack || dragData?.falloutMawTradeCatalogAggregate) && usesVirtualInventoryStacks(item);
     const selectedStackIndex = Math.max(0, toInteger(sourceStackIndex ?? dragData?.stackIndex));
     const selectedStackQuantity = Math.max(0, toInteger(sourceStackQuantity ?? dragData?.stackQuantity));
@@ -1322,7 +1328,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       });
     if (!quantity) return null;
 
-    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item, entryKind: "item", entryKey: item.id });
+    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item: placementItemData, entryKind: "item", entryKey: item.id });
     if (zone && !placement) return null;
     if (this.#tradeSessionSnapshot) {
       this.#captureScrollPositions();
@@ -1353,6 +1359,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const side = this.#getTradeSideForActor(offerActorUuid);
     if (!this.#canDepositCompletedTradeHub(side, sourceActor)) return null;
     const dragData = event?.type === "drop" ? this.#getDragEventData(event) : null;
+    const placementItemData = applyInventoryDragRotation(item.toObject(), dragData);
     const selectedStackIndex = Math.max(0, toInteger(sourceStackIndex ?? dragData?.stackIndex));
     const selectedStackQuantity = Math.max(0, toInteger(sourceStackQuantity ?? dragData?.stackQuantity));
     const sourceQuantity = usesVirtualInventoryStacks(item)
@@ -1369,7 +1376,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       });
     if (!quantity) return null;
 
-    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item, entryKind: "item", entryKey: item.id });
+    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item: placementItemData, entryKind: "item", entryKey: item.id });
     if (zone && !placement) return null;
     this.#beginInventoryMutation();
     try {
@@ -1415,7 +1422,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const offerActorUuid = String(zone?.dataset?.tradeOfferActorUuid ?? "");
     if (!TRADE_OFFER_SIDES.includes(side) || !kind || !key || !this.#canManageTradeOfferSide(side)) return null;
     if (offerActorUuid !== this.#getActorForTradeSide(side)?.uuid) return null;
-    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item, entryKind: kind, entryKey: key });
+    const placementItemData = item?.toObject?.() ?? (item ? foundry.utils.deepClone(item) : null);
+    applyInventoryDragRotation(placementItemData, data);
+    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item: placementItemData, entryKind: kind, entryKey: key });
     if (!placement) return null;
     if (this.#tradeSessionSnapshot) {
       this.#captureScrollPositions();
@@ -1901,9 +1910,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #getPreviewItemData(event) {
-    if (this.#draggedItemData) return this.#draggedItemData;
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return null;
+    if (this.#draggedItemData) return applyInventoryDragRotation(this.#draggedItemData, data);
     this.#draggedTradeOfferKind = String(data.tradeOfferKind ?? "");
     this.#draggedTradeOfferKey = String(data.tradeOfferKey ?? "");
     if (this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer && data.tradeOfferKind === "item") {
@@ -1912,7 +1921,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!itemData) return null;
       this.#draggedItemId = String(entry.itemId ?? "");
       this.#draggedActorUuid = String(entry.sourceActorUuid ?? "");
-      return itemData;
+      return applyInventoryDragRotation(itemData, data);
     }
     const actor = this.#getActorByUuid(String(data.sourceActorUuid ?? data.actorUuid ?? ""));
     const item = actor?.items?.get(String(data.itemId ?? ""));
@@ -1925,7 +1934,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const stackQuantity = Math.max(0, toInteger(data.stackQuantity));
       foundry.utils.setProperty(itemData, "system.quantity", stackQuantity || getItemStackPartQuantity(item, stackIndex));
     }
-    return itemData;
+    return applyInventoryDragRotation(itemData, data);
   }
 
   #getDragEventData(event) {
@@ -2022,7 +2031,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
 
     const parentId = getDropZoneParentId(zone);
-    const inputKey = `inventory:${actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedActorUuid}:${this.#draggedItemId}`;
+    const inputKey = `inventory:${actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedActorUuid}:${this.#draggedItemId}:${Boolean(this.#draggedItemData?.system?.placement?.rotated)}`;
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
     const targetItem = this.#getTargetStackItem(zone, actor, this.#draggedItemId, parentId);
@@ -2063,7 +2072,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #applyInventoryPlacementPreview(actor, parentId, placement) {
     if (!placement) return;
-    const previewKey = `inventory:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    const previewKey = `inventory:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${Boolean(placement.rotated)}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
@@ -2117,13 +2126,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const entryKind = this.#draggedTradeOfferKind || "item";
     const entryKey = this.#draggedTradeOfferKey || this.#draggedItemId;
     const placement = side
-      ? this.#getTradeOfferDropPlacement({ side, zone, event, item: sourceItem ?? this.#draggedItemData, entryKind, entryKey })
+      ? this.#getTradeOfferDropPlacement({ side, zone, event, item: this.#draggedItemData ?? sourceItem, entryKind, entryKey })
       : null;
     if (!placement) {
       this.#clearInventoryHoverPreviewClasses();
       return;
     }
-    const previewKey = `trade-offer:${offerActorUuid}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${this.#draggedActorUuid}:${this.#draggedItemId}:${entryKind}:${entryKey}`;
+    const previewKey = `trade-offer:${offerActorUuid}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${Boolean(placement.rotated)}:${this.#draggedActorUuid}:${this.#draggedItemId}:${entryKind}:${entryKey}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
@@ -4799,6 +4808,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetWeaponSlot: String(payload.targetWeaponSlot ?? ""),
     targetX: payload.targetX,
     targetY: payload.targetY,
+    targetRotated: payload.targetRotated,
     targetItemId: String(payload.targetItemId ?? ""),
     quantity,
     sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
@@ -6626,6 +6636,7 @@ export async function transferItemBetweenActors({
   targetWeaponSlot = "",
   targetX = null,
   targetY = null,
+  targetRotated = null,
   targetItemId = "",
   quantity = 0,
   sourceStackIndex = 0,
@@ -6635,6 +6646,9 @@ export async function transferItemBetweenActors({
 } = {}) {
   assertSearchTransferableItem(sourceItem, { allowLocked, allowButchering });
   const itemData = sourceItem.toObject();
+  if (targetRotated !== null && targetRotated !== undefined) {
+    foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(targetRotated));
+  }
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
@@ -6668,7 +6682,8 @@ export async function transferItemBetweenActors({
       parentId: targetParentId,
       quantity: transferQuantity,
       targetItem,
-      sourceStackIndex
+      sourceStackIndex,
+      rotatedItemData: itemData
     });
     if (moved) return moved;
     return insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
@@ -6907,7 +6922,8 @@ async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requeste
   parentId = ROOT_CONTAINER_ID,
   quantity = 0,
   targetItem = null,
-  sourceStackIndex = 0
+  sourceStackIndex = 0,
+  rotatedItemData = null
 } = {}) {
   if (!actor || !sourceItem || targetItem) return null;
   if (!isInventoryContextPlacementMode(requestedPlacement?.mode)) return null;
@@ -6922,7 +6938,7 @@ async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requeste
       || sourceItem.system?.placement?.mode !== placementMode
     ) return null;
     const placement = createContextInventoryPlacement(
-      normalizeInventoryPlacement(requestedPlacement, sourceItem, actor.items),
+      normalizeInventoryPlacement(requestedPlacement, rotatedItemData ?? sourceItem, actor.items),
       parentId
     );
     const updateData = createItemStackPartPlacementUpdate(sourceItem, sourceStackIndex, placement);
@@ -6934,7 +6950,7 @@ async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requeste
 
   if (Math.max(1, toInteger(quantity) || sourceQuantity) !== sourceQuantity) return null;
 
-  const itemData = sourceItem.toObject();
+  const itemData = rotatedItemData ?? sourceItem.toObject();
   if (isContainerItem(sourceItem)) {
     if (String(parentId ?? ROOT_CONTAINER_ID) === sourceItem.id) return null;
     if (getAllContainedItems(sourceItem.id, actor.items).some(item => item.id === String(parentId ?? ROOT_CONTAINER_ID))) return null;
