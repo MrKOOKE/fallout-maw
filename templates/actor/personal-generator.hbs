@@ -33,31 +33,33 @@
         <input type="checkbox" name="name.overwriteBaseName" {{#if config.name.overwriteBaseName}}checked{{/if}}>
         <span>Заменять базовое имя</span>
       </label>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="name.useSurname" {{#if config.name.useSurname}}checked{{/if}}>
-        <span>Добавлять фамилию</span>
-      </label>
-      <label>
-        <span>Блок имен</span>
-        <select name="name.firstNameBlockId">
-          {{#each nameBlockChoices}}
-          <option value="{{value}}" {{#if firstSelected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </label>
-      <label>
-        <span>Блок фамилий</span>
-        <select name="name.surnameBlockId">
-          {{#each nameBlockChoices}}
-          <option value="{{value}}" {{#if surnameSelected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </label>
       <label>
         <span>Имен в предпросмотре</span>
         <input type="number" name="name.countPreview" value="{{config.name.countPreview}}" min="1" max="30" step="1">
       </label>
     </div>
+
+    <div class="fallout-maw-pg-name-block-list">
+      {{#each nameBlockRows}}
+      <div class="fallout-maw-pg-name-block-row" data-pg-name-block data-index="{{index}}">
+        <label>
+          <span>Часть имени</span>
+          <select data-field="blockId">
+            {{#each choices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+        {{#if canDelete}}
+        <button type="button" data-action="deleteNameBlock" title="Удалить часть имени"><i class="fa-solid fa-trash"></i></button>
+        {{/if}}
+      </div>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-pg-add-block-row">
+      <button type="button" data-action="createNameBlock"><i class="fa-solid fa-plus"></i> Добавить часть имени</button>
+    </div>
+
     <p class="fallout-maw-pg-preview">{{generatedNamePreview}}</p>
   </section>
 
@@ -68,11 +70,11 @@
         <option value="add" {{#unless (eq config.currency.mode "set")}}selected{{/unless}}>Добавить к базовой</option>
         <option value="set" {{#if (eq config.currency.mode "set")}}selected{{/if}}>Заменить значением</option>
       </select>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
+        <span>Включить</span>
+      </label>
     </header>
-    <label class="fallout-maw-inline-check">
-      <input type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
-      <span>Генерировать валюту</span>
-    </label>
     <div class="fallout-maw-settings-table fallout-maw-pg-currency-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
         <span>Валюта</span>
@@ -81,7 +83,10 @@
       </div>
       {{#each currencyChoices}}
       <div class="fallout-maw-settings-row" data-currency-range="{{key}}">
-        <span>{{label}}</span>
+        <span class="fallout-maw-pg-currency-label">
+          {{#if hasImage}}<img class="fallout-maw-pg-currency-icon" src="{{img}}" alt="" draggable="false">{{/if}}
+          {{label}}
+        </span>
         <input type="number" data-field="min" value="{{range.min}}" min="0" step="1">
         <input type="number" data-field="max" value="{{range.max}}" min="0" step="1">
       </div>
@@ -122,44 +127,6 @@
     </div>
   </section>
 
-  <section class="fallout-maw-panel fallout-maw-pg-abilities-section">
-    <header class="fallout-maw-panel-header">
-      <h2>Способности</h2>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="abilities.enabled" {{#if config.abilities.enabled}}checked{{/if}}>
-        <span>Включить</span>
-      </label>
-    </header>
-
-    <div class="fallout-maw-pg-dropzone" data-pg-ability-drop>
-      <div class="fallout-maw-pg-dropzone-header">
-        <span>Способности генератора</span>
-      </div>
-
-      <div class="fallout-maw-pg-entry-list">
-        {{#each config.abilityEntries}}
-        <article class="fallout-maw-pg-entry fallout-maw-pg-ability-entry" data-pg-ability-entry data-index="{{@index}}">
-          <input type="hidden" data-field="sourceId" value="{{sourceId}}">
-          <input type="hidden" data-field="categoryId" value="{{categoryId}}">
-          <input type="hidden" data-field="uuid" value="{{uuid}}">
-          <input type="hidden" data-field="name" value="{{name}}">
-          <input type="hidden" data-field="img" value="{{img}}">
-
-          <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="">
-          <div class="fallout-maw-pg-entry-content">
-            <strong class="fallout-maw-pg-entry-name">{{name}}</strong>
-          </div>
-          <div class="fallout-maw-pg-entry-actions">
-            <button type="button" data-action="deleteAbilityEntry" title="Удалить способность"><i class="fa-solid fa-trash"></i></button>
-          </div>
-        </article>
-        {{else}}
-        <p class="fallout-maw-empty-list">Перетащите способности сюда.</p>
-        {{/each}}
-      </div>
-    </div>
-  </section>
-
   <section class="fallout-maw-panel fallout-maw-pg-items-section">
     <header class="fallout-maw-panel-header">
       <h2>Предметы</h2>
@@ -190,7 +157,7 @@
             <span>Значение</span>
             <input type="text" data-field="pick" value="{{pick}}" placeholder="1 или 2-5">
           </label>
-          <label>
+          <label class="fallout-maw-pg-pick-currency" data-pg-pick-currency {{#unless showPickCurrency}}hidden{{/unless}}>
             <span>Валюта ценности</span>
             <select data-field="pickCurrency">
               {{#each currencyChoices}}
@@ -199,11 +166,6 @@
             </select>
           </label>
         </div>
-
-        <label class="fallout-maw-pg-exclusions">
-          <span>Взаимоисключения</span>
-          <input type="text" data-field="exclusions" value="{{exclusionsText}}" placeholder="id блоков через запятую">
-        </label>
 
         <div class="fallout-maw-pg-dropzone" data-pg-block-drop>
           <div class="fallout-maw-pg-dropzone-header">
@@ -216,7 +178,8 @@
             {{#if chain}}
             <div class="fallout-maw-pg-chain" data-pg-chain="{{chain}}">
               {{#each entries}}
-              <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+              <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-entry-id="{{entryId}}" data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+                <input type="hidden" data-field="entryId" value="{{entryId}}">
                 <input type="hidden" data-field="kind" value="{{kind}}">
                 <input type="hidden" data-field="sourceId" value="{{sourceId}}">
                 <input type="hidden" data-field="categoryId" value="{{categoryId}}">
@@ -227,7 +190,7 @@
                 <input type="hidden" data-field="chain" value="{{chain}}">
                 <input type="hidden" data-field="itemTradeLocked" value="{{#if itemTradeLocked}}1{{else}}0{{/if}}">
 
-                <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="">
+                <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="" draggable="false">
                 <div class="fallout-maw-pg-entry-content">
                   <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
                   <div class="fallout-maw-pg-entry-fields">
@@ -253,7 +216,8 @@
             </div>
             {{else}}
             {{#each entries}}
-            <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+            <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-entry-id="{{entryId}}" data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+              <input type="hidden" data-field="entryId" value="{{entryId}}">
               <input type="hidden" data-field="kind" value="{{kind}}">
               <input type="hidden" data-field="sourceId" value="{{sourceId}}">
               <input type="hidden" data-field="categoryId" value="{{categoryId}}">
@@ -264,7 +228,7 @@
               <input type="hidden" data-field="chain" value="{{chain}}">
               <input type="hidden" data-field="itemTradeLocked" value="{{#if itemTradeLocked}}1{{else}}0{{/if}}">
 
-              <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="">
+              <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="" draggable="false">
               <div class="fallout-maw-pg-entry-content">
                 <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
                 <div class="fallout-maw-pg-entry-fields">

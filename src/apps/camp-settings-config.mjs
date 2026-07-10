@@ -2,6 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import {
   getCampSettings,
   getNeedSettings,
+  resetCampSettings,
   setCampSettings
 } from "../settings/accessors.mjs";
 import {
@@ -104,7 +105,7 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   static async #onResetDefaults(event) {
     event.preventDefault();
-    this.settings = createDefaultCampSettings();
+    this.settings = await resetCampSettings();
     return this.forceRender();
   }
 

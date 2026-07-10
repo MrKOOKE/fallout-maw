@@ -65,12 +65,18 @@ const DEFAULT_NAME_BLOCKS = Object.freeze([
   { id: DEFAULT_NAME_BLOCK_IDS.nobleSurname, name: "Знатные фамилии", namesText: "Блэквуд, Фэрфакс, Уиндзор, Кавендиш, Монтгомери, Равенскрофт" }
 ]);
 
+const DEFAULT_NAME_BLOCK_ID_LIST = Object.freeze([
+  DEFAULT_NAME_BLOCK_IDS.male,
+  DEFAULT_NAME_BLOCK_IDS.commonSurname
+]);
+
 const PERSONAL_GENERATOR_DEFAULTS = Object.freeze({
   enabled: false,
   name: {
     enabled: true,
     appendToTokenName: true,
     overwriteBaseName: false,
+    blockIds: [...DEFAULT_NAME_BLOCK_ID_LIST],
     firstNameBlockId: DEFAULT_NAME_BLOCK_IDS.male,
     surnameBlockId: DEFAULT_NAME_BLOCK_IDS.commonSurname,
     useSurname: true,
@@ -96,7 +102,7 @@ const PERSONAL_GENERATOR_DEFAULTS = Object.freeze({
   }
 });
 
-const PERSONAL_GENERATOR_DROPZONE_SELECTOR = "[data-pg-block-drop], [data-pg-ability-drop]";
+const PERSONAL_GENERATOR_DROPZONE_SELECTOR = "[data-pg-block-drop]";
 
 let personalGeneratorWindow = null;
 
@@ -237,7 +243,9 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
 
   static async #onResetDefaults(event) {
     event.preventDefault();
-    await game.settings.set(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, { blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block })) });
+    await game.settings.set(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, getBaselineDefault(PERSONAL_NAME_RANDOMIZER_SETTING, {
+      blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block }))
+    }));
     this.blocks = getPersonalNameBlocks();
     return this.forceRender();
   }
@@ -266,7 +274,9 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   #chainMoveHandler = null;
   #chainMouseDownHandler = null;
   #chainKeyHandler = null;
-  #modifierKeyHandler = null;
+  #interactionAbort = null;
+  #draggingEntry = null;
+  #activeDragPayload = null;
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-personal-generator",
@@ -289,7 +299,8 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       previewNames: this.#onPreviewNames,
       togglePrototypeTokenLink: this.#onTogglePrototypeTokenLink,
       openItemEntry: this.#onOpenItemEntry,
-      deleteAbilityEntry: this.#onDeleteAbilityEntry,
+      createNameBlock: this.#onCreateNameBlock,
+      deleteNameBlock: this.#onDeleteNameBlock,
       toggleItemLock: this.#onToggleItemLock,
       chainItemEntry: this.#onChainItemEntry
     }
@@ -307,7 +318,10 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     if (this.rendered && this.#actor && this.#actor.uuid !== actor?.uuid) void this.#saveCurrentConfig({ fromForm: true });
     this.#actorUuid = actor?.uuid ?? "";
     this.#actor = actor ?? null;
+    const raw = actor?.getFlag?.(SYSTEM_ID, "personalGenerator") ?? {};
+    const missingEntryIds = personalGeneratorConfigMissingEntryIds(raw);
     this.#config = getPersonalGeneratorConfig(actor);
+    if (missingEntryIds && actor) void actor.setFlag(SYSTEM_ID, "personalGenerator", this.#config);
   }
 
   get _dragDrop() {
@@ -318,7 +332,9 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
         drop: () => true
       },
       callbacks: {
-        drop: this.#onDropItem.bind(this)
+        dragover: this.#onDropzoneDragOver.bind(this),
+        dragenter: this.#onDropzoneDragEnter.bind(this),
+        dragleave: this.#onDropzoneDragLeave.bind(this)
       }
     });
   }
@@ -332,7 +348,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       config: preparePersonalGeneratorContext(this.#config),
       prototypeTokenLink: getPrototypeTokenLinkContext(this.#actor),
       currencyChoices: getCurrencyChoices(this.#config),
-      nameBlockChoices: getNameBlockChoices(this.#config),
+      nameBlockRows: getNameBlockRows(this.#config),
       pickModeChoices: getPickModeChoices(),
       generatedNamePreview: createNamePreview(this.#config.name)
     };
@@ -340,35 +356,22 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#resetEntryVisualState();
     this._dragDrop.bind(this.element);
-    this.element.addEventListener("input", event => this.#queueAutosaveFromEvent(event, 350));
-    this.element.addEventListener("change", event => this.#queueAutosaveFromEvent(event, 0));
-    this.element.addEventListener("click", event => this.#onEntryClick(event));
-    this.element.addEventListener("dragstart", event => this.#onEntryDragStart(event));
-    this.element.addEventListener("dragend", event => this.#onEntryDragEnd(event));
-    this.element.addEventListener("dragenter", event => this.#onDropzoneDragEnter(event));
-    this.element.addEventListener("dragleave", event => this.#onDropzoneDragLeave(event));
-    this.element.addEventListener("dragover", event => this.#onDropzoneDragOver(event));
-    this.element.addEventListener("pointerdown", event => this.#onEntryPointerDown(event), true);
-    this.element.addEventListener("pointerup", () => this.#restoreEntryDragging(), true);
-    this.element.addEventListener("pointercancel", () => this.#restoreEntryDragging(), true);
-    if (this.#modifierKeyHandler) {
-      document.removeEventListener("keydown", this.#modifierKeyHandler, true);
-      document.removeEventListener("keyup", this.#modifierKeyHandler, true);
-    }
-    this.#modifierKeyHandler = event => this.#onModifierKeyChange(event);
-    document.addEventListener("keydown", this.#modifierKeyHandler, true);
-    document.addEventListener("keyup", this.#modifierKeyHandler, true);
+    this.#activateInteractionListeners();
+    this.#syncAllPickModeFields();
     this.#syncChainLinkDisplay();
+  }
+
+  async _onClose(options) {
+    this.#cancelChainLink();
+    this.#abortInteractionListeners();
+    await super._onClose(options);
   }
 
   async close(options) {
     this.#cancelChainLink();
-    if (this.#modifierKeyHandler) {
-      document.removeEventListener("keydown", this.#modifierKeyHandler, true);
-      document.removeEventListener("keyup", this.#modifierKeyHandler, true);
-      this.#modifierKeyHandler = null;
-    }
+    this.#abortInteractionListeners();
     if (this.#autosaveTimeout) {
       window.clearTimeout(this.#autosaveTimeout);
       this.#autosaveTimeout = null;
@@ -414,10 +417,13 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   static async #onDeleteItemEntry(event, target) {
     event.preventDefault();
     const blockIndex = getRowIndex(target, "[data-pg-block]");
-    const entryIndex = getRowIndex(target, "[data-pg-entry]");
-    if (blockIndex < 0 || entryIndex < 0) return undefined;
+    const entryId = getItemEntryId(target);
+    if (blockIndex < 0 || !entryId) return undefined;
     this.#config = this.#readConfigFromForm();
-    this.#config.items.blocks[blockIndex]?.entries.splice(entryIndex, 1);
+    const block = this.#config.items.blocks[blockIndex];
+    if (!block) return undefined;
+    block.entries = block.entries.filter(entry => entry.entryId !== entryId);
+    normalizeChainsInBlock(block);
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -478,13 +484,24 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return document?.sheet?.render?.(true);
   }
 
-  static async #onDeleteAbilityEntry(event, target) {
+  static async #onCreateNameBlock(event) {
     event.preventDefault();
-    const entries = Array.from(this.element?.querySelectorAll("[data-pg-ability-entry]") ?? []);
-    const index = entries.indexOf(target.closest("[data-pg-ability-entry]"));
+    this.#config = this.#readConfigFromForm();
+    const fallback = getPersonalNameBlocks()[0]?.id ?? DEFAULT_NAME_BLOCK_IDS.male;
+    this.#config.name.blockIds.push(fallback);
+    this.#config.name = normalizeNameConfig(this.#config.name);
+    await this.#saveCurrentConfig();
+    return this.render({ force: true });
+  }
+
+  static async #onDeleteNameBlock(event, target) {
+    event.preventDefault();
+    const index = getRowIndex(target, "[data-pg-name-block]");
     if (index < 0) return undefined;
     this.#config = this.#readConfigFromForm();
-    this.#config.abilities.entries.splice(index, 1);
+    if (this.#config.name.blockIds.length <= 1) return undefined;
+    this.#config.name.blockIds.splice(index, 1);
+    this.#config.name = normalizeNameConfig(this.#config.name);
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -505,34 +522,41 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   static async #onChainItemEntry(event, target) {
     event.preventDefault();
     const entry = target.closest("[data-pg-entry]");
-    const block = target.closest("[data-pg-block]");
-    const blockIndex = getRowIndex(block, "[data-pg-block]");
-    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
-    if (!entry || blockIndex < 0 || entryIndex < 0) return undefined;
+    const blockId = getBlockId(entry);
+    const entryId = getItemEntryId(entry);
+    if (!entry || !blockId || !entryId) return undefined;
 
     this.#config = this.#readConfigFromForm();
-    const currentEntry = this.#config.items.blocks[blockIndex]?.entries[entryIndex];
+    const block = findPersonalGeneratorBlock(this.#config.items.blocks, blockId);
+    const currentEntry = findPersonalGeneratorEntry(block, entryId);
     if (!currentEntry) return undefined;
 
     if ((event.shiftKey || event.altKey) && currentEntry.chain) {
       currentEntry.chain = "";
-      normalizeChainsInBlock(this.#config.items.blocks[blockIndex]);
+      normalizeChainsInBlock(block);
       this.#cancelChainLink();
       await this.#saveCurrentConfig();
       return this.render({ force: true });
     }
 
-    this.#startChainLink({ blockIndex, entryIndex, entryElement: entry, buttonElement: target });
+    this.#startChainLink({ blockId, entryId, entryElement: entry, buttonElement: target });
     return undefined;
   }
 
   async #onDropItem(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const internalDrop = this.#resolveInternalEntryDropData(event);
     this.#clearDropzoneHighlight(event.target?.closest?.(PERSONAL_GENERATOR_DROPZONE_SELECTOR));
-    if (event.target?.closest?.("[data-pg-ability-drop]")) return this.#onDropAbility(event);
-    const internalDrop = this.#getInternalEntryDropData(event);
-    if (internalDrop) return this.#moveInternalEntryDrop(event, internalDrop);
+    if (internalDrop) {
+      await this.#moveInternalEntryDrop(event, internalDrop);
+      this.#activeDragPayload = null;
+      this.#resetEntryVisualState();
+      return undefined;
+    }
+    this.#resetEntryVisualState();
 
-    const blockElement = event.target?.closest?.("[data-pg-block]");
+    const blockElement = this.#getItemBlockElementForDrop(event);
     const blockIndex = getRowIndex(blockElement, "[data-pg-block]");
     if (blockIndex < 0) return undefined;
 
@@ -551,22 +575,6 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
 
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks[blockIndex]?.entries.push(createItemEntryFromItem(item));
-    await this.#saveCurrentConfig();
-    return this.render({ force: true });
-  }
-
-  async #onDropAbility(event) {
-    const data = this.#getDragEventData(event);
-    const entry = await createAbilityEntryFromDropData(data);
-    if (!entry) return undefined;
-
-    this.#config = this.#readConfigFromForm();
-    const entries = this.#config.abilities.entries;
-    const duplicate = entries.some(existing => (
-      (entry.sourceId && existing.sourceId === entry.sourceId)
-      || (!entry.sourceId && entry.uuid && existing.uuid === entry.uuid)
-    ));
-    if (!duplicate) entries.push(entry);
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -594,9 +602,86 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     dropzone.classList.add("drag-over");
   }
 
+  #activateInteractionListeners() {
+    this.#abortInteractionListeners();
+    const element = this.element;
+    if (!element) return undefined;
+
+    this.#interactionAbort = new AbortController();
+    const { signal } = this.#interactionAbort;
+    const onPointerRelease = () => {
+      this.#restoreEntryDragging();
+    };
+
+    this.#prepareEntryImagesForDrag(element);
+    const interactionRoot = element.querySelector(".window-content") ?? element;
+
+    element.addEventListener("input", event => this.#queueAutosaveFromEvent(event, 350), { signal });
+    element.addEventListener("change", event => this.#queueAutosaveFromEvent(event, 0), { signal });
+    interactionRoot.addEventListener("click", event => this.#onEntryClick(event), { signal });
+    interactionRoot.addEventListener("dragstart", event => this.#onEntryDragStart(event), { signal });
+    interactionRoot.addEventListener("dragend", event => this.#onEntryDragEnd(event), { signal });
+    interactionRoot.addEventListener("dragenter", event => this.#onDropzoneDragEnter(event), { signal });
+    interactionRoot.addEventListener("dragleave", event => this.#onDropzoneDragLeave(event), { signal });
+    interactionRoot.addEventListener("dragover", event => this.#onDropzoneDragOver(event), { signal });
+    interactionRoot.addEventListener("drop", event => void this.#onDropItem(event), { signal });
+    interactionRoot.addEventListener("change", event => {
+      if (event.target?.matches?.("[data-field='pickMode']")) this.#syncPickModeFields(event.target.closest("[data-pg-block]"));
+    }, { signal });
+    interactionRoot.addEventListener("pointerdown", event => this.#onEntryPointerDown(event), { capture: true, signal });
+    interactionRoot.addEventListener("pointerup", onPointerRelease, { capture: true, signal });
+    interactionRoot.addEventListener("pointercancel", onPointerRelease, { capture: true, signal });
+    document.addEventListener("dragend", event => this.#onDocumentDragEnd(event), { capture: true, signal });
+    document.addEventListener("keydown", event => this.#onModifierKeyChange(event), { capture: true, signal });
+    document.addEventListener("keyup", event => this.#onModifierKeyChange(event), { capture: true, signal });
+    return undefined;
+  }
+
+  #prepareEntryImagesForDrag(root = this.element) {
+    for (const img of root?.querySelectorAll(".fallout-maw-pg-entry-img") ?? []) {
+      img.draggable = false;
+    }
+  }
+
+  #abortInteractionListeners() {
+    this.#interactionAbort?.abort();
+    this.#interactionAbort = null;
+  }
+
+  #resetEntryVisualState() {
+    const root = this.element;
+
+    if (this.#draggingEntry?.isConnected) this.#draggingEntry.classList.remove("pg-chip-dragging");
+    this.#draggingEntry = null;
+
+    for (const entry of root?.querySelectorAll("[data-pg-entry].pg-chip-dragging") ?? []) {
+      entry.classList.remove("pg-chip-dragging");
+    }
+    for (const dropzone of root?.querySelectorAll(`${PERSONAL_GENERATOR_DROPZONE_SELECTOR}.drag-over`) ?? []) {
+      this.#clearDropzoneHighlight(dropzone);
+    }
+    if (!this.#chainSource) {
+      for (const entry of root?.querySelectorAll("[data-pg-entry]") ?? []) {
+        entry.classList.remove("pg-chain-link-source", "pg-chain-link-target");
+      }
+    }
+
+    this.#restoreEntryDragging();
+    return undefined;
+  }
+
+  #onDocumentDragEnd(event) {
+    const fromApp = !!event.target?.closest?.(`#${this.id}`);
+    if (!fromApp && !this.#draggingEntry && !this.#activeDragPayload) return undefined;
+    this.#activeDragPayload = null;
+    return this.#resetEntryVisualState();
+  }
+
   #getDropEffectForEvent(event) {
-    const data = this.#getDragEventData(event);
-    if (data?.type === "fallout-maw-personal-generator-entry") return data.copy === true || event.shiftKey === true ? "copy" : "move";
+    const data = this.#resolveInternalEntryDropData(event) ?? this.#getDragEventData(event);
+    if (data?.type === "fallout-maw-personal-generator-entry") {
+      return data.copy === true || event.shiftKey === true ? "copy" : "move";
+    }
     return "copy";
   }
 
@@ -614,23 +699,28 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       event.stopPropagation();
       return;
     }
-    const block = entry.closest("[data-pg-block]");
-    const blockIndex = getRowIndex(block, "[data-pg-block]");
-    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
-    if (blockIndex < 0 || entryIndex < 0) return;
+    const blockId = getBlockId(entry);
+    const entryId = getItemEntryId(entry);
+    if (!blockId || !entryId) return;
+    this.#draggingEntry = entry;
     entry.classList.add("pg-chip-dragging");
-    event.dataTransfer?.setData("text/plain", JSON.stringify({
+    const payload = {
       type: "fallout-maw-personal-generator-entry",
-      blockIndex,
-      entryIndex,
+      blockId,
+      entryId,
       copy: event.shiftKey === true
-    }));
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = event.shiftKey ? "copy" : "move";
+    };
+    this.#activeDragPayload = payload;
+    event.dataTransfer?.setData("text/plain", JSON.stringify(payload));
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "copyMove";
+    }
   }
 
-  #onEntryDragEnd(event) {
-    event.target?.closest?.("[data-pg-entry]")?.classList.remove("pg-chip-dragging");
-    this.#restoreEntryDragging();
+  #onEntryDragEnd(_event) {
+    this.#activeDragPayload = null;
+    this.#resetEntryVisualState();
+    return undefined;
   }
 
   #onEntryPointerDown(event) {
@@ -646,13 +736,16 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     }
   }
 
-  #getInternalEntryDropData(event) {
-    try {
-      const data = JSON.parse(event.dataTransfer?.getData("text/plain") || "{}");
-      return data?.type === "fallout-maw-personal-generator-entry" ? data : null;
-    } catch (_error) {
-      return null;
-    }
+  #resolveInternalEntryDropData(event) {
+    const data = this.#getDragEventData(event);
+    if (data?.type === "fallout-maw-personal-generator-entry" && data.entryId && data.blockId) return data;
+    if (this.#activeDragPayload?.type === "fallout-maw-personal-generator-entry") return { ...this.#activeDragPayload };
+    return null;
+  }
+
+  #getItemBlockElementForDrop(event) {
+    return event.target?.closest?.("[data-pg-block-drop]")?.closest?.("[data-pg-block]")
+      ?? event.target?.closest?.("[data-pg-block]");
   }
 
   #getDragEventData(event) {
@@ -682,38 +775,37 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
 
   async #moveInternalEntryDrop(event, data) {
     event.preventDefault();
-    const targetBlock = event.target?.closest?.("[data-pg-block]");
-    const targetBlockIndex = getRowIndex(targetBlock, "[data-pg-block]");
-    const sourceBlockIndex = toInteger(data.blockIndex);
-    const sourceEntryIndex = toInteger(data.entryIndex);
-    if (targetBlockIndex < 0 || sourceBlockIndex < 0 || sourceEntryIndex < 0) return undefined;
+    event.stopPropagation();
 
+    const targetBlockElement = this.#getItemBlockElementForDrop(event);
+    const targetBlockId = getBlockId(targetBlockElement);
+    if (!targetBlockId) return undefined;
+
+    const copy = data.copy === true || event.shiftKey === true;
     this.#config = this.#readConfigFromForm();
-    const sourceBlock = this.#config.items.blocks[sourceBlockIndex];
-    const target = this.#config.items.blocks[targetBlockIndex];
-    const source = sourceBlock?.entries?.[sourceEntryIndex];
-    if (!sourceBlock || !target || !source) return undefined;
+    const sourceBlock = findPersonalGeneratorBlock(this.#config.items.blocks, data.blockId);
+    const targetBlock = findPersonalGeneratorBlock(this.#config.items.blocks, targetBlockId);
+    const sourceEntry = findPersonalGeneratorEntry(sourceBlock, data.entryId);
+    if (!sourceBlock || !targetBlock || !sourceEntry) return undefined;
 
-    const chain = String(source.chain ?? "").trim();
-    const moving = chain
-      ? sourceBlock.entries.filter(entry => String(entry.chain ?? "").trim() === chain)
-      : [source];
-    if (!moving.length) return undefined;
+    const moving = getPersonalGeneratorChainGroup(sourceBlock.entries, sourceEntry);
+    const movedEntries = copy
+      ? clonePersonalGeneratorItemEntries(moving)
+      : moving.map(entry => entry);
 
-    const copied = data.copy === true || event.shiftKey === true;
-    const movedEntries = moving.map(entry => copied ? { ...entry } : entry);
-    if (copied && chain) {
+    if (copy && moving.length > 1) {
       const newChain = foundry.utils.randomID();
       for (const entry of movedEntries) entry.chain = newChain;
     }
 
-    if (!copied) {
-      const movingSet = new Set(moving);
-      sourceBlock.entries = sourceBlock.entries.filter(entry => !movingSet.has(entry));
+    if (!copy) {
+      const movingIds = new Set(moving.map(entry => entry.entryId));
+      sourceBlock.entries = sourceBlock.entries.filter(entry => !movingIds.has(entry.entryId));
       normalizeChainsInBlock(sourceBlock);
     }
-    target.entries.push(...movedEntries);
-    normalizeChainsInBlock(target);
+
+    targetBlock.entries.push(...movedEntries);
+    normalizeChainsInBlock(targetBlock);
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -765,9 +857,9 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return this.#saveChain;
   }
 
-  #startChainLink({ blockIndex, entryIndex, entryElement, buttonElement }) {
+  #startChainLink({ blockId, entryId, entryElement, buttonElement }) {
     this.#cancelChainLink();
-    this.#chainSource = { blockIndex, entryIndex };
+    this.#chainSource = { blockId, entryId };
     this.#createChainOverlay(entryElement, buttonElement);
     this.#syncChainLinkDisplay();
   }
@@ -840,17 +932,17 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       return;
     }
 
-    const block = entry.closest("[data-pg-block]");
-    const blockIndex = getRowIndex(block, "[data-pg-block]");
-    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
+    const blockId = getBlockId(entry);
+    const entryId = getItemEntryId(entry);
     const source = this.#chainSource;
-    if (blockIndex !== source.blockIndex || entryIndex === source.entryIndex) {
+    if (!blockId || !entryId || blockId !== source.blockId || entryId === source.entryId) {
       this.#cancelChainLink();
       return;
     }
 
     this.#config = this.#readConfigFromForm();
-    linkItemEntriesInBlock(this.#config.items.blocks[blockIndex], source.entryIndex, entryIndex);
+    const block = findPersonalGeneratorBlock(this.#config.items.blocks, blockId);
+    linkItemEntriesInBlock(block, source.entryId, entryId);
     this.#cancelChainLink();
     await this.#saveCurrentConfig();
     return this.render({ force: true });
@@ -874,6 +966,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     if (event.key !== "Shift" && event.key !== "Alt") return;
     const removeMode = event.shiftKey || event.altKey;
     this.#syncChainRemoveMode(removeMode);
+    if (this.#activeDragPayload) this.#activeDragPayload.copy = event.shiftKey === true;
   }
 
   #syncChainRemoveMode(removeMode) {
@@ -885,27 +978,40 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   #syncChainLinkDisplay() {
     const source = this.#chainSource;
     for (const entry of this.element?.querySelectorAll("[data-pg-entry]") ?? []) {
-      const block = entry.closest("[data-pg-block]");
-      const blockIndex = getRowIndex(block, "[data-pg-block]");
-      const entryIndex = getRowIndex(entry, "[data-pg-entry]");
-      const active = !!source && source.blockIndex === blockIndex && source.entryIndex === entryIndex;
-      const target = !!source && source.blockIndex === blockIndex && source.entryIndex !== entryIndex;
+      const blockId = getBlockId(entry);
+      const entryId = getItemEntryId(entry);
+      const active = !!source && source.blockId === blockId && source.entryId === entryId;
+      const target = !!source && source.blockId === blockId && source.entryId !== entryId;
       entry.classList.toggle("pg-chain-link-source", active);
       entry.classList.toggle("pg-chain-link-target", target);
     }
   }
 
+  #syncAllPickModeFields() {
+    for (const block of this.element?.querySelectorAll("[data-pg-block]") ?? []) {
+      this.#syncPickModeFields(block);
+    }
+  }
+
+  #syncPickModeFields(blockElement) {
+    if (!blockElement) return undefined;
+    const pickMode = normalizePickMode(blockElement.querySelector("[data-field='pickMode']")?.value);
+    const currencyField = blockElement.querySelector("[data-pg-pick-currency]");
+    if (currencyField) currencyField.hidden = pickMode !== "totalValue";
+    return undefined;
+  }
+
   #readConfigFromForm() {
     const form = this.element;
+    const previousBlocks = this.#config?.items?.blocks ?? [];
+    const previousAbilities = this.#config?.abilities ?? { enabled: false, entries: [] };
     const config = createPersonalGeneratorConfig({
       enabled: getChecked(form, "enabled"),
       name: {
         enabled: getChecked(form, "name.enabled"),
         appendToTokenName: getChecked(form, "name.appendToTokenName"),
         overwriteBaseName: getChecked(form, "name.overwriteBaseName"),
-        firstNameBlockId: getValue(form, "name.firstNameBlockId"),
-        surnameBlockId: getValue(form, "name.surnameBlockId"),
-        useSurname: getChecked(form, "name.useSurname"),
+        blockIds: readNameBlockIds(form),
         countPreview: getInteger(form, "name.countPreview", 10)
       },
       currency: {
@@ -919,12 +1025,12 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
         paths: readImagePaths(form)
       },
       abilities: {
-        enabled: getChecked(form, "abilities.enabled"),
-        entries: readAbilityEntries(form)
+        enabled: previousAbilities.enabled === true,
+        entries: previousAbilities.entries ?? []
       },
       items: {
         enabled: getChecked(form, "items.enabled"),
-        blocks: readItemBlocks(form)
+        blocks: readItemBlocks(form, previousBlocks)
       }
     });
     return config;
@@ -1634,10 +1740,7 @@ function createPersonalGeneratorConfig(config = {}) {
   output.name.enabled = output.name.enabled !== false;
   output.name.appendToTokenName = output.name.appendToTokenName !== false;
   output.name.overwriteBaseName = output.name.overwriteBaseName === true;
-  output.name.firstNameBlockId = normalizeNameBlockId(output.name.firstNameBlockId, DEFAULT_NAME_BLOCK_IDS.male);
-  output.name.surnameBlockId = normalizeNameBlockId(output.name.surnameBlockId, DEFAULT_NAME_BLOCK_IDS.commonSurname);
-  output.name.useSurname = output.name.useSurname !== false;
-  output.name.countPreview = Math.max(1, Math.min(30, toInteger(output.name.countPreview) || 10));
+  output.name = normalizeNameConfig(output.name);
 
   output.currency.enabled = output.currency.enabled === true;
   output.currency.mode = output.currency.mode === "set" ? "set" : "add";
@@ -1721,6 +1824,7 @@ function normalizeItemEntries(entries = []) {
     if (!uuid && legacyItemId) uuid = `Item.${legacyItemId}`;
     const kind = String(entry.kind ?? entry.type ?? "").trim() === "ability" || sourceId ? "ability" : "item";
     return {
+      entryId: String(entry.entryId ?? "").trim() || foundry.utils.randomID(),
       kind,
       sourceId,
       categoryId: String(entry.categoryId ?? "").trim(),
@@ -1755,7 +1859,11 @@ function createItemBlock() {
 
 function createItemEntry() {
   return normalizeItemEntries([{ kind: "item", uuid: "", name: "", img: "", min: 1, max: 1, weight: 100, condMin: 100, condMax: 100 }])[0]
-    ?? { kind: "item", sourceId: "", categoryId: "", uuid: "", name: "", img: "", equip: false, hasCondition: false, chain: "", min: 1, max: 1, condMin: 100, condMax: 100, weight: 100, itemTradeLocked: false };
+    ?? {
+      entryId: foundry.utils.randomID(),
+      kind: "item", sourceId: "", categoryId: "", uuid: "", name: "", img: "",
+      equip: false, hasCondition: false, chain: "", min: 1, max: 1, condMin: 100, condMax: 100, weight: 100, itemTradeLocked: false
+    };
 }
 
 function createItemEntryFromItem(item) {
@@ -1831,11 +1939,11 @@ async function resolveItemDocumentFromDropData(data = {}) {
   }
 }
 
-function linkItemEntriesInBlock(block, sourceIndex, targetIndex) {
+function linkItemEntriesInBlock(block, sourceEntryId, targetEntryId) {
   const entries = block?.entries ?? [];
-  const source = entries[sourceIndex];
-  const target = entries[targetIndex];
-  if (!source || !target || source === target) return;
+  const source = findPersonalGeneratorEntry(block, sourceEntryId);
+  const target = findPersonalGeneratorEntry(block, targetEntryId);
+  if (!source || !target || source.entryId === target.entryId) return;
   const sourceChain = String(source.chain ?? "").trim();
   const targetChain = String(target.chain ?? "").trim();
   const chain = sourceChain || targetChain || foundry.utils.randomID();
@@ -1875,16 +1983,18 @@ function getPrototypeTokenLinkContext(actor) {
 function preparePersonalGeneratorContext(config) {
   return {
     ...config,
-    abilityEntries: prepareAbilityEntriesForDisplay(config.abilities.entries),
+    name: normalizeNameConfig(config.name ?? {}),
     itemBlocks: config.items.blocks.map(block => ({
       ...block,
-      exclusionsText: (block.exclusions ?? []).join(", "),
+      showPickCurrency: block.pickMode === "totalValue",
       pickModeChoices: getPickModeChoices().map(choice => ({
         ...choice,
         selected: choice.value === block.pickMode
       })),
       currencyChoices: getCurrencySettings().map(currency => ({
         ...currency,
+        img: normalizeImagePath(currency.img),
+        hasImage: Boolean(currency.img),
         selected: currency.key === block.pickCurrency
       })),
       entries: (block.entries ?? []).map((entry, index) => ({
@@ -1939,19 +2049,28 @@ function createItemEntryGroups(entries = []) {
   return groups;
 }
 
-function getNameBlockChoices(config = {}) {
-  const blocks = getPersonalNameBlocks();
-  return blocks.map(block => ({
+function getNameBlockRows(config = {}) {
+  const nameConfig = normalizeNameConfig(config.name ?? {});
+  const choices = getPersonalNameBlocks().map(block => ({
     value: block.id,
-    label: block.name,
-    firstSelected: block.id === config.name?.firstNameBlockId,
-    surnameSelected: block.id === config.name?.surnameBlockId
+    label: block.name
+  }));
+  return nameConfig.blockIds.map((blockId, index) => ({
+    index,
+    blockId,
+    canDelete: nameConfig.blockIds.length > 1,
+    choices: choices.map(choice => ({
+      ...choice,
+      selected: choice.value === blockId
+    }))
   }));
 }
 
 function getCurrencyChoices(config = {}) {
   return getCurrencySettings().map(currency => ({
     ...currency,
+    img: normalizeImagePath(currency.img),
+    hasImage: Boolean(currency.img),
     range: config.currency?.ranges?.[currency.key] ?? { min: 0, max: 0 },
     pickSelected: currency.key === config.items?.blocks?.[0]?.pickCurrency
   }));
@@ -1981,11 +2100,40 @@ function normalizeNameBlockId(blockId, fallback) {
   return known.has(id) ? id : fallback;
 }
 
+function normalizeNameConfig(name = {}) {
+  const known = new Set(getPersonalNameBlocks().map(block => block.id));
+  const normalizeId = (blockId, fallback) => {
+    const id = String(blockId ?? "").trim();
+    return known.has(id) ? id : fallback;
+  };
+
+  let blockIds = Array.isArray(name.blockIds)
+    ? name.blockIds.map(id => normalizeId(id, "")).filter(Boolean)
+    : [];
+  if (!blockIds.length) {
+    blockIds.push(normalizeId(name.firstNameBlockId, DEFAULT_NAME_BLOCK_IDS.male));
+    if (name.useSurname !== false) {
+      blockIds.push(normalizeId(name.surnameBlockId, DEFAULT_NAME_BLOCK_IDS.commonSurname));
+    }
+  }
+  if (!blockIds.length) blockIds = [...DEFAULT_NAME_BLOCK_ID_LIST];
+
+  return {
+    ...name,
+    blockIds,
+    firstNameBlockId: blockIds[0] ?? DEFAULT_NAME_BLOCK_IDS.male,
+    surnameBlockId: blockIds[1] ?? DEFAULT_NAME_BLOCK_IDS.commonSurname,
+    useSurname: blockIds.length > 1,
+    countPreview: Math.max(1, Math.min(30, toInteger(name.countPreview) || 10))
+  };
+}
+
 function generatePersonalName(config = {}) {
-  const first = pickRandom(parseNamesFromBlock(config.firstNameBlockId));
-  if (!first) return "";
-  const surname = config.useSurname ? pickRandom(parseNamesFromBlock(config.surnameBlockId)) : "";
-  return `${first}${surname ? ` ${surname}` : ""}`.trim();
+  const nameConfig = normalizeNameConfig(config);
+  const parts = nameConfig.blockIds
+    .map(blockId => pickRandom(parseNamesFromBlock(blockId)))
+    .filter(Boolean);
+  return parts.join(" ").trim();
 }
 
 function createNamePreview(nameConfig = {}) {
@@ -2347,32 +2495,98 @@ function readAbilityEntries(form) {
   })));
 }
 
-function readItemBlocks(form) {
-  return Array.from(form.querySelectorAll("[data-pg-block]")).map(block => ({
-    id: String(block.dataset.blockId || foundry.utils.randomID()).trim(),
-    name: String(block.querySelector("[data-field='name']")?.value ?? "").trim(),
-    pick: String(block.querySelector("[data-field='pick']")?.value ?? "1").trim(),
-    pickMode: normalizePickMode(block.querySelector("[data-field='pickMode']")?.value),
-    pickCurrency: String(block.querySelector("[data-field='pickCurrency']")?.value ?? getDefaultCurrencyKey()).trim(),
-    exclusions: splitComma(block.querySelector("[data-field='exclusions']")?.value),
-    entries: Array.from(block.querySelectorAll("[data-pg-entry]")).map(entry => ({
-      kind: String(entry.querySelector("[data-field='kind']")?.value ?? "item").trim(),
-      sourceId: String(entry.querySelector("[data-field='sourceId']")?.value ?? "").trim(),
-      categoryId: String(entry.querySelector("[data-field='categoryId']")?.value ?? "").trim(),
-      uuid: String(entry.querySelector("[data-field='uuid']")?.value ?? "").trim(),
-      name: String(entry.querySelector("[data-field='name']")?.value ?? "").trim(),
-      img: String(entry.querySelector("[data-field='img']")?.value ?? "").trim(),
-      equip: getFieldBoolean(entry.querySelector("[data-field='equip']")),
-      hasCondition: getFieldBoolean(entry.querySelector("[data-field='hasCondition']")),
-      chain: String(entry.querySelector("[data-field='chain']")?.value ?? "").trim(),
-      min: toInteger(entry.querySelector("[data-field='min']")?.value),
-      max: toInteger(entry.querySelector("[data-field='max']")?.value),
-      condMin: toInteger(entry.querySelector("[data-field='condMin']")?.value),
-      condMax: toInteger(entry.querySelector("[data-field='condMax']")?.value),
-      weight: toInteger(entry.querySelector("[data-field='weight']")?.value),
-      itemTradeLocked: getFieldBoolean(entry.querySelector("[data-field='itemTradeLocked']"))
-    }))
-  }));
+function personalGeneratorConfigMissingEntryIds(config = {}) {
+  return (config.items?.blocks ?? []).some(block =>
+    (block.entries ?? []).some(entry => !String(entry.entryId ?? "").trim())
+  );
+}
+
+function findPersonalGeneratorBlock(blocks = [], blockId = "") {
+  const id = String(blockId ?? "").trim();
+  if (!id) return null;
+  return blocks.find(block => String(block.id) === id) ?? null;
+}
+
+function findPersonalGeneratorEntry(block, entryId = "") {
+  const id = String(entryId ?? "").trim();
+  if (!block || !id) return null;
+  return block.entries?.find(entry => entry.entryId === id) ?? null;
+}
+
+function getPersonalGeneratorChainGroup(entries = [], entry = null) {
+  if (!entry) return [];
+  const chain = String(entry.chain ?? "").trim();
+  if (!chain) return [entry];
+  const grouped = entries.filter(current => String(current.chain ?? "").trim() === chain);
+  return grouped.length >= 2 ? grouped : [entry];
+}
+
+function clonePersonalGeneratorItemEntries(entries = []) {
+  return entries.map(entry => {
+    const cloned = foundry.utils.deepClone(entry);
+    cloned.entryId = foundry.utils.randomID();
+    return cloned;
+  });
+}
+
+function getBlockId(target) {
+  const block = target?.closest?.("[data-pg-block]") ?? target;
+  return String(block?.dataset?.blockId ?? "").trim();
+}
+
+function getItemEntryId(target) {
+  const entry = target?.closest?.("[data-pg-entry]") ?? target;
+  return String(entry?.dataset?.entryId ?? entry?.querySelector?.("[data-field='entryId']")?.value ?? "").trim();
+}
+
+function readEntryElementData(entry) {
+  return normalizeItemEntries([{
+    entryId: getItemEntryId(entry),
+    kind: String(entry.querySelector("[data-field='kind']")?.value ?? "item").trim(),
+    sourceId: String(entry.querySelector("[data-field='sourceId']")?.value ?? "").trim(),
+    categoryId: String(entry.querySelector("[data-field='categoryId']")?.value ?? "").trim(),
+    uuid: String(entry.querySelector("[data-field='uuid']")?.value ?? "").trim(),
+    name: String(entry.querySelector("[data-field='name']")?.value ?? "").trim(),
+    img: String(entry.querySelector("[data-field='img']")?.value ?? "").trim(),
+    equip: getFieldBoolean(entry.querySelector("[data-field='equip']")),
+    hasCondition: getFieldBoolean(entry.querySelector("[data-field='hasCondition']")),
+    chain: String(entry.querySelector("[data-field='chain']")?.value ?? "").trim(),
+    min: toInteger(entry.querySelector("[data-field='min']")?.value),
+    max: toInteger(entry.querySelector("[data-field='max']")?.value),
+    condMin: toInteger(entry.querySelector("[data-field='condMin']")?.value),
+    condMax: toInteger(entry.querySelector("[data-field='condMax']")?.value),
+    weight: toInteger(entry.querySelector("[data-field='weight']")?.value),
+    itemTradeLocked: getFieldBoolean(entry.querySelector("[data-field='itemTradeLocked']"))
+  }])[0];
+}
+
+function readNameBlockIds(form) {
+  const blockIds = Array.from(form.querySelectorAll("[data-pg-name-block]"))
+    .map(row => String(row.querySelector("[data-field='blockId']")?.value ?? "").trim())
+    .filter(Boolean);
+  return blockIds.length ? blockIds : [...DEFAULT_NAME_BLOCK_ID_LIST];
+}
+
+function readItemBlocks(form, previousBlocks = []) {
+  const previousById = new Map(previousBlocks.map(block => [block.id, block]));
+  return Array.from(form.querySelectorAll("[data-pg-block]")).map(block => {
+    const id = String(block.dataset.blockId || foundry.utils.randomID()).trim();
+    const previous = previousById.get(id);
+    const pickMode = normalizePickMode(block.querySelector("[data-field='pickMode']")?.value);
+    const pickCurrencyField = block.querySelector("[data-field='pickCurrency']");
+    const pickCurrency = pickMode === "totalValue" && pickCurrencyField
+      ? String(pickCurrencyField.value ?? getDefaultCurrencyKey()).trim()
+      : String(previous?.pickCurrency ?? getDefaultCurrencyKey()).trim();
+    return {
+      id,
+      name: String(block.querySelector("[data-field='name']")?.value ?? "").trim(),
+      pick: String(block.querySelector("[data-field='pick']")?.value ?? "1").trim(),
+      pickMode,
+      pickCurrency,
+      exclusions: Array.isArray(previous?.exclusions) ? [...previous.exclusions] : [],
+      entries: Array.from(block.querySelectorAll("[data-pg-entry]")).map(readEntryElementData)
+    };
+  });
 }
 
 function getFieldBoolean(input) {
