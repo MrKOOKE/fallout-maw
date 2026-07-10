@@ -79,6 +79,7 @@ import {
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeRicochetSettings,
+  normalizeToTheEndSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
@@ -855,6 +856,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-fixed-rescue-mode]").forEach(select => {
       select.addEventListener("change", () => syncFixedRescueCountVisibility(select));
       syncFixedRescueCountVisibility(select);
+    });
+    this.element?.querySelectorAll("[data-add-fixed-to-the-end-advantage-skill]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddToTheEndAdvantageSkill(event));
+    });
+    this.element?.querySelectorAll("[data-delete-fixed-to-the-end-advantage-skill]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteToTheEndAdvantageSkill(event));
     });
     this.element?.querySelectorAll("[data-delete-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityFunction(event));
@@ -2505,6 +2512,34 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       if (!value) return;
       option.hidden = query && !String(option.textContent ?? "").toLocaleLowerCase().includes(query);
     });
+  }
+
+  #onAddToTheEndAdvantageSkill(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const entry = functions[functionIndex];
+    if (entry?.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.toTheEnd) return undefined;
+    const settings = normalizeToTheEndSettings(entry.fixedSettings);
+    settings.advantageSkills.push({ skillKey: getFirstUnusedToTheEndAdvantageSkillKey(settings.advantageSkills), advantageCount: 1 });
+    entry.fixedSettings = settings;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteToTheEndAdvantageSkill(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const skillIndex = Number(event.currentTarget?.closest?.("[data-fixed-to-the-end-advantage-skill-row]")?.dataset.rowIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const entry = functions[functionIndex];
+    const settings = normalizeToTheEndSettings(entry?.fixedSettings);
+    if (entry?.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.toTheEnd || settings.advantageSkills.length <= 1 || skillIndex < 0) return undefined;
+    settings.advantageSkills.splice(skillIndex, 1);
+    entry.fixedSettings = settings;
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onDeleteAbilityFunction(event) {
@@ -5757,6 +5792,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedLookSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look
     ? prepareLookSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedToTheEndSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd
+    ? prepareToTheEndSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -5807,6 +5845,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
     fixedLookSettings,
+    fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
@@ -6086,6 +6125,45 @@ function prepareLookSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
   };
+}
+
+function prepareToTheEndSettingsForDisplay(settings = {}) {
+  const normalized = normalizeToTheEndSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    advantageSkillRows: buildToTheEndAdvantageSkillRows(normalized.advantageSkills)
+  };
+}
+
+function buildToTheEndAdvantageSkillRows(advantageSkills = []) {
+  return advantageSkills.map((entry, index) => ({
+    index,
+    advantageCount: entry.advantageCount,
+    canDelete: advantageSkills.length > 1,
+    skillChoices: buildToTheEndAdvantageSkillChoices(entry.skillKey)
+  }));
+}
+
+function buildToTheEndAdvantageSkillChoices(selectedKey = "") {
+  const selected = String(selectedKey ?? "").trim();
+  const entries = [...getSkillSettings()];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries.map(entry => ({
+    key: entry.key,
+    label: entry.label || entry.key,
+    selected: entry.key === selected
+  }));
+}
+
+function getFirstUnusedToTheEndAdvantageSkillKey(advantageSkills = []) {
+  const selected = new Set(advantageSkills.map(entry => String(entry?.skillKey ?? "").trim()).filter(Boolean));
+  return getSkillSettings().find(skill => !selected.has(skill.key))?.key ?? "resilience";
 }
 
 function prepareHeightenedConcentrationSettingsForDisplay(settings = {}) {
@@ -6951,6 +7029,24 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       continue;
     }
 
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-to-the-end-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-to-the-end-overload-duration-unit]")?.value
+      );
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-to-the-end-duration-amount]")?.value,
+        row.querySelector("[data-fixed-to-the-end-duration-unit]")?.value
+      );
+      const suppressTraumas = Boolean(row.querySelector("[data-fixed-to-the-end-suppress-traumas]")?.checked);
+      const advantageSkills = readSubmittedToTheEndAdvantageSkills(row);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.advantageSkills`, advantageSkills);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.suppressTraumas`, suppressTraumas);
+      continue;
+    }
+
     if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight) {
       const overloadDurationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-oversight-overload-duration-amount]")?.value,
@@ -7014,6 +7110,13 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       currentDamage >= requiredDamage
     );
   }
+}
+
+function readSubmittedToTheEndAdvantageSkills(row) {
+  return Array.from(row.querySelectorAll("[data-fixed-to-the-end-advantage-skill-row]") ?? []).map(skillRow => ({
+    skillKey: skillRow.querySelector("[data-fixed-to-the-end-advantage-skill-key]")?.value,
+    advantageCount: skillRow.querySelector("[data-fixed-to-the-end-advantage-count]")?.value
+  }));
 }
 
 function syncFixedRescueCountVisibility(select) {

@@ -34,6 +34,7 @@ import {
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
   normalizeReaperSettings,
+  normalizeToTheEndSettings,
   normalizeVirtuosoSettings,
   normalizeRageSettings,
   normalizeRicochetSettings,
@@ -53,6 +54,7 @@ import {
   isCriticalLimb,
   isLimbDestroyed,
   registerLethalDamagePreventionHandler,
+  requestDamageApplications,
   restoreDestroyedLimb,
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
@@ -86,6 +88,7 @@ import {
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS,
+  TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
@@ -155,6 +158,7 @@ const HEIGHTENED_CONCENTRATION_EFFECT_SOURCE = "heightenedConcentration";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY = "knockOffBalance";
+const TO_THE_END_EFFECT_FLAG_KEY = "toTheEnd";
 const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
@@ -456,6 +460,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.look,
       fixedSettings: normalizeLookSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.toTheEnd,
+    label: "До конца!!!",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.toTheEnd,
+      fixedSettings: normalizeToTheEndSettings()
     })
   }),
   Object.freeze({
@@ -869,6 +882,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look) {
     const used = await useLook(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd) {
+    const used = await useToTheEnd(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -1784,6 +1803,298 @@ function createLookTargetRow(token, sourceToken = null) {
   }
   row.selectable = true;
   return row;
+}
+
+async function useToTheEnd(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn(`${abilityName}: сцена не готова.`);
+    return false;
+  }
+
+  const settings = normalizeToTheEndSettings(abilityFunction.fixedSettings);
+  const sourceToken = getActorSceneToken(actor);
+  if (!sourceToken) {
+    ui.notifications.warn(`${abilityName}: токен персонажа не найден на сцене.`);
+    return false;
+  }
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${abilityName}: нет активного GM для применения эффекта.`);
+    return false;
+  }
+
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+
+  const radiusMeters = Math.max(0, evaluateActorFormula(settings.radiusFormula, actor, {
+    fallback: 20,
+    minimum: 0,
+    context: "to the end radius"
+  }));
+  const targets = collectToTheEndTargets(actor, sourceToken, radiusMeters);
+  if (!targets.length) {
+    ui.notifications.warn(`${abilityName}: нет союзников в радиусе ${Math.floor(radiusMeters)} м.`);
+    return false;
+  }
+
+  const healingAmount = Math.max(0, Math.floor(evaluateActorFormula(settings.healingFormula, actor, {
+    fallback: 50,
+    minimum: 0,
+    context: "to the end healing"
+  })));
+  const characteristicBonus = Math.max(0, Math.floor(evaluateActorFormula(settings.characteristicBonusFormula, actor, {
+    fallback: 1,
+    minimum: 0,
+    context: "to the end characteristic bonus"
+  })));
+
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+
+  const applied = await requestToTheEndOperation({
+    actorUuid: actor.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    targetActorUuids: targets.map(entry => entry.actor.uuid),
+    healingAmount,
+    durationSeconds: settings.durationSeconds,
+    characteristicBonus,
+    advantageSkills: settings.advantageSkills,
+    suppressTraumas: settings.suppressTraumas,
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!applied) {
+    ui.notifications.warn(`${abilityName}: не удалось применить эффект.`);
+    return false;
+  }
+
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `${targets.length} союзников в радиусе ${Math.floor(radiusMeters)} м: восстановлено ${healingAmount} ОЗ, эффект на ${formatDuration(settings.durationSeconds)}.`
+  );
+  return true;
+}
+
+function collectToTheEndTargets(actor, sourceToken, radiusMeters = 0) {
+  const seen = new Set();
+  return (canvas.tokens?.placeables ?? [])
+    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
+    .filter(token => token.actor.uuid !== actor?.uuid)
+    .filter(token => isCommandBasicsAlly(actor, token.actor))
+    .filter(token => measureTokenDistanceMeters(sourceToken, token) <= radiusMeters)
+    .map(token => ({ token, actor: token.actor }))
+    .filter(entry => {
+      if (!entry.actor?.uuid || seen.has(entry.actor.uuid)) return false;
+      seen.add(entry.actor.uuid);
+      return true;
+    });
+}
+
+function measureTokenDistanceMeters(leftToken, rightToken) {
+  const left = getToTheEndTokenCenterPoint(leftToken);
+  const right = getToTheEndTokenCenterPoint(rightToken);
+  const measured = canvas?.grid?.measurePath?.([left, right]);
+  const measuredDistance = Number(measured?.distance);
+  if (Number.isFinite(measuredDistance)) return measuredDistance;
+
+  const distancePixels = Number(canvas?.dimensions?.distancePixels)
+    || ((Number(canvas?.dimensions?.size) || Number(canvas?.grid?.size) || 100) / (Number(canvas?.dimensions?.distance) || Number(canvas?.grid?.distance) || 1));
+  return Math.hypot(left.x - right.x, left.y - right.y) / Math.max(1, distancePixels);
+}
+
+function getToTheEndTokenCenterPoint(token) {
+  const object = token?.object ?? token;
+  if (object?.center) {
+    return {
+      x: Number(object.center.x) || 0,
+      y: Number(object.center.y) || 0
+    };
+  }
+  const document = token?.document ?? token;
+  const width = Number(object?.w ?? document?.width ?? 0) || 0;
+  const height = Number(object?.h ?? document?.height ?? 0) || 0;
+  return {
+    x: (Number(object?.x ?? document?.x) || 0) + (width / 2),
+    y: (Number(object?.y ?? document?.y) || 0) + (height / 2)
+  };
+}
+
+async function requestToTheEndOperation(payload = {}) {
+  if (game.user?.isGM) return processToTheEndOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DISARM_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performToTheEnd",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+async function processToTheEndSocketRequest(message = {}) {
+  const applied = await processToTheEndOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "toTheEndResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { applied: Boolean(applied) }
+  });
+}
+
+async function processToTheEndOperation(payload = {}) {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!actor || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const targetActorUuids = Array.from(new Set((payload.targetActorUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  const targets = (await Promise.all(targetActorUuids.map(uuid => fromUuid(uuid))))
+    .filter(target => target && target.uuid !== actor.uuid && isCommandBasicsAlly(actor, target));
+  if (!targets.length) return false;
+
+  const healingAmount = Math.max(0, toInteger(payload.healingAmount));
+  if (healingAmount > 0) {
+    await requestDamageApplications(targets.map(target => ({
+      actor: target,
+      amount: healingAmount,
+      damageTypeKey: "healing",
+      mode: "healing",
+      scope: "health",
+      applyMitigation: false,
+      processDamageTypeSettings: false,
+      source: {
+        ability: true,
+        abilityItemUuid: abilityItem.uuid,
+        abilityFunctionId: abilityFunction.id,
+        fixedKey: ABILITY_FIXED_FUNCTION_KEYS.toTheEnd
+      }
+    })));
+  }
+
+  const durationSeconds = Math.max(0, toInteger(payload.durationSeconds));
+  const characteristicBonus = Math.max(0, toInteger(payload.characteristicBonus));
+  const advantageSkills = normalizeToTheEndSettings({ advantageSkills: payload.advantageSkills }).advantageSkills;
+  const suppressTraumas = payload.suppressTraumas !== false;
+  const startTime = Number(game.time?.worldTime) || 0;
+
+  for (const target of targets) {
+    const changes = buildToTheEndEffectChanges(target, {
+      characteristicBonus,
+      advantageSkills,
+      suppressTraumas
+    });
+    if (!changes.length) continue;
+    await target.createEmbeddedDocuments("ActiveEffect", [{
+      type: "base",
+      name: getAbilityDisplayName(abilityItem),
+      img: abilityItem.img || "icons/svg/aura.svg",
+      origin: abilityItem.uuid,
+      transfer: false,
+      disabled: false,
+      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+      duration: {
+        seconds: durationSeconds,
+        startTime
+      },
+      system: { changes },
+      flags: {
+        [SYSTEM_ID]: {
+          kind: "temporary",
+          [TO_THE_END_EFFECT_FLAG_KEY]: {
+            abilityItemId: abilityItem.id,
+            abilitySourceId: getAbilitySourceId(abilityItem),
+            functionId: abilityFunction.id,
+            fixedKey: ABILITY_FIXED_FUNCTION_KEYS.toTheEnd,
+            createdAt: startTime
+          }
+        }
+      }
+    }], { animate: false });
+  }
+  return true;
+}
+
+function buildToTheEndEffectChanges(actor, {
+  characteristicBonus = 0,
+  advantageSkills = [],
+  suppressTraumas = true
+} = {}) {
+  const changes = [];
+  if (suppressTraumas) {
+    changes.push({
+      key: TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
+      type: "add",
+      value: "1",
+      phase: "initial",
+      priority: null
+    });
+  }
+  const bonus = Math.max(0, toInteger(characteristicBonus));
+  if (bonus > 0) {
+    for (const key of getActorCharacteristicKeys(actor)) {
+      changes.push({
+        key: `system.characteristics.${key}`,
+        type: "add",
+        value: String(bonus),
+        phase: "initial",
+        priority: null
+      });
+    }
+  }
+  for (const entry of advantageSkills) {
+    const skillKey = String(entry?.skillKey ?? "").trim();
+    const advantageCount = Math.max(0, toInteger(entry?.advantageCount));
+    if (!skillKey || advantageCount <= 0) continue;
+    changes.push({
+      key: `system.skills.${skillKey}.advantage`,
+      type: "add",
+      value: String(advantageCount),
+      phase: "initial",
+      priority: null
+    });
+  }
+  return changes;
+}
+
+function getActorCharacteristicKeys(actor) {
+  const configured = getCharacteristicSettings()
+    .map(entry => String(entry?.key ?? "").trim())
+    .filter(Boolean);
+  const keys = new Set(configured);
+  for (const key of Object.keys(actor?.system?.characteristics ?? {})) {
+    if (key) keys.add(key);
+  }
+  return Array.from(keys);
 }
 
 async function requestLookResourceLossOperation(payload = {}) {
@@ -5414,6 +5725,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processLookResourceLossSocketRequest(message);
     return;
   }
+  if (message.action === "performToTheEnd") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processToTheEndSocketRequest(message);
+    return;
+  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -5447,6 +5763,14 @@ function handleFixedAbilitySocketMessage(message = {}) {
     pending.resolve(Boolean(message.result?.applied));
   }
   if (message.action === "lookResourceLossResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
+  }
+  if (message.action === "toTheEndResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
     if (!pending) return;

@@ -49,6 +49,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   commandBasics: "commandBasics",
   knockOffBalance: "knockOffBalance",
   look: "look",
+  toTheEnd: "toTheEnd",
   heightenedConcentration: "heightenedConcentration",
   grapplingMaster: "grapplingMaster"
 });
@@ -851,6 +852,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.look) {
     return normalizeLookSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd) {
+    return normalizeToTheEndSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return normalizeHeightenedConcentrationSettings(value);
   }
@@ -1284,6 +1288,36 @@ export function normalizeLookSettings(value = {}) {
     failureResourceLoss: Math.max(0, toInteger(value?.failureResourceLoss ?? 3)),
     criticalFailureResourceLoss: Math.max(0, toInteger(value?.criticalFailureResourceLoss ?? 6))
   };
+}
+
+export function normalizeToTheEndSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 100)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 300)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200)),
+    radiusFormula: String(value?.radiusFormula ?? "20+speech/10").trim() || "20+speech/10",
+    healingFormula: String(value?.healingFormula ?? "50+speech").trim() || "50+speech",
+    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 18)),
+    characteristicBonusFormula: String(value?.characteristicBonusFormula ?? "1+speech/100").trim() || "1+speech/100",
+    advantageSkills: normalizeToTheEndAdvantageSkills(value),
+    suppressTraumas: normalizeBoolean(value?.suppressTraumas, true)
+  };
+}
+
+function normalizeToTheEndAdvantageSkills(value = {}) {
+  const raw = value?.advantageSkills !== undefined
+    ? (Array.isArray(value.advantageSkills) ? value.advantageSkills : Object.values(value.advantageSkills ?? {}))
+    : [{
+      skillKey: value?.resilienceSkillKey ?? "resilience",
+      advantageCount: value?.resilienceAdvantageCount ?? 1
+    }];
+  const normalized = raw
+    .map(entry => ({
+      skillKey: String(entry?.skillKey ?? entry?.key ?? "").trim(),
+      advantageCount: Math.max(0, toInteger(entry?.advantageCount ?? entry?.count ?? entry?.value ?? 1))
+    }))
+    .filter(entry => entry.skillKey);
+  return normalized.length ? normalized : [{ skillKey: "resilience", advantageCount: 1 }];
 }
 
 export function normalizeHeightenedConcentrationSettings(value = {}) {

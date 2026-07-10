@@ -1029,6 +1029,92 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedToTheEndSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: До конца!!!</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Стоимость активации, энергия</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedToTheEndSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Радиус, м</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.radiusFormula" value="{{fixedToTheEndSettings.radiusFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Восстановление ОЗ</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.healingFormula" value="{{fixedToTheEndSettings.healingFormula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Эффект</strong>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedToTheEndSettings.durationAmount}}" min="0" step="1" data-fixed-to-the-end-duration-amount>
+              <select data-fixed-to-the-end-duration-unit>
+                {{#each fixedToTheEndSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+          <label>
+            <span>Бонус характеристик</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.characteristicBonusFormula" value="{{fixedToTheEndSettings.characteristicBonusFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Подавлять травмы</span>
+            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.fixedSettings.suppressTraumas" data-fixed-to-the-end-suppress-traumas {{checked fixedToTheEndSettings.suppressTraumas}}>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Навыки получающие преимущество</strong>
+          <div class="fallout-maw-item-use-category-field">
+            <div class="fallout-maw-item-use-category-header">
+              <span>Навык</span>
+              <button type="button" data-add-fixed-to-the-end-advantage-skill><i class="fa-solid fa-plus"></i> Добавить</button>
+            </div>
+            <div class="fallout-maw-item-use-category-list">
+              {{#each fixedToTheEndSettings.advantageSkillRows}}
+              <div class="fallout-maw-to-the-end-advantage-skill-row" data-fixed-to-the-end-advantage-skill-row data-row-index="{{index}}">
+                <select name="{{../functionPath}}.{{../functionIndex}}.fixedSettings.advantageSkills.{{index}}.skillKey" data-fixed-to-the-end-advantage-skill-key>
+                  {{#each skillChoices}}
+                  <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+                <input type="number" name="{{../functionPath}}.{{../functionIndex}}.fixedSettings.advantageSkills.{{index}}.advantageCount" value="{{advantageCount}}" min="0" step="1" data-fixed-to-the-end-advantage-count>
+                <button type="button" class="fallout-maw-icon-button" data-delete-fixed-to-the-end-advantage-skill title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#unless canDelete}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{/each}}
+            </div>
+          </div>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedToTheEndSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedToTheEndSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-to-the-end-overload-duration-amount>
+              <select data-fixed-to-the-end-overload-duration-unit>
+                {{#each fixedToTheEndSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedHeightenedConcentrationSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

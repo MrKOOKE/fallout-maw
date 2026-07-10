@@ -3348,6 +3348,17 @@ body #prosemirror-dropdown {
   font-weight: 700;
 }
 
+.fallout-maw-to-the-end-advantage-skill-row {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(12rem, 1fr) 6rem auto;
+}
+
+.fallout-maw-to-the-end-advantage-skill-row > * {
+  min-width: 0;
+}
+
 .fallout-maw-item-use-category-list {
   display: grid;
   gap: 0.35rem;

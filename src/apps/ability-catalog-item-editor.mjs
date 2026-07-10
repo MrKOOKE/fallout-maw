@@ -42,6 +42,7 @@ import {
   normalizeRageSettings,
   normalizeRicochetSettings,
   normalizeReaperSettings,
+  normalizeToTheEndSettings,
   normalizeVirtuosoSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
@@ -131,6 +132,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteConditionAuraTargetGroup: this.#onDeleteConditionAuraTargetGroup,
       addFunctionPenalty: this.#onAddFunctionPenalty,
       deleteFunctionPenalty: this.#onDeleteFunctionPenalty,
+      addToTheEndAdvantageSkill: this.#onAddToTheEndAdvantageSkill,
+      deleteToTheEndAdvantageSkill: this.#onDeleteToTheEndAdvantageSkill,
       addAcquisitionRequirement: this.#onAddAcquisitionRequirement,
       deleteAcquisitionRequirement: this.#onDeleteAcquisitionRequirement
     }
@@ -387,6 +390,34 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     const changeIndex = getRowIndex(target.closest("[data-ability-function-row]"), "[data-ability-change-row]", target.closest("[data-ability-change-row]"));
     if (functionIndex >= 0 && changeIndex >= 0) this.ability.system.functions[functionIndex]?.changes?.splice(changeIndex, 1);
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddToTheEndAdvantageSkill(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
+    const entry = this.ability.system.functions?.[functionIndex];
+    if (entry?.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd) {
+      const settings = normalizeToTheEndSettings(entry.fixedSettings);
+      settings.advantageSkills.push({ skillKey: getFirstUnusedToTheEndAdvantageSkillKey(settings.advantageSkills), advantageCount: 1 });
+      entry.fixedSettings = settings;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteToTheEndAdvantageSkill(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const skillIndex = getRowIndex(functionRow, "[data-fixed-to-the-end-advantage-skill-row]", target.closest("[data-fixed-to-the-end-advantage-skill-row]"));
+    const entry = this.ability.system.functions?.[functionIndex];
+    const settings = normalizeToTheEndSettings(entry?.fixedSettings);
+    if (entry?.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd && settings.advantageSkills.length > 1 && skillIndex >= 0) {
+      settings.advantageSkills.splice(skillIndex, 1);
+      entry.fixedSettings = settings;
+    }
     return this.#persist({ render: true, sync: false });
   }
 
@@ -983,6 +1014,25 @@ function readFixedFunctionSettings(row) {
       criticalFailureResourceLoss: row.querySelector("[data-field='fixed.look.criticalFailureResourceLoss']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.toTheEnd.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.toTheEnd.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.toTheEnd.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.toTheEnd.overloadDurationUnit']")?.value
+      ),
+      radiusFormula: row.querySelector("[data-field='fixed.toTheEnd.radiusFormula']")?.value,
+      healingFormula: row.querySelector("[data-field='fixed.toTheEnd.healingFormula']")?.value,
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.toTheEnd.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.toTheEnd.durationUnit']")?.value
+      ),
+      characteristicBonusFormula: row.querySelector("[data-field='fixed.toTheEnd.characteristicBonusFormula']")?.value,
+      advantageSkills: readToTheEndAdvantageSkills(row),
+      suppressTraumas: row.querySelector("[data-field='fixed.toTheEnd.suppressTraumas']")?.checked
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
     return {
       energyCost: row.querySelector("[data-field='fixed.heightenedConcentration.energyCost']")?.value,
@@ -1127,6 +1177,13 @@ function readFixedFunctionSettings(row) {
       restoreCount: row.querySelector("[data-field='fixed.rescue.restoreCount']")?.value
     }
   };
+}
+
+function readToTheEndAdvantageSkills(row) {
+  return Array.from(row.querySelectorAll("[data-fixed-to-the-end-advantage-skill-row]") ?? []).map(skillRow => ({
+    skillKey: skillRow.querySelector("[data-field='fixed.toTheEnd.advantageSkillKey']")?.value,
+    advantageCount: skillRow.querySelector("[data-field='fixed.toTheEnd.advantageCount']")?.value
+  }));
 }
 
 function readAbilityChanges(root, selector) {
@@ -1298,6 +1355,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedLookSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.look
     ? prepareLookSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedToTheEndSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.toTheEnd
+    ? prepareToTheEndSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
     ? prepareHeightenedConcentrationSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1349,6 +1409,7 @@ function prepareFunctionForDisplay(entry) {
     fixedCommandBasicsSettings,
     fixedKnockOffBalanceSettings,
     fixedLookSettings,
+    fixedToTheEndSettings,
     fixedHeightenedConcentrationSettings,
     fixedRageSettings,
     fixedDisarmSettings,
@@ -1611,6 +1672,34 @@ function prepareLookSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, getSkillSettings())
   };
+}
+
+function prepareToTheEndSettingsForDisplay(settings = {}) {
+  const normalized = normalizeToTheEndSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    advantageSkillRows: buildToTheEndAdvantageSkillRows(normalized.advantageSkills)
+  };
+}
+
+function buildToTheEndAdvantageSkillRows(advantageSkills = []) {
+  return advantageSkills.map((entry, index) => ({
+    index,
+    advantageCount: entry.advantageCount,
+    canDelete: advantageSkills.length > 1,
+    skillChoices: buildSkillChoices(entry.skillKey, getSkillSettings())
+  }));
+}
+
+function getFirstUnusedToTheEndAdvantageSkillKey(advantageSkills = []) {
+  const selected = new Set(advantageSkills.map(entry => String(entry?.skillKey ?? "").trim()).filter(Boolean));
+  return getSkillSettings().find(skill => !selected.has(skill.key))?.key ?? "resilience";
 }
 
 function prepareHeightenedConcentrationSettingsForDisplay(settings = {}) {
