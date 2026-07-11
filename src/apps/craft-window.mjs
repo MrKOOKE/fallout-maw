@@ -1,7 +1,7 @@
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
-import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
   canUseWeaponSlotForItem,
   getRaceEquipmentSlotsForItem,
@@ -98,6 +98,8 @@ const CRAFT_MAX_ZOOM = 2.5;
 const CRAFT_SOCKET_DEPTH_PX = 9;
 const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
 const CRAFT_FLOW_DURATION_MS = 1000;
+const CRAFT_BATCH_SUMMARY_DURATION_MS = 3000;
+const CRAFT_BATCH_SUMMARY_CLOSE_MS = 180;
 const CRAFT_FLOW_SOCKET_PHASE_FRACTION = 0.14;
 const CRAFT_FLOW_FAILURE_BLEND_FRACTION = 0.16;
 const CRAFT_FLOW_GOLD = { r: 255, g: 203, b: 77 };
@@ -617,6 +619,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #craftMode = CRAFT_MODE_CREATE;
   #craftToolPickerNodeId = "";
   #craftToolSelections = new Map();
+  #craftRepeatCount = 0;
+  #craftBatchSummaryClose = null;
+  #craftBatchSummaryTimer = null;
   #busy = false;
   #pendingOperation = null;
   #startedOperationId = "";
@@ -698,6 +703,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#expandedRecipeCategories = new Set();
     this.#craftViewportOverride = null;
     this.#craftToolPickerNodeId = "";
+    this.#craftRepeatCount = 0;
     this.#updateActiveCraftTabTitle();
     this.#saveActiveCraftTabState();
   }
@@ -759,7 +765,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       recipeSearch: String(data.recipeSearch ?? ""),
       expandedRecipeCategories: Array.from(data.expandedRecipeCategories ?? []),
       craftViewportOverride: data.craftViewportOverride ? foundry.utils.deepClone(data.craftViewportOverride) : null,
-      craftToolPickerNodeId: String(data.craftToolPickerNodeId ?? "")
+      craftToolPickerNodeId: String(data.craftToolPickerNodeId ?? ""),
+      craftRepeatCount: Math.max(0, toInteger(data.craftRepeatCount))
     };
   }
 
@@ -780,6 +787,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     tab.expandedRecipeCategories = Array.from(this.#expandedRecipeCategories);
     tab.craftViewportOverride = this.#craftViewportOverride ? foundry.utils.deepClone(this.#craftViewportOverride) : null;
     tab.craftToolPickerNodeId = this.#craftToolPickerNodeId;
+    tab.craftRepeatCount = this.#craftRepeatCount;
     this.#updateCraftTabTitle(tab);
   }
 
@@ -796,6 +804,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#expandedRecipeCategories = new Set(Array.from(tab.expandedRecipeCategories ?? []));
     this.#craftViewportOverride = tab.craftViewportOverride ? foundry.utils.deepClone(tab.craftViewportOverride) : null;
     this.#craftToolPickerNodeId = String(tab.craftToolPickerNodeId ?? "");
+    this.#craftRepeatCount = Math.max(0, toInteger(tab.craftRepeatCount));
   }
 
   #updateActiveCraftTabTitle(recipe = this.#selectedRecipe) {
@@ -1000,7 +1009,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       craft.canShowAcquisitionWays = hasWays;
       this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     }
-    if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
+    if (selectedRecipe) {
+      this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
+      if (!acquisition && !usage) this.#prepareCraftRepeatContext(craft);
+    }
     const selectedRecipeSummary = recipes.find(recipe => recipe.uuid === this.#selectedRecipeUuid) ?? null;
     this.#updateActiveCraftTabTitle(selectedRecipeSummary ?? selectedRecipe);
     this.#saveActiveCraftTabState();
@@ -1076,6 +1088,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onClose(options) {
     await super._onClose(options);
+    this.#craftBatchSummaryClose?.();
     this.#unbindViewportResize();
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
@@ -1271,7 +1284,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       craft.canShowAcquisitionWays = hasWays;
       this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     }
-    if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
+    if (selectedRecipe) {
+      this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
+      if (!acquisition && !usage) this.#prepareCraftRepeatContext(craft);
+    }
     this.#updateActiveCraftTabTitle(selectedRecipe);
     this.#saveActiveCraftTabState();
     return {
@@ -1286,6 +1302,16 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       craftModes: getCraftModeChoices(this.#craftMode),
       craftMode: this.#craftMode
     };
+  }
+
+  #prepareCraftRepeatContext(craft = {}) {
+    const repeatMax = craft.canCraft
+      ? getCraftRepeatLimit(this.#actor, craft.requirements, craft.toolRequirements, this.#getCraftToolSelections())
+      : 0;
+    this.#craftRepeatCount = normalizeCraftRepeatCount(this.#craftRepeatCount, repeatMax);
+    craft.repeatCount = this.#craftRepeatCount;
+    craft.repeatMax = repeatMax;
+    craft.repeatDisabled = Boolean(this.#busy || repeatMax < 1);
   }
 
   async #prepareAcquisitionWaysContext(targetItem) {
@@ -1360,10 +1386,25 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#usageTargetUuid = "";
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
+        this.#craftRepeatCount = 0;
         this.#saveActiveCraftTabState();
         this.#captureScrollPositions();
         void this.#renderPreservingWindowStack();
       });
+    });
+    this.element?.querySelectorAll("[data-craft-repeat-count]").forEach(input => {
+      if (input.dataset.craftRepeatBound === "true") return;
+      input.dataset.craftRepeatBound = "true";
+      const syncValue = ({ commit = false } = {}) => {
+        const max = Math.max(0, toInteger(input.max));
+        const raw = input.valueAsNumber;
+        if (Number.isFinite(raw)) this.#craftRepeatCount = normalizeCraftRepeatCount(raw, max);
+        else if (commit) this.#craftRepeatCount = 0;
+        if (commit) input.value = String(this.#craftRepeatCount);
+        this.#saveActiveCraftTabState();
+      };
+      input.addEventListener("input", () => syncValue());
+      input.addEventListener("change", () => syncValue({ commit: true }));
     });
     this.element?.querySelectorAll('[data-action="craft"]').forEach(button => {
       if (button.dataset.craftActionBound === "true") return;
@@ -1456,6 +1497,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#usageTargetUuid = "";
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
+        this.#craftRepeatCount = 0;
         this.#updateActiveCraftTabTitle();
         this.#saveActiveCraftTabState();
         this.#syncRecipeSelectionDom();
@@ -2652,17 +2694,61 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const recipe = selection?.item ?? null;
     this.#selectedRecipe = recipe;
     this.#selectedRecipeId = selection?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID;
-    const validation = await validateCraftRequest(actor, recipe, this.#craftMode, this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode), this.#selectedRecipeId);
+    const repeatContext = recipe
+      ? prepareCraftContext(recipe, actor, {
+        mode: this.#craftMode,
+        recipeId: this.#selectedRecipeId,
+        toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
+      })
+      : createEmptyCraftContext();
+    this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, repeatContext.toolRequirements);
+    const toolSelections = this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode);
+    const repeatMax = repeatContext.canCraft
+      ? getCraftRepeatLimit(actor, repeatContext.requirements, repeatContext.toolRequirements, toolSelections)
+      : 0;
+    const repeatCount = this.#readCraftRepeatCount(repeatMax);
+    const validation = await validateCraftRequest(actor, recipe, this.#craftMode, toolSelections, this.#selectedRecipeId);
     if (!validation.valid) {
       ui.notifications.warn(validation.message);
       return undefined;
     }
     this.#storeCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, validation.toolSelections);
 
-    this.#busy = true;
+    if (repeatCount > 0) {
+      await this.#runCraftBatch(actor, recipe, validation, repeatCount);
+      return undefined;
+    }
 
+    this.#busy = true;
+    const linkResults = await this.#resolveCraftLinkResults(actor, validation.links);
+    if (!linkResults) {
+      this.#busy = false;
+      ui.notifications.warn("Проверка крафта не выполнена.");
+      return undefined;
+    }
+
+    const operation = this.#buildCraftOperation(actor, recipe, validation, linkResults);
+    this.#pendingOperation = operation;
+    this.#startedOperationId = operation.id;
+    await this.#runCraftOperationAnimation(operation);
+    return undefined;
+  }
+
+  #readCraftRepeatCount(repeatMax = 0) {
+    const input = this.element?.querySelector("[data-craft-repeat-count]");
+    const raw = Number.isFinite(input?.valueAsNumber) ? input.valueAsNumber : this.#craftRepeatCount;
+    this.#craftRepeatCount = normalizeCraftRepeatCount(raw, repeatMax);
+    if (input) {
+      input.max = String(Math.max(0, toInteger(repeatMax)));
+      input.value = String(this.#craftRepeatCount);
+    }
+    this.#saveActiveCraftTabState();
+    return this.#craftRepeatCount;
+  }
+
+  async #resolveCraftLinkResults(actor, links = [], { createMessages = true, collector = null } = {}) {
     const linkResults = [];
-    for (const link of validation.links) {
+    for (const link of links) {
       if (link.noCheck) {
         linkResults.push({
           linkId: link.id,
@@ -2678,14 +2764,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         skillKey: link.skillKey,
         data: { difficulty: link.difficulty },
         animate: false,
-        createMessage: true,
+        createMessage: createMessages,
         requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт"
       });
-      if (!outcome) {
-        this.#busy = false;
-        ui.notifications.warn("Проверка крафта не выполнена.");
-        return undefined;
-      }
+      if (!outcome) return null;
+      collector?.add(outcome);
       linkResults.push({
         linkId: link.id,
         linkKey: link.key,
@@ -2694,10 +2777,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         resultKey: String(outcome.result?.key ?? "failure")
       });
     }
+    return linkResults;
+  }
 
-    const operationId = foundry.utils.randomID();
-    const operation = {
-      id: operationId,
+  #buildCraftOperation(actor, recipe, validation, linkResults = []) {
+    return {
+      id: foundry.utils.randomID(),
       actorUuid: actor.uuid,
       recipeUuid: recipe.uuid,
       recipeSelectionUuid: this.#selectedRecipeUuid,
@@ -2714,10 +2799,158 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       failureOutputPlan: validation.failureOutputPlan,
       linkResults
     };
-    this.#pendingOperation = operation;
-    this.#startedOperationId = operation.id;
-    await this.#runCraftOperationAnimation(operation);
-    return undefined;
+  }
+
+  async #runCraftBatch(actor, recipe, firstValidation, repeatCount = 0) {
+    const requested = normalizeCraftRepeatCount(repeatCount, repeatCount) + 1;
+    const summary = createCraftBatchSummary(requested, this.#craftMode);
+    const collector = createSkillCheckBatchCollector({
+      requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт",
+      title: game.i18n.format("FALLOUTMAW.Craft.BatchChatTitle", { name: recipe.name })
+    });
+    let warning = "";
+    this.#busy = true;
+
+    try {
+      for (let attempt = 0; attempt < requested; attempt += 1) {
+        const validation = attempt === 0
+          ? firstValidation
+          : await validateCraftRequest(
+            actor,
+            recipe,
+            this.#craftMode,
+            this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode),
+            this.#selectedRecipeId
+          );
+        if (!validation.valid) {
+          warning = validation.message || "Недостаточно ресурсов для следующей попытки.";
+          break;
+        }
+        this.#storeCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, validation.toolSelections);
+
+        const linkResults = await this.#resolveCraftLinkResults(actor, validation.links, {
+          createMessages: false,
+          collector
+        });
+        if (!linkResults) {
+          warning = "Проверка крафта не выполнена.";
+          break;
+        }
+
+        const operation = this.#buildCraftOperation(actor, recipe, validation, linkResults);
+        try {
+          await applyCraftOperation(operation);
+        } catch (error) {
+          console.error(`${SYSTEM_ID} | Craft batch operation failed`, error);
+          warning = error.message || "Следующая попытка крафта не завершена.";
+          break;
+        }
+
+        const resultKey = getCraftAttemptResultKey(linkResults);
+        summary.results[resultKey] += 1;
+        summary.completed += 1;
+      }
+
+      if (collector.size) {
+        try {
+          await collector.publish({ forceBatch: true });
+        } catch (error) {
+          console.error(`${SYSTEM_ID} | Craft batch chat card failed`, error);
+          ui.notifications.warn("Серия выполнена, но карточка проверок не была создана.");
+        }
+      }
+      if (warning) ui.notifications.warn(warning);
+      if (summary.completed) await this.#showCraftBatchSummary(summary);
+    } finally {
+      this.#busy = false;
+      if (this.rendered) {
+        this.#captureScrollPositions();
+        await this.#renderPreservingWindowStack();
+      }
+    }
+  }
+
+  #showCraftBatchSummary(summary = {}) {
+    this.#craftBatchSummaryClose?.();
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    if (!workspace) return Promise.resolve();
+
+    const overlay = document.createElement("section");
+    const titleId = `fallout-maw-craft-batch-${foundry.utils.randomID()}`;
+    const disassembly = summary.mode === CRAFT_MODE_DISASSEMBLY;
+    const rows = [
+      ["criticalSuccess", "critical-success", game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess")],
+      ["success", "success", game.i18n.localize("FALLOUTMAW.SkillCheck.Success")],
+      ["failure", "failure", game.i18n.localize("FALLOUTMAW.SkillCheck.Failure")],
+      ["criticalFailure", "critical-failure", game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure")]
+    ];
+    overlay.className = "fallout-maw-craft-batch-overlay";
+    overlay.dataset.craftBatchSummary = "true";
+    overlay.tabIndex = 0;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "false");
+    overlay.setAttribute("aria-labelledby", titleId);
+    overlay.innerHTML = `
+      <article class="fallout-maw-chat-card fallout-maw-skill-check-card fallout-maw-skill-check-batch-card fallout-maw-craft-batch-terminal">
+        <header class="fallout-maw-skill-check-terminal-header">
+          <div>
+            <span class="fallout-maw-skill-check-kicker">${escapeHTML(game.i18n.localize(disassembly ? "FALLOUTMAW.Craft.BatchDisassemblyProtocol" : "FALLOUTMAW.Craft.BatchCraftProtocol"))}</span>
+            <h2 id="${escapeAttribute(titleId)}">${escapeHTML(game.i18n.localize("FALLOUTMAW.Craft.BatchComplete"))}</h2>
+          </div>
+          <div class="fallout-maw-craft-batch-terminal-actions">
+            <strong class="fallout-maw-skill-check-batch-total">×${Math.max(0, toInteger(summary.completed))}</strong>
+            <button type="button" data-craft-batch-dismiss title="${escapeAttribute(game.i18n.localize("FALLOUTMAW.Craft.BatchDismissNow"))}" aria-label="${escapeAttribute(game.i18n.localize("FALLOUTMAW.Craft.BatchDismissNow"))}"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </header>
+        <section class="fallout-maw-skill-check-batch-results">
+          ${rows.map(([key, cssClass, label]) => {
+            const count = Math.max(0, toInteger(summary.results?.[key]));
+            return `<div class="fallout-maw-skill-check-batch-result ${cssClass}${count ? "" : " empty"}"><span>${escapeHTML(label)}</span><strong>${count}</strong></div>`;
+          }).join("")}
+        </section>
+        <footer class="fallout-maw-craft-batch-terminal-footer"><i class="fa-solid fa-terminal"></i><span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Craft.BatchAutoDismiss"))}</span></footer>
+      </article>`;
+    workspace.appendChild(overlay);
+
+    return new Promise(resolve => {
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        if (this.#craftBatchSummaryTimer) clearTimeout(this.#craftBatchSummaryTimer);
+        this.#craftBatchSummaryTimer = null;
+        overlay.classList.add("is-closing");
+        setTimeout(() => {
+          overlay.remove();
+          if (this.#craftBatchSummaryClose === close) this.#craftBatchSummaryClose = null;
+          resolve();
+        }, CRAFT_BATCH_SUMMARY_CLOSE_MS);
+      };
+      this.#craftBatchSummaryClose = close;
+      this.#craftBatchSummaryTimer = setTimeout(close, CRAFT_BATCH_SUMMARY_DURATION_MS);
+      overlay.addEventListener("pointerdown", event => event.stopPropagation());
+      overlay.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      overlay.addEventListener("wheel", event => {
+        event.preventDefault();
+        event.stopPropagation();
+      }, { passive: false });
+      overlay.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      });
+      overlay.addEventListener("keydown", event => {
+        if (!["Escape", "Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      });
+      requestAnimationFrame(() => overlay.classList.add("is-visible"));
+      overlay.focus({ preventScroll: true });
+    });
   }
 
   #startPendingOperation() {
@@ -2945,6 +3178,75 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     svg.replaceChildren(fragment);
   }
+}
+
+function normalizeCraftRepeatCount(value, maximum = 0) {
+  const numeric = Number(value);
+  const integer = Number.isFinite(numeric) ? Math.trunc(numeric) : 0;
+  return Math.min(Math.max(0, integer), Math.max(0, toInteger(maximum)));
+}
+
+function getCraftRepeatLimit(actor, requirements = [], toolRequirements = [], toolSelections = {}) {
+  if (!actor) return 0;
+  let operationLimit = Number.POSITIVE_INFINITY;
+  let hasConsumableRequirement = false;
+
+  for (const requirement of requirements) {
+    const quantity = Math.max(0, toInteger(requirement?.quantity));
+    if (!quantity) continue;
+    hasConsumableRequirement = true;
+    const owned = Math.max(0, toInteger(requirement?.owned));
+    operationLimit = Math.min(operationLimit, Math.floor(owned / quantity));
+  }
+
+  const normalizedSelections = normalizeCraftToolSelections(toolSelections);
+  const toolGroups = new Map();
+  for (const requirement of toolRequirements) {
+    const quantity = Math.max(0, toInteger(requirement?.quantity));
+    const toolKey = String(requirement?.toolKey ?? "").trim();
+    if (!quantity || !toolKey) continue;
+    hasConsumableRequirement = true;
+    const selectedId = String(normalizedSelections[requirement.key] ?? requirement?.selectedInstrument?.id ?? "");
+    const selected = getActorCraftToolCandidates(actor, requirement).find(candidate => candidate.id === selectedId) ?? null;
+    if (!selected) return 0;
+    const supplyKey = `${selected.id}:${toolKey}`;
+    const group = toolGroups.get(supplyKey) ?? {
+      quantity: 0,
+      supply: Math.max(0, toInteger(selected.supplyValue))
+    };
+    group.quantity += quantity;
+    group.supply = Math.min(group.supply, Math.max(0, toInteger(selected.supplyValue)));
+    toolGroups.set(supplyKey, group);
+  }
+  for (const group of toolGroups.values()) {
+    operationLimit = Math.min(operationLimit, Math.floor(group.supply / group.quantity));
+  }
+
+  if (!hasConsumableRequirement || !Number.isFinite(operationLimit)) return 0;
+  return Math.max(0, operationLimit - 1);
+}
+
+function getCraftAttemptResultKey(linkResults = []) {
+  const checkedResults = linkResults.filter(result => result.resultKey !== "noCheck");
+  if (!checkedResults.length) return "success";
+  if (checkedResults.some(result => result.resultKey === "criticalFailure")) return "criticalFailure";
+  if (checkedResults.some(result => !result.success)) return "failure";
+  if (checkedResults.every(result => result.resultKey === "criticalSuccess")) return "criticalSuccess";
+  return "success";
+}
+
+function createCraftBatchSummary(requested = 0, mode = CRAFT_MODE_CREATE) {
+  return {
+    requested: Math.max(0, toInteger(requested)),
+    completed: 0,
+    mode: normalizeCraftMode(mode),
+    results: {
+      criticalSuccess: 0,
+      success: 0,
+      failure: 0,
+      criticalFailure: 0
+    }
+  };
 }
 
 async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID) {

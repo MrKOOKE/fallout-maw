@@ -668,7 +668,16 @@
       "KnowledgeTerminal": "Technical knowledge database",
       "KnowledgeUpdated": "Recipe knowledge updated.",
       "ActorsShort": "actors",
-      "ItemsShort": "items"
+      "ItemsShort": "items",
+      "Repetitions": "Repetitions",
+      "RepetitionsLimit": "Maximum available additional runs",
+      "RepetitionsHint": "Number of additional runs (0 performs one standard run).",
+      "BatchChatTitle": "Batch: {name}",
+      "BatchCraftProtocol": "Production protocol",
+      "BatchDisassemblyProtocol": "Disassembly protocol",
+      "BatchComplete": "Batch complete",
+      "BatchDismissNow": "Dismiss report",
+      "BatchAutoDismiss": "Auto-dismiss: 3 sec // click to close"
     },
     "Creation": {
       "Base": "Character Base",

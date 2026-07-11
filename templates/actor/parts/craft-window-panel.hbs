@@ -22,10 +22,13 @@
         <span>Вернуться</span>
       </button>
       {{else}}
-      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="showAcquisitionWays" title="Показать способы получения" {{#unless craft.canShowAcquisitionWays}}disabled{{/unless}}>
-        <i class="fa-solid fa-route"></i>
-        <span>Показать способы получения</span>
-      </button>
+      <div class="fallout-maw-craft-repeat-control {{#if craft.repeatDisabled}}disabled{{/if}}">
+        <label for="fallout-maw-craft-repeat-count">
+          <span>{{localize "FALLOUTMAW.Craft.Repetitions"}}</span>
+          <strong title="{{localize "FALLOUTMAW.Craft.RepetitionsLimit"}}"><small>MAX</small>{{craft.repeatMax}}</strong>
+        </label>
+        <input id="fallout-maw-craft-repeat-count" type="number" min="0" max="{{craft.repeatMax}}" step="1" value="{{craft.repeatCount}}" data-craft-repeat-count title="{{localize "FALLOUTMAW.Craft.RepetitionsHint"}}" aria-label="{{localize "FALLOUTMAW.Craft.Repetitions"}}" {{#if craft.repeatDisabled}}disabled{{/if}}>
+      </div>
       <button type="button" class="fallout-maw-craft-window-hammer" data-action="craft" title="{{craft.actionTitle}}" {{#unless craft.canCraft}}disabled{{/unless}}>
         <i class="fa-solid {{craft.actionIcon}}"></i>
       </button>

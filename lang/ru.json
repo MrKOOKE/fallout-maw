@@ -728,7 +728,16 @@
       "KnowledgeTerminal": "База технологических знаний",
       "KnowledgeUpdated": "Знания рецептов обновлены.",
       "ActorsShort": "актёров",
-      "ItemsShort": "предметов"
+      "ItemsShort": "предметов",
+      "Repetitions": "Повторения",
+      "RepetitionsLimit": "Максимальное доступное число дополнительных запусков",
+      "RepetitionsHint": "Число дополнительных запусков (0 — один обычный запуск).",
+      "BatchChatTitle": "Серия: {name}",
+      "BatchCraftProtocol": "Протокол производства",
+      "BatchDisassemblyProtocol": "Протокол разбора",
+      "BatchComplete": "Серия завершена",
+      "BatchDismissNow": "Закрыть отчёт",
+      "BatchAutoDismiss": "Автозакрытие: 3 сек // нажмите, чтобы закрыть"
     },
     "Creation": {
       "Base": "Основа персонажа",
