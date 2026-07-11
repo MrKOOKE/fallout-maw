@@ -15,6 +15,13 @@ import {
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import { getOneTimeUseFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import {
+  actorKnowsCraftItem,
+  getCraftKnowledgeItemUuid,
+  grantCraftItemKnowledge,
+  hasCraftKnowledgeData,
+  resolveCraftKnowledgeItem
+} from "./recipe-knowledge.mjs";
 
 const ONE_TIME_USE_STUDIED_FLAG = "oneTimeUseStudied";
 const LEGACY_ONE_TIME_USE_STUDIED_FLAG = "oneTimeUseDump";
@@ -29,8 +36,9 @@ export async function useOneTimeUseItem({ actor = null, item = null } = {}) {
 
   const oneTimeUse = getOneTimeUseFunction(item);
   const changes = normalizeOneTimeUseChanges(oneTimeUse.changes);
-  if (!changes.length) {
-    ui.notifications.warn(`${item.name}: изменения не настроены.`);
+  const recipeItemUuids = normalizeOneTimeUseRecipeItemUuids(oneTimeUse.recipeItemUuids);
+  if (!changes.length && !recipeItemUuids.length) {
+    ui.notifications.warn(`${item.name}: изменения и знания рецептов не настроены.`);
     return false;
   }
   if (getItemQuantity(item) <= 0) {
@@ -43,9 +51,23 @@ export async function useOneTimeUseItem({ actor = null, item = null } = {}) {
     ui.notifications.warn(`${item.name}: уже изучено, повторное применение недоступно.`);
     return false;
   }
+  const unknownRecipeItemUuids = recipeItemUuids.filter(uuid => !actorKnowsCraftItem(actor, uuid));
+  if (!changes.length && recipeItemUuids.length && !unknownRecipeItemUuids.length) {
+    ui.notifications.warn(`${item.name}: все содержащиеся рецепты уже изучены.`);
+    return false;
+  }
 
-  await applyOneTimeUseChanges(actor, item, changes, studiedEffect);
+  if (changes.length || Boolean(oneTimeUse.repeatApplicationBlocked)) {
+    await applyOneTimeUseChanges(actor, item, changes, studiedEffect);
+  }
+  const grantedRecipeItemUuids = await grantCraftItemKnowledge(actor, unknownRecipeItemUuids);
   await spendOneTimeUseItem(item);
+  if (grantedRecipeItemUuids.length) {
+    const names = grantedRecipeItemUuids
+      .map(uuid => resolveCraftKnowledgeItem(uuid)?.name ?? uuid)
+      .join(", ");
+    ui.notifications.info(`${actor.name}: изучены рецепты — ${names}.`);
+  }
   Hooks.callAll("fallout-maw.itemUsed", {
     actor,
     targetActor: actor,
@@ -75,6 +97,12 @@ export function normalizeOneTimeUseChanges(changes = []) {
       priority: change?.priority ?? null
     }))
     .filter(change => change.key && change.value !== "");
+}
+
+export function normalizeOneTimeUseRecipeItemUuids(values = []) {
+  return Array.from(new Set((Array.isArray(values) ? values : Object.values(values ?? {}))
+    .map(value => getCraftKnowledgeItemUuid(value))
+    .filter(uuid => hasCraftKnowledgeData(resolveCraftKnowledgeItem(uuid)))));
 }
 
 export function remapOneTimeUseChangeKey(key = "") {

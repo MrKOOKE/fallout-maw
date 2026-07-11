@@ -199,6 +199,11 @@ import {
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 import { findOneTimeUseStudiedEffect, isOneTimeUseRepeatBlocked } from "../items/one-time-use.mjs";
+import {
+  actorKnowsCraftItem,
+  hasCraftKnowledgeData,
+  resolveCraftKnowledgeItem
+} from "../items/recipe-knowledge.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { dropActorInventoryItem } from "../items/dropped-items.mjs";
@@ -235,6 +240,14 @@ const ACTOR_SHEET_FALLBACK_VIEWPORT_HEIGHT = 720;
 const ACTOR_SHEET_WORLD_SIDEBAR_PEEK_WIDTH = 420;
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
+let recipeKnowledgeTooltipListenersActive = false;
+let recipeKnowledgeTooltipTimer = null;
+let recipeKnowledgeTooltipAnchor = null;
+let recipeKnowledgeTooltipPendingAnchor = null;
+let recipeKnowledgeTooltipElement = null;
+let recipeKnowledgeTooltipCloseTimer = null;
+let recipeKnowledgeTooltipPinned = false;
+const recipeKnowledgeMiddleActiveAnchors = new WeakSet();
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
@@ -3587,6 +3600,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     event.stopPropagation();
 
+    const nestedAnchor = event.target?.closest?.("[data-tooltip-html]");
+    if (nestedAnchor && this.#tooltipElement?.contains(nestedAnchor)) {
+      game.tooltip?.lockTooltip?.();
+      return;
+    }
     this.#clearNestedInventoryTooltip({ force: true });
     this.#pinInventoryTooltip();
   }
@@ -4143,9 +4161,16 @@ export function getInventoryTooltipCompareActor() {
 }
 
 export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, compareActor = null, compareMode = false } = {}) {
+  ensureRecipeKnowledgeTooltipListeners();
   const descriptionHTML = await renderInventoryItemDescriptionHTML(item);
+  const recipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(item, actor);
   if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, actor, { descriptionHTML });
-  const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex, baseMode, descriptionHTML });
+  const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, {
+    activeWeaponIndex,
+    baseMode,
+    descriptionHTML,
+    recipeKnowledgePreviews
+  });
   if (!compareMode) return itemHTML;
   if (!compareActor) return itemHTML;
 
@@ -4155,10 +4180,12 @@ export async function renderInventoryItemTooltipHTML(item, actor, { activeWeapon
   const equippedHTMLs = [];
   for (const equippedItem of equippedItems) {
     const equippedDescriptionHTML = await renderInventoryItemDescriptionHTML(equippedItem);
+    const equippedRecipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(equippedItem, compareActor);
     equippedHTMLs.push(renderInventoryItemTooltipContentHTML(equippedItem, compareActor, {
       activeWeaponIndex: 0,
       baseMode,
-      descriptionHTML: equippedDescriptionHTML
+      descriptionHTML: equippedDescriptionHTML,
+      recipeKnowledgePreviews: equippedRecipeKnowledgePreviews
     }));
   }
   return renderInventoryTooltipComparisonHTML(itemHTML, equippedHTMLs);
@@ -4172,6 +4199,218 @@ async function renderInventoryItemDescriptionHTML(item) {
     secrets: item?.isOwner,
     relativeTo: item
   });
+}
+
+async function prepareOneTimeUseRecipeKnowledgePreviews(item, actor = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.oneTimeUse, { ignoreBroken: true })) return new Map();
+  const previews = new Map();
+  for (const uuid of getOneTimeUseFunction(item).recipeItemUuids ?? []) {
+    const recipeItem = resolveCraftKnowledgeItem(uuid);
+    if (!recipeItem || !hasCraftKnowledgeData(recipeItem) || previews.has(recipeItem.uuid)) continue;
+    previews.set(recipeItem.uuid, await renderCraftKnowledgeTooltipHTML(recipeItem, actor));
+  }
+  return previews;
+}
+
+export async function renderCraftKnowledgeTooltipHTML(item, actor = null) {
+  const { renderCraftKnowledgeVariantsHTML } = await import("../apps/craft-window.mjs");
+  const descriptionHTML = await renderInventoryItemDescriptionHTML(item);
+  const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, {
+    descriptionHTML,
+    includeRecipeKnowledge: false
+  });
+  return `
+    <section class="fallout-maw-recipe-knowledge-preview">
+      <div class="fallout-maw-recipe-knowledge-item-tooltip">${itemHTML}</div>
+      ${renderCraftKnowledgeVariantsHTML(item, actor)}
+    </section>
+  `;
+}
+
+export function activateCraftKnowledgeTooltip(anchor, html, { locked = false, replace = false } = {}) {
+  if (!anchor?.isConnected || !html) return null;
+  cancelCraftKnowledgeTooltipClose();
+  if (recipeKnowledgeTooltipPinned) {
+    if (!locked || recipeKnowledgeTooltipAnchor === anchor) return null;
+    removeCraftKnowledgeTooltip();
+  }
+  if (!replace && recipeKnowledgeTooltipElement?.isConnected && game.tooltip?.element === anchor) {
+    if (locked) pinCraftKnowledgeTooltip(anchor);
+    return recipeKnowledgeTooltipElement.querySelector(".fallout-maw-recipe-knowledge-tooltip-host");
+  }
+  const host = anchor.ownerDocument.createElement("div");
+  host.className = "fallout-maw-recipe-knowledge-tooltip-host";
+  host.innerHTML = String(html);
+  const radioGroup = `craft-knowledge-${foundry.utils.randomID()}`;
+  host.querySelectorAll(".fallout-maw-recipe-knowledge-variant-tabs > input[type='radio']").forEach((input, index) => {
+    const previousId = input.id;
+    const nextId = `${radioGroup}-${index}`;
+    const label = previousId ? host.querySelector(`label[for="${CSS.escape(previousId)}"]`) : null;
+    input.id = nextId;
+    input.name = radioGroup;
+    if (label) label.htmlFor = nextId;
+  });
+  const anchorRect = anchor.getBoundingClientRect();
+  const direction = (window.innerWidth - anchorRect.right) >= anchorRect.left ? "RIGHT" : "LEFT";
+  game.tooltip.activate(anchor, {
+    html: host,
+    cssClass: "fallout-maw-inventory-tooltip fallout-maw-recipe-knowledge-tooltip",
+    direction
+  });
+  const tooltip = game.tooltip.tooltip;
+  tooltip.style.pointerEvents = "none";
+  host.addEventListener("pointerenter", cancelCraftKnowledgeTooltipClose);
+  host.addEventListener("pointerleave", event => scheduleCraftKnowledgeTooltipClose(anchor, event.relatedTarget));
+  host.addEventListener("click", event => {
+    const button = event.target.closest?.("[data-tooltip-weapon-tab]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
+    host.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
+      const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
+      entry.classList.toggle("active", active);
+      entry.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    host.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
+      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
+    });
+  });
+  host.addEventListener("auxclick", event => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    pinCraftKnowledgeTooltip(anchor);
+  });
+  recipeKnowledgeTooltipElement = tooltip;
+  recipeKnowledgeTooltipAnchor = anchor;
+  recipeKnowledgeTooltipPinned = false;
+  if (locked) pinCraftKnowledgeTooltip(anchor);
+  import("../apps/craft-window.mjs").then(({ activateCraftKnowledgeVariants }) => {
+    activateCraftKnowledgeVariants(host);
+  });
+  return host;
+}
+
+export function isCraftKnowledgeTooltipOpen() {
+  if (recipeKnowledgeTooltipPinned) return Boolean(recipeKnowledgeTooltipElement?.isConnected);
+  return Boolean(
+    recipeKnowledgeTooltipElement === game.tooltip?.tooltip
+    && game.tooltip?.element === recipeKnowledgeTooltipAnchor
+    && recipeKnowledgeTooltipElement?.classList?.contains("active")
+    && recipeKnowledgeTooltipElement?.classList?.contains("fallout-maw-recipe-knowledge-tooltip")
+  );
+}
+
+export function reanchorCraftKnowledgeTooltip(anchor) {
+  if (recipeKnowledgeTooltipPinned || !isCraftKnowledgeTooltipOpen() || !anchor?.isConnected) return false;
+  const host = recipeKnowledgeTooltipElement.querySelector(".fallout-maw-recipe-knowledge-tooltip-host");
+  if (!host) return false;
+  const rect = anchor.getBoundingClientRect();
+  game.tooltip.activate(anchor, {
+    html: host,
+    cssClass: "fallout-maw-inventory-tooltip fallout-maw-recipe-knowledge-tooltip",
+    direction: (window.innerWidth - rect.right) >= rect.left ? "RIGHT" : "LEFT"
+  });
+  game.tooltip.tooltip.style.pointerEvents = "none";
+  recipeKnowledgeTooltipElement = game.tooltip.tooltip;
+  recipeKnowledgeTooltipAnchor = anchor;
+  return true;
+}
+
+export function toggleCraftKnowledgeTooltipPin(anchor) {
+  if (!isCraftKnowledgeTooltipOpen() || recipeKnowledgeTooltipAnchor !== anchor) return false;
+  if (recipeKnowledgeTooltipPinned) removeCraftKnowledgeTooltip(anchor);
+  else pinCraftKnowledgeTooltip(anchor);
+  return true;
+}
+
+function pinCraftKnowledgeTooltip(anchor) {
+  if (recipeKnowledgeTooltipPinned || game.tooltip?.element !== anchor) return recipeKnowledgeTooltipElement;
+  const tooltip = game.tooltip.lockTooltip();
+  tooltip.classList.add("pinned");
+  tooltip.style.pointerEvents = "auto";
+  tooltip.dataset.locked = "true";
+  recipeKnowledgeTooltipElement = tooltip;
+  recipeKnowledgeTooltipPinned = true;
+  return tooltip;
+}
+
+export function scheduleCraftKnowledgeTooltipClose(anchor, relatedTarget = null) {
+  if (!recipeKnowledgeTooltipElement?.isConnected || recipeKnowledgeTooltipAnchor !== anchor) return;
+  if (recipeKnowledgeTooltipPinned) return;
+  if (anchor?.contains?.(relatedTarget)) return;
+  cancelCraftKnowledgeTooltipClose();
+  recipeKnowledgeTooltipCloseTimer = window.setTimeout(() => {
+    recipeKnowledgeTooltipCloseTimer = null;
+    if (anchor?.matches?.(":hover")) return;
+    removeCraftKnowledgeTooltip();
+  }, 160);
+}
+
+export function cancelCraftKnowledgeTooltipClose() {
+  if (!recipeKnowledgeTooltipCloseTimer) return;
+  window.clearTimeout(recipeKnowledgeTooltipCloseTimer);
+  recipeKnowledgeTooltipCloseTimer = null;
+}
+
+export function removeCraftKnowledgeTooltip(anchor = null) {
+  if (anchor && recipeKnowledgeTooltipAnchor !== anchor) return;
+  cancelCraftKnowledgeTooltipClose();
+  if (recipeKnowledgeTooltipPinned && recipeKnowledgeTooltipElement) {
+    game.tooltip?.dismissLockedTooltip?.(recipeKnowledgeTooltipElement);
+  } else if (game.tooltip?.element === recipeKnowledgeTooltipAnchor) game.tooltip.deactivate();
+  recipeKnowledgeTooltipElement = null;
+  recipeKnowledgeTooltipAnchor = null;
+  recipeKnowledgeTooltipPinned = false;
+}
+
+function ensureRecipeKnowledgeTooltipListeners() {
+  if (recipeKnowledgeTooltipListenersActive || !globalThis.document?.body) return;
+  recipeKnowledgeTooltipListenersActive = true;
+  document.addEventListener("pointerover", event => {
+    const anchor = event.target.closest?.("[data-recipe-knowledge-tooltip-html]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    cancelCraftKnowledgeTooltipClose();
+    if (recipeKnowledgeTooltipTimer) window.clearTimeout(recipeKnowledgeTooltipTimer);
+    recipeKnowledgeTooltipPendingAnchor = anchor;
+    if (isCraftKnowledgeTooltipOpen()) {
+      activateCraftKnowledgeTooltip(anchor, anchor.dataset.recipeKnowledgeTooltipHtml);
+      return;
+    }
+    recipeKnowledgeTooltipTimer = window.setTimeout(() => {
+      recipeKnowledgeTooltipTimer = null;
+      if (recipeKnowledgeTooltipPendingAnchor !== anchor || !anchor.isConnected) return;
+      activateCraftKnowledgeTooltip(anchor, anchor.dataset.recipeKnowledgeTooltipHtml);
+    }, 500);
+  }, true);
+  document.addEventListener("pointerout", event => {
+    const anchor = event.target.closest?.("[data-recipe-knowledge-tooltip-html]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    if (recipeKnowledgeTooltipTimer) window.clearTimeout(recipeKnowledgeTooltipTimer);
+    recipeKnowledgeTooltipTimer = null;
+    if (recipeKnowledgeTooltipPendingAnchor === anchor) recipeKnowledgeTooltipPendingAnchor = null;
+    scheduleCraftKnowledgeTooltipClose(anchor, event.relatedTarget);
+  }, true);
+  document.addEventListener("pointerdown", event => {
+    if (event.button !== 1) return;
+    const anchor = event.target.closest?.("[data-recipe-knowledge-tooltip-html]");
+    if (!anchor) return;
+    if (toggleCraftKnowledgeTooltipPin(anchor)) recipeKnowledgeMiddleActiveAnchors.add(anchor);
+    event.preventDefault();
+  }, true);
+  document.addEventListener("auxclick", event => {
+    if (event.button !== 1) return;
+    const anchor = event.target.closest?.("[data-recipe-knowledge-tooltip-html]");
+    if (!anchor) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (recipeKnowledgeMiddleActiveAnchors.has(anchor)) {
+      recipeKnowledgeMiddleActiveAnchors.delete(anchor);
+      return;
+    }
+    activateCraftKnowledgeTooltip(anchor, anchor.dataset.recipeKnowledgeTooltipHtml, { locked: true });
+  }, true);
 }
 
 function renderInventoryTooltipComparisonHTML(itemHTML = "", equippedHTMLs = []) {
@@ -4459,7 +4698,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
   ];
 }
 
-function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "" } = {}) {
+function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "", includeRecipeKnowledge = true, recipeKnowledgePreviews = new Map() } = {}) {
   const currencySettings = getCurrencySettings();
   const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
   const quantity = Math.max(1, toInteger(item.system?.quantity));
@@ -4470,7 +4709,12 @@ function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex 
   const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
   const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
   const armedStatus = renderArmedDelayedExplosionStatus(item);
-  const functionSections = buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex, baseMode });
+  const functionSections = buildInventoryTooltipFunctionSections(item, actor, {
+    activeWeaponIndex,
+    baseMode,
+    includeRecipeKnowledge,
+    recipeKnowledgePreviews
+  });
   return `
     <section class="content">
       <section class="header">
@@ -4556,13 +4800,13 @@ function renderTooltipMeterValue(value, max = 0) {
   };
 }
 
-function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0, baseMode = false } = {}) {
+function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0, baseMode = false, includeRecipeKnowledge = true, recipeKnowledgePreviews = new Map() } = {}) {
   const sections = [
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
     buildFirstAidTooltipSection(item, actor),
     buildNeedChangeTooltipSection(item, actor),
-    buildOneTimeUseTooltipSection(item, actor),
+    buildOneTimeUseTooltipSection(item, actor, { includeRecipeKnowledge, recipeKnowledgePreviews }),
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item, actor),
     buildEnergySourceTooltipSection(item),
@@ -4705,7 +4949,7 @@ function getNeedChangeDamageTooltipRows(damages = []) {
   return values.length ? [["Получение урона", values.join(", ")]] : [];
 }
 
-function buildOneTimeUseTooltipSection(item, actor = null) {
+function buildOneTimeUseTooltipSection(item, actor = null, { includeRecipeKnowledge = true, recipeKnowledgePreviews = new Map() } = {}) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.oneTimeUse, { ignoreBroken: true })) return "";
   const oneTimeUse = getOneTimeUseFunction(item);
   const rows = [];
@@ -4716,6 +4960,28 @@ function buildOneTimeUseTooltipSection(item, actor = null) {
       game.i18n.localize("FALLOUTMAW.Item.OneTimeUseAlreadyApplied"),
       game.i18n.localize(alreadyApplied ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")
     ]);
+  }
+  if (includeRecipeKnowledge) {
+    const recipeItems = (oneTimeUse.recipeItemUuids ?? [])
+      .map(uuid => resolveCraftKnowledgeItem(uuid))
+      .filter(item => item && hasCraftKnowledgeData(item));
+    if (recipeItems.length) {
+      rows.push([
+        game.i18n.localize("FALLOUTMAW.Item.OneTimeUseRecipeKnowledge"),
+        {
+          html: `<span class="fallout-maw-recipe-knowledge-chip-list">${recipeItems.map(recipeItem => {
+            const preview = recipeKnowledgePreviews.get(recipeItem.uuid) ?? "";
+            const known = actorKnowsCraftItem(actor, recipeItem);
+            return `<span class="fallout-maw-recipe-knowledge-chip ${known ? "known" : "unknown"}"
+              ${preview ? `data-recipe-knowledge-tooltip-html="${escapeAttribute(preview)}"` : ""}>
+              <img src="${escapeAttribute(recipeItem.img || "icons/svg/item-bag.svg")}" alt="">
+              <span>${escapeHTML(recipeItem.name)}</span>
+              <i class="fa-solid ${known ? "fa-book-open" : "fa-book"}"></i>
+            </span>`;
+          }).join("")}</span>`
+        }
+      ]);
+    }
   }
   rows.push(...getFirstAidEffectChangeTooltipRows(oneTimeUse.changes, actor, "FALLOUTMAW.Item.OneTimeUseChanges"));
   if (!rows.length) return "";

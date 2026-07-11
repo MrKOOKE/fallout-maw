@@ -4526,6 +4526,12 @@ body #prosemirror-dropdown {
 }
 
 .fallout-maw-pointer-drag-preview {
+  align-items: center !important;
+  background: rgba(210, 185, 145, 0.2) !important;
+  border: 1px solid rgba(201, 180, 114, 0.72) !important;
+  box-sizing: border-box !important;
+  display: grid !important;
+  justify-items: center !important;
   margin: 0 !important;
   opacity: 0.82 !important;
   overflow: hidden !important;
@@ -4554,6 +4560,26 @@ body #prosemirror-dropdown {
   transform: translate(-50%, -50%) rotate(90deg) !important;
   transform-origin: center !important;
   width: var(--fallout-maw-pointer-drag-image-width) !important;
+}
+
+.fallout-maw-pointer-drag-preview > strong {
+  background: rgba(0, 0, 0, 0.72);
+  bottom: 0.15rem;
+  color: #f5e79c;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.12rem 0.2rem;
+  position: absolute;
+  right: 0.15rem;
+  z-index: 1;
+}
+
+.fallout-maw-pointer-drag-preview-label {
+  max-width: calc(100% - 0.5rem);
+  overflow: hidden;
+  padding: 0.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fallout-maw-draggable-item {
@@ -17454,4 +17480,413 @@ html.fallout-maw-token-action-hud-open #hotbar {
   color: #fff0ed;
   border-color: rgba(230, 83, 69, 0.95);
   box-shadow: 0 0 10px rgba(230, 83, 69, 0.28);
+}
+
+/* Recipe knowledge */
+
+.fallout-maw-recipe-knowledge-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fallout-maw-recipe-knowledge-chip {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(218, 197, 110, 0.38);
+  display: inline-flex;
+  gap: 5px;
+  max-width: 250px;
+  padding: 3px 6px 3px 3px;
+}
+
+.fallout-maw-recipe-knowledge-chip:hover,
+.fallout-maw-recipe-knowledge-chip.known {
+  border-color: #e4d06f;
+  color: #fff0a6;
+}
+
+.fallout-maw-recipe-knowledge-chip > img {
+  border: 0;
+  height: 24px;
+  margin: 0;
+  object-fit: contain;
+  width: 24px;
+}
+
+.fallout-maw-recipe-knowledge-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-inventory-tooltip.fallout-maw-recipe-knowledge-tooltip {
+  max-height: calc(100vh - 32px);
+  max-width: none;
+  min-width: 1220px;
+  width: 1220px;
+}
+
+.locked-tooltip.fallout-maw-recipe-knowledge-tooltip {
+  pointer-events: auto;
+}
+
+.locked-tooltip.fallout-maw-recipe-knowledge-node-tooltip {
+  pointer-events: auto !important;
+}
+
+.fallout-maw-recipe-knowledge-tooltip-host {
+  display: contents;
+}
+
+.fallout-maw-recipe-knowledge-preview {
+  display: grid;
+  grid-template-columns: 660px 560px;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+}
+
+.fallout-maw-recipe-knowledge-item-tooltip {
+  border-right: 1px solid rgba(218, 197, 110, 0.42);
+  min-width: 660px;
+  width: 660px;
+  overflow: hidden;
+}
+
+.fallout-maw-recipe-knowledge-tooltip .fallout-maw-recipe-knowledge-item-tooltip > .content {
+  max-height: calc(100vh - 48px);
+}
+
+.fallout-maw-recipe-knowledge-tooltip .weapon-tab-list {
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+}
+
+.fallout-maw-recipe-knowledge-tooltip .weapon-tab-list button {
+  transition: none;
+  width: 100%;
+}
+
+.fallout-maw-recipe-knowledge-craft {
+  background:
+    repeating-linear-gradient(0deg, rgba(208, 220, 140, 0.025) 0 1px, transparent 1px 4px),
+    #080c08;
+  min-width: 560px;
+  padding: 12px;
+}
+
+.fallout-maw-recipe-knowledge-variant-tabs {
+  align-content: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fallout-maw-recipe-knowledge-variant-tabs > input {
+  display: none;
+}
+
+.fallout-maw-recipe-knowledge-variant-tabs > label {
+  align-items: center;
+  background: rgba(55, 61, 44, 0.76);
+  border: 1px solid rgba(218, 197, 110, 0.38);
+  color: #bcb16e;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.38rem;
+  max-width: 220px;
+  overflow: hidden;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.fallout-maw-recipe-knowledge-variant-tabs > label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fallout-maw-recipe-knowledge-variant-tabs > input:checked + label {
+  background: rgba(218, 197, 110, 0.18);
+  border-color: #ead77d;
+  box-shadow: inset 0 -2px 0 #ead77d, 0 0 9px rgba(218, 197, 110, 0.14);
+  color: #fff0a6;
+}
+
+.fallout-maw-recipe-knowledge-variant-panel {
+  display: none;
+  flex: 0 0 100%;
+  order: 100;
+  padding-top: 7px;
+}
+
+.fallout-maw-recipe-knowledge-variant-panel > .fallout-maw-craft-editor {
+  height: min(520px, calc(100vh - 105px));
+  min-height: 0;
+  width: 100%;
+}
+
+.fallout-maw-recipe-knowledge-variant-tabs > input:checked + label + .fallout-maw-recipe-knowledge-variant-panel {
+  display: grid;
+}
+
+.application.fallout-maw-recipe-knowledge-window .window-content {
+  overflow: hidden;
+}
+
+.application.fallout-maw-recipe-knowledge-window .fallout-maw-recipe-knowledge-window-sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.fallout-maw-recipe-knowledge-window-header {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+}
+
+.fallout-maw-recipe-knowledge-search {
+  align-items: center;
+  background: rgba(5, 8, 6, 0.9);
+  border: 2px solid var(--fallout-maw-actor-border-soft);
+  display: flex;
+  gap: 0.55rem;
+  min-height: 3rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.fallout-maw-recipe-knowledge-search input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-size: 1.15rem;
+  width: 100%;
+}
+
+.fallout-maw-recipe-knowledge-window-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.application.fallout-maw-recipe-knowledge-window .fallout-maw-recipe-knowledge-catalog {
+  flex: 1 1 auto;
+  margin: 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.application.fallout-maw-recipe-knowledge-window .fallout-maw-recipe-knowledge-catalog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.fallout-maw-recipe-knowledge-summary {
+  align-items: center;
+  background: rgba(5, 8, 6, 0.9);
+  border: 2px solid var(--fallout-maw-actor-border-soft);
+  display: flex;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.fallout-maw-recipe-knowledge-summary span {
+  color: var(--fallout-maw-actor-text-soft);
+}
+
+.fallout-maw-recipe-knowledge-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 0;
+}
+
+.fallout-maw-recipe-knowledge-category {
+  border: 1px solid var(--fallout-maw-actor-border-soft);
+  margin-bottom: 0.5rem;
+}
+
+.fallout-maw-recipe-knowledge-category > summary {
+  align-items: center;
+  background: linear-gradient(90deg, rgba(48, 51, 39, 0.82), rgba(11, 14, 10, 0.9));
+  cursor: pointer;
+  display: flex;
+  gap: 0.55rem;
+  list-style: none;
+  padding: 0.55rem 0.7rem;
+}
+
+.fallout-maw-recipe-knowledge-category > summary strong {
+  margin-left: auto;
+}
+
+.fallout-maw-recipe-knowledge-category[open] > summary i {
+  transform: rotate(90deg);
+}
+
+.fallout-maw-recipe-knowledge-table-wrap {
+  overflow-x: auto;
+}
+
+.fallout-maw-recipe-knowledge-catalog table {
+  border-collapse: collapse;
+  margin: 0;
+  min-width: 100%;
+  width: max-content;
+}
+
+.fallout-maw-recipe-knowledge-catalog th,
+.fallout-maw-recipe-knowledge-catalog td {
+  border: 1px solid var(--fallout-maw-actor-border-soft);
+  padding: 0.4rem 0.55rem;
+  text-align: center;
+}
+
+.fallout-maw-recipe-knowledge-catalog th {
+  background: rgba(18, 21, 15, 0.98);
+  color: var(--fallout-maw-actor-text-strong);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.fallout-maw-recipe-knowledge-catalog tbody tr,
+.fallout-maw-recipe-knowledge-catalog tbody tr:nth-child(even) {
+  background: rgba(5, 8, 6, 0.84);
+}
+
+.fallout-maw-recipe-knowledge-catalog tbody tr:nth-child(even) {
+  background: rgba(19, 22, 16, 0.84);
+}
+
+.fallout-maw-recipe-knowledge-catalog tbody tr:hover {
+  background: rgba(220, 197, 110, 0.09);
+}
+
+.fallout-maw-recipe-knowledge-catalog th:nth-child(2),
+.fallout-maw-recipe-knowledge-catalog td:nth-child(2) {
+  min-width: 300px;
+  text-align: left;
+}
+
+.fallout-maw-recipe-knowledge-catalog th:first-child,
+.fallout-maw-recipe-knowledge-catalog td:first-child {
+  min-width: 3.25rem;
+  width: 3.25rem;
+}
+
+.fallout-maw-recipe-knowledge-checkbox,
+.fallout-maw-recipe-knowledge-column-toggle {
+  cursor: pointer;
+  position: relative;
+}
+
+.fallout-maw-recipe-knowledge-checkbox {
+  display: inline-grid;
+  margin: 0;
+  place-items: center;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-input {
+  height: 1px !important;
+  left: 50%;
+  margin: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  width: 1px !important;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-box {
+  align-items: center;
+  background: linear-gradient(180deg, #181b16, #070907);
+  border: 1px solid #82784d;
+  box-shadow: inset 1px 1px 0 rgba(255, 244, 188, 0.12), 1px 1px 0 #000;
+  color: #191b13;
+  display: inline-flex;
+  flex: 0 0 1.35rem;
+  height: 1.35rem;
+  justify-content: center;
+  width: 1.35rem;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-box i {
+  font-size: 0.78rem;
+  opacity: 0;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-input:checked + .fallout-maw-recipe-knowledge-checkbox-box {
+  background: linear-gradient(180deg, #e7d991, #a99b55);
+  border-color: #f3e49b;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-input:checked + .fallout-maw-recipe-knowledge-checkbox-box i {
+  opacity: 1;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-input:indeterminate + .fallout-maw-recipe-knowledge-checkbox-box::after {
+  background: #e7d991;
+  box-shadow: 0 0 4px rgba(231, 217, 145, 0.35);
+  content: "";
+  height: 3px;
+  width: 0.75rem;
+}
+
+.fallout-maw-recipe-knowledge-checkbox-input:focus-visible + .fallout-maw-recipe-knowledge-checkbox-box {
+  outline: 2px solid #f3e49b;
+  outline-offset: 2px;
+}
+
+.fallout-maw-recipe-knowledge-column-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  justify-content: space-between;
+  margin: 0;
+  min-width: 10rem;
+}
+
+.fallout-maw-recipe-knowledge-column-toggle > span {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-recipe-knowledge-manager-item {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.fallout-maw-recipe-knowledge-manager-item img {
+  border: 1px solid var(--fallout-maw-actor-border);
+  height: 36px;
+  object-fit: contain;
+  width: 36px;
+}
+
+.fallout-maw-recipe-knowledge-actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-recipe-knowledge-actions button {
+  min-height: 2.7rem;
+}
+
+@media (max-width: 900px) {
+  .application.fallout-maw-recipe-knowledge-window .fallout-maw-recipe-knowledge-window-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -1,0 +1,58 @@
+<div class="fallout-maw-sheet fallout-maw-recipe-knowledge-window-sheet">
+  <header class="fallout-maw-recipe-knowledge-window-header">
+    <div class="fallout-maw-recipe-knowledge-summary">
+      <strong>{{actorCount}} {{localize "FALLOUTMAW.Craft.ActorsShort"}}</strong>
+      <span>{{itemCount}} {{localize "FALLOUTMAW.Craft.ItemsShort"}}</span>
+    </div>
+    <label class="fallout-maw-recipe-knowledge-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" data-recipe-knowledge-search placeholder="{{localize 'FALLOUTMAW.Common.Search'}}">
+    </label>
+  </header>
+
+  <div class="fallout-maw-recipe-knowledge-window-body">
+    <main class="fallout-maw-panel fallout-maw-recipe-knowledge-catalog">
+      <div class="fallout-maw-recipe-knowledge-scroll">
+        {{#each categories}}
+        <details class="fallout-maw-recipe-knowledge-category" data-recipe-knowledge-category {{#if open}}open{{/if}}>
+          <summary><i class="fa-solid fa-caret-right"></i><span>{{name}}</span><strong>{{itemCount}}</strong></summary>
+          <div class="fallout-maw-recipe-knowledge-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{{localize "FALLOUTMAW.Craft.Knowledge"}}</th>
+                  <th>{{localize "FALLOUTMAW.Craft.Item"}}</th>
+                  {{#each actors}}
+                  <th><label class="fallout-maw-recipe-knowledge-column-toggle" title="{{name}}"><span>{{name}}</span><input class="fallout-maw-recipe-knowledge-checkbox-input" type="checkbox" data-recipe-knowledge-column="{{uuid}}"><span class="fallout-maw-recipe-knowledge-checkbox-box" aria-hidden="true"><i class="fa-solid fa-check"></i></span></label></th>
+                  {{/each}}
+                </tr>
+              </thead>
+              <tbody>
+                {{#each items}}
+                <tr data-recipe-knowledge-row data-item-uuid="{{uuid}}" data-search-text="{{searchText}}">
+                  <td><label class="fallout-maw-recipe-knowledge-checkbox"><input class="fallout-maw-recipe-knowledge-checkbox-input" type="checkbox" data-recipe-knowledge-row-toggle><span class="fallout-maw-recipe-knowledge-checkbox-box" aria-hidden="true"><i class="fa-solid fa-check"></i></span></label></td>
+                  <td>
+                    <span class="fallout-maw-recipe-knowledge-manager-item" data-recipe-knowledge-item-uuid="{{uuid}}">
+                      <img src="{{img}}" alt="">
+                      <span>{{name}}</span>
+                    </span>
+                  </td>
+                  {{#each actorStates}}
+                  <td><label class="fallout-maw-recipe-knowledge-checkbox"><input class="fallout-maw-recipe-knowledge-checkbox-input" type="checkbox" data-recipe-knowledge-actor="{{uuid}}" {{#if checked}}checked{{/if}}><span class="fallout-maw-recipe-knowledge-checkbox-box" aria-hidden="true"><i class="fa-solid fa-check"></i></span></label></td>
+                  {{/each}}
+                </tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        {{/each}}
+      </div>
+    </main>
+  </div>
+
+  <footer class="fallout-maw-recipe-knowledge-actions">
+    <button type="button" data-action="apply"><i class="fa-solid fa-floppy-disk"></i> {{localize "FALLOUTMAW.Common.Apply"}}</button>
+    <button type="button" data-action="cancel"><i class="fa-solid fa-xmark"></i> {{localize "FALLOUTMAW.Common.Cancel"}}</button>
+  </footer>
+</div>

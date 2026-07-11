@@ -92,13 +92,19 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
   }
 
   #handlePointerDown(event) {
-    if (event.button !== 0 || FalloutMaWDragDrop.#pointerSession) return;
+    if (event.button !== 0) return;
+    if (FalloutMaWDragDrop.#pointerSession) {
+      FalloutMaWDragDrop.#cleanupPointerSession(FalloutMaWDragDrop.#pointerSession);
+    }
     const source = event.currentTarget;
     if (!source?.matches?.(POINTER_DRAG_SELECTOR)) return;
+    const ownerDocument = source.ownerDocument ?? globalThis.document;
 
     const session = {
       sourceController: this,
       source,
+      document: ownerDocument,
+      view: ownerDocument?.defaultView ?? globalThis.window,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -122,12 +128,13 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
     session.moveHandler = pointerEvent => { void FalloutMaWDragDrop.#handlePointerMove(pointerEvent); };
     session.upHandler = pointerEvent => { void FalloutMaWDragDrop.#handlePointerUp(pointerEvent); };
     session.cancelHandler = pointerEvent => { void FalloutMaWDragDrop.#handlePointerCancel(pointerEvent); };
+    session.blurHandler = () => { void FalloutMaWDragDrop.#abortPointerSession(session); };
     FalloutMaWDragDrop.#pointerSession = session;
 
-    source.setPointerCapture?.(event.pointerId);
-    source.addEventListener("pointermove", session.moveHandler);
-    source.addEventListener("pointerup", session.upHandler);
-    source.addEventListener("pointercancel", session.cancelHandler);
+    ownerDocument?.addEventListener?.("pointermove", session.moveHandler, true);
+    ownerDocument?.addEventListener?.("pointerup", session.upHandler, true);
+    ownerDocument?.addEventListener?.("pointercancel", session.cancelHandler, true);
+    session.view?.addEventListener?.("blur", session.blurHandler);
   }
 
   static async #handlePointerMove(event) {
@@ -143,6 +150,7 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
     if (FalloutMaWDragDrop.#pointerSession !== session || !session.started) return;
 
     event.preventDefault();
+    FalloutMaWDragDrop.#ensurePointerDragPreview(session);
     FalloutMaWDragDrop.#positionPointerDragPreview(event);
     FalloutMaWDragDrop.#dispatchPointerDragOver(session, event);
   }
@@ -159,17 +167,23 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
     }
     if (FalloutMaWDragDrop.#pointerSession !== session) return;
 
-    FalloutMaWDragDrop.#cachePayload(dragStartEvent);
-    if (!FalloutMaWDragDrop.#payload) {
+    try {
+      FalloutMaWDragDrop.#cachePayload(dragStartEvent);
+      if (!FalloutMaWDragDrop.#payload) {
+        FalloutMaWDragDrop.#cleanupPointerSession(session);
+        return;
+      }
+      session.started = true;
+      session.starting = false;
+      FalloutMaWDragDrop.#bindRotationKey(dragStartEvent);
+      FalloutMaWDragDrop.#createPointerDragPreview(session);
+      FalloutMaWDragDrop.#positionPointerDragPreview(event);
+      FalloutMaWDragDrop.#dispatchPointerDragOver(session, event);
+    } catch (error) {
+      console.error("fallout-maw | Inventory pointer drag initialization failed", error);
       FalloutMaWDragDrop.#cleanupPointerSession(session);
       return;
     }
-    session.started = true;
-    session.starting = false;
-    FalloutMaWDragDrop.#bindRotationKey(dragStartEvent);
-    FalloutMaWDragDrop.#createPointerDragPreview(session);
-    FalloutMaWDragDrop.#positionPointerDragPreview(event);
-    FalloutMaWDragDrop.#dispatchPointerDragOver(session, event);
 
     if (session.releasedEvent) await FalloutMaWDragDrop.#completePointerDrag(session, session.releasedEvent, { drop: true });
   }
@@ -198,6 +212,15 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
       return;
     }
     await FalloutMaWDragDrop.#completePointerDrag(session, event, { drop: false });
+  }
+
+  static async #abortPointerSession(session) {
+    if (FalloutMaWDragDrop.#pointerSession !== session) return;
+    if (!session.started) {
+      FalloutMaWDragDrop.#cleanupPointerSession(session);
+      return;
+    }
+    await FalloutMaWDragDrop.#completePointerDrag(session, session.lastPointer, { drop: false });
   }
 
   static #dispatchPointerDragOver(session, pointerEvent) {
@@ -285,25 +308,51 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
   }
 
   static #createPointerDragPreview(session) {
-    const preview = session.source.cloneNode(true);
+    const document = session.document ?? session.source.ownerDocument;
+    document?.querySelectorAll?.(".fallout-maw-pointer-drag-preview").forEach(element => element.remove());
+    const preview = document.createElement("div");
     const rect = session.source.getBoundingClientRect();
-    preview.removeAttribute("id");
-    preview.classList.remove("dragging");
-    preview.classList.add("fallout-maw-pointer-drag-preview");
-    preview.querySelectorAll("[id]").forEach(element => element.removeAttribute("id"));
+    preview.className = "fallout-maw-pointer-drag-preview";
+    preview.setAttribute("aria-hidden", "true");
     session.preview = preview;
-    session.previewInitialRotated = session.source.classList.contains("rotated");
-    session.previewWidth = rect.width;
-    session.previewHeight = rect.height;
-    const previewItem = resolvePointerDragItem(FalloutMaWDragDrop.#payload?.data);
+    session.previewInitialRotated = Boolean(FalloutMaWDragDrop.#payload?.data?.[INVENTORY_DRAG_ROTATION_KEY]);
+    if (rect.width > 0) session.previewWidth = rect.width;
+    if (rect.height > 0) session.previewHeight = rect.height;
+    const previewItem = resolvePointerDragItem(FalloutMaWDragDrop.#payload?.data)
+      ?? (session.previewItemData ? { itemData: session.previewItemData, items: session.previewItems } : null);
     session.previewItemData = previewItem?.itemData ?? null;
     session.previewItems = previewItem?.items ?? null;
-    session.previewGridMetrics = getPointerInventoryGridMetrics(session.source);
-    const view = session.source.ownerDocument?.defaultView ?? globalThis.window;
-    const rootFontSize = Number.parseFloat(view?.getComputedStyle?.(session.source.ownerDocument?.documentElement)?.fontSize);
+    session.previewGridMetrics ??= getPointerInventoryGridMetrics(session.source);
+    const imagePath = String(session.previewItemData?.img ?? session.source.querySelector?.(":scope > img")?.src ?? "").trim();
+    if (imagePath) {
+      const image = document.createElement("img");
+      image.src = imagePath;
+      image.alt = "";
+      image.draggable = false;
+      preview.append(image);
+    }
+    const quantityText = String(session.source.querySelector?.(":scope > strong")?.textContent ?? "").trim();
+    if (quantityText) {
+      const quantity = document.createElement("strong");
+      quantity.textContent = quantityText;
+      preview.append(quantity);
+    }
+    const labelText = String(session.source.querySelector?.(".fallout-maw-container-overview-name")?.textContent ?? "").trim();
+    if (!imagePath && labelText) {
+      const label = document.createElement("span");
+      label.className = "fallout-maw-pointer-drag-preview-label";
+      label.textContent = labelText;
+      preview.append(label);
+    }
+    const rootFontSize = Number.parseFloat(session.view?.getComputedStyle?.(document.documentElement)?.fontSize);
     session.previewInset = Math.max(0, (Number.isFinite(rootFontSize) ? rootFontSize : 16) * 0.2);
-    session.source.ownerDocument?.body?.append(preview);
+    document.body?.append(preview);
     FalloutMaWDragDrop.#syncPointerDragPreview();
+  }
+
+  static #ensurePointerDragPreview(session) {
+    if (session?.preview?.isConnected) return;
+    FalloutMaWDragDrop.#createPointerDragPreview(session);
   }
 
   static #syncPointerDragPreview() {
@@ -339,10 +388,11 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
 
   static #cleanupPointerSession(session) {
     if (!session) return;
-    session.source.removeEventListener("pointermove", session.moveHandler);
-    session.source.removeEventListener("pointerup", session.upHandler);
-    session.source.removeEventListener("pointercancel", session.cancelHandler);
-    if (session.source.hasPointerCapture?.(session.pointerId)) session.source.releasePointerCapture(session.pointerId);
+    session.document?.removeEventListener?.("pointermove", session.moveHandler, true);
+    session.document?.removeEventListener?.("pointerup", session.upHandler, true);
+    session.document?.removeEventListener?.("pointercancel", session.cancelHandler, true);
+    session.view?.removeEventListener?.("blur", session.blurHandler);
+    session.source?.classList?.remove("dragging");
     session.preview?.remove();
     if (FalloutMaWDragDrop.#pointerSession === session) FalloutMaWDragDrop.#pointerSession = null;
     FalloutMaWDragDrop.#clearRuntimeState();

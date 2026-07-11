@@ -79,6 +79,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
+import { actorKnowsCraftItem, hasCraftKnowledgeLayoutData } from "../items/recipe-knowledge.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { getItemInteractionState } from "../items/item-interactions.mjs";
@@ -511,10 +512,11 @@ export function openCraftWindow({ actor, selection = null } = {}) {
   return result;
 }
 
-export async function getCraftWindowOpenOptionsForItem(item) {
+export async function getCraftWindowOpenOptionsForItem(item, actor = item?.parent?.documentName === "Actor" ? item.parent : null) {
   if (!item || item.type !== "gear") return [];
   await getCraftRecipeSummaries();
-  const matchingRecipes = findCraftRecipesForItem(item);
+  const matchingRecipes = findCraftRecipesForItem(item)
+    .filter(recipe => !actor || actorKnowsCraftItem(actor, recipe.itemUuid));
   const createOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_CREATE);
   const disassemblyOptions = buildCraftOpenOptionsForMode(matchingRecipes, CRAFT_MODE_DISASSEMBLY);
   return [...createOptions, ...disassemblyOptions];
@@ -847,7 +849,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#ensureCraftTabs();
     this.#actor = await resolveActor(this.#actorUuid);
     const recipes = await getCraftRecipeSummaries();
-    const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode));
+    const modeRecipes = recipes.filter(recipe => (
+      hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode)
+      && actorKnowsCraftItem(this.#actor, recipe.itemUuid)
+    ));
     if (this.#selectedRecipeUuid && !modeRecipes.some(recipe => recipe.uuid === this.#selectedRecipeUuid)) {
       this.#selectedRecipeUuid = "";
       this.#selectedRecipe = null;
@@ -1165,7 +1170,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   async #prepareAcquisitionWaysContext(targetItem) {
     if (!targetItem) return null;
     await getCraftRecipeSummaries();
-    const { recipes: candidateRecipes, targetProfile } = findAcquisitionRecipesForItem(targetItem);
+    const { recipes: allCandidateRecipes, targetProfile } = findAcquisitionRecipesForItem(targetItem);
+    const candidateRecipes = allCandidateRecipes.filter(recipe => actorKnowsCraftItem(this.#actor, recipe.itemUuid));
     const availability = this.#actor ? getCraftAvailabilityIndex(this.#actor) : null;
     const entries = buildAcquisitionWayEntries(targetItem, targetProfile, candidateRecipes, this.#actor, availability);
 
@@ -1984,6 +1990,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (event.button !== 1) return;
       event.preventDefault();
       event.stopPropagation();
+      const nestedAnchor = event.target?.closest?.("[data-tooltip-html]");
+      if (nestedAnchor && tooltip.contains(nestedAnchor)) {
+        game.tooltip?.lockTooltip?.();
+        return;
+      }
       this.#tooltipPinned = true;
       tooltip.classList.add("pinned");
       tooltip.style.pointerEvents = "auto";
@@ -2170,7 +2181,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
-    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
+    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item, this.#actor);
     const menuOptions = [];
 
     if (game.user?.isGM) {
@@ -2251,7 +2262,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #showCraftOpenContextMenu(item, event) {
     this.#clearCraftContextOverlays();
-    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item);
+    const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item, this.#actor);
     const menuOptions = craftOpenOptions.map((option, index) => ({
       action: `craft-open-${index}`,
       icon: option.icon,
@@ -2783,6 +2794,9 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   mode = normalizeCraftMode(mode);
   if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
   if (!recipe) return { valid: false, message: "Рецепт не выбран." };
+  if (!actorKnowsCraftItem(actor, recipe.itemUuid)) {
+    return { valid: false, message: game.i18n.localize("FALLOUTMAW.Craft.KnowledgeRequired") };
+  }
   const craft = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId, randomizeBlocks: true });
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
   if (!craft.requirements.length && !craft.toolRequirements.length) {
@@ -3581,6 +3595,223 @@ function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelec
     viewport,
     viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`
   };
+}
+
+/** Render knowledge previews with the exact read-only craft workspace. */
+export function renderCraftKnowledgeVariantsHTML(recipe, actor = null) {
+  const recipes = getCraftRecipeEntries(recipe);
+  const views = recipes.flatMap(entry => [
+    hasCraftKnowledgeLayoutData(entry) ? { recipeId: entry.id, recipeName: entry.name, mode: CRAFT_MODE_CREATE } : null,
+    hasCraftKnowledgeLayoutData(entry.disassembly) ? { recipeId: entry.id, recipeName: entry.name, mode: CRAFT_MODE_DISASSEMBLY } : null
+  ].filter(Boolean));
+  if (!views.length) return "";
+  const groupId = `craft-knowledge-${foundry.utils.randomID()}`;
+  return `
+    <section class="fallout-maw-recipe-knowledge-craft">
+      <div class="fallout-maw-recipe-knowledge-variant-tabs">
+        ${views.map((view, index) => {
+          const inputId = `${groupId}-${index}`;
+          const disassembly = view.mode === CRAFT_MODE_DISASSEMBLY;
+          const modeLabel = game.i18n.localize(disassembly ? "FALLOUTMAW.Craft.Disassembly" : "FALLOUTMAW.Craft.Creation");
+          const label = recipes.length > 1 ? `${view.recipeName} · ${modeLabel}` : modeLabel;
+          const craft = getCraftRenderData(recipe, actor, view.mode, { recipeId: view.recipeId });
+          return `
+            <input type="radio" id="${escapeAttribute(inputId)}" name="${escapeAttribute(groupId)}" ${index === 0 ? "checked" : ""}>
+            <label for="${escapeAttribute(inputId)}" title="${escapeAttribute(label)}"><i class="fa-solid ${disassembly ? "fa-screwdriver-wrench" : "fa-hammer"}"></i><span>${escapeHTML(label)}</span></label>
+            <div class="fallout-maw-recipe-knowledge-variant-panel" data-craft-knowledge-panel data-craft-recipe-uuid="${escapeAttribute(recipe.uuid ?? "")}" data-craft-mode="${escapeAttribute(view.mode)}" data-craft-recipe-id="${escapeAttribute(view.recipeId)}">
+              ${renderCraftKnowledgeWorkspaceHTML(craft, view.mode)}
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>`;
+}
+
+function renderCraftKnowledgeWorkspaceHTML(craft, mode) {
+  const blocks = craft.blocks.map(block => `<div class="fallout-maw-craft-block readonly" data-craft-block-id="${escapeAttribute(block.id)}" data-craft-x="${block.x}" data-craft-y="${block.y}" data-craft-width="${block.width}" data-craft-height="${block.height}" style="${escapeAttribute(block.style)}" aria-label="${escapeAttribute(block.label)}"></div>`).join("");
+  const nodes = craft.nodes.map(node => `
+    <div class="fallout-maw-craft-node readonly ${node.root ? "root" : ""} ${node.isToolRequirement ? "tool-requirement" : ""} ${node.missing ? "missing" : ""}"
+      data-craft-node-id="${escapeAttribute(node.id)}" data-craft-block-id="${escapeAttribute(node.blockId)}" data-craft-x="${node.x}" data-craft-y="${node.y}" data-craft-width="${node.width}" data-craft-height="${node.height}"
+      ${node.tooltipUuid ? `data-tooltip-uuid="${escapeAttribute(node.tooltipUuid)}"` : ""} style="${escapeAttribute(node.style)}">
+      <span class="fallout-maw-craft-node-image"><img src="${escapeAttribute(node.img)}" alt="${escapeAttribute(node.name)}"><span class="fallout-maw-craft-node-quantity">${escapeHTML(node.quantityLabel)}</span></span>
+    </div>`).join("");
+  const frames = craft.blocks.map(block => `<div class="fallout-maw-craft-block-frame readonly" data-craft-block-frame-id="${escapeAttribute(block.id)}" data-craft-x="${block.x}" data-craft-y="${block.y}" data-craft-width="${block.width}" data-craft-height="${block.height}" style="${escapeAttribute(block.style)}" aria-hidden="true"></div>`).join("");
+  return `
+    <div class="fallout-maw-craft-editor fallout-maw-craft-viewer fallout-maw-craft-mode-${escapeAttribute(mode)}" data-craft-workspace style="${escapeAttribute(craft.viewportStyle)}">
+      <div class="fallout-maw-craft-world" data-craft-world style="${escapeAttribute(craft.viewportStyle)}">
+        <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>${blocks}${nodes}${frames}
+      </div>
+    </div>`;
+}
+
+/** Draw exact craft pipes once a tooltip panel is measurable. */
+export function activateCraftKnowledgeVariants(root) {
+  if (!root) return;
+  const renderVisible = () => {
+    for (const panel of root.querySelectorAll("[data-craft-knowledge-panel]")) {
+      if (panel.getClientRects().length) renderCraftKnowledgePanelLinks(panel);
+    }
+  };
+  root.addEventListener("change", event => {
+    if (event.target.matches(".fallout-maw-recipe-knowledge-variant-tabs > input[type='radio']")) requestAnimationFrame(renderVisible);
+  });
+  for (const panel of root.querySelectorAll("[data-craft-knowledge-panel]")) activateCraftKnowledgePanelViewport(panel);
+  activateCraftKnowledgeNodeTooltips(root);
+  requestAnimationFrame(renderVisible);
+}
+
+function activateCraftKnowledgePanelViewport(panel) {
+  const workspace = panel.querySelector("[data-craft-workspace]");
+  const world = workspace?.querySelector("[data-craft-world]");
+  if (!workspace || !world || workspace.dataset.craftKnowledgeInteractive === "true") return;
+  workspace.dataset.craftKnowledgeInteractive = "true";
+  const readViewport = () => {
+    const styles = getComputedStyle(workspace);
+    return normalizeCraftViewport({
+      x: Number.parseFloat(styles.getPropertyValue("--craft-pan-x")),
+      y: Number.parseFloat(styles.getPropertyValue("--craft-pan-y")),
+      zoom: Number.parseFloat(styles.getPropertyValue("--craft-zoom"))
+    });
+  };
+  const setViewport = (x, y, zoom) => {
+    const viewport = normalizeCraftViewport({ x, y, zoom });
+    const step = getCraftGridMetrics(workspace).step;
+    for (const element of [workspace, world]) {
+      element.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+      element.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+      element.style.setProperty("--craft-zoom", String(viewport.zoom));
+    }
+    workspace.style.setProperty("--fallout-maw-craft-scaled-step", `${Math.round(step * viewport.zoom)}px`);
+    requestAnimationFrame(() => renderCraftKnowledgePanelLinks(panel));
+    return viewport;
+  };
+  let drag = null;
+  workspace.addEventListener("contextmenu", event => event.preventDefault());
+  workspace.addEventListener("pointerdown", event => {
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const viewport = readViewport();
+    drag = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: viewport.x, y: viewport.y };
+    const onMove = moveEvent => {
+      if (!drag || moveEvent.pointerId !== drag.pointerId) return;
+      moveEvent.preventDefault();
+      setViewport(drag.x + moveEvent.clientX - drag.clientX, drag.y + moveEvent.clientY - drag.clientY, readViewport().zoom);
+    };
+    const onUp = upEvent => {
+      if (drag && upEvent.pointerId === drag.pointerId) drag = null;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  });
+  workspace.addEventListener("wheel", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = workspace.getBoundingClientRect();
+    const viewport = readViewport();
+    const zoom = clampCraftZoom(viewport.zoom * Math.exp(-event.deltaY * 0.0015));
+    if (Math.abs(zoom - viewport.zoom) < 0.001) return;
+    const pointerX = event.clientX - rect.left - (rect.width / 2);
+    const pointerY = event.clientY - rect.top - (rect.height / 2);
+    const worldX = (pointerX - viewport.x) / viewport.zoom;
+    const worldY = (pointerY - viewport.y) / viewport.zoom;
+    setViewport(pointerX - (worldX * zoom), pointerY - (worldY * zoom), zoom);
+  }, { passive: false });
+}
+
+function activateCraftKnowledgeNodeTooltips(root) {
+  let timer = null;
+  let anchor = null;
+  const clearTimer = () => {
+    if (!timer) return;
+    window.clearTimeout(timer);
+    timer = null;
+  };
+  const remove = () => {
+    clearTimer();
+    if (game.tooltip?.element === anchor) game.tooltip.deactivate();
+    anchor = null;
+  };
+  const scheduleRemove = (node, relatedTarget) => {
+    if (node?.contains?.(relatedTarget) || game.tooltip?.tooltip?.contains?.(relatedTarget)) return;
+    clearTimer();
+    timer = window.setTimeout(() => {
+      timer = null;
+      if (node?.matches?.(":hover") || game.tooltip?.tooltip?.matches?.(":hover")) return;
+      remove();
+    }, 140);
+  };
+  root.addEventListener("pointerover", event => {
+    const node = event.target.closest?.("[data-craft-node-id][data-tooltip-uuid]");
+    if (!node || node.contains(event.relatedTarget)) return;
+    clearTimer();
+    anchor = node;
+    timer = window.setTimeout(async () => {
+      timer = null;
+      const item = resolveWorldItemSync(node.dataset.tooltipUuid);
+      if (!item || anchor !== node || !node.isConnected) return;
+      const html = await renderInventoryItemTooltipHTML(item, item.parent?.documentName === "Actor" ? item.parent : null);
+      if (anchor !== node || !node.isConnected) return;
+      const content = document.createElement("div");
+      content.innerHTML = html;
+      content.addEventListener("pointerenter", clearTimer);
+      content.addEventListener("pointerleave", leaveEvent => scheduleRemove(node, leaveEvent.relatedTarget));
+      content.addEventListener("click", clickEvent => {
+        const button = clickEvent.target.closest?.("[data-tooltip-weapon-tab]");
+        if (!button) return;
+        const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
+        content.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
+          const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
+          entry.classList.toggle("active", active);
+          entry.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        content.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index));
+      });
+      game.tooltip.activate(node, {
+        html: content,
+        cssClass: "fallout-maw-inventory-tooltip fallout-maw-recipe-knowledge-node-tooltip",
+        direction: node.getBoundingClientRect().left > (window.innerWidth / 2) ? "LEFT" : "RIGHT"
+      });
+    }, 280);
+  });
+  root.addEventListener("pointerout", event => {
+    const node = event.target.closest?.("[data-craft-node-id][data-tooltip-uuid]");
+    if (node && !node.contains(event.relatedTarget)) scheduleRemove(node, event.relatedTarget);
+  });
+}
+
+function renderCraftKnowledgePanelLinks(panel) {
+  const workspace = panel.querySelector("[data-craft-workspace]");
+  const svg = workspace?.querySelector("[data-craft-links]");
+  const recipe = resolveWorldItemSync(panel.dataset.craftRecipeUuid);
+  if (!workspace || !svg || !recipe || !svg.getClientRects().length) return;
+  const mode = normalizeCraftMode(panel.dataset.craftMode);
+  const recipeId = String(panel.dataset.craftRecipeId || DEFAULT_CRAFT_RECIPE_ID);
+  const craft = getCraftRenderData(recipe, null, mode, { recipeId });
+  const nodeData = new Map(craft.nodes.map(node => [node.id, node]));
+  const flowByLink = getCraftLinkFlowMap(craft.links, craft.nodes, mode);
+  const fragment = document.createDocumentFragment();
+  for (const [linkIndex, link] of craft.links.entries()) {
+    const fromNode = nodeData.get(link.fromNodeId);
+    const toNode = nodeData.get(link.toNodeId);
+    if (!fromNode || !toNode || getCraftResolvedEndpointId(fromNode) === getCraftResolvedEndpointId(toNode)) continue;
+    const linkKey = getCraftResolvedLinkKey(link, craft.nodes);
+    const flow = flowByLink.get(link.id) ?? getCraftLinkFlow(link, nodeData, mode);
+    const from = getCraftEndpointElement(workspace, craft.nodes, flow.fromNodeId);
+    const to = getCraftEndpointElement(workspace, craft.nodes, flow.toNodeId);
+    if (!from || !to) continue;
+    const anchors = flow.reversed ? { from: getCraftLinkAnchor(link, "to"), to: getCraftLinkAnchor(link, "from") } : getCraftLinkAnchors(link);
+    appendCraftLinkPath(fragment, getCraftConnectorGeometry(from, to, svg, getCraftLinkBend(link, svg), anchors), link, {
+      recipeUuid: recipe.uuid,
+      linkKey,
+      linkIndex,
+      flowFromKey: getCraftResolvedEndpointId(nodeData.get(flow.fromNodeId)),
+      flowToKey: getCraftResolvedEndpointId(nodeData.get(flow.toNodeId))
+    });
+  }
+  svg.replaceChildren(fragment);
 }
 
 function getCraftRequirements(nodes = [], { includeRoot = false } = {}) {
@@ -5339,6 +5570,7 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
   const getAvailability = () => availability ??= (actor ? getCraftAvailabilityIndex(actor) : null);
   for (const recipe of recipes) {
     if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
+    if (!actorKnowsCraftItem(actor, recipe.itemUuid)) continue;
     const category = getCraftRecipeCategory(recipe);
     const displayName = getCraftRecipeDisplayName(recipe);
     if (normalizedSearch && !normalizeCraftSearchText(`${displayName} ${category}`).includes(normalizedSearch)) continue;
@@ -5487,7 +5719,7 @@ function hasCraftRecipeDataForMode(craft = {}, mode = CRAFT_MODE_CREATE) {
     return craft.recipes.some(recipe => hasCraftRecipeDataForMode(recipe, mode));
   }
   const recipe = normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? craft?.disassembly : craft;
-  return Boolean((recipe?.nodes ?? []).length || (recipe?.links ?? []).length);
+  return hasCraftKnowledgeLayoutData(recipe);
 }
 
 function prepareRecipeSummary(item, recipe = createDefaultCraftRecipeEntry(item)) {

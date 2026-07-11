@@ -984,7 +984,8 @@ function oneTimeUseFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     repeatApplicationBlocked: new BooleanField({ required: true, initial: false }),
-    changes: new ArrayField(abilityChangeField(), { required: true, initial: [] })
+    changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
+    recipeItemUuids: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] })
   });
 }
 

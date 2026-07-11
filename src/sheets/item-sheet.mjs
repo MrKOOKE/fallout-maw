@@ -113,6 +113,13 @@ import {
   isWeaponModuleItem
 } from "../utils/weapon-modules.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { getDroppedWorldItems, mergeDroppedUuids } from "../utils/document-drop.mjs";
+import {
+  getCraftKnowledgeVariants,
+  getCraftKnowledgeItemUuid,
+  hasCraftKnowledgeData,
+  resolveCraftKnowledgeItem
+} from "../items/recipe-knowledge.mjs";
 import {
   preserveTextSelectionBeforePartSync,
   restoreTextSelectionAfterPartSync
@@ -532,6 +539,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       needChangeEffectRows: buildFirstAidEffectRowsFromChanges(item.system?.functions?.needChange?.changes),
       needChangeDuration: buildDurationPartsContext(item.system?.functions?.needChange?.durationSeconds),
       oneTimeUseEffectRows: buildFirstAidEffectRowsFromChanges(item.system?.functions?.oneTimeUse?.changes),
+      oneTimeUseRecipeItems: buildOneTimeUseRecipeItemRows(item.system?.functions?.oneTimeUse?.recipeItemUuids),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
       firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
       firstAidWithdrawalDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.withdrawalDurationSeconds),
@@ -1015,6 +1023,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-one-time-use-effect]")?.addEventListener("click", event => this.#onAddOneTimeUseEffect(event));
     this.element?.querySelectorAll("[data-delete-one-time-use-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteOneTimeUseEffect(event));
+    });
+    this.element?.querySelectorAll("[data-one-time-use-recipe-drop]").forEach(zone => {
+      zone.addEventListener("dragover", event => this.#onOneTimeUseRecipeDragOver(event));
+      zone.addEventListener("drop", event => this.#onOneTimeUseRecipeDrop(event));
+    });
+    this.element?.querySelectorAll("[data-delete-one-time-use-recipe]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteOneTimeUseRecipe(event));
     });
     this.element?.querySelectorAll("[data-need-change-charge-input]").forEach(input => {
       input.addEventListener("change", event => this.#onNeedChangeChargeInputChange(event));
@@ -3061,7 +3076,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.oneTimeUse.enabled": true,
         "system.functions.oneTimeUse.repeatApplicationBlocked": false,
-        "system.functions.oneTimeUse.changes": []
+        "system.functions.oneTimeUse.changes": [],
+        "system.functions.oneTimeUse.recipeItemUuids": []
       });
     }
 
@@ -3422,7 +3438,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.oneTimeUse.enabled": false,
         "system.functions.oneTimeUse.repeatApplicationBlocked": false,
-        "system.functions.oneTimeUse.changes": []
+        "system.functions.oneTimeUse.changes": [],
+        "system.functions.oneTimeUse.recipeItemUuids": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.lightSource) {
@@ -3940,6 +3957,37 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.oneTimeUse.changes": changes });
   }
 
+  #onOneTimeUseRecipeDragOver(event) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "link";
+  }
+
+  async #onOneTimeUseRecipeDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const droppedItems = await getDroppedWorldItems(event);
+    if (!droppedItems.length) return undefined;
+    const recipeItems = droppedItems.filter(item => getCraftKnowledgeItemUuid(item) && hasCraftKnowledgeData(item));
+    if (!recipeItems.length) {
+      return ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.OneTimeUseRecipeNoCraft"));
+    }
+
+    const recipeItemUuids = this.item.system?.functions?.oneTimeUse?.recipeItemUuids ?? [];
+    const index = Number(event.currentTarget?.dataset?.oneTimeUseRecipeIndex);
+    return this.item.update({
+      "system.functions.oneTimeUse.recipeItemUuids": mergeDroppedUuids(recipeItemUuids, recipeItems, index)
+    });
+  }
+
+  #onDeleteOneTimeUseRecipe(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteOneTimeUseRecipe);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const recipeItemUuids = [...(this.item.system?.functions?.oneTimeUse?.recipeItemUuids ?? [])];
+    recipeItemUuids.splice(index, 1);
+    return this.item.update({ "system.functions.oneTimeUse.recipeItemUuids": recipeItemUuids });
+  }
+
   #onNeedChangeChargeInputChange(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -4376,20 +4424,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
     if (!path) return undefined;
-    const item = await getDroppedItem(event);
-    if (!item) return undefined;
-    if (!isWorldDamageSourceItem(item)) {
+    const droppedItems = await getDroppedWorldItems(event);
+    if (!droppedItems.length) return undefined;
+    const sourceItems = droppedItems.filter(isWorldDamageSourceItem);
+    if (!sourceItems.length) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceWorldOnly"));
       return undefined;
     }
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
     const sources = getWeaponMagazineSourceUuids(weaponData);
     const index = Number(event.currentTarget?.dataset?.weaponMagazineSourceIndex);
-    if (Number.isInteger(index) && index >= 0 && index < sources.length) sources[index] = item.uuid;
-    else sources.push(item.uuid);
-    const uniqueSources = uniqueStrings(sources);
+    const uniqueSources = mergeDroppedUuids(sources, sourceItems, index);
     return this.item.update({
-      [`${path}.magazine.sourceItemUuid`]: item.uuid,
+      [`${path}.magazine.sourceItemUuid`]: sourceItems[0].uuid,
       [`${path}.magazine.sourceItemUuids`]: uniqueSources
     });
   }
@@ -4429,18 +4476,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   async #onEnergyConsumerSourceDrop(event) {
     event.preventDefault();
     event.stopPropagation();
-    const item = await getDroppedItem(event);
-    if (!item) return undefined;
-    if (!isWorldEnergySourceItem(item)) {
+    const droppedItems = await getDroppedWorldItems(event);
+    if (!droppedItems.length) return undefined;
+    const sourceItems = droppedItems.filter(isWorldEnergySourceItem);
+    if (!sourceItems.length) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.EnergySourceWorldOnly"));
       return undefined;
     }
+    const item = sourceItems[0];
     const consumerData = this.item.system?.functions?.energyConsumer ?? {};
     const sources = getEnergyConsumerSourceUuids(consumerData);
     const index = Number(event.currentTarget?.dataset?.energyConsumerSourceIndex);
-    if (Number.isInteger(index) && index >= 0 && index < sources.length) sources[index] = item.uuid;
-    else sources.push(item.uuid);
-    const uniqueSources = uniqueStrings(sources);
+    const uniqueSources = mergeDroppedUuids(sources, sourceItems, index);
     return this.item.update({
       "system.functions.energyConsumer.sourceItemUuid": item.uuid,
       "system.functions.energyConsumer.sourceItemUuids": uniqueSources,
@@ -10456,6 +10503,36 @@ function buildConditionRecoveryMethodRows(item, toolSettings = []) {
 
 function buildFirstAidEffectRows(item) {
   return buildFirstAidEffectRowsFromChanges(item.system?.functions?.firstAid?.changes);
+}
+
+function buildOneTimeUseRecipeItemRows(values = []) {
+  const rows = (values ?? []).map((value, index) => {
+    const item = resolveCraftKnowledgeItem(value);
+    const variants = item ? getCraftKnowledgeVariants(item) : [];
+    return {
+      index,
+      uuid: String(value ?? ""),
+      name: item?.name ?? game.i18n.localize("FALLOUTMAW.Common.MissingItem"),
+      img: normalizeImagePath(item?.img, FALLBACK_ICON),
+      variantCount: variants.length,
+      hasCraft: variants.some(variant => (variant.nodes?.length || variant.links?.length)),
+      hasDisassembly: variants.some(variant => (variant.disassembly?.nodes?.length || variant.disassembly?.links?.length)),
+      missing: !item,
+      empty: false
+    };
+  });
+  rows.push({
+    index: rows.length,
+    uuid: "",
+    name: "",
+    img: FALLBACK_ICON,
+    variantCount: 0,
+    hasCraft: false,
+    hasDisassembly: false,
+    missing: false,
+    empty: true
+  });
+  return rows;
 }
 
 function buildFirstAidEffectRowsFromChanges(changes = []) {

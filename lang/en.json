@@ -92,7 +92,9 @@
       "Untitled": "Untitled",
       "Value": "Value",
       "ValuePercent": "Value %",
-      "Weapon": "Weapon"
+      "Weapon": "Weapon",
+      "MissingItem": "Missing item",
+      "Uncategorized": "Uncategorized"
     },
     "AnimationLibrary": {
       "Title": "Animation Library",
@@ -356,6 +358,10 @@
       "OneTimeUseChanges": "Changes on Use",
       "OneTimeUseRepeatBlocked": "Repeat application unavailable?",
       "OneTimeUseAlreadyApplied": "Already applied?",
+      "OneTimeUseRecipeKnowledge": "Recipe Knowledge",
+      "OneTimeUseRecipeDrop": "Drop a world item with crafting or disassembly here",
+      "OneTimeUseRecipeWorldOnly": "Recipe knowledge requires an item from the world Items directory.",
+      "OneTimeUseRecipeNoCraft": "This item has neither crafting nor disassembly data.",
       "FirstAidWithdrawalChanges": "Withdrawal",
       "FirstAidWithdrawalDuration": "Withdrawal Duration",
       "FirstAidWithdrawalDurationSeconds": "Withdrawal Duration, sec",
@@ -641,6 +647,28 @@
       },
       "SkillModifier": "Skill Modifier",
       "Title": "Skill Check Control"
+    },
+    "Craft": {
+      "DefaultRecipe": "Recipe 1",
+      "Recipe": "Recipe",
+      "VariantsShort": "variant(s)",
+      "Creation": "Creation",
+      "Disassembly": "Disassembly",
+      "Components": "Components",
+      "Outputs": "Outputs",
+      "Checks": "Checks",
+      "NoCheck": "No check",
+      "Knowledge": "All",
+      "Item": "Item",
+      "KnowledgeRequired": "This item and its recipes have not been learned yet.",
+      "KnowledgeNoActors": "Select at least one actor on the scene.",
+      "KnowledgeNoRecipes": "There are no world items with crafting or disassembly data.",
+      "KnowledgeManagerTitle": "Recipe Knowledge",
+      "SelectedActors": "Selected Actors",
+      "KnowledgeTerminal": "Technical knowledge database",
+      "KnowledgeUpdated": "Recipe knowledge updated.",
+      "ActorsShort": "actors",
+      "ItemsShort": "items"
     },
     "Creation": {
       "Base": "Character Base",

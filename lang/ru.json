@@ -91,7 +91,9 @@
       "Untitled": "Без названия",
       "Value": "Значение",
       "ValuePercent": "Значение %",
-      "Weapon": "Оружие"
+      "Weapon": "Оружие",
+      "MissingItem": "Отсутствующий предмет",
+      "Uncategorized": "Без категории"
     },
     "AnimationLibrary": {
       "Title": "Библиотека анимаций",
@@ -368,6 +370,10 @@
       "OneTimeUseChanges": "Изменения при использовании",
       "OneTimeUseRepeatBlocked": "Повторное применение недоступно?",
       "OneTimeUseAlreadyApplied": "Уже применен?",
+      "OneTimeUseRecipeKnowledge": "Знания рецептов",
+      "OneTimeUseRecipeDrop": "Перетащите сюда мировой предмет с крафтом или разбором",
+      "OneTimeUseRecipeWorldOnly": "Для знания рецепта нужен предмет из мирового хранилища.",
+      "OneTimeUseRecipeNoCraft": "У предмета нет ни крафта, ни разбора.",
       "FirstAidWithdrawalChanges": "Отдача",
       "FirstAidWithdrawalDuration": "Длительность отдачи",
       "FirstAidWithdrawalDurationSeconds": "Длительность отдачи, сек",
@@ -701,6 +707,28 @@
       },
       "SkillModifier": "Изменение навыка",
       "Title": "Управление проверками"
+    },
+    "Craft": {
+      "DefaultRecipe": "Рецепт 1",
+      "Recipe": "Рецепт",
+      "VariantsShort": "вариант(а)",
+      "Creation": "Создание",
+      "Disassembly": "Разбор",
+      "Components": "Компоненты",
+      "Outputs": "Результаты",
+      "Checks": "Проверки",
+      "NoCheck": "Без проверки",
+      "Knowledge": "Все",
+      "Item": "Предмет",
+      "KnowledgeRequired": "Этот предмет и его рецепты ещё не изучены.",
+      "KnowledgeNoActors": "Выберите хотя бы одного актёра на сцене.",
+      "KnowledgeNoRecipes": "В мировом хранилище нет предметов с крафтом или разбором.",
+      "KnowledgeManagerTitle": "Знания рецептов",
+      "SelectedActors": "Выбранные актёры",
+      "KnowledgeTerminal": "База технологических знаний",
+      "KnowledgeUpdated": "Знания рецептов обновлены.",
+      "ActorsShort": "актёров",
+      "ItemsShort": "предметов"
     },
     "Creation": {
       "Base": "Основа персонажа",

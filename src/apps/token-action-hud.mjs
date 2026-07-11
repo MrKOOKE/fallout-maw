@@ -86,6 +86,7 @@ import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search-inventory.mjs";
 import { openCraftWindow } from "./craft-window.mjs";
+import { openRecipeKnowledgeManager } from "./recipe-knowledge-manager.mjs";
 import { openCampFromHud } from "./camp-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
 import {
@@ -515,6 +516,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
+      gmManageRecipeKnowledge: TokenActionHud.#onGmManageRecipeKnowledge,
       endCombatTurn: TokenActionHud.#onEndCombatTurn,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
@@ -841,6 +843,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       await actor.update({ "system.development.experience": current + amount });
     }
     await playExperienceAwardMedia({ leveledActors, playExperienceSound: true });
+    return this.render({ force: true });
+  }
+
+  static async #onGmManageRecipeKnowledge(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return undefined;
+    await openRecipeKnowledgeManager(getSelectedHudActors());
     return this.render({ force: true });
   }
 
