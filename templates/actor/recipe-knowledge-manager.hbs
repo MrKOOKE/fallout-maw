@@ -20,7 +20,7 @@
             <table>
               <thead>
                 <tr>
-                  <th>{{localize "FALLOUTMAW.Craft.Knowledge"}}</th>
+                  <th data-recipe-knowledge-category-toggle role="button" tabindex="0">{{localize "FALLOUTMAW.Craft.Knowledge"}}</th>
                   <th>{{localize "FALLOUTMAW.Craft.Item"}}</th>
                   {{#each actors}}
                   <th><label class="fallout-maw-recipe-knowledge-column-toggle" title="{{name}}"><span>{{name}}</span><input class="fallout-maw-recipe-knowledge-checkbox-input" type="checkbox" data-recipe-knowledge-column="{{uuid}}"><span class="fallout-maw-recipe-knowledge-checkbox-box" aria-hidden="true"><i class="fa-solid fa-check"></i></span></label></th>

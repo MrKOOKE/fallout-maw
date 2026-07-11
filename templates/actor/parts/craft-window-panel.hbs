@@ -16,6 +16,11 @@
         <i class="fa-solid fa-arrow-left"></i>
         <span>Вернуться</span>
       </button>
+      {{else if craft.usage}}
+      <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="hideAcquisitionWays" title="Вернуться к схеме">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>Вернуться</span>
+      </button>
       {{else}}
       <button type="button" class="fallout-maw-craft-window-secondary-action" data-action="showAcquisitionWays" title="Показать способы получения" {{#unless craft.canShowAcquisitionWays}}disabled{{/unless}}>
         <i class="fa-solid fa-route"></i>
@@ -40,7 +45,7 @@
     {{#if craft.acquisition.entries.length}}
     <div class="fallout-maw-craft-acquisition-list">
       {{#each craft.acquisition.entries}}
-      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" role="button" tabindex="0">
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-craft-acquisition-entry-body">
           <div class="fallout-maw-craft-acquisition-entry-title">
@@ -66,6 +71,37 @@
     </div>
     {{else}}
     <div class="fallout-maw-craft-acquisition-empty">Нет разборов, которые дают этот предмет.</div>
+    {{/if}}
+  </div>
+  {{else if craft.usage}}
+  <div class="fallout-maw-craft-acquisition">
+    <header class="fallout-maw-craft-acquisition-header">
+      <div>
+        <h2>Показать в каких крафтах участвует</h2>
+        <span>{{craft.usage.targetName}}</span>
+      </div>
+      <strong>{{craft.usage.entries.length}}</strong>
+    </header>
+    {{#if craft.usage.entries.length}}
+    <div class="fallout-maw-craft-acquisition-list">
+      {{#each craft.usage.entries}}
+      <article class="fallout-maw-craft-acquisition-entry {{statusClass}}" data-acquisition-recipe-uuid="{{recipeSelectionUuid}}" data-acquisition-recipe-mode="{{mode}}" role="button" tabindex="0">
+        <img src="{{img}}" alt="{{name}}">
+        <div class="fallout-maw-craft-acquisition-entry-body">
+          <div class="fallout-maw-craft-acquisition-entry-title">
+            <strong>{{name}}</strong>
+            <span class="{{statusClass}}">{{statusLabel}}</span>
+          </div>
+          <div class="fallout-maw-craft-acquisition-entry-meta">
+            <span>{{category}}</span>
+            <span>{{targetQuantityLabel}}</span>
+          </div>
+        </div>
+      </article>
+      {{/each}}
+    </div>
+    {{else}}
+    <div class="fallout-maw-craft-acquisition-empty">Нет известных крафтов, где используется этот предмет.</div>
     {{/if}}
   </div>
   {{else}}

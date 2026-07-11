@@ -15624,8 +15624,10 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-craft-acquisition-list {
+  align-content: start;
   display: grid;
   gap: 0.65rem;
+  grid-auto-rows: max-content;
   min-height: 0;
   overflow: auto;
   padding-right: 0.25rem;
@@ -17842,6 +17844,16 @@ html.fallout-maw-token-action-hud-open #hotbar {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fallout-maw-recipe-knowledge-catalog th[data-recipe-knowledge-category-toggle] {
+  cursor: pointer;
+}
+
+.fallout-maw-recipe-knowledge-catalog th[data-recipe-knowledge-category-toggle].checked,
+.fallout-maw-recipe-knowledge-catalog th[data-recipe-knowledge-category-toggle].indeterminate {
+  color: #f3e49b;
+  text-shadow: 0 0 5px rgba(243, 228, 155, 0.35);
 }
 
 .fallout-maw-recipe-knowledge-manager-item {

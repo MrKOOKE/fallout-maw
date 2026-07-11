@@ -207,16 +207,57 @@ function activateManager(root, tooltipActor = null) {
   };
   const syncColumns = category => category.querySelectorAll("[data-recipe-knowledge-column]")
     .forEach(master => syncColumn(category, String(master.dataset.recipeKnowledgeColumn ?? "")));
+  const syncCategory = category => {
+    const master = category.querySelector("[data-recipe-knowledge-category-toggle]");
+    if (!master) return;
+    const checks = Array.from(category.querySelectorAll("[data-recipe-knowledge-row]:not([hidden]) [data-recipe-knowledge-actor]"));
+    const checked = checks.filter(input => input.checked).length;
+    const allChecked = Boolean(checks.length && checked === checks.length);
+    const partial = checked > 0 && checked < checks.length;
+    if (master instanceof HTMLInputElement) {
+      master.checked = allChecked;
+      master.indeterminate = partial;
+    }
+    master.classList.toggle("checked", allChecked);
+    master.classList.toggle("indeterminate", partial);
+    master.setAttribute("aria-pressed", partial ? "mixed" : String(allChecked));
+  };
+  const syncCategoryControls = category => {
+    syncColumns(category);
+    syncCategory(category);
+  };
+
+  const toggleCategory = categoryMaster => {
+    const category = categoryMaster.closest("[data-recipe-knowledge-category]");
+    const checks = Array.from(category.querySelectorAll("[data-recipe-knowledge-row]:not([hidden]) [data-recipe-knowledge-actor]"));
+    const allChecked = checks.length > 0 && checks.every(input => input.checked);
+    checks.forEach(input => { input.checked = !allChecked; });
+    category.querySelectorAll("[data-recipe-knowledge-row]:not([hidden])").forEach(syncRow);
+    syncCategoryControls(category);
+  };
 
   root.querySelectorAll("[data-recipe-knowledge-row]").forEach(syncRow);
-  root.querySelectorAll("[data-recipe-knowledge-category]").forEach(syncColumns);
+  root.querySelectorAll("[data-recipe-knowledge-category]").forEach(syncCategoryControls);
+  root.addEventListener("click", event => {
+    const categoryMaster = event.target.closest?.("[data-recipe-knowledge-category-toggle]");
+    if (!categoryMaster) return;
+    event.preventDefault();
+    toggleCategory(categoryMaster);
+  });
+  root.addEventListener("keydown", event => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const categoryMaster = event.target.closest?.("[data-recipe-knowledge-category-toggle]");
+    if (!categoryMaster) return;
+    event.preventDefault();
+    toggleCategory(categoryMaster);
+  });
   root.addEventListener("change", event => {
     const rowMaster = event.target.closest?.("[data-recipe-knowledge-row-toggle]");
     if (rowMaster) {
       const row = rowMaster.closest("[data-recipe-knowledge-row]");
       row.querySelectorAll("[data-recipe-knowledge-actor]").forEach(input => { input.checked = rowMaster.checked; });
       syncRow(row);
-      syncColumns(row.closest("[data-recipe-knowledge-category]"));
+      syncCategoryControls(row.closest("[data-recipe-knowledge-category]"));
       return;
     }
     const columnMaster = event.target.closest?.("[data-recipe-knowledge-column]");
@@ -227,13 +268,16 @@ function activateManager(root, tooltipActor = null) {
       category.querySelectorAll(`[data-recipe-knowledge-row]:not([hidden]) [data-recipe-knowledge-actor="${escaped}"]`)
         .forEach(input => { input.checked = columnMaster.checked; syncRow(input.closest("[data-recipe-knowledge-row]")); });
       syncColumn(category, actorUuid);
+      syncCategory(category);
       return;
     }
     const actorCheck = event.target.closest?.("[data-recipe-knowledge-actor]");
     if (actorCheck) {
       const row = actorCheck.closest("[data-recipe-knowledge-row]");
       syncRow(row);
-      syncColumn(row.closest("[data-recipe-knowledge-category]"), String(actorCheck.dataset.recipeKnowledgeActor ?? ""));
+      const category = row.closest("[data-recipe-knowledge-category]");
+      syncColumn(category, String(actorCheck.dataset.recipeKnowledgeActor ?? ""));
+      syncCategory(category);
     }
   });
   root.querySelector("[data-recipe-knowledge-search]")?.addEventListener("input", event => {
@@ -246,7 +290,7 @@ function activateManager(root, tooltipActor = null) {
       });
       category.hidden = visible < 1;
       if (query && visible) category.open = true;
-      if (visible) syncColumns(category);
+      if (visible) syncCategoryControls(category);
     });
   });
   root.addEventListener("pointerover", event => {
