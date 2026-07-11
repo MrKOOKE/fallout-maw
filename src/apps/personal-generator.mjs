@@ -35,6 +35,7 @@ import {
   getContextInventoryItems,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackAvailableSpace,
   getItemTotalWeight,
   hasContainerCycle,
   isContainerItem,
@@ -1481,10 +1482,11 @@ function planPersonalGeneratorItems(actor, itemsData) {
     let remainingQuantity = Math.max(1, getItemQuantity(itemData));
 
     if (maxStack > 1) {
-      const [target] = getProjectedStackTargets(projected, itemData);
+      const target = getProjectedStackTargets(projected, itemData)
+        .find(candidate => getItemStackAvailableSpace(candidate) > 0);
       if (target) {
         const parentId = String(foundry.utils.getProperty(target, "system.container.parentId") ?? ROOT_CONTAINER_ID);
-        const quantity = remainingQuantity;
+        const quantity = Math.min(remainingQuantity, getItemStackAvailableSpace(target));
         const update = usesVirtualInventoryStacks(target)
           ? createItemStackPartAdditionUpdate(target, quantity)
           : { _id: target._id ?? target.id, "system.quantity": getItemQuantity(target) + quantity };

@@ -131,6 +131,7 @@ import {
   getContainerMaxLoad,
   getItemContainerParentId,
   getItemMaxStack,
+  getItemStackAvailableSpace,
   getContextInventoryItems,
   getItemTotalWeight,
   getItemUnitWeight,
@@ -140,6 +141,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getActorInstalledModuleItems, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
@@ -151,7 +153,6 @@ import {
   getWeaponModuleDisplayName,
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
-  getWeaponModuleTechnicalName,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
@@ -4578,7 +4579,7 @@ function canReturnMagazineSourceToStack(actor, item) {
 
 function getMagazineSourceStackReturnRoom(actor, item, reservedPlacementContexts = []) {
   const stackRoom = usesVirtualInventoryStacks(item)
-    ? Number.POSITIVE_INFINITY
+    ? getItemStackAvailableSpace(item)
     : Math.max(0, getItemMaxStack(item) - getItemQuantity(item));
   if (!stackRoom) return 0;
   const parentId = getItemContainerParentId(item);
@@ -4603,56 +4604,12 @@ function reserveMagazineSourceContainerLoad(item, sourceItem, quantity, reserved
 
 async function returnModuleItemToActorInventory(actor, itemData) {
   if (!actor || !itemData?.system) return null;
-  const moduleName = getWeaponModuleTechnicalName(itemData);
-  const stackTarget = actor.items.contents.find(item => (
-    getWeaponModuleTechnicalName(item) === moduleName
-    && (usesVirtualInventoryStacks(item) || getItemQuantity(item) < getItemMaxStack(item))
-    && String(item.system?.placement?.mode ?? "inventory") === "inventory"
-  ));
-  if (stackTarget) {
-    if (usesVirtualInventoryStacks(stackTarget)) {
-      const updateData = createItemStackPartAdditionUpdate(stackTarget, 1);
-      if (!updateData) return null;
-      const { _id, ...changes } = updateData;
-      return stackTarget.update(changes);
-    }
-    return stackTarget.update({ "system.quantity": getItemQuantity(stackTarget) + 1 });
-  }
-
-  const placement = getFirstAvailableRootInventoryPlacement(actor, itemData);
-  if (!placement) {
+  try {
+    return await grantActorInventoryItem(actor, itemData, { quantity: 1 });
+  } catch (_error) {
     ui.notifications.warn("Нет места в инвентаре для снятого модуля.");
     return null;
   }
-  const createData = foundry.utils.deepClone(itemData);
-  delete createData._id;
-  const storedPlacement = createStoredPlacement(placement, itemData);
-  foundry.utils.mergeObject(createData, {
-    system: {
-      quantity: 1,
-      equipped: false,
-      container: { parentId: ROOT_CONTAINER_ID },
-      placement: {
-        mode: storedPlacement.mode,
-        equipmentSlot: storedPlacement.equipmentSlot,
-        weaponSet: storedPlacement.weaponSet,
-        weaponSlot: storedPlacement.weaponSlot,
-        x: storedPlacement.x,
-        y: storedPlacement.y,
-        width: storedPlacement.width,
-        height: storedPlacement.height,
-        rotated: storedPlacement.rotated
-      }
-    }
-  });
-  return actor.createEmbeddedDocuments("Item", [createData]);
-}
-
-function getFirstAvailableRootInventoryPlacement(actor, itemData) {
-  const allItems = actor?.items?.contents ?? [];
-  const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, allItems);
-  const { columns, rows } = getActorRootInventoryDimensions(actor);
-  return findFirstAvailableInventoryPlacement(rootItems, columns, rows, itemData, allItems, [], [], getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID));
 }
 
 function getHudWeaponSets(inventory = {}) {

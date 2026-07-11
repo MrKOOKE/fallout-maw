@@ -15,6 +15,7 @@ import {
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 
 export const DROPPED_ITEMS_FLAG = "droppedItems";
 export const DROPPED_ITEMS_ACTOR_FLAG = "droppedItemsActor";
@@ -280,6 +281,23 @@ function buildDroppedStackCreateData(actor, itemData, quantity = 1, reservedPlac
   const creates = [];
   const maxStack = Math.max(1, getItemMaxStack(itemData));
   let remaining = Math.max(1, toInteger(quantity));
+  if (usesVirtualInventoryStacks(itemData)) {
+    const stackParts = [];
+    while (remaining > 0) {
+      const stackQuantity = Math.min(remaining, maxStack);
+      const placement = getFirstAvailableActorRootPlacement(actor, itemData, reservedPlacements);
+      if (!placement) throw new Error("Р’ РёРЅРІРµРЅС‚Р°СЂРµ РЅРµС‚ РјРµСЃС‚Р° РґР»СЏ РІС‹Р±СЂРѕС€РµРЅРЅРѕРіРѕ РїСЂРµРґРјРµС‚Р°.");
+      reservedPlacements.push(placement);
+      stackParts.push({
+        quantity: stackQuantity,
+        x: placement.x,
+        y: placement.y,
+        rotated: Boolean(placement.rotated)
+      });
+      remaining -= stackQuantity;
+    }
+    return [createDroppedInventoryItemData(itemData, quantity, stackParts[0], { stackParts })];
+  }
   while (remaining > 0) {
     const stackQuantity = Math.min(remaining, maxStack);
     const placement = getFirstAvailableActorRootPlacement(actor, itemData, reservedPlacements);
@@ -320,7 +338,7 @@ function buildDroppedContainerCreateData(actor, rootItemData, containedItems = [
   return creates;
 }
 
-function createDroppedInventoryItemData(itemData, quantity = 1, placement = null, { id = "" } = {}) {
+function createDroppedInventoryItemData(itemData, quantity = 1, placement = null, { id = "", stackParts = [] } = {}) {
   const data = foundry.utils.deepClone(itemData);
   const itemId = id || foundry.utils.randomID();
   data._id = itemId;
@@ -343,6 +361,7 @@ function createDroppedInventoryItemData(itemData, quantity = 1, placement = null
     height: storedPlacement.height,
     rotated: storedPlacement.rotated
   });
+  foundry.utils.setProperty(data, "system.stackParts", usesVirtualInventoryStacks(data) ? stackParts : []);
   return data;
 }
 
@@ -399,6 +418,7 @@ function normalizeDroppedItemData(itemData, quantity = 0) {
   foundry.utils.setProperty(data, "system.equipped", false);
   foundry.utils.setProperty(data, "system.locked", false);
   foundry.utils.setProperty(data, "system.container.parentId", ROOT_CONTAINER_ID);
+  foundry.utils.setProperty(data, "system.stackParts", []);
   return data;
 }
 
@@ -488,8 +508,12 @@ async function appendDroppedItemToTile(tile, droppedEntry) {
   const state = getDroppedItemsFlag(tile);
   const actor = game.user?.isGM ? await resolveDroppedActor(state.actorUuid) : null;
   if (actor) {
-    const createData = buildDroppedItemCreateData(actor, [droppedEntry]);
-    if (createData.length) await actor.createEmbeddedDocuments("Item", createData, { keepId: true, render: false });
+    if (isContainerItem(droppedEntry.itemData)) {
+      const createData = buildDroppedItemCreateData(actor, [droppedEntry]);
+      if (createData.length) await actor.createEmbeddedDocuments("Item", createData, { keepId: true, render: false });
+    } else {
+      await grantActorInventoryItem(actor, droppedEntry.itemData, { quantity: droppedEntry.quantity });
+    }
     await tile.update({
       name: "Выброшенные предметы",
       [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.actorUuid`]: actor.uuid,

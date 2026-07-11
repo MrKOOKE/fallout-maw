@@ -8,7 +8,8 @@
     "build:animations": "node scripts/build-animation-database.mjs",
     "check": "node scripts/validate-manifest.mjs && node scripts/check-syntax.mjs",
     "check:manifest": "node scripts/validate-manifest.mjs",
-    "check:syntax": "node scripts/check-syntax.mjs"
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "test:inventory-stacks": "node --test tests/inventory-containers.test.mjs"
   },
   "engines": {
     "node": ">=20"

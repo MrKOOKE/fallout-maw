@@ -54,6 +54,7 @@ import {
   getItemId,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackAdditionOverflowQuantity,
   getItemStackPartQuantity,
   getItemTotalWeight,
   isContainerItem,
@@ -2908,7 +2909,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
             return `<div class="fallout-maw-skill-check-batch-result ${cssClass}${count ? "" : " empty"}"><span>${escapeHTML(label)}</span><strong>${count}</strong></div>`;
           }).join("")}
         </section>
-        <footer class="fallout-maw-craft-batch-terminal-footer"><i class="fa-solid fa-terminal"></i><span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Craft.BatchAutoDismiss"))}</span></footer>
       </article>`;
     workspace.appendChild(overlay);
 
@@ -3643,7 +3643,8 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
       const nextQuantity = getItemQuantity(target) + stackQuantity;
       let updateData = null;
       if (usesVirtualInventoryStacks(target)) {
-        const addedStackParts = createCraftOutputStackParts(actor, spec.data, stackQuantity, getItemContainerParentId(target), null, planningItems);
+        const overflowQuantity = getItemStackAdditionOverflowQuantity(target, stackQuantity);
+        const addedStackParts = createCraftOutputStackParts(actor, spec.data, overflowQuantity, getItemContainerParentId(target), null, planningItems);
         if (!addedStackParts) continue;
         updateData = createItemStackPartAdditionUpdate(target, stackQuantity, null, addedStackParts);
       } else {
@@ -3716,7 +3717,7 @@ function createCraftOutputStackParts(actor, itemData, quantity, parentId, prefer
     columns: context.dimensions.columns,
     rows: context.dimensions.rows,
     allItems: planningItems,
-    options: getActorRootInventoryGridOptions(actor, parentId)
+    options: context.options
   });
 }
 

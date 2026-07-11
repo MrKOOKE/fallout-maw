@@ -140,6 +140,7 @@ import {
   getItemFootprint as getItemFootprintHelper,
   getItemMaxStack as getItemMaxStackHelper,
   getItemQuantity as getItemQuantityHelper,
+  getItemStackAdditionOverflowQuantity,
   getItemStackPartQuantity,
   getItemTotalWeight,
   hasContainerCycle,
@@ -161,6 +162,7 @@ import {
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -2513,9 +2515,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
     const target = this.#getCompatibleVirtualStackTarget(itemData, targetItem, excludedIds, parentId);
     const { columns, rows } = this.#getInventoryGridDimensions(parentId);
+    const overflowQuantity = target ? getItemStackAdditionOverflowQuantity(target, quantity) : quantity;
     const stackParts = createAnchoredItemStackPartsForQuantity({
       itemData,
-      quantity,
+      quantity: overflowQuantity,
       preferredPlacement,
       contextItems: this.#getContextInventoryItems(parentId),
       columns,
@@ -3195,7 +3198,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #copyInventoryItem(item) {
     const data = item.toObject();
     delete data._id;
+    delete data.id;
     const parentId = getItemContainerParentId(item);
+    if (usesVirtualInventoryStacks(item) && String(item.system?.placement?.mode ?? "inventory") === "inventory") {
+      try {
+        return await grantActorInventoryItem(this.actor, data, {
+          quantity: getItemQuantityHelper(item),
+          parentId
+        });
+      } catch (_error) {
+        this.#warnInventoryNoSpace();
+        return null;
+      }
+    }
     const placement = this.#getFirstAvailableInventoryPlacement(data, [], [], parentId);
     if (!placement) {
       this.#warnInventoryNoSpace();

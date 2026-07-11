@@ -676,8 +676,7 @@
       "BatchCraftProtocol": "Production protocol",
       "BatchDisassemblyProtocol": "Disassembly protocol",
       "BatchComplete": "Batch complete",
-      "BatchDismissNow": "Dismiss report",
-      "BatchAutoDismiss": "Auto-dismiss: 3 sec // click to close"
+      "BatchDismissNow": "Dismiss report"
     },
     "Creation": {
       "Base": "Character Base",

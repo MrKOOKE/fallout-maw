@@ -8,6 +8,7 @@ import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, hasToolFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MEDICINE_SOCKET = `system.${SYSTEM_ID}`;
@@ -813,12 +814,9 @@ async function applyImplantRemovalLocally({ sourceActor, targetActor, limbKey = 
   if (String(item.system?.placement?.mode ?? "") !== "implant") return buildTargetContext(targetActor);
   if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
 
-  if (sourceActor && sourceActor.uuid !== targetActor.uuid) {
-    await sourceActor.createEmbeddedDocuments("Item", [createReturnedImplantItemData(item)]);
-    await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
-  } else {
-    await targetActor.updateEmbeddedDocuments("Item", [createReturnImplantUpdate(item)]);
-  }
+  const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
+  await grantActorInventoryItem(receivingActor, createReturnedImplantItemData(item), { quantity: 1 });
+  await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
   return buildTargetContext(targetActor);
 }
 
@@ -899,26 +897,8 @@ function createImplantItemData(item, limbKey = "") {
       }
     }
   });
+  foundry.utils.setProperty(itemData, "system.stackParts", []);
   return itemData;
-}
-
-function createReturnImplantUpdate(item) {
-  const placement = item.system?.placement ?? {};
-  return {
-    _id: item.id,
-    "system.equipped": false,
-    "system.container.parentId": "",
-    "system.placement.mode": "inventory",
-    "system.placement.equipmentSlot": "",
-    "system.placement.weaponSet": "",
-    "system.placement.weaponSlot": "",
-    "system.placement.limbKey": "",
-    "system.placement.x": 1,
-    "system.placement.y": 10000,
-    "system.placement.width": Math.max(1, toInteger(placement.width) || 1),
-    "system.placement.height": Math.max(1, toInteger(placement.height) || 1),
-    "system.placement.rotated": Boolean(placement.rotated)
-  };
 }
 
 function createReturnedImplantItemData(item) {
@@ -945,6 +925,7 @@ function createReturnedImplantItemData(item) {
       }
     }
   });
+  foundry.utils.setProperty(itemData, "system.stackParts", []);
   return itemData;
 }
 
@@ -1157,7 +1138,10 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
   if (!isProsthesisItemInstallable(item)) return buildTargetContext(targetActor);
 
   const existing = getInstalledTargetProsthesis(targetActor, limbKey);
-  if (existing) await targetActor.updateEmbeddedDocuments("Item", [createReturnProsthesisUpdate(existing)]);
+  if (existing) {
+    await grantActorInventoryItem(targetActor, createReturnedProsthesisItemData(existing), { quantity: 1 });
+    await targetActor.deleteEmbeddedDocuments("Item", [existing.id]);
+  }
 
   if (sourceContainer?.uuid === targetActor.uuid) {
     const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
@@ -1188,12 +1172,9 @@ async function applyProsthesisRemovalLocally({ sourceActor, targetActor, limbKey
   if (String(item.system?.placement?.mode ?? "") !== "prosthesis") return buildTargetContext(targetActor);
   if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
 
-  if (sourceActor && sourceActor.uuid !== targetActor.uuid) {
-    await sourceActor.createEmbeddedDocuments("Item", [createReturnedProsthesisItemData(item)]);
-    await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
-  } else {
-    await targetActor.updateEmbeddedDocuments("Item", [createReturnProsthesisUpdate(item)]);
-  }
+  const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
+  await grantActorInventoryItem(receivingActor, createReturnedProsthesisItemData(item), { quantity: 1 });
+  await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
   await setLimbMissingState(targetActor, limbKey);
   await applyDestroyedLimbConsequences(targetActor, [limbKey], { ignoreInstalledProsthesis: true });
   return buildTargetContext(targetActor);
@@ -1276,26 +1257,8 @@ function createProsthesisItemData(item, limbKey = "") {
       }
     }
   });
+  foundry.utils.setProperty(itemData, "system.stackParts", []);
   return itemData;
-}
-
-function createReturnProsthesisUpdate(item) {
-  const placement = item.system?.placement ?? {};
-  return {
-    _id: item.id,
-    "system.equipped": false,
-    "system.container.parentId": "",
-    "system.placement.mode": "inventory",
-    "system.placement.equipmentSlot": "",
-    "system.placement.weaponSet": "",
-    "system.placement.weaponSlot": "",
-    "system.placement.limbKey": "",
-    "system.placement.x": 1,
-    "system.placement.y": 10000,
-    "system.placement.width": Math.max(1, toInteger(placement.width) || 1),
-    "system.placement.height": Math.max(1, toInteger(placement.height) || 1),
-    "system.placement.rotated": Boolean(placement.rotated)
-  };
 }
 
 function createReturnedProsthesisItemData(item) {
@@ -1322,6 +1285,7 @@ function createReturnedProsthesisItemData(item) {
       }
     }
   });
+  foundry.utils.setProperty(itemData, "system.stackParts", []);
   return itemData;
 }
 

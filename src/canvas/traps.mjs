@@ -7,6 +7,7 @@ import { buildWeaponExplosionDamageRequests, executeWeaponAttackAgainstToken } f
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { normalizeImagePath, prepareInventoryContext } from "../utils/actor-display-data.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { getCreatureOptions, getToolSettings } from "../settings/accessors.mjs";
 import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
@@ -1497,15 +1498,15 @@ async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
 
 async function restoreTrapItemToOwner(actor, trap) {
   const sourceItem = trap.sourceItemUuid ? await fromUuid(trap.sourceItemUuid) : null;
-  if (sourceItem?.parent?.uuid === actor.uuid) {
-    await sourceItem.update({ "system.quantity": getItemQuantity(sourceItem) + 1 });
-    return;
-  }
-  const itemData = foundry.utils.deepClone(trap.itemData ?? {});
+  const itemData = sourceItem?.parent?.uuid === actor.uuid
+    ? sourceItem.toObject()
+    : foundry.utils.deepClone(trap.itemData ?? {});
   if (!itemData?.name) return;
   delete itemData._id;
+  delete itemData.id;
   foundry.utils.setProperty(itemData, "system.quantity", 1);
-  await actor.createEmbeddedDocuments("Item", [itemData]);
+  foundry.utils.setProperty(itemData, "system.stackParts", []);
+  await grantActorInventoryItem(actor, itemData, { quantity: 1 });
 }
 
 function getTrapViewerActor() {

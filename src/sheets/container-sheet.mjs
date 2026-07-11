@@ -19,6 +19,7 @@ import {
   getItemContainerParentId,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackAdditionOverflowQuantity,
   getItemStackPartQuantity,
   getItemTotalWeight,
   isContainerItem,
@@ -39,6 +40,7 @@ import {
 } from "../utils/inventory-rotation.mjs";
 import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
@@ -731,9 +733,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const excludedIds = [sourceOwned ? sourceItem?.id ?? "" : ""].filter(Boolean);
     const target = this.#getCompatibleVirtualStackTarget(itemData, targetItem, excludedIds);
     const { columns, rows } = getContainerInventoryGridOptions(this.item);
+    const overflowQuantity = target ? getItemStackAdditionOverflowQuantity(target, quantity) : quantity;
     const stackParts = createAnchoredItemStackPartsForQuantity({
       itemData,
-      quantity,
+      quantity: overflowQuantity,
       preferredPlacement,
       contextItems: getContextInventoryItems(this.item.id, this.actor.items),
       columns,
@@ -1006,6 +1009,17 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const data = item.toObject();
     delete data._id;
     delete data.id;
+    if (usesVirtualInventoryStacks(item)) {
+      try {
+        return await grantActorInventoryItem(this.actor, data, {
+          quantity: getItemQuantity(item),
+          parentId: this.item.id
+        });
+      } catch (_error) {
+        this.#warnValidation({ reason: "no-space" });
+        return null;
+      }
+    }
     const placement = this.#getFirstAvailableInventoryPlacement(data, [], []);
     if (!placement) {
       this.#warnValidation({ reason: "no-space" });

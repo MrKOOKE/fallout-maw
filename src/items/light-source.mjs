@@ -14,6 +14,12 @@ import {
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
+import {
+  createItemStackPartRemovalUpdate,
+  getItemQuantity,
+  usesVirtualInventoryStacks
+} from "../utils/inventory-containers.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const ACTIVE_LIGHT_SOURCES_FLAG = "activeLightSources";
@@ -383,13 +389,20 @@ export async function installEnergyConsumerSource(actor = null, consumerItem = n
 
   const returnedData = createEnergySourceItemDataFromInstalled(consumer.installedSource);
   const deleteSourceId = sourceItem.parent === actor ? sourceItem.id : "";
+  if (returnedData) await grantActorInventoryItem(actor, returnedData, { quantity: 1 });
   await consumerItem.update({
     "system.functions.energyConsumer.installedSource": createInstalledEnergySourceData(sourceItem)
   });
   if (deleteSourceId && actor.items?.get(deleteSourceId)) {
-    await actor.deleteEmbeddedDocuments("Item", [deleteSourceId]);
+    const sourceQuantity = getItemQuantity(sourceItem);
+    if (sourceQuantity <= 1) await actor.deleteEmbeddedDocuments("Item", [deleteSourceId]);
+    else if (usesVirtualInventoryStacks(sourceItem)) {
+      const update = createItemStackPartRemovalUpdate(sourceItem, 1, 0);
+      if (update) await actor.updateEmbeddedDocuments("Item", [update]);
+    } else {
+      await sourceItem.update({ "system.quantity": sourceQuantity - 1 });
+    }
   }
-  if (returnedData) await actor.createEmbeddedDocuments("Item", [returnedData]);
   return true;
 }
 
@@ -398,10 +411,10 @@ export async function extractEnergyConsumerSource(actor = null, consumerItem = n
   if (!hasItemFunction(consumerItem, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return false;
   const returnedData = createEnergySourceItemDataFromInstalled(getEnergyConsumerFunction(consumerItem).installedSource);
   if (!returnedData) return false;
+  await grantActorInventoryItem(actor, returnedData, { quantity: 1 });
   await consumerItem.update({
     "system.functions.energyConsumer.installedSource": createInstalledEnergySourceData(null)
   });
-  await actor.createEmbeddedDocuments("Item", [returnedData]);
   return true;
 }
 
@@ -718,6 +731,8 @@ function createEnergySourceItemDataFromInstalled(source = {}) {
   data.name = installed.name || data.name || game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource");
   data.img = installed.img || data.img || "icons/svg/battery.svg";
   data.system ??= {};
+  data.system.quantity = 1;
+  data.system.stackParts = [];
   data.system.functions ??= {};
   data.system.functions.energySource = {
     ...(data.system.functions.energySource ?? {}),

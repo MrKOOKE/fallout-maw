@@ -613,6 +613,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 
   async _processSubmitData(event, form, submitData, options = {}) {
+    if (hasSubmittedStackShapeChange(this.item, submitData)) {
+      options.falloutMawRepackStacks = true;
+    }
     if (form?.querySelector?.("[data-implant-limb-key-list]")) {
       const limbKeys = Array.from(form.querySelectorAll("[data-implant-limb-key-list] select"))
         .map(input => String(input.value ?? "").trim())
@@ -5273,6 +5276,16 @@ class ContainerSpecialGridApplication extends HandlebarsApplicationMixin(Applica
     const anchor = computeContainerSpecialGridBaseAnchorSeed(getContainerDimensions(item));
     await item.update({ "system.functions.container.specialGrids.baseAnchor": anchor });
   }
+}
+
+function hasSubmittedStackShapeChange(item, submitData = {}) {
+  if (!item || !submitData?.system) return false;
+  const submittedQuantity = Number(submitData.system.quantity);
+  const submittedMaxStack = Number(submitData.system.maxStack);
+  return (
+    (Number.isFinite(submittedQuantity) && submittedQuantity !== Number(item.system?.quantity))
+    || (Number.isFinite(submittedMaxStack) && submittedMaxStack !== Number(item.system?.maxStack))
+  );
 }
 
 export function registerItemSheetSourceSyncHooks() {

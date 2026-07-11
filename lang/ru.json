@@ -736,8 +736,7 @@
       "BatchCraftProtocol": "Протокол производства",
       "BatchDisassemblyProtocol": "Протокол разбора",
       "BatchComplete": "Серия завершена",
-      "BatchDismissNow": "Закрыть отчёт",
-      "BatchAutoDismiss": "Автозакрытие: 3 сек // нажмите, чтобы закрыть"
+      "BatchDismissNow": "Закрыть отчёт"
     },
     "Creation": {
       "Base": "Основа персонажа",

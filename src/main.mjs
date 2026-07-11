@@ -87,6 +87,7 @@ import {
   getItemContainerParentId,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackAdditionOverflowQuantity,
   isContainerItem,
   usesVirtualInventoryStacks,
   validateInventoryTree
@@ -389,18 +390,19 @@ function planActorDropVirtualItem(actor, itemData) {
     const parentId = getItemContainerParentId(target);
     const context = contexts.find(entry => entry.parentId === parentId);
     if (!context) continue;
+    const transferQuantity = remainingQuantity;
+    const overflowQuantity = getItemStackAdditionOverflowQuantity(target, transferQuantity);
     const parts = createAnchoredItemStackPartsForQuantity({
       itemData,
-      quantity: remainingQuantity,
+      quantity: overflowQuantity,
       contextItems: context.items,
       columns: context.dimensions.columns,
       rows: context.dimensions.rows,
       allItems: actor.items.contents,
       reservedPlacements: reservedPlacements.get(parentId) ?? [],
-      options: getActorRootInventoryGridOptions(actor, parentId)
+      options: context.options
     });
-    if (!parts?.length) continue;
-    const transferQuantity = parts.reduce((total, part) => total + Math.max(1, toInteger(part.quantity)), 0);
+    if (!parts) continue;
     const updateData = createItemStackPartAdditionUpdate(target, transferQuantity, null, parts);
     if (!updateData) continue;
     updates.push(updateData);
@@ -420,7 +422,7 @@ function planActorDropVirtualItem(actor, itemData) {
       rows: context.dimensions.rows,
       allItems: actor.items.contents,
       reservedPlacements: reservedPlacements.get(parentId) ?? [],
-      options: getActorRootInventoryGridOptions(actor, parentId)
+      options: context.options
     });
     if (!parts?.length) continue;
     const createQuantity = parts.reduce((total, part) => total + Math.max(1, toInteger(part.quantity)), 0);

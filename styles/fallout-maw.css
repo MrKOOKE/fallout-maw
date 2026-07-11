@@ -17803,19 +17803,6 @@ html.fallout-maw-token-action-hud-open #hotbar {
   font-size: 1.25rem;
 }
 
-.fallout-maw-craft-batch-terminal-footer {
-  align-items: center;
-  border-top: 1px solid rgba(216, 192, 94, 0.42);
-  color: #d5c98b;
-  display: flex;
-  font-size: 0.68rem;
-  font-weight: 800;
-  gap: 0.45rem;
-  letter-spacing: 0.065em;
-  padding-top: 0.5rem;
-  text-transform: uppercase;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .fallout-maw-craft-batch-overlay,
   .fallout-maw-craft-batch-terminal {

@@ -83,13 +83,38 @@ export function getItemStackParts(itemOrSystem = null) {
   const parts = rawParts
     .map(part => normalizeRawStackPart(part, maxStack))
     .filter(part => part.quantity > 0);
-  return normalizeItemStackParts(parts, quantity, maxStack);
+  return consolidateUnpositionedStackParts(
+    normalizeItemStackParts(parts, quantity, maxStack),
+    maxStack,
+    getItemSystem(itemOrSystem)?.placement
+  );
 }
 
 export function getItemStackPartQuantity(itemOrSystem = null, stackIndex = 0) {
   const parts = getItemStackParts(itemOrSystem);
   const index = Math.max(0, toInteger(stackIndex));
   return parts[index]?.quantity ?? parts[0]?.quantity ?? getItemQuantity(itemOrSystem);
+}
+
+export function getItemStackAvailableSpace(itemOrSystem = null, targetStackIndex = null) {
+  const maxStack = getItemMaxStack(itemOrSystem);
+  if (!usesVirtualInventoryStacks(itemOrSystem)) {
+    return Math.max(0, maxStack - getItemQuantity(itemOrSystem));
+  }
+  const parts = getItemStackParts(itemOrSystem);
+  if (targetStackIndex !== null && targetStackIndex !== undefined) {
+    const index = Math.max(0, Math.min(parts.length - 1, toInteger(targetStackIndex)));
+    return Math.max(0, maxStack - Math.max(0, toInteger(parts[index]?.quantity)));
+  }
+  return parts.reduce(
+    (total, part) => total + Math.max(0, maxStack - Math.max(0, toInteger(part?.quantity))),
+    0
+  );
+}
+
+export function getItemStackAdditionOverflowQuantity(itemOrSystem = null, amount = 0, targetStackIndex = null) {
+  const addQuantity = Math.max(0, toInteger(amount));
+  return Math.max(0, addQuantity - getItemStackAvailableSpace(itemOrSystem, targetStackIndex));
 }
 
 export function createItemStackPartPlacementUpdate(itemOrSystem = null, stackIndex = 0, placement = null) {
@@ -216,8 +241,11 @@ export function createItemStackPartAdditionUpdate(itemOrSystem = null, amount = 
   const maxStack = getItemMaxStack(itemOrSystem);
   const parts = getItemStackParts(itemOrSystem);
   let remaining = addQuantity;
-  if (targetStackIndex !== null && targetStackIndex !== undefined && parts.length) {
-    const index = Math.max(0, Math.min(parts.length - 1, toInteger(targetStackIndex)));
+  const fillIndexes = targetStackIndex !== null && targetStackIndex !== undefined && parts.length
+    ? [Math.max(0, Math.min(parts.length - 1, toInteger(targetStackIndex)))]
+    : parts.map((_part, index) => index);
+  for (const index of fillIndexes) {
+    if (remaining <= 0) break;
     const room = Math.max(0, maxStack - parts[index].quantity);
     const moved = Math.min(room, remaining);
     if (moved > 0) {
@@ -267,11 +295,23 @@ export function createAnchoredItemStackPartsForQuantity({
 } = {}) {
   if (!itemData || !usesVirtualInventoryStacks(itemData)) return createItemStackPartsForQuantity(itemData, quantity);
   const parts = createItemStackPartsForQuantity(itemData, quantity);
+  if (!parts.length) return [];
   const reserved = Array.isArray(reservedPlacements) ? [...reservedPlacements] : [];
-  const occupiedCells = createOccupiedInventoryCellSet([
-    ...createInventoryPlacementItems(getItemsArray(contextItems), allItems)
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const filteredContextItems = getItemsArray(contextItems)
+    .filter(item => !excluded.has(getItemId(item)));
+  const contextPlacementItems = createInventoryPlacementItems(filteredContextItems, allItems);
+  const resolvedContext = contextPlacementItems.some(item => item._stackHasStoredPlacement === false)
+    ? resolveInventoryGridPlacements(filteredContextItems, columns, rows, allItems, options)
+    : null;
+  if (contextPlacementItems.some(item => item._stackHasStoredPlacement === false) && !resolvedContext) return null;
+  const occupiedPlacements = resolvedContext
+    ? resolvedContext.items.filter(entry => !entry.phantom).map(entry => entry.placement)
+    : contextPlacementItems
       .filter(item => item._stackHasStoredPlacement !== false)
-      .map(item => normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems)),
+      .map(item => normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems));
+  const occupiedCells = createOccupiedInventoryCellSet([
+    ...occupiedPlacements,
     ...reserved
   ]);
   const cursor = { x: 1, y: 1 };
@@ -342,7 +382,18 @@ function normalizeItemStackParts(parts = [], quantity = 0, maxStack = 1) {
     total += value;
   }
 
-  if (total < quantity) normalized.push(...createCanonicalStackParts(quantity - total, maxStack));
+  let remaining = Math.max(0, quantity - total);
+  for (let index = 0; index < normalized.length && remaining > 0; index += 1) {
+    const room = Math.max(0, maxStack - normalized[index].quantity);
+    const moved = Math.min(room, remaining);
+    if (!moved) continue;
+    normalized[index] = {
+      ...normalized[index],
+      quantity: normalized[index].quantity + moved
+    };
+    remaining -= moved;
+  }
+  if (remaining > 0) normalized.push(...createCanonicalStackParts(remaining, maxStack));
   return normalized;
 }
 
@@ -357,6 +408,43 @@ function createCanonicalStackParts(quantity = 0, maxStack = 1) {
     remaining -= part;
   }
   return parts;
+}
+
+function consolidateUnpositionedStackParts(parts = [], maxStack = 1, fallbackPlacement = null) {
+  const positioned = [];
+  const unpositioned = [];
+  for (const part of parts) {
+    if (toInteger(part?.x) > 0 && toInteger(part?.y) > 0) positioned.push({ ...part });
+    else unpositioned.push({ ...part });
+  }
+  if (!unpositioned.length) return positioned;
+
+  if (!positioned.length && toInteger(fallbackPlacement?.x) > 0 && toInteger(fallbackPlacement?.y) > 0) {
+    const first = unpositioned.shift();
+    positioned.push({
+      ...first,
+      x: toInteger(fallbackPlacement.x),
+      y: toInteger(fallbackPlacement.y),
+      rotated: Boolean(first.rotated ?? fallbackPlacement.rotated)
+    });
+  }
+
+  const remainingParts = [];
+  for (const part of unpositioned) {
+    let remaining = Math.max(0, toInteger(part.quantity));
+    for (let index = 0; index < positioned.length && remaining > 0; index += 1) {
+      const room = Math.max(0, maxStack - positioned[index].quantity);
+      const moved = Math.min(room, remaining);
+      if (!moved) continue;
+      positioned[index] = {
+        ...positioned[index],
+        quantity: positioned[index].quantity + moved
+      };
+      remaining -= moved;
+    }
+    if (remaining > 0) remainingParts.push({ ...part, quantity: remaining });
+  }
+  return [...positioned, ...remainingParts];
 }
 
 function applyStackPartPlacement(part = null, placement = null) {
@@ -871,9 +959,17 @@ export function isInventoryPlacementAvailable(
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   if (reservedPlacements.some(existing => inventoryPlacementsOverlap(placement, existing))) return false;
 
-  if (options.allowResolvedAvailability && !options.skipResolvedContext && getItemsArray(contextItems).some(usesVirtualInventoryStacks)) {
+  const contextItemsArray = getItemsArray(contextItems);
+  const hasUnpositionedVirtualPart = contextItemsArray.some(usesVirtualInventoryStacks)
+    && createInventoryPlacementItems(contextItemsArray, allItems)
+      .some(item => item._stackHasStoredPlacement === false);
+  if (
+    !options.skipResolvedContext
+    && (options.allowResolvedAvailability || hasUnpositionedVirtualPart)
+    && contextItemsArray.some(usesVirtualInventoryStacks)
+  ) {
     const resolved = resolveInventoryGridPlacements(
-      getItemsArray(contextItems).filter(item => !excluded.has(getItemId(item))),
+      contextItemsArray.filter(item => !excluded.has(getItemId(item))),
       columns,
       rows,
       allItems,

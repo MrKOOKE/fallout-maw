@@ -23,6 +23,7 @@ import {
   createItemStackPartPlacementUpdate,
   createItemStackPartRemovalUpdate,
   createItemStackPartSplitUpdate,
+  createItemStackPartsForQuantity,
   createInventoryHoverPlacementChecker,
   createInventoryPlacement,
   createStoredPlacement,
@@ -40,6 +41,7 @@ import {
   getItemsArray,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackAdditionOverflowQuantity,
   getItemStackPartQuantity,
   getItemTotalWeight,
   hasContainerCycle,
@@ -6857,9 +6859,10 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   const excludedIds = [sourceActor?.uuid === actor.uuid || sourceItem?.parent === actor ? sourceItem?.id ?? "" : ""].filter(Boolean);
   const target = getCompatibleVirtualStackTarget(actor, itemData, targetItem, excludedIds, parentId);
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
+  const overflowQuantity = target ? getItemStackAdditionOverflowQuantity(target, quantity) : quantity;
   const stackParts = createAnchoredItemStackPartsForQuantity({
     itemData,
-    quantity,
+    quantity: overflowQuantity,
     preferredPlacement,
     contextItems: getContextInventoryItems(parentId, actor.items),
     columns: dimensions.columns,
@@ -7756,6 +7759,11 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
       }
     }
   });
+  foundry.utils.setProperty(
+    createData,
+    "system.stackParts",
+    usesVirtualInventoryStacks(createData) ? createItemStackPartsForQuantity(createData, quantity) : []
+  );
   return createData;
 }
 
@@ -7767,10 +7775,22 @@ export async function copyActorInventoryItem(actor, item, { allowLocked = false 
   const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
     ? LOCKED_STORAGE_PARENT_ID
     : getItemContainerParentId(item);
+  if (usesVirtualInventoryStacks(data)) {
+    return insertVirtualStackItemIntoActorInventory(
+      actor,
+      data,
+      createContextInventoryPlacement(
+        normalizeInventoryPlacement(item.system?.placement ?? {}, data, actor.items),
+        parentId
+      ),
+      { parentId }
+    );
+  }
   const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, data, [], []);
   if (!placement) throwInventoryNoSpace();
   foundry.utils.setProperty(data, "system.container.parentId", getStoredInventoryParentId(parentId));
   foundry.utils.setProperty(data, "system.placement", createStoredPlacement(createContextInventoryPlacement(placement, parentId), data));
+  foundry.utils.setProperty(data, "system.stackParts", []);
   if (!validateActorProjectedInventoryState(actor, { creates: [data] })) throwInventoryNoSpace();
   return actor.createEmbeddedDocuments("Item", [data]);
 }
@@ -7790,8 +7810,20 @@ export async function splitActorInventoryItem(actor, item, amount, { allowLocked
     : getItemContainerParentId(item);
   const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, data, [], []);
   if (!placement) throwInventoryNoSpace();
+  if (usesVirtualInventoryStacks(item)) {
+    const updateData = createItemStackPartSplitUpdate(
+      item,
+      0,
+      splitQuantity,
+      createContextInventoryPlacement(placement, parentId)
+    );
+    if (!updateData || !validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
+    await actor.updateEmbeddedDocuments("Item", [updateData]);
+    return actor.items.get(item.id) ?? null;
+  }
   foundry.utils.setProperty(data, "system.container.parentId", getStoredInventoryParentId(parentId));
   foundry.utils.setProperty(data, "system.placement", createStoredPlacement(createContextInventoryPlacement(placement, parentId), data));
+  foundry.utils.setProperty(data, "system.stackParts", []);
   const updateData = {
     _id: item.id,
     "system.quantity": quantity - splitQuantity

@@ -12,6 +12,7 @@ import {
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const THROWN_ITEM_SOCKET = `system.${SYSTEM_ID}`;
@@ -365,6 +366,37 @@ async function pickupThrownItemTile({ sceneId = "", tileId = "", actorUuid = "",
   if (requestingUser && !requestingUser.isGM && !actor.testUserPermission(requestingUser, "OWNER")) return;
 
   const itemData = normalizePickedUpItemData(thrownItem.itemData);
+  if (!isContainerItem(itemData)) {
+    const parentIds = [
+      ROOT_CONTAINER_ID,
+      ...actor.items.contents
+        .filter(item => isContainerItem(item) && !getItemContainerParentId(item) && item.system?.equipped)
+        .map(item => item.id)
+    ];
+    let grantedItem = null;
+    let grantError = null;
+    for (const parentId of parentIds) {
+      try {
+        grantedItem = await grantActorInventoryItem(actor, itemData, {
+          quantity: Math.max(1, toInteger(itemData.system?.quantity) || 1),
+          parentId,
+          merge: !getDelayedThrownItemId(itemData)
+        });
+        if (grantedItem) break;
+      } catch (error) {
+        grantError = error;
+      }
+    }
+    if (!grantedItem) {
+      console.warn(`${SYSTEM_ID} | Thrown item pickup failed`, grantError);
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return;
+    }
+    await attachDelayedThrownItemRegionToActor(itemData, actor, scene);
+    await scene.deleteEmbeddedDocuments("Tile", [tile.id]);
+    return;
+  }
+
   const targetPlacement = findFirstActorDropPlacement(actor, itemData);
   if (!targetPlacement) {
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
@@ -610,6 +642,7 @@ function normalizeDroppedItemData(itemData) {
       }
     }
   });
+  foundry.utils.setProperty(data, "system.stackParts", []);
   return data;
 }
 
