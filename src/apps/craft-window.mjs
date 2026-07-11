@@ -80,6 +80,12 @@ import { toInteger } from "../utils/numbers.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
+import {
+  getConstructPartSlots,
+  getInstalledConstructPartForSlot,
+  isConstructPartCompatibleWithSlot,
+  isInstalledConstructPartItem
+} from "../utils/construct-parts.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
 import { actorKnowsCraftItem, hasCraftKnowledgeLayoutData } from "../items/recipe-knowledge.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
@@ -1731,6 +1737,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         targetEquipmentSlot: placementRequest.equipmentSlot,
         targetWeaponSet: placementRequest.weaponSet,
         targetWeaponSlot: placementRequest.weaponSlot,
+        targetConstructPartSlot: placementRequest.constructPartSlot,
         targetX: pointerPlacement?.x ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
         targetY: pointerPlacement?.y ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
         targetRotated: Boolean(itemData.system?.placement?.rotated),
@@ -1839,8 +1846,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const actor = zone.dataset.searchActorUuid === this.#actor?.uuid ? this.#actor : null;
-    if (zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
-      const inputKey = `slot:${actor?.uuid ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#actor?.uuid ?? ""}:${this.#draggedItemId}`;
+    if (zone.dataset.constructPartSlot || zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
+      const inputKey = `slot:${actor?.uuid ?? ""}:${zone.dataset.constructPartSlot ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#actor?.uuid ?? ""}:${this.#draggedItemId}`;
       if (this.#hoverPreviewInputKey === inputKey) return;
       this.#hoverPreviewInputKey = inputKey;
       if (!actor || !this.#draggedItemData) {
@@ -1854,6 +1861,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         equipmentSlot: placementRequest.equipmentSlot,
         weaponSet: placementRequest.weaponSet,
         weaponSlot: placementRequest.weaponSlot,
+        constructPartSlot: placementRequest.constructPartSlot,
         x: 1,
         y: 1
       }, excludeItemIds)) {
@@ -1978,6 +1986,14 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const race = getActorRace(this.#actor);
     for (const slot of getRaceEquipmentSlotsForItem(race, item)) {
       this.element?.querySelector(`[data-equipment-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-match-preview");
+    }
+    if (this.#actor?.type === "construct") {
+      for (const slot of getConstructPartSlots(this.#actor)) {
+        if (!isConstructPartCompatibleWithSlot(item, slot)) continue;
+        const installed = getInstalledConstructPartForSlot(this.#actor, slot.id);
+        if (installed && installed.id !== item.id) continue;
+        this.element?.querySelector(`[data-construct-part-slot="${CSS.escape(slot.id)}"]`)?.classList.add("drop-match-preview");
+      }
     }
     for (const set of race?.weaponSets ?? []) {
       for (const slot of set.slots ?? []) {
@@ -2362,7 +2378,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
     const isSlottedWeapon = placementMode === "weapon";
-    const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
+    const isSlottedItem = isSlottedEquipment || isSlottedWeapon || isInstalledConstructPartItem(item);
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
     const craftOpenOptions = await getCraftWindowOpenOptionsForItem(item, this.#actor);
@@ -2406,7 +2422,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
     }
-    if (game.user?.isGM) {
+    if (game.user?.isGM && !isInstalledConstructPartItem(item)) {
       menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
     }
 

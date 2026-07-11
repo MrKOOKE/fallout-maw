@@ -115,6 +115,18 @@ import {
 } from "../items/dropped-items.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { applyDestroyedLimbConsequences, clearLimbLossState, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import {
+  createConstructPartSlotFromItem,
+  ensureConstructPartSlots,
+  getConstructPartLimbKey,
+  getConstructPartSlot,
+  getConstructPartSlotId,
+  getConstructPartSlots,
+  getInstalledConstructPartForSlot,
+  isConstructPartCompatibleWithSlot,
+  isInstalledConstructPartItem
+} from "../utils/construct-parts.mjs";
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
 import { requestActorHacking } from "./hacking-dialog.mjs";
 
@@ -1068,6 +1080,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         targetEquipmentSlot: placementRequest.equipmentSlot,
         targetWeaponSet: placementRequest.weaponSet,
         targetWeaponSlot: placementRequest.weaponSlot,
+        targetConstructPartSlot: placementRequest.constructPartSlot,
         targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
         targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
         targetRotated: Boolean(draggedItemData.system?.placement?.rotated),
@@ -1158,6 +1171,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetEquipmentSlot: placementRequest.equipmentSlot,
       targetWeaponSet: placementRequest.weaponSet,
       targetWeaponSlot: placementRequest.weaponSlot,
+      targetConstructPartSlot: placementRequest.constructPartSlot,
       targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
       targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
       targetItemId: targetItem?.id ?? "",
@@ -1999,8 +2013,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
 
     const actor = this.#getActorByUuid(String(zone.dataset.searchActorUuid ?? ""));
-    if (zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
-      const inputKey = `slot:${actor?.uuid ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#draggedActorUuid}:${this.#draggedItemId}`;
+    if (zone.dataset.constructPartSlot || zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
+      const inputKey = `slot:${actor?.uuid ?? ""}:${zone.dataset.constructPartSlot ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#draggedActorUuid}:${this.#draggedItemId}`;
       if (this.#hoverPreviewInputKey === inputKey) return;
       this.#hoverPreviewInputKey = inputKey;
       if (!actor || !this.#draggedItemData) {
@@ -2014,6 +2028,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         equipmentSlot: placementRequest.equipmentSlot,
         weaponSet: placementRequest.weaponSet,
         weaponSlot: placementRequest.weaponSlot,
+        constructPartSlot: placementRequest.constructPartSlot,
         x: 1,
         y: 1
       }, excludeItemIds)) {
@@ -2192,6 +2207,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           `[data-search-actor-uuid="${actorUuid}"][data-equipment-slot="${CSS.escape(slot.key)}"]`
         )?.classList.add("drop-match-preview");
         highlighted = true;
+      }
+
+      if (actor.type === "construct") {
+        for (const slot of getConstructPartSlots(actor)) {
+          if (!isConstructPartCompatibleWithSlot(itemData, slot)) continue;
+          if (getInstalledConstructPartForSlot(actor, slot.id)) continue;
+          this.element?.querySelector(
+            `[data-search-actor-uuid="${actorUuid}"][data-construct-part-slot="${CSS.escape(slot.id)}"]`
+          )?.classList.add("drop-match-preview");
+          highlighted = true;
+        }
       }
 
       for (const set of race?.weaponSets ?? []) {
@@ -2460,7 +2486,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
     const isSlottedWeapon = placementMode === "weapon";
-    const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
+    const isSlottedConstructPart = isInstalledConstructPartItem(item);
+    const isSlottedItem = isSlottedEquipment || isSlottedWeapon || isSlottedConstructPart;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
     const isButcheringItem = isItemInButcheringStorage(item);
@@ -3131,6 +3158,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
       : getItemQuantity(item);
     try {
+      await prepareConstructPartDetachment(actor, item);
       await dropActorInventoryItem(actor, item, {
         quantity,
         stackIndex: Math.max(0, toInteger(stackIndex))
@@ -3146,11 +3174,21 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #deleteSearchItem(actor, item, { stackIndex = 0, stackQuantity = 0 } = {}) {
-    if (!usesVirtualInventoryStacks(item)) return item.delete();
-    const amount = Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex));
-    const updateData = createItemStackPartRemovalUpdate(item, amount, stackIndex);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return actor.deleteEmbeddedDocuments("Item", [item.id]);
-    return actor.updateEmbeddedDocuments("Item", [updateData]);
+    try {
+      const detachedSlotId = await prepareConstructPartDetachment(actor, item);
+      if (!usesVirtualInventoryStacks(item)) await item.delete();
+      else {
+        const amount = Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex));
+        const updateData = createItemStackPartRemovalUpdate(item, amount, stackIndex);
+        if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) await actor.deleteEmbeddedDocuments("Item", [item.id]);
+        else await actor.updateEmbeddedDocuments("Item", [updateData]);
+      }
+      if (detachedSlotId) await finalizeConstructPartDetachment(actor, detachedSlotId);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search inventory item delete failed`, error);
+      ui.notifications.warn(error.message || "Не удалось удалить предмет.");
+    }
+    return null;
   }
 
   async #transferItemToOppositeRoot(itemElement) {
@@ -4802,6 +4840,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetEquipmentSlot: String(payload.targetEquipmentSlot ?? ""),
     targetWeaponSet: String(payload.targetWeaponSet ?? ""),
     targetWeaponSlot: String(payload.targetWeaponSlot ?? ""),
+    targetConstructPartSlot: String(payload.targetConstructPartSlot ?? ""),
     targetX: payload.targetX,
     targetY: payload.targetY,
     targetRotated: payload.targetRotated,
@@ -5124,6 +5163,7 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
     targetEquipmentSlot: String(payload.targetEquipmentSlot ?? ""),
     targetWeaponSet: String(payload.targetWeaponSet ?? ""),
     targetWeaponSlot: String(payload.targetWeaponSlot ?? ""),
+    targetConstructPartSlot: String(payload.targetConstructPartSlot ?? ""),
     targetX: autoTarget?.placement?.x ?? payload.targetX,
     targetY: autoTarget?.placement?.y ?? payload.targetY,
     targetItemId: String(payload.targetItemId ?? ""),
@@ -6457,12 +6497,14 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
   targetEquipmentSlot = "",
   targetWeaponSet = "",
   targetWeaponSlot = "",
+  targetConstructPartSlot = "",
   targetX = null,
   targetY = null,
   targetItemId = "",
   skipProjectedValidation = false
 } = {}) {
   validateTargetParent(targetActor, targetParentId);
+  if (targetMode === ITEM_FUNCTIONS.constructPart) await ensureConstructPartSlots(targetActor);
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
   const targetStack = targetMode === "inventory"
     ? getCompatibleStackTarget(targetActor, itemData, targetItem, [], targetParentId).at(0)
@@ -6479,6 +6521,7 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
     targetEquipmentSlot,
     targetWeaponSet,
     targetWeaponSlot,
+    targetConstructPartSlot,
     targetX,
     targetY,
     targetItemId
@@ -6505,7 +6548,11 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
   if (!replacementUpdates) throwInventoryNoSpace();
   if (!validateActorProjectedInventoryState(targetActor, { updates: replacementUpdates, creates: [createData] })) throwInventoryNoSpace();
   if (replacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", replacementUpdates);
-  return targetActor.createEmbeddedDocuments("Item", [createData]);
+  const created = await targetActor.createEmbeddedDocuments("Item", [createData]);
+  if (preferredPlacement.mode === ITEM_FUNCTIONS.constructPart) {
+    await finalizeConstructPartInstallation(targetActor, preferredPlacement.limbKey);
+  }
+  return created;
 }
 
 async function createCompletedTradeContainerTree(targetActor, rootItemData, containedItems = [], targetParentId = ROOT_CONTAINER_ID, preferredPlacement = null) {
@@ -6533,6 +6580,9 @@ async function createCompletedTradeContainerTree(targetActor, rootItemData, cont
   });
   if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
   const createdItems = await targetActor.createEmbeddedDocuments("Item", treeCreateData.creates, { keepId: true });
+  if (preferredPlacement.mode === ITEM_FUNCTIONS.constructPart) {
+    await finalizeConstructPartInstallation(targetActor, preferredPlacement.limbKey);
+  }
   return createdItems.find(item => item.id === treeCreateData.rootId) ?? createdItems.at(0) ?? null;
 }
 
@@ -6621,6 +6671,39 @@ function createUniqueEmbeddedItemId(actor = null, reservedIds = new Set()) {
   return id;
 }
 
+async function prepareConstructPartDetachment(actor, item) {
+  if (!isInstalledConstructPartItem(item)) return "";
+  const slotId = getConstructPartSlotId(item);
+  if (!slotId) return "";
+  const occupied = actor.items?.contents?.some(candidate => (
+    String(candidate.system?.placement?.mode ?? "") === "weapon"
+    && String(candidate.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${slotId}:`)
+  ));
+  if (occupied) throw new Error("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+  await ensureConstructPartSlots(actor);
+  return slotId;
+}
+
+async function finalizeConstructPartDetachment(actor, slotId = "") {
+  if (!slotId || getInstalledConstructPartForSlot(actor, slotId)) return;
+  await applyDestroyedLimbConsequences(actor, [getConstructPartLimbKey(slotId)], { ignoreInstalledProsthesis: true });
+}
+
+async function finalizeConstructPartInstallation(actor, slotId = "") {
+  const slot = getConstructPartSlot(actor, slotId);
+  const item = getInstalledConstructPartForSlot(actor, slotId);
+  if (!slot || !item) return;
+  const refreshed = createConstructPartSlotFromItem(item, { id: slot.id, order: slot.order });
+  const slots = getConstructPartSlots(actor).map(entry => entry.id === slot.id ? refreshed : entry);
+  await actor.update({ "system.constructPartSlots": slots });
+  const limbKey = getConstructPartLimbKey(slot.id);
+  if (isLimbDestroyed(actor, limbKey)) {
+    await applyDestroyedLimbConsequences(actor, [limbKey], { ignoreInstalledProsthesis: true });
+  } else {
+    await clearLimbLossState(actor, limbKey);
+  }
+}
+
 export async function transferItemBetweenActors({
   sourceActor,
   targetActor,
@@ -6630,6 +6713,7 @@ export async function transferItemBetweenActors({
   targetEquipmentSlot = "",
   targetWeaponSet = "",
   targetWeaponSlot = "",
+  targetConstructPartSlot = "",
   targetX = null,
   targetY = null,
   targetRotated = null,
@@ -6647,6 +6731,25 @@ export async function transferItemBetweenActors({
   }
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
+  const targetConstructSlot = targetMode === ITEM_FUNCTIONS.constructPart
+    ? getConstructPartSlot(targetActor, targetConstructPartSlot)
+    : null;
+  if (targetMode === ITEM_FUNCTIONS.constructPart) {
+    if (!targetConstructSlot || !isConstructPartCompatibleWithSlot(itemData, targetConstructSlot)) {
+      throw new Error("Тип детали не совпадает с типом слота конструкта.");
+    }
+    await ensureConstructPartSlots(targetActor);
+  }
+
+  const sourceConstructSlotId = isInstalledConstructPartItem(sourceItem)
+    && transferQuantity >= getItemQuantity(sourceItem)
+    && !(
+      sourceActor.uuid === targetActor.uuid
+      && targetMode === ITEM_FUNCTIONS.constructPart
+      && getConstructPartSlotId(sourceItem) === targetConstructSlot?.id
+    )
+    ? await prepareConstructPartDetachment(sourceActor, sourceItem)
+    : "";
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
   const targetStackPlacement = isInventoryContextPlacementMode(targetMode) && targetItem && areStackable(itemData, targetItem) && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
     ? normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, targetActor.items)
@@ -6661,46 +6764,55 @@ export async function transferItemBetweenActors({
     targetEquipmentSlot,
     targetWeaponSet,
     targetWeaponSlot,
+    targetConstructPartSlot,
     targetX,
     targetY,
     excludeItemId: sourceActor.uuid === targetActor.uuid ? sourceItem.id : ""
   }) ?? targetStackPlacement;
   if (!preferredPlacement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
 
-  if (!isInventoryContextPlacementMode(preferredPlacement.mode)) {
-    if (sourceActor.uuid === targetActor.uuid) return moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement, { spendWeaponSwitchCost });
-    if (isContainerItem(sourceItem)) return transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId: ROOT_CONTAINER_ID, preferredPlacement });
-    return createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem, sourceStackIndex, spendWeaponSwitchCost });
+  let result;
+  try {
+    if (!isInventoryContextPlacementMode(preferredPlacement.mode)) {
+      if (sourceActor.uuid === targetActor.uuid) {
+        result = await moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement, { spendWeaponSwitchCost });
+      } else if (isContainerItem(sourceItem)) {
+        result = await transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId: ROOT_CONTAINER_ID, preferredPlacement });
+      } else {
+        result = await createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem, sourceStackIndex, spendWeaponSwitchCost });
+      }
+    } else if (sourceActor.uuid === targetActor.uuid) {
+      result = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
+        parentId: targetParentId,
+        quantity: transferQuantity,
+        targetItem,
+        sourceStackIndex,
+        rotatedItemData: itemData
+      });
+      if (!result) {
+        result = await insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
+          sourceItem,
+          targetItem,
+          parentId: targetParentId,
+          sourceStackIndex
+        });
+      }
+    } else if (isContainerItem(sourceItem)) {
+      result = await transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId, preferredPlacement });
+    } else {
+      result = await insertExternalItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
+        sourceActor,
+        sourceItem,
+        targetItem,
+        parentId: targetParentId,
+        sourceStackIndex
+      });
+    }
+  } finally {
+    if (sourceConstructSlotId) await finalizeConstructPartDetachment(sourceActor, sourceConstructSlotId);
+    if (targetConstructSlot) await finalizeConstructPartInstallation(targetActor, targetConstructSlot.id);
   }
-
-  if (sourceActor.uuid === targetActor.uuid) {
-    const moved = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
-      parentId: targetParentId,
-      quantity: transferQuantity,
-      targetItem,
-      sourceStackIndex,
-      rotatedItemData: itemData
-    });
-    if (moved) return moved;
-    return insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
-      sourceItem,
-      targetItem,
-      parentId: targetParentId,
-      sourceStackIndex
-    });
-  }
-
-  if (isContainerItem(sourceItem)) {
-    return transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId, preferredPlacement });
-  }
-
-  return insertExternalItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
-    sourceActor,
-    sourceItem,
-    targetItem,
-    parentId: targetParentId,
-    sourceStackIndex
-  });
+  return result;
 }
 
 async function moveOwnedItemToActorPlacement(actor, item, placement, { spendWeaponSwitchCost = true } = {}) {
@@ -7200,11 +7312,24 @@ function getRequestedTargetPlacement({
   targetEquipmentSlot = "",
   targetWeaponSet = "",
   targetWeaponSlot = "",
+  targetConstructPartSlot = "",
   targetX,
   targetY,
   excludeItemId = ""
 } = {}) {
   const excluded = excludeItemId ? [excludeItemId] : [];
+  if (targetMode === ITEM_FUNCTIONS.constructPart) {
+    return resolveActorPlacement(targetActor, itemData, {
+      mode: ITEM_FUNCTIONS.constructPart,
+      constructPartSlot: targetConstructPartSlot,
+      limbKey: targetConstructPartSlot,
+      equipmentSlot: "",
+      weaponSet: "",
+      weaponSlot: "",
+      x: 1,
+      y: 1
+    }, excluded, [], ROOT_CONTAINER_ID);
+  }
   if (targetMode === "equipment") {
     return resolveActorPlacement(targetActor, itemData, {
       mode: "equipment",
@@ -7306,6 +7431,9 @@ export function resolveActorPlacement(
   parentId = ROOT_CONTAINER_ID,
   options = {}
 ) {
+  if (placement.mode === ITEM_FUNCTIONS.constructPart) {
+    return resolveActorConstructPartPlacement(actor, itemData, placement, excludeItemIds);
+  }
   if (placement.mode === "equipment") return resolveActorEquipmentPlacement(actor, itemData, placement, excludeItemIds, options);
   if (placement.mode === "weapon") return resolveActorWeaponPlacement(actor, itemData, placement, excludeItemIds, options);
 
@@ -7765,6 +7893,31 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
     usesVirtualInventoryStacks(createData) ? createItemStackPartsForQuantity(createData, quantity) : []
   );
   return createData;
+}
+
+function resolveActorConstructPartPlacement(actor, itemData, placement = {}, excludeItemIds = []) {
+  if (actor?.type !== "construct") return null;
+  const slotId = String(placement.constructPartSlot ?? placement.limbKey ?? "").trim();
+  const slot = getConstructPartSlot(actor, slotId);
+  if (!slot || !isConstructPartCompatibleWithSlot(itemData, slot)) return null;
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const installed = getInstalledConstructPartForSlot(actor, slot.id);
+  if (installed && !excluded.has(installed.id)) return null;
+  const footprint = getItemFootprint(itemData);
+  return {
+    ...placement,
+    mode: ITEM_FUNCTIONS.constructPart,
+    constructPartSlot: slot.id,
+    limbKey: slot.id,
+    constructPartOrder: slot.order,
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    x: 1,
+    y: 1,
+    width: footprint.width,
+    height: footprint.height
+  };
 }
 
 export async function copyActorInventoryItem(actor, item, { allowLocked = false } = {}) {
@@ -8282,9 +8435,19 @@ function setWeaponSlotImageAspect(image) {
 }
 
 export function getDropZonePlacementRequest(zone) {
+  if (zone?.dataset?.constructPartSlot) {
+    return {
+      mode: ITEM_FUNCTIONS.constructPart,
+      constructPartSlot: String(zone.dataset.constructPartSlot ?? ""),
+      equipmentSlot: "",
+      weaponSet: "",
+      weaponSlot: ""
+    };
+  }
   if (zone?.dataset?.equipmentSlot) {
     return {
       mode: "equipment",
+      constructPartSlot: "",
       equipmentSlot: String(zone.dataset.equipmentSlot ?? ""),
       weaponSet: "",
       weaponSlot: ""
@@ -8293,6 +8456,7 @@ export function getDropZonePlacementRequest(zone) {
   if (zone?.dataset?.weaponSet && zone?.dataset?.weaponSlot) {
     return {
       mode: "weapon",
+      constructPartSlot: "",
       equipmentSlot: "",
       weaponSet: String(zone.dataset.weaponSet ?? ""),
       weaponSlot: String(zone.dataset.weaponSlot ?? "")
@@ -8300,6 +8464,7 @@ export function getDropZonePlacementRequest(zone) {
   }
   return {
     mode: getInventoryPlacementModeForParent(getDropZoneParentId(zone)),
+    constructPartSlot: "",
     equipmentSlot: "",
     weaponSet: "",
     weaponSlot: ""

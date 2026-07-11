@@ -64,7 +64,7 @@ import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
 } from "../research/index.mjs";
 import { prepareOrganismDevelopmentForDisplay } from "../races/organism-development.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import { applyDamageCostModifier, applyDestroyedLimbConsequences, clearLimbLossState, getActorTraumas, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
@@ -210,6 +210,18 @@ import {
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { dropActorInventoryItem } from "../items/dropped-items.mjs";
+import {
+  createConstructPartSlotFromItem,
+  ensureConstructPartSlots,
+  getConstructPartLimbKey,
+  getConstructPartSlot,
+  getConstructPartSlotId,
+  getConstructPartSlots,
+  getInstalledConstructPartForLimb,
+  getInstalledConstructPartForSlot,
+  isConstructPartCompatibleWithSlot,
+  isInstalledConstructPartItem
+} from "../utils/construct-parts.mjs";
 import {
   getItemInteractionState,
   resolveActorInteractionToken
@@ -714,6 +726,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const placement = this.#getPlacementForDropZone(zone, itemData, [sourceOwned ? dropped.item?.id ?? "" : ""], parentId, event);
     if (!placement) return null;
+
+    if (placement.mode === ITEM_FUNCTIONS.constructPart) {
+      return this.#installConstructPart(dropped, placement, { sourceOwned });
+    }
 
     if (!sourceOwned && placement.mode === "inventory") {
       itemData = await this.#getExternalDroppedInventoryItemData(itemData);
@@ -1791,6 +1807,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       highlighted = true;
     }
 
+    if (this.actor?.type === "construct") {
+      for (const slot of getConstructPartSlots(this.actor)) {
+        if (!isConstructPartCompatibleWithSlot(itemData, slot)) continue;
+        if (getInstalledConstructPartForSlot(this.actor, slot.id)) continue;
+        this.element?.querySelector(`[data-construct-part-slot="${CSS.escape(slot.id)}"]`)?.classList.add("drop-match-preview");
+        highlighted = true;
+      }
+    }
+
     if (!getValidSelectedWeaponSlotKeys(race, itemData).size) return highlighted;
     for (const set of race?.weaponSets ?? []) {
       for (const slot of set.slots ?? []) {
@@ -1811,6 +1836,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #setInventoryHoverPreview(zone = null, event = null) {
     if (!zone) {
       this.#clearInventoryHoverPreview();
+      return;
+    }
+    if (zone.dataset.constructPartSlot) {
+      const slot = getConstructPartSlot(this.actor, zone.dataset.constructPartSlot);
+      const compatible = slot
+        && this.#draggedItemData
+        && isConstructPartCompatibleWithSlot(this.#draggedItemData, slot)
+        && !getInstalledConstructPartForSlot(this.actor, slot.id);
+      if (!compatible) {
+        this.#clearInventoryHoverPreview();
+        return;
+      }
+      this.#applySingleZonePreview(zone, `construct-part:${slot.id}:${this.#draggedItemId}`);
       return;
     }
     if (zone.dataset.inventoryCell !== undefined || zone.dataset.inventoryGridItem !== undefined) {
@@ -1955,6 +1993,27 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       const placement = this.#getInventoryPointerPlacement(zone, itemData, excludeItemIds, parentId, event)
         ?? createInventoryPlacement(toInteger(zone.dataset.x), toInteger(zone.dataset.y), itemData, this.actor.items);
       return this.#createContextInventoryPlacement(placement, parentId);
+    }
+
+    if (zone.dataset.constructPartSlot) {
+      const slot = getConstructPartSlot(this.actor, zone.dataset.constructPartSlot);
+      if (!slot || !isConstructPartCompatibleWithSlot(itemData, slot)) {
+        ui.notifications?.warn?.("Тип детали не совпадает с типом этого слота конструкта.");
+        return null;
+      }
+      const footprint = getItemFootprint(itemData);
+      return {
+        mode: ITEM_FUNCTIONS.constructPart,
+        equipmentSlot: "",
+        weaponSet: "",
+        weaponSlot: "",
+        limbKey: slot.id,
+        constructPartOrder: slot.order,
+        x: 1,
+        y: 1,
+        width: footprint.width,
+        height: footprint.height
+      };
     }
 
     if (zone.dataset.equipmentSlot) {
@@ -2132,7 +2191,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
     if (ownedItem) return { item: ownedItem, itemData: applyInventoryDragRotation(ownedItem.toObject(), data) };
 
-    const item = data.uuid ? resolveWorldItemSync(data.uuid) : null;
+    const item = await Item.implementation.fromDropData(data).catch(() => null);
     if (!(item instanceof Item)) return null;
     return { item, itemData: applyInventoryDragRotation(item.toObject(), data) };
   }
@@ -2220,13 +2279,20 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #moveOwnedItem(item, placement, targetItem = null, parentId = ROOT_CONTAINER_ID, sourceStackIndex = 0) {
+    const detachedSlotId = placement.mode === ITEM_FUNCTIONS.constructPart
+      ? ""
+      : await this.#prepareConstructPartDetachment(item);
+    if (detachedSlotId === null) return null;
+
     if (placement.mode === "inventory" || placement.mode === LOCKED_STORAGE_PLACEMENT_MODE) {
       const itemData = item.toObject();
       foundry.utils.setProperty(itemData, "system.placement.rotated", Boolean(placement.rotated));
       if (usesVirtualInventoryStacks(item)) {
         foundry.utils.setProperty(itemData, "system.quantity", getItemStackPartQuantity(item, sourceStackIndex));
       }
-      return this.#insertItemIntoInventory(itemData, placement, { sourceItem: item, targetItem, parentId, sourceStackIndex });
+      const moved = await this.#insertItemIntoInventory(itemData, placement, { sourceItem: item, targetItem, parentId, sourceStackIndex });
+      if (moved && detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
+      return moved;
     }
 
     const placementResolution = this.#resolvePlacementWithReplacements(item.toObject(), placement, [item.id]);
@@ -2246,6 +2312,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.weaponSet": storedPlacement.weaponSet,
       "system.placement.weaponSlot": storedPlacement.weaponSlot,
       "system.placement.limbKey": storedPlacement.limbKey,
+      "system.placement.constructPartOrder": storedPlacement.constructPartOrder,
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
@@ -2258,7 +2325,78 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#validateProjectedInventoryState({ updates })) return null;
     await this.actor.updateEmbeddedDocuments("Item", updates);
     if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(this.actor);
+    if (detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
     return this.actor.items.get(item.id) ?? null;
+  }
+
+  async #installConstructPart(dropped, placement, { sourceOwned = false } = {}) {
+    const slot = getConstructPartSlot(this.actor, placement?.limbKey);
+    const candidate = dropped?.item ?? dropped?.itemData;
+    if (!slot || !isConstructPartCompatibleWithSlot(candidate, slot)) {
+      ui.notifications?.warn?.("Тип детали не совпадает с типом этого слота конструкта.");
+      return null;
+    }
+
+    const current = getInstalledConstructPartForSlot(this.actor, slot.id);
+    if (current) {
+      if (sourceOwned && current.id === dropped?.item?.id) return current;
+      ui.notifications?.warn?.("Сначала снимите установленную деталь из этого слота.");
+      return null;
+    }
+
+    await ensureConstructPartSlots(this.actor);
+    const sourceItem = sourceOwned ? dropped?.item : null;
+    const previousSlotId = sourceItem && isInstalledConstructPartItem(sourceItem)
+      ? getConstructPartSlotId(sourceItem)
+      : "";
+    if (previousSlotId && previousSlotId !== slot.id && !this.#canDetachConstructPart(previousSlotId)) return null;
+
+    if (sourceOwned) {
+      await this.#moveOwnedItem(sourceItem, placement, null, ROOT_CONTAINER_ID, 0);
+    } else {
+      await this.#createOrStackDroppedItem(dropped?.itemData, placement, null, ROOT_CONTAINER_ID);
+    }
+
+    const installed = getInstalledConstructPartForSlot(this.actor, slot.id);
+    if (!installed) return null;
+    const refreshedSlot = createConstructPartSlotFromItem(installed, { id: slot.id, order: slot.order });
+    const slots = getConstructPartSlots(this.actor).map(entry => entry.id === slot.id ? refreshedSlot : entry);
+    await this.actor.update({ "system.constructPartSlots": slots });
+
+    if (previousSlotId && previousSlotId !== slot.id) {
+      await this.#completeConstructPartDetachment(previousSlotId);
+    }
+    const limbKey = getConstructPartLimbKey(slot.id);
+    if (isLimbDestroyed(this.actor, limbKey)) {
+      await applyDestroyedLimbConsequences(this.actor, [limbKey], { ignoreInstalledProsthesis: true });
+    } else {
+      await clearLimbLossState(this.actor, limbKey);
+    }
+    return getInstalledConstructPartForSlot(this.actor, slot.id);
+  }
+
+  async #prepareConstructPartDetachment(item) {
+    if (!isInstalledConstructPartItem(item)) return "";
+    const slotId = getConstructPartSlotId(item);
+    if (!slotId || !this.#canDetachConstructPart(slotId)) return null;
+    await ensureConstructPartSlots(this.actor);
+    return slotId;
+  }
+
+  #canDetachConstructPart(slotId = "") {
+    const occupied = this.actor.items?.contents?.some(item => (
+      String(item.system?.placement?.mode ?? "") === "weapon"
+      && String(item.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${slotId}:`)
+    ));
+    if (!occupied) return true;
+    ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+    return false;
+  }
+
+  async #completeConstructPartDetachment(slotId = "") {
+    const limbKey = getConstructPartLimbKey(slotId);
+    if (!limbKey || getInstalledConstructPartForSlot(this.actor, slotId)) return;
+    await applyDestroyedLimbConsequences(this.actor, [limbKey], { ignoreInstalledProsthesis: true });
   }
 
   #canStackDroppedItem(itemData, targetItem = null) {
@@ -2364,6 +2502,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           weaponSet: storedPlacement.weaponSet,
           weaponSlot: storedPlacement.weaponSlot,
           limbKey: storedPlacement.limbKey,
+          constructPartOrder: storedPlacement.constructPartOrder,
           x: storedPlacement.x,
           y: storedPlacement.y,
           width: storedPlacement.width,
@@ -3028,7 +3167,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
     const isSlottedWeapon = placementMode === "weapon";
-    const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
+    const isSlottedConstructPart = isInstalledConstructPartItem(item);
+    const isSlottedItem = isSlottedEquipment || isSlottedWeapon || isSlottedConstructPart;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
     const canEquip = this.#canEquipInventoryItem(item);
@@ -3275,6 +3415,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #dropInventoryItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {
+    const detachedSlotId = await this.#prepareConstructPartDetachment(item);
+    if (detachedSlotId === null) return null;
     const quantity = usesVirtualInventoryStacks(item)
       ? Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex))
       : getItemQuantity(item);
@@ -3293,7 +3435,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #deleteInventoryItem(item, { stackIndex = 0, stackQuantity = 0 } = {}) {
-    if (!usesVirtualInventoryStacks(item)) return item.delete();
+    const detachedSlotId = await this.#prepareConstructPartDetachment(item);
+    if (detachedSlotId === null) return null;
+    if (!usesVirtualInventoryStacks(item)) {
+      await item.delete();
+      if (detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
+      return null;
+    }
     const quantity = Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex));
     const updateData = createItemStackPartRemovalUpdate(item, quantity, stackIndex);
     if (!updateData) return null;
@@ -3302,6 +3450,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#validateProjectedInventoryState({ updates, deletes })) return null;
     if (updates.length) await this.actor.updateEmbeddedDocuments("Item", updates);
     if (deletes.length) await this.actor.deleteEmbeddedDocuments("Item", deletes);
+    if (detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
     return null;
   }
 
@@ -3351,6 +3500,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #unequipInventoryItem(item) {
+    const detachedSlotId = await this.#prepareConstructPartDetachment(item);
+    if (detachedSlotId === null) return null;
     const currentPlacement = item.system?.placement ?? {};
     const currentParentId = getItemContainerParentId(item);
     const currentInventoryPlacement = (
@@ -3376,6 +3527,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const updateData = this.#createInventoryPlacementUpdate(item, placementContext);
     if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
     await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+    if (detachedSlotId) await this.#completeConstructPartDetachment(detachedSlotId);
     return this.actor.items.get(item.id) ?? null;
   }
 
@@ -7279,17 +7431,7 @@ function getInstalledActorProsthesis(actor, limbKey = "") {
 }
 
 function getInstalledConstructPart(actor, limbKey = "") {
-  if (actor?.type !== "construct") return null;
-  const key = String(limbKey ?? "").trim();
-  const itemId = key.startsWith("constructPart:")
-    ? key.slice("constructPart:".length)
-    : key.startsWith("constructPart.") ? key.slice("constructPart.".length) : "";
-  if (!itemId) return null;
-  const item = actor.items?.get(itemId);
-  if (!item || item.type !== "gear") return null;
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart)) return null;
-  if (String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart) return null;
-  return item;
+  return getInstalledConstructPartForLimb(actor, limbKey);
 }
 
 function getEffectCategoryKey(effect) {

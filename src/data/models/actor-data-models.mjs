@@ -46,6 +46,13 @@ import {
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { getAbilitySkillAdvancementBaseBonuses } from "../../abilities/evaluation.mjs";
 import { prepareActorEffectChangeForApplication } from "../../utils/active-effect-changes.mjs";
+import {
+  getConstructPartLimbKey,
+  getConstructPartSlotId,
+  getConstructPartSlots,
+  getConstructPartTypeLabel,
+  getInstalledConstructPartForSlot
+} from "../../utils/construct-parts.mjs";
 
 const REACTION_RESOURCE_KEY = "reactionPoints";
 import { toInteger } from "../../utils/numbers.mjs";
@@ -229,7 +236,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(sourceProficiencies, proficiencySettings));
 
     const skillValues = getSkillValues(this.skills);
-    const constructLimbData = isConstruct ? getConstructPartLimbData(this.parent?.items) : null;
+    const constructLimbData = isConstruct ? getConstructPartLimbData(this.parent) : null;
     const limbSettings = constructLimbData?.settings ?? race?.limbs ?? [];
     const limbSource = constructLimbData?.source ?? this.parent?._source?.system?.limbs ?? {};
     const limbMaximums = evaluateLimbMaximums(
@@ -304,7 +311,28 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 }
 
 export class CharacterDataModel extends BaseActorDataModel {}
-export class ConstructDataModel extends BaseActorDataModel {}
+export class ConstructDataModel extends BaseActorDataModel {
+  static defineSchema() {
+    return {
+      ...super.defineSchema(),
+      constructPartSlots: new ArrayField(constructPartSlotField(), { required: true, initial: [] })
+    };
+  }
+}
+
+function constructPartSlotField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    partType: new StringField({ required: true, blank: true, initial: "" }),
+    order: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    profile: new SchemaField({
+      name: new StringField({ required: true, blank: true, initial: "" }),
+      img: new StringField({ required: true, blank: true, initial: "" }),
+      conditionMax: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      constructPart: new ObjectField({ required: true, initial: {} })
+    })
+  });
+}
 
 function hackingMethodField() {
   return new SchemaField({
@@ -767,7 +795,9 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
     const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
     const weakening = getConditionWeakeningData(item);
     const weakeningRatio = weakening.active ? weakening.ratio : 1;
-    const constructPartLimbKey = isConstructPart ? `constructPart:${item.id}` : "";
+    const constructPartLimbKey = isConstructPart
+      ? getConstructPartLimbKey(getConstructPartSlotId(item))
+      : "";
 
     for (const [rawLimbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
       const limbKey = rawLimbKey === CONSTRUCT_PART_MITIGATION_LIMB_KEY && constructPartLimbKey
@@ -803,26 +833,23 @@ function mergeLimbDamageMaps(base = {}, ...bonuses) {
   );
 }
 
-function getConstructPartLimbData(items) {
+function getConstructPartLimbData(actor) {
   const settings = [];
   const source = {};
-  const constructParts = (items?.contents ?? Array.from(items ?? []))
-    .filter(item => (
-      item?.type === "gear"
-      && hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
-      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
-    ))
-    .sort(compareConstructPartItems);
 
-  for (const item of constructParts) {
-    const key = `constructPart:${item.id}`;
-    const part = getConstructPartFunction(item);
-    const label = String(part.partType ?? "").trim() || item.name || key;
-    const hasCondition = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+  for (const slot of getConstructPartSlots(actor)) {
+    const item = getInstalledConstructPartForSlot(actor, slot.id);
+    const key = getConstructPartLimbKey(slot.id);
+    if (!key) continue;
+    const part = item ? getConstructPartFunction(item) : slot.profile?.constructPart ?? {};
+    const label = getConstructPartTypeLabel(item ?? slot) || slot.profile?.name || key;
+    const hasCondition = Boolean(item && hasItemFunction(item, ITEM_FUNCTIONS.condition));
     const condition = hasCondition ? getConditionFunction(item) : {};
-    const max = hasCondition ? Math.max(0, toInteger(condition.max)) : 0;
+    const max = hasCondition
+      ? Math.max(0, toInteger(condition.max))
+      : item ? 0 : Math.max(0, toInteger(slot.profile?.conditionMax));
     const value = hasCondition ? Math.max(0, Math.min(max, toInteger(condition.value))) : 0;
-    const missing = hasCondition && max > 0 && value <= 0;
+    const missing = !item || (hasCondition && max > 0 && value <= 0);
     settings.push({
       key,
       label,
@@ -847,13 +874,6 @@ function getConstructPartLimbData(items) {
     };
   }
   return { settings, source };
-}
-
-function compareConstructPartItems(left, right) {
-  const leftOrder = toInteger(left.system?.placement?.constructPartOrder);
-  const rightOrder = toInteger(right.system?.placement?.constructPartOrder);
-  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-  return String(left.id).localeCompare(String(right.id));
 }
 
 function expandLimbDamageMapSelectors(source = {}, limbs = {}, damageTypeSettings = []) {

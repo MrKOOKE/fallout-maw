@@ -38,6 +38,14 @@ import {
   resolveActorInteractionToken
 } from "../items/item-interactions.mjs";
 import { toInteger } from "./numbers.mjs";
+import {
+  getConstructPartLimbKey,
+  getConstructPartSlotId,
+  getConstructPartSlots,
+  getConstructPartTypeLabel,
+  getInstalledConstructPartForSlot,
+  isInstalledConstructPartItem
+} from "./construct-parts.mjs";
 export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
 
 export function normalizeImagePath(path, fallback = FALLBACK_ICON) {
@@ -357,7 +365,7 @@ function getConstructNaturalWeaponSetContext(actor, allItemData = []) {
       const part = getConstructPartFunction(document);
       const label = String(part.partType ?? "").trim() || item.name;
       return {
-        key: `constructPartWeapon.${item.id}`,
+        key: `constructPartWeapon.${getConstructPartSlotId(document)}`,
         label,
         item
       };
@@ -372,24 +380,26 @@ function getConstructNaturalWeaponSetContext(actor, allItemData = []) {
 
 function prepareConstructPartEquipmentSlots(actor, topLevelItems, assignedItemIds) {
   if (actor?.type !== "construct") return [];
-  return topLevelItems
-    .filter(item => isInstalledConstructPart(actor, item) && !isInstalledConstructPartWeapon(actor, item))
-    .sort(compareConstructPartDisplayItems)
-    .map(item => {
-      assignedItemIds?.add(item.id);
-      const document = actor.items.get(item.id);
-      const part = getConstructPartFunction(document);
-      const label = String(part.partType ?? "").trim() || item.name;
+  return getConstructPartSlots(actor)
+    .map(slot => {
+      const document = getInstalledConstructPartForSlot(actor, slot.id);
+      const item = document ? topLevelItems.find(candidate => candidate.id === document.id) ?? null : null;
+      if (item) assignedItemIds?.add(item.id);
+      const label = getConstructPartTypeLabel(document ?? slot) || slot.profile?.name || slot.id;
       return {
-        key: `constructPart:${item.id}`,
+        key: getConstructPartLimbKey(slot.id),
         label: abbreviateConstructPartSlotLabel(label),
         fullLabel: label,
-        locked: true,
-        item: {
+        constructPartSlot: true,
+        constructPartSlotId: slot.id,
+        partType: slot.partType,
+        phantom: !item,
+        phantomImg: slot.profile?.img || "icons/svg/item-bag.svg",
+        item: item ? {
           ...item,
           equipped: true,
-          locked: true
-        }
+          locked: false
+        } : null
       };
     });
 }
@@ -404,7 +414,8 @@ function prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds) {
       const part = getConstructPartFunction(document);
       const partType = String(part.partType ?? "").trim() || item.name;
       return normalizeConstructPartWeaponSets(part.weaponSets).map(set => {
-        const setKey = getConstructPartWeaponSetKey(item.id, set.id);
+        const slotId = getConstructPartSlotId(document);
+        const setKey = getConstructPartWeaponSetKey(slotId, set.id);
         const label = set.label || `${partType}: оружие`;
         const slots = Array.from({ length: set.quantity }, (_value, index) => {
           const slotKey = getConstructPartWeaponSlotKey(index);
@@ -417,6 +428,7 @@ function prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds) {
           key: setKey,
           label,
           constructPartId: item.id,
+          constructPartSlotId: slotId,
           slots: slots.map((slot, index) => prepareWeaponSlotContext({
             setKey,
             slot,
@@ -439,11 +451,7 @@ function isInstalledConstructPartWeapon(actor, item) {
 
 function isInstalledConstructPart(actor, item) {
   const document = actor?.items?.get(item?.id ?? "");
-  return Boolean(
-    document?.type === "gear"
-    && item?.placement?.mode === ITEM_FUNCTIONS.constructPart
-    && hasItemFunction(document, ITEM_FUNCTIONS.constructPart)
-  );
+  return Boolean(document && isInstalledConstructPartItem(document));
 }
 
 function normalizeConstructPartWeaponSets(sets) {
@@ -592,8 +600,8 @@ function isWeaponSlotOccupantDisabled(actor, race, item = null) {
   return requiredSlots.some(slot => slot.limbKey && getLimbHealingCap(actor, slot.limbKey) <= 0);
 }
 
-function getConstructPartWeaponSetKey(itemId = "", setId = "") {
-  return `container:constructPart:${itemId}:${setId}`;
+function getConstructPartWeaponSetKey(slotId = "", setId = "") {
+  return `container:constructPart:${slotId}:${setId}`;
 }
 
 function getConstructPartWeaponSlotKey(index = 0) {

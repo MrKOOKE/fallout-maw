@@ -3,7 +3,6 @@ import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import {
   ITEM_FUNCTIONS,
   getConditionFunction,
-  getConstructPartFunction,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import {
@@ -15,7 +14,22 @@ import {
   normalizePaths
 } from "../utils/limb-silhouette.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import {
+  createConstructPartSlotFromItem,
+  getConstructPartLimbKey,
+  getConstructPartSlots,
+  getConstructPartTypeLabel,
+  getInstalledConstructPartForSlot,
+  isConstructPartCompatibleWithSlot
+} from "../utils/construct-parts.mjs";
+import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
+import {
+  ROOT_CONTAINER_ID,
+  createStoredPlacement,
+  findFirstAvailableInventoryPlacement,
+  getContextInventoryItems
+} from "../utils/inventory-containers.mjs";
+import { applyDestroyedLimbConsequences, clearLimbLossState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 
 export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   #entries = [];
@@ -94,17 +108,24 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     const data = readDropData(event);
     if (data?.type !== "Item") return;
-    const item = resolveWorldItemSync(data.uuid);
+    const item = await Item.implementation.fromDropData(data).catch(() => null);
     if (!isConstructPartItem(item)) {
       ui.notifications?.warn?.("Можно добавить только предмет с функцией «Деталь конструкта».");
       return;
     }
 
-    if (item.parent === this.actor && !this.#entries.some(entry => entry.kind === "owned" && entry.itemId === item.id)) {
-      this.#entries.push(createOwnedConstructPartEntry(item, false));
-    } else {
-      this.#entries.push(createConstructPartCreateEntry(item.toObject()));
-    }
+    if (item.parent === this.actor && this.#entries.some(entry => entry.itemId === item.id && entry.installed)) return;
+    const preferredId = item.parent === this.actor
+      && !this.#entries.some(entry => entry.slot?.id === item.id)
+      ? item.id
+      : foundry.utils.randomID();
+    const slot = createConstructPartSlotFromItem(item, { id: preferredId, order: this.#entries.length });
+    if (!slot) return;
+    this.#entries.push(createConstructPartEntry(slot, {
+      item: item.parent === this.actor ? item : null,
+      itemData: item.parent === this.actor ? null : item.toObject(),
+      installed: true
+    }));
     return this.render();
   }
 
@@ -143,14 +164,42 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     this.#previewEntryDrop(event);
   }
 
-  #onEntryDrop(event) {
+  async #onEntryDrop(event) {
     const entryId = this.#readDraggedEntryId(event);
-    if (!entryId) return;
+    if (!entryId) return this.#onDropIntoEntry(event);
     event.preventDefault();
     event.stopPropagation();
     this.#syncEntriesToPreviewOrder();
     this.#dropCommitted = true;
     this.#previewDirty = false;
+    return this.render();
+  }
+
+  async #onDropIntoEntry(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const targetEntryId = event.currentTarget?.dataset?.constructPartEntryId ?? "";
+    const entry = this.#entries.find(candidate => candidate.entryId === targetEntryId);
+    if (!entry) return;
+    if (entry.installed) {
+      ui.notifications?.warn?.("Сначала снимите установленную деталь из этого слота.");
+      return;
+    }
+    const data = readDropData(event);
+    if (data?.type !== "Item") return;
+    const item = await Item.implementation.fromDropData(data).catch(() => null);
+    if (!isConstructPartCompatibleWithSlot(item, entry.slot)) {
+      ui.notifications?.warn?.("Тип детали не совпадает с типом этого слота конструкта.");
+      return;
+    }
+    if (item.parent === this.actor && this.#entries.some(candidate => candidate !== entry && candidate.installed && candidate.itemId === item.id)) {
+      ui.notifications?.warn?.("Эта деталь уже установлена в другой слот конструкта.");
+      return;
+    }
+    entry.item = item.parent === this.actor ? item : null;
+    entry.itemId = entry.item?.id ?? "";
+    entry.itemData = item.parent === this.actor ? null : item.toObject();
+    entry.installed = true;
     return this.render();
   }
 
@@ -172,7 +221,13 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     const entryId = event.currentTarget?.dataset?.constructPartRemove ?? "";
     if (!entryId) return;
-    this.#entries = this.#entries.filter(entry => entry.entryId !== entryId);
+    const entry = this.#entries.find(candidate => candidate.entryId === entryId);
+    if (!entry?.installed) return;
+    if (hasConstructPartWeaponOccupants(this.actor, entry.slot?.id)) {
+      ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+      return;
+    }
+    entry.installed = false;
     return this.render();
   }
 
@@ -227,44 +282,102 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     if (this.actor.type !== "construct") return;
     const updates = [];
     const createPlans = [];
-    const keptOwnedIds = new Set();
     const previousEntries = getOwnedConstructPartEntries(this.actor);
+    const previousItemBySlotId = new Map(previousEntries.map(entry => [entry.slot.id, entry.item]));
+    const installedOwnedIds = new Set(
+      this.#entries
+        .filter(entry => entry.installed && entry.itemId)
+        .map(entry => entry.itemId)
+    );
+    const installedSlotIds = [];
+    const finalSlots = [];
+
+    const { columns, rows } = getActorInventoryGridDimensions(this.actor, null);
+    const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, this.actor.items);
+    const detachedEntries = this.#entries
+      .map(entry => ({ entry, item: previousItemBySlotId.get(entry.slot.id) ?? null }))
+      .filter(({ entry, item }) => item && (!entry.installed || entry.itemId !== item.id));
+    const detachedSlotIds = detachedEntries.map(({ entry }) => entry.slot.id);
+    const detachedItems = detachedEntries.filter(({ item }) => !installedOwnedIds.has(item.id));
+    const inventoryExcludeIds = Array.from(new Set([
+      ...installedOwnedIds,
+      ...detachedItems.map(({ item }) => item.id)
+    ]));
+    const reservedPlacements = [];
+
+    for (const { entry, item } of detachedItems) {
+      if (hasConstructPartWeaponOccupants(this.actor, entry.slot.id)) {
+        ui.notifications?.warn?.("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+        return;
+      }
+      const placement = findFirstAvailableInventoryPlacement(
+        rootItems,
+        columns,
+        rows,
+        item,
+        this.actor.items,
+        inventoryExcludeIds,
+        reservedPlacements,
+        getActorRootInventoryGridOptions(this.actor, ROOT_CONTAINER_ID)
+      );
+      if (!placement) {
+        ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+        return;
+      }
+      reservedPlacements.push(placement);
+      updates.push(createConstructPartInventoryUpdate(item, placement));
+    }
 
     for (const [order, entry] of this.#entries.entries()) {
-      if (entry.kind === "owned") {
+      const source = entry.item ?? entry.itemData;
+      const slot = entry.installed && source
+        ? createConstructPartSlotFromItem(source, { id: entry.slot.id, order })
+        : { ...foundry.utils.deepClone(entry.slot), order };
+      if (!slot) continue;
+      finalSlots.push(slot);
+      entry.slot = slot;
+
+      if (!entry.installed) continue;
+      installedSlotIds.push(slot.id);
+      if (entry.itemId) {
         const item = this.actor.items.get(entry.itemId);
         if (!isConstructPartItem(item)) continue;
-        keptOwnedIds.add(item.id);
-        updates.push(createConstructPartPlacementUpdate(item.id, order));
+        updates.push(createConstructPartPlacementUpdate(item.id, slot.id, order));
         continue;
       }
 
-      const createData = createConstructPartCreateData(entry.itemData, order);
+      const createData = createConstructPartCreateData(entry.itemData, slot.id, order);
       if (createData) createPlans.push({ entryId: entry.entryId, order, data: createData });
     }
 
-    const installedIds = previousEntries.map(entry => entry.itemId);
-    const deletes = installedIds.filter(itemId => !keptOwnedIds.has(itemId));
-    if (deletes.length) await this.actor.deleteEmbeddedDocuments("Item", deletes);
-    if (updates.length) await this.actor.updateEmbeddedDocuments("Item", updates);
-    const createdItems = createPlans.length ? await this.actor.createEmbeddedDocuments("Item", createPlans.map(plan => plan.data)) : [];
-    const createdItemsByEntryId = new Map(createdItems.map((item, index) => [createPlans[index]?.entryId, item]));
-    const createdUpdates = createdItems.map(item => ({
-      _id: item.id,
-      "system.placement.limbKey": item.id
-    }));
-    if (createdUpdates.length) await this.actor.updateEmbeddedDocuments("Item", createdUpdates);
+    const itemUpdates = coalesceConstructPartItemUpdates(updates);
+    if (itemUpdates.length) await this.actor.updateEmbeddedDocuments("Item", itemUpdates);
+    if (createPlans.length) await this.actor.createEmbeddedDocuments("Item", createPlans.map(plan => plan.data));
 
     await this.actor.update({
       "system.creature.typeId": "",
       "system.creature.raceId": "",
       "system.creature.subtypeId": "",
+      "system.constructPartSlots": finalSlots,
       ...buildConstructSilhouetteUpdate(this.actor, {
         previousEntries,
-        finalEntries: this.#entries,
-        createdItemsByEntryId
+        finalEntries: this.#entries
       })
     });
+
+    for (const slotId of detachedSlotIds) {
+      if (getInstalledConstructPartForSlot(this.actor, slotId)) continue;
+      await applyDestroyedLimbConsequences(this.actor, [getConstructPartLimbKey(slotId)], { ignoreInstalledProsthesis: true });
+    }
+    for (const slotId of installedSlotIds) {
+      if (!getInstalledConstructPartForSlot(this.actor, slotId)) continue;
+      const limbKey = getConstructPartLimbKey(slotId);
+      if (isLimbDestroyed(this.actor, limbKey)) {
+        await applyDestroyedLimbConsequences(this.actor, [limbKey], { ignoreInstalledProsthesis: true });
+      } else {
+        await clearLimbLossState(this.actor, limbKey);
+      }
+    }
   }
 }
 
@@ -275,27 +388,26 @@ export function openConstructStructure(actor) {
 
 function buildConstructSilhouetteUpdate(actor, {
   previousEntries = [],
-  finalEntries = [],
-  createdItemsByEntryId = new Map()
+  finalEntries = []
 } = {}) {
   if (actor?.type !== "construct" || !actor.system?.limbSilhouetteOverride) return {};
 
   const source = normalizeLimbSilhouette(
     actor.system?.limbSilhouette,
     previousEntries.map(entry => ({
-      key: getConstructPartLimbKey(entry.itemId),
-      label: entry.item?.name ?? entry.itemId
+      key: getConstructPartLimbKey(entry.slot?.id),
+      label: getConstructPartTypeLabel(entry.item ?? entry.slot) || entry.slot?.id
     }))
   );
   if (!source) return {};
 
-  const previousKeys = previousEntries.map(entry => getConstructPartLimbKey(entry.itemId));
+  const previousKeys = previousEntries.map(entry => getConstructPartLimbKey(entry.slot?.id)).filter(Boolean);
   const previousKeySet = new Set(previousKeys);
   const previousKeyByOrder = new Map(previousKeys.map((key, index) => [index, key]));
   const finalLimbs = finalEntries
     .map(entry => ({
-      key: getConstructPartEntryFinalLimbKey(entry, createdItemsByEntryId),
-      label: getConstructPartEntryLabel(entry, createdItemsByEntryId)
+      key: getConstructPartEntryFinalLimbKey(entry),
+      label: getConstructPartEntryLabel(entry)
     }))
     .filter(entry => entry.key);
   const finalKeySet = new Set(finalLimbs.map(entry => entry.key));
@@ -319,7 +431,7 @@ function buildConstructSilhouetteUpdate(actor, {
 
   const replacementNewKeys = new Set();
   for (const [order, entry] of finalEntries.entries()) {
-    const newKey = getConstructPartEntryFinalLimbKey(entry, createdItemsByEntryId);
+    const newKey = getConstructPartEntryFinalLimbKey(entry);
     if (!newKey || previousKeySet.has(newKey)) continue;
     const replacedOldKey = previousKeyByOrder.get(order);
     const replacedPart = sourcePartsByKey.get(replacedOldKey);
@@ -416,80 +528,61 @@ function createRectanglePath(left, top, right, bottom) {
   ];
 }
 
-function getConstructPartEntryFinalLimbKey(entry, createdItemsByEntryId = new Map()) {
-  const itemId = entry?.kind === "owned"
-    ? entry.itemId
-    : createdItemsByEntryId.get(entry?.entryId)?.id;
-  return itemId ? getConstructPartLimbKey(itemId) : "";
+function getConstructPartEntryFinalLimbKey(entry) {
+  return getConstructPartLimbKey(entry?.slot?.id);
 }
 
-function getConstructPartEntryLabel(entry, createdItemsByEntryId = new Map()) {
-  if (entry?.kind === "owned") return String(entry.item?.name ?? entry.itemId ?? "");
-  const item = createdItemsByEntryId.get(entry?.entryId);
-  return String(item?.name ?? entry?.itemData?.name ?? "");
-}
-
-function getConstructPartLimbKey(itemId = "") {
-  return itemId ? `constructPart:${itemId}` : "";
+function getConstructPartEntryLabel(entry) {
+  return getConstructPartTypeLabel(entry?.item ?? entry?.itemData ?? entry?.slot)
+    || String(entry?.slot?.profile?.name ?? entry?.slot?.id ?? "");
 }
 
 function getOwnedConstructPartEntries(actor) {
-  return actor.items
-    .filter(item => (
-      isConstructPartItem(item)
-      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
-    ))
-    .sort(compareConstructPartItems)
-    .map(item => createOwnedConstructPartEntry(item, true));
+  return getConstructPartSlots(actor).map(slot => {
+    const item = getInstalledConstructPartForSlot(actor, slot.id);
+    return createConstructPartEntry(slot, { item, installed: Boolean(item) });
+  });
 }
 
-function createOwnedConstructPartEntry(item, installed) {
+function createConstructPartEntry(slot, { item = null, itemData = null, installed = false } = {}) {
   return {
-    kind: "owned",
-    entryId: `owned.${item.id}`,
-    itemId: item.id,
+    entryId: `slot.${slot.id}`,
+    slot,
+    itemId: item?.id ?? "",
     item,
-    installed
+    itemData,
+    installed: Boolean(installed)
   };
-}
-
-function createConstructPartCreateEntry(itemData) {
-  return {
-    kind: "create",
-    entryId: `create.${foundry.utils.randomID()}`,
-    itemData
-  };
-}
-
-function compareConstructPartItems(left, right) {
-  const leftOrder = toInteger(left.system?.placement?.constructPartOrder);
-  const rightOrder = toInteger(right.system?.placement?.constructPartOrder);
-  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-  return String(left.id).localeCompare(String(right.id));
 }
 
 function prepareConstructPartEntry(entry, index) {
-  const item = entry.item ?? entry.itemData;
-  const part = getConstructPartFunction(item);
-  const hasCondition = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+  const item = entry.installed ? entry.item ?? entry.itemData : null;
+  const hasCondition = Boolean(item && hasItemFunction(item, ITEM_FUNCTIONS.condition));
   const condition = hasCondition ? getConditionFunction(item) : {};
-  const max = hasCondition ? Math.max(0, toInteger(condition.max)) : 0;
+  const profileMax = Math.max(0, toInteger(entry.slot?.profile?.conditionMax));
+  const max = hasCondition ? Math.max(0, toInteger(condition.max)) : profileMax;
   const value = hasCondition ? Math.max(0, Math.min(max, toInteger(condition.value))) : 0;
-  const percent = hasCondition && max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 100;
-  const typeLabel = String(part.partType ?? "").trim() || item?.name || "Деталь";
-  const stateColor = getConstructPartStateColor(hasCondition, value, max);
+  const percent = entry.installed
+    ? (hasCondition && max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 100)
+    : 0;
+  const typeLabel = getConstructPartTypeLabel(item ?? entry.slot) || entry.slot?.profile?.name || "Деталь";
+  const stateColor = entry.installed ? getConstructPartStateColor(hasCondition, value, max) : "#4f9e99";
   return {
     id: entry.entryId,
+    slotId: entry.slot?.id ?? "",
     order: index + 1,
-    name: String(item?.name ?? ""),
-    img: item?.img || "icons/svg/item-bag.svg",
+    name: String(item?.name ?? entry.slot?.profile?.name ?? typeLabel),
+    img: item?.img || entry.slot?.profile?.img || "icons/svg/item-bag.svg",
     typeLabel,
+    partType: getConstructPartTypeLabel(entry.slot) || typeLabel,
+    installed: entry.installed,
+    phantom: !entry.installed,
     hasCondition,
-    value: hasCondition ? value : 1,
-    max: hasCondition ? max : 1,
-    valueLabel: hasCondition ? String(value) : "∞",
-    maxLabel: hasCondition ? String(max) : "",
-    stateTitle: hasCondition ? `${value} / ${max}` : "∞",
+    value: entry.installed ? (hasCondition ? value : 1) : 0,
+    max: entry.installed ? (hasCondition ? Math.max(1, max) : 1) : Math.max(1, max),
+    valueLabel: entry.installed ? (hasCondition ? String(value) : "∞") : "ПУСТО",
+    maxLabel: entry.installed && hasCondition ? String(max) : "",
+    stateTitle: entry.installed ? (hasCondition ? `${value} / ${max}` : "∞") : "Пустой слот детали",
     meterStyle: `--construct-part-meter-color: ${stateColor};`,
     fillStyle: `width: ${Number(percent.toFixed(2))}%;`
   };
@@ -508,7 +601,7 @@ function isConstructPartItem(item) {
   return Boolean(item?.type === "gear" && hasItemFunction(item, ITEM_FUNCTIONS.constructPart));
 }
 
-function createConstructPartPlacementUpdate(itemId, order) {
+function createConstructPartPlacementUpdate(itemId, slotId, order) {
   return {
     _id: itemId,
     "system.equipped": false,
@@ -517,12 +610,12 @@ function createConstructPartPlacementUpdate(itemId, order) {
     "system.placement.equipmentSlot": "",
     "system.placement.weaponSet": "",
     "system.placement.weaponSlot": "",
-    "system.placement.limbKey": itemId,
+    "system.placement.limbKey": slotId,
     "system.placement.constructPartOrder": order
   };
 }
 
-function createConstructPartCreateData(itemData, order) {
+function createConstructPartCreateData(itemData, slotId, order) {
   if (!isConstructPartItem(itemData)) return null;
   const createData = foundry.utils.deepClone(itemData);
   delete createData._id;
@@ -538,7 +631,7 @@ function createConstructPartCreateData(itemData, order) {
         equipmentSlot: "",
         weaponSet: "",
         weaponSlot: "",
-        limbKey: "",
+        limbKey: slotId,
         constructPartOrder: order,
         x: 1,
         y: 1,
@@ -548,6 +641,53 @@ function createConstructPartCreateData(itemData, order) {
     }
   });
   return createData;
+}
+
+function createConstructPartInventoryUpdate(item, placement) {
+  const stored = createStoredPlacement({
+    ...placement,
+    mode: "inventory",
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    limbKey: "",
+    constructPartOrder: 0
+  }, item);
+  return {
+    _id: item.id,
+    "system.equipped": false,
+    "system.container.parentId": ROOT_CONTAINER_ID,
+    "system.placement.mode": "inventory",
+    "system.placement.equipmentSlot": "",
+    "system.placement.weaponSet": "",
+    "system.placement.weaponSlot": "",
+    "system.placement.limbKey": "",
+    "system.placement.constructPartOrder": 0,
+    "system.placement.x": stored.x,
+    "system.placement.y": stored.y,
+    "system.placement.width": stored.width,
+    "system.placement.height": stored.height,
+    "system.placement.rotated": stored.rotated
+  };
+}
+
+function hasConstructPartWeaponOccupants(actor, slotId = "") {
+  return Boolean(slotId && actor?.items?.contents?.some(item => (
+    String(item.system?.placement?.mode ?? "") === "weapon"
+    && String(item.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${slotId}:`)
+  )));
+}
+
+function coalesceConstructPartItemUpdates(updates = []) {
+  const byId = new Map();
+  for (const update of updates) {
+    const id = String(update?._id ?? "").trim();
+    if (!id) continue;
+    const merged = byId.get(id) ?? { _id: id };
+    Object.assign(merged, update, { _id: id });
+    byId.set(id, merged);
+  }
+  return Array.from(byId.values());
 }
 
 function readDropData(event) {

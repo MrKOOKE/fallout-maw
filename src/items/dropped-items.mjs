@@ -16,6 +16,14 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
+import { applyDestroyedLimbConsequences } from "../combat/damage-hub.mjs";
+import {
+  ensureConstructPartSlots,
+  getConstructPartLimbKey,
+  getConstructPartSlotId,
+  getInstalledConstructPartForSlot,
+  isInstalledConstructPartItem
+} from "../utils/construct-parts.mjs";
 
 export const DROPPED_ITEMS_FLAG = "droppedItems";
 export const DROPPED_ITEMS_ACTOR_FLAG = "droppedItemsActor";
@@ -48,9 +56,68 @@ export async function dropActorInventoryItem(actor, item, {
   stackIndex = 0
 } = {}) {
   if (!actor || !item) return null;
-  const dropped = createDroppedItemEntryFromActorItem(actor, item, { quantity, stackIndex });
-  const tile = await addDroppedItemToScene(actor, dropped);
+  const scene = canvas?.scene ?? null;
+  const token = getActorDropTokenDocument(actor, scene);
+  const payload = {
+    actorUuid: String(actor.uuid ?? ""),
+    itemId: String(item.id ?? ""),
+    quantity: Math.max(0, toInteger(quantity)),
+    stackIndex: Math.max(0, toInteger(stackIndex)),
+    sceneId: String(scene?.id ?? ""),
+    tokenId: String(token?.id ?? "")
+  };
+
+  if (!game.user?.isGM) {
+    const result = await requestDroppedItemsSocket("dropActorInventoryItem", payload);
+    return getDroppedItemsTileFromResult(result);
+  }
+
+  return performActorInventoryItemDrop(payload, game.user?.id ?? "");
+}
+
+async function performActorInventoryItemDrop(payload = {}, requesterUserId = "") {
+  const requester = game.users?.get(String(requesterUserId ?? ""));
+  if (!requester) throw new Error("Пользователь, запросивший выброс предмета, не найден.");
+  const actor = await resolveDroppedActor(String(payload.actorUuid ?? ""));
+  if (!actor) throw new Error("Актёр для выброса предмета не найден.");
+  if (!requester.isGM && !actor.testUserPermission?.(requester, "OWNER")) {
+    throw new Error("Нет прав на выбрасывание предметов этого актёра.");
+  }
+  const item = actor.items?.get(String(payload.itemId ?? ""));
+  if (!item) throw new Error("Выбрасываемый предмет не найден.");
+  const constructPartSlotId = isInstalledConstructPartItem(item)
+    ? getConstructPartSlotId(item)
+    : "";
+  if (constructPartSlotId) {
+    const occupied = actor.items?.contents?.some(candidate => (
+      String(candidate.system?.placement?.mode ?? "") === "weapon"
+      && String(candidate.system?.placement?.weaponSet ?? "").startsWith(`container:constructPart:${constructPartSlotId}:`)
+    ));
+    if (occupied) throw new Error("Сначала снимите оружие, установленное в слоты этой детали конструкта.");
+  }
+
+  const scene = game.scenes?.get(String(payload.sceneId ?? ""));
+  if (!scene) throw new Error("Сцена для выброса предмета не найдена.");
+  const token = scene.tokens?.get(String(payload.tokenId ?? ""));
+  if (!token || !doesTokenRepresentActor(token, actor)) {
+    throw new Error("Токен этого актёра на выбранной сцене не найден.");
+  }
+  const position = getActorDropPosition(actor, { scene, token });
+  if (!position) throw new Error("Не удалось определить позицию токена для выброса предмета.");
+  if (constructPartSlotId) await ensureConstructPartSlots(actor);
+
+  const stackIndex = Math.max(0, toInteger(payload.stackIndex));
+  const dropped = createDroppedItemEntryFromActorItem(actor, item, {
+    quantity: Math.max(0, toInteger(payload.quantity)),
+    stackIndex
+  });
+  const tile = await addDroppedItemToScene(actor, dropped, { scene, position });
   await removeDroppedItemFromActor(actor, item, dropped.quantity, { stackIndex });
+  if (constructPartSlotId && !getInstalledConstructPartForSlot(actor, constructPartSlotId)) {
+    await applyDestroyedLimbConsequences(actor, [getConstructPartLimbKey(constructPartSlotId)], {
+      ignoreInstalledProsthesis: true
+    });
+  }
   return tile;
 }
 
@@ -154,13 +221,13 @@ async function openDroppedItemsSearch(tile, actor) {
 
 async function requestDroppedItemsSocket(action = "", payload = {}) {
   const gm = getResponsibleGM();
-  if (!gm) throw new Error("Нет активного GM для подбора выброшенных предметов.");
+  if (!gm) throw new Error("Нет активного GM для операций с выброшенными предметами.");
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingDroppedItemsSocketRequests.delete(requestId);
-      reject(new Error("GM не ответил на запрос подбора."));
+      reject(new Error("GM не ответил на запрос операции с выброшенными предметами."));
     }, DROPPED_ITEMS_SOCKET_TIMEOUT);
     pendingDroppedItemsSocketRequests.set(requestId, { resolve, reject, timeout });
   });
@@ -194,6 +261,9 @@ async function handleDroppedItemsSocketMessage(message = {}) {
     let result = null;
     if (message.action === "ensureDroppedItemsActor") {
       result = await performDroppedItemsActorEnsure(message.payload ?? {}, message.requesterUserId ?? "");
+    } else if (message.action === "dropActorInventoryItem") {
+      const tile = await performActorInventoryItemDrop(message.payload ?? {}, message.requesterUserId ?? "");
+      result = serializeDroppedItemsTile(tile);
     } else if (message.action === "cleanupDroppedItemsActor") {
       const actor = await resolveDroppedActor(String(message.payload?.actorUuid ?? ""));
       if (actor) await cleanupDroppedItemsActorIfEmpty(actor);
@@ -201,6 +271,8 @@ async function handleDroppedItemsSocketMessage(message = {}) {
         actorUuid: String(message.payload?.actorUuid ?? ""),
         deleted: !game.actors?.get(actor?.id ?? "")
       };
+    } else {
+      throw new Error(`Unsupported dropped items socket action: ${String(message.action ?? "")}`);
     }
     game.socket.emit(DROPPED_ITEMS_SOCKET, {
       scope: DROPPED_ITEMS_SOCKET_SCOPE,
@@ -388,6 +460,18 @@ function getResponsibleGM() {
     .at(0) ?? null;
 }
 
+function serializeDroppedItemsTile(tile) {
+  return {
+    sceneId: String(tile?.parent?.id ?? ""),
+    tileId: String(tile?.id ?? "")
+  };
+}
+
+function getDroppedItemsTileFromResult(result = {}) {
+  const scene = game.scenes?.get(String(result?.sceneId ?? ""));
+  return scene?.tiles?.get(String(result?.tileId ?? "")) ?? null;
+}
+
 function createDroppedItemEntryFromActorItem(actor, item, { quantity = 0, stackIndex = 0 } = {}) {
   const requestedQuantity = getDroppedItemQuantity(item, { quantity, stackIndex });
   const itemData = normalizeDroppedItemData(item.toObject(), requestedQuantity);
@@ -461,34 +545,60 @@ async function removeDroppedItemFromActor(actor, item, quantity = 0, { stackInde
   }]);
 }
 
-async function addDroppedItemToScene(actor, droppedEntry) {
-  const scene = canvas?.scene;
+async function addDroppedItemToScene(actor, droppedEntry, {
+  scene = canvas?.scene,
+  position = null
+} = {}) {
   if (!scene) throw new Error("No active scene for item drop.");
-  const position = getActorDropPosition(actor);
+  position ??= getActorDropPosition(actor, { scene });
   if (!position) throw new Error("No actor token for item drop.");
   const existing = findNearbyDroppedItemsTile(scene, position);
   if (existing) return appendDroppedItemToTile(existing, droppedEntry);
   return createDroppedItemsTile(scene, position, droppedEntry);
 }
 
-function getActorDropPosition(actor) {
-  const token = actor?.getActiveTokens?.(false, true)?.at(0)
-    ?? canvas?.tokens?.controlled?.find(controlled => controlled.actor?.uuid === actor?.uuid)
-    ?? canvas?.tokens?.placeables?.find(placeable => placeable.actor?.uuid === actor?.uuid)
-    ?? null;
-  const center = token?.center;
+function getActorDropPosition(actor, {
+  scene = canvas?.scene,
+  token = null
+} = {}) {
+  const tokenDocument = token?.document ?? token ?? getActorDropTokenDocument(actor, scene);
+  const tokenObject = token?.document ? token : tokenDocument?.object;
+  const center = tokenObject?.center;
   if (center) return { x: Math.round(center.x), y: Math.round(center.y) };
-  const document = token?.document
-    ?? (token && token.x !== undefined && token.y !== undefined ? token : null)
-    ?? actor?.getActiveTokens?.()?.at(0)?.document
-    ?? null;
+  const document = tokenDocument?.x !== undefined && tokenDocument?.y !== undefined ? tokenDocument : null;
   if (!document) return null;
-  const width = Math.max(1, Number(document.width) || 1) * getSceneGridSize(canvas.scene);
-  const height = Math.max(1, Number(document.height) || 1) * getSceneGridSize(canvas.scene);
+  const width = Math.max(1, Number(document.width) || 1) * getSceneGridSize(scene);
+  const height = Math.max(1, Number(document.height) || 1) * getSceneGridSize(scene);
   return {
     x: Math.round((Number(document.x) || 0) + (width / 2)),
     y: Math.round((Number(document.y) || 0) + (height / 2))
   };
+}
+
+function getActorDropTokenDocument(actor, scene = canvas?.scene) {
+  if (!actor || !scene) return null;
+  const actorToken = actor.token?.document ?? actor.token ?? null;
+  if (actorToken?.parent?.id === scene.id && doesTokenRepresentActor(actorToken, actor)) return actorToken;
+
+  const controlled = canvas?.scene?.id === scene.id
+    ? canvas.tokens?.controlled?.find(token => doesTokenRepresentActor(token, actor))
+    : null;
+  if (controlled?.document) return controlled.document;
+
+  const active = actor.getActiveTokens?.(false, true)
+    ?.find(token => token?.document?.parent?.id === scene.id && doesTokenRepresentActor(token, actor));
+  if (active?.document) return active.document;
+  return scene.tokens?.contents?.find(token => doesTokenRepresentActor(token, actor)) ?? null;
+}
+
+function doesTokenRepresentActor(token, actor) {
+  if (!token || !actor) return false;
+  const tokenDocument = token.document ?? token;
+  const tokenActor = token.actor ?? tokenDocument.actor ?? null;
+  if (tokenActor?.uuid && tokenActor.uuid === actor.uuid) return true;
+  const actorToken = actor.token?.document ?? actor.token ?? null;
+  if (actorToken?.id && actorToken.id === tokenDocument.id && actorToken.parent?.id === tokenDocument.parent?.id) return true;
+  return Boolean(!actor.isToken && actor.id && tokenDocument.actorId === actor.id);
 }
 
 function findNearbyDroppedItemsTile(scene, position) {

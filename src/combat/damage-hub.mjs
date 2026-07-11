@@ -28,6 +28,13 @@ import { evaluateActorEffectChangeNumber, getActorSuppressedTraumaDiseaseIds } f
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
+import {
+  getConstructPartLimbKey,
+  getConstructPartSlotForLimb,
+  getConstructPartSlotId,
+  getConstructPartTypeLabel,
+  getInstalledConstructPartForLimb
+} from "../utils/construct-parts.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 export const DAMAGE_APPLIED_HOOK = "fallout-maw.damageApplied";
@@ -1370,20 +1377,29 @@ export function isLimbPhysicallyMissing(actor, limbKey = "") {
 export function isLimbDestroyed(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return false;
+  const constructSlot = getConstructPartSlotForLimb(actor, limbKey);
   const constructPart = getConstructPartItemForLimb(actor, limbKey);
+  if (constructSlot && !constructPart) return true;
   if (constructPart) return isConstructPartDestroyed(constructPart);
   if (hasInstalledProsthesis(actor, limbKey)) return false;
   return isLimbPhysicallyMissing(actor, limbKey);
 }
 
 export function getDestroyedLimbStateLabel(actor, limbKey = "") {
-  return getConstructPartItemForLimb(actor, limbKey) ? "Разрушен" : "Отсутствует";
+  if (getConstructPartSlotForLimb(actor, limbKey)) {
+    return getConstructPartItemForLimb(actor, limbKey) ? "Разрушен" : "Отсутствует";
+  }
+  return "Отсутствует";
 }
 
 export async function restoreDestroyedLimb(actor, limbKey = "") {
   if (!actor || !game.user?.isGM) return undefined;
-  if (getConstructPartItemForLimb(actor, limbKey)) {
-    ui.notifications?.warn?.("Детали конструкта восстанавливаются через ремонт самой детали.");
+  const constructSlot = getConstructPartSlotForLimb(actor, limbKey);
+  if (constructSlot) {
+    const message = getConstructPartItemForLimb(actor, limbKey)
+      ? "Детали конструкта восстанавливаются через ремонт самой детали."
+      : "Сначала установите подходящую деталь в пустой слот конструкта.";
+    ui.notifications?.warn?.(message);
     return undefined;
   }
   return queueActorDamageMutation(actor.uuid, async freshActor => {
@@ -1520,7 +1536,8 @@ export function handleItemDamageUpdate(item, changes = {}, options = {}) {
   return queueActorDamageMutation(actorUuid, async freshActor => {
     const freshItem = freshActor?.items?.get?.(itemId);
     if (!freshItem) return undefined;
-    const limbKey = `constructPart:${itemId}`;
+    const limbKey = getConstructPartLimbKey(getConstructPartSlotId(freshItem));
+    if (!limbKey) return undefined;
     if (isConstructPartDestroyed(freshItem)) {
       await applyDestroyedLimbConsequencesNow(freshActor, [limbKey]);
     } else {
@@ -1638,7 +1655,9 @@ export async function runDamageHubOperation(operation) {
 }
 
 export async function applyDestroyedLimbConsequences(actor, limbKeys = [], options = {}) {
-  return applyDestroyedLimbConsequencesNow(actor, limbKeys, options);
+  const result = await applyDestroyedLimbConsequencesNow(actor, limbKeys, options);
+  await queueActorDamageStatusSync(actor);
+  return result;
 }
 
 async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreInstalledProsthesis = false } = {}) {
@@ -1649,9 +1668,12 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
     const limb = actor?.system?.limbs?.[limbKey];
     if (!limb) continue;
+    const constructSlot = getConstructPartSlotForLimb(actor, limbKey);
     const constructPart = getConstructPartItemForLimb(actor, limbKey);
-    const missing = constructPart ? isConstructPartDestroyed(constructPart) : isLimbPhysicallyMissing(actor, limbKey);
-    const reachedDestruction = constructPart ? missing : toInteger(limb.value) <= toInteger(limb.min);
+    const missing = constructSlot
+      ? !constructPart || isConstructPartDestroyed(constructPart)
+      : isLimbPhysicallyMissing(actor, limbKey);
+    const reachedDestruction = constructSlot ? missing : toInteger(limb.value) <= toInteger(limb.min);
     if (!missing && !reachedDestruction) continue;
     destroyed.add(limbKey);
     destroyedLimbKeys.push(limbKey);
@@ -1969,7 +1991,7 @@ function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
 function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
-    if (getConstructPartItemForLimb(actor, key)) continue;
+    if (getConstructPartSlotForLimb(actor, key)) continue;
     const max = Math.max(0, toInteger(limb?.max));
     updates[`system.limbs.${key}.missing`] = false;
     updates[`system.limbs.${key}.value`] = max;
@@ -2064,13 +2086,21 @@ function getLimbLossEffects(actor, limbKey = "") {
 }
 
 function getActorLimbSettings(actor, limbKey = "") {
+  const constructSlot = getConstructPartSlotForLimb(actor, limbKey);
   const constructPart = getConstructPartItemForLimb(actor, limbKey);
-  if (constructPart) {
-    const part = getConstructPartFunction(constructPart);
+  if (constructSlot) {
+    const part = constructPart
+      ? getConstructPartFunction(constructPart)
+      : constructSlot.profile?.constructPart ?? {};
     return {
       key: limbKey,
-      label: String(part.partType ?? "").trim() || constructPart.name || limbKey,
-      stateMax: String(constructPart.system?.functions?.condition?.max ?? actor?.system?.limbs?.[limbKey]?.max ?? "0"),
+      label: getConstructPartTypeLabel(constructPart ?? constructSlot) || limbKey,
+      stateMax: String(
+        constructPart?.system?.functions?.condition?.max
+        ?? constructSlot.profile?.conditionMax
+        ?? actor?.system?.limbs?.[limbKey]?.max
+        ?? "0"
+      ),
       damageMultiplier: 1,
       aimedDifficultyPercent: toInteger(part.aimedDifficultyPercent),
       aimedDifficultyBonus: toInteger(part.aimedDifficultyBonus),
@@ -2101,18 +2131,11 @@ async function syncConstructPartConditionValues(actor, limbStates = new Map()) {
 }
 
 function getConstructPartItemForLimb(actor, limbKey = "") {
-  const key = String(limbKey ?? "").trim();
-  if (!key.startsWith("constructPart:") && !key.startsWith("constructPart.")) return null;
-  const itemId = key.slice(key.indexOf(":") >= 0 ? "constructPart:".length : "constructPart.".length);
-  const item = actor?.items?.get?.(itemId);
-  if (!item || item.type !== "gear") return null;
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart)) return null;
-  if (String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart) return null;
-  return item;
+  return getInstalledConstructPartForLimb(actor, limbKey);
 }
 
 function isConstructPartLimb(actor, limbKey = "") {
-  return Boolean(getConstructPartItemForLimb(actor, limbKey));
+  return Boolean(getConstructPartSlotForLimb(actor, limbKey));
 }
 
 function isConstructPartConditionUpdateRelevant(item, changes = {}) {

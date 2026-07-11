@@ -33,6 +33,7 @@ import {
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
+import { getInstalledConstructPartForLimb } from "../utils/construct-parts.mjs";
 import {
   expandActorEffectChangeKeys,
   getActorSuppressedTraumaDiseaseIds,
@@ -666,7 +667,7 @@ async function syncConstructPartConditionDamage(actor, changes = {}) {
   for (const [path, value] of Object.entries(foundry.utils.flattenObject(changes ?? {}))) {
     const match = path.match(/^system\.limbs\.constructPart[:.]([^.]+)\.value$/);
     if (!match) continue;
-    const item = actor.items?.get(match[1]);
+    const item = getInstalledConstructPartForLimb(actor, `constructPart:${match[1]}`);
     if (!item || item.type !== "gear") continue;
     if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart) || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
     const condition = getConditionFunction(item);

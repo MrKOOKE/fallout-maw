@@ -1,4 +1,7 @@
+import { ensureConstructPartSlotSource } from "../utils/construct-parts.mjs";
+
 const ACTOR_MIGRATIONS = Object.freeze([
+  migrateLegacyConstructPartSlots
 ]);
 
 const ITEM_MIGRATIONS = Object.freeze([
@@ -18,6 +21,10 @@ export function migrateItemData(source = {}) {
 function runDocumentMigrations(source, migrations) {
   for (const migration of migrations) migration(source);
   return source;
+}
+
+function migrateLegacyConstructPartSlots(source) {
+  ensureConstructPartSlotSource(source);
 }
 
 function migrateLegacyWeaponAndArmorTypes(source) {

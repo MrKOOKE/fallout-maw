@@ -89,13 +89,18 @@
           {{#each inventory.equipmentSlots}}
           <div class="fallout-maw-slot-card">
             <div class="fallout-maw-slot-card-label" {{#if fullLabel}}title="{{fullLabel}}"{{/if}}>{{label}}</div>
-            <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large {{#if locked}}locked{{/if}} {{#if (eq item.occupiedSlotMode "oneOf")}}one-of{{/if}}" data-equipment-slot="{{key}}" {{#unless locked}}data-drop-zone{{/unless}}>
+            <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large {{#if locked}}locked{{/if}} {{#if phantom}}phantom construct-part-phantom{{/if}} {{#if (eq item.occupiedSlotMode "oneOf")}}one-of{{/if}}" data-equipment-slot="{{key}}" {{#if constructPartSlotId}}data-construct-part-slot="{{constructPartSlotId}}"{{/if}} {{#unless locked}}data-drop-zone{{/unless}}>
               {{#if item}}
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
                 {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
                 {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
               </article>
+              {{else if phantom}}
+              <div class="fallout-maw-construct-slot-phantom" title="{{fullLabel}}: перетащите подходящую деталь">
+                <img src="{{phantomImg}}" alt="">
+                <i class="fa-solid fa-plus"></i>
+              </div>
               {{/if}}
             </div>
           </div>

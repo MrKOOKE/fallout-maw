@@ -61,6 +61,7 @@ import {
 } from "./weapon-attack-modifiers.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { energySourceMatchesConsumer, getActiveEnergySourceItem, getEnergySourceReserveState } from "../items/light-source.mjs";
+import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/construct-parts.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -8362,7 +8363,7 @@ function getHeldWeaponHoldingLimbKey(actor, item = null, race = null) {
 function getConstructPartWeaponSetLimbKey(setKey = "", actor = null) {
   const match = String(setKey ?? "").match(/^container:constructPart:([^:]+):/);
   if (!match) return "";
-  const limbKey = `constructPart:${match[1]}`;
+  const limbKey = getConstructPartLimbKey(match[1]);
   return actor?.system?.limbs?.[limbKey] ? limbKey : "";
 }
 
@@ -8400,7 +8401,8 @@ function getActorWeaponSetKeys(actor, race = null) {
     ) continue;
     for (const set of item.system?.functions?.constructPart?.weaponSets ?? []) {
       const setId = String(set?.id ?? "").trim();
-      if (setId) keys.add(`container:constructPart:${item.id}:${setId}`);
+      const slotId = getConstructPartSlotId(item);
+      if (setId && slotId) keys.add(`container:constructPart:${slotId}:${setId}`);
     }
   }
   for (const item of actor?.items ?? []) {

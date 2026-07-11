@@ -6,8 +6,11 @@
     </div>
     <div class="fallout-maw-construct-part-list fallout-maw-construct-drop-zone" data-construct-part-list data-construct-part-drop-zone>
       {{#each entries}}
-      <article class="fallout-maw-construct-part-card" draggable="true" data-construct-part-entry-id="{{id}}">
-        <img src="{{img}}" alt="{{name}}">
+      <article class="fallout-maw-construct-part-card{{#if phantom}} phantom{{/if}}" draggable="true" data-construct-part-entry-id="{{id}}" data-construct-part-slot="{{slotId}}">
+        <div class="fallout-maw-construct-part-image">
+          <img src="{{img}}" alt="{{name}}">
+          {{#if phantom}}<i class="fa-solid fa-plus" aria-hidden="true"></i>{{/if}}
+        </div>
         <div class="fallout-maw-construct-part-main">
           <div class="fallout-maw-resource-card-header">
             <span class="fallout-maw-resource-name" title="{{name}}">{{order}}. {{typeLabel}}</span>
@@ -19,10 +22,22 @@
           <div class="fallout-maw-resource-meter fallout-maw-construct-part-meter" style="{{meterStyle}}" role="meter" aria-valuemin="0" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
             <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
           </div>
+          {{#if phantom}}
+          <div class="fallout-maw-construct-part-phantom-label">
+            <i class="fa-solid fa-terminal" aria-hidden="true"></i>
+            СЛОТ ОЖИДАЕТ: {{partType}}
+          </div>
+          {{/if}}
         </div>
-        <button class="fallout-maw-construct-part-remove" type="button" title="Убрать" data-construct-part-remove="{{id}}">
-          <i class="fa-solid fa-trash"></i>
+        {{#if installed}}
+        <button class="fallout-maw-construct-part-remove" type="button" title="Снять деталь" data-construct-part-remove="{{id}}">
+          <i class="fa-solid fa-eject"></i>
         </button>
+        {{else}}
+        <span class="fallout-maw-construct-part-empty-mark" title="Перетащите сюда подходящую деталь">
+          <i class="fa-solid fa-link-slash"></i>
+        </span>
+        {{/if}}
       </article>
       {{else}}
       <div class="fallout-maw-construct-drop-placeholder">

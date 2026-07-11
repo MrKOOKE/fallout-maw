@@ -98,6 +98,65 @@ body #prosemirror-dropdown {
   border: 1px solid rgba(219, 202, 151, 0.35);
 }
 
+.fallout-maw-construct-part-image {
+  display: grid;
+  height: 44px;
+  place-items: center;
+  position: relative;
+  width: 44px;
+}
+
+.fallout-maw-construct-part-image > * {
+  grid-area: 1 / 1;
+}
+
+.fallout-maw-construct-part-image > i {
+  color: rgba(142, 225, 216, 0.92);
+  filter: drop-shadow(0 0 5px rgba(74, 188, 179, 0.75));
+  font-size: 18px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.fallout-maw-construct-part-card.phantom {
+  background:
+    linear-gradient(90deg, rgba(51, 117, 114, 0.13), transparent 45%),
+    rgba(0, 0, 0, 0.2);
+  border-color: rgba(112, 196, 190, 0.58);
+  border-style: dashed;
+  box-shadow: inset 0 0 16px rgba(65, 145, 142, 0.1);
+}
+
+.fallout-maw-construct-part-card.phantom .fallout-maw-construct-part-image img {
+  filter: grayscale(0.8) contrast(0.75) brightness(0.62);
+  opacity: 0.24;
+}
+
+.fallout-maw-construct-part-card.phantom:hover {
+  border-color: rgba(142, 225, 216, 0.9);
+  box-shadow: inset 0 0 18px rgba(65, 145, 142, 0.16), 0 0 10px rgba(74, 188, 179, 0.18);
+}
+
+.fallout-maw-construct-part-phantom-label {
+  color: rgba(142, 225, 216, 0.78);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-construct-part-empty-mark {
+  align-items: center;
+  color: rgba(142, 225, 216, 0.65);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
 .fallout-maw-construct-part-main {
   min-width: 0;
 }
@@ -4408,6 +4467,44 @@ body #prosemirror-dropdown {
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(148, 177, 111, 0.14);
   box-sizing: border-box;
+}
+
+.fallout-maw-equipment-slot.construct-part-phantom {
+  border-color: rgba(112, 196, 190, 0.58);
+  border-style: dashed;
+  box-shadow: inset 0 0 14px rgba(65, 145, 142, 0.1);
+}
+
+.fallout-maw-construct-slot-phantom {
+  align-items: center;
+  display: grid;
+  inset: 0;
+  justify-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+.fallout-maw-construct-slot-phantom img {
+  filter: grayscale(0.75) contrast(0.75) brightness(0.62);
+  height: 100%;
+  opacity: 0.22;
+  object-fit: cover;
+  width: 100%;
+}
+
+.fallout-maw-construct-slot-phantom i {
+  color: rgba(142, 225, 216, 0.88);
+  filter: drop-shadow(0 0 4px rgba(74, 188, 179, 0.62));
+  font-size: 1.15rem;
+  grid-area: 1 / 1;
+  position: absolute;
+}
+
+.fallout-maw-equipment-slot.construct-part-phantom.drop-preview,
+.fallout-maw-equipment-slot.construct-part-phantom.drop-match-preview {
+  border-color: rgba(142, 225, 216, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(142, 225, 216, 0.24), 0 0 12px rgba(74, 188, 179, 0.24);
 }
 
 .fallout-maw-inventory-cell.occupied {
