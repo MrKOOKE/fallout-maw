@@ -76,6 +76,7 @@ import {
   syncInventoryVirtualCell
 } from "../utils/inventory-grid-dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -2030,14 +2031,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
       return;
     }
-    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
-      const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
-      entry.classList.toggle("active", active);
-      entry.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
-      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
-    });
+    activateInventoryTooltipTab(this.#tooltipElement, index);
     this.#positionInventoryTooltip();
   }
 
@@ -3647,6 +3641,11 @@ function renderCraftKnowledgeWorkspaceHTML(craft, mode) {
 /** Draw exact craft pipes once a tooltip panel is measurable. */
 export function activateCraftKnowledgeVariants(root) {
   if (!root) return;
+  root.querySelector(".fallout-maw-recipe-knowledge-craft")?.addEventListener("contextmenu", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+  });
   const renderVisible = () => {
     for (const panel of root.querySelectorAll("[data-craft-knowledge-panel]")) {
       if (panel.getClientRects().length) renderCraftKnowledgePanelLinks(panel);
@@ -3686,7 +3685,11 @@ function activateCraftKnowledgePanelViewport(panel) {
     return viewport;
   };
   let drag = null;
-  workspace.addEventListener("contextmenu", event => event.preventDefault());
+  workspace.addEventListener("contextmenu", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+  });
   workspace.addEventListener("pointerdown", event => {
     if (event.button !== 2) return;
     event.preventDefault();
@@ -3762,12 +3765,7 @@ function activateCraftKnowledgeNodeTooltips(root) {
         const button = clickEvent.target.closest?.("[data-tooltip-weapon-tab]");
         if (!button) return;
         const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
-        content.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
-          const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
-          entry.classList.toggle("active", active);
-          entry.setAttribute("aria-selected", active ? "true" : "false");
-        });
-        content.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index));
+        activateInventoryTooltipTab(content, index);
       });
       game.tooltip.activate(node, {
         html: content,

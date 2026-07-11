@@ -161,6 +161,7 @@ import {
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
@@ -246,7 +247,6 @@ let recipeKnowledgeTooltipAnchor = null;
 let recipeKnowledgeTooltipPendingAnchor = null;
 let recipeKnowledgeTooltipElement = null;
 let recipeKnowledgeTooltipCloseTimer = null;
-let recipeKnowledgeTooltipPinned = false;
 const recipeKnowledgeMiddleActiveAnchors = new WeakSet();
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
@@ -3610,15 +3610,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #activateInventoryTooltipWeaponTab(index) {
-    if (!this.#tooltipElement) return;
-    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(button => {
-      const active = toInteger(button.dataset.tooltipWeaponTab) === index;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
-      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
-    });
+    activateInventoryTooltipTab(this.#tooltipElement, index);
   }
 
   async #refreshInventoryTooltip() {
@@ -4214,14 +4206,8 @@ async function prepareOneTimeUseRecipeKnowledgePreviews(item, actor = null) {
 
 export async function renderCraftKnowledgeTooltipHTML(item, actor = null) {
   const { renderCraftKnowledgeVariantsHTML } = await import("../apps/craft-window.mjs");
-  const descriptionHTML = await renderInventoryItemDescriptionHTML(item);
-  const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, {
-    descriptionHTML,
-    includeRecipeKnowledge: false
-  });
   return `
     <section class="fallout-maw-recipe-knowledge-preview">
-      <div class="fallout-maw-recipe-knowledge-item-tooltip">${itemHTML}</div>
       ${renderCraftKnowledgeVariantsHTML(item, actor)}
     </section>
   `;
@@ -4229,8 +4215,9 @@ export async function renderCraftKnowledgeTooltipHTML(item, actor = null) {
 
 export function activateCraftKnowledgeTooltip(anchor, html, { locked = false, replace = false } = {}) {
   if (!anchor?.isConnected || !html) return null;
+  reconcileCraftKnowledgeTooltipState();
   cancelCraftKnowledgeTooltipClose();
-  if (recipeKnowledgeTooltipPinned) {
+  if (isCraftKnowledgeTooltipPinned()) {
     if (!locked || recipeKnowledgeTooltipAnchor === anchor) return null;
     removeCraftKnowledgeTooltip();
   }
@@ -4261,21 +4248,6 @@ export function activateCraftKnowledgeTooltip(anchor, html, { locked = false, re
   tooltip.style.pointerEvents = "none";
   host.addEventListener("pointerenter", cancelCraftKnowledgeTooltipClose);
   host.addEventListener("pointerleave", event => scheduleCraftKnowledgeTooltipClose(anchor, event.relatedTarget));
-  host.addEventListener("click", event => {
-    const button = event.target.closest?.("[data-tooltip-weapon-tab]");
-    if (!button) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
-    host.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
-      const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
-      entry.classList.toggle("active", active);
-      entry.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    host.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
-      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
-    });
-  });
   host.addEventListener("auxclick", event => {
     if (event.button !== 1) return;
     event.preventDefault();
@@ -4284,7 +4256,6 @@ export function activateCraftKnowledgeTooltip(anchor, html, { locked = false, re
   });
   recipeKnowledgeTooltipElement = tooltip;
   recipeKnowledgeTooltipAnchor = anchor;
-  recipeKnowledgeTooltipPinned = false;
   if (locked) pinCraftKnowledgeTooltip(anchor);
   import("../apps/craft-window.mjs").then(({ activateCraftKnowledgeVariants }) => {
     activateCraftKnowledgeVariants(host);
@@ -4293,7 +4264,8 @@ export function activateCraftKnowledgeTooltip(anchor, html, { locked = false, re
 }
 
 export function isCraftKnowledgeTooltipOpen() {
-  if (recipeKnowledgeTooltipPinned) return Boolean(recipeKnowledgeTooltipElement?.isConnected);
+  reconcileCraftKnowledgeTooltipState();
+  if (isCraftKnowledgeTooltipPinned()) return true;
   return Boolean(
     recipeKnowledgeTooltipElement === game.tooltip?.tooltip
     && game.tooltip?.element === recipeKnowledgeTooltipAnchor
@@ -4303,7 +4275,7 @@ export function isCraftKnowledgeTooltipOpen() {
 }
 
 export function reanchorCraftKnowledgeTooltip(anchor) {
-  if (recipeKnowledgeTooltipPinned || !isCraftKnowledgeTooltipOpen() || !anchor?.isConnected) return false;
+  if (isCraftKnowledgeTooltipPinned() || !isCraftKnowledgeTooltipOpen() || !anchor?.isConnected) return false;
   const host = recipeKnowledgeTooltipElement.querySelector(".fallout-maw-recipe-knowledge-tooltip-host");
   if (!host) return false;
   const rect = anchor.getBoundingClientRect();
@@ -4320,25 +4292,39 @@ export function reanchorCraftKnowledgeTooltip(anchor) {
 
 export function toggleCraftKnowledgeTooltipPin(anchor) {
   if (!isCraftKnowledgeTooltipOpen() || recipeKnowledgeTooltipAnchor !== anchor) return false;
-  if (recipeKnowledgeTooltipPinned) removeCraftKnowledgeTooltip(anchor);
+  if (isCraftKnowledgeTooltipPinned()) removeCraftKnowledgeTooltip(anchor);
   else pinCraftKnowledgeTooltip(anchor);
   return true;
 }
 
 function pinCraftKnowledgeTooltip(anchor) {
-  if (recipeKnowledgeTooltipPinned || game.tooltip?.element !== anchor) return recipeKnowledgeTooltipElement;
+  if (isCraftKnowledgeTooltipPinned() || game.tooltip?.element !== anchor) return recipeKnowledgeTooltipElement;
   const tooltip = game.tooltip.lockTooltip();
   tooltip.classList.add("pinned");
   tooltip.style.pointerEvents = "auto";
   tooltip.dataset.locked = "true";
   recipeKnowledgeTooltipElement = tooltip;
-  recipeKnowledgeTooltipPinned = true;
   return tooltip;
+}
+
+function isCraftKnowledgeTooltipPinned() {
+  return Boolean(
+    recipeKnowledgeTooltipElement?.isConnected
+    && recipeKnowledgeTooltipElement.classList.contains("locked-tooltip")
+    && recipeKnowledgeTooltipElement.classList.contains("fallout-maw-recipe-knowledge-tooltip")
+  );
+}
+
+function reconcileCraftKnowledgeTooltipState() {
+  if (!recipeKnowledgeTooltipElement || recipeKnowledgeTooltipElement.isConnected) return;
+  recipeKnowledgeTooltipElement = null;
+  recipeKnowledgeTooltipAnchor = null;
+  cancelCraftKnowledgeTooltipClose();
 }
 
 export function scheduleCraftKnowledgeTooltipClose(anchor, relatedTarget = null) {
   if (!recipeKnowledgeTooltipElement?.isConnected || recipeKnowledgeTooltipAnchor !== anchor) return;
-  if (recipeKnowledgeTooltipPinned) return;
+  if (isCraftKnowledgeTooltipPinned()) return;
   if (anchor?.contains?.(relatedTarget)) return;
   cancelCraftKnowledgeTooltipClose();
   recipeKnowledgeTooltipCloseTimer = window.setTimeout(() => {
@@ -4357,12 +4343,11 @@ export function cancelCraftKnowledgeTooltipClose() {
 export function removeCraftKnowledgeTooltip(anchor = null) {
   if (anchor && recipeKnowledgeTooltipAnchor !== anchor) return;
   cancelCraftKnowledgeTooltipClose();
-  if (recipeKnowledgeTooltipPinned && recipeKnowledgeTooltipElement) {
+  if (isCraftKnowledgeTooltipPinned()) {
     game.tooltip?.dismissLockedTooltip?.(recipeKnowledgeTooltipElement);
   } else if (game.tooltip?.element === recipeKnowledgeTooltipAnchor) game.tooltip.deactivate();
   recipeKnowledgeTooltipElement = null;
   recipeKnowledgeTooltipAnchor = null;
-  recipeKnowledgeTooltipPinned = false;
 }
 
 function ensureRecipeKnowledgeTooltipListeners() {
@@ -5466,7 +5451,6 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
       </div>
     ` : ""
   ].join("");
-
   return [`
     <section class="function-section weapon-tab-section">
       <div class="weapon-tab-list" role="tablist">${tabs}</div>

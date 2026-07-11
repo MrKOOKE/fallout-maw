@@ -140,6 +140,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getActorInstalledModuleItems, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { getWeaponTooltipModuleSlotsTabIndex, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -1764,14 +1765,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #activateHudItemTooltipWeaponTab(index) {
     if (!this.#itemTooltipElement) return;
-    this.#itemTooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(button => {
-      const active = toInteger(button.dataset.tooltipWeaponTab) === index;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    this.#itemTooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
-      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
-    });
+    activateInventoryTooltipTab(this.#itemTooltipElement, index);
     this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
   }
 

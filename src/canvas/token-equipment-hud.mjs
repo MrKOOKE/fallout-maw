@@ -3,6 +3,7 @@ import { TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING } from "../settings/constants
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "../apps/search-inventory.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { prepareInventoryContext } from "../utils/actor-display-data.mjs";
+import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import {
   equipActorItemInEquipmentSlot,
   equipActorItemInWeaponSlot,
@@ -419,14 +420,7 @@ function createSlotPickerTooltipController(overlay) {
     event.preventDefault();
     event.stopPropagation();
     const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
-    element.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
-      const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
-      entry.classList.toggle("active", active);
-      entry.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    element.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
-      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
-    });
+    activateInventoryTooltipTab(element, index);
     if (anchor) positionSlotPickerTooltip(element, anchor);
   };
 

@@ -5892,6 +5892,10 @@ label.fallout-maw-mitigation-cell {
   gap: 0.55rem;
 }
 
+.weapon-tab-list > button[data-tooltip-weapon-tab] {
+  transition: none;
+}
+
 .fallout-maw-inventory-tooltip .weapon-tab-list {
   background:
     linear-gradient(135deg, var(--fallout-maw-tooltip-casing-top), var(--fallout-maw-tooltip-casing) 48%, var(--fallout-maw-tooltip-casing-bottom));
@@ -17523,8 +17527,8 @@ html.fallout-maw-token-action-hud-open #hotbar {
 .fallout-maw-inventory-tooltip.fallout-maw-recipe-knowledge-tooltip {
   max-height: calc(100vh - 32px);
   max-width: none;
-  min-width: 1220px;
-  width: 1220px;
+  min-width: 560px;
+  width: 560px;
 }
 
 .locked-tooltip.fallout-maw-recipe-knowledge-tooltip {
@@ -17540,32 +17544,11 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-recipe-knowledge-preview {
-  display: grid;
-  grid-template-columns: 660px 560px;
+  display: block;
   max-height: calc(100vh - 32px);
   overflow: hidden;
   position: relative;
   z-index: 2;
-}
-
-.fallout-maw-recipe-knowledge-item-tooltip {
-  border-right: 1px solid rgba(218, 197, 110, 0.42);
-  min-width: 660px;
-  width: 660px;
-  overflow: hidden;
-}
-
-.fallout-maw-recipe-knowledge-tooltip .fallout-maw-recipe-knowledge-item-tooltip > .content {
-  max-height: calc(100vh - 48px);
-}
-
-.fallout-maw-recipe-knowledge-tooltip .weapon-tab-list {
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-}
-
-.fallout-maw-recipe-knowledge-tooltip .weapon-tab-list button {
-  transition: none;
-  width: 100%;
 }
 
 .fallout-maw-recipe-knowledge-craft {

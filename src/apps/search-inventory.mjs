@@ -95,6 +95,7 @@ import {
   ITEM_FUNCTIONS
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
@@ -3571,14 +3572,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
       return;
     }
-    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
-      const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
-      entry.classList.toggle("active", active);
-      entry.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
-      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
-    });
+    activateInventoryTooltipTab(this.#tooltipElement, index);
     this.#positionInventoryTooltip();
   }
 
