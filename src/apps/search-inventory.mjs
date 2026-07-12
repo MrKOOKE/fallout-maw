@@ -610,6 +610,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           tradeCatalogEnabledCategories: this.#getTradeCatalogEnabledCategories(this.#searcherActor?.uuid ?? this.#searcherActorUuid),
           tradeCatalogExpandedWeaponGroups: this.#getTradeCatalogExpandedWeaponGroups(this.#searcherActor?.uuid ?? this.#searcherActorUuid),
           sideBarterValues: tradeSideBarterValues,
+          tradeCounterpartyActor: this.#searchedActor,
           equipmentCollapsed: this.#tradeEquipmentCollapsed,
           selector: searcherSelector,
           canControl: canManageSearcher,
@@ -626,6 +627,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           tradeCatalogEnabledCategories: this.#getTradeCatalogEnabledCategories(this.#searchedActor?.uuid ?? this.#searchedActorUuid),
           tradeCatalogExpandedWeaponGroups: this.#getTradeCatalogExpandedWeaponGroups(this.#searchedActor?.uuid ?? this.#searchedActorUuid),
           sideBarterValues: tradeSideBarterValues,
+          tradeCounterpartyActor: this.#searcherActor,
           equipmentCollapsed: this.#tradeEquipmentCollapsed,
           selector: searchedSelector,
           canControl: canManageSearched,
@@ -1289,6 +1291,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return {
       currencyKey: this.#tradeCurrencyKey,
       sellerActor: sourceActor,
+      buyerActor: this.#getActorForTradeSide(targetSide),
       barterAdjustmentPercent: getTradeBarterAdjustmentPercent(sideBarterValues[sourceSide], sideBarterValues[targetSide])
     };
   }
@@ -3964,6 +3967,7 @@ export function prepareSearchActorContext(actor, {
   tradeCatalogEnabledCategories = null,
   tradeCatalogExpandedWeaponGroups = null,
   sideBarterValues = null,
+  tradeCounterpartyActor = null,
   equipmentCollapsed = false,
   selector = null,
   canControl = false,
@@ -3983,11 +3987,13 @@ export function prepareSearchActorContext(actor, {
     tradeCatalogEnabledCategories,
     tradeCatalogExpandedWeaponGroups,
     side,
-    sideBarterValues
+    sideBarterValues,
+    tradeCounterpartyActor
   });
   const loadValue = Math.max(0, Number(actor.system?.load?.value) || 0);
   const loadMax = Math.max(0, Number(actor.system?.load?.max) || 0);
-  const loadRatio = loadMax > 0 ? loadValue / loadMax : 0;
+  const infiniteLoad = Boolean(actor.system?.trade?.infiniteInventory);
+  const loadRatio = !infiniteLoad && loadMax > 0 ? loadValue / loadMax : 0;
   const currencies = getCurrencySettings().map(currency => ({
     ...currency,
     amount: isTrade
@@ -4010,7 +4016,7 @@ export function prepareSearchActorContext(actor, {
     equipmentCollapsed: isTrade && equipmentCollapsed,
     load: {
       value: formatWeight(loadValue),
-      max: formatWeight(loadMax),
+      max: infiniteLoad ? "∞" : formatWeight(loadMax),
       percent: Number(Math.max(0, Math.min(100, loadRatio * 100)).toFixed(2)),
       trend: "negative",
       state: loadRatio >= 1 ? "critical" : loadRatio >= 0.75 ? "warning" : "normal"
@@ -4025,7 +4031,8 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
   tradeCatalogEnabledCategories = null,
   tradeCatalogExpandedWeaponGroups = null,
   side = "",
-  sideBarterValues = null
+  sideBarterValues = null,
+  tradeCounterpartyActor = null
 } = {}) {
   const actorUuid = actor.uuid;
   const oppositeSide = getOppositeTradeSide(side);
@@ -4050,7 +4057,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, {
       tradeCatalogWeaponProficiencyKey: weaponProficiencyKey,
       quantity: displayedQuantity,
       draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer, actor) ? " trade-offered-source" : ""}` : "",
-      tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent }) : ""
+      tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent, buyerActor: tradeCounterpartyActor }) : ""
     };
   };
 
@@ -5622,7 +5629,7 @@ async function removeTransferredVirtualStackQuantity(actor, item, quantity = 0, 
 }
 
 function ensureTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, quantity = 1, barterAdjustmentPercent = null } = {}) {
-  const price = calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, barterAdjustmentPercent });
+  const price = calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, buyerActor, barterAdjustmentPercent });
   if (price <= 0) return;
   const available = getActorCurrencyAmount(buyerActor, currencyKey);
   if (available < price) {
@@ -5632,7 +5639,7 @@ function ensureTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, qu
 }
 
 async function applyTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, quantity = 1, barterAdjustmentPercent = null } = {}) {
-  const price = calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, barterAdjustmentPercent });
+  const price = calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, buyerActor, barterAdjustmentPercent });
   if (price <= 0) return { price: 0 };
   const buyerAmount = getActorCurrencyAmount(buyerActor, currencyKey);
   const sellerAmount = getActorCurrencyAmount(sellerActor, currencyKey);
@@ -5644,6 +5651,7 @@ async function applyTradeItemPayment({ buyerActor, sellerActor, item, currencyKe
 
 function calculateItemTradePrice(item, currencyKey = "", quantity = 1, {
   sellerActor = null,
+  buyerActor = null,
   barterAdjustmentPercent = null,
   itemCollection = null,
   containedItems = []
@@ -5653,14 +5661,13 @@ function calculateItemTradePrice(item, currencyKey = "", quantity = 1, {
   if (!Number.isFinite(barterPercent)) throw new Error("Trade barter adjustment percent is required.");
   const currencies = getCurrencySettings();
   const targetCurrency = currencies.find(entry => entry.key === currencyKey) ?? currencies.find(entry => entry.primaryTrade) ?? currencies.at(0);
-  const markupPercent = Number(sellerActor.system.trade.markupPercent);
-  if (!Number.isFinite(markupPercent)) throw new Error("Seller trade markup must be numeric.");
-  const percentMultiplier = 1 + ((markupPercent + barterPercent) / 100);
   return calculateItemTradePriceTree(item, {
     targetCurrency,
     currencies,
     quantity: Math.max(1, toInteger(quantity)),
-    percentMultiplier,
+    sellerActor,
+    buyerActor,
+    barterPercent,
     itemCollection: itemCollection ?? sellerActor?.items ?? null,
     containedItems
   });
@@ -5670,7 +5677,9 @@ function calculateItemTradePriceTree(item, {
   targetCurrency = null,
   currencies = getCurrencySettings(),
   quantity = null,
-  percentMultiplier = 1,
+  sellerActor = null,
+  buyerActor = null,
+  barterPercent = 0,
   itemCollection = null,
   containedItems = [],
   visitedIds = new Set(),
@@ -5689,12 +5698,18 @@ function calculateItemTradePriceTree(item, {
   const itemQuantity = quantity === null
     ? Math.max(1, getItemQuantity(item))
     : Math.max(1, toInteger(quantity));
-  let price = calculateSingleItemTradePrice(item, targetCurrency, currencies, itemQuantity, percentMultiplier);
+  let price = calculateSingleItemTradePrice(item, targetCurrency, currencies, itemQuantity, {
+    sellerActor,
+    buyerActor,
+    barterPercent
+  });
   for (const child of getItemTradePriceChildren(item, itemCollection, containedItems)) {
     price += calculateItemTradePriceTree(child, {
       targetCurrency,
       currencies,
-      percentMultiplier,
+      sellerActor,
+      buyerActor,
+      barterPercent,
       itemCollection,
       containedItems,
       visitedIds,
@@ -5704,9 +5719,24 @@ function calculateItemTradePriceTree(item, {
   return price;
 }
 
-function calculateSingleItemTradePrice(item, targetCurrency = null, currencies = getCurrencySettings(), quantity = 1, percentMultiplier = 1) {
+function calculateSingleItemTradePrice(item, targetCurrency = null, currencies = getCurrencySettings(), quantity = 1, {
+  sellerActor = null,
+  buyerActor = null,
+  barterPercent = 0
+} = {}) {
   const unitPrice = Math.max(0, Number(item?.system?.price ?? item?.price) || 0);
   const itemQuantity = Math.max(1, toInteger(quantity));
+
+  const sellerItemOverride = getActorTradeItemOverride(sellerActor, item);
+  const buyerItemOverride = getActorTradeItemOverride(buyerActor, item);
+  const fixedPrice = sellerItemOverride?.mode === "fixed" && Number(sellerItemOverride.fixedSell?.value) > 0
+    ? sellerItemOverride.fixedSell
+    : buyerItemOverride?.mode === "fixed" && Number(buyerItemOverride.fixedBuy?.value) > 0
+      ? buyerItemOverride.fixedBuy
+      : null;
+  if (fixedPrice) {
+    return convertTradeFixedPrice(fixedPrice, targetCurrency, currencies, itemQuantity);
+  }
   if (!unitPrice) return 0;
 
   const sourceCurrencyKey = String(item?.system?.priceCurrency ?? item?.priceCurrency ?? "");
@@ -5717,13 +5747,67 @@ function calculateSingleItemTradePrice(item, targetCurrency = null, currencies =
     ? unitPrice * itemQuantity
     : (unitPrice * itemQuantity * sourceValue) / targetValue;
   const functionMultiplier = getItemTradeFunctionPriceMultiplier(item);
+  const sellerAdjustment = getActorTradePercentForItem(sellerActor, item, "sell", sellerItemOverride);
+  const buyerAdjustment = getActorTradePercentForItem(buyerActor, item, "buy", buyerItemOverride);
+  const percentMultiplier = Math.max(0, 1 + ((sellerAdjustment + buyerAdjustment + barterPercent) / 100));
   return Math.max(0, Math.ceil(basePrice * functionMultiplier * percentMultiplier));
 }
 
-function formatItemTradePrice(item, currencyKey = "", sellerActor = null, { barterAdjustmentPercent = null } = {}) {
-  const price = calculateItemTradePrice(item, currencyKey, 1, { sellerActor, barterAdjustmentPercent });
+function formatItemTradePrice(item, currencyKey = "", sellerActor = null, { barterAdjustmentPercent = null, buyerActor = null } = {}) {
+  const price = calculateItemTradePrice(item, currencyKey, 1, { sellerActor, buyerActor, barterAdjustmentPercent });
   if (price <= 0) return "";
   return price;
+}
+
+function getActorTradePercentForItem(actor = null, item = null, side = "sell", itemOverride = null) {
+  if (!actor || !["sell", "buy"].includes(side)) return 0;
+  if (itemOverride?.mode === "percent") return tradeAdjustmentToSignedPercent(itemOverride[side]);
+  const categoryOverride = getActorTradeCategoryOverride(actor, item);
+  if (categoryOverride) return tradeAdjustmentToSignedPercent(categoryOverride[side]);
+  const sourceTrade = actor._source?.system?.trade ?? {};
+  if (side === "sell" && !sourceTrade.sell) {
+    const legacyMarkup = Number(actor.system?.trade?.markupPercent);
+    return Number.isFinite(legacyMarkup) ? legacyMarkup : 0;
+  }
+  return tradeAdjustmentToSignedPercent(actor.system?.trade?.[side]);
+}
+
+function getActorTradeCategoryOverride(actor = null, item = null) {
+  const category = normalizeTradeOverrideText(item?.system?.itemCategory ?? item?.itemCategory);
+  if (!category) return null;
+  const entries = Array.isArray(actor?.system?.trade?.categoryOverrides) ? actor.system.trade.categoryOverrides : [];
+  return entries.find(entry => normalizeTradeOverrideText(entry?.category) === category) ?? null;
+}
+
+function getActorTradeItemOverride(actor = null, item = null) {
+  if (!actor || !item) return null;
+  const entries = Array.isArray(actor.system?.trade?.itemOverrides) ? actor.system.trade.itemOverrides : [];
+  const uuid = String(item?.uuid ?? "").trim();
+  const id = String(item?.id ?? item?._id ?? "").trim();
+  const name = normalizeTradeOverrideText(item?.name);
+  return entries.find(entry => (
+    (uuid && String(entry?.itemUuid ?? "").trim() === uuid)
+    || (id && String(entry?.itemId ?? "").trim() === id)
+    || (name && normalizeTradeOverrideText(entry?.name) === name)
+  )) ?? null;
+}
+
+function tradeAdjustmentToSignedPercent(adjustment = {}) {
+  const percent = Math.max(0, Math.abs(Number(adjustment?.percent) || 0));
+  return adjustment?.direction === "decrease" ? -percent : percent;
+}
+
+function convertTradeFixedPrice(fixedPrice = {}, targetCurrency = null, currencies = [], quantity = 1) {
+  const value = Math.max(0, Number(fixedPrice?.value) || 0) * Math.max(1, toInteger(quantity));
+  const sourceCurrency = currencies.find(entry => entry.key === fixedPrice?.currencyKey) ?? targetCurrency;
+  const sourceValue = Math.max(0, Number(sourceCurrency?.value) || 0);
+  const targetValue = Math.max(0, Number(targetCurrency?.value) || 0);
+  if (!sourceValue || !targetValue) return Math.ceil(value);
+  return Math.max(0, Math.ceil((value * sourceValue) / targetValue));
+}
+
+function normalizeTradeOverrideText(value = "") {
+  return String(value ?? "").trim().toLocaleLowerCase("ru");
 }
 
 function getItemTradePriceChildren(item, itemCollection = null, containedItems = []) {
@@ -6132,15 +6216,15 @@ function prepareTradeOffersContext(state = {}, { searcherActor = null, searchedA
   offers.searcher.completed = offers.completed;
   offers.searched.completed = offers.completed;
   const context = {
-    searcher: prepareTradeOfferSideContext(offers.searcher, searcherActor, "searcher", tradeCurrencyKey, sideBarterValues),
-    searched: prepareTradeOfferSideContext(offers.searched, searchedActor, "searched", tradeCurrencyKey, sideBarterValues)
+    searcher: prepareTradeOfferSideContext(offers.searcher, searcherActor, "searcher", tradeCurrencyKey, sideBarterValues, searchedActor),
+    searched: prepareTradeOfferSideContext(offers.searched, searchedActor, "searched", tradeCurrencyKey, sideBarterValues, searcherActor)
   };
   context.searcher.completed = offers.completed;
   context.searched.completed = offers.completed;
   return context;
 }
 
-function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", tradeCurrencyKey = "", sideBarterValues = null) {
+function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", tradeCurrencyKey = "", sideBarterValues = null, buyerActor = null) {
   const items = [];
   let total = 0;
   const columns = getFixedTradeOfferGridColumns();
@@ -6161,6 +6245,7 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
     const priceItemCollection = liveItem ? sourceActor?.items : entry.containedItems ?? [];
     const price = calculateItemTradePrice(liveItem ?? itemData, tradeCurrencyKey, quantity, {
       sellerActor: sourceActor,
+      buyerActor,
       barterAdjustmentPercent,
       itemCollection: priceItemCollection,
       containedItems: entry.containedItems ?? []
@@ -8068,12 +8153,13 @@ export async function promptSearchItemStackQuantity({ item, title = "Колич�
   const limit = Math.max(1, toInteger(max));
   const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
   const sellerActor = trade?.sellerActor;
+  const buyerActor = trade?.buyerActor;
   const barterAdjustmentPercent = trade?.barterAdjustmentPercent;
   const currencyKey = String(trade?.currencyKey ?? "");
   const currency = getCurrencySettings().find(entry => entry.key === normalizeTradeCurrencyKey(currencyKey));
   const hasTradePrice = Boolean(trade && currencyKey && sellerActor);
   const tradePriceContent = hasTradePrice
-    ? `<p class="fallout-maw-trade-quantity-price" data-trade-quantity-price><span>Итого</span><strong data-trade-quantity-total>${calculateItemTradePrice(item, currencyKey, initial, { sellerActor, barterAdjustmentPercent })} ${escapeHTML(currency?.label ?? currencyKey)}</strong></p>`
+    ? `<p class="fallout-maw-trade-quantity-price" data-trade-quantity-price><span>Итого</span><strong data-trade-quantity-total>${calculateItemTradePrice(item, currencyKey, initial, { sellerActor, buyerActor, barterAdjustmentPercent })} ${escapeHTML(currency?.label ?? currencyKey)}</strong></p>`
     : "";
   const formData = await DialogV2.input({
     window: { title },
@@ -8092,7 +8178,7 @@ export async function promptSearchItemStackQuantity({ item, title = "Колич�
       if (!input || !total) return;
       const updateTotal = () => {
         const quantity = Math.max(1, Math.min(limit, toInteger(input.value)));
-        total.textContent = `${calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, barterAdjustmentPercent })} ${currency?.label ?? currencyKey}`;
+        total.textContent = `${calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, buyerActor, barterAdjustmentPercent })} ${currency?.label ?? currencyKey}`;
       };
       input.addEventListener("input", updateTotal);
       input.addEventListener("change", updateTotal);
@@ -8385,6 +8471,7 @@ function normalizeStackComparableValue(value) {
 }
 
 function validateActorLoadLimit(actor, projectedItems = []) {
+  if (actor?.system?.trade?.infiniteInventory) return { valid: true };
   const limit = getActorLoadLimit(actor);
   if (limit <= 0) return { valid: true };
 
@@ -8396,6 +8483,7 @@ function validateActorLoadLimit(actor, projectedItems = []) {
 }
 
 function getActorLoadLimit(actor) {
+  if (actor?.system?.trade?.infiniteInventory) return 0;
   const max = Number(actor?.system?.load?.max) || 0;
   const percent = Math.max(0, Number(actor?.system?.load?.limitPercent) || 0);
   if (max > 0 && percent > 0) return (max * percent) / 100;

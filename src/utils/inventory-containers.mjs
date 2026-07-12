@@ -9,6 +9,13 @@ export const LOCKED_STORAGE_PLACEMENT_MODE = "lockedStorage";
 export const BUTCHERING_STORAGE_PARENT_ID = "__butcheringStorage";
 export const BUTCHERING_STORAGE_PLACEMENT_MODE = "butcheringStorage";
 
+// #region agent log
+let _agentPerf = null;
+function _agentLog(hypothesisId, location, message, data = {}) {
+  fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'repro2',hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{});
+}
+// #endregion
+
 export function getItemsArray(items) {
   if (Array.isArray(items)) return items;
   if (items?.contents) return items.contents;
@@ -955,6 +962,9 @@ export function isInventoryPlacementAvailable(
   reservedPlacements = [],
   options = {}
 ) {
+  // #region agent log
+  if (_agentPerf) _agentPerf.availabilityChecks = (_agentPerf.availabilityChecks ?? 0) + 1;
+  // #endregion
   if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   if (reservedPlacements.some(existing => inventoryPlacementsOverlap(placement, existing))) return false;
@@ -968,6 +978,9 @@ export function isInventoryPlacementAvailable(
     && (options.allowResolvedAvailability || hasUnpositionedVirtualPart)
     && contextItemsArray.some(usesVirtualInventoryStacks)
   ) {
+    // #region agent log
+    if (_agentPerf) _agentPerf.resolvePathChecks = (_agentPerf.resolvePathChecks ?? 0) + 1;
+    // #endregion
     const resolved = resolveInventoryGridPlacements(
       contextItemsArray.filter(item => !excluded.has(getItemId(item))),
       columns,
@@ -1018,6 +1031,9 @@ export function createInventoryHoverPlacementChecker(
   const cached = _hoverPlacementCheckerCache.get(cacheKey);
   if (cached) return cached;
 
+  // #region agent log
+  const _t0 = performance.now();
+  // #endregion
   const filtered = getItemsArray(contextItems).filter(item => !excluded.has(getItemId(item)));
   const resolved = resolveInventoryGridPlacements(filtered, columns, rows, allItems, options);
   const occupied = resolved?.items?.filter(entry => !entry.phantom).map(entry => entry.placement) ?? [];
@@ -1027,6 +1043,16 @@ export function createInventoryHoverPlacementChecker(
     return !occupied.some(existing => inventoryPlacementsOverlap(placement, existing));
   };
   _hoverPlacementCheckerCache.set(cacheKey, checker);
+  // #region agent log
+  _agentLog('G', 'inventory-containers.mjs:createInventoryHoverPlacementChecker', 'hover checker built', {
+    ms: Math.round(performance.now() - _t0),
+    contextItems: filtered.length,
+    occupied: occupied.length,
+    columns,
+    rows,
+    cacheMiss: true
+  });
+  // #endregion
   return checker;
 }
 
@@ -1040,8 +1066,13 @@ export function findFirstAvailableInventoryPlacement(
   reservedPlacements = [],
   options = {}
 ) {
+  // #region agent log
+  const _t0 = performance.now();
+  const _prev = _agentPerf;
+  _agentPerf = { availabilityChecks: 0, resolvePathChecks: 0, resolveCalls: 0, resolveMs: 0 };
+  // #endregion
   // Resolve occupancy once, then scan — avoids O(cells × visualStacks) rebuilds on large inventories.
-  return findFirstAvailableResolvedInventoryPlacement(
+  const result = findFirstAvailableResolvedInventoryPlacement(
     contextItems,
     columns,
     rows,
@@ -1051,6 +1082,22 @@ export function findFirstAvailableInventoryPlacement(
     reservedPlacements,
     options
   );
+  // #region agent log
+  const stats = _agentPerf;
+  _agentPerf = _prev;
+  _agentLog('A', 'inventory-containers.mjs:findFirstAvailableInventoryPlacement', 'auto-place call', {
+    ms: Math.round(performance.now() - _t0),
+    columns,
+    rows,
+    contextItems: getItemsArray(contextItems).length,
+    allItems: getItemsArray(allItems).length,
+    allowOverflowRows: Boolean(options.allowOverflowRows),
+    found: Boolean(result),
+    foundAt: result ? { x: result.x, y: result.y } : null,
+    ...stats
+  });
+  // #endregion
+  return result;
 }
 
 function findFirstAvailableInventoryPlacementByZonePriority(
@@ -1318,6 +1365,9 @@ function getInventoryCellKey(x, y) {
 }
 
 export function validateInventoryTree(items, rootDimensions, options = {}) {
+  // #region agent log
+  const _t0 = performance.now();
+  // #endregion
   const itemsArray = getItemsArray(items).filter(isInventoryManagedItem);
   const itemMap = new Map(itemsArray.map(item => [getItemId(item), item]));
   const contextItemsByParent = buildInventoryContextItemsByParent(itemsArray);
@@ -1329,15 +1379,24 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
     if (!parentId) continue;
 
     if (parentId === itemId || hasContainerCycleInMap(itemId, parentId, itemMap)) {
+      // #region agent log
+      _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate failed early', { ms: Math.round(performance.now()-_t0), reason: 'recursive', itemCount: itemsArray.length });
+      // #endregion
       return { valid: false, reason: "recursive", itemId, parentId };
     }
 
     const parent = itemMap.get(parentId);
     if (!parent || !isContainerItem(parent)) {
+      // #region agent log
+      _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate failed early', { ms: Math.round(performance.now()-_t0), reason: 'invalid-parent', itemCount: itemsArray.length });
+      // #endregion
       return { valid: false, reason: "invalid-parent", itemId, parentId };
     }
 
     if (String(item.system?.placement?.mode ?? "inventory") !== "inventory") {
+      // #region agent log
+      _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate failed early', { ms: Math.round(performance.now()-_t0), reason: 'invalid-placement', itemCount: itemsArray.length });
+      // #endregion
       return { valid: false, reason: "invalid-placement", itemId, parentId };
     }
   }
@@ -1348,6 +1407,9 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
     extraRows: 0
   };
   if (!validateContextPlacements(rootItems, rootDimensions.columns, rootDimensions.rows, itemsArray, rootOptions)) {
+    // #region agent log
+    _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate failed root', { ms: Math.round(performance.now()-_t0), reason: 'no-space', itemCount: itemsArray.length, rootItems: rootItems.length });
+    // #endregion
     return { valid: false, reason: "no-space", parentId: ROOT_CONTAINER_ID };
   }
 
@@ -1356,14 +1418,24 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
     const gridOptions = getContainerInventoryGridOptions(container);
     const contents = contextItemsByParent.get(container.id) ?? [];
     if (!validateContextPlacements(contents, gridOptions.columns, gridOptions.rows, itemsArray, gridOptions)) {
+      // #region agent log
+      _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate failed container', { ms: Math.round(performance.now()-_t0), reason: 'no-space', itemCount: itemsArray.length, parentId: container.id });
+      // #endregion
       return { valid: false, reason: "no-space", parentId: container.id, itemId: container.id };
     }
 
     if (getContainerContentsWeight(container, itemsArray, contentsWeightMemo) > getContainerMaxLoad(container)) {
+      // #region agent log
+      _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate failed max-load', { ms: Math.round(performance.now()-_t0), itemCount: itemsArray.length, parentId: container.id });
+      // #endregion
       return { valid: false, reason: "max-load", parentId: container.id, itemId: container.id };
     }
   }
 
+  // #region agent log
+  const _ms = Math.round(performance.now() - _t0);
+  if (_ms >= 5) _agentLog('F', 'inventory-containers.mjs:validateInventoryTree', 'validate ok', { ms: _ms, itemCount: itemsArray.length, rootItems: rootItems.length });
+  // #endregion
   return { valid: true };
 }
 
@@ -1578,6 +1650,10 @@ function validateStoredContextPlacements(contextItems, columns, rows, allItems, 
 }
 
 function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options = {}) {
+  // #region agent log
+  const _t0 = performance.now();
+  if (_agentPerf) _agentPerf.resolveCalls = (_agentPerf.resolveCalls ?? 0) + 1;
+  // #endregion
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
 
@@ -1653,6 +1729,22 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
 
   const extraRows = options.allowOverflowRows ? Math.max(0, toInteger(options.extraRows)) : 0;
   const overflowRows = options.compactRows ? Math.max(1, visualRows) : Math.max(rows, visualRows);
+  // #region agent log
+  const _ms = performance.now() - _t0;
+  if (_agentPerf) _agentPerf.resolveMs = (_agentPerf.resolveMs ?? 0) + _ms;
+  if (_ms >= 10 || _agentPerf) {
+    _agentLog('B', 'inventory-containers.mjs:resolveInventoryGridPlacements', 'resolve placements', {
+      ms: Math.round(_ms),
+      contextItems: getItemsArray(contextItems).length,
+      visualItems: items.length,
+      preferred: preferredItems.length,
+      deferred: deferredItems.length,
+      columns,
+      rows,
+      insideAutoFind: Boolean(_agentPerf)
+    });
+  }
+  // #endregion
   return {
     columns: visualColumns,
     rows: options.allowOverflowRows ? overflowRows + extraRows : visualRows,

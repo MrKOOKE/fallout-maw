@@ -245,6 +245,7 @@ function validateActorGrantLoad(actor, { updates = [], creates = [] } = {}) {
 }
 
 function getActorLoadLimit(actor) {
+  if (actor?.system?.trade?.infiniteInventory) return 0;
   const max = Number(actor?.system?.load?.max) || 0;
   const percent = Math.max(0, Number(actor?.system?.load?.limitPercent) || 0);
   if (max > 0 && percent > 0) return (max * percent) / 100;

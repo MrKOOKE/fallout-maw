@@ -506,7 +506,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const canManageSheetDocuments = Boolean(game.user?.isGM);
     const loadValue = Math.max(0, Number(actor.system.load?.value) || 0);
     const loadMax = Math.max(0, Number(actor.system.load?.max) || 0);
-    const loadRatio = loadMax > 0 ? (loadValue / loadMax) : 0;
+    const infiniteLoad = Boolean(actor.system?.trade?.infiniteInventory);
+    const loadRatio = !infiniteLoad && loadMax > 0 ? (loadValue / loadMax) : 0;
     const loadPercent = Math.max(0, Math.min(100, loadRatio * 100));
     const currentThreshold = level <= 1
       ? 0
@@ -532,7 +533,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       actorName: this.#actorNameDraft ?? actor.name,
       load: {
         value: formatWeight(loadValue),
-        max: formatWeight(loadMax),
+        max: infiniteLoad ? "∞" : formatWeight(loadMax),
         percent: Number(loadPercent.toFixed(2)),
         trend: "negative",
         state: loadRatio >= 1 ? "critical" : loadRatio >= 0.75 ? "warning" : "normal"
@@ -664,6 +665,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async _onDrop(event) {
+    // #region agent log
+    const _dropT0 = performance.now();
+    let _dropPhase = 'start';
+    // #endregion
     const data = this.#getDragEventData(event);
     if (data?.type === "ActorContainerPassenger") return this.#onDropActorContainerPassenger(event, data);
     if (data?.type === ABILITY_CATALOG_DRAG_TYPE) return this.#onDropCatalogAbility(data);
@@ -724,7 +729,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return this.#stackDroppedItemQuantity(dropped.item, itemData, targetItem, quantity, sourceStackIndex, targetStackIndex);
     }
 
+    // #region agent log
+    _dropPhase = 'before-placement';
+    const _placeT0 = performance.now();
+    // #endregion
     const placement = this.#getPlacementForDropZone(zone, itemData, [sourceOwned ? dropped.item?.id ?? "" : ""], parentId, event);
+    // #region agent log
+    const _placeMs = Math.round(performance.now() - _placeT0);
+    _dropPhase = 'after-placement';
+    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'repro2',hypothesisId:'C',location:'actor-sheet.mjs:_onDrop',message:'drop placement resolved',data:{placeMs:_placeMs,totalMs:Math.round(performance.now()-_dropT0),actorItems:this.actor.items.size,parentId:String(parentId??''),zoneKeys:Object.keys(zone?.dataset??{}),hasCell:zone?.dataset?.inventoryCell!==undefined,hasDropSurface:zone?.dataset?.inventoryDropSurface!==undefined,placementMode:placement?.mode??null,found:Boolean(placement)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!placement) return null;
 
     if (placement.mode === ITEM_FUNCTIONS.constructPart) {
@@ -736,11 +750,20 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (!itemData) return null;
     }
 
+    // #region agent log
+    _dropPhase = 'before-apply';
+    const _applyT0 = performance.now();
+    // #endregion
+    let result;
     if (sourceOwned) {
-      return this.#moveOwnedItem(dropped.item, placement, targetItem, parentId, sourceStackIndex);
+      result = await this.#moveOwnedItem(dropped.item, placement, targetItem, parentId, sourceStackIndex);
+    } else {
+      result = await this.#createOrStackDroppedItem(itemData, placement, targetItem, parentId);
     }
-
-    return this.#createOrStackDroppedItem(itemData, placement, targetItem, parentId);
+    // #region agent log
+    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'repro2',hypothesisId:'F',location:'actor-sheet.mjs:_onDrop',message:'drop apply finished',data:{applyMs:Math.round(performance.now()-_applyT0),placeMs:_placeMs,totalMs:Math.round(performance.now()-_dropT0),sourceOwned,phase:_dropPhase,actorItems:this.actor.items.size},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return result;
   }
 
   async #onDropCatalogAbility(data = {}) {
@@ -2076,24 +2099,36 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const pointer = this.#getInventoryGridPointerPosition(event, grid);
     if (!pointer) return null;
 
+    // #region agent log
+    const _t0 = performance.now();
+    // #endregion
     const { columns, rows } = this.#getInventoryGridDimensions(parentId);
-    const footprint = getItemFootprint(itemData, this.actor.items);
-    const minX = 1;
-    const minY = 1;
-    const maxX = Math.max(1, columns - footprint.width + 1);
-    const allowOverflowRows = this.#getInventoryGridOptions(parentId).allowOverflowRows;
-    const maxY = allowOverflowRows
-      ? Math.max(1, rows - footprint.height + 1, Math.ceil(pointer.y) + 64)
-      : Math.max(1, rows - footprint.height + 1);
-    const centeredX = Math.round(pointer.x - ((footprint.width - 1) / 2));
-    const centeredY = Math.round(pointer.y - ((footprint.height - 1) / 2));
-    const originX = Math.max(minX, Math.min(maxX, centeredX));
-    const originY = allowOverflowRows ? Math.max(minY, centeredY) : Math.max(minY, Math.min(maxY, centeredY));
-    const preferred = createInventoryPlacement(originX, originY, itemData, this.actor.items);
-    if (this.#isInventoryPlacementAvailable(preferred, excludeItemIds, [], parentId)) return preferred;
-    if (!findNearest) return null;
-
-    return this.#getNearestInventoryCellInGrid(originX, originY, itemData, excludeItemIds, parentId, columns, rows);
+    const gridOptions = this.#getInventoryGridOptions(parentId);
+    const excluded = Array.isArray(excludeItemIds) ? excludeItemIds.filter(Boolean) : [excludeItemIds].filter(Boolean);
+    const isPlacementAvailable = createInventoryHoverPlacementChecker(
+      this.#getContextInventoryItems(parentId),
+      columns,
+      rows,
+      this.actor.items,
+      excluded,
+      gridOptions,
+      parentId
+    );
+    const sourceItemId = excluded[0] ?? "";
+    const placement = resolveInventoryPointerPlacement({
+      anchor: pointer,
+      itemData,
+      items: this.actor.items,
+      dimensions: { columns, rows },
+      options: gridOptions,
+      sourceItem: sourceItemId ? this.actor.items.get(sourceItemId) : null,
+      findNearest,
+      isPlacementAvailable
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'post-fix',hypothesisId:'H',location:'actor-sheet.mjs:#getInventoryPointerPlacement',message:'pointer placement via resolved checker',data:{ms:Math.round(performance.now()-_t0),found:Boolean(placement),findNearest,foundAt:placement?{x:placement.x,y:placement.y}:null,actorItems:this.actor.items.size,columns,rows},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return placement;
   }
 
   #getInventoryGridPointerPosition(event, grid) {
@@ -2109,27 +2144,34 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getNearestInventoryCellInGrid(originX, originY, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, columns = 1, rows = 1) {
-    const footprint = getItemFootprint(itemData, this.actor.items);
-    const maxX = Math.max(1, columns - footprint.width + 1);
-    const allowOverflowRows = this.#getInventoryGridOptions(parentId).allowOverflowRows;
-    const maxY = allowOverflowRows
-      ? Math.max(1, rows - footprint.height + 1, originY + 64)
-      : Math.max(1, rows - footprint.height + 1);
-    let best = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    for (let y = 1; y <= maxY; y += 1) {
-      for (let x = 1; x <= maxX; x += 1) {
-        const placement = createInventoryPlacement(x, y, itemData, this.actor.items);
-        if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, [], parentId)) continue;
-        const distance = Math.abs(x - originX) + Math.abs(y - originY);
-        if (distance >= bestDistance) continue;
-        best = placement;
-        bestDistance = distance;
-      }
-    }
-
-    return best;
+    // #region agent log
+    const _t0 = performance.now();
+    // #endregion
+    const gridOptions = this.#getInventoryGridOptions(parentId);
+    const excluded = Array.isArray(excludeItemIds) ? excludeItemIds.filter(Boolean) : [excludeItemIds].filter(Boolean);
+    const isPlacementAvailable = createInventoryHoverPlacementChecker(
+      this.#getContextInventoryItems(parentId),
+      columns,
+      rows,
+      this.actor.items,
+      excluded,
+      gridOptions,
+      parentId
+    );
+    const placement = resolveInventoryPointerPlacement({
+      anchor: { x: originX, y: originY },
+      itemData,
+      items: this.actor.items,
+      dimensions: { columns, rows },
+      options: gridOptions,
+      sourceItem: excluded[0] ? this.actor.items.get(excluded[0]) : null,
+      findNearest: true,
+      isPlacementAvailable
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'post-fix',hypothesisId:'H',location:'actor-sheet.mjs:#getNearestInventoryCellInGrid',message:'nearest via resolved checker',data:{ms:Math.round(performance.now()-_t0),found:Boolean(placement),originX,originY,foundAt:placement?{x:placement.x,y:placement.y}:null,actorItems:this.actor.items.size},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return placement;
   }
 
   #getInventoryGridDimensions(parentId = ROOT_CONTAINER_ID) {
@@ -6735,6 +6777,7 @@ function setWeaponSlotImageAspect(image) {
 }
 
 function validateActorLoadLimit(actor, projectedItems = []) {
+  if (actor?.system?.trade?.infiniteInventory) return { valid: true };
   const limit = getActorLoadLimit(actor);
   if (limit <= 0) return { valid: true };
 
@@ -6746,6 +6789,7 @@ function validateActorLoadLimit(actor, projectedItems = []) {
 }
 
 function getActorLoadLimit(actor) {
+  if (actor?.system?.trade?.infiniteInventory) return 0;
   const max = Number(actor?.system?.load?.max) || 0;
   const percent = Math.max(0, Number(actor?.system?.load?.limitPercent) || 0);
   if (max > 0 && percent > 0) return (max * percent) / 100;

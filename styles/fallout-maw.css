@@ -12359,6 +12359,98 @@ html.fallout-maw-token-action-hud-open #hotbar {
   margin-top: 0.65rem;
 }
 
+.fallout-maw-actor-trade-settings .fallout-maw-panel {
+  padding: 0.75rem;
+}
+
+.fallout-maw-actor-trade-settings .fallout-maw-panel > h2,
+.fallout-maw-trade-section-heading h2 {
+  margin: 0 0 0.35rem;
+}
+
+.fallout-maw-trade-adjustment-grid,
+.fallout-maw-trade-fixed-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.fallout-maw-trade-section-heading,
+.fallout-maw-trade-override-title,
+.fallout-maw-trade-item-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
+.fallout-maw-trade-section-heading .notes {
+  margin: 0;
+}
+
+.fallout-maw-trade-override-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.fallout-maw-trade-override-card {
+  background: color-mix(in srgb, var(--fallout-maw-panel-bg) 75%, black);
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 5px;
+  padding: 0.65rem;
+}
+
+.fallout-maw-actor-trade-settings .hidden {
+  display: none !important;
+}
+
+.fallout-maw-trade-override-title > label {
+  flex: 1;
+}
+
+.fallout-maw-trade-item-heading {
+  justify-content: flex-start;
+  margin-bottom: 0.55rem;
+}
+
+.fallout-maw-trade-item-heading img {
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 4px;
+  height: 42px;
+  object-fit: cover;
+  width: 42px;
+}
+
+.fallout-maw-trade-item-heading strong {
+  flex: 1;
+}
+
+.fallout-maw-trade-item-dropzone {
+  align-items: center;
+  border: 1px dashed var(--fallout-maw-border);
+  border-radius: 5px;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 3.25rem;
+  padding: 0.65rem;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.fallout-maw-trade-item-dropzone.drag-over {
+  background: rgba(208, 174, 94, 0.16);
+  border-color: var(--fallout-maw-accent);
+}
+
+@media (max-width: 620px) {
+  .fallout-maw-trade-adjustment-grid,
+  .fallout-maw-trade-fixed-grid {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+  }
+}
+
 .fallout-maw-creature-options-toolbar {
   justify-content: flex-end;
   margin-top: 0;

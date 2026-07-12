@@ -95,7 +95,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       }),
       trade: new SchemaField({
         infiniteInventory: new BooleanField({ required: true, initial: false }),
-        markupPercent: new NumberField({ required: true, integer: true, initial: 0 })
+        markupPercent: new NumberField({ required: true, integer: true, initial: 0 }),
+        sell: tradeAdjustmentField("increase"),
+        buy: tradeAdjustmentField("decrease"),
+        categoryOverrides: new ArrayField(tradeCategoryOverrideField(), { required: true, initial: [] }),
+        itemOverrides: new ArrayField(tradeItemOverrideField(), { required: true, initial: [] })
       }),
       hacking: new SchemaField({
         enabled: new BooleanField({ required: true, initial: false }),
@@ -348,6 +352,49 @@ function hackingMethodField() {
     toolCost: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     attempts: new NumberField({ required: true, integer: true, min: 0, initial: 3 }),
     attemptsRemaining: new NumberField({ required: true, integer: true, min: 0, initial: 3 })
+  });
+}
+
+function tradeAdjustmentField(initialDirection = "increase") {
+  return new SchemaField({
+    percent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    direction: new StringField({
+      required: true,
+      blank: false,
+      choices: ["increase", "decrease"],
+      initial: initialDirection
+    })
+  });
+}
+
+function tradeCategoryOverrideField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    category: new StringField({ required: true, blank: true, initial: "" }),
+    sell: tradeAdjustmentField("increase"),
+    buy: tradeAdjustmentField("decrease")
+  });
+}
+
+function tradeItemOverrideField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    itemUuid: new StringField({ required: true, blank: true, initial: "" }),
+    itemId: new StringField({ required: true, blank: true, initial: "" }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    img: new StringField({ required: true, blank: true, initial: "" }),
+    mode: new StringField({ required: true, blank: false, choices: ["percent", "fixed"], initial: "percent" }),
+    sell: tradeAdjustmentField("increase"),
+    buy: tradeAdjustmentField("decrease"),
+    fixedSell: tradeFixedPriceField(),
+    fixedBuy: tradeFixedPriceField()
+  });
+}
+
+function tradeFixedPriceField() {
+  return new SchemaField({
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    currencyKey: new StringField({ required: true, blank: true, initial: "" })
   });
 }
 

@@ -1,21 +1,190 @@
 <div class="fallout-maw-sheet-body fallout-maw-actor-trade-settings-body">
   <section class="fallout-maw-panel">
-    <div class="fallout-maw-list-grid two-columns">
+    <h2>Общие настройки</h2>
+    <label class="fallout-maw-inline-check">
+      <input type="checkbox" name="trade.infiniteInventory" {{checked settings.infiniteInventory}}>
+      <span>Бесконечный инвентарь и нагрузка</span>
+    </label>
+    <p class="notes">Корневой инвентарь не ограничен числом строк, а вес предметов не создаёт нагрузку.</p>
+
+    <div class="fallout-maw-trade-adjustment-grid">
       <label class="fallout-maw-stacked-field">
-        <span>Бесконечный инвентарь</span>
-        <input type="checkbox" name="trade.infiniteInventory" {{checked settings.infiniteInventory}}>
+        <span>Продаёт на, %</span>
+        <input type="number" name="trade.sell.percent" value="{{settings.sell.percent}}" min="0" step="1">
       </label>
       <label class="fallout-maw-stacked-field">
-        <span>Наценка торговца, %</span>
-        <input type="number" name="trade.markupPercent" value="{{settings.markupPercent}}" step="1">
+        <span>Направление</span>
+        <select name="trade.sell.direction">
+          <option value="increase" {{#if (eq settings.sell.direction "increase")}}selected{{/if}}>дороже</option>
+          <option value="decrease" {{#if (eq settings.sell.direction "decrease")}}selected{{/if}}>дешевле</option>
+        </select>
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>Скупает на, %</span>
+        <input type="number" name="trade.buy.percent" value="{{settings.buy.percent}}" min="0" step="1">
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>Направление</span>
+        <select name="trade.buy.direction">
+          <option value="decrease" {{#if (eq settings.buy.direction "decrease")}}selected{{/if}}>дешевле</option>
+          <option value="increase" {{#if (eq settings.buy.direction "increase")}}selected{{/if}}>дороже</option>
+        </select>
       </label>
     </div>
   </section>
 
-  <footer class="fallout-maw-settings-actions">
-    <button type="submit">
-      <i class="fa-solid fa-floppy-disk"></i>
-      Сохранить
-    </button>
-  </footer>
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-trade-section-heading">
+      <div>
+        <h2>Переопределения категорий</h2>
+        <p class="notes">Имеют приоритет над общими процентами.</p>
+      </div>
+      <button type="button" data-trade-add-category>
+        <i class="fa-solid fa-plus"></i> Добавить
+      </button>
+    </div>
+
+    <datalist id="fallout-maw-trade-category-suggestions">
+      {{#each categorySuggestions}}
+        <option value="{{this}}"></option>
+      {{/each}}
+    </datalist>
+
+    <div class="fallout-maw-trade-override-list">
+      {{#each settings.categoryOverrides as |entry index|}}
+        <article class="fallout-maw-trade-override-card">
+          <input type="hidden" name="trade.categoryOverrides.{{index}}.id" value="{{entry.id}}">
+          <div class="fallout-maw-trade-override-title">
+            <label class="fallout-maw-stacked-field">
+              <span>Категория</span>
+              <input type="text" name="trade.categoryOverrides.{{index}}.category" value="{{entry.category}}" list="fallout-maw-trade-category-suggestions" placeholder="Название категории">
+            </label>
+            <button type="button" class="icon" data-trade-remove-category="{{entry.id}}" title="Удалить">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+          <div class="fallout-maw-trade-adjustment-grid">
+            <label class="fallout-maw-stacked-field">
+              <span>Продаёт на, %</span>
+              <input type="number" name="trade.categoryOverrides.{{index}}.sell.percent" value="{{entry.sell.percent}}" min="0" step="1">
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Направление</span>
+              <select name="trade.categoryOverrides.{{index}}.sell.direction">
+                <option value="increase" {{#if (eq entry.sell.direction "increase")}}selected{{/if}}>дороже</option>
+                <option value="decrease" {{#if (eq entry.sell.direction "decrease")}}selected{{/if}}>дешевле</option>
+              </select>
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Скупает на, %</span>
+              <input type="number" name="trade.categoryOverrides.{{index}}.buy.percent" value="{{entry.buy.percent}}" min="0" step="1">
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Направление</span>
+              <select name="trade.categoryOverrides.{{index}}.buy.direction">
+                <option value="decrease" {{#if (eq entry.buy.direction "decrease")}}selected{{/if}}>дешевле</option>
+                <option value="increase" {{#if (eq entry.buy.direction "increase")}}selected{{/if}}>дороже</option>
+              </select>
+            </label>
+          </div>
+        </article>
+      {{else}}
+        <p class="notes">Для категорий особые цены не заданы.</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-trade-section-heading">
+      <div>
+        <h2>Переопределения предметов</h2>
+        <p class="notes">Имеют наивысший приоритет.</p>
+      </div>
+    </div>
+    <div class="fallout-maw-trade-item-dropzone" data-trade-item-dropzone>
+      <i class="fa-solid fa-arrow-down"></i>
+      <span>Перетащите предмет сюда</span>
+    </div>
+
+    <div class="fallout-maw-trade-override-list">
+      {{#each settings.itemOverrides as |entry index|}}
+        <article class="fallout-maw-trade-override-card" data-trade-item-override>
+          <input type="hidden" name="trade.itemOverrides.{{index}}.id" value="{{entry.id}}">
+          <input type="hidden" name="trade.itemOverrides.{{index}}.itemUuid" value="{{entry.itemUuid}}">
+          <input type="hidden" name="trade.itemOverrides.{{index}}.itemId" value="{{entry.itemId}}">
+          <input type="hidden" name="trade.itemOverrides.{{index}}.name" value="{{entry.name}}">
+          <input type="hidden" name="trade.itemOverrides.{{index}}.img" value="{{entry.img}}">
+          <div class="fallout-maw-trade-item-heading">
+            <img src="{{entry.img}}" alt="">
+            <strong>{{entry.name}}</strong>
+            <button type="button" class="icon" data-trade-remove-item="{{entry.id}}" title="Удалить">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+          <label class="fallout-maw-stacked-field">
+            <span>Режим цены</span>
+            <select name="trade.itemOverrides.{{index}}.mode" data-trade-item-mode>
+              <option value="percent" {{#if entry.isPercent}}selected{{/if}}>Изменение цены</option>
+              <option value="fixed" {{#unless entry.isPercent}}selected{{/unless}}>Фиксированная цена</option>
+            </select>
+          </label>
+
+          <div class="fallout-maw-trade-adjustment-grid {{#unless entry.isPercent}}hidden{{/unless}}" data-trade-percent-fields>
+            <label class="fallout-maw-stacked-field">
+              <span>Продаёт на, %</span>
+              <input type="number" name="trade.itemOverrides.{{index}}.sell.percent" value="{{entry.sell.percent}}" min="0" step="1">
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Направление</span>
+              <select name="trade.itemOverrides.{{index}}.sell.direction">
+                <option value="increase" {{#if (eq entry.sell.direction "increase")}}selected{{/if}}>дороже</option>
+                <option value="decrease" {{#if (eq entry.sell.direction "decrease")}}selected{{/if}}>дешевле</option>
+              </select>
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Скупает на, %</span>
+              <input type="number" name="trade.itemOverrides.{{index}}.buy.percent" value="{{entry.buy.percent}}" min="0" step="1">
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Направление</span>
+              <select name="trade.itemOverrides.{{index}}.buy.direction">
+                <option value="decrease" {{#if (eq entry.buy.direction "decrease")}}selected{{/if}}>дешевле</option>
+                <option value="increase" {{#if (eq entry.buy.direction "increase")}}selected{{/if}}>дороже</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="fallout-maw-trade-fixed-grid {{#if entry.isPercent}}hidden{{/if}}" data-trade-fixed-fields>
+            <label class="fallout-maw-stacked-field">
+              <span>Фиксированная цена продажи</span>
+              <input type="number" name="trade.itemOverrides.{{index}}.fixedSell.value" value="{{entry.fixedSell.value}}" min="0" step="1">
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Валюта продажи</span>
+              <select name="trade.itemOverrides.{{index}}.fixedSell.currencyKey">
+                {{#each entry.currencies as |currency|}}
+                  <option value="{{currency.key}}" {{#if currency.selectedSell}}selected{{/if}}>{{currency.label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Фиксированная цена скупки</span>
+              <input type="number" name="trade.itemOverrides.{{index}}.fixedBuy.value" value="{{entry.fixedBuy.value}}" min="0" step="1">
+            </label>
+            <label class="fallout-maw-stacked-field">
+              <span>Валюта скупки</span>
+              <select name="trade.itemOverrides.{{index}}.fixedBuy.currencyKey">
+                {{#each entry.currencies as |currency|}}
+                  <option value="{{currency.key}}" {{#if currency.selectedBuy}}selected{{/if}}>{{currency.label}}</option>
+                {{/each}}
+              </select>
+            </label>
+          </div>
+        </article>
+      {{else}}
+        <p class="notes">Для отдельных предметов особые цены не заданы.</p>
+      {{/each}}
+    </div>
+  </section>
+
 </div>
