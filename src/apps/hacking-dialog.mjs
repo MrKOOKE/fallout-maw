@@ -5,7 +5,6 @@ import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
-const { FormDataExtended } = foundry.applications.ux;
 const HACKING_SOCKET = `system.${SYSTEM_ID}`;
 const HACKING_SOCKET_SCOPE = "fallout-maw.hacking";
 const HACKING_FLAG_PATH = `flags.${SYSTEM_ID}.hacking`;
@@ -27,7 +26,7 @@ export function registerHackingSocket() {
 export async function openHackingSettings(actor) {
   if (!game.user?.isGM || !actor) return undefined;
   const state = normalizeActorHackingState(actor.system?.hacking);
-  const result = await DialogV2.prompt({
+  const result = await DialogV2.input({
     window: { title: `Настройки взлома — ${actor.name}` },
     content: buildHackingSettingsContent(state.methods, {
       includeEnabled: true,
@@ -38,8 +37,7 @@ export async function openHackingSettings(actor) {
     render: (_event, dialog) => activateHackingMethodsEditor(dialog.element),
     ok: {
       label: "Сохранить",
-      icon: "fa-solid fa-floppy-disk",
-      callback: (_event, button) => new FormDataExtended(button.form).object
+      icon: "fa-solid fa-floppy-disk"
     }
   });
   if (!result) return undefined;
