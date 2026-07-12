@@ -4634,7 +4634,7 @@ body #prosemirror-dropdown {
   overflow: hidden !important;
   pointer-events: none !important;
   position: fixed !important;
-  z-index: 100000 !important;
+  z-index: 100000;
 }
 
 .fallout-maw-pointer-drag-preview > img {

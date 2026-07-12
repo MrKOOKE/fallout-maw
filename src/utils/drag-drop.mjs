@@ -1,5 +1,6 @@
 import { INVENTORY_DRAG_ROTATION_KEY } from "./inventory-rotation.mjs";
 import { getItemFootprint } from "./inventory-containers.mjs";
+import { getOverlayBaseZIndex, reserveOverlayZIndex } from "./overlay-layer.mjs";
 
 const POINTER_DRAG_SELECTOR = ".fallout-maw-draggable-item[data-item-id]";
 const POINTER_DRAG_THRESHOLD = 4;
@@ -347,11 +348,28 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
     const rootFontSize = Number.parseFloat(session.view?.getComputedStyle?.(document.documentElement)?.fontSize);
     session.previewInset = Math.max(0, (Number.isFinite(rootFontSize) ? rootFontSize : 16) * 0.2);
     document.body?.append(preview);
+    FalloutMaWDragDrop.#syncPointerDragPreviewLayer(preview, session.source);
     FalloutMaWDragDrop.#syncPointerDragPreview();
   }
 
+  static #syncPointerDragPreviewLayer(preview, ownerElement = null) {
+    if (!preview) return;
+    const stackOwner = ownerElement?.closest?.(".application") ?? ownerElement;
+    const baseZIndex = getOverlayBaseZIndex(stackOwner);
+    const maxZ = Number(globalThis.foundry?.applications?.api?.ApplicationV2?._maxZ);
+    const liveMax = Math.max(baseZIndex, Number.isFinite(maxZ) ? maxZ : 0);
+    const current = Number.parseInt(preview.style.zIndex, 10) || 0;
+    if (current > liveMax) return;
+    const zIndex = liveMax + 1;
+    preview.style.setProperty("z-index", String(zIndex), "important");
+    reserveOverlayZIndex(zIndex);
+  }
+
   static #ensurePointerDragPreview(session) {
-    if (session?.preview?.isConnected) return;
+    if (session?.preview?.isConnected) {
+      FalloutMaWDragDrop.#syncPointerDragPreviewLayer(session.preview, session.source);
+      return;
+    }
     FalloutMaWDragDrop.#createPointerDragPreview(session);
   }
 
@@ -380,8 +398,10 @@ export class FalloutMaWDragDrop extends foundry.applications.ux.DragDrop {
   }
 
   static #positionPointerDragPreview(event) {
-    const preview = FalloutMaWDragDrop.#pointerSession?.preview;
+    const session = FalloutMaWDragDrop.#pointerSession;
+    const preview = session?.preview;
     if (!preview) return;
+    FalloutMaWDragDrop.#syncPointerDragPreviewLayer(preview, session.source);
     preview.style.left = `${event.clientX + 14}px`;
     preview.style.top = `${event.clientY + 14}px`;
   }

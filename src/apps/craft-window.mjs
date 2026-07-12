@@ -2276,6 +2276,25 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (bringToFront || this.#tooltipPinned || menus.length) reserveOverlayZIndex(baseZIndex + 3);
   }
 
+  #positionOverlayAtPointer(element, pointer = {}, baseMargin = 14) {
+    if (!element) return;
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const rect = element.getBoundingClientRect();
+    const margin = Math.max(8, baseMargin * this.#uiScale);
+    const pointerX = Number(pointer?.x);
+    const pointerY = Number(pointer?.y);
+    const x = Math.min(
+      (Number.isFinite(pointerX) ? pointerX : 0) + margin,
+      viewportWidth - rect.width - margin
+    );
+    const y = Math.min(
+      (Number.isFinite(pointerY) ? pointerY : 0) + margin,
+      viewportHeight - rect.height - margin
+    );
+    element.style.left = `${Math.max(margin, x)}px`;
+    element.style.top = `${Math.max(margin, y)}px`;
+  }
+
   async #resolveTooltipItem(anchor = this.#tooltipAnchorElement) {
     const documentUuid = String(anchor?.dataset?.tooltipUuid ?? this.#tooltipDocumentUuid ?? "").trim();
     if (documentUuid) {
@@ -2428,12 +2447,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
+    menu.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
     menu.innerHTML = menuOptions
       .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeAttribute(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
+    this.#syncInventoryTooltipLayer({ bringToFront: true });
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", async clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
@@ -2479,13 +2499,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
     menu.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
     menu.innerHTML = menuOptions
       .map(option => `<button type="button" data-action="${option.action}"><i class="fa-solid ${option.icon}"></i>${option.label}</button>`)
       .join("");
     document.body.append(menu);
     this.#syncInventoryTooltipLayer({ bringToFront: true });
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", async clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;

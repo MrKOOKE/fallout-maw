@@ -10,9 +10,17 @@ export function getOverlayBaseZIndex(ownerElement, { minimum = OVERLAY_MINIMUM_Z
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  let ancestorZ = 0;
+  for (let node = ownerElement; node && node !== body && node !== documentElement; node = node.parentElement) {
+    const zIndex = readZIndex(view.getComputedStyle(node).zIndex);
+    if (zIndex != null) ancestorZ = Math.max(ancestorZ, zIndex);
+    if (node.classList?.contains?.("application")) break;
+  }
+
   return Math.max(
     minimum,
     readZIndex(ownerElement ? view.getComputedStyle(ownerElement).zIndex : null) ?? 0,
+    ancestorZ,
     readZIndex(view.getComputedStyle(body).getPropertyValue("--z-index-tooltip")) ?? 0,
     readZIndex(view.getComputedStyle(body).getPropertyValue("--z-index-window")) ?? 0,
     readZIndex(view.getComputedStyle(documentElement).getPropertyValue("--z-index-tooltip")) ?? 0,
