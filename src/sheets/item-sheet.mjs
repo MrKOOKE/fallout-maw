@@ -3307,35 +3307,23 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!confirmed) return undefined;
 
     if (functionKey === ITEM_FUNCTIONS.actorContainer) {
-      return this.item.update({
-        "system.functions.actorContainer.enabled": false,
-        "system.functions.actorContainer.slots": []
-      });
+      return this.item.update({ "system.functions.actorContainer": globalThis._del });
     }
 
     if (functionKey === ITEM_FUNCTIONS.container) {
       return this.item.update({
         "system.itemFunction": "",
-        "system.functions.container.enabled": false,
-        "system.functions.container.loadReduction": 0,
-        "system.functions.container.extraWeaponSlots": 0,
-        "system.functions.container.specialGrids.blocks": [],
-        "system.functions.container.specialGrids.baseAnchor": null,
-        "system.functions.container.specialGrids.viewport": { x: 0, y: 0, zoom: 1 }
+        "system.functions.container": globalThis._del
       });
     }
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
-      return this.item.update({ "system.functions.damageMitigation.enabled": false });
+      return this.item.update({ "system.functions.damageMitigation": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.damageSource) {
-      return this.item.update({
-        "system.functions.damageSource": createDefaultDamageSourceFunctionData({ enabled: false })
-      });
+      return this.item.update({ "system.functions.damageSource": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.energySource) {
-      return this.item.update({
-        "system.functions.energySource": createDefaultEnergySourceFunctionData({ enabled: false })
-      });
+      return this.item.update({ "system.functions.energySource": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.energyConsumer) {
       const additionalWeapons = removeWeaponResourceCostTypeFromEntries(
@@ -3346,24 +3334,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         getModuleWeaponFunctionEntries(this.item),
         "energyConsumer"
       );
-      return this.item.update({
-        "system.functions.energyConsumer": createDefaultEnergyConsumerFunctionData({ enabled: false }),
-        "system.functions.lightSource.resourceCosts": (this.item.system?.functions?.lightSource?.resourceCosts ?? [])
-          .filter(cost => cost.type !== "energyConsumer"),
-        "system.functions.weapon": removeWeaponResourceCostTypeFromWeaponData(
+      const update = { "system.functions.energyConsumer": globalThis._del };
+      if (this.item.system?.functions?.lightSource?.enabled) {
+        update["system.functions.lightSource.resourceCosts"] = (this.item.system.functions.lightSource.resourceCosts ?? [])
+          .filter(cost => cost.type !== "energyConsumer");
+      }
+      if (this.item.system?.functions?.weapon?.enabled) {
+        update["system.functions.weapon"] = removeWeaponResourceCostTypeFromWeaponData(
           this.item.system?.functions?.weapon ?? {},
           "energyConsumer"
-        ),
-        "system.functions.additionalWeapons": additionalWeapons,
-        "system.functions.module.additionalWeapons": moduleWeapons
-      });
+        );
+      }
+      if (additionalWeapons && Object.keys(additionalWeapons).length) {
+        update["system.functions.additionalWeapons"] = additionalWeapons;
+      }
+      if (this.item.system?.functions?.module?.enabled && moduleWeapons && Object.keys(moduleWeapons).length) {
+        update["system.functions.module.additionalWeapons"] = moduleWeapons;
+      }
+      return this.item.update(update);
     }
     if (functionKey === ITEM_FUNCTIONS.freeSettings) {
-      return this.item.update({
-        "system.functions.freeSettings.enabled": false,
-        "system.functions.freeSettings.useConditionWeakening": false,
-        "system.functions.freeSettings.entries": []
-      });
+      return this.item.update({ "system.functions.freeSettings": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.condition) {
       const additionalWeapons = Object.fromEntries(getAdditionalWeaponFunctionEntries(this.item)
@@ -3374,134 +3365,69 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
             resourceCosts: (data?.resourceCosts ?? []).filter(cost => cost.type !== "condition")
           }
         ]));
-      return this.item.update({
-        "system.functions.condition.enabled": false,
-        "system.functions.condition.value": 0,
-        "system.functions.condition.max": 0,
-        "system.functions.freeSettings.useConditionWeakening": false,
-        "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
-          .filter(cost => cost.type !== "condition"),
-        "system.functions.additionalWeapons": additionalWeapons
-      });
+      const update = { "system.functions.condition": globalThis._del };
+      if (this.item.system?.functions?.freeSettings?.enabled) {
+        update["system.functions.freeSettings.useConditionWeakening"] = false;
+      }
+      if (this.item.system?.functions?.weapon?.enabled) {
+        update["system.functions.weapon.resourceCosts"] = (this.item.system.functions.weapon.resourceCosts ?? [])
+          .filter(cost => cost.type !== "condition");
+      }
+      if (Object.keys(additionalWeapons).length) update["system.functions.additionalWeapons"] = additionalWeapons;
+      return this.item.update(update);
     }
     if (functionKey === ITEM_FUNCTIONS.constructPart) {
       return this.item.update({
-        "system.functions.constructPart.enabled": false,
-        "system.functions.constructPart.partType": "",
-        "system.functions.constructPart.aimedDifficultyPercent": 0,
-        "system.functions.constructPart.aimedDifficultyBonus": 0,
-        "system.functions.constructPart.critical": false,
-        "system.functions.constructPart.blockedPeriodicEffects": [],
-        "system.functions.constructPart.lossEffects": [],
-        "system.functions.constructPart.weaponSets": [],
-        "system.functions.constructPart.needs": [],
+        "system.functions.constructPart": globalThis._del,
         "system.placement.limbKey": ""
       });
     }
     if (functionKey === ITEM_FUNCTIONS.firstAid) {
-      return this.item.update({
-        "system.functions.firstAid.enabled": false,
-        "system.functions.firstAid.healing": 0,
-        "system.functions.firstAid.healingIsPercentage": false,
-        "system.functions.firstAid.durationSeconds": 0,
-        "system.functions.firstAid.intervalSeconds": 6,
-        "system.functions.firstAid.actionPointCost": 0,
-        "system.functions.firstAid.maxDistance": 0,
-        "system.functions.firstAid.difficulty": 0,
-        "system.functions.firstAid.criticalSuccessHealingBonus": 20,
-        "system.functions.firstAid.criticalFailureDamageMin": 1,
-        "system.functions.firstAid.criticalFailureDamageMax": 10,
-        "system.functions.firstAid.charges.value": 1,
-        "system.functions.firstAid.charges.max": 1,
-        "system.functions.firstAid.needs": [],
-        "system.functions.firstAid.limbSelection.count": 0,
-        "system.functions.firstAid.limbSelection.value": 0,
-        "system.functions.firstAid.removeEffects": [],
-        "system.functions.firstAid.changes": [],
-        "system.functions.firstAid.withdrawalDurationSeconds": 0,
-        "system.functions.firstAid.withdrawalIntervalSeconds": 6,
-        "system.functions.firstAid.withdrawal": []
-      });
+      return this.item.update({ "system.functions.firstAid": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.needChange) {
-      return this.item.update({
-        "system.functions.needChange.enabled": false,
-        "system.functions.needChange.charges.value": 1,
-        "system.functions.needChange.charges.max": 1,
-        "system.functions.needChange.needs": [],
-        "system.functions.needChange.damages": [],
-        "system.functions.needChange.organismDevelopment": [],
-        "system.functions.needChange.healthRecovery": 0,
-        "system.functions.needChange.durationSeconds": 0,
-        "system.functions.needChange.intervalSeconds": 6,
-        "system.functions.needChange.changes": []
-      });
+      return this.item.update({ "system.functions.needChange": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.oneTimeUse) {
-      return this.item.update({
-        "system.functions.oneTimeUse.enabled": false,
-        "system.functions.oneTimeUse.repeatApplicationBlocked": false,
-        "system.functions.oneTimeUse.changes": [],
-        "system.functions.oneTimeUse.recipeItemUuids": []
-      });
+      return this.item.update({ "system.functions.oneTimeUse": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.lightSource) {
-      return this.item.update({
-        "system.functions.lightSource": createDefaultLightSourceFunctionData({ enabled: false })
-      });
+      return this.item.update({ "system.functions.lightSource": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.trap) {
-      return this.item.update({
-        "system.functions.trap": createDefaultTrapFunctionData({ enabled: false })
-      });
+      return this.item.update({ "system.functions.trap": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.weapon) {
       return this.item.update({
-        "system.functions.weapon.enabled": false,
-        "system.functions.weapon.resourceCosts": [],
-        "system.functions.weapon.specialProperties": [],
-        "system.functions.additionalWeapons": {}
+        "system.functions.weapon": globalThis._del,
+        "system.functions.additionalWeapons": globalThis._del
       });
     }
     if (functionKey === ITEM_FUNCTIONS.module) {
-      return this.item.update({
-        "system.functions.module.enabled": false,
-        "system.functions.module.name": "",
-        "system.functions.module.targetFunction": "weapon",
-        "system.functions.module.additionalWeapons": {}
-      });
+      return this.item.update({ "system.functions.module": globalThis._del });
     }
     if (functionKey === ITEM_FUNCTIONS.implant) {
       return this.item.update({
-        "system.functions.implant.enabled": false,
-        "system.functions.implant.limbKeys": [],
-        "system.functions.implant.difficulty": 60,
-        "system.functions.implant.skillKey": "doctor",
+        "system.functions.implant": globalThis._del,
         "system.placement.limbKey": ""
       });
     }
     if (functionKey === ITEM_FUNCTIONS.prosthesis) {
       return this.item.update({
-        "system.functions.prosthesis.enabled": false,
-        "system.functions.prosthesis.limbKeys": [],
-        "system.functions.prosthesis.blockedPeriodicEffects": [],
-        "system.functions.prosthesis.integrationPercent": 0,
-        "system.functions.prosthesis.breakShockResistant": false,
-        "system.functions.prosthesis.difficulty": 60,
-        "system.functions.prosthesis.skillKey": "doctor",
+        "system.functions.prosthesis": globalThis._del,
         "system.placement.limbKey": ""
       });
     }
     if (functionKey === ITEM_FUNCTIONS.tool) {
-      const update = {};
-      for (const existingKey of Object.keys(this.item.system?.functions?.tools ?? {})) {
-        update[`system.functions.tools.${existingKey}.enabled`] = false;
-      }
-      return this.item.update(update);
+      return this.item.update({ "system.functions.tools": globalThis._del });
     }
     const toolKey = getToolKeyFromFunctionKey(functionKey);
     if (toolKey) {
-      return this.item.update({ [`system.functions.tools.${toolKey}.enabled`]: false });
+      const tools = this.item.system?.functions?.tools ?? {};
+      const path = Object.keys(tools).length <= 1
+        ? "system.functions.tools"
+        : `system.functions.tools.${toolKey}`;
+      return this.item.update({ [path]: globalThis._del });
     }
     return undefined;
   }
@@ -3628,7 +3554,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const id = String(event.currentTarget?.dataset?.deleteAdditionalWeaponFunction ?? "");
     if (!id) return undefined;
     if (this.#activeWeaponFunctionTab === getAdditionalWeaponFunctionTabId(id)) this.#activeWeaponFunctionTab = ITEM_FUNCTIONS.weapon;
-    return this.item.update({ [`system.functions.additionalWeapons.${id}`]: globalThis._del });
+    const path = getAdditionalWeaponFunctionEntries(this.item).length <= 1
+      ? "system.functions.additionalWeapons"
+      : `system.functions.additionalWeapons.${id}`;
+    return this.item.update({ [path]: globalThis._del });
   }
 
   #onAddModuleWeaponFunction(event) {
@@ -3652,7 +3581,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const id = String(event.currentTarget?.dataset?.deleteModuleWeaponFunction ?? "");
     if (!id) return undefined;
     if (this.#activeWeaponFunctionTab === getModuleWeaponFunctionTabId(id)) this.#activeWeaponFunctionTab = ITEM_FUNCTIONS.weapon;
-    return this.item.update({ [`system.functions.module.additionalWeapons.${id}`]: globalThis._del });
+    const path = getModuleWeaponFunctionEntries(this.item).length <= 1
+      ? "system.functions.module.additionalWeapons"
+      : `system.functions.module.additionalWeapons.${id}`;
+    return this.item.update({ [path]: globalThis._del });
   }
 
   #onSelectWeaponFunctionTab(event) {
@@ -10457,7 +10389,7 @@ function createToolFunctionSelectionUpdate(item, toolKey = "", { enabled = true,
   };
 
   for (const existingKey of Object.keys(item.system?.functions?.tools ?? {})) {
-    if (existingKey !== key) update[`system.functions.tools.${existingKey}.enabled`] = false;
+    if (existingKey !== key) update[`system.functions.tools.${existingKey}`] = globalThis._del;
   }
 
   return update;

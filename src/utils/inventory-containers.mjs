@@ -1040,8 +1040,8 @@ export function findFirstAvailableInventoryPlacement(
   reservedPlacements = [],
   options = {}
 ) {
-  const searchRows = getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextItems, reservedPlacements, options);
-  const prioritizedPlacement = findFirstAvailableInventoryPlacementByZonePriority(
+  // Resolve occupancy once, then scan — avoids O(cells × visualStacks) rebuilds on large inventories.
+  return findFirstAvailableResolvedInventoryPlacement(
     contextItems,
     columns,
     rows,
@@ -1051,17 +1051,6 @@ export function findFirstAvailableInventoryPlacement(
     reservedPlacements,
     options
   );
-  if (prioritizedPlacement) return prioritizedPlacement;
-
-  for (let y = 1; y <= searchRows; y += 1) {
-    for (let x = 1; x <= columns; x += 1) {
-      const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
-      if (isInventoryPlacementAvailable(candidate, contextItems, columns, rows, allItems, excludeItemIds, reservedPlacements, options)) {
-        return candidate;
-      }
-    }
-  }
-  return null;
 }
 
 function findFirstAvailableInventoryPlacementByZonePriority(

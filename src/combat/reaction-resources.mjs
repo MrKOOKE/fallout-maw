@@ -197,7 +197,7 @@ async function syncCombatantDefeatedState(combatant, defeated) {
 
   if (!hasSyncFlag) return false;
   const update = {
-    [`flags.${SYSTEM_ID}.-=${COMBATANT_DEFEATED_SYNC_FLAG}`]: null
+    [`flags.${SYSTEM_ID}.${COMBATANT_DEFEATED_SYNC_FLAG}`]: globalThis._del
   };
   if (combatant.defeated && !syncData?.previousDefeated) update.defeated = false;
   await combatant.update(update);

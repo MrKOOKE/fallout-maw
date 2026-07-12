@@ -110,7 +110,7 @@ async function advanceItemUseCounter(actor, entry) {
   }
 
   if (Object.keys(counters).length <= 1) await entry.abilityItem.unsetFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY);
-  else await entry.abilityItem.update({ [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}.-=${key}`]: null });
+  else await entry.abilityItem.update({ [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}.${key}`]: globalThis._del });
   return createTriggeredAbilityEffect(actor, entry);
 }
 

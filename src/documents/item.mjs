@@ -48,9 +48,9 @@ export class FalloutMaWItem extends Item {
     }, renderOptions);
   }
 
-  static migrateData(source) {
-    source = super.migrateData(source);
-    return migrateItemData(source);
+  static migrateData(source, options) {
+    source = super.migrateData(source, options);
+    return migrateItemData(source, options);
   }
 
   _initializeSource(data, options = {}) {
@@ -410,7 +410,7 @@ function getSlotRequirementRecordDeletionUpdates(path, slots = {}, validKeys = n
   const updates = {};
   for (const [key, selected] of Object.entries(slots ?? {})) {
     if (selected && validKeys.has(key)) continue;
-    updates[`${path}.-=${key}`] = null;
+    updates[`${path}.${key}`] = globalThis._del;
   }
   return updates;
 }

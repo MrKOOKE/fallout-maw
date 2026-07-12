@@ -1,8 +1,6 @@
 import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
-import { FIXED_GEAR_FUNCTION_KEYS } from "../../utils/item-functions.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField, TypedSchemaField } = foundry.data.fields;
-const { ForcedDeletion, ForcedReplacement } = foundry.data.operators;
 const OPTIONAL_FUNCTION_FIELD_OPTIONS = Object.freeze({ required: false });
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
@@ -111,89 +109,6 @@ export class GearDataModel extends BaseItemDataModel {
       craft: craftRecipeField()
     };
   }
-
-  static _cleanData(data, options, state) {
-    super._cleanData(data, options, state);
-    cleanSparseGearFunctionChanges(data, options, state);
-  }
-}
-
-function cleanSparseGearFunctionChanges(data = {}, { partial = false } = {}, state = {}) {
-  const functions = data.functions;
-  if (!isPlainRecord(functions)) return;
-  const sourceFunctions = isPlainRecord(state.source?.functions) ? state.source.functions : {};
-  let removesPrimaryWeapon = false;
-
-  for (const key of FIXED_GEAR_FUNCTION_KEYS) {
-    if (!(key in functions)) continue;
-    const functionData = functions[key];
-    if (functionData === undefined) {
-      delete functions[key];
-      continue;
-    }
-    if (functionData instanceof ForcedDeletion) {
-      if (!partial || !Object.hasOwn(sourceFunctions, key)) delete functions[key];
-      if (key === "weapon") removesPrimaryWeapon = true;
-      continue;
-    }
-    if (functionData?.enabled !== false) continue;
-    removeSparseFunctionField(functions, sourceFunctions, key, partial);
-    if (key === "weapon") removesPrimaryWeapon = true;
-  }
-
-  if (removesPrimaryWeapon) {
-    removeSparseFunctionField(functions, sourceFunctions, "additionalWeapons", partial);
-  }
-  cleanSparseFunctionCollection(functions, sourceFunctions, "additionalWeapons", partial);
-  cleanSparseFunctionCollection(functions, sourceFunctions, "tools", partial);
-
-  const moduleData = functions.module;
-  if (isPlainRecord(moduleData) && !(moduleData instanceof ForcedDeletion)) {
-    const sourceModule = isPlainRecord(sourceFunctions.module) ? sourceFunctions.module : {};
-    cleanSparseFunctionCollection(moduleData, sourceModule, "additionalWeapons", partial);
-  }
-}
-
-function cleanSparseFunctionCollection(target = {}, source = {}, key = "", partial = false) {
-  if (!(key in target)) return;
-  const update = target[key];
-  if (update === undefined) {
-    delete target[key];
-    return;
-  }
-  if (update instanceof ForcedDeletion) {
-    if (!partial || !Object.hasOwn(source, key)) delete target[key];
-    return;
-  }
-  if (!isPlainRecord(update)) return;
-
-  const replacement = update instanceof ForcedReplacement;
-  const entries = replacement ? ForcedReplacement.get(update) : update;
-  if (!isPlainRecord(entries)) return;
-  const sourceEntries = isPlainRecord(source[key]) ? source[key] : {};
-
-  for (const [entryKey, entryData] of Object.entries(entries)) {
-    if (entryData instanceof ForcedDeletion) {
-      if (!partial || !Object.hasOwn(sourceEntries, entryKey)) delete entries[entryKey];
-      continue;
-    }
-    if (entryData?.enabled !== false) continue;
-    removeSparseFunctionField(entries, sourceEntries, entryKey, partial);
-  }
-
-  const next = replacement
-    ? foundry.utils.mergeObject({}, entries, { inplace: false, applyOperators: true })
-    : foundry.utils.mergeObject(sourceEntries, entries, { inplace: false, applyOperators: true });
-  if (!Object.keys(next).length) removeSparseFunctionField(target, source, key, partial);
-}
-
-function removeSparseFunctionField(target = {}, source = {}, key = "", partial = false) {
-  if (partial && Object.hasOwn(source, key)) target[key] = new ForcedDeletion();
-  else delete target[key];
-}
-
-function isPlainRecord(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export class AbilityDataModel extends BaseItemDataModel {

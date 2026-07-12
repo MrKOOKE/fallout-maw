@@ -651,11 +651,11 @@ function queueUnlinkGrapplePair(scene, grapplerTokenId = "", targetTokenId = "",
   let linked = false;
 
   if (grappler && getGrappleTargetId(grappler) === targetTokenId) {
-    updates.push({ _id: grappler.id, [`flags.${SYSTEM_ID}.-=${GRAPPLE_TARGET_FLAG}`]: null });
+    updates.push({ _id: grappler.id, [`flags.${SYSTEM_ID}.${GRAPPLE_TARGET_FLAG}`]: globalThis._del });
     linked = true;
   }
   if (target && getGrapplerId(target) === grapplerTokenId) {
-    updates.push({ _id: target.id, [`flags.${SYSTEM_ID}.-=${GRAPPLE_GRAPPLER_FLAG}`]: null });
+    updates.push({ _id: target.id, [`flags.${SYSTEM_ID}.${GRAPPLE_GRAPPLER_FLAG}`]: globalThis._del });
     if (target.actor) clearedEffectActors.add(target.actor);
     linked = true;
   }

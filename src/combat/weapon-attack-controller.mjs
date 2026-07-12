@@ -5026,7 +5026,7 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
       else {
         updateData["system.quantity"] = next;
         if (weapon.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG)?.id) {
-          updateData[`flags.${SYSTEM_ID}.-=${DELAYED_THROWN_ITEM_FLAG}`] = null;
+          updateData[`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`] = globalThis._del;
         }
       }
     }

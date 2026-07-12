@@ -16,11 +16,12 @@ export function migrateActorData(source = {}) {
   return runDocumentMigrations(source, ACTOR_MIGRATIONS);
 }
 
-export function migrateItemData(source = {}) {
-  return runDocumentMigrations(source, ITEM_MIGRATIONS);
+export function migrateItemData(source = {}, options = {}) {
+  return runDocumentMigrations(source, ITEM_MIGRATIONS, options);
 }
 
-export function sparsifyGearItemFunctions(source = {}) {
+export function sparsifyGearItemFunctions(source = {}, { partial = false } = {}) {
+  if (partial) return source;
   if (source?.type !== "gear") return source;
   if (!source.system || typeof source.system !== "object" || Array.isArray(source.system)) source.system = {};
   const functions = source.system.functions;
@@ -64,8 +65,8 @@ export function sparsifyGearItemFunctions(source = {}) {
   return source;
 }
 
-function runDocumentMigrations(source, migrations) {
-  for (const migration of migrations) migration(source);
+function runDocumentMigrations(source, migrations, options = {}) {
+  for (const migration of migrations) migration(source, options);
   return source;
 }
 

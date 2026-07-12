@@ -155,7 +155,7 @@ export async function deleteDelayedThrownItemDocuments(delayedThrownItemId = "")
         updates.push({
           _id: item.id,
           "system.quantity": quantity - 1,
-          [`flags.${SYSTEM_ID}.-=${DELAYED_THROWN_ITEM_FLAG}`]: null
+          [`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`]: globalThis._del
         });
       } else if (item.id) itemIds.push(item.id);
     }

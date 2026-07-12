@@ -385,7 +385,7 @@ async function spendPendingPostureChangeCost(tokenDocument) {
   if (amount > 0) await spendPostureChangeResources(tokenDocument, amount, pending);
 
   await tokenDocument.update({
-    [`flags.${SYSTEM_ID}.${POSTURE_MOVEMENT_FLAG}.-=pendingChangeCost`]: null
+    [`flags.${SYSTEM_ID}.${POSTURE_MOVEMENT_FLAG}.pendingChangeCost`]: globalThis._del
   }, { [AUTOMATIC_POSTURE_OPTION]: true });
 }
 
