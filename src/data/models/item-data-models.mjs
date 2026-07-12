@@ -1,6 +1,9 @@
 import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
+import { FIXED_GEAR_FUNCTION_KEYS } from "../../utils/item-functions.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField, TypedSchemaField } = foundry.data.fields;
+const { ForcedDeletion, ForcedReplacement } = foundry.data.operators;
+const OPTIONAL_FUNCTION_FIELD_OPTIONS = Object.freeze({ required: false });
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
@@ -70,21 +73,21 @@ export class GearDataModel extends BaseItemDataModel {
       ...super.defineSchema(),
       itemFunction: new StringField({ required: true, blank: true, initial: "" }),
       functions: new SchemaField({
-        actorContainer: actorContainerFunctionField(),
-        container: containerFunctionField(),
-        condition: conditionFunctionField(),
-        constructPart: constructPartFunctionField(),
-        damageSource: damageSourceFunctionField(),
-        energyConsumer: energyConsumerFunctionField(),
-        energySource: energySourceFunctionField(),
-        freeSettings: itemFreeSettingsFunctionField(),
-        implant: implantFunctionField(),
-        lightSource: lightSourceFunctionField(),
-        module: moduleFunctionField(),
-        prosthesis: prosthesisFunctionField(),
-        trap: trapFunctionField(),
-        weapon: weaponFunctionField(),
-        additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
+        actorContainer: actorContainerFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        container: containerFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        condition: conditionFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        constructPart: constructPartFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        damageSource: damageSourceFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        energyConsumer: energyConsumerFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        energySource: energySourceFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        freeSettings: itemFreeSettingsFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        implant: implantFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        lightSource: lightSourceFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        module: moduleFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        prosthesis: prosthesisFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        trap: trapFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        weapon: weaponFunctionField({ fieldOptions: OPTIONAL_FUNCTION_FIELD_OPTIONS }),
+        additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: false }),
         damageMitigation: new SchemaField({
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, choices: ["defense", "resistance"], initial: "defense" }),
@@ -93,11 +96,11 @@ export class GearDataModel extends BaseItemDataModel {
             new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),
             { required: true, initial: {} }
           )
-        }),
-        firstAid: firstAidFunctionField(),
-        needChange: needChangeFunctionField(),
-        oneTimeUse: oneTimeUseFunctionField(),
-        tools: new TypedObjectField(toolFunctionField(), { required: true, initial: {} })
+        }, OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        firstAid: firstAidFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        needChange: needChangeFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        oneTimeUse: oneTimeUseFunctionField(OPTIONAL_FUNCTION_FIELD_OPTIONS),
+        tools: new TypedObjectField(toolFunctionField(), { required: false })
       }),
       container: new SchemaField({
         parentId: new StringField({ required: true, blank: true, initial: "" }),
@@ -108,6 +111,89 @@ export class GearDataModel extends BaseItemDataModel {
       craft: craftRecipeField()
     };
   }
+
+  static _cleanData(data, options, state) {
+    super._cleanData(data, options, state);
+    cleanSparseGearFunctionChanges(data, options, state);
+  }
+}
+
+function cleanSparseGearFunctionChanges(data = {}, { partial = false } = {}, state = {}) {
+  const functions = data.functions;
+  if (!isPlainRecord(functions)) return;
+  const sourceFunctions = isPlainRecord(state.source?.functions) ? state.source.functions : {};
+  let removesPrimaryWeapon = false;
+
+  for (const key of FIXED_GEAR_FUNCTION_KEYS) {
+    if (!(key in functions)) continue;
+    const functionData = functions[key];
+    if (functionData === undefined) {
+      delete functions[key];
+      continue;
+    }
+    if (functionData instanceof ForcedDeletion) {
+      if (!partial || !Object.hasOwn(sourceFunctions, key)) delete functions[key];
+      if (key === "weapon") removesPrimaryWeapon = true;
+      continue;
+    }
+    if (functionData?.enabled !== false) continue;
+    removeSparseFunctionField(functions, sourceFunctions, key, partial);
+    if (key === "weapon") removesPrimaryWeapon = true;
+  }
+
+  if (removesPrimaryWeapon) {
+    removeSparseFunctionField(functions, sourceFunctions, "additionalWeapons", partial);
+  }
+  cleanSparseFunctionCollection(functions, sourceFunctions, "additionalWeapons", partial);
+  cleanSparseFunctionCollection(functions, sourceFunctions, "tools", partial);
+
+  const moduleData = functions.module;
+  if (isPlainRecord(moduleData) && !(moduleData instanceof ForcedDeletion)) {
+    const sourceModule = isPlainRecord(sourceFunctions.module) ? sourceFunctions.module : {};
+    cleanSparseFunctionCollection(moduleData, sourceModule, "additionalWeapons", partial);
+  }
+}
+
+function cleanSparseFunctionCollection(target = {}, source = {}, key = "", partial = false) {
+  if (!(key in target)) return;
+  const update = target[key];
+  if (update === undefined) {
+    delete target[key];
+    return;
+  }
+  if (update instanceof ForcedDeletion) {
+    if (!partial || !Object.hasOwn(source, key)) delete target[key];
+    return;
+  }
+  if (!isPlainRecord(update)) return;
+
+  const replacement = update instanceof ForcedReplacement;
+  const entries = replacement ? ForcedReplacement.get(update) : update;
+  if (!isPlainRecord(entries)) return;
+  const sourceEntries = isPlainRecord(source[key]) ? source[key] : {};
+
+  for (const [entryKey, entryData] of Object.entries(entries)) {
+    if (entryData instanceof ForcedDeletion) {
+      if (!partial || !Object.hasOwn(sourceEntries, entryKey)) delete entries[entryKey];
+      continue;
+    }
+    if (entryData?.enabled !== false) continue;
+    removeSparseFunctionField(entries, sourceEntries, entryKey, partial);
+  }
+
+  const next = replacement
+    ? foundry.utils.mergeObject({}, entries, { inplace: false, applyOperators: true })
+    : foundry.utils.mergeObject(sourceEntries, entries, { inplace: false, applyOperators: true });
+  if (!Object.keys(next).length) removeSparseFunctionField(target, source, key, partial);
+}
+
+function removeSparseFunctionField(target = {}, source = {}, key = "", partial = false) {
+  if (partial && Object.hasOwn(source, key)) target[key] = new ForcedDeletion();
+  else delete target[key];
+}
+
+function isPlainRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export class AbilityDataModel extends BaseItemDataModel {
@@ -267,19 +353,19 @@ function abilityAcquisitionRequirementField() {
   });
 }
 
-function itemFreeSettingsFunctionField() {
+function itemFreeSettingsFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     useConditionWeakening: new BooleanField({ required: true, initial: false }),
     entries: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
-function actorContainerFunctionField() {
+function actorContainerFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     slots: new ArrayField(actorContainerSlotField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
 function actorContainerSlotField() {
@@ -291,13 +377,13 @@ function actorContainerSlotField() {
   });
 }
 
-function containerFunctionField() {
+function containerFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     loadReduction: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
     extraWeaponSlots: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     specialGrids: containerSpecialGridsField()
-  });
+  }, options);
 }
 
 function containerSpecialGridsField() {
@@ -325,14 +411,14 @@ function containerSpecialGridBlockField() {
   });
 }
 
-function conditionFunctionField() {
+function conditionFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     weakeningThreshold: new NumberField({ required: true, integer: true, min: 1, initial: DEFAULT_CONDITION_WEAKENING_THRESHOLD }),
     recoveryMethods: new ArrayField(conditionRecoveryMethodField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
 function conditionRecoveryMethodField() {
@@ -344,7 +430,7 @@ function conditionRecoveryMethodField() {
   });
 }
 
-function damageSourceFunctionField() {
+function damageSourceFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
@@ -365,7 +451,7 @@ function damageSourceFunctionField() {
     }),
     penetration: new StringField({ required: true, blank: true, initial: "0" }),
     volley: damageSourceVolleyField()
-  });
+  }, options);
 }
 
 function damageSourceVolleyField() {
@@ -381,7 +467,7 @@ function damageSourceVolleyField() {
   });
 }
 
-function trapFunctionField() {
+function trapFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -432,7 +518,7 @@ function trapFunctionField() {
     }),
     triggerAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     triggerSoundPath: new StringField({ required: true, blank: true, initial: "" })
-  });
+  }, options);
 }
 
 function trapDetectionConditionField() {
@@ -446,7 +532,7 @@ function trapDetectionConditionField() {
   });
 }
 
-function weaponFunctionField({ named = false } = {}) {
+function weaponFunctionField({ named = false, fieldOptions = {} } = {}) {
   const schema = {
     enabled: new BooleanField({ required: true, initial: false }),
     damageMode: new StringField({ required: true, blank: false, choices: ["manual", "source"], initial: "manual" }),
@@ -521,20 +607,20 @@ function weaponFunctionField({ named = false } = {}) {
     schema.id = new StringField({ required: true, blank: true, initial: "" });
     schema.name = new StringField({ required: true, blank: true, initial: "" });
   }
-  return new SchemaField(schema);
+  return new SchemaField(schema, fieldOptions);
 }
 
-function moduleFunctionField() {
+function moduleFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
     targetFunction: new StringField({ required: true, blank: false, choices: ["weapon"], initial: "weapon" }),
     weapon: weaponModuleModifiersField(),
-    additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} })
-  });
+    additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: false })
+  }, options);
 }
 
-function constructPartFunctionField() {
+function constructPartFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     partType: new StringField({ required: true, blank: true, initial: "" }),
@@ -548,10 +634,10 @@ function constructPartFunctionField() {
     lossEffects: new ArrayField(limbLossEffectField(), { required: true, initial: [] }),
     weaponSets: new ArrayField(constructPartWeaponSetField(), { required: true, initial: [] }),
     needs: new ArrayField(needDefinitionField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
-function energySourceFunctionField() {
+function energySourceFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
@@ -560,10 +646,10 @@ function energySourceFunctionField() {
       value: new NumberField({ required: true, min: 0, initial: 0 }),
       max: new NumberField({ required: true, min: 0, initial: 0 })
     })
-  });
+  }, options);
 }
 
-function energyConsumerFunctionField() {
+function energyConsumerFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     sourceItemUuid: new StringField({ required: true, blank: true, initial: "" }),
@@ -571,10 +657,10 @@ function energyConsumerFunctionField() {
     activeSourceUuid: new StringField({ required: true, blank: true, initial: "" }),
     activeConditions: new TypedObjectField(new BooleanField({ required: true, initial: false }), { required: true, initial: {} }),
     installedSource: installedEnergySourceField()
-  });
+  }, options);
 }
 
-function lightSourceFunctionField() {
+function lightSourceFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
@@ -584,7 +670,7 @@ function lightSourceFunctionField() {
     rotation: new NumberField({ required: true, initial: 0 }),
     color: new StringField({ required: true, blank: true, initial: "" }),
     resourceCosts: new ArrayField(lightSourceResourceCostField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
 function installedEnergySourceField() {
@@ -624,7 +710,7 @@ function constructPartWeaponSetField() {
   });
 }
 
-function implantFunctionField() {
+function implantFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     limbKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
@@ -633,10 +719,10 @@ function implantFunctionField() {
     }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
     skillKey: new StringField({ required: true, blank: false, initial: "doctor" })
-  });
+  }, options);
 }
 
-function prosthesisFunctionField() {
+function prosthesisFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     limbKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
@@ -651,7 +737,7 @@ function prosthesisFunctionField() {
     breakShockResistant: new BooleanField({ required: true, initial: false }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
     skillKey: new StringField({ required: true, blank: false, initial: "doctor" })
-  });
+  }, options);
 }
 
 function weaponModuleModifiersField() {
@@ -900,7 +986,7 @@ function weaponRequirementField() {
   });
 }
 
-function toolFunctionField() {
+function toolFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     useAsItem: new BooleanField({ required: true, initial: false }),
@@ -911,10 +997,10 @@ function toolFunctionField() {
     }),
     skillValue: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     skillKey: new StringField({ required: true, blank: true, initial: "" })
-  });
+  }, options);
 }
 
-function firstAidFunctionField() {
+function firstAidFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     healing: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -946,10 +1032,10 @@ function firstAidFunctionField() {
     withdrawalDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     withdrawalIntervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
     withdrawal: new ArrayField(traumaEffectField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
-function needChangeFunctionField() {
+function needChangeFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     charges: new SchemaField({
@@ -963,7 +1049,7 @@ function needChangeFunctionField() {
     durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     intervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
     changes: new ArrayField(traumaEffectField(), { required: true, initial: [] })
-  });
+  }, options);
 }
 
 function needChangeOrganismDevelopmentEntryField() {
@@ -980,13 +1066,13 @@ function needChangeDamageEntryField() {
   });
 }
 
-function oneTimeUseFunctionField() {
+function oneTimeUseFunctionField(options = {}) {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     repeatApplicationBlocked: new BooleanField({ required: true, initial: false }),
     changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
     recipeItemUuids: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] })
-  });
+  }, options);
 }
 
 function needChangeEntryField() {

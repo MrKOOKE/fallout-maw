@@ -22,6 +22,26 @@ export const ITEM_FUNCTIONS = {
   tool: "tool",
   toolPrefix: "tool:"
 };
+export const FIXED_GEAR_FUNCTION_KEYS = Object.freeze([
+  ITEM_FUNCTIONS.actorContainer,
+  ITEM_FUNCTIONS.container,
+  ITEM_FUNCTIONS.condition,
+  ITEM_FUNCTIONS.constructPart,
+  ITEM_FUNCTIONS.damageSource,
+  ITEM_FUNCTIONS.energyConsumer,
+  ITEM_FUNCTIONS.energySource,
+  ITEM_FUNCTIONS.freeSettings,
+  ITEM_FUNCTIONS.implant,
+  ITEM_FUNCTIONS.lightSource,
+  ITEM_FUNCTIONS.module,
+  ITEM_FUNCTIONS.prosthesis,
+  ITEM_FUNCTIONS.trap,
+  ITEM_FUNCTIONS.weapon,
+  ITEM_FUNCTIONS.damageMitigation,
+  ITEM_FUNCTIONS.firstAid,
+  ITEM_FUNCTIONS.needChange,
+  ITEM_FUNCTIONS.oneTimeUse
+]);
 export const CONSTRUCT_PART_MITIGATION_LIMB_KEY = "constructPart";
 export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
 export const INSTALLED_MODULE_ITEM_ID_PREFIX = "installed-module:";

@@ -3493,7 +3493,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
     if (functionKey === ITEM_FUNCTIONS.tool) {
-      const update = { "system.functions.tool.enabled": false };
+      const update = {};
       for (const existingKey of Object.keys(this.item.system?.functions?.tools ?? {})) {
         update[`system.functions.tools.${existingKey}.enabled`] = false;
       }
@@ -10447,8 +10447,6 @@ function createToolFunctionSelectionUpdate(item, toolKey = "", { enabled = true,
   const sourceKey = String(sourceToolKey || getSelectedToolFunctionKey(item) || key).trim();
   const sourceData = foundry.utils.deepClone(item.system?.functions?.tools?.[sourceKey] ?? item.system?.functions?.tools?.[key] ?? {});
   const update = {
-    "system.functions.tool.enabled": Boolean(enabled),
-    "system.functions.tool.toolKey": key,
     [`system.functions.tools.${key}.enabled`]: Boolean(enabled),
     [`system.functions.tools.${key}.useAsItem`]: Boolean(item.system?.functions?.tools?.[key]?.useAsItem),
     [`system.functions.tools.${key}.toolClass`]: String(sourceData.toolClass ?? "D") || "D",
