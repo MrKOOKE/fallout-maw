@@ -57,6 +57,8 @@ export function createCampParticipant(actor, {
     userId: String(userId ?? ""),
     ready: false,
     watchSeconds: 0,
+    researchSeconds: 0,
+    researchId: "",
     restPlaceId: String(restPlaceId ?? ""),
     joinedAt: Date.now()
   };
@@ -120,6 +122,8 @@ function normalizeCampParticipants(value = []) {
         userId: String(entry?.userId ?? ""),
         ready: Boolean(entry?.ready),
         watchSeconds: Math.max(0, Math.trunc(Number(entry?.watchSeconds) || 0)),
+        researchSeconds: Math.max(0, Math.trunc(Number(entry?.researchSeconds) || 0)),
+        researchId: String(entry?.researchId ?? "").trim(),
         restPlaceId: String(entry?.restPlaceId ?? ""),
         joinedAt: Math.max(0, Math.trunc(Number(entry?.joinedAt) || 0))
       };

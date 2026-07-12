@@ -10,6 +10,23 @@
       <span>Время караула, ч.</span>
       <input type="number" value="{{localParticipant.watchHours}}" min="0" step="0.25" data-camp-local-watch data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEditWatch}}disabled{{/unless}}>
     </label>
+    <label class="fallout-maw-camp-time-field">
+      <span>Время исследования, ч.</span>
+      <input type="number" value="{{localParticipant.researchHours}}" min="0" step="0.5" data-camp-local-research-hours data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEdit}}disabled{{/unless}}>
+    </label>
+    <label class="fallout-maw-camp-time-field">
+      <span>Исследование</span>
+      <select data-camp-local-research data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEdit}}disabled{{/unless}}>
+        <option value="">Не выбрано</option>
+        {{#each localParticipant.researchOptions}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+    <p class="fallout-maw-camp-time-allocation {{#if localParticipant.researchSelectionRequired}}warning{{/if}}">
+      Сон: {{localParticipant.restHours}} ч. Каждые полчаса исследования дают одну проверку.
+      {{#if localParticipant.researchSelectionRequired}} Без выбранного исследования проверки выполняться не будут.{{/if}}
+    </p>
     {{/if}}
   </section>
 

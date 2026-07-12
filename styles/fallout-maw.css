@@ -17360,6 +17360,16 @@ html.fallout-maw-token-action-hud-open #hotbar {
   padding: 12px;
 }
 
+.fallout-maw-camp-time-allocation {
+  color: var(--fallout-maw-terminal-muted);
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.fallout-maw-camp-time-allocation.warning {
+  color: var(--fallout-maw-terminal-accent);
+}
+
 .fallout-maw-camp-time-field {
   display: grid;
   gap: 4px;

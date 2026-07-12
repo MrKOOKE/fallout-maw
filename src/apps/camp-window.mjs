@@ -11,6 +11,8 @@ import {
   getDefaultCampRestPlaceId,
   normalizeCampState
 } from "../settings/camp.mjs";
+import { applyResearchTime } from "../research/research.mjs";
+import { getResearchById } from "../research/storage.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { advanceWorldTime } from "./world-time-control.mjs";
@@ -204,6 +206,20 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
       });
       return;
     }
+    if (target.matches("[data-camp-local-research-hours]")) {
+      await runCampOperation("updateParticipant", {
+        actorUuid: target.dataset.actorUuid ?? "",
+        researchSeconds: hoursInputToSeconds(target.value)
+      });
+      return;
+    }
+    if (target.matches("[data-camp-local-research]")) {
+      await runCampOperation("updateParticipant", {
+        actorUuid: target.dataset.actorUuid ?? "",
+        researchId: target.value
+      });
+      return;
+    }
 
     const row = target.closest("[data-camp-participant-row]");
     const actorUuid = row?.dataset.actorUuid ?? "";
@@ -262,14 +278,26 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
 async function prepareCampParticipantContext(participant, state, restPlaceOptions) {
   const actor = await resolveActor(participant.actorUuid);
   const restPlaceId = participant.restPlaceId || restPlaceOptions[0]?.value || "";
+  const watchSeconds = Math.min(participant.watchSeconds, state.restSeconds);
+  const researchSeconds = Math.min(participant.researchSeconds, Math.max(0, state.restSeconds - watchSeconds));
+  const researchOptions = (actor?.system?.researches ?? []).map(research => ({
+    value: research.id,
+    label: research.name || research.id,
+    selected: research.id === participant.researchId
+  }));
+  const selectedResearchExists = Boolean(participant.researchId && researchOptions.some(option => option.selected));
   return {
     ...participant,
     actor,
     name: actor?.name ?? "Недоступный участник",
     img: actor?.img ?? "icons/svg/mystery-man.svg",
     missing: !actor,
-    watchHours: secondsToHoursInput(Math.min(participant.watchSeconds, state.restSeconds)),
-    restHours: secondsToHoursInput(Math.max(0, state.restSeconds - Math.min(participant.watchSeconds, state.restSeconds))),
+    watchHours: secondsToHoursInput(watchSeconds),
+    researchHours: secondsToHoursInput(researchSeconds),
+    restHours: secondsToHoursInput(Math.max(0, state.restSeconds - watchSeconds - researchSeconds)),
+    researchOptions,
+    selectedResearchExists,
+    researchSelectionRequired: researchSeconds > 0 && !selectedResearchExists,
     readyChecked: participant.ready,
     restPlaceOptions: restPlaceOptions.map(option => ({
       ...option,
@@ -424,25 +452,44 @@ async function updateCampRestSeconds({ restSeconds = 0 } = {}, requesterUserId =
     restSeconds: nextRestSeconds,
     participants: current.participants.map(participant => ({
       ...participant,
-      watchSeconds: Math.min(participant.watchSeconds, nextRestSeconds)
+      ready: false,
+      watchSeconds: Math.min(participant.watchSeconds, nextRestSeconds),
+      researchSeconds: Math.min(participant.researchSeconds, Math.max(0, nextRestSeconds - Math.min(participant.watchSeconds, nextRestSeconds)))
     }))
   });
   await saveCampState(next);
   return next;
 }
 
-async function updateCampParticipant({ actorUuid = "", watchSeconds, restPlaceId, ready } = {}, requesterUserId = "") {
+async function updateCampParticipant({ actorUuid = "", watchSeconds, researchSeconds, researchId, restPlaceId, ready } = {}, requesterUserId = "") {
   const current = getCampState();
   if (!current.active) return current;
   if (watchSeconds !== undefined) await assertUserIsCampParticipant(current, requesterUserId);
-  if (restPlaceId !== undefined || ready !== undefined) await assertUserOwnsActor(actorUuid, requesterUserId);
+  if (researchSeconds !== undefined || researchId !== undefined || restPlaceId !== undefined || ready !== undefined) {
+    await assertUserOwnsActor(actorUuid, requesterUserId);
+  }
   const next = normalizeCampState({
     ...current,
     participants: current.participants.map(participant => {
       if (participant.actorUuid !== actorUuid) return participant;
       const update = { ...participant };
+      if (watchSeconds !== undefined || researchSeconds !== undefined || researchId !== undefined || restPlaceId !== undefined) {
+        update.ready = false;
+      }
       if (watchSeconds !== undefined) {
-        update.watchSeconds = Math.min(current.restSeconds, Math.max(0, toInteger(watchSeconds)));
+        update.watchSeconds = Math.min(
+          Math.max(0, current.restSeconds - Math.max(0, toInteger(participant.researchSeconds))),
+          Math.max(0, toInteger(watchSeconds))
+        );
+      }
+      if (researchSeconds !== undefined) {
+        update.researchSeconds = Math.min(
+          Math.max(0, current.restSeconds - Math.max(0, toInteger(update.watchSeconds))),
+          Math.max(0, toInteger(researchSeconds))
+        );
+      }
+      if (researchId !== undefined) {
+        update.researchId = String(researchId ?? "").trim();
       }
       if (restPlaceId !== undefined) {
         update.restPlaceId = String(restPlaceId ?? "");
@@ -493,16 +540,31 @@ async function restCamp(requesterUserId = "") {
       forceTimeMechanics: true,
       participants: current.participants.map(participant => {
         const watchSeconds = Math.min(current.restSeconds, Math.max(0, toInteger(participant.watchSeconds)));
+        const researchSeconds = getCampParticipantResearchSeconds(participant, current.restSeconds, watchSeconds);
         const place = restPlaces.get(participant.restPlaceId) ?? fallbackPlace;
         return {
           actorUuid: participant.actorUuid,
-          normalSeconds: watchSeconds,
-          restSeconds: Math.max(0, current.restSeconds - watchSeconds),
+          normalSeconds: watchSeconds + researchSeconds,
+          restSeconds: Math.max(0, current.restSeconds - watchSeconds - researchSeconds),
           effects: place?.effects ?? []
         };
       })
     }
   });
+
+  for (let index = 0; index < current.participants.length; index += 1) {
+    const participant = current.participants[index];
+    const actor = participantActors[index];
+    const researchSeconds = getCampParticipantResearchSeconds(participant, current.restSeconds);
+    if (researchSeconds < 30 * 60) continue;
+    if (!getResearchById(actor.system?.researches, participant.researchId)) continue;
+    try {
+      await applyResearchTime(actor, participant.researchId, researchDurationFromSeconds(researchSeconds));
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Camp research failed for ${actor.name}`, error);
+      ui.notifications.warn(`${actor.name}: исследование не выполнено — ${error.message}`);
+    }
+  }
   await saveCampState(createEmptyCampState());
   return createEmptyCampState();
 }
@@ -607,4 +669,20 @@ function secondsToHoursInput(seconds) {
 
 function hoursInputToSeconds(value) {
   return Math.max(0, Math.round((Number(value) || 0) * 3600));
+}
+
+function getCampParticipantResearchSeconds(participant = {}, restSeconds = 0, watchSeconds = null) {
+  const available = Math.max(0, toInteger(restSeconds));
+  const watch = watchSeconds === null
+    ? Math.min(available, Math.max(0, toInteger(participant.watchSeconds)))
+    : Math.min(available, Math.max(0, toInteger(watchSeconds)));
+  return Math.min(Math.max(0, available - watch), Math.max(0, toInteger(participant.researchSeconds)));
+}
+
+function researchDurationFromSeconds(seconds = 0) {
+  const halfHours = Math.floor(Math.max(0, toInteger(seconds)) / (30 * 60));
+  return {
+    hours: Math.floor(halfHours / 2),
+    halfHour: (halfHours % 2) === 1
+  };
 }
