@@ -665,10 +665,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async _onDrop(event) {
-    // #region agent log
-    const _dropT0 = performance.now();
-    let _dropPhase = 'start';
-    // #endregion
     const data = this.#getDragEventData(event);
     if (data?.type === "ActorContainerPassenger") return this.#onDropActorContainerPassenger(event, data);
     if (data?.type === ABILITY_CATALOG_DRAG_TYPE) return this.#onDropCatalogAbility(data);
@@ -729,16 +725,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return this.#stackDroppedItemQuantity(dropped.item, itemData, targetItem, quantity, sourceStackIndex, targetStackIndex);
     }
 
-    // #region agent log
-    _dropPhase = 'before-placement';
-    const _placeT0 = performance.now();
-    // #endregion
     const placement = this.#getPlacementForDropZone(zone, itemData, [sourceOwned ? dropped.item?.id ?? "" : ""], parentId, event);
-    // #region agent log
-    const _placeMs = Math.round(performance.now() - _placeT0);
-    _dropPhase = 'after-placement';
-    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'repro2',hypothesisId:'C',location:'actor-sheet.mjs:_onDrop',message:'drop placement resolved',data:{placeMs:_placeMs,totalMs:Math.round(performance.now()-_dropT0),actorItems:this.actor.items.size,parentId:String(parentId??''),zoneKeys:Object.keys(zone?.dataset??{}),hasCell:zone?.dataset?.inventoryCell!==undefined,hasDropSurface:zone?.dataset?.inventoryDropSurface!==undefined,placementMode:placement?.mode??null,found:Boolean(placement)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!placement) return null;
 
     if (placement.mode === ITEM_FUNCTIONS.constructPart) {
@@ -750,20 +737,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (!itemData) return null;
     }
 
-    // #region agent log
-    _dropPhase = 'before-apply';
-    const _applyT0 = performance.now();
-    // #endregion
-    let result;
     if (sourceOwned) {
-      result = await this.#moveOwnedItem(dropped.item, placement, targetItem, parentId, sourceStackIndex);
-    } else {
-      result = await this.#createOrStackDroppedItem(itemData, placement, targetItem, parentId);
+      return this.#moveOwnedItem(dropped.item, placement, targetItem, parentId, sourceStackIndex);
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'repro2',hypothesisId:'F',location:'actor-sheet.mjs:_onDrop',message:'drop apply finished',data:{applyMs:Math.round(performance.now()-_applyT0),placeMs:_placeMs,totalMs:Math.round(performance.now()-_dropT0),sourceOwned,phase:_dropPhase,actorItems:this.actor.items.size},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return result;
+
+    return this.#createOrStackDroppedItem(itemData, placement, targetItem, parentId);
   }
 
   async #onDropCatalogAbility(data = {}) {
@@ -2099,9 +2077,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const pointer = this.#getInventoryGridPointerPosition(event, grid);
     if (!pointer) return null;
 
-    // #region agent log
-    const _t0 = performance.now();
-    // #endregion
     const { columns, rows } = this.#getInventoryGridDimensions(parentId);
     const gridOptions = this.#getInventoryGridOptions(parentId);
     const excluded = Array.isArray(excludeItemIds) ? excludeItemIds.filter(Boolean) : [excludeItemIds].filter(Boolean);
@@ -2115,7 +2090,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       parentId
     );
     const sourceItemId = excluded[0] ?? "";
-    const placement = resolveInventoryPointerPlacement({
+    return resolveInventoryPointerPlacement({
       anchor: pointer,
       itemData,
       items: this.actor.items,
@@ -2125,10 +2100,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       findNearest,
       isPlacementAvailable
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'post-fix',hypothesisId:'H',location:'actor-sheet.mjs:#getInventoryPointerPlacement',message:'pointer placement via resolved checker',data:{ms:Math.round(performance.now()-_t0),found:Boolean(placement),findNearest,foundAt:placement?{x:placement.x,y:placement.y}:null,actorItems:this.actor.items.size,columns,rows},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return placement;
   }
 
   #getInventoryGridPointerPosition(event, grid) {
@@ -2144,9 +2115,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getNearestInventoryCellInGrid(originX, originY, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, columns = 1, rows = 1) {
-    // #region agent log
-    const _t0 = performance.now();
-    // #endregion
     const gridOptions = this.#getInventoryGridOptions(parentId);
     const excluded = Array.isArray(excludeItemIds) ? excludeItemIds.filter(Boolean) : [excludeItemIds].filter(Boolean);
     const isPlacementAvailable = createInventoryHoverPlacementChecker(
@@ -2158,7 +2126,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       gridOptions,
       parentId
     );
-    const placement = resolveInventoryPointerPlacement({
+    return resolveInventoryPointerPlacement({
       anchor: { x: originX, y: originY },
       itemData,
       items: this.actor.items,
@@ -2168,10 +2136,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       findNearest: true,
       isPlacementAvailable
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7815/ingest/477c0bca-778e-4b72-9d68-e7f8bcefd8f5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'363203'},body:JSON.stringify({sessionId:'363203',runId:'post-fix',hypothesisId:'H',location:'actor-sheet.mjs:#getNearestInventoryCellInGrid',message:'nearest via resolved checker',data:{ms:Math.round(performance.now()-_t0),found:Boolean(placement),originX,originY,foundAt:placement?{x:placement.x,y:placement.y}:null,actorItems:this.actor.items.size},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return placement;
   }
 
   #getInventoryGridDimensions(parentId = ROOT_CONTAINER_ID) {
