@@ -42,8 +42,11 @@ export async function openHackingSettings(actor) {
   });
   if (!result) return undefined;
 
-  const enabled = result.enabled === true;
-  const methods = normalizeHackingMethods(result.methods);
+  // DialogV2.input returns FormDataExtended.object, whose dotted field names
+  // (for example, methods.0.toolKey) are still flat keys.
+  const formData = foundry.utils.expandObject(result);
+  const enabled = formData.enabled === true;
+  const methods = normalizeHackingMethods(formData.methods);
   if (enabled && !state.enabled) {
     for (const method of methods) method.attemptsRemaining = method.attempts;
   }
