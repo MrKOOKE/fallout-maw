@@ -33,6 +33,8 @@ import { getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState 
 const InteractionLayer = foundry.canvas.layers.InteractionLayer;
 
 export class FalloutMaWGlobalMapLayer extends InteractionLayer {
+  #refreshCycle = 0;
+
   mode = "select";
   editor = null;
   dragPreviewLocation = null;
@@ -107,6 +109,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
 
   async refresh() {
     if (!this.container || !canvas?.scene) return;
+    const refreshCycle = ++this.#refreshCycle;
     this.#clearLocationHover();
     for (const child of this.container.removeChildren()) child.destroy?.({ children: true });
     const state = getSceneState(canvas.scene);
@@ -114,8 +117,8 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     this.#drawTransitions(state.transitions, state.discoveredTransitionIds);
     this.#drawIncomingTransitionZones();
     this.#drawLocationExitZones(state.locationExitZones, state.discoveredExitZoneIds);
-    this.#drawLocations(state.locations, state.discoveredLocationIds);
-    this.#drawDiscoveredLocationOverlay(state.locations, state.discoveredLocationIds);
+    this.#drawLocations(state.locations, state.discoveredLocationIds, refreshCycle);
+    this.#drawDiscoveredLocationOverlay(state.locations, state.discoveredLocationIds, refreshCycle);
     this.#drawWorkingData();
     if (this.mode === "locationEdit" && game.user?.isGM) {
       foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
@@ -538,7 +541,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     pending.get(id).add(key);
   }
 
-  #drawLocations(locations, discoveredIds) {
+  #drawLocations(locations, discoveredIds, refreshCycle) {
     const renderedLocations = new Map(locations.map(location => [location.id, location]));
     if (this.editor instanceof LocationEditor && this.editor.data?.id) {
       renderedLocations.set(this.editor.data.id, this.editor.data);
@@ -556,6 +559,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       drawCellBoundary(graphic, cells, lineColor, lineWidth, isActive ? 1 : 0.9);
       this.container.addChild(graphic);
       const bounds = getBoundaryBounds(getCellsBoundaryLoops(canvas.scene, cells));
+      this.#drawLocationIcon(this.container, location, bounds, 31, refreshCycle);
       const text = new PIXI.Text(location.name ?? "", {
         fill: location.textColor || "#ffffff",
         fontSize: Math.max(8, Number(location.fontSize) || 28),
@@ -568,13 +572,13 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
         bounds ? (bounds.minX + bounds.maxX) / 2 : location.x,
         bounds ? bounds.minY - Math.max(8, Number(location.fontSize) * 0.7) : location.y
       );
-      text.zIndex = 31;
+      text.zIndex = 32;
       this.container.addChild(text);
     }
     if (this.dragPreviewLocation) this.#drawLocationGhost(this.dragPreviewLocation);
   }
 
-  #drawDiscoveredLocationOverlay(locations, discoveredIds) {
+  #drawDiscoveredLocationOverlay(locations, discoveredIds, refreshCycle) {
     this.#destroyDiscoveredLocationOverlay();
     if (!canvas?.interface) return;
     const renderedLocations = new Map(locations.map(location => [location.id, location]));
@@ -595,10 +599,10 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     overlay.zIndex = (CONFIG.Canvas.groups.interface.zIndexDrawings ?? 500) + 1;
     canvas.interface.addChild(overlay);
     this.locationDiscoveryOverlay = overlay;
-    for (const location of visible) this.#drawLocationOverlayEntry(overlay, location);
+    for (const location of visible) this.#drawLocationOverlayEntry(overlay, location, refreshCycle);
   }
 
-  #drawLocationOverlayEntry(container, location) {
+  #drawLocationOverlayEntry(container, location, refreshCycle) {
     const cells = getLocationCells(canvas.scene, location);
     if (!cells.length) return;
     const graphic = new PIXI.LegacyGraphics();
@@ -616,6 +620,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     );
     container.addChild(graphic);
     const bounds = getBoundaryBounds(getCellsBoundaryLoops(canvas.scene, cells));
+    this.#drawLocationIcon(container, location, bounds, 2, refreshCycle);
     const text = new PIXI.Text(location.name ?? "", {
       fill: location.textColor || "#ffffff",
       fontSize: Math.max(8, Number(location.fontSize) || 28),
@@ -628,9 +633,39 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       bounds ? (bounds.minX + bounds.maxX) / 2 : location.x,
       bounds ? bounds.minY - Math.max(8, Number(location.fontSize) * 0.7) : location.y
     );
-    text.zIndex = 2;
+    text.zIndex = 3;
     container.addChild(text);
     this.#drawLocationInteractionArea(container, cells, location);
+  }
+
+  #drawLocationIcon(container, location, bounds, zIndex, refreshCycle) {
+    const src = String(location?.image ?? "").trim();
+    if (!src || !bounds) return;
+    const sprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
+    sprite.name = `fallout-maw-location-icon-${location.id}`;
+    sprite.anchor.set(0.5);
+    sprite.position.set((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2);
+    sprite.eventMode = "none";
+    sprite.zIndex = zIndex;
+    container.addChild(sprite);
+    void this.#loadLocationIcon(sprite, src, bounds, refreshCycle);
+  }
+
+  async #loadLocationIcon(sprite, src, bounds, refreshCycle) {
+    try {
+      const texture = await foundry.canvas.loadTexture(src);
+      if (!texture || refreshCycle !== this.#refreshCycle || sprite.destroyed || !sprite.parent) return;
+      sprite.texture = texture;
+      const availableWidth = Math.max(1, (bounds.maxX - bounds.minX) * 0.72);
+      const availableHeight = Math.max(1, (bounds.maxY - bounds.minY) * 0.72);
+      const textureWidth = Math.max(1, Number(texture.width) || 1);
+      const textureHeight = Math.max(1, Number(texture.height) || 1);
+      const scale = Math.min(availableWidth / textureWidth, availableHeight / textureHeight);
+      sprite.scale.set(scale);
+    } catch (error) {
+      console.warn(`fallout-maw | Failed to load global-map location icon: ${src}`, error);
+      if (!sprite.destroyed) sprite.destroy();
+    }
   }
 
   #destroyDiscoveredLocationOverlay() {
