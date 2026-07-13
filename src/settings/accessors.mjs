@@ -65,7 +65,7 @@ import {
   createDefaultSkillDevelopmentCostSettings,
   normalizeSkillDevelopmentCostSettings
 } from "./skill-development-costs.mjs";
-import { getBaselineDefault } from "./baseline.mjs";
+import { getMainPresetDefault } from "./presets/manager.mjs";
 
 export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resultMode: "standard",
@@ -234,7 +234,7 @@ export async function setCharacteristicSettings(settings) {
 }
 
 export async function resetCharacteristicSettings() {
-  return setCharacteristicSettings(getBaselineDefault(CHARACTERISTICS_SETTING, createDefaultCharacteristicSettings()));
+  return setCharacteristicSettings(getMainPresetDefault(CHARACTERISTICS_SETTING, createDefaultCharacteristicSettings()));
 }
 
 export function getSkillSettings() {
@@ -262,7 +262,7 @@ export async function setSkillSettings(settings) {
 }
 
 export async function resetSkillSettings() {
-  return setSkillSettings(getBaselineDefault(SKILL_SETTINGS_SETTING, {
+  return setSkillSettings(getMainPresetDefault(SKILL_SETTINGS_SETTING, {
     entries: createDefaultSkillSettings(),
     advancement: createDefaultSkillAdvancementSettings()
   }));
@@ -283,7 +283,7 @@ export async function setSkillDevelopmentCostSettings(settings) {
 }
 
 export async function resetSkillDevelopmentCostSettings() {
-  return setSkillDevelopmentCostSettings(getBaselineDefault(SKILL_DEVELOPMENT_COSTS_SETTING, createDefaultSkillDevelopmentCostSettings()));
+  return setSkillDevelopmentCostSettings(getMainPresetDefault(SKILL_DEVELOPMENT_COSTS_SETTING, createDefaultSkillDevelopmentCostSettings()));
 }
 
 export function getProficiencySettings() {
@@ -309,7 +309,7 @@ export async function setAbilityCatalog(catalog) {
 }
 
 export async function resetAbilityCatalog() {
-  return setAbilityCatalog(getBaselineDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(getSkillSettings())));
+  return setAbilityCatalog(getMainPresetDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(getSkillSettings())));
 }
 
 export function getProficiencyInfluenceSettings() {
@@ -332,7 +332,7 @@ export async function setProficiencySettings(settings) {
 }
 
 export async function resetProficiencySettings() {
-  return setProficiencySettings(getBaselineDefault(PROFICIENCY_SETTINGS_SETTING, {
+  return setProficiencySettings(getMainPresetDefault(PROFICIENCY_SETTINGS_SETTING, {
     entries: createDefaultProficiencySettings(),
     influence: createDefaultProficiencyInfluenceSettings()
   }));
@@ -355,7 +355,7 @@ export async function setDamageTypeSettings(settings) {
 }
 
 export async function resetDamageTypeSettings() {
-  return setDamageTypeSettings(getBaselineDefault(DAMAGE_TYPES_SETTING, createDefaultDamageTypeSettings()));
+  return setDamageTypeSettings(getMainPresetDefault(DAMAGE_TYPES_SETTING, createDefaultDamageTypeSettings()));
 }
 
 export function getCurrencySettings() {
@@ -378,7 +378,7 @@ export async function setCurrencySettings(settings) {
 }
 
 export async function resetCurrencySettings() {
-  return setCurrencySettings(getBaselineDefault(CURRENCY_SETTINGS_SETTING, createDefaultCurrencySettings()));
+  return setCurrencySettings(getMainPresetDefault(CURRENCY_SETTINGS_SETTING, createDefaultCurrencySettings()));
 }
 
 export function getItemCategorySettings() {
@@ -396,7 +396,7 @@ export async function setItemCategorySettings(settings) {
 }
 
 export async function resetItemCategorySettings() {
-  return setItemCategorySettings(getBaselineDefault(ITEM_CATEGORIES_SETTING, createDefaultItemCategorySettings()));
+  return setItemCategorySettings(getMainPresetDefault(ITEM_CATEGORIES_SETTING, createDefaultItemCategorySettings()));
 }
 
 export function getCreatureOptions(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
@@ -426,7 +426,7 @@ export async function setResourceSettings(settings) {
 }
 
 export async function resetResourceSettings() {
-  return setResourceSettings(getBaselineDefault(RESOURCE_SETTINGS_SETTING, createDefaultResourceSettings()));
+  return setResourceSettings(getMainPresetDefault(RESOURCE_SETTINGS_SETTING, createDefaultResourceSettings()));
 }
 
 export function getNeedSettings() {
@@ -500,7 +500,7 @@ export async function setCampSettings(value) {
 }
 
 export async function resetCampSettings() {
-  return setCampSettings(getBaselineDefault(CAMP_SETTINGS_SETTING, createDefaultCampSettings()));
+  return setCampSettings(getMainPresetDefault(CAMP_SETTINGS_SETTING, createDefaultCampSettings()));
 }
 
 export function getCampState() {
@@ -532,7 +532,7 @@ export async function setDiseaseSettings(settings) {
 }
 
 export async function resetDiseaseSettings() {
-  return setDiseaseSettings(getBaselineDefault(DISEASE_SETTINGS_SETTING, createDefaultDiseaseSettings()));
+  return setDiseaseSettings(getMainPresetDefault(DISEASE_SETTINGS_SETTING, createDefaultDiseaseSettings()));
 }
 
 export function getLevelSettings() {
@@ -550,7 +550,7 @@ export async function setLevelSettings(settings) {
 }
 
 export async function resetLevelSettings() {
-  return setLevelSettings(getBaselineDefault(LEVELS_SETTING, createDefaultLevelSettings()));
+  return setLevelSettings(getMainPresetDefault(LEVELS_SETTING, createDefaultLevelSettings()));
 }
 
 export function getTraumaSettings(creatureOptions = getCreatureOptions(), damageTypes = getDamageTypeSettings()) {
@@ -568,7 +568,7 @@ export async function setTraumaSettings(settings, creatureOptions = getCreatureO
 }
 
 export async function resetTraumaSettings() {
-  return setTraumaSettings(getBaselineDefault(TRAUMA_SETTINGS_SETTING, createDefaultTraumaSettings()));
+  return setTraumaSettings(getMainPresetDefault(TRAUMA_SETTINGS_SETTING, createDefaultTraumaSettings()));
 }
 
 export function getToolSettings() {
@@ -586,7 +586,7 @@ export async function setToolSettings(settings) {
 }
 
 export async function resetToolSettings() {
-  return setToolSettings(getBaselineDefault(TOOL_SETTINGS_SETTING, createDefaultToolSettings()));
+  return setToolSettings(getMainPresetDefault(TOOL_SETTINGS_SETTING, createDefaultToolSettings()));
 }
 
 export function getSystemActionSettings() {
@@ -604,7 +604,7 @@ export async function setSystemActionSettings(settings) {
 }
 
 export async function resetSystemActionSettings() {
-  return setSystemActionSettings(getBaselineDefault(SYSTEM_ACTION_SETTINGS_SETTING, createDefaultSystemActionSettings()));
+  return setSystemActionSettings(getMainPresetDefault(SYSTEM_ACTION_SETTINGS_SETTING, createDefaultSystemActionSettings()));
 }
 
 export function getStealthSettings() {
@@ -622,7 +622,7 @@ export async function setStealthSettings(settings) {
 }
 
 export async function resetStealthSettings() {
-  return setStealthSettings(getBaselineDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings()));
+  return setStealthSettings(getMainPresetDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings()));
 }
 
 export function getCombatSettings() {
@@ -661,7 +661,7 @@ export function getConstructPartNeedSettings(items) {
 }
 
 export async function resetCombatSettings() {
-  return setCombatSettings(getBaselineDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings()));
+  return setCombatSettings(getMainPresetDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings()));
 }
 
 export function getCoverSettings() {
@@ -679,7 +679,7 @@ export async function setCoverSettings(settings) {
 }
 
 export async function resetCoverSettings() {
-  return setCoverSettings(getBaselineDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings()));
+  return setCoverSettings(getMainPresetDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings()));
 }
 
 export function getSkillCheckControl() {
@@ -736,6 +736,11 @@ export function syncSettingsIntoSystemConfig() {
 
 export function refreshPreparedActors() {
   syncSettingsIntoSystemConfig();
+  refreshPreparedActorsAfterConfig();
+}
+
+/** Refresh prepared Actor data after CONFIG has already been synchronized. */
+export function refreshPreparedActorsAfterConfig() {
   syncActorTrackableAttributes();
   for (const actor of getLoadedActors()) {
     actor.reset();

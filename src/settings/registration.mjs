@@ -36,12 +36,13 @@ import {
 } from "../apps/token-prototype-defaults-config.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
+import { SettingsPresetsConfig } from "../apps/settings-presets-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
-  getBaselineDefault,
-  registerSettingsBaselineTools,
-  SettingsBaselineConfig
-} from "./baseline.mjs";
+  createDefaultSettingsPresetState,
+  getMainPresetDefault,
+  registerSettingsPresetTools
+} from "./presets/manager.mjs";
 import {
   ABILITIES_CATALOG_SETTING,
   CAMP_SETTINGS_SETTING,
@@ -60,6 +61,7 @@ import {
   ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
   MIGRATION_STATE_SETTING,
+  SETTINGS_PRESET_STATE_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
@@ -115,33 +117,47 @@ export function registerSystemSettings() {
     }
   });
 
-  game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
+  game.settings.register(FALLOUT_MAW.id, SETTINGS_PRESET_STATE_SETTING, {
+    name: "Settings Preset State",
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(CREATURE_OPTIONS_SETTING, createEmptyCreatureOptions()),
+    default: createDefaultSettingsPresetState()
+  });
+
+  game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
+    name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
+    scope: "world",
+    preset: true,
+    config: false,
+    type: Object,
+    default: getMainPresetDefault(CREATURE_OPTIONS_SETTING, createEmptyCreatureOptions()),
+    presetEffect: "creatures",
     onChange: onCreatureOptionsChanged
   });
 
   game.settings.register(FALLOUT_MAW.id, CHARACTERISTICS_SETTING, {
     name: localize("FALLOUTMAW.Settings.Characteristics.Title"),
     scope: "world",
+    preset: true,
     config: false,
     type: Object,
-    default: getBaselineDefault(CHARACTERISTICS_SETTING, createDefaultCharacteristicSettings()),
+    default: getMainPresetDefault(CHARACTERISTICS_SETTING, createDefaultCharacteristicSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, {
     name: localize("FALLOUTMAW.Settings.Skills.Title"),
     scope: "world",
+    preset: true,
     config: false,
     type: Object,
-    default: getBaselineDefault(SKILL_SETTINGS_SETTING, {
+    default: getMainPresetDefault(SKILL_SETTINGS_SETTING, {
       entries: createDefaultSkillSettings(),
       advancement: createDefaultSkillAdvancementSettings()
     }),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -150,7 +166,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(SKILL_DEVELOPMENT_COSTS_SETTING, createDefaultSkillDevelopmentCostSettings())
+    preset: true,
+    default: getMainPresetDefault(SKILL_DEVELOPMENT_COSTS_SETTING, createDefaultSkillDevelopmentCostSettings())
   });
 
   game.settings.register(FALLOUT_MAW.id, LEVELS_SETTING, {
@@ -158,7 +175,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(LEVELS_SETTING, createDefaultLevelSettings()),
+    preset: true,
+    default: getMainPresetDefault(LEVELS_SETTING, createDefaultLevelSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -167,7 +186,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(DAMAGE_TYPES_SETTING, createDefaultDamageTypeSettings()),
+    preset: true,
+    default: getMainPresetDefault(DAMAGE_TYPES_SETTING, createDefaultDamageTypeSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -176,7 +197,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(CURRENCY_SETTINGS_SETTING, createDefaultCurrencySettings()),
+    preset: true,
+    default: getMainPresetDefault(CURRENCY_SETTINGS_SETTING, createDefaultCurrencySettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -185,7 +208,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(ITEM_CATEGORIES_SETTING, createDefaultItemCategorySettings()),
+    preset: true,
+    default: getMainPresetDefault(ITEM_CATEGORIES_SETTING, createDefaultItemCategorySettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -194,19 +219,23 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(RESOURCE_SETTINGS_SETTING, createDefaultResourceSettings()),
+    preset: true,
+    default: getMainPresetDefault(RESOURCE_SETTINGS_SETTING, createDefaultResourceSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING, {
     name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
     scope: "world",
+    preset: true,
     config: false,
     type: Object,
-    default: getBaselineDefault(PROFICIENCY_SETTINGS_SETTING, {
+    default: getMainPresetDefault(PROFICIENCY_SETTINGS_SETTING, {
       entries: createDefaultProficiencySettings(),
       influence: createDefaultProficiencyInfluenceSettings()
     }),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -215,7 +244,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(createDefaultSkillSettings())),
+    preset: true,
+    default: getMainPresetDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(createDefaultSkillSettings())),
     onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.abilityCatalogChanged`)
   });
 
@@ -224,7 +254,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(SKILL_CHECK_CONTROL_SETTING, normalizeSkillCheckControl(DEFAULT_SKILL_CHECK_CONTROL))
+    preset: true,
+    default: getMainPresetDefault(SKILL_CHECK_CONTROL_SETTING, normalizeSkillCheckControl(DEFAULT_SKILL_CHECK_CONTROL))
   });
 
   game.settings.register(FALLOUT_MAW.id, DISEASE_SETTINGS_SETTING, {
@@ -232,7 +263,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(DISEASE_SETTINGS_SETTING, createDefaultDiseaseSettings()),
+    preset: true,
+    default: getMainPresetDefault(DISEASE_SETTINGS_SETTING, createDefaultDiseaseSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -241,7 +274,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(TRAUMA_SETTINGS_SETTING, createDefaultTraumaSettings()),
+    preset: true,
+    default: getMainPresetDefault(TRAUMA_SETTINGS_SETTING, createDefaultTraumaSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -250,7 +285,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(TOOL_SETTINGS_SETTING, createDefaultToolSettings()),
+    preset: true,
+    default: getMainPresetDefault(TOOL_SETTINGS_SETTING, createDefaultToolSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -259,7 +296,9 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(SYSTEM_ACTION_SETTINGS_SETTING, createDefaultSystemActionSettings()),
+    preset: true,
+    default: getMainPresetDefault(SYSTEM_ACTION_SETTINGS_SETTING, createDefaultSystemActionSettings()),
+    presetEffect: "actors",
     onChange: refreshPreparedActors
   });
 
@@ -268,7 +307,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings()),
+    preset: true,
+    default: getMainPresetDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings()),
     onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.stealthSettingsChanged`)
   });
 
@@ -277,7 +317,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings()),
+    preset: true,
+    default: getMainPresetDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings()),
     onChange: refreshCombatUi
   });
 
@@ -286,7 +327,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings())
+    preset: true,
+    default: getMainPresetDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings())
   });
 
   game.settings.register(FALLOUT_MAW.id, CAMP_SETTINGS_SETTING, {
@@ -294,7 +336,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(CAMP_SETTINGS_SETTING, createDefaultCampSettings())
+    preset: true,
+    default: getMainPresetDefault(CAMP_SETTINGS_SETTING, createDefaultCampSettings())
   });
 
   game.settings.register(FALLOUT_MAW.id, CAMP_STATE_SETTING, {
@@ -310,7 +353,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings()),
+    preset: true,
+    default: getMainPresetDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings()),
     onChange: refreshCombatUi
   });
 
@@ -319,7 +363,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix()),
+    preset: true,
+    default: getMainPresetDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix()),
     onChange: refreshCombatUi
   });
 
@@ -328,7 +373,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Boolean,
-    default: getBaselineDefault(TIME_MECHANICS_IGNORED_SETTING, false)
+    preset: true,
+    default: getMainPresetDefault(TIME_MECHANICS_IGNORED_SETTING, false)
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_NEEDS_PLAYERS_ONLY_SETTING, {
@@ -336,7 +382,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Boolean,
-    default: getBaselineDefault(TIME_NEEDS_PLAYERS_ONLY_SETTING, true)
+    preset: true,
+    default: getMainPresetDefault(TIME_NEEDS_PLAYERS_ONLY_SETTING, true)
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_REST_MODE_SETTING, {
@@ -344,7 +391,7 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Boolean,
-    default: getBaselineDefault(TIME_REST_MODE_SETTING, false)
+    default: getMainPresetDefault(TIME_REST_MODE_SETTING, false)
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {
@@ -352,7 +399,7 @@ export function registerSystemSettings() {
     scope: "client",
     config: false,
     type: Boolean,
-    default: getBaselineDefault(TOKEN_ACTION_HUD_ENABLED_SETTING, true)
+    default: getMainPresetDefault(TOKEN_ACTION_HUD_ENABLED_SETTING, true)
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_SCALE_SETTING, {
@@ -360,7 +407,7 @@ export function registerSystemSettings() {
     scope: "client",
     config: false,
     type: Number,
-    default: getBaselineDefault(TOKEN_ACTION_HUD_SCALE_SETTING, 50)
+    default: getMainPresetDefault(TOKEN_ACTION_HUD_SCALE_SETTING, 50)
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING, {
@@ -368,7 +415,7 @@ export function registerSystemSettings() {
     scope: "client",
     config: false,
     type: Object,
-    default: getBaselineDefault(TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING, {})
+    default: getMainPresetDefault(TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING, {})
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, {
@@ -376,7 +423,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, normalizeTokenActionHudIcons(DEFAULT_TOKEN_ACTION_HUD_ICONS))
+    preset: true,
+    default: getMainPresetDefault(TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, normalizeTokenActionHudIcons(DEFAULT_TOKEN_ACTION_HUD_ICONS))
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING, {
@@ -384,7 +432,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: true,
     type: Boolean,
-    default: getBaselineDefault(TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING, true)
+    preset: true,
+    default: getMainPresetDefault(TOKEN_HUD_EQUIPMENT_SLOTS_ENABLED_SETTING, true)
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_PROTOTYPE_DEFAULTS_SETTING, {
@@ -392,7 +441,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(TOKEN_PROTOTYPE_DEFAULTS_SETTING, createDefaultTokenPrototypeDefaults())
+    preset: true,
+    default: getMainPresetDefault(TOKEN_PROTOTYPE_DEFAULTS_SETTING, createDefaultTokenPrototypeDefaults())
   });
 
   registerTokenPrototypeDefaultsApi();
@@ -402,7 +452,7 @@ export function registerSystemSettings() {
     scope: "client",
     config: false,
     type: Boolean,
-    default: getBaselineDefault(COMBAT_CAROUSEL_ENABLED_SETTING, true)
+    default: getMainPresetDefault(COMBAT_CAROUSEL_ENABLED_SETTING, true)
   });
 
   game.settings.register(FALLOUT_MAW.id, COMBAT_CAROUSEL_SIZE_SETTING, {
@@ -410,7 +460,7 @@ export function registerSystemSettings() {
     scope: "client",
     config: false,
     type: Number,
-    default: getBaselineDefault(COMBAT_CAROUSEL_SIZE_SETTING, 82)
+    default: getMainPresetDefault(COMBAT_CAROUSEL_SIZE_SETTING, 82)
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
@@ -605,15 +655,15 @@ export function registerSystemSettings() {
     restricted: true
   });
 
-  game.settings.registerMenu(FALLOUT_MAW.id, "settingsBaselineMenu", {
-    name: "Settings Baseline",
+  game.settings.registerMenu(FALLOUT_MAW.id, "settingsPresetsMenu", {
+    name: localize("FALLOUTMAW.Settings.Presets.Title"),
     label: localize("FALLOUTMAW.Settings.Open"),
-    icon: "fa-solid fa-file-export",
-    type: SettingsBaselineConfig,
+    icon: "fa-solid fa-sliders",
+    type: SettingsPresetsConfig,
     restricted: true
   });
 
-  registerSettingsBaselineTools();
+  registerSettingsPresetTools();
 }
 
 export async function finalizeSystemSettings() {

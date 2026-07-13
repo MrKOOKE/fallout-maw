@@ -3,7 +3,7 @@ import {
   FACTION_MATRIX_SETTING,
   FACTION_SETTINGS_SETTING
 } from "./constants.mjs";
-import { getBaselineDefault } from "./baseline.mjs";
+import { getMainPresetDefault } from "./presets/manager.mjs";
 
 export const DEFAULT_FACTION_NAME = "\u041d\u0435\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u043e";
 
@@ -60,8 +60,8 @@ export async function setFactionSettings(settings) {
 }
 
 export async function resetFactionSettings() {
-  const factions = getBaselineDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings());
-  const matrix = getBaselineDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix());
+  const factions = getMainPresetDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings());
+  const matrix = getMainPresetDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix());
   await game.settings.set(FALLOUT_MAW.id, FACTION_MATRIX_SETTING, matrix);
   await setFactionSettings(factions);
   await setFactionMatrix(matrix, factions);

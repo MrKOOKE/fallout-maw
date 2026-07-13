@@ -42,6 +42,7 @@ export function registerGlobalMapSystem() {
   game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_TRAVEL_IMAGE_SETTING, {
     name: "Изображение путешествующей группы",
     scope: "world",
+    preset: true,
     config: false,
     type: String,
     default: TRAVEL_GROUP_IMAGE_DEFAULT
@@ -49,6 +50,7 @@ export function registerGlobalMapSystem() {
   game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_TRAVEL_SPEED_FORMULA_SETTING, {
     name: "Формула скорости путешествия",
     scope: "world",
+    preset: true,
     config: false,
     type: String,
     default: GLOBAL_MAP_TRAVEL_SPEED_FORMULA_DEFAULT

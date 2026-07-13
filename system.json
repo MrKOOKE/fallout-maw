@@ -3,7 +3,7 @@
   "type": "system",
   "title": "Fallout-MaW",
   "description": "A universal automation-focused tabletop system for Foundry Virtual Tabletop.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "compatibility": {
     "minimum": "14",
     "verified": "14.361"
@@ -106,6 +106,7 @@
     }
   ],
   "socket": true,
+  "persistentStorage": true,
   "initiative": "1d20 + @attributes.initiative",
   "grid": {
     "distance": 1,

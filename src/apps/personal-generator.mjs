@@ -11,7 +11,7 @@ import {
   PERSONAL_GENERATOR_PRESETS_SETTING,
   PERSONAL_NAME_RANDOMIZER_SETTING
 } from "../settings/constants.mjs";
-import { getBaselineDefault } from "../settings/baseline.mjs";
+import { getMainPresetDefault } from "../settings/presets/manager.mjs";
 import {
   canUseWeaponSlotForItem,
   getEquipmentSlotSelectionKey,
@@ -111,17 +111,19 @@ export function registerPersonalGeneratorSettings() {
   game.settings.register(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, {
     name: "Настройки персонального генератора",
     scope: "world",
+    preset: true,
     config: false,
     type: Object,
-    default: getBaselineDefault(PERSONAL_NAME_RANDOMIZER_SETTING, { blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block })) })
+    default: getMainPresetDefault(PERSONAL_NAME_RANDOMIZER_SETTING, { blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block })) })
   });
 
   game.settings.register(SYSTEM_ID, PERSONAL_GENERATOR_PRESETS_SETTING, {
     name: "Пресеты персонального генератора",
     scope: "world",
+    preset: true,
     config: false,
     type: Object,
-    default: getBaselineDefault(PERSONAL_GENERATOR_PRESETS_SETTING, {})
+    default: getMainPresetDefault(PERSONAL_GENERATOR_PRESETS_SETTING, {})
   });
 }
 
@@ -244,7 +246,7 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
 
   static async #onResetDefaults(event) {
     event.preventDefault();
-    await game.settings.set(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, getBaselineDefault(PERSONAL_NAME_RANDOMIZER_SETTING, {
+    await game.settings.set(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, getMainPresetDefault(PERSONAL_NAME_RANDOMIZER_SETTING, {
       blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block }))
     }));
     this.blocks = getPersonalNameBlocks();

@@ -24,7 +24,12 @@ import { registerDataModels, registerTrackableAttributes } from "./data/index.mj
 import { FalloutMaWActor, FalloutMaWCombat, FalloutMaWItem } from "./documents/index.mjs";
 import { registerAdvancementMediaSocket } from "./advancement/media.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
-import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
+import {
+  registerSystemSettings,
+  finalizeSystemSettings,
+  initializeSettingsPresets,
+  finalizeSettingsPresetStartup
+} from "./settings/index.mjs";
 import {
   refreshSkillCheckControlButton,
   registerSkillCheckControlHooks,
@@ -165,10 +170,11 @@ Hooks.on("openDetachedWindow", (_id, win) => {
   registerFormFocusDragGuard(win?.document);
 });
 
-Hooks.once("ready", initializeGlobalMapRuntime);
-
 Hooks.once("ready", async () => {
+  await initializeSettingsPresets();
   await finalizeSystemSettings();
+  await finalizeSettingsPresetStartup();
+  initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();

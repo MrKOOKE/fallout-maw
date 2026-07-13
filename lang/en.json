@@ -684,6 +684,99 @@
     },
     "Settings": {
       "Open": "Open",
+      "Presets": {
+        "Title": "Fallout-MaW: Settings Presets",
+        "Heading": "Settings Presets",
+        "Description": "Select which portable set of world settings this world uses, or share a set as a JSON file.",
+        "ActivePreset": "Active preset",
+        "SyncStatus": "Synchronization",
+        "Name": "Preset name",
+        "Main": "Main",
+        "Active": "Active",
+        "Deleted": "Deleted",
+        "SeedPending": "Initial seed",
+        "MainCannotDelete": "The main Fallout-MaW preset cannot be deleted.",
+        "Empty": "No settings presets are available.",
+        "Unknown": "Unknown",
+        "Unnamed": "Unnamed preset",
+        "Columns": {
+          "Name": "Name",
+          "Id": "ID",
+          "Revision": "Revision",
+          "Source": "Source",
+          "State": "Sync state",
+          "Actions": "Actions"
+        },
+        "Actions": {
+          "Activate": "Activate",
+          "Create": "Create",
+          "Delete": "Delete",
+          "Export": "Export",
+          "Import": "Import",
+          "Refresh": "Refresh",
+          "Rename": "Rename"
+        },
+        "Create": {
+          "Heading": "Create a preset",
+          "Hint": "A new preset starts as a full copy of the main Fallout-MaW preset.",
+          "NamePlaceholder": "Preset name"
+        },
+        "Import": {
+          "Heading": "Import a preset",
+          "Hint": "Choose a standalone preset JSON file or a legacy baseline snapshot.",
+          "Activate": "Activate after import",
+          "ReplaceTitle": "Replace settings preset",
+          "ReplaceContent": "Preset \"{name}\" ({id}) already exists. Importing this file will replace it completely. Continue?",
+          "Replace": "Replace"
+        },
+        "Rename": {
+          "Title": "Rename {name}"
+        },
+        "Delete": {
+          "Title": "Delete {name}",
+          "Content": "Remove preset \"{name}\" only from this world's library? Presets owned by other GMs are not affected.",
+          "ActiveWarning": "The main Fallout-MaW preset will become active in this world."
+        },
+        "Sources": {
+          "System": "System",
+          "World": "World",
+          "SystemWorld": "System + world"
+        },
+        "SyncStates": {
+          "Synced": "Synced",
+          "Pending": "Pending",
+          "WorldOnly": "World only",
+          "Tombstone": "Tombstone",
+          "Error": "Error"
+        },
+        "ManagerStates": {
+          "Ready": "Ready",
+          "Busy": "Saving",
+          "Pending": "Pending changes",
+          "Loading": "Loading",
+          "Error": "Error"
+        },
+        "Notifications": {
+          "Activated": "Preset \"{name}\" activated.",
+          "Created": "Preset \"{name}\" created.",
+          "Deleted": "Preset \"{name}\" deleted.",
+          "Exported": "Preset \"{name}\" exported.",
+          "Imported": "Preset \"{name}\" imported.",
+          "Refreshed": "Settings preset library refreshed.",
+          "Renamed": "Preset renamed to \"{name}\"."
+        },
+        "Warnings": {
+          "FileRequired": "Choose a preset JSON file first.",
+          "NameRequired": "Enter a preset name.",
+          "OnlyGM": "Only a GM can manage settings presets."
+        },
+        "Errors": {
+          "ApiUnavailable": "The settings presets manager is not initialized.",
+          "InvalidJson": "The selected file is not valid settings preset JSON.",
+          "OperationFailed": "Settings preset operation failed: {message}",
+          "Unknown": "Unknown settings preset error."
+        }
+      },
       "Combat": {
         "Title": "Combat Settings",
         "DodgeEnabled": "Use dodge as a resource",

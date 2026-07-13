@@ -35,3 +35,4 @@ export const TIME_MECHANICS_IGNORED_SETTING = "timeMechanicsIgnored";
 export const TIME_NEEDS_PLAYERS_ONLY_SETTING = "timeNeedsPlayersOnly";
 export const TIME_REST_MODE_SETTING = "timeRestMode";
 export const MIGRATION_STATE_SETTING = "migrationState";
+export const SETTINGS_PRESET_STATE_SETTING = "settingsPresetState";

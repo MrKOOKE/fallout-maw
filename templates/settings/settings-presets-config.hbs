@@ -1,0 +1,144 @@
+<section class="fallout-maw-settings-presets" aria-labelledby="fallout-maw-settings-presets-heading">
+  <header class="fallout-maw-settings-presets-header">
+    <div>
+      <h2 id="fallout-maw-settings-presets-heading">{{localize "FALLOUTMAW.Settings.Presets.Heading"}}</h2>
+      <p>{{localize "FALLOUTMAW.Settings.Presets.Description"}}</p>
+    </div>
+    <button type="button" class="fallout-maw-settings-presets-refresh" data-action="refresh">
+      <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+      <span>{{localize "FALLOUTMAW.Settings.Presets.Actions.Refresh"}}</span>
+    </button>
+  </header>
+
+  <div class="fallout-maw-settings-presets-summary">
+    <div class="fallout-maw-settings-presets-summary-item">
+      <span>{{localize "FALLOUTMAW.Settings.Presets.ActivePreset"}}</span>
+      <strong>{{#if activePreset}}{{activePreset.name}}{{else}}—{{/if}}</strong>
+    </div>
+    <div class="fallout-maw-settings-presets-summary-item">
+      <span>{{localize "FALLOUTMAW.Settings.Presets.SyncStatus"}}</span>
+      <strong class="fallout-maw-settings-preset-state state-{{status.stateClass}}">
+        <i class="fa-solid fa-circle" aria-hidden="true"></i>
+        {{status.label}}
+      </strong>
+    </div>
+    {{#if status.error}}
+      <div class="fallout-maw-settings-presets-summary-error" title="{{status.error}}">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        <span>{{status.error}}</span>
+      </div>
+    {{/if}}
+  </div>
+
+  <div class="fallout-maw-settings-presets-table-wrap">
+    <table class="fallout-maw-settings-presets-table">
+      <thead>
+        <tr>
+          <th>{{localize "FALLOUTMAW.Settings.Presets.Columns.Name"}}</th>
+          <th>{{localize "FALLOUTMAW.Settings.Presets.Columns.Id"}}</th>
+          <th>{{localize "FALLOUTMAW.Settings.Presets.Columns.Revision"}}</th>
+          <th>{{localize "FALLOUTMAW.Settings.Presets.Columns.Source"}}</th>
+          <th>{{localize "FALLOUTMAW.Settings.Presets.Columns.State"}}</th>
+          <th class="fallout-maw-settings-presets-actions-heading">{{localize "FALLOUTMAW.Settings.Presets.Columns.Actions"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each presets}}
+          <tr class="{{rowClass}}" data-preset-id="{{id}}">
+            <td class="fallout-maw-settings-preset-name">
+              <strong>{{name}}</strong>
+              <div class="fallout-maw-settings-preset-flags">
+                {{#if isMain}}
+                  <span class="fallout-maw-settings-preset-badge main">
+                    <i class="fa-solid fa-star" aria-hidden="true"></i>
+                    {{localize "FALLOUTMAW.Settings.Presets.Main"}}
+                  </span>
+                {{/if}}
+                {{#if active}}
+                  <span class="fallout-maw-settings-preset-badge active">
+                    <i class="fa-solid fa-check" aria-hidden="true"></i>
+                    {{localize "FALLOUTMAW.Settings.Presets.Active"}}
+                  </span>
+                {{/if}}
+                {{#if seedPending}}
+                  <span class="fallout-maw-settings-preset-badge seed">
+                    <i class="fa-solid fa-seedling" aria-hidden="true"></i>
+                    {{localize "FALLOUTMAW.Settings.Presets.SeedPending"}}
+                  </span>
+                {{/if}}
+              </div>
+            </td>
+            <td class="fallout-maw-settings-preset-code" title="{{id}}"><code>{{shortId}}</code></td>
+            <td class="fallout-maw-settings-preset-code" title="{{revision}}"><code>{{shortRevision}}</code></td>
+            <td><span class="fallout-maw-settings-preset-source">{{sourceLabel}}</span></td>
+            <td>
+              <span class="fallout-maw-settings-preset-state state-{{syncClass}}">
+                <i class="fa-solid fa-circle" aria-hidden="true"></i>
+                {{syncLabel}}
+              </span>
+            </td>
+            <td class="fallout-maw-settings-preset-actions-cell">
+              <div class="fallout-maw-settings-preset-actions">
+                <button type="button" data-action="activate" data-tooltip="{{localize "FALLOUTMAW.Settings.Presets.Actions.Activate"}}" aria-label="{{localize "FALLOUTMAW.Settings.Presets.Actions.Activate"}}" {{#unless canActivate}}disabled{{/unless}}>
+                  <i class="fa-solid fa-circle-play" aria-hidden="true"></i>
+                </button>
+                <button type="button" data-action="export" data-tooltip="{{localize "FALLOUTMAW.Settings.Presets.Actions.Export"}}" aria-label="{{localize "FALLOUTMAW.Settings.Presets.Actions.Export"}}" {{#unless canExport}}disabled{{/unless}}>
+                  <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+                </button>
+                <button type="button" data-action="rename" data-tooltip="{{localize "FALLOUTMAW.Settings.Presets.Actions.Rename"}}" aria-label="{{localize "FALLOUTMAW.Settings.Presets.Actions.Rename"}}" {{#unless canRename}}disabled{{/unless}}>
+                  <i class="fa-solid fa-pen" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="danger" data-action="delete" data-tooltip="{{#if isMain}}{{localize "FALLOUTMAW.Settings.Presets.MainCannotDelete"}}{{else}}{{localize "FALLOUTMAW.Settings.Presets.Actions.Delete"}}{{/if}}" aria-label="{{localize "FALLOUTMAW.Settings.Presets.Actions.Delete"}}" {{#unless canDelete}}disabled{{/unless}}>
+                  <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        {{else}}
+          <tr>
+            <td class="fallout-maw-settings-presets-empty" colspan="6">
+              <i class="fa-solid fa-box-open" aria-hidden="true"></i>
+              {{localize "FALLOUTMAW.Settings.Presets.Empty"}}
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="fallout-maw-settings-presets-editors">
+    <section class="fallout-maw-settings-presets-editor">
+      <h3>
+        <i class="fa-solid fa-copy" aria-hidden="true"></i>
+        {{localize "FALLOUTMAW.Settings.Presets.Create.Heading"}}
+      </h3>
+      <p>{{localize "FALLOUTMAW.Settings.Presets.Create.Hint"}}</p>
+      <div class="fallout-maw-settings-presets-editor-controls">
+        <input type="text" data-preset-create-name autocomplete="off" placeholder="{{localize "FALLOUTMAW.Settings.Presets.Create.NamePlaceholder"}}">
+        <button type="button" data-action="create">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          <span>{{localize "FALLOUTMAW.Settings.Presets.Actions.Create"}}</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="fallout-maw-settings-presets-editor">
+      <h3>
+        <i class="fa-solid fa-file-import" aria-hidden="true"></i>
+        {{localize "FALLOUTMAW.Settings.Presets.Import.Heading"}}
+      </h3>
+      <p>{{localize "FALLOUTMAW.Settings.Presets.Import.Hint"}}</p>
+      <div class="fallout-maw-settings-presets-editor-controls import">
+        <input type="file" data-preset-import-file accept=".json,application/json">
+        <button type="button" data-action="import">
+          <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i>
+          <span>{{localize "FALLOUTMAW.Settings.Presets.Actions.Import"}}</span>
+        </button>
+      </div>
+      <label class="fallout-maw-settings-presets-import-activate">
+        <input type="checkbox" data-preset-import-activate {{checked importActivate}}>
+        <span>{{localize "FALLOUTMAW.Settings.Presets.Import.Activate"}}</span>
+      </label>
+    </section>
+  </div>
+</section>

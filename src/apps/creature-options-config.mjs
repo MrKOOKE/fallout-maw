@@ -11,7 +11,7 @@ import {
   getSkillSettings,
   setCreatureOptions
 } from "../settings/accessors.mjs";
-import { getBaselineDefault } from "../settings/baseline.mjs";
+import { getMainPresetDefault } from "../settings/presets/manager.mjs";
 import { CREATURE_OPTIONS_SETTING } from "../settings/constants.mjs";
 import {
   createEmptyCreatureOptions,
@@ -255,7 +255,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     });
     if (!confirmed) return undefined;
 
-    await setCreatureOptions(getBaselineDefault(CREATURE_OPTIONS_SETTING, createEmptyCreatureOptions()));
+    await setCreatureOptions(getMainPresetDefault(CREATURE_OPTIONS_SETTING, createEmptyCreatureOptions()));
     this.creatureOptions = getCreatureOptions();
     this.activeTypeId = this.creatureOptions.types[0]?.id ?? "";
     this.activeRaceId = this.creatureOptions.races.find(race => race.typeId === this.activeTypeId)?.id ?? "";
