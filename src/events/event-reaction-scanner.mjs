@@ -112,9 +112,13 @@ export async function eventReactionFunctionMatches({
 } = {}) {
   const reactorActorUuid = String(reactor?.uuid ?? "").trim();
   if (!reactorActorUuid || abilityFunction?.type !== ABILITY_FUNCTION_TYPES.effectChanges) return false;
-  const subscriptions = getEventReactionSubscriptions(abilityFunction.conditions);
-  if (!subscriptions.some(condition => eventReactionSubscriptionMatches(condition, envelope, reactorActorUuid))) return false;
   const resolved = participants ?? await resolveEventReactionParticipants(envelope, resolveUuid);
+  const subscriptions = getEventReactionSubscriptions(abilityFunction.conditions);
+  if (!subscriptions.some(condition => eventReactionSubscriptionMatches(condition, envelope, reactorActorUuid, {
+    reactorActor: reactor,
+    sourceActor: resolved.sourceActor,
+    targetActor: resolved.targetActor
+  }))) return false;
   return evaluateEventReactionSecondaryConditions({
     reactor,
     item,

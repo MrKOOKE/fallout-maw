@@ -9,7 +9,7 @@ import {
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
-  ABILITY_EVENT_REACTOR_ROLES,
+  ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -128,6 +128,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
       addFunctionReactionCost: this.#onAddFunctionReactionCost,
       deleteFunctionReactionCost: this.#onDeleteFunctionReactionCost,
+      addConditionTrackingTarget: this.#onAddConditionTrackingTarget,
+      deleteConditionTrackingTarget: this.#onDeleteConditionTrackingTarget,
       addConditionItemCategory: this.#onAddConditionItemCategory,
       deleteConditionItemCategory: this.#onDeleteConditionItemCategory,
       addConditionTargetFaction: this.#onAddConditionTargetFaction,
@@ -493,7 +495,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     settings.costs.push({
       id: foundry.utils.randomID(),
       resourceKey: REACTION_POINTS_RESOURCE_KEY,
-      formula: "1"
+      formula: "1",
+      overloadAmount: 0,
+      overloadDurationSeconds: 0
     });
     entry.reactionSettings = settings;
     return this.#persist({ render: true, sync: false });
@@ -513,6 +517,35 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const settings = normalizeEventReactionSettings(entry.reactionSettings);
     settings.costs.splice(costIndex, 1);
     entry.reactionSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionTrackingTarget(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = normalizeConditionValues(condition.trackingTargets)
+      .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
+    const next = ABILITY_EVENT_TRACKING_TARGETS.find(group => !values.includes(group));
+    if (next) condition.trackingTargets = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionTrackingTarget(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-event-tracking-target-index]")?.dataset.eventTrackingTargetIndex ?? -1);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || index < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = normalizeConditionValues(condition.trackingTargets)
+      .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
+    values.splice(index, 1);
+    condition.trackingTargets = values;
     return this.#persist({ render: true, sync: false });
   }
 
@@ -844,12 +877,25 @@ function readAbilityFunctions(root) {
 function readEventReactionSettings(row) {
   if (row?.dataset?.functionType !== ABILITY_FUNCTION_TYPES.effectChanges) return {};
   return {
-    durationSeconds: row.querySelector("[data-field='reaction.durationSeconds']")?.value ?? 0,
-    costs: Array.from(row.querySelectorAll("[data-event-reaction-cost-row]") ?? []).map(costRow => ({
-      id: costRow.dataset.costId || foundry.utils.randomID(),
-      resourceKey: costRow.querySelector("[data-field='reaction.cost.resourceKey']")?.value ?? "",
-      formula: costRow.querySelector("[data-field='reaction.cost.formula']")?.value ?? "0"
-    }))
+    durationSeconds: 0,
+    costs: Array.from(row.querySelectorAll("[data-event-reaction-cost-row]") ?? []).map(costRow => {
+      const overloadDurationRaw = costRow.querySelector("[data-field='reaction.cost.overloadDurationAmount']")?.value;
+      const overloadDurationSeconds = overloadDurationRaw === "" || overloadDurationRaw === undefined || overloadDurationRaw === null
+        ? 0
+        : durationPartsToSeconds(
+          overloadDurationRaw,
+          costRow.querySelector("[data-field='reaction.cost.overloadDurationUnit']")?.value
+        );
+      return {
+        id: costRow.dataset.costId || foundry.utils.randomID(),
+        resourceKey: costRow.querySelector("[data-field='reaction.cost.resourceKey']")?.value ?? "",
+        formula: costRow.querySelector("[data-field='reaction.cost.formula']")?.value ?? "0",
+        overloadAmount: overloadDurationSeconds > 0
+          ? Math.max(0, toInteger(costRow.querySelector("[data-field='reaction.cost.overloadAmount']")?.value ?? 0))
+          : 0,
+        overloadDurationSeconds
+      };
+    })
   };
 }
 
@@ -1276,7 +1322,8 @@ function readAbilityConditions(root) {
       groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
       type: row.querySelector("[data-field='conditionType']")?.value || "",
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
-      reactorRole: row.querySelector("[data-field='conditionReactorRole']")?.value ?? ABILITY_EVENT_REACTOR_ROLES.any,
+      combatOnly: Boolean(row.querySelector("[data-field='conditionCombatOnly']")?.checked),
+      trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
       operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
       percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
@@ -1442,16 +1489,17 @@ function prepareFunctionForDisplay(entry) {
     ? prepareDisarmSettingsForDisplay(normalized.fixedSettings)
     : null;
   const hasEventReaction = normalized.conditions.some(condition => condition.type === ABILITY_CONDITION_TYPES.eventReaction);
+  const eventReactionSettings = isEffectChanges && hasEventReaction
+    ? prepareEventReactionSettingsForDisplay(normalized.reactionSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges || isActiveApplication,
     allowEventReaction: isEffectChanges,
-    eventReactionMode: hasEventReaction
+    eventReactionMode: hasEventReaction,
+    eventReactionSettings
   }));
   const hasRuntimeConditions = normalized.conditions.some(condition => isRuntimeCondition(condition.type));
-  const eventReactionSettings = isEffectChanges && hasEventReaction
-    ? prepareEventReactionSettingsForDisplay(normalized.reactionSettings)
-    : null;
   return {
     ...normalized,
     isAcquisitionChanges,
@@ -1511,12 +1559,17 @@ function prepareEventReactionSettingsForDisplay(settings = {}) {
   const normalized = normalizeEventReactionSettings(settings);
   return {
     ...normalized,
-    costs: normalized.costs.map((cost, index) => ({
-      ...cost,
-      index,
-      resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
-      isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey)
-    }))
+    costs: normalized.costs.map((cost, index) => {
+      const overloadDuration = splitDurationSeconds(cost.overloadDurationSeconds);
+      return {
+        ...cost,
+        index,
+        overloadDurationAmount: cost.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
+        overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+        resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
+        isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey)
+      };
+    })
   };
 }
 
@@ -1842,13 +1895,15 @@ function prepareConditionForDisplay(condition, {
   changeCount = 0,
   allowLimitedChanges = false,
   allowEventReaction = false,
-  eventReactionMode = false
+  eventReactionMode = false,
+  eventReactionSettings = null
 } = {}) {
   const type = String(condition?.type ?? "");
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
   const isEventReactionFilter = isEventReactionFilterType(type);
+  const isDuration = type === ABILITY_CONDITION_TYPES.duration;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isEventReaction && !isEventReactionFilter) || (isEventReaction && !allowEventReaction));
+    && ((!isEventReaction && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -1875,14 +1930,20 @@ function prepareConditionForDisplay(condition, {
   const eventDisplay = isEventReaction
     ? buildEventReactionDisplay(condition?.eventKey)
     : { groups: [], selectedEvent: null, isUnsupported: false };
+  const trackingTargets = normalizeConditionValues(condition?.trackingTargets)
+    .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
   return {
     ...condition,
     healthTarget,
-    isPending: !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isEnergyConsumption && !isItemUse,
+    isPending: !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isEventReaction,
     isEventReactionFilter,
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
+    eventReactionSettings: isEventReaction ? eventReactionSettings : null,
+    combatOnly: Boolean(condition?.combatOnly),
+    trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),
+    canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -1900,9 +1961,10 @@ function prepareConditionForDisplay(condition, {
     isAura,
     isLimitedChanges,
     isCooldown,
+    isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
@@ -1917,7 +1979,6 @@ function prepareConditionForDisplay(condition, {
     eventGroups: eventDisplay.groups,
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
-    reactorRoleChoices: buildEventReactorRoleChoices(condition?.reactorRole),
     eventSubjectChoices: buildEventSubjectChoices(condition?.eventSubject),
     healthTargetChoices: buildHealthTargetChoices(healthTarget),
     limbChoices: buildLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
@@ -2085,6 +2146,11 @@ function buildConditionTypeChoices(selected = "", {
     selected: selected === ABILITY_CONDITION_TYPES.cooldown
   });
   choices.push({
+    value: ABILITY_CONDITION_TYPES.duration,
+    label: "Длительность",
+    selected: selected === ABILITY_CONDITION_TYPES.duration
+  });
+  choices.push({
     value: ABILITY_CONDITION_TYPES.energyConsumption,
     label: "Потребление энергии",
     selected: selected === ABILITY_CONDITION_TYPES.energyConsumption
@@ -2099,12 +2165,14 @@ function buildConditionTypeChoices(selected = "", {
     .filter(choice => (
       !choice.value
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
+      || choice.value === ABILITY_CONDITION_TYPES.duration
       || isEventReactionFilterType(choice.value)
       || choice.value === selected
     ))
     .map(choice => choice.value === selected
       && choice.value
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
+      && choice.value !== ABILITY_CONDITION_TYPES.duration
       && !isEventReactionFilterType(choice.value)
       ? { ...choice, label: `${choice.label} — ${localizeEventReactionUi("Unsupported", "unsupported")}` }
       : choice);
@@ -2182,18 +2250,26 @@ function prepareSelectedEventMetadata(descriptor) {
   };
 }
 
-function buildEventReactorRoleChoices(selected = ABILITY_EVENT_REACTOR_ROLES.any) {
-  const labels = {
-    [ABILITY_EVENT_REACTOR_ROLES.source]: localizeEventReactionUi("ReactorRoles.Source", "Event source"),
-    [ABILITY_EVENT_REACTOR_ROLES.target]: localizeEventReactionUi("ReactorRoles.Target", "Event target"),
-    [ABILITY_EVENT_REACTOR_ROLES.observer]: localizeEventReactionUi("ReactorRoles.Observer", "Observer"),
-    [ABILITY_EVENT_REACTOR_ROLES.any]: localizeEventReactionUi("ReactorRoles.Any", "Any matching actor")
-  };
-  return Object.values(ABILITY_EVENT_REACTOR_ROLES).map(value => ({
-    value,
-    label: labels[value] ?? value,
-    selected: value === selected
+function buildEventTrackingTargetRows(value = []) {
+  const selected = normalizeConditionValues(value).filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
+  return selected.map((group, index) => ({
+    index,
+    choices: ABILITY_EVENT_TRACKING_TARGETS.map(entry => ({
+      value: entry,
+      label: getEventTrackingTargetLabel(entry),
+      selected: entry === group,
+      disabled: entry !== group && selected.includes(entry)
+    }))
   }));
+}
+
+function getEventTrackingTargetLabel(group = "") {
+  return {
+    owner: localizeEventReactionUi("TrackingTargetOptions.Owner", "Owner"),
+    ally: localizeEventReactionUi("TrackingTargetOptions.Ally", "Ally"),
+    enemy: localizeEventReactionUi("TrackingTargetOptions.Enemy", "Enemy"),
+    neutral: localizeEventReactionUi("TrackingTargetOptions.Neutral", "Neutral")
+  }[group] ?? group;
 }
 
 function buildEventSubjectChoices(selected = ABILITY_EVENT_SUBJECTS.reactor) {

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  eventReactionRoleMatches,
-  eventReactionSubscriptionMatches
+  eventReactionCombatAllows,
+  eventReactionSubscriptionMatches,
+  eventReactionTrackingTargetsMatch,
+  getEventTrackingRelation
 } from "../src/events/event-reaction-schema.mjs";
 import {
   collectActiveSceneReactorActors,
@@ -22,22 +24,57 @@ import {
   createEventReactionEffectManager,
   getEventReactionEffectFlag
 } from "../src/events/reaction-effects.mjs";
-import { createGenericEventReactionProvider } from "../src/events/event-reaction-provider.mjs";
+import { createGenericEventReactionProvider, buildEventReactionCostLines } from "../src/events/event-reaction-provider.mjs";
+import {
+  ABILITY_OVERLOAD_EFFECT_FLAG_KEY,
+  ABILITY_OVERLOAD_REACTION_COST_ID,
+  withAbilityOverloadEnergyCostRows
+} from "../src/abilities/overload.mjs";
+import { ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY } from "../src/utils/active-effect-changes.mjs";
+import { SYSTEM_ID } from "../src/constants.mjs";
 
 const EVENT_KEY = "fallout-maw.weapon.attack.targeted";
 
-test("event reaction roles distinguish source, target, observer and self-target actors", () => {
-  const base = { reactorActorUuid: "Actor.A", sourceActorUuid: "Actor.A", targetActorUuid: "Actor.B" };
-  assert.equal(eventReactionRoleMatches("source", base), true);
-  assert.equal(eventReactionRoleMatches("target", base), false);
-  assert.equal(eventReactionRoleMatches("observer", base), false);
-  assert.equal(eventReactionRoleMatches("any", base), true);
-  assert.equal(eventReactionRoleMatches("observer", { ...base, reactorActorUuid: "Actor.C" }), true);
+test("event reaction tracking targets match owner, ally, enemy and empty-any", () => {
+  const reactor = { uuid: "Actor.A" };
+  const ally = { uuid: "Actor.B" };
+  const enemy = { uuid: "Actor.C" };
+  const resolveRelation = (_reactor, other) => (other.uuid === "Actor.B" ? "ally" : "enemy");
 
-  const selfTarget = { reactorActorUuid: "Actor.A", sourceActorUuid: "Actor.A", targetActorUuid: "Actor.A" };
-  assert.equal(eventReactionRoleMatches("source", selfTarget), true);
-  assert.equal(eventReactionRoleMatches("target", selfTarget), true);
-  assert.equal(eventReactionRoleMatches("observer", selfTarget), false);
+  assert.equal(getEventTrackingRelation(reactor, reactor), "owner");
+  assert.equal(getEventTrackingRelation(reactor, ally, { resolveRelation }), "ally");
+  assert.equal(getEventTrackingRelation(reactor, enemy, { resolveRelation }), "enemy");
+
+  assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: [] }, {
+    reactorActor: reactor,
+    sourceActor: enemy,
+    targetActor: ally,
+    resolveRelation
+  }), true);
+  assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["owner"] }, {
+    reactorActor: reactor,
+    sourceActor: reactor,
+    targetActor: ally,
+    resolveRelation
+  }), true);
+  assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["ally"] }, {
+    reactorActor: reactor,
+    sourceActor: enemy,
+    targetActor: ally,
+    resolveRelation
+  }), true);
+  assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["enemy"] }, {
+    reactorActor: reactor,
+    sourceActor: ally,
+    targetActor: null,
+    resolveRelation
+  }), false);
+});
+
+test("combat-only reactions require an active combat when requested", () => {
+  assert.equal(eventReactionCombatAllows({ combatOnly: false }, { inCombat: false }), true);
+  assert.equal(eventReactionCombatAllows({ combatOnly: true }, { inCombat: true }), true);
+  assert.equal(eventReactionCombatAllows({ combatOnly: true }, { inCombat: false }), false);
 });
 
 test("event subscription requires an exact stable event key", () => {
@@ -46,8 +83,18 @@ test("event subscription requires an exact stable event key", () => {
     source: { actorUuid: "Actor.A" },
     target: { actorUuid: "Actor.B" }
   };
-  assert.equal(eventReactionSubscriptionMatches({ eventKey: EVENT_KEY, reactorRole: "target" }, envelope, "Actor.B"), true);
-  assert.equal(eventReactionSubscriptionMatches({ eventKey: `${EVENT_KEY}.other`, reactorRole: "target" }, envelope, "Actor.B"), false);
+  assert.equal(eventReactionSubscriptionMatches(
+    { eventKey: EVENT_KEY, trackingTargets: ["owner"] },
+    envelope,
+    "Actor.B",
+    { reactorActor: { uuid: "Actor.B" }, sourceActor: { uuid: "Actor.A" }, targetActor: { uuid: "Actor.B" } }
+  ), true);
+  assert.equal(eventReactionSubscriptionMatches(
+    { eventKey: `${EVENT_KEY}.other`, trackingTargets: ["owner"] },
+    envelope,
+    "Actor.B",
+    { reactorActor: { uuid: "Actor.B" }, sourceActor: { uuid: "Actor.A" }, targetActor: { uuid: "Actor.B" } }
+  ), false);
 });
 
 test("active-scene reactor pool includes hidden tokens and deduplicates actors", () => {
@@ -66,26 +113,26 @@ test("active-scene reactor pool includes hidden tokens and deduplicates actors",
   assert.deepEqual(actors.map(actor => actor.uuid), ["Actor.A", "Actor.B"]);
 });
 
-test("scanner supports owned abilities, active gear, role OR subscriptions, and unique actors", async () => {
+test("scanner supports owned abilities, active gear, tracking OR subscriptions, and unique actors", async () => {
   const actor = { uuid: "Actor.C", items: [] };
   const ability = createSourceItem(actor, {
     id: "ability",
     uuid: "Actor.C.Item.ability",
     type: "ability",
-    functions: [eventFunction({ id: "observer", roles: ["source", "observer"] })]
+    functions: [eventFunction({ id: "observer", trackingTargets: [[], ["enemy"]] })]
   });
   const activeGear = createSourceItem(actor, {
     id: "gear-active",
     uuid: "Actor.C.Item.gear-active",
     type: "gear",
     equipped: true,
-    functions: [eventFunction({ id: "gear-reaction", roles: ["observer"] })]
+    functions: [eventFunction({ id: "gear-reaction", trackingTargets: [[]] })]
   });
   const inactiveGear = createSourceItem(actor, {
     id: "gear-inactive",
     uuid: "Actor.C.Item.gear-inactive",
     type: "gear",
-    functions: [eventFunction({ id: "inactive", roles: ["observer"] })]
+    functions: [eventFunction({ id: "inactive", trackingTargets: [[]] })]
   });
   actor.items = [ability, activeGear, inactiveGear];
   const envelope = eventEnvelope();
@@ -107,7 +154,7 @@ test("secondary filters retain AND/OR groups, explicit subjects, and ignore inco
   const warnings = [];
   const abilityFunction = eventFunction({
     id: "filters",
-    roles: ["observer"],
+    trackingTargets: [[]],
     extraConditions: [
       { id: "standalone", groupId: "", type: "healthPercent", eventSubject: "eventTarget", expected: "target" },
       { id: "or-false", groupId: "g", type: "targetRace", eventSubject: "eventSource", expected: "wrong" },
@@ -130,7 +177,7 @@ test("secondary filters retain AND/OR groups, explicit subjects, and ignore inco
     reactor,
     abilityFunction: eventFunction({
       id: "missing",
-      roles: ["observer"],
+      trackingTargets: [[]],
       extraConditions: [{ id: "target", groupId: "", type: "healthPercent", eventSubject: "eventTarget" }]
     }),
     envelope: eventEnvelope(),
@@ -159,7 +206,7 @@ test("event functions are completely excluded from passive effect and penalty ev
     changes: [{ id: "change", key: "system.test", type: "add", value: "1", phase: "initial", priority: null }],
     penalties: [{ id: "penalty", key: "system.test", type: "add", value: "-1", phase: "initial", priority: null }],
     conditions: [
-      { id: "event", groupId: "or", type: "eventReaction", eventKey: EVENT_KEY, reactorRole: "any" },
+      { id: "event", groupId: "or", type: "eventReaction", eventKey: EVENT_KEY, trackingTargets: [] },
       { id: "ordinary", groupId: "or", type: "healthPercent", operator: "gte", percent: 0 }
     ]
   }]);
@@ -317,7 +364,7 @@ test("health cost selects the reentrant Damage Hub path only for a current opera
   assert.equal(calls[0].time, 42);
 });
 
-test("managed effects use native v14 duration, refresh timed identity, and isolate parallel roots", async () => {
+test("managed effects use native v14 duration, stack timed effects per root, and isolate parallel roots", async () => {
   let worldTime = 100;
   let nextId = 1;
   const actor = { uuid: "Actor.C", effects: [] };
@@ -339,7 +386,7 @@ test("managed effects use native v14 duration, refresh timed identity, and isola
     }
   });
   const sourceItem = { uuid: "Actor.C.Item.ability", name: "Reaction", img: "reaction.webp" };
-  const abilityFunction = eventFunction({ id: "effect", roles: ["any"] });
+  const abilityFunction = eventFunction({ id: "effect" });
   abilityFunction.changes = [{ key: "system.test", value: "1", type: "add", phase: "initial" }];
 
   await manager.apply({ actor, sourceItem, abilityFunction, envelope: eventEnvelope({ rootId: "root-a", eventId: "event-a" }) });
@@ -350,16 +397,65 @@ test("managed effects use native v14 duration, refresh timed identity, and isola
   assert.equal(actor.effects.length, 1);
   assert.equal(getEventReactionEffectFlag(actor.effects[0]).rootId, "root-b");
 
-  abilityFunction.reactionSettings.durationSeconds = 12;
+  abilityFunction.conditions.push({
+    id: "effect-duration",
+    groupId: "",
+    type: "duration",
+    durationSeconds: 12
+  });
   worldTime = 200;
   await manager.apply({ actor, sourceItem, abilityFunction, envelope: eventEnvelope({ rootId: "root-c", eventId: "event-c" }) });
   worldTime = 205;
   await manager.apply({ actor, sourceItem, abilityFunction, envelope: eventEnvelope({ rootId: "root-d", eventId: "event-d" }) });
   const timed = actor.effects.filter(effect => getEventReactionEffectFlag(effect)?.scope === "timed");
-  assert.equal(timed.length, 1);
-  assert.deepEqual(timed[0].start, { time: 205 });
-  assert.deepEqual(timed[0].duration, { value: 12, units: "seconds", expiry: null, expired: false });
-  assert.equal(getEventReactionEffectFlag(timed[0]).rootId, "root-d");
+  assert.equal(timed.length, 2);
+  assert.deepEqual(timed.map(effect => effect.start.time).sort((a, b) => a - b), [200, 205]);
+  assert.deepEqual(
+    timed.map(effect => getEventReactionEffectFlag(effect).rootId).sort(),
+    ["root-c", "root-d"]
+  );
+});
+
+test("ability overload adds energy cost rows for any use of the same ability", () => {
+  const abilityItem = { id: "ability-1", uuid: "Actor.C.Item.ability-1" };
+  const actor = {
+    effects: [{
+      disabled: false,
+      system: {
+        changes: [{
+          key: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+          type: "add",
+          value: "20",
+          phase: "initial"
+        }]
+      },
+      flags: {
+        [SYSTEM_ID]: {
+          [ABILITY_OVERLOAD_EFFECT_FLAG_KEY]: {
+            abilityItemId: "ability-1",
+            abilitySourceId: ""
+          }
+        }
+      },
+      getFlag(scope, key) {
+        return this.flags?.[scope]?.[key];
+      }
+    }]
+  };
+  const rows = withAbilityOverloadEnergyCostRows(actor, abilityItem, { id: "fn" }, [
+    { id: "base", resourceKey: "power", formula: "1" }
+  ]);
+  assert.deepEqual(rows.map(row => ({ id: row.id, resourceKey: row.resourceKey, formula: row.formula })), [
+    { id: "base", resourceKey: "power", formula: "1" },
+    { id: ABILITY_OVERLOAD_REACTION_COST_ID, resourceKey: "power", formula: "20" }
+  ]);
+  assert.deepEqual(
+    buildEventReactionCostLines(
+      { costs: [{ resourceKey: "power", label: "Энергия", amount: 1 }] },
+      { costs: [{ resourceKey: "power", label: "Энергия", amount: 21 }] }
+    ),
+    ["Энергия: 1 базовая / 21 итоговая"]
+  );
 });
 
 test("synthetic active-HUD module effects retain module provenance and use a valid host-item origin", () => {
@@ -415,7 +511,7 @@ test("generic provider consumes a declined opportunity for the whole root", asyn
     id: "ability",
     uuid: "Actor.C.Item.ability",
     type: "ability",
-    functions: [eventFunction({ id: "generic", roles: ["observer"] })]
+    functions: [eventFunction({ id: "generic" })]
   });
   actor.items = [item];
   const docs = new Map([[actor.uuid, actor], [item.uuid, item]]);
@@ -433,7 +529,8 @@ test("generic provider consumes a declined opportunity for the whole root", asyn
       cleanupOrphans: async () => 0
     },
     conditionEvaluator: () => true,
-    normalizeFunctions: functions => functions
+    normalizeFunctions: functions => functions,
+    hasEventKey: async () => true
   });
   const context = { envelope: eventEnvelope(), chainRef: {} };
   const first = await provider.collect({ eventKey: EVENT_KEY, context });
@@ -456,7 +553,7 @@ function eventEnvelope(overrides = {}) {
   };
 }
 
-function eventFunction({ id, roles = ["any"], extraConditions = [] }) {
+function eventFunction({ id, trackingTargets = [[]], extraConditions = [] }) {
   return {
     id,
     type: "effectChanges",
@@ -464,12 +561,13 @@ function eventFunction({ id, roles = ["any"], extraConditions = [] }) {
     changes: [],
     penalties: [],
     conditions: [
-      ...roles.map((reactorRole, index) => ({
+      ...trackingTargets.map((targets, index) => ({
         id: `${id}-event-${index}`,
         groupId: "",
         type: "eventReaction",
         eventKey: EVENT_KEY,
-        reactorRole
+        combatOnly: false,
+        trackingTargets: targets
       })),
       ...extraConditions
     ]

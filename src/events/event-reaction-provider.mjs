@@ -6,6 +6,12 @@ import {
   getActorEventReactionSourceItems
 } from "./event-reaction-scanner.mjs";
 import { eventReactionIndexHasKey } from "./event-reaction-index.mjs";
+import {
+  applyAbilityFunctionOverloadCosts,
+  withAbilityOverloadEnergyCostRows
+} from "../abilities/overload.mjs";
+import { ENERGY_RESOURCE_KEY } from "../combat/energy-resource.mjs";
+import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
 
 export const GENERIC_EVENT_REACTION_PROVIDER_ID = "fallout-maw.genericEventReaction";
 const REACTION_SUCCESS = "success";
@@ -23,6 +29,7 @@ export function createGenericEventReactionProvider({
   effectManager,
   registerRootCleanup = null,
   canReactToEvent = () => true,
+  hasEventKey = eventReactionIndexHasKey,
   warn = undefined,
   logger = console
 } = {}) {
@@ -34,18 +41,27 @@ export function createGenericEventReactionProvider({
   }
   const consumedChances = new Set();
   const registeredRootCleanups = new Set();
+  const itemLookupOptions = getItems ? { getItems } : {};
+  const functionLookupOptions = normalizeFunctions ? { normalizeFunctions } : {};
+
+  function resolveOfferSource(actor, sourceItemUuid = "") {
+    const uuid = String(sourceItemUuid ?? "").trim();
+    return getActorEventReactionSourceItems(actor, itemLookupOptions)
+      .find(item => String(item?.uuid ?? "") === uuid)
+      ?? null;
+  }
 
   async function collect({ eventKey = "", context = {}, semanticEvent = null } = {}) {
     const envelope = getReactionEnvelope(eventKey, { ...context, semanticEvent: semanticEvent ?? context?.semanticEvent });
     if (!envelope.key || !envelope.rootId || !canReactToEvent(envelope)) return [];
-    if (!(await eventReactionIndexHasKey(envelope.key))) return [];
+    if (!(await hasEventKey(envelope.key))) return [];
     const reactors = await getReactorActors(envelope);
     const candidates = await collectEventReactionCandidates({
       envelope,
       reactors,
       resolveUuid,
-      ...(getItems ? { getItems } : {}),
-      ...(normalizeFunctions ? { normalizeFunctions } : {}),
+      ...itemLookupOptions,
+      ...functionLookupOptions,
       ...(conditionEvaluator ? { conditionEvaluator } : {}),
       warn
     });
@@ -56,13 +72,27 @@ export function createGenericEventReactionProvider({
       }
       const actor = await safeResolve(candidate.actorUuid, resolveUuid);
       if (!actor || !canOfferToActor(actor, envelope)) continue;
-      const quote = await costRegistry.quote(actor, candidate.reactionSettings?.costs ?? [], {
+      const sourceItem = resolveOfferSource(actor, candidate.sourceItemUuid);
+      const abilityFunction = sourceItem
+        ? findEventReactionFunction(sourceItem, candidate.functionId, functionLookupOptions)
+        : null;
+      const baseRows = candidate.reactionSettings?.costs ?? [];
+      const quoteContext = {
         rootId: candidate.rootId,
         eventId: candidate.eventId,
         sourceItemUuid: candidate.sourceItemUuid,
         functionId: candidate.functionId,
         chainRef: context?.chainRef
-      });
+      };
+      const baseQuote = await costRegistry.quote(actor, baseRows, quoteContext);
+      if (!baseQuote.valid || !baseQuote.affordable) continue;
+      const costRows = withAbilityOverloadEnergyCostRows(
+        actor,
+        sourceItem,
+        abilityFunction ?? { id: candidate.functionId },
+        baseRows
+      );
+      const quote = await costRegistry.quote(actor, costRows, quoteContext);
       if (!quote.valid || !quote.affordable) continue;
       consumedChances.add(candidate.chanceKey);
       ensureRootCleanup(candidate.rootId);
@@ -70,7 +100,7 @@ export function createGenericEventReactionProvider({
         ...candidate,
         energyCost: 0,
         costFingerprint: quote.fingerprint,
-        costLines: quote.costLines,
+        costLines: buildEventReactionCostLines(baseQuote, quote),
         eventReaction: {
           rootId: candidate.rootId,
           eventId: candidate.eventId,
@@ -89,19 +119,11 @@ export function createGenericEventReactionProvider({
     const actor = await safeResolve(offer.actorUuid, resolveUuid);
     if (!actor || !canOfferToActor(actor, envelope) || !canReactToEvent(envelope)) return failedResult("invalidReactor");
     return costRegistry.withActorLock(actor, async actorLockToken => {
-      const resolvedSourceItem = await safeResolve(offer.sourceItemUuid, resolveUuid);
-      const currentSources = getActorEventReactionSourceItems(actor, {
-        ...(getItems ? { getItems } : {})
-      });
-      const sourceItem = currentSources.find(item => (
-        String(item?.uuid ?? "") === String(resolvedSourceItem?.uuid ?? offer.sourceItemUuid ?? "")
-      ));
+      const sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);
       if (!sourceItem) {
         return failedResult("invalidSourceItem");
       }
-      const abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, {
-        ...(normalizeFunctions ? { normalizeFunctions } : {})
-      });
+      const abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
       if (!abilityFunction) return failedResult("invalidFunction");
       const matches = await eventReactionFunctionMatches({
         reactor: actor,
@@ -114,7 +136,14 @@ export function createGenericEventReactionProvider({
       });
       if (!matches) return failedResult("conditionsChanged");
 
-      const execution = await costRegistry.execute(actor, abilityFunction.reactionSettings?.costs ?? [], {
+      const baseRows = abilityFunction.reactionSettings?.costs ?? [];
+      const costRows = withAbilityOverloadEnergyCostRows(
+        actor,
+        sourceItem,
+        abilityFunction,
+        baseRows
+      );
+      const execution = await costRegistry.execute(actor, costRows, {
         expectedFingerprint: String(offer.costFingerprint ?? offer.eventReaction?.costFingerprint ?? ""),
         actorLockToken,
         rootId: envelope.rootId,
@@ -133,7 +162,10 @@ export function createGenericEventReactionProvider({
             envelope,
             chainRef: context?.chainRef
           });
-          if (abilityFunction.reactionSettings?.durationSeconds === 0) ensureRootCleanup(envelope.rootId);
+          await applyAbilityFunctionOverloadCosts(actor, sourceItem, abilityFunction, {
+            chainRef: context?.chainRef
+          });
+          if (getAbilityFunctionEffectDurationSeconds(abilityFunction) === 0) ensureRootCleanup(envelope.rootId);
           return { effect, executionContext };
         }
       });
@@ -200,6 +232,26 @@ function failedResult(reason) {
     difficultyBonus: 0,
     reason: String(reason ?? "eventReactionFailed")
   };
+}
+
+/** Same display pattern as fixed-function reactions: "Энергия: X базовая / Y итоговая". */
+export function buildEventReactionCostLines(baseQuote = {}, totalQuote = {}) {
+  const baseByKey = new Map((baseQuote?.costs ?? []).map(cost => [
+    String(cost?.resourceKey ?? ""),
+    cost
+  ]));
+  return (totalQuote?.costs ?? [])
+    .filter(cost => Math.max(0, Math.trunc(Number(cost?.amount) || 0)) > 0)
+    .map(cost => {
+      const resourceKey = String(cost?.resourceKey ?? "");
+      const label = String(cost?.label ?? resourceKey);
+      const totalAmount = Math.max(0, Math.trunc(Number(cost?.amount) || 0));
+      const baseAmount = Math.max(0, Math.trunc(Number(baseByKey.get(resourceKey)?.amount) || 0));
+      if (resourceKey === ENERGY_RESOURCE_KEY || baseAmount !== totalAmount) {
+        return `${label}: ${baseAmount} базовая / ${totalAmount} итоговая`;
+      }
+      return `${label}: ${totalAmount}`;
+    });
 }
 
 async function safeResolve(uuid, resolveUuid) {

@@ -3369,6 +3369,9 @@ body #prosemirror-dropdown {
   background: rgba(72, 98, 132, 0.09);
   border: 1px solid rgba(112, 158, 205, 0.28);
   border-radius: 6px;
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
   padding: 0.65rem;
 }
 
@@ -3387,21 +3390,37 @@ body #prosemirror-dropdown {
 .fallout-maw-event-reaction-cost-row {
   align-items: center;
   display: grid;
-  gap: 0.45rem;
-  grid-template-columns: minmax(170px, 0.9fr) minmax(180px, 1fr) auto;
+  gap: 0.35rem;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(90px, 0.7fr) auto;
+}
+
+.fallout-maw-event-reaction-cost-overload {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(70px, 0.45fr) minmax(70px, 0.45fr) minmax(90px, 0.55fr);
 }
 
 .fallout-maw-event-reaction-event-field {
   display: grid;
   gap: 0.45rem;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .fallout-maw-event-reaction-event-field > label,
-.fallout-maw-event-reaction-subject-field {
+.fallout-maw-event-reaction-subject-field,
+.fallout-maw-event-reaction-combat-only,
+.fallout-maw-event-reaction-tracking-targets {
   display: grid;
   gap: 0.18rem;
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-event-reaction-combat-only {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .fallout-maw-event-reaction-event-summary {
@@ -3437,7 +3456,8 @@ body #prosemirror-dropdown {
 @media (max-width: 720px) {
   .fallout-maw-event-reaction-event-field,
   .fallout-maw-event-reaction-cost-row,
-  .fallout-maw-event-reaction-settings > label {
+  .fallout-maw-event-reaction-settings > label,
+  .fallout-maw-event-reaction-combat-only {
     grid-template-columns: minmax(0, 1fr);
   }
 }

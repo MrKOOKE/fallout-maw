@@ -69,16 +69,12 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   aura: "aura",
   limitedChanges: "limitedChanges",
   cooldown: "cooldown",
+  duration: "duration",
   energyConsumption: "energyConsumption",
   itemUse: "itemUse"
 });
 
-export const ABILITY_EVENT_REACTOR_ROLES = Object.freeze({
-  source: "source",
-  target: "target",
-  observer: "observer",
-  any: "any"
-});
+export const ABILITY_EVENT_TRACKING_TARGETS = Object.freeze(["owner", "ally", "enemy", "neutral"]);
 
 export const ABILITY_EVENT_SUBJECTS = Object.freeze({
   reactor: "reactor",
@@ -410,7 +406,24 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   const type = Object.values(ABILITY_FUNCTION_TYPES).includes(rawType) && !isLegacy
     ? rawType
     : ABILITY_FUNCTION_TYPES.effectChanges;
-  const conditions = normalizeAbilityConditions(value?.conditions ?? (value?.condition ? [value.condition] : []));
+  let conditions = normalizeAbilityConditions(value?.conditions ?? (value?.condition ? [value.condition] : []));
+  const reactionSettings = type === ABILITY_FUNCTION_TYPES.effectChanges
+    ? normalizeEventReactionSettings(value?.reactionSettings)
+    : { durationSeconds: 0, costs: [] };
+  const legacyReactionDuration = Math.max(0, toInteger(value?.reactionSettings?.durationSeconds ?? value?.reactionSettings?.duration ?? 0));
+  if (
+    type === ABILITY_FUNCTION_TYPES.effectChanges
+    && legacyReactionDuration > 0
+    && !conditions.some(condition => condition?.type === ABILITY_CONDITION_TYPES.duration)
+  ) {
+    conditions = [
+      ...conditions,
+      normalizeAbilityCondition({
+        type: ABILITY_CONDITION_TYPES.duration,
+        durationSeconds: legacyReactionDuration
+      })
+    ];
+  }
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
@@ -421,9 +434,7 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     activeSettings: type === ABILITY_FUNCTION_TYPES.activeApplication
       ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
       : {},
-    reactionSettings: type === ABILITY_FUNCTION_TYPES.effectChanges
-      ? normalizeEventReactionSettings(value?.reactionSettings)
-      : { durationSeconds: 0, costs: [] },
+    reactionSettings,
     changes: isLegacy
       ? legacyFunctionToChanges(value)
       : normalizeAbilityChanges(value?.changes ?? value?.effects),
@@ -477,12 +488,33 @@ export function normalizeEventReactionSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   const rows = Array.isArray(source.costs) ? source.costs : Object.values(source.costs ?? {});
   return {
-    durationSeconds: Math.max(0, toInteger(source.durationSeconds ?? source.duration ?? 0)),
-    costs: rows.map(row => ({
-      id: String(row?.id ?? "").trim() || foundry.utils.randomID(),
-      resourceKey: String(row?.resourceKey ?? row?.key ?? "").trim(),
-      formula: String(row?.formula ?? row?.value ?? "0").trim()
-    }))
+    durationSeconds: 0,
+    costs: rows.map(row => normalizeEventReactionCost(row))
+  };
+}
+
+export function getAbilityFunctionEffectDurationSeconds(abilityFunction = {}) {
+  const fromConditions = (abilityFunction?.conditions ?? [])
+    .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.duration)
+    .map(condition => Math.max(0, toInteger(condition?.durationSeconds ?? condition?.duration ?? condition?.seconds)))
+    .filter(seconds => seconds > 0);
+  return fromConditions.length ? fromConditions[0] : 0;
+}
+
+export function normalizeEventReactionCost(value = {}) {
+  const overloadDurationSeconds = Math.max(0, toInteger(
+    value?.overloadDurationSeconds ?? value?.overloadDuration ?? 0
+  ));
+  const rawOverload = value?.overloadAmount ?? value?.overload ?? value?.overloadFormula;
+  const overloadAmount = overloadDurationSeconds > 0
+    ? Math.max(0, toInteger(rawOverload ?? 0))
+    : 0;
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    resourceKey: String(value?.resourceKey ?? value?.key ?? "").trim(),
+    formula: String(value?.formula ?? value?.value ?? "0").trim(),
+    overloadAmount,
+    overloadDurationSeconds
   };
 }
 
@@ -553,15 +585,13 @@ function normalizeAbilityCondition(value = {}) {
   const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
 
   if (type === ABILITY_CONDITION_TYPES.eventReaction) {
-    const rawRole = String(value?.reactorRole ?? value?.role ?? "").trim();
     return {
       id,
       groupId,
       type,
       eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
-      reactorRole: Object.values(ABILITY_EVENT_REACTOR_ROLES).includes(rawRole)
-        ? rawRole
-        : ABILITY_EVENT_REACTOR_ROLES.any
+      combatOnly: normalizeBoolean(value?.combatOnly, false),
+      trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets)
     };
   }
 
@@ -704,6 +734,21 @@ function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.duration) {
+    return {
+      id,
+      groupId,
+      type,
+      operator: "lte",
+      percent: 50,
+      equipmentSlotKey: "",
+      healthTarget: ABILITY_HEALTH_TARGETS.general,
+      limbKey: ABILITY_HEALTH_LIMB_ALL,
+      limit: 1,
+      durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? value?.duration ?? value?.seconds))
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.energyConsumption) {
     return {
       id,
@@ -800,6 +845,10 @@ function normalizeAuraMode(value) {
 function normalizeAuraTargetGroups(value = []) {
   const normalized = normalizeStringList(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
   return normalized.length ? normalized : ["enemy"];
+}
+
+function normalizeEventTrackingTargets(value = []) {
+  return normalizeStringList(value).filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
 }
 
 function normalizeFormulaText(value = "", fallback = "0") {

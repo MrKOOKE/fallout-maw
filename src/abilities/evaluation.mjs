@@ -142,6 +142,10 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     return !hasAbilityFunctionCooldown(actor, { abilityItemId, functionId, conditionId });
   }
 
+  if (condition.type === ABILITY_CONDITION_TYPES.duration) {
+    return true;
+  }
+
   if (condition.type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
     const occupied = isActorEquipmentSlotOccupied(actor, condition.equipmentSlotKey);
     return condition.operator === ABILITY_EQUIPMENT_OPERATORS.empty ? !occupied : occupied;

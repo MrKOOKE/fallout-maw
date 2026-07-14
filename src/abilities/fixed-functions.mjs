@@ -154,13 +154,18 @@ import {
   runTerminalSystemEventWorkflow,
   serializeSystemWorkflowError
 } from "../utils/system-event-workflow.mjs";
+import {
+  ABILITY_OVERLOAD_EFFECT_FLAG_KEY,
+  applyAbilityOverloadEffect,
+  getAbilityOverloadEnergyCost,
+  getAbilityOverloadName
+} from "./overload.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 export const ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY = "abilityFixedFunctionState";
 const DEUS_EX_MACHINA_INSIGHT_EFFECT_FLAG_KEY = "deusExMachinaInsight";
 const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
-const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
 const LETHAL_ATTACK_EFFECT_FLAG_KEY = "lethalAttack";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
@@ -6313,30 +6318,6 @@ export function getFixedAbilityEnergyCost(actor, abilityItem, abilityFunction, b
   return getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost);
 }
 
-function getAbilityOverloadEnergyCost(actor, abilityItem, abilityFunction) {
-  if (!actor || !abilityItem) return 0;
-  const abilityItemId = String(abilityItem.id ?? "").trim();
-  const abilitySourceId = getAbilitySourceId(abilityItem);
-  let total = 0;
-  for (const effect of actor.allApplicableEffects?.() ?? actor.effects ?? []) {
-    if (effect?.disabled) continue;
-    const overload = effect.getFlag?.(SYSTEM_ID, ABILITY_OVERLOAD_EFFECT_FLAG_KEY);
-    if (!abilityOverloadApplies(overload, { abilityItemId, abilitySourceId })) continue;
-    for (const change of effect.system?.changes ?? []) {
-      if (String(change?.key ?? "") !== ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY) continue;
-      total += Math.max(0, evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 }));
-    }
-  }
-  return Math.max(0, Math.trunc(total));
-}
-
-function abilityOverloadApplies(overload = {}, { abilityItemId = "", abilitySourceId = "" } = {}) {
-  if (!overload || typeof overload !== "object") return false;
-  const overloadSourceId = String(overload.abilitySourceId ?? "").trim();
-  if (overloadSourceId && abilitySourceId) return overloadSourceId === abilitySourceId;
-  return String(overload.abilityItemId ?? "").trim() === abilityItemId;
-}
-
 async function deactivateFixedAbilityFunction(abilityItem, abilityFunction) {
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
@@ -6384,54 +6365,6 @@ async function applyCurseAndBlessingEffect(actor, abilityItem, abilityFunction, 
     }
   }], { animate: false });
   await createAbilityChatMessage(actor, abilityItem, `${effectName}: ${formatDuration(durationSeconds)}.`);
-  return true;
-}
-
-async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-  name = "Перегрузка",
-  energyCost = 0,
-  durationSeconds = 0,
-  chainRef = null
-} = {}) {
-  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
-  const startTime = Number(game.time?.worldTime) || 0;
-  await actor.createEmbeddedDocuments("ActiveEffect", [{
-    type: "base",
-    name,
-    img: abilityItem.img || "icons/svg/aura.svg",
-    origin: abilityItem.uuid,
-    transfer: false,
-    disabled: false,
-    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: {
-      seconds: Math.max(0, toInteger(durationSeconds)),
-      startTime
-    },
-    system: {
-      changes: [{
-        key: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
-        type: "add",
-        value: String(Math.max(0, toInteger(energyCost))),
-        phase: "initial",
-        priority: null
-      }]
-    },
-    flags: {
-      [SYSTEM_ID]: {
-        kind: "temporary",
-        [ABILITY_OVERLOAD_EFFECT_FLAG_KEY]: {
-          abilityItemId: abilityItem.id,
-          abilitySourceId: getAbilitySourceId(abilityItem),
-          functionId: abilityFunction.id,
-          fixedKey: abilityFunction.fixedKey,
-          createdAt: startTime
-        }
-      }
-    }
-  }], {
-    animate: false,
-    ...createAbilitySystemEventOptions(chainRef)
-  });
   return true;
 }
 
@@ -7669,10 +7602,6 @@ function getResponsibleActorOwner(actor) {
 
 function getAbilityDisplayName(item) {
   return String(item?.name ?? "").trim() || "Способность";
-}
-
-function getAbilityOverloadName(item) {
-  return `Перегрузка: ${getAbilityDisplayName(item)}`;
 }
 
 function escapeHTML(value) {

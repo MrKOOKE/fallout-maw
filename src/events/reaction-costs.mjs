@@ -237,11 +237,18 @@ export function createReactionCostFingerprint({ components = [], costs = [] } = 
 
 export function normalizeCostRows(rows = []) {
   const source = Array.isArray(rows) ? rows : Object.values(rows ?? {});
-  return source.map((row, index) => ({
-    id: String(row?.id ?? `cost-${index + 1}`).trim() || `cost-${index + 1}`,
-    resourceKey: String(row?.resourceKey ?? row?.key ?? "").trim(),
-    formula: String(row?.formula ?? row?.value ?? "0").trim()
-  }));
+  return source.map((row, index) => {
+    const overloadDurationSeconds = Math.max(0, Math.trunc(Number(row?.overloadDurationSeconds) || 0));
+    return {
+      id: String(row?.id ?? `cost-${index + 1}`).trim() || `cost-${index + 1}`,
+      resourceKey: String(row?.resourceKey ?? row?.key ?? "").trim(),
+      formula: String(row?.formula ?? row?.value ?? "0").trim(),
+      overloadAmount: overloadDurationSeconds > 0
+        ? Math.max(0, Math.trunc(Number(row?.overloadAmount ?? row?.overload) || 0))
+        : 0,
+      overloadDurationSeconds
+    };
+  });
 }
 
 export async function spendActorResourceCostVector(actor, costs = [], {

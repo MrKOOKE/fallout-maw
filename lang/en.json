@@ -224,10 +224,16 @@
         "AddCost": "Add cost",
         "Resource": "Resource",
         "Formula": "Cost formula",
+        "Overload": "Overload",
+        "OverloadAmount": "Overload",
+        "OverloadDuration": "Overload duration",
         "NoCosts": "No resource costs configured.",
         "Event": "Event",
         "SelectEvent": "Select an event",
-        "ReactorRole": "Reactor role",
+        "CombatOnly": "Triggers only in combat?",
+        "TrackingTargets": "Tracking target",
+        "AddTrackingTarget": "Add",
+        "NoTrackingTargets": "No targets selected.",
         "EventSubject": "Filter subject",
         "Phase": "Phase",
         "Roles": "Participants",
@@ -246,11 +252,11 @@
         "DeclineAll": "Decline all",
         "CostSummary": "Cost: {cost}",
         "CostUnavailable": "The reaction cost is no longer available.",
-        "ReactorRoles": {
-          "Source": "Event source",
-          "Target": "Event target",
-          "Observer": "Observer",
-          "Any": "Any matching actor"
+        "TrackingTargetOptions": {
+          "Owner": "Owner",
+          "Ally": "Ally",
+          "Enemy": "Enemy",
+          "Neutral": "Neutral"
         },
         "EventSubjects": {
           "Reactor": "Reactor",

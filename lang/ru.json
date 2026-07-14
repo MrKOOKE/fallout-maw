@@ -223,10 +223,16 @@
         "AddCost": "Добавить стоимость",
         "Resource": "Ресурс",
         "Formula": "Формула стоимости",
+        "Overload": "Перегрузка",
+        "OverloadAmount": "Перегрузка",
+        "OverloadDuration": "Длительность перегрузки",
         "NoCosts": "Расход ресурсов не настроен.",
         "Event": "Событие",
         "SelectEvent": "Выберите событие",
-        "ReactorRole": "Роль реагирующего",
+        "CombatOnly": "Срабатывает только в бою?",
+        "TrackingTargets": "Цель для отслеживания",
+        "AddTrackingTarget": "Добавить",
+        "NoTrackingTargets": "Цели не выбраны.",
         "EventSubject": "Субъект фильтра",
         "Phase": "Фаза",
         "Roles": "Участники",
@@ -245,11 +251,11 @@
         "DeclineAll": "Отказаться от всех",
         "CostSummary": "Стоимость: {cost}",
         "CostUnavailable": "Стоимость реакции больше недоступна.",
-        "ReactorRoles": {
-          "Source": "Источник события",
-          "Target": "Цель события",
-          "Observer": "Наблюдатель",
-          "Any": "Любой подходящий актёр"
+        "TrackingTargetOptions": {
+          "Owner": "Владелец",
+          "Ally": "Союзник",
+          "Enemy": "Враг",
+          "Neutral": "Нейтрал"
         },
         "EventSubjects": {
           "Reactor": "Реагирующий",

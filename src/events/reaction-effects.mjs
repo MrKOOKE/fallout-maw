@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
 
 export const EVENT_REACTION_EFFECT_FLAG_KEY = "eventReaction";
 export const EVENT_REACTION_EFFECT_KIND = "eventReaction";
@@ -38,7 +39,7 @@ export function createEventReactionEffectManager({
       throw new Error("Event Reaction effect provenance is incomplete.");
     }
     const seconds = Math.max(0, Math.trunc(Number(
-      durationSeconds ?? abilityFunction?.reactionSettings?.durationSeconds ?? 0
+      durationSeconds ?? getAbilityFunctionEffectDurationSeconds(abilityFunction)
     ) || 0));
     const preparedChanges = normalizeManagedChanges(await prepareChanges(
       reactor,
@@ -212,7 +213,7 @@ function managedEffectMatches(effect, identity) {
   if (!flag || flag.scope !== identity.scope) return false;
   if (flag.reactorActorUuid !== identity.reactorActorUuid) return false;
   if (flag.sourceItemUuid !== identity.sourceItemUuid || flag.functionId !== identity.functionId) return false;
-  return identity.scope === "timed" || flag.rootId === identity.rootId;
+  return flag.rootId === identity.rootId;
 }
 
 function buildEventReactionEffectUpdate(data) {

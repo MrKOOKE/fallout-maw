@@ -146,7 +146,9 @@ function abilityFunctionField() {
       costs: new ArrayField(new SchemaField({
         id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
         resourceKey: new StringField({ required: true, blank: true, initial: "" }),
-        formula: new StringField({ required: true, blank: true, initial: "0" })
+        formula: new StringField({ required: true, blank: true, initial: "0" }),
+        overloadAmount: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+        overloadDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
       }), { required: true, initial: [] })
     }),
     changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
@@ -187,16 +189,17 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "eventReaction", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "energyConsumption", "itemUse"],
+      choices: ["", "eventReaction", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     eventKey: new StringField({ required: true, blank: true, initial: "" }),
-    reactorRole: new StringField({
+    combatOnly: new BooleanField({ required: true, initial: false }),
+    trackingTargets: new ArrayField(new StringField({
       required: true,
       blank: false,
-      choices: ["source", "target", "observer", "any"],
-      initial: "any"
-    }),
+      choices: ["owner", "ally", "enemy", "neutral"],
+      initial: "owner"
+    }), { required: true, initial: [] }),
     eventSubject: new StringField({
       required: true,
       blank: false,

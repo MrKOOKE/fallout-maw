@@ -1,8 +1,13 @@
 import {
   ABILITY_CONDITION_TYPES,
-  ABILITY_EVENT_REACTOR_ROLES,
-  ABILITY_EVENT_SUBJECTS
+  ABILITY_EVENT_SUBJECTS,
+  ABILITY_EVENT_TRACKING_TARGETS
 } from "../settings/abilities.mjs";
+import {
+  DEFAULT_FACTION_NAME,
+  getActorFactionBelongs,
+  getRelationTo
+} from "../settings/factions.mjs";
 
 export const EVENT_REACTION_CONDITION_TYPE = ABILITY_CONDITION_TYPES.eventReaction;
 
@@ -24,11 +29,13 @@ export const EVENT_REACTION_IGNORED_CONDITION_TYPES = Object.freeze([
   ABILITY_CONDITION_TYPES.aura,
   ABILITY_CONDITION_TYPES.limitedChanges,
   ABILITY_CONDITION_TYPES.cooldown,
+  ABILITY_CONDITION_TYPES.duration,
   ABILITY_CONDITION_TYPES.energyConsumption
 ]);
 
 const FILTER_TYPES = new Set(EVENT_REACTION_FILTER_TYPES);
 const IGNORED_TYPES = new Set(EVENT_REACTION_IGNORED_CONDITION_TYPES);
+const TRACKING_TARGETS = new Set(ABILITY_EVENT_TRACKING_TARGETS);
 
 export function hasEventReactionCondition(conditions = []) {
   return (conditions ?? []).some(condition => condition?.type === EVENT_REACTION_CONDITION_TYPE);
@@ -71,31 +78,66 @@ export function normalizeEventSubject(value = "") {
     : ABILITY_EVENT_SUBJECTS.reactor;
 }
 
-export function eventReactionRoleMatches(role = ABILITY_EVENT_REACTOR_ROLES.any, {
-  reactorActorUuid = "",
-  sourceActorUuid = "",
-  targetActorUuid = ""
-} = {}) {
-  const requested = Object.values(ABILITY_EVENT_REACTOR_ROLES).includes(role)
-    ? role
-    : ABILITY_EVENT_REACTOR_ROLES.any;
-  const reactor = String(reactorActorUuid ?? "").trim();
-  const source = String(sourceActorUuid ?? "").trim();
-  const target = String(targetActorUuid ?? "").trim();
-  if (!reactor) return false;
-  if (requested === ABILITY_EVENT_REACTOR_ROLES.any) return true;
-  if (requested === ABILITY_EVENT_REACTOR_ROLES.source) return Boolean(source && reactor === source);
-  if (requested === ABILITY_EVENT_REACTOR_ROLES.target) return Boolean(target && reactor === target);
-  return reactor !== source && reactor !== target;
+export function normalizeEventTrackingTargets(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(entry => String(entry ?? "").trim())
+    .filter(entry => TRACKING_TARGETS.has(entry));
 }
 
-export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, reactorActorUuid = "") {
+export function eventReactionCombatAllows(condition = {}, { inCombat = null } = {}) {
+  if (!condition?.combatOnly) return true;
+  if (typeof inCombat === "boolean") return inCombat;
+  const combat = globalThis.game?.combat ?? globalThis.game?.combats?.active ?? null;
+  return Boolean(combat?.started);
+}
+
+export function getEventTrackingRelation(reactorActor = null, otherActor = null, {
+  resolveRelation = null
+} = {}) {
+  const reactorUuid = String(reactorActor?.uuid ?? "").trim();
+  const otherUuid = String(otherActor?.uuid ?? "").trim();
+  if (!reactorUuid || !otherUuid) return "";
+  if (reactorUuid === otherUuid) return "owner";
+  if (typeof resolveRelation === "function") {
+    const relation = String(resolveRelation(reactorActor, otherActor) ?? "").trim();
+    return TRACKING_TARGETS.has(relation) && relation !== "owner" ? relation : "neutral";
+  }
+  const factions = getActorFactionBelongs(otherActor);
+  const names = factions.length ? factions : [DEFAULT_FACTION_NAME];
+  if (names.some(faction => getRelationTo(reactorActor, faction) === "ally")) return "ally";
+  if (names.some(faction => getRelationTo(reactorActor, faction) === "enemy")) return "enemy";
+  return "neutral";
+}
+
+export function eventReactionTrackingTargetsMatch(condition = {}, {
+  reactorActor = null,
+  sourceActor = null,
+  targetActor = null,
+  resolveRelation = null
+} = {}) {
+  const accepted = new Set(normalizeEventTrackingTargets(condition?.trackingTargets));
+  if (!accepted.size) return true;
+  const participants = [sourceActor, targetActor].filter(Boolean);
+  if (!participants.length) return false;
+  return participants.some(actor => accepted.has(getEventTrackingRelation(reactorActor, actor, { resolveRelation })));
+}
+
+export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, reactorActorUuid = "", {
+  reactorActor = null,
+  sourceActor = null,
+  targetActor = null,
+  inCombat = null,
+  resolveRelation = null
+} = {}) {
   const eventKey = String(condition?.eventKey ?? "").trim();
   if (!eventKey || eventKey !== String(envelope?.key ?? "").trim()) return false;
-  return eventReactionRoleMatches(condition?.reactorRole, {
-    reactorActorUuid,
-    sourceActorUuid: getEventParticipantActorUuid(envelope?.source),
-    targetActorUuid: getEventParticipantActorUuid(envelope?.target)
+  if (!String(reactorActorUuid ?? "").trim()) return false;
+  if (!eventReactionCombatAllows(condition, { inCombat })) return false;
+  return eventReactionTrackingTargetsMatch(condition, {
+    reactorActor: reactorActor ?? { uuid: reactorActorUuid },
+    sourceActor: sourceActor ?? actorStubFromParticipant(envelope?.source),
+    targetActor: targetActor ?? actorStubFromParticipant(envelope?.target),
+    resolveRelation
   });
 }
 
@@ -117,4 +159,9 @@ export function getEventParticipantTokenUuid(participant = null) {
     ?? participant.token?.tokenUuid
     ?? ""
   ).trim();
+}
+
+function actorStubFromParticipant(participant = null) {
+  const uuid = getEventParticipantActorUuid(participant);
+  return uuid ? { uuid } : null;
 }

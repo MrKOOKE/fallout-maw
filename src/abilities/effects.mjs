@@ -596,6 +596,7 @@ function hasRuntimeConditions(conditions = []) {
     condition?.type
     && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
     && condition.type !== ABILITY_CONDITION_TYPES.cooldown
+    && condition.type !== ABILITY_CONDITION_TYPES.duration
   ));
 }
 
