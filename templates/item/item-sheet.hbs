@@ -1574,41 +1574,55 @@
     <fieldset class="fallout-maw-fieldset">
       <legend>{{localize "FALLOUTMAW.Ability.Actions.Title"}}</legend>
       {{#each actions}}
-      {{#if isWeaponAttack}}
-      <div class="fallout-maw-ability-condition-card" data-ability-action-row data-action-index="{{index}}">
+      <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-action-row data-action-index="{{index}}">
         <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.id" value="{{id}}">
-        <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.type" value="weaponAttack">
-        <div class="fallout-maw-ability-condition-card-header">
-          <h4>{{localize "FALLOUTMAW.Ability.Actions.WeaponAttack"}}</h4>
-          <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-        </div>
-        <div class="fallout-maw-ability-action-section">
-          <div class="fallout-maw-item-use-category-header">
-            <span>{{localize "FALLOUTMAW.Ability.Actions.AllowedAttacks"}}</span>
-            <button type="button" data-add-ability-attack-choice {{#unless canAddAttackAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.Actions.AddAttackVariant"}}</button>
-          </div>
-          <div class="fallout-maw-ability-action-choice-list">
-            {{#each attackActionRows}}
-            <div class="fallout-maw-ability-action-choice-row" data-ability-attack-choice-row data-choice-index="{{choiceIndex}}">
-              <select data-ability-attack-choice name="{{functionPath}}.{{functionIndex}}.actions.{{actionIndex}}.attackActionKeys.{{choiceIndex}}">{{#each choices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
-              <button type="button" class="fallout-maw-icon-button" data-delete-ability-attack-choice {{#unless ../canDeleteAttackAction}}disabled{{/unless}} title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-            </div>
+        {{#if isPending}}
+        <label>
+          <span>{{localize "FALLOUTMAW.Ability.Actions.Type"}}</span>
+          <select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.type" data-ability-action-type>
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
+          </select>
+        </label>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{else}}
+        <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.type" value="{{type}}">
+        {{#if isWeaponAttack}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{localize "FALLOUTMAW.Ability.Actions.WeaponAttack"}}</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-ability-action-section">
+            <div class="fallout-maw-item-use-category-header">
+              <span>{{localize "FALLOUTMAW.Ability.Actions.AllowedAttacks"}}</span>
+              <button type="button" data-add-ability-attack-choice {{#unless canAddAttackAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.Actions.AddAttackVariant"}}</button>
+            </div>
+            <div class="fallout-maw-ability-action-choice-list">
+              {{#each attackActionRows}}
+              <div class="fallout-maw-ability-action-choice-row" data-ability-attack-choice-row data-choice-index="{{choiceIndex}}">
+                <select data-ability-attack-choice name="{{functionPath}}.{{functionIndex}}.actions.{{actionIndex}}.attackActionKeys.{{choiceIndex}}">{{#each choices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                <button type="button" class="fallout-maw-icon-button" data-delete-ability-attack-choice {{#unless ../canDeleteAttackAction}}disabled{{/unless}} title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{/each}}
+            </div>
+          </div>
+          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActionPointCost"}}</span><select data-ability-action-cost-mode name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actionPointCostMode">{{#each costModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          </div>
+          <div class="fallout-maw-ability-action-cost-detail" data-ability-action-fixed-cost {{#unless usesFixedActionPointCost}}hidden{{/unless}}>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.FixedCost"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.fixedActionPointCost" value="{{fixedActionPointCost}}"></label>
+          </div>
+          <div class="fallout-maw-ability-action-cost-detail" data-ability-action-actual-cost {{#unless usesActualActionPointCost}}hidden{{/unless}}>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActualPercent"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actualActionPointCostPercent" value="{{actualActionPointCostPercent}}"></label>
+            <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.CostHint"}}</p>
           </div>
         </div>
-        <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActionPointCost"}}</span><select data-ability-action-cost-mode name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actionPointCostMode">{{#each costModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-        </div>
-        <div class="fallout-maw-ability-action-cost-detail" data-ability-action-fixed-cost {{#unless usesFixedActionPointCost}}hidden{{/unless}}>
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.FixedCost"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.fixedActionPointCost" value="{{fixedActionPointCost}}"></label>
-        </div>
-        <div class="fallout-maw-ability-action-cost-detail" data-ability-action-actual-cost {{#unless usesActualActionPointCost}}hidden{{/unless}}>
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActualPercent"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actualActionPointCostPercent" value="{{actualActionPointCostPercent}}"></label>
-          <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.CostHint"}}</p>
-        </div>
+        {{/if}}
+        {{/if}}
       </div>
-      {{/if}}
       {{/each}}
     </fieldset>
     {{/if}}
@@ -1658,6 +1672,14 @@
             {{/if}}
             <div class="fallout-maw-ability-condition-fields">
               {{#if isEventReaction}}
+              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
+                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
+              </label>
+              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-auto-apply">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AutoApply"}}</span>
+                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.autoApply" data-ability-event-reaction-auto-apply {{checked autoApply}}>
+              </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}
                 <label>
@@ -1714,10 +1736,6 @@
                 {{#if isUnsupportedEventKey}}
                 <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedEvent"}}</p>
                 {{/if}}
-                <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
-                  <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
-                  <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
-                </label>
                 <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-tracking-targets">
                   <div class="fallout-maw-item-use-category-header">
                     <span>{{localize "FALLOUTMAW.Events.Reaction.TrackingTargets"}}</span>
@@ -2307,41 +2325,55 @@
     <fieldset class="fallout-maw-fieldset">
       <legend>{{localize "FALLOUTMAW.Ability.Actions.Title"}}</legend>
       {{#each actions}}
-      {{#if isWeaponAttack}}
-      <div class="fallout-maw-ability-condition-card" data-ability-action-row data-action-index="{{index}}">
+      <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-action-row data-action-index="{{index}}">
         <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.id" value="{{id}}">
-        <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.type" value="weaponAttack">
-        <div class="fallout-maw-ability-condition-card-header">
-          <h4>{{localize "FALLOUTMAW.Ability.Actions.WeaponAttack"}}</h4>
-          <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-        </div>
-        <div class="fallout-maw-ability-action-section">
-          <div class="fallout-maw-item-use-category-header">
-            <span>{{localize "FALLOUTMAW.Ability.Actions.AllowedAttacks"}}</span>
-            <button type="button" data-add-ability-attack-choice {{#unless canAddAttackAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.Actions.AddAttackVariant"}}</button>
-          </div>
-          <div class="fallout-maw-ability-action-choice-list">
-            {{#each attackActionRows}}
-            <div class="fallout-maw-ability-action-choice-row" data-ability-attack-choice-row data-choice-index="{{choiceIndex}}">
-              <select data-ability-attack-choice name="{{functionPath}}.{{functionIndex}}.actions.{{actionIndex}}.attackActionKeys.{{choiceIndex}}">{{#each choices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
-              <button type="button" class="fallout-maw-icon-button" data-delete-ability-attack-choice {{#unless ../canDeleteAttackAction}}disabled{{/unless}} title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-            </div>
+        {{#if isPending}}
+        <label>
+          <span>{{localize "FALLOUTMAW.Ability.Actions.Type"}}</span>
+          <select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.type" data-ability-action-type>
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
+          </select>
+        </label>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{else}}
+        <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.type" value="{{type}}">
+        {{#if isWeaponAttack}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{localize "FALLOUTMAW.Ability.Actions.WeaponAttack"}}</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-ability-action-section">
+            <div class="fallout-maw-item-use-category-header">
+              <span>{{localize "FALLOUTMAW.Ability.Actions.AllowedAttacks"}}</span>
+              <button type="button" data-add-ability-attack-choice {{#unless canAddAttackAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.Actions.AddAttackVariant"}}</button>
+            </div>
+            <div class="fallout-maw-ability-action-choice-list">
+              {{#each attackActionRows}}
+              <div class="fallout-maw-ability-action-choice-row" data-ability-attack-choice-row data-choice-index="{{choiceIndex}}">
+                <select data-ability-attack-choice name="{{functionPath}}.{{functionIndex}}.actions.{{actionIndex}}.attackActionKeys.{{choiceIndex}}">{{#each choices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                <button type="button" class="fallout-maw-icon-button" data-delete-ability-attack-choice {{#unless ../canDeleteAttackAction}}disabled{{/unless}} title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{/each}}
+            </div>
+          </div>
+          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActionPointCost"}}</span><select data-ability-action-cost-mode name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actionPointCostMode">{{#each costModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          </div>
+          <div class="fallout-maw-ability-action-cost-detail" data-ability-action-fixed-cost {{#unless usesFixedActionPointCost}}hidden{{/unless}}>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.FixedCost"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.fixedActionPointCost" value="{{fixedActionPointCost}}"></label>
+          </div>
+          <div class="fallout-maw-ability-action-cost-detail" data-ability-action-actual-cost {{#unless usesActualActionPointCost}}hidden{{/unless}}>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActualPercent"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actualActionPointCostPercent" value="{{actualActionPointCostPercent}}"></label>
+            <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.CostHint"}}</p>
           </div>
         </div>
-        <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActionPointCost"}}</span><select data-ability-action-cost-mode name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actionPointCostMode">{{#each costModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-        </div>
-        <div class="fallout-maw-ability-action-cost-detail" data-ability-action-fixed-cost {{#unless usesFixedActionPointCost}}hidden{{/unless}}>
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.FixedCost"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.fixedActionPointCost" value="{{fixedActionPointCost}}"></label>
-        </div>
-        <div class="fallout-maw-ability-action-cost-detail" data-ability-action-actual-cost {{#unless usesActualActionPointCost}}hidden{{/unless}}>
-          <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActualPercent"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actualActionPointCostPercent" value="{{actualActionPointCostPercent}}"></label>
-          <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.CostHint"}}</p>
-        </div>
+        {{/if}}
+        {{/if}}
       </div>
-      {{/if}}
       {{/each}}
     </fieldset>
     {{/if}}
@@ -2391,6 +2423,14 @@
             {{/if}}
             <div class="fallout-maw-ability-condition-fields">
               {{#if isEventReaction}}
+              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
+                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
+              </label>
+              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-auto-apply">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AutoApply"}}</span>
+                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.autoApply" data-ability-event-reaction-auto-apply {{checked autoApply}}>
+              </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}
                 <label>
@@ -2447,10 +2487,6 @@
                 {{#if isUnsupportedEventKey}}
                 <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedEvent"}}</p>
                 {{/if}}
-                <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
-                  <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
-                  <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
-                </label>
                 <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-tracking-targets">
                   <div class="fallout-maw-item-use-category-header">
                     <span>{{localize "FALLOUTMAW.Events.Reaction.TrackingTargets"}}</span>

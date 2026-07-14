@@ -22,8 +22,9 @@
     "SystemTitle": "Fallout-MaW",
     "Ability": {
       "Actions": {
-        "Add": "Добавить атакующее действие",
+        "Add": "Добавить действие",
         "Title": "Действия",
+        "Type": "Действие",
         "WeaponAttack": "Атакующее действие",
         "AllowedAttacks": "Доступные виды атак",
         "AddAttackVariant": "Добавить вариант атаки",
@@ -265,6 +266,7 @@
         "AllSkills": "Все навыки",
         "NoSkills": "Все навыки (без фильтра).",
         "CombatOnly": "Срабатывает только в бою?",
+        "AutoApply": "Автоматическое применение?",
         "TrackingTargets": "Цель для отслеживания",
         "AddTrackingTarget": "Добавить",
         "NoTrackingTargets": "Цели не выбраны.",

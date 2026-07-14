@@ -125,8 +125,14 @@ export async function requestReactionEvent(eventKey = "", context = {}) {
  */
 function dispatchReactionEventRequest(request = {}) {
   if (reactionExecutionDepth > 0) {
-    const envelope = request?.context?.envelope ?? request?.context?.semanticEvent ?? null;
-    pendingReactionRequests.push(request);
+    // Nested requests drain after the current wave releases its root lease/token.
+    // Keep the payload, but drop chainRef so drain opens a fresh root instead of
+    // failing acquire with invalidLease / expiredLineage.
+    const context = foundry.utils.deepClone(request?.context ?? {});
+    if (context.chainRef) context.chainRef = null;
+    if (context.envelope && typeof context.envelope === "object") context.envelope.chainRef = null;
+    if (context.semanticEvent && typeof context.semanticEvent === "object") context.semanticEvent.chainRef = null;
+    pendingReactionRequests.push({ ...request, context });
     return Promise.resolve(createReactionHubResult({ reason: "queued" }));
   }
   return processReactionEventRequest(request);
@@ -358,34 +364,44 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
   const actorOrder = await getStableReactionActorOrder(offersByActor.keys());
   const columns = usable.map(entry => entry.column);
   const lockId = foundry.utils.randomID();
-  let responses = new Map();
-  beginReactionLock(lockId, { reason: "reaction-opportunity-wave" });
-  try {
-    await createReactionOpportunityMessage({
-      context: usable[0]?.context ?? {},
-      actorOrder,
-      offersByActor
-    });
-    responses = await queryReactionOwners(actorOrder, offersByActor, {
-      eventKey: usable[0]?.eventKey ?? "",
-      context: usable[0]?.context ?? {},
-      timeoutMs,
-      columns,
-      singleSelection: true
-    });
-  } finally {
-    endReactionLock(lockId);
-  }
-
-  // One choice for the whole wave: first non-empty selection in reactor order.
   let selected = null;
-  for (const actorUuid of actorOrder) {
-    const response = responses.get(actorUuid) ?? null;
-    if (!response?.offerId) continue;
-    const offer = allOffers.find(entry => entry.actorUuid === actorUuid && entry.offerId === response.offerId);
-    if (offer) {
-      selected = { offer, response, opportunity: offer.__opportunity };
-      break;
+
+  const autoOffer = pickAutoApplyReactionOffer(actorOrder, offersByActor);
+  if (autoOffer) {
+    selected = {
+      offer: autoOffer,
+      response: { offerId: autoOffer.offerId },
+      opportunity: autoOffer.__opportunity
+    };
+  } else {
+    let responses = new Map();
+    beginReactionLock(lockId, { reason: "reaction-opportunity-wave" });
+    try {
+      await createReactionOpportunityMessage({
+        context: usable[0]?.context ?? {},
+        actorOrder,
+        offersByActor
+      });
+      responses = await queryReactionOwners(actorOrder, offersByActor, {
+        eventKey: usable[0]?.eventKey ?? "",
+        context: usable[0]?.context ?? {},
+        timeoutMs,
+        columns,
+        singleSelection: true
+      });
+    } finally {
+      endReactionLock(lockId);
+    }
+
+    // One choice for the whole wave: first non-empty selection in reactor order.
+    for (const actorUuid of actorOrder) {
+      const response = responses.get(actorUuid) ?? null;
+      if (!response?.offerId) continue;
+      const offer = allOffers.find(entry => entry.actorUuid === actorUuid && entry.offerId === response.offerId);
+      if (offer) {
+        selected = { offer, response, opportunity: offer.__opportunity };
+        break;
+      }
     }
   }
   if (!selected) return createReactionHubResult();
@@ -430,6 +446,14 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
     reactionExecutionDepth -= 1;
     if (reactionExecutionDepth === 0) await drainPendingReactionRequests();
   }
+}
+
+function pickAutoApplyReactionOffer(actorOrder = [], offersByActor = new Map()) {
+  for (const actorUuid of actorOrder) {
+    const offer = (offersByActor.get(actorUuid) ?? []).find(entry => entry?.autoApply);
+    if (offer) return offer;
+  }
+  return null;
 }
 
 function canAffordReactionOffer(actor, offer = {}) {

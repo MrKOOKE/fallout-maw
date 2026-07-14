@@ -126,8 +126,22 @@ export function createSystemEventDispatcher({
           ? await requestAuthority("acquireRoot", { chainRef: normalizedMeta.chainRef, meta: normalizedMeta })
           : await requestAuthority("openRoot", { meta: normalizedMeta });
       } catch (error) {
-        logFailOpen("System event root could not be opened", error);
-        return operation(createDetachedScope(normalizedMeta, error));
+        const code = String(error?.code ?? "");
+        const canRetryFresh = Boolean(normalizedMeta.chainRef)
+          && ["invalidLease", "expiredLineage", "unknownRoot", "rootClosed", "rootClosing"].includes(code);
+        if (canRetryFresh) {
+          try {
+            opened = await requestAuthority("openRoot", {
+              meta: { ...normalizedMeta, chainRef: null }
+            });
+          } catch (retryError) {
+            logFailOpen("System event root could not be opened", retryError);
+            return operation(createDetachedScope(normalizedMeta, retryError));
+          }
+        } else {
+          logFailOpen("System event root could not be opened", error);
+          return operation(createDetachedScope(normalizedMeta, error));
+        }
       }
 
       const scope = createClientScope(opened.chainRef, normalizedMeta);

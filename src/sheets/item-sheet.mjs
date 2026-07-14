@@ -1021,6 +1021,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-ability-condition-type]").forEach(select => {
       select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
     });
+    this.element?.querySelectorAll("[data-ability-action-type]").forEach(select => {
+      select.addEventListener("change", event => this.#onAbilityActionTypeChange(event));
+    });
     this.element?.querySelectorAll("[data-ability-condition-health-target]").forEach(select => {
       select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
     });
@@ -3094,6 +3097,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       updateData[path.replace(/\.healthTarget$/, ".limbKey")] = ABILITY_HEALTH_LIMB_ALL;
     }
     await this.#submitCurrentForm(updateData);
+    return this.render();
+  }
+
+  async #onAbilityActionTypeChange(event) {
+    event.preventDefault();
+    const path = String(event.currentTarget?.name ?? "");
+    if (!path) return undefined;
+    await this.#submitCurrentForm({ [path]: event.currentTarget.value });
     return this.render();
   }
 
@@ -6076,6 +6087,28 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
 }
 
 function prepareItemAbilityActionForDisplay(action, index, functionIndex, functionPath) {
+  const type = String(action?.type ?? "");
+  const isPending = !type;
+  const isWeaponAttack = type === "weaponAttack";
+  const typeChoices = [
+    { value: "", label: "", selected: isPending },
+    {
+      value: "weaponAttack",
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.WeaponAttack"),
+      selected: isWeaponAttack
+    }
+  ];
+  if (isPending || !isWeaponAttack) {
+    return {
+      ...action,
+      index,
+      functionIndex,
+      functionPath,
+      isPending,
+      isWeaponAttack: false,
+      typeChoices
+    };
+  }
   const selected = new Set(action?.attackActionKeys ?? []);
   const allSelected = selected.has(ABILITY_ATTACK_ACTION_ALL);
   const choices = [
@@ -6087,7 +6120,9 @@ function prepareItemAbilityActionForDisplay(action, index, functionIndex, functi
     index,
     functionIndex,
     functionPath,
-    isWeaponAttack: action?.type === "weaponAttack",
+    isPending: false,
+    isWeaponAttack: true,
+    typeChoices,
     attackActionRows: (allSelected ? [ABILITY_ATTACK_ACTION_ALL] : action.attackActionKeys).map((selectedKey, choiceIndex) => ({
       choiceIndex,
       functionPath,
@@ -6539,6 +6574,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     showEventSubject: eventReactionMode && isEventReactionFilter,
     eventReactionSettings: isEventReaction ? eventReactionSettings : null,
     combatOnly: Boolean(condition?.combatOnly),
+    autoApply: Boolean(condition?.autoApply),
     trackingTargetRows: buildAbilityEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     showEventTiming: Boolean(eventDisplay.showEventTiming),
@@ -7444,10 +7480,16 @@ function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) 
       const conditionIndex = Number(conditionRow.dataset.conditionIndex ?? -1);
       if (conditionIndex < 0) continue;
       const combatOnly = Boolean(conditionRow.querySelector("[data-ability-event-reaction-combat-only]")?.checked);
+      const autoApply = Boolean(conditionRow.querySelector("[data-ability-event-reaction-auto-apply]")?.checked);
       foundry.utils.setProperty(
         submitData,
         `${functionPath}.${functionIndex}.conditions.${conditionIndex}.combatOnly`,
         combatOnly
+      );
+      foundry.utils.setProperty(
+        submitData,
+        `${functionPath}.${functionIndex}.conditions.${conditionIndex}.autoApply`,
+        autoApply
       );
     }
 

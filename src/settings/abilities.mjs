@@ -338,7 +338,7 @@ export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChange
   });
 }
 
-export function createAbilityAction(type = ABILITY_ACTION_TYPES.weaponAttack) {
+export function createAbilityAction(type = "") {
   return normalizeAbilityAction({
     id: foundry.utils.randomID(),
     type,
@@ -493,10 +493,24 @@ export function normalizeAbilityActions(value = []) {
 }
 
 export function normalizeAbilityAction(value = {}) {
+  const hasExplicitType = Object.prototype.hasOwnProperty.call(value ?? {}, "type");
   const rawType = String(value?.type ?? "").trim();
   const type = Object.values(ABILITY_ACTION_TYPES).includes(rawType)
     ? rawType
-    : ABILITY_ACTION_TYPES.weaponAttack;
+    : hasExplicitType && rawType === ""
+      ? ""
+      : ABILITY_ACTION_TYPES.weaponAttack;
+  if (!type) {
+    return {
+      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      type: "",
+      attackActionKeys: [ABILITY_ATTACK_ACTION_ALL],
+      targetMode: ABILITY_ACTION_TARGET_MODES.triggerActor,
+      actionPointCostMode: ABILITY_ACTION_POINT_COST_MODES.none,
+      fixedActionPointCost: 0,
+      actualActionPointCostPercent: 100
+    };
+  }
   const rawKeys = Array.isArray(value?.attackActionKeys)
     ? value.attackActionKeys
     : Object.values(value?.attackActionKeys ?? {});
@@ -671,6 +685,7 @@ function normalizeAbilityCondition(value = {}) {
       type,
       eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
       combatOnly: normalizeBoolean(value?.combatOnly, false),
+      autoApply: normalizeBoolean(value?.autoApply, false),
       trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets),
       skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey)
     };

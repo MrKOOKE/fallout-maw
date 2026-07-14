@@ -1,11 +1,14 @@
 import {
   ABILITY_ACTION_POINT_COST_MODES,
   ABILITY_ACTION_TARGET_MODES,
+  ABILITY_ACTION_TYPES,
   ABILITY_ATTACK_ACTION_ALL,
   ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
   normalizeAbilityAction
 } from "../settings/abilities.mjs";
 import {
+  canWeaponAttackReachToken,
+  collectValidWeaponAttackTargets,
   executeWeaponAttackAgainstToken,
   getActionAttackCount,
   getMissingWeaponResourceCost,
@@ -16,6 +19,7 @@ import {
   startConstrainedAimedAttackSelection,
   startWeaponAttackAndWait
 } from "../combat/weapon-attack-controller.mjs";
+import { createForcedAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import {
   canSpendStrictActionPoints,
   getStrictActionPointState,
@@ -45,8 +49,12 @@ export function registerAbilityActionQueries() {
   CONFIG.queries[ATTACK_SELECTION_QUERY] = handleAbilityActionSelectionQuery;
 }
 
-export function collectAbilityWeaponAttackOptions(actor, actionSource = {}) {
+export function collectAbilityWeaponAttackOptions(actor, actionSource = {}, {
+  targetToken = null,
+  requireReachableTarget = false
+} = {}) {
   const action = normalizeAbilityAction(actionSource);
+  if (action.type !== ABILITY_ACTION_TYPES.weaponAttack) return [];
   const allowedKeys = action.attackActionKeys.includes(ABILITY_ATTACK_ACTION_ALL)
     ? ABILITY_ATTACKING_WEAPON_ACTION_KEYS
     : action.attackActionKeys;
@@ -80,7 +88,21 @@ export function collectAbilityWeaponAttackOptions(actor, actionSource = {}) {
       }
     }
   }
-  return options;
+  if (!requireReachableTarget) return options;
+  return options.filter(option => abilityWeaponAttackOptionCanReach(actor, option, targetToken));
+}
+
+export function abilityWeaponAttackOptionCanReach(actor, option = null, targetToken = null) {
+  const attackerToken = getPrimaryActorToken(actor);
+  const weapon = option?.weapon ?? null;
+  if (!attackerToken?.actor || !weapon || !option?.actionKey) return false;
+  return canWeaponAttackReachToken({
+    attackerToken,
+    weapon,
+    actionKey: option.actionKey,
+    weaponFunctionId: option.weaponFunctionId,
+    targetToken
+  });
 }
 
 export function getConfiguredActionPointCost(actor, weapon, actionKey, weaponFunctionId, actionSource = {}) {
@@ -129,11 +151,15 @@ export async function executeAbilityWeaponAttackOption({
   targetToken = null,
   chainRef = null,
   damageHubOperationRef = "",
-  ignoreReactionLock = false
+  ignoreReactionLock = false,
+  preventCancel = false,
+  autoApply = false
 } = {}) {
   const freshOption = findFreshOption(actor, option);
   const freeTarget = freshOption?.action?.targetMode === ABILITY_ACTION_TARGET_MODES.free;
+  const useAutoApply = Boolean(autoApply);
   if (!freshOption || (!freeTarget && !targetToken?.actor)) return false;
+  if (freeTarget && useAutoApply && !targetToken?.actor) return false;
   const owner = getResponsibleOwner(actor) ?? game.users?.activeGM ?? null;
   const attackerToken = getPrimaryActorToken(actor);
   if (!owner || !attackerToken?.actor) return false;
@@ -142,7 +168,9 @@ export async function executeAbilityWeaponAttackOption({
     executionId: foundry.utils.randomID(),
     actorUuid: String(actor.uuid ?? ""),
     attackerTokenUuid: String(attackerToken.document?.uuid ?? attackerToken.uuid ?? ""),
-    targetTokenUuid: freeTarget ? "" : String(targetToken?.document?.uuid ?? targetToken?.uuid ?? ""),
+    targetTokenUuid: (freeTarget && !useAutoApply)
+      ? ""
+      : String(targetToken?.document?.uuid ?? targetToken?.uuid ?? ""),
     weaponUuid: freshOption.weaponUuid,
     weaponFunctionId: freshOption.weaponFunctionId,
     actionKey: freshOption.actionKey,
@@ -151,6 +179,8 @@ export async function executeAbilityWeaponAttackOption({
     chainRef,
     damageHubOperationRef: String(damageHubOperationRef ?? ""),
     ignoreReactionLock,
+    preventCancel: Boolean(preventCancel),
+    autoApply: useAutoApply,
     timeoutMs
   };
   try {
@@ -211,9 +241,9 @@ export async function executePreparedAbilityFunctionActions({
   return { attempted, executed, cancelled: false };
 }
 
-export async function requestAbilityWeaponAttackOption(options = [], { title = "" } = {}) {
+export async function requestAbilityWeaponAttackOption(options = [], { title = "", autoApply = false } = {}) {
   if (!options.length) return null;
-  if (options.length === 1) return options[0];
+  if (autoApply || options.length === 1) return pickRandomAbilityAttackOption(options);
   const weaponGroups = groupAbilityAttackOptionsByWeapon(options);
   let selectedGroup = weaponGroups[0] ?? null;
   if (weaponGroups.length > 1) {
@@ -264,9 +294,9 @@ export async function requestAbilityWeaponAttackOption(options = [], { title = "
   return selectedGroup.options.find(option => option.id === optionId) ?? null;
 }
 
-export async function selectAbilityWeaponAttackOption(actor, options = [], { title = "" } = {}) {
+export async function selectAbilityWeaponAttackOption(actor, options = [], { title = "", autoApply = false } = {}) {
   if (!options.length) return null;
-  if (options.length === 1) return options[0];
+  if (autoApply || options.length === 1) return pickRandomAbilityAttackOption(options);
   const owner = getResponsibleOwner(actor) ?? game.users?.activeGM ?? null;
   if (!owner) return null;
   const timeoutMs = getReactionTimeoutMs();
@@ -285,6 +315,21 @@ export async function selectAbilityWeaponAttackOption(actor, options = [], { tit
     console.warn("fallout-maw | Ability attack selection query failed", error);
     return null;
   }
+}
+
+export async function pickRandomAbilityFreeAttackTarget(actor = null, option = null) {
+  const freshOption = findFreshOption(actor, option) ?? option;
+  const attackerToken = getPrimaryActorToken(actor);
+  const weapon = freshOption?.weapon
+    ?? (freshOption?.weaponUuid ? await globalThis.fromUuid?.(freshOption.weaponUuid) : null);
+  if (!attackerToken?.actor || !weapon || !freshOption?.actionKey) return null;
+  const targets = collectValidWeaponAttackTargets({
+    attackerToken,
+    weapon,
+    actionKey: freshOption.actionKey,
+    weaponFunctionId: freshOption.weaponFunctionId
+  });
+  return pickRandomAbilityAttackOption(targets);
 }
 
 function findFreshOption(actor, option) {
@@ -326,6 +371,9 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null) {
   const actionKey = String(data.actionKey ?? "");
   const weaponFunctionId = String(data.weaponFunctionId ?? "");
   const actionPointCost = Math.max(0, Math.trunc(Number(data.actionPointCost) || 0));
+  const attackModifier = data.preventCancel
+    ? createForcedAttackModifier({ label: getWeaponActionLabel(actionKey) })
+    : null;
   const onBeforeExecute = async () => {
     if (actionPointCost <= 0) return true;
     if (!canSpendStrictActionPoints(actor, actionPointCost, { label: getWeaponActionLabel(actionKey) })) return false;
@@ -337,33 +385,38 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null) {
     return true;
   };
 
-  if (data.targetMode === ABILITY_ACTION_TARGET_MODES.free) {
+  const suppressGenericEventReactions = Boolean(data.preventCancel || data.autoApply);
+  if (data.targetMode === ABILITY_ACTION_TARGET_MODES.free && !data.autoApply) {
     return startWeaponAttackAndWait({
       token: attackerToken,
       weapon,
       actionKey,
       weaponFunctionId,
+      attackModifier,
       chainRef,
       damageHubOperationRef: data.damageHubOperationRef,
       onBeforeExecute,
       skipActionPointCost: true,
       ignoreReactionLock: Boolean(data.ignoreReactionLock),
       suspendActiveAttack: true,
-      timeoutMs: data.timeoutMs
+      timeoutMs: data.timeoutMs,
+      suppressGenericEventReactions
     });
   }
   if (!targetToken?.actor) return false;
-  if (["aimedShot", "aimedMeleeAttack"].includes(actionKey)) {
+  if (["aimedShot", "aimedMeleeAttack"].includes(actionKey) && !data.autoApply) {
     return startConstrainedAimedAttackSelection({
       attackerToken,
       targetToken,
       weapon,
       actionKey,
       weaponFunctionId,
+      attackModifier,
       chainRef,
       damageHubOperationRef: data.damageHubOperationRef,
       onBeforeExecute,
-      timeoutMs: data.timeoutMs
+      timeoutMs: data.timeoutMs,
+      suppressGenericEventReactions
     });
   }
   return executeWeaponAttackAgainstToken({
@@ -372,13 +425,20 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null) {
     weapon,
     actionKey,
     weaponFunctionId,
+    attackModifier,
     chainRef,
     damageHubOperationRef: data.damageHubOperationRef,
     onBeforeExecute,
     skipActionPointCost: true,
     ignoreReactionLock: Boolean(data.ignoreReactionLock),
-    suspendActiveAttack: true
+    suspendActiveAttack: true,
+    suppressGenericEventReactions
   });
+}
+
+function pickRandomAbilityAttackOption(options = []) {
+  if (!options.length) return null;
+  return options[Math.floor(Math.random() * options.length)] ?? null;
 }
 
 function getSceneUuidFromTokenUuid(tokenUuid = "") {

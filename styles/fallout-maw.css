@@ -3503,6 +3503,7 @@ body #prosemirror-dropdown {
 .fallout-maw-event-reaction-event-field > label,
 .fallout-maw-event-reaction-subject-field,
 .fallout-maw-event-reaction-combat-only,
+.fallout-maw-event-reaction-auto-apply,
 .fallout-maw-event-reaction-tracking-targets,
 .fallout-maw-event-reaction-skills {
   display: grid;
@@ -3510,7 +3511,8 @@ body #prosemirror-dropdown {
   grid-column: 1 / -1;
 }
 
-.fallout-maw-event-reaction-combat-only {
+.fallout-maw-event-reaction-combat-only,
+.fallout-maw-event-reaction-auto-apply {
   align-items: center;
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -3549,7 +3551,8 @@ body #prosemirror-dropdown {
   .fallout-maw-event-reaction-event-field,
   .fallout-maw-event-reaction-cost-row,
   .fallout-maw-event-reaction-settings > label,
-  .fallout-maw-event-reaction-combat-only {
+  .fallout-maw-event-reaction-combat-only,
+  .fallout-maw-event-reaction-auto-apply {
     grid-template-columns: minmax(0, 1fr);
   }
 }

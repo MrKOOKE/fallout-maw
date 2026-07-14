@@ -3,7 +3,8 @@ import { toInteger } from "../utils/numbers.mjs";
 export const WEAPON_ATTACK_MODIFIER_KEYS = Object.freeze({
   whirlwind: "whirlwind",
   lunge: "lunge",
-  counterSniper: "counterSniper"
+  counterSniper: "counterSniper",
+  forced: "forced"
 });
 
 const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
@@ -28,6 +29,12 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
     finishAfterAttack: true,
     preventCancel: true,
     suppressCounterSniperReaction: true
+  }),
+  [WEAPON_ATTACK_MODIFIER_KEYS.forced]: Object.freeze({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.forced,
+    label: "Реакция",
+    finishAfterAttack: true,
+    preventCancel: true
   })
 });
 
@@ -59,6 +66,14 @@ export function createLungeAttackModifier({
 export function createCounterSniperAttackModifier({ onDestroy = null, label = "Контр-снайпер" } = {}) {
   return normalizeWeaponAttackModifier({
     key: WEAPON_ATTACK_MODIFIER_KEYS.counterSniper,
+    label,
+    onDestroy
+  });
+}
+
+export function createForcedAttackModifier({ onDestroy = null, label = "Реакция" } = {}) {
+  return normalizeWeaponAttackModifier({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.forced,
     label,
     onDestroy
   });

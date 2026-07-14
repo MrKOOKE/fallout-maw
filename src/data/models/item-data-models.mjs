@@ -170,7 +170,7 @@ function abilityFunctionField() {
 function abilityActionField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
-    type: new StringField({ required: true, blank: false, choices: ["weaponAttack"], initial: "weaponAttack" }),
+    type: new StringField({ required: true, blank: true, choices: ["", "weaponAttack"], initial: "weaponAttack" }),
     attackActionKeys: new ArrayField(new StringField({ required: true, blank: false }), { required: true, initial: ["all"] }),
     targetMode: new StringField({
       required: true,
@@ -217,6 +217,7 @@ function abilityConditionField() {
     }),
     eventKey: new StringField({ required: true, blank: true, initial: "" }),
     combatOnly: new BooleanField({ required: true, initial: false }),
+    autoApply: new BooleanField({ required: true, initial: false }),
     trackingTargets: new ArrayField(new StringField({
       required: true,
       blank: false,

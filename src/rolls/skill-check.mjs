@@ -386,6 +386,7 @@ function createSkillCheckEventContext(actor, skill, data = {}, { source = {}, ra
 function buildSkillCheckBeforeEventData(skill, data = {}) {
   return {
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
+    suppressGenericEventReactions: data.suppressGenericEventReactions === true,
     skill: {
       key: String(skill?.key ?? ""),
       label: String(skill?.label ?? ""),

@@ -248,6 +248,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='conditionType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
+    this.element?.querySelectorAll?.("[data-field='action.type']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onActionTypeChange(event));
+    });
     this.element?.querySelectorAll?.("[data-field='conditionEventKey']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
@@ -393,6 +396,14 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       const { condition } = this.#getConditionForTarget(event.currentTarget);
       if (condition) condition.auraIncludeSelf = false;
     }
+    this.#activeTab = "functions";
+    return this.#persist({ render: true, sync: false });
+  }
+
+  #onActionTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.#syncFromForm();
     this.#activeTab = "functions";
     return this.#persist({ render: true, sync: false });
   }
@@ -1000,7 +1011,7 @@ function readAbilityFunctions(root) {
 function readAbilityActions(row) {
   return Array.from(row.querySelectorAll("[data-ability-action-row]") ?? []).map(actionRow => ({
     id: actionRow.dataset.actionId || foundry.utils.randomID(),
-    type: "weaponAttack",
+    type: actionRow.querySelector("[data-field='action.type']")?.value ?? "",
     attackActionKeys: Array.from(actionRow.querySelectorAll("[data-field='action.attackActionKey']") ?? [])
       .map(input => String(input.value ?? "").trim())
       .filter(Boolean),
@@ -1460,6 +1471,7 @@ function readAbilityConditions(root) {
       type: row.querySelector("[data-field='conditionType']")?.value || "",
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
       combatOnly: Boolean(row.querySelector("[data-field='conditionCombatOnly']")?.checked),
+      autoApply: Boolean(row.querySelector("[data-field='conditionAutoApply']")?.checked),
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
       operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
@@ -1699,6 +1711,26 @@ function prepareFunctionForDisplay(entry) {
 }
 
 function prepareAbilityActionForDisplay(action, index) {
+  const type = String(action?.type ?? "");
+  const isPending = !type;
+  const isWeaponAttack = type === "weaponAttack";
+  const typeChoices = [
+    { value: "", label: "", selected: isPending },
+    {
+      value: "weaponAttack",
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.WeaponAttack"),
+      selected: isWeaponAttack
+    }
+  ];
+  if (isPending || !isWeaponAttack) {
+    return {
+      ...action,
+      index,
+      isPending,
+      isWeaponAttack: false,
+      typeChoices
+    };
+  }
   const selected = new Set(action.attackActionKeys ?? []);
   const allSelected = selected.has(ABILITY_ATTACK_ACTION_ALL);
   const choices = [
@@ -1708,7 +1740,9 @@ function prepareAbilityActionForDisplay(action, index) {
   return {
     ...action,
     index,
-    isWeaponAttack: action.type === "weaponAttack",
+    isPending: false,
+    isWeaponAttack: true,
+    typeChoices,
     attackActionRows: (allSelected ? [ABILITY_ATTACK_ACTION_ALL] : action.attackActionKeys).map((selectedKey, choiceIndex) => ({
       choiceIndex,
       choices: choices.map(choice => ({ ...choice, selected: choice.key === selectedKey }))
@@ -2142,6 +2176,7 @@ function prepareConditionForDisplay(condition, {
     showEventSubject: eventReactionMode && isEventReactionFilter,
     eventReactionSettings: isEventReaction ? eventReactionSettings : null,
     combatOnly: Boolean(condition?.combatOnly),
+    autoApply: Boolean(condition?.autoApply),
     trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     showEventTiming: Boolean(eventDisplay.showEventTiming),

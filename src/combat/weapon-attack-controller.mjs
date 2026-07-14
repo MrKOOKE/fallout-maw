@@ -374,7 +374,8 @@ export function startWeaponAttack({
   damageHubOperationRef = "",
   skipActionPointCost = false,
   ignoreReactionLock = false,
-  finishAfterAttack = false
+  finishAfterAttack = false,
+  suppressGenericEventReactions = false
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return undefined;
   if (!token?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return undefined;
@@ -395,7 +396,8 @@ export function startWeaponAttack({
     damageHubOperationRef,
     skipActionPointCost,
     ignoreReactionLock,
-    finishAfterAttack
+    finishAfterAttack,
+    suppressGenericEventReactions
   });
   if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) return undefined;
   activeAttack = controller;
@@ -1013,12 +1015,14 @@ export async function executeWeaponAttackAgainstToken({
   weapon = null,
   actionKey = "",
   weaponFunctionId = "",
+  attackModifier = null,
   chainRef = null,
   damageHubOperationRef = "",
   onBeforeExecute = null,
   skipActionPointCost = false,
   ignoreReactionLock = false,
-  suspendActiveAttack = false
+  suspendActiveAttack = false,
+  suppressGenericEventReactions = false
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return false;
   if (!attackerToken?.actor || !targetToken?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
@@ -1036,13 +1040,14 @@ export async function executeWeaponAttackAgainstToken({
   } else if (activeAttack && !cancelWeaponAttack({ ignoreReactionLock })) {
     return false;
   }
-  const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId, null, {
+  const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId, attackModifier, {
     chainRef,
     damageHubOperationRef,
     onBeforeExecute,
     skipActionPointCost,
     ignoreReactionLock,
-    finishAfterAttack: true
+    finishAfterAttack: true,
+    suppressGenericEventReactions
   });
   if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) {
     if (suspendedAttack && !suspendedAttack.destroyed && !activeAttack) {
@@ -1065,6 +1070,67 @@ export async function executeWeaponAttackAgainstToken({
   }
 }
 
+/** Collect tokens the given weapon action can currently attack from attackerToken. */
+export function collectValidWeaponAttackTargets({
+  attackerToken = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = "",
+  targetToken = null,
+  stopOnFirst = false
+} = {}) {
+  if (!attackerToken?.actor || !weapon || !actionKey) return [];
+  if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return [];
+  if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return [];
+  const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId, null, {
+    skipActionPointCost: true,
+    ignoreReactionLock: true
+  });
+  try {
+    const candidates = targetToken
+      ? [targetToken]
+      : (canvas.tokens?.placeables ?? []);
+    const results = [];
+    for (const token of candidates) {
+      if (!token?.actor || token === attackerToken) continue;
+      if (!controller.evaluateReachAgainstToken(token)) continue;
+      results.push(token);
+      if (stopOnFirst) break;
+    }
+    return results;
+  } finally {
+    controller.destroy();
+  }
+}
+
+export function canWeaponAttackReachToken({
+  attackerToken = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = "",
+  targetToken = null
+} = {}) {
+  return collectValidWeaponAttackTargets({
+    attackerToken,
+    weapon,
+    actionKey,
+    weaponFunctionId,
+    targetToken,
+    stopOnFirst: true
+  }).length > 0;
+}
+
+function isSameAttackToken(left, right) {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const leftUuid = String(left.document?.uuid ?? left.uuid ?? "");
+  const rightUuid = String(right.document?.uuid ?? right.uuid ?? "");
+  if (leftUuid && rightUuid && leftUuid === rightUuid) return true;
+  const leftId = String(left.id ?? left.document?.id ?? "");
+  const rightId = String(right.id ?? right.document?.id ?? "");
+  return Boolean(leftId && rightId && leftId === rightId);
+}
+
 export async function startConstrainedAimedAttackSelection({
   attackerToken = null,
   targetToken = null,
@@ -1076,7 +1142,8 @@ export async function startConstrainedAimedAttackSelection({
   damageHubOperationRef = "",
   onBeforeExecute = null,
   onProcessingStarted = null,
-  timeoutMs = 120000
+  timeoutMs = 120000,
+  suppressGenericEventReactions = false
 } = {}) {
   const normalizedActionKey = ["aimedShot", "aimedMeleeAttack"].includes(actionKey) ? actionKey : "";
   if (!attackerToken?.actor || !targetToken?.actor || !weapon || isActorUnableToAct(attackerToken.actor)) return false;
@@ -1115,7 +1182,8 @@ export async function startConstrainedAimedAttackSelection({
       finishAfterAttack: true,
       constrainedTarget: true,
       skipActionPointCost: true,
-      ignoreReactionLock: true
+      ignoreReactionLock: true,
+      suppressGenericEventReactions
     });
     if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId))) {
       finish(false);
@@ -1323,6 +1391,7 @@ class WeaponAttackController {
     this.damageHubOperationRef = String(options.damageHubOperationRef ?? "").trim();
     this.skipActionPointCost = Boolean(options.skipActionPointCost);
     this.ignoreReactionLock = Boolean(options.ignoreReactionLock);
+    this.suppressGenericEventReactions = Boolean(options.suppressGenericEventReactions);
     this.captureOnly = Boolean(options.captureOnly);
     this.onCapture = typeof options.onCapture === "function" ? options.onCapture : null;
     this.reactionCoordinator = options.reactionCoordinator?.run ? options.reactionCoordinator : null;
@@ -1472,6 +1541,7 @@ class WeaponAttackController {
       weaponActionKey: this.actionKey,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
       weaponActionModifierState: this.getWeaponActionModifierState(),
+      suppressGenericEventReactions: this.suppressGenericEventReactions,
       ...getPostureAttackEdgeModifiers({
         attackerToken: this.token,
         targetToken,
@@ -3598,13 +3668,55 @@ class WeaponAttackController {
       return;
     }
 
+    if (!this.rebuildGeometryAndTargets()) return;
+    this.syncAttackAutoCover();
+    this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
+      ? getAimedTargetUnderPointer(this.pointer, this.targets)
+      : this.selectedTarget;
+    drawAttackShape(this.shape, this.geometry, {
+      locked: this.processing || this.pushStrengthMaximum > 0 || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
+      hasTargets: this.targets.length > 0
+    });
+    this.drawMeleeDirectionHoverPreview();
+    const markerPreview = this.getTargetMarkerPreview(forceBroadcast || this.processing);
+    this.drawTargetMarkersForPreview(markerPreview, {
+      force: forceBroadcast || this.processing,
+      time: performance.now()
+    });
+    if (this.pushStrengthMaximum > 0) {
+      this.removeChanceMenu();
+      this.refreshPushStrengthMenu();
+    } else if (this.targetedAction) {
+      this.removeChanceMenu();
+      this.refreshAimedLimbMenu();
+    } else {
+      this.removeLimbMenu();
+      this.refreshUntargetedChanceMenu();
+    }
+    this.broadcastPreview(forceBroadcast, markerPreview);
+  }
+
+  /** Geometry/target membership only — used by reaction reach filters, not attack previews. */
+  evaluateReachAgainstToken(targetToken) {
+    if (this.destroyed || !targetToken?.actor) return false;
+    const pointer = getTokenAimPoint(targetToken);
+    if (!pointer) return false;
+    this.pointer = pointer;
+    if (!this.rebuildGeometryAndTargets()) return false;
+    return this.targets.includes(targetToken);
+  }
+
+  rebuildGeometryAndTargets() {
     const origin = this.getAttackOrigin();
     this.geometry = this.pushStrengthMaximum > 0
       ? deserializeGeometry(this.lockedGeometry)
       : this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
       ? deserializeGeometry(this.lockedGeometry)
       : this.getAttackGeometry(origin);
-    if (!this.geometry) return;
+    if (!this.geometry) {
+      this.targets = [];
+      return false;
+    }
     const ricochet = this.actionKey === "snapshot"
       ? this.getWeaponActionModifierState().getOption("ricochet")
       : null;
@@ -3645,31 +3757,7 @@ class WeaponAttackController {
     } else if (this.geometry.aimPoint) {
       this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
     }
-    this.syncAttackAutoCover();
-    this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
-      ? getAimedTargetUnderPointer(this.pointer, this.targets)
-      : this.selectedTarget;
-    drawAttackShape(this.shape, this.geometry, {
-      locked: this.processing || this.pushStrengthMaximum > 0 || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
-      hasTargets: this.targets.length > 0
-    });
-    this.drawMeleeDirectionHoverPreview();
-    const markerPreview = this.getTargetMarkerPreview(forceBroadcast || this.processing);
-    this.drawTargetMarkersForPreview(markerPreview, {
-      force: forceBroadcast || this.processing,
-      time: performance.now()
-    });
-    if (this.pushStrengthMaximum > 0) {
-      this.removeChanceMenu();
-      this.refreshPushStrengthMenu();
-    } else if (this.targetedAction) {
-      this.removeChanceMenu();
-      this.refreshAimedLimbMenu();
-    } else {
-      this.removeLimbMenu();
-      this.refreshUntargetedChanceMenu();
-    }
-    this.broadcastPreview(forceBroadcast, markerPreview);
+    return true;
   }
 
   getTrajectoryAimTarget(potentialTargets = []) {

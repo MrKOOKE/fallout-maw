@@ -29,6 +29,7 @@ import {
 import {
   collectAbilityWeaponAttackOptions,
   executeAbilityWeaponAttackOption,
+  pickRandomAbilityFreeAttackTarget,
   registerAbilityActionQueries,
   resolveAbilityActionTriggerTarget,
   selectAbilityWeaponAttackOption
@@ -62,7 +63,8 @@ export function registerFoundrySystemEventIntegration() {
       collectOptions: collectAbilityWeaponAttackOptions,
       selectOption: selectAbilityWeaponAttackOption,
       execute: executeAbilityWeaponAttackOption,
-      resolveTriggerTarget: resolveAbilityActionTriggerTarget
+      resolveTriggerTarget: resolveAbilityActionTriggerTarget,
+      pickRandomFreeTarget: pickRandomAbilityFreeAttackTarget
     },
     warn: warning => console.warn(`${SYSTEM_ID} | Event Reaction condition ignored`, warning)
   });

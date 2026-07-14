@@ -23,8 +23,9 @@
     "SystemTitle": "Fallout-MaW",
     "Ability": {
       "Actions": {
-        "Add": "Add attacking action",
+        "Add": "Add action",
         "Title": "Actions",
+        "Type": "Action",
         "WeaponAttack": "Attacking action",
         "AllowedAttacks": "Available attack types",
         "AddAttackVariant": "Add attack variant",
@@ -266,6 +267,7 @@
         "AllSkills": "All skills",
         "NoSkills": "All skills (no filter).",
         "CombatOnly": "Triggers only in combat?",
+        "AutoApply": "Automatic application?",
         "TrackingTargets": "Tracking target",
         "AddTrackingTarget": "Add",
         "NoTrackingTargets": "No targets selected.",

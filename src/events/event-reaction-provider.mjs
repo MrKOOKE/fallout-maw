@@ -11,6 +11,7 @@ import {
   withAbilityOverloadCostRows
 } from "../abilities/overload.mjs";
 import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
+import { getEventReactionSubscriptions } from "./event-reaction-schema.mjs";
 
 export const GENERIC_EVENT_REACTION_PROVIDER_ID = "fallout-maw.genericEventReaction";
 const REACTION_SUCCESS = "success";
@@ -98,9 +99,12 @@ export function createGenericEventReactionProvider({
       if (!quote.valid || !quote.affordable) continue;
       const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
       if (!variants.length) continue;
+      const autoApply = getEventReactionSubscriptions(abilityFunction?.conditions).some(condition => condition?.autoApply);
       offers.push({
         ...candidate,
         energyCost: 0,
+        autoApply,
+        actionVariants: autoApply ? variants : undefined,
         costFingerprint: quote.fingerprint,
         costLines: buildEventReactionCostLines(baseQuote, quote),
         eventReaction: {
@@ -186,7 +190,9 @@ export function createGenericEventReactionProvider({
             targetToken: actionSelection.targetToken,
             chainRef: context?.chainRef,
             damageHubOperationRef: context?.damageHubOperationRef,
-            ignoreReactionLock: true
+            ignoreReactionLock: true,
+            preventCancel: true,
+            autoApply: Boolean(actionSelection.autoApply)
           })
           : true;
         return { effect, actionUsed, executionContext };
@@ -249,32 +255,45 @@ async function collectActionVariants(actor, abilityFunction, envelope, actionRun
   if (!actionRuntime?.collectOptions || !actionRuntime?.selectOption || !actionRuntime?.execute) return [];
   const variants = [];
   for (const action of actions) {
+    if (!action?.type) continue;
     const targetToken = action.targetMode === "free"
       ? null
       : await actionRuntime.resolveTriggerTarget?.(envelope);
     if (action.targetMode !== "free" && !targetToken) continue;
-    for (const option of await actionRuntime.collectOptions(actor, action)) variants.push({ action, option, targetToken });
+    const options = await actionRuntime.collectOptions(actor, action, {
+      targetToken,
+      requireReachableTarget: true
+    });
+    for (const option of options) variants.push({ action, option, targetToken });
   }
   return variants;
 }
 
 async function resolveActionSelection({ actor, abilityFunction, envelope, offer, actionRuntime }) {
   const actions = abilityFunction?.actions ?? [];
-  if (!actions.length) return { ok: true, option: null, targetToken: null };
+  if (!actions.length) return { ok: true, option: null, targetToken: null, autoApply: false };
   if (!actionRuntime?.collectOptions || !actionRuntime?.selectOption || !actionRuntime?.execute) {
     return { ok: false, reason: "actionRuntimeUnavailable" };
   }
-  const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
+  const autoApply = Boolean(offer?.autoApply);
+  const variants = autoApply && Array.isArray(offer?.actionVariants) && offer.actionVariants.length
+    ? offer.actionVariants
+    : await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
   if (!variants.length) return { ok: false, reason: "actionUnavailable" };
   const option = await actionRuntime.selectOption(actor, variants.map(variant => variant.option), {
     title: String(offer?.label ?? ""),
-    targetName: String(variants.find(variant => variant.targetToken)?.targetToken?.actor?.name ?? "")
+    targetName: String(variants.find(variant => variant.targetToken)?.targetToken?.actor?.name ?? ""),
+    autoApply
   });
   if (!option) return { ok: false, reason: "actionDeclined" };
   const selected = variants.find(variant => variant.option.id === option.id);
-  return selected
-    ? { ok: true, option: selected.option, targetToken: selected.targetToken }
-    : { ok: false, reason: "actionChanged" };
+  if (!selected) return { ok: false, reason: "actionChanged" };
+  let targetToken = selected.targetToken;
+  if (selected.action?.targetMode === "free" && autoApply) {
+    targetToken = await actionRuntime.pickRandomFreeTarget?.(actor, selected.option) ?? null;
+    if (!targetToken?.actor) return { ok: false, reason: "noValidTarget" };
+  }
+  return { ok: true, option: selected.option, targetToken, autoApply };
 }
 
 export function getReactionEnvelope(eventKey = "", context = {}) {
