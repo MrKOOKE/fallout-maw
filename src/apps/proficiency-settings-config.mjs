@@ -3,7 +3,6 @@ import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import {
   getProficiencyInfluenceSettings,
   getProficiencySettings,
-  resetProficiencySettings,
   setProficiencySettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
@@ -33,8 +32,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createProficiency: this.#onCreateProficiency,
-      deleteProficiency: this.#onDeleteProficiency,
-      resetDefaults: this.#onResetDefaults
+      deleteProficiency: this.#onDeleteProficiency
     }
   };
 
@@ -98,13 +96,6 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetProficiencySettings();
-    this.proficiencies = getProficiencySettings();
-    this.influence = getProficiencyInfluenceSettings();
-    return this.forceRender();
-  }
 
   #readProficienciesFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-proficiency-row]") ?? []);

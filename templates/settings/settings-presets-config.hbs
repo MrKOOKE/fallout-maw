@@ -48,6 +48,7 @@
             <td class="fallout-maw-settings-preset-name">
               <strong>{{name}}</strong>
               <div class="fallout-maw-settings-preset-flags">
+                <span class="fallout-maw-settings-preset-badge">Сохранений: {{saveCount}}</span>
                 {{#if isMain}}
                   <span class="fallout-maw-settings-preset-badge main">
                     <i class="fa-solid fa-star" aria-hidden="true"></i>
@@ -81,6 +82,12 @@
               <div class="fallout-maw-settings-preset-actions">
                 <button type="button" data-action="activate" data-tooltip="{{localize "FALLOUTMAW.Settings.Presets.Actions.Activate"}}" aria-label="{{localize "FALLOUTMAW.Settings.Presets.Actions.Activate"}}" {{#unless canActivate}}disabled{{/unless}}>
                   <i class="fa-solid fa-circle-play" aria-hidden="true"></i>
+                </button>
+                <button type="button" data-action="saveVersion" data-tooltip="Сохранить текущую версию" aria-label="Сохранить текущую версию">
+                  <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                </button>
+                <button type="button" data-action="viewVersions" data-tooltip="Посмотреть и установить сохранения" aria-label="Посмотреть и установить сохранения" {{#unless saveCount}}disabled{{/unless}}>
+                  <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
                 </button>
                 <button type="button" data-action="export" data-tooltip="{{localize "FALLOUTMAW.Settings.Presets.Actions.Export"}}" aria-label="{{localize "FALLOUTMAW.Settings.Presets.Actions.Export"}}" {{#unless canExport}}disabled{{/unless}}>
                   <i class="fa-solid fa-file-export" aria-hidden="true"></i>

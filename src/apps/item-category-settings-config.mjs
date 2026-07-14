@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getItemCategorySettings, resetItemCategorySettings, setItemCategorySettings } from "../settings/accessors.mjs";
+import { getItemCategorySettings, setItemCategorySettings } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
@@ -24,8 +24,7 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createCategory: this.#onCreateCategory,
-      deleteCategory: this.#onDeleteCategory,
-      resetDefaults: this.#onResetDefaults
+      deleteCategory: this.#onDeleteCategory
     }
   };
 
@@ -79,12 +78,6 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetItemCategorySettings();
-    this.categories = getItemCategorySettings();
-    return this.forceRender();
-  }
 
   #readCategoriesFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-item-category-row]") ?? []);

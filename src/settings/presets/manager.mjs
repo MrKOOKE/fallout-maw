@@ -7,6 +7,7 @@ import {
   clonePresetFromMain,
   convertLegacyBaseline,
   createPresetDocument,
+  createPresetSave,
   normalizePresetDocument,
   reconcilePresetSources
 } from "./schema.mjs";
@@ -68,6 +69,10 @@ const api = Object.freeze({
   activate: activateSettingsPreset,
   rename: renameSettingsPreset,
   remove: removeSettingsPreset,
+  saveVersion: saveSettingsPresetVersion,
+  restoreVersion: restoreSettingsPresetVersion,
+  removeVersion: removeSettingsPresetVersion,
+  migrate: migrateSettingsPresetValues,
   import: importSettingsPreset,
   importFile: importSettingsPreset,
   export: exportSettingsPreset,
@@ -140,7 +145,7 @@ export async function finalizeSettingsPresetStartup() {
   });
 }
 
-/** Return the main preset value used by reset actions after ready. */
+/** Return the main preset value used as a registration-time fallback after ready. */
 export function getMainPresetDefault(key, fallback, { namespace = SYSTEM_ID } = {}) {
   const main = runtime.presets.get(MAIN_PRESET_ID);
   const fullId = String(key ?? "").includes(".") ? String(key) : `${namespace}.${key}`;
@@ -299,6 +304,97 @@ export async function removeSettingsPreset(id) {
     removeRuntimePreset(presetId);
     broadcastPresetChange();
     return { id: current.id, name: current.name, removed: true };
+  });
+}
+
+/** Store the preset's current complete settings as an immutable nested save. */
+export async function saveSettingsPresetVersion(id, name = "") {
+  const presetId = String(id ?? "");
+  return runMutation("saveVersion", [presetId, String(name ?? "")], async () => {
+    await flushActivePresetLocal();
+    const current = requirePreset(presetId);
+    const createdAt = new Date().toISOString();
+    const save = createPresetSave({
+      id: randomPresetId("save"),
+      name: normalizeName(name, formatSaveName(createdAt)),
+      settings: current.settings,
+      systemVersion: game.system?.version ?? current.systemVersion ?? null,
+      createdAt
+    });
+    const next = await rebuildPreset(current, { saves: [...(current.saves ?? []), save] });
+    const active = getPresetState().activePresetId === presetId;
+    await savePresetCopies(next, { statePatch: active ? { appliedRevision: next.revision } : {} });
+    broadcastPresetChange();
+    return cloneValue(save);
+  });
+}
+
+/** Replace the preset's current revision with a nested save and activate it. */
+export async function restoreSettingsPresetVersion(id, saveId) {
+  const presetId = String(id ?? "");
+  const nestedId = String(saveId ?? "");
+  return runMutation("restoreVersion", [presetId, nestedId], async () => {
+    await flushActivePresetLocal();
+    const current = requirePreset(presetId);
+    const save = (current.saves ?? []).find(entry => entry.id === nestedId);
+    if (!save) throw new Error(`Preset save ${nestedId || "(empty)"} was not found.`);
+    const next = await rebuildPreset(current, { settings: save.settings });
+    await savePresetCopies(next);
+    const applied = await activatePresetLocal(next.id, { skipFlush: true });
+    broadcastPresetChange();
+    return cloneValue(applied);
+  });
+}
+
+/** Delete one nested save without changing the preset's current settings. */
+export async function removeSettingsPresetVersion(id, saveId) {
+  const presetId = String(id ?? "");
+  const nestedId = String(saveId ?? "");
+  return runMutation("removeVersion", [presetId, nestedId], async () => {
+    await flushActivePresetLocal();
+    const current = requirePreset(presetId);
+    const saves = (current.saves ?? []).filter(entry => entry.id !== nestedId);
+    if (saves.length === (current.saves ?? []).length) {
+      throw new Error(`Preset save ${nestedId || "(empty)"} was not found.`);
+    }
+    const next = await rebuildPreset(current, { saves });
+    const active = getPresetState().activePresetId === presetId;
+    await savePresetCopies(next, { statePatch: active ? { appliedRevision: next.revision } : {} });
+    broadcastPresetChange();
+    return { id: nestedId, removed: true };
+  });
+}
+
+/** Atomically replace selected managed values in the active preset. */
+export async function migrateSettingsPresetValues(entries = []) {
+  const normalizedEntries = Array.isArray(entries) ? entries.map(entry => ({
+    id: String(entry?.id ?? ""),
+    scope: "world",
+    value: cloneValue(entry?.value)
+  })) : [];
+  return runMutation("migrate", [normalizedEntries], async () => {
+    await flushActivePresetLocal();
+    const state = getPresetState();
+    const current = requirePreset(state.activePresetId);
+    const managed = new Map(getManagedPresetSettings().map(setting => [setting.id, setting]));
+    const replacements = new Map();
+    for (const entry of normalizedEntries) {
+      const setting = managed.get(entry.id);
+      if (!setting) throw new Error(`Setting ${entry.id || "(empty)"} is not managed by presets.`);
+      replacements.set(entry.id, validateSettingValue(setting, entry.value));
+    }
+    if (!replacements.size) throw new Error("No settings were selected for migration.");
+    const settings = current.settings.map(entry => replacements.has(entry.id)
+      ? { id: entry.id, scope: "world", value: replacements.get(entry.id) }
+      : entry);
+    for (const [id, value] of replacements) {
+      if (!settings.some(entry => entry.id === id)) settings.push({ id, scope: "world", value });
+    }
+    const next = validatePresetForStorage(await rebuildPreset(current, { settings }));
+    await savePresetCopies(next);
+    const applied = await activatePresetLocal(next.id, { skipFlush: true });
+    broadcastPresetChange();
+    return cloneValue(applied);
   });
 }
 
@@ -833,17 +929,31 @@ function mergeKnownSnapshotWithUnknown(preset, knownEntries) {
 function sanitizePresetSettings(rawPreset) {
   const preset = normalizePresetDocument(rawPreset);
   if (preset.deleted) return preset;
-  const settings = preset.settings.filter(entry => {
+  const portable = entry => {
     const registration = game.settings.settings.get(entry.id);
     return !registration || isPresetManagedSetting(registration);
+  };
+  const settings = preset.settings.filter(portable);
+  const saves = (preset.saves ?? []).map(save => {
+    const saveSettings = save.settings.filter(portable);
+    if (saveSettings.length === save.settings.length) return save;
+    return createPresetSave({
+      id: save.id,
+      name: save.name,
+      settings: saveSettings,
+      systemVersion: save.systemVersion,
+      createdAt: save.createdAt
+    });
   });
-  if (settings.length === preset.settings.length) return preset;
+  const savesChanged = saves.some((save, index) => save !== preset.saves?.[index]);
+  if (settings.length === preset.settings.length && !savesChanged) return preset;
   return createPresetDocument({
     id: preset.id,
     name: preset.name,
     settings,
     systemVersion: preset.systemVersion,
-    seedPending: preset.seedPending
+    seedPending: preset.seedPending,
+    saves
   });
 }
 
@@ -1067,7 +1177,8 @@ function validatePresetForStorage(preset) {
       assignments.map(({ setting, value }) => ({ id: setting.id, scope: "world", value }))
     ),
     systemVersion: normalized.systemVersion,
-    seedPending: normalized.seedPending
+    seedPending: normalized.seedPending,
+    saves: normalized.saves ?? []
   });
 }
 
@@ -1634,6 +1745,10 @@ async function dispatchRemoteMutation(action, args) {
     case "activate": return activateSettingsPreset(...args);
     case "rename": return renameSettingsPreset(...args);
     case "remove": return removeSettingsPreset(...args);
+    case "saveVersion": return saveSettingsPresetVersion(...args);
+    case "restoreVersion": return restoreSettingsPresetVersion(...args);
+    case "removeVersion": return removeSettingsPresetVersion(...args);
+    case "migrate": return migrateSettingsPresetValues(...args);
     case "importDocument": return importSettingsPreset(...args);
     case "refresh": return refreshSettingsPresets(...args);
     case "flush": return flushSettingsPreset();
@@ -1840,7 +1955,8 @@ async function makePreset(source) {
     name: source.name,
     settings: source.settings ?? [],
     systemVersion: game.system?.version ?? source.systemVersion ?? null,
-    seedPending: Boolean(source.seedPending)
+    seedPending: Boolean(source.seedPending),
+    saves: source.saves ?? []
   });
 }
 
@@ -1850,6 +1966,7 @@ async function rebuildPreset(source, changes = {}) {
     ...changes,
     id: source.id,
     settings: changes.settings ?? source.settings,
+    saves: changes.saves ?? source.saves ?? [],
     seedPending: changes.seedPending ?? source.seedPending
   });
 }
@@ -1914,6 +2031,7 @@ function describePreset(preset) {
     active: state.activePresetId === preset.id,
     seedPending: Boolean(preset.seedPending),
     canDelete: preset.id !== MAIN_PRESET_ID,
+    saveCount: preset.saves?.length ?? 0,
     syncState
   };
 }
@@ -1924,6 +2042,17 @@ function normalizeName(value, fallback = "Preset") {
   if (name.length > 200) throw new Error("Preset name cannot exceed 200 characters.");
   if (/[\u0000-\u001f\u007f]/u.test(name)) throw new Error("Preset name contains control characters.");
   return name;
+}
+
+function formatSaveName(iso) {
+  try {
+    return new Intl.DateTimeFormat(game.i18n?.lang ?? "ru", {
+      dateStyle: "short",
+      timeStyle: "medium"
+    }).format(new Date(iso));
+  } catch (_error) {
+    return iso;
+  }
 }
 
 function normalizeRemovedPresetIds(value) {

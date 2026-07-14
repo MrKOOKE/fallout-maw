@@ -1465,7 +1465,7 @@
           <label>
             <span>Длительность</span>
             <div class="fallout-maw-split-number-field-control">
-              <input type="number" value="{{activeApplicationSettings.overloadDurationAmount}}" min="1" step="1" data-active-application-overload-duration-amount>
+              <input type="number" value="{{activeApplicationSettings.overloadDurationAmount}}" min="0" step="1" data-active-application-overload-duration-amount>
               <select data-active-application-overload-duration-unit>
                 {{#each activeApplicationSettings.overloadDurationUnitChoices}}
                 <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -1517,7 +1517,7 @@
         <label>
           <span>Длительность</span>
           <div class="fallout-maw-split-number-field-control">
-            <input type="number" value="{{activeApplicationSettings.durationAmount}}" min="1" step="1" data-active-application-duration-amount>
+            <input type="number" value="{{activeApplicationSettings.durationAmount}}" min="0" step="1" data-active-application-duration-amount>
             <select data-active-application-duration-unit>
               {{#each activeApplicationSettings.durationUnitChoices}}
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>

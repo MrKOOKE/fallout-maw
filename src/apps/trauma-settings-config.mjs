@@ -9,7 +9,6 @@ import {
   getProficiencySettings,
   getSkillSettings,
   getTraumaSettings,
-  resetTraumaSettings,
   setTraumaSettings
 } from "../settings/accessors.mjs";
 import {
@@ -42,8 +41,7 @@ export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
       closeOnSubmit: true
     },
     actions: {
-      openGroup: this.#onOpenGroup,
-      resetDefaults: this.#onResetDefaults
+      openGroup: this.#onOpenGroup
     }
   };
 
@@ -81,12 +79,6 @@ export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
     return new TraumaGroupSettingsConfig({ groupId }).render({ force: true });
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetTraumaSettings();
-    this.settings = getTraumaSettings(this.creatureOptions, this.damageTypes);
-    return this.forceRender();
-  }
 }
 
 export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {

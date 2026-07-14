@@ -2,7 +2,6 @@ import { TEMPLATES } from "../constants.mjs";
 import {
   getCampSettings,
   getNeedSettings,
-  resetCampSettings,
   setCampSettings
 } from "../settings/accessors.mjs";
 import {
@@ -34,8 +33,7 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       addRestPlace: this.#onAddRestPlace,
       deleteRestPlace: this.#onDeleteRestPlace,
-      openPlaceSettings: this.#onOpenPlaceSettings,
-      resetDefaults: this.#onResetDefaults
+      openPlaceSettings: this.#onOpenPlaceSettings
     }
   };
 
@@ -101,12 +99,6 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
         this.forceRender();
       }
     }).render({ force: true });
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    this.settings = await resetCampSettings();
-    return this.forceRender();
   }
 
   #readSettingsFromForm() {

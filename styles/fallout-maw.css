@@ -18549,6 +18549,212 @@ html.fallout-maw-token-action-hud-open #hotbar {
   opacity: 0.72;
 }
 
+.fallout-maw-settings-migration {
+  display: grid;
+  gap: 0.75rem;
+  max-height: min(72vh, 720px);
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.fallout-maw-settings-migration fieldset {
+  border: 1px solid var(--color-border-light-primary);
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.55rem;
+}
+
+.fallout-maw-migration-row {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: auto minmax(8rem, 1fr) auto minmax(8rem, 1fr);
+  margin: 0;
+}
+
+.fallout-maw-migration-row > select {
+  grid-column: 3 / -1;
+}
+
+.fallout-maw-preset-save-browser,
+.fallout-maw-preset-save-list {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.fallout-maw-preset-save-list {
+  max-height: min(58vh, 520px);
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.fallout-maw-preset-save-row {
+  align-items: center;
+  border: 1px solid rgba(210, 185, 145, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(180px, 1fr) max-content max-content;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+}
+
+.fallout-maw-preset-save-row:hover,
+.fallout-maw-preset-save-row:has(input:checked) {
+  background: rgba(181, 93, 53, 0.16);
+  border-color: rgba(229, 179, 111, 0.72);
+}
+
+.fallout-maw-preset-save-row > input[type="radio"],
+.fallout-maw-migration-option-row > input[type="checkbox"],
+.fallout-maw-migration-category-check > input[type="checkbox"],
+.fallout-maw-migration-ability-controls > input[type="checkbox"] {
+  margin: 0;
+  width: auto;
+}
+
+.fallout-maw-preset-save-name {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-preset-save-row time,
+.fallout-maw-preset-save-row code {
+  white-space: nowrap;
+}
+
+.fallout-maw-settings-migration-dialog.mode-creatures .fallout-maw-settings-migration,
+.fallout-maw-settings-migration-dialog.mode-abilities .fallout-maw-settings-migration {
+  overflow-x: hidden;
+}
+
+.fallout-maw-migration-creatures {
+  align-items: start;
+  grid-template-columns: minmax(280px, 0.75fr) minmax(380px, 1.25fr);
+}
+
+.fallout-maw-migration-creatures .fallout-maw-panel,
+.fallout-maw-migration-race-group {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.fallout-maw-migration-race-list {
+  align-content: start;
+  max-height: min(62vh, 620px);
+  overflow: auto;
+}
+
+.fallout-maw-migration-race-group + .fallout-maw-migration-race-group {
+  border-top: 1px solid rgba(210, 185, 145, 0.25);
+  padding-top: 0.65rem;
+}
+
+.fallout-maw-migration-option-row {
+  border: 1px solid rgba(210, 185, 145, 0.28);
+  border-radius: 4px;
+  cursor: pointer;
+  grid-template-columns: auto minmax(120px, 1fr) max-content max-content;
+  padding: 0.5rem 0.6rem;
+}
+
+.fallout-maw-migration-option-row:hover,
+.fallout-maw-migration-option-row:has(input:checked) {
+  background: rgba(181, 93, 53, 0.13);
+  border-color: rgba(229, 179, 111, 0.62);
+}
+
+.fallout-maw-migration-option-name {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-migration-count,
+.fallout-maw-migration-status {
+  opacity: 0.76;
+  white-space: nowrap;
+}
+
+.fallout-maw-migration-ability-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-migration-ability-list .fallout-maw-ability-category-shell {
+  display: block;
+  min-width: 0;
+}
+
+.fallout-maw-migration-ability-list .fallout-maw-ability-category {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.fallout-maw-migration-ability-list .fallout-maw-ability-category-header {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(220px, 1fr) max-content;
+}
+
+.fallout-maw-migration-category-check {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.65rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.fallout-maw-migration-ability-list .fallout-maw-ability-compact-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.fallout-maw-migration-ability-row {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 2.5rem minmax(220px, 1fr) minmax(300px, auto);
+}
+
+.fallout-maw-migration-ability-row > img {
+  border: 1px solid rgba(210, 185, 145, 0.35);
+  height: 2.25rem;
+  object-fit: cover;
+  width: 2.25rem;
+}
+
+.fallout-maw-migration-ability-controls {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto 2.25rem minmax(190px, 280px);
+}
+
+.fallout-maw-migration-ability-controls .fallout-maw-icon-button {
+  align-items: center;
+  display: inline-flex;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.fallout-maw-migration-ability-controls select {
+  min-width: 0;
+  width: 100%;
+}
+
 @media (max-width: 800px) {
   .fallout-maw-settings-presets {
     grid-template-rows: auto auto minmax(12rem, 1fr) auto;
@@ -18566,5 +18772,20 @@ html.fallout-maw-token-action-hud-open #hotbar {
   .fallout-maw-settings-presets-refresh {
     justify-content: center;
     width: 100%;
+  }
+
+  .fallout-maw-preset-save-row,
+  .fallout-maw-migration-creatures,
+  .fallout-maw-migration-ability-list .fallout-maw-ability-category-header,
+  .fallout-maw-migration-ability-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fallout-maw-preset-save-row > input[type="radio"] {
+    justify-self: start;
+  }
+
+  .fallout-maw-migration-ability-controls {
+    grid-template-columns: auto 2.25rem minmax(0, 1fr);
   }
 }

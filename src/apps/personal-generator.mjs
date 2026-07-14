@@ -196,8 +196,7 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createBlock: this.#onCreateBlock,
-      deleteBlock: this.#onDeleteBlock,
-      resetDefaults: this.#onResetDefaults
+      deleteBlock: this.#onDeleteBlock
     }
   };
 
@@ -241,15 +240,6 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
     if (index < 0) return undefined;
     this.blocks = this.#readBlocksFromForm();
     this.blocks.splice(index, 1);
-    return this.forceRender();
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await game.settings.set(SYSTEM_ID, PERSONAL_NAME_RANDOMIZER_SETTING, getMainPresetDefault(PERSONAL_NAME_RANDOMIZER_SETTING, {
-      blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block }))
-    }));
-    this.blocks = getPersonalNameBlocks();
     return this.forceRender();
   }
 

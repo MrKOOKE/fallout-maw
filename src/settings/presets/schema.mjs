@@ -21,10 +21,12 @@ const DOCUMENT_KEYS = new Set([
   "systemVersion",
   "seedPending",
   "deleted",
+  "saves",
   "settings"
 ]);
 
 const SETTING_KEYS = new Set(["id", "scope", "value"]);
+const SAVE_KEYS = new Set(["id", "name", "revision", "createdAt", "systemVersion", "settings"]);
 
 const SHA256_CONSTANTS = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -150,6 +152,7 @@ export function normalizePresetDocument(raw, { allowLegacy = false, name } = {})
   }
 
   const settings = normalizeSettings(raw.settings, { deleted });
+  const saves = normalizePresetSaves(raw.saves, { deleted });
   const systemVersion = normalizeSystemVersion(raw.systemVersion);
   const updatedAt = normalizeUpdatedAt(raw.updatedAt);
   const suppliedRevision = normalizeRevision(raw.revision);
@@ -165,7 +168,8 @@ export function normalizePresetDocument(raw, { allowLegacy = false, name } = {})
     systemVersion,
     seedPending,
     deleted,
-    settings
+    settings,
+    ...(saves.length || Object.hasOwn(raw, "saves") ? { saves } : {})
   };
 
   const computedRevision = computePresetRevisionSync(normalized);
@@ -181,6 +185,7 @@ export function createPresetDocument({
   id,
   name,
   settings,
+  saves = [],
   systemVersion = null,
   seedPending = false
 }) {
@@ -194,7 +199,8 @@ export function createPresetDocument({
     systemVersion,
     seedPending,
     deleted: false,
-    settings
+    settings,
+    ...(saves.length ? { saves } : {})
   });
 }
 
@@ -237,6 +243,12 @@ export function clonePresetFromMain(main, { id, name }) {
     systemVersion: source.systemVersion,
     seedPending: false
   });
+}
+
+/** Create an immutable named snapshot inside a preset. */
+export function createPresetSave({ id, name, settings, systemVersion = null, createdAt = new Date().toISOString() }) {
+  const normalized = normalizePresetSave({ id, name, settings, systemVersion, createdAt }, 0);
+  return { ...normalized, revision: computePresetSaveRevision(normalized) };
 }
 
 /**
@@ -333,6 +345,49 @@ function normalizeSettings(rawSettings, { deleted }) {
   });
 
   return settings.sort((left, right) => compareText(left.id, right.id));
+}
+
+function normalizePresetSaves(rawSaves, { deleted }) {
+  if (rawSaves === undefined) return [];
+  if (!Array.isArray(rawSaves)) throw new TypeError("Preset saves must be an array.");
+  if (deleted && rawSaves.length) throw new TypeError("A preset tombstone cannot contain saves.");
+  const ids = new Set();
+  return rawSaves.map((raw, index) => {
+    const save = normalizePresetSave(raw, index);
+    if (ids.has(save.id)) throw new TypeError(`Preset saves contains duplicate id ${save.id}.`);
+    ids.add(save.id);
+    return save;
+  });
+}
+
+function normalizePresetSave(raw, index) {
+  assertPlainRecord(raw, `Preset saves[${index}]`);
+  assertOnlyKeys(raw, SAVE_KEYS, `Preset saves[${index}]`);
+  const save = {
+    id: normalizePresetId(raw.id),
+    name: normalizePresetName(raw.name),
+    revision: null,
+    createdAt: normalizeUpdatedAt(raw.createdAt),
+    systemVersion: normalizeSystemVersion(raw.systemVersion),
+    settings: normalizeSettings(raw.settings, { deleted: false })
+  };
+  if (!save.createdAt) throw new TypeError(`Preset saves[${index}].createdAt is required.`);
+  const suppliedRevision = normalizeRevision(raw.revision);
+  const revision = computePresetSaveRevision(save);
+  if (suppliedRevision && suppliedRevision !== revision) {
+    throw new TypeError(`Preset save ${save.id} has an invalid revision.`);
+  }
+  save.revision = suppliedRevision ?? revision;
+  return save;
+}
+
+function computePresetSaveRevision(save) {
+  const stable = {};
+  for (const key of Object.keys(save)) {
+    if (key === "revision") continue;
+    stable[key] = save[key];
+  }
+  return sha256Hex(canonicalStringify(stable));
 }
 
 function normalizePresetCollection(rawCollection, label) {

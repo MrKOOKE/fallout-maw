@@ -11,9 +11,12 @@ import {
   isPresetManagedSetting,
   listSettingsPresets,
   removeSettingsPreset,
-  renameSettingsPreset
+  removeSettingsPresetVersion,
+  renameSettingsPreset,
+  restoreSettingsPresetVersion,
+  saveSettingsPresetVersion
 } from "../src/settings/presets/manager.mjs";
-import { createPresetDocument, normalizePresetDocument } from "../src/settings/presets/schema.mjs";
+import { createPresetDocument, createPresetSave, normalizePresetDocument } from "../src/settings/presets/schema.mjs";
 
 const STATE_ID = "fallout-maw.settingsPresetState";
 const ORIGINAL_FILE = globalThis.File;
@@ -384,6 +387,83 @@ test("public CRUD clones main, preserves identity, and removes presets only from
   assert.deepEqual(state.removedPresetIds, [created.id]);
   assert.equal(uploads.length, 4);
   assert.equal(uploads.some(upload => upload.document.deleted), false);
+});
+
+test("a named nested save persists with its preset without becoming a separate preset", async () => {
+  installFoundryMock();
+  const uploads = installPresetFileMock();
+  const main = makePreset("fallout-maw", "Fallout-MaW", [
+    entry("fallout-maw.alpha", false),
+    entry("fallout-maw.beta", { code: "main" })
+  ]);
+  const personal = makePreset("personal-history", "Personal", [
+    entry("fallout-maw.alpha", true),
+    entry("fallout-maw.beta", { code: "personal" })
+  ]);
+  SETTINGS_PRESET_TESTING.installPresets([main, personal]);
+
+  const save = await saveSettingsPresetVersion(personal.id, "Before experiment");
+  const stored = await getSettingsPreset(personal.id);
+  assert.equal(stored.saves.length, 1);
+  assert.equal(stored.saves[0].id, save.id);
+  assert.equal(stored.saves[0].name, "Before experiment");
+  assert.deepEqual(stored.saves[0].settings, personal.settings);
+  assert.equal((await listSettingsPresets()).filter(entry => entry.id === personal.id)[0].saveCount, 1);
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads.every(upload => upload.document.saves?.length === 1), true);
+
+  const removed = await removeSettingsPresetVersion(personal.id, save.id);
+  assert.deepEqual(removed, { id: save.id, removed: true });
+  assert.equal(((await getSettingsPreset(personal.id)).saves ?? []).length, 0);
+  assert.equal((await listSettingsPresets()).find(entry => entry.id === personal.id).saveCount, 0);
+  assert.equal(uploads.length, 4);
+  assert.equal(uploads.slice(-2).every(upload => (upload.document.saves ?? []).length === 0), true);
+});
+
+test("restoring a nested save keeps its history and atomically activates that preset", async () => {
+  let state;
+  ({ state } = installFoundryMock({
+    storedIds: ["fallout-maw.alpha", "fallout-maw.beta", STATE_ID],
+    values: {
+      "fallout-maw.alpha": false,
+      "fallout-maw.beta": { code: "main" }
+    },
+    modifyBatch: async operations => operations.map(operation => (operation.updates ?? []).map(update => {
+      if (update._id === `doc-${STATE_ID}`) Object.assign(state, JSON.parse(update.value));
+      return {};
+    }))
+  }));
+  installPresetFileMock();
+  const main = makePreset("fallout-maw", "Fallout-MaW", [
+    entry("fallout-maw.alpha", false),
+    entry("fallout-maw.beta", { code: "main" })
+  ]);
+  const save = createPresetSave({
+    id: "save-restore",
+    name: "Known good",
+    createdAt: "2026-07-14T12:00:00.000Z",
+    settings: [
+      entry("fallout-maw.alpha", true),
+      entry("fallout-maw.beta", { code: "restored" })
+    ]
+  });
+  const personal = createPresetDocument({
+    id: "personal-restore",
+    name: "Personal",
+    settings: [
+      entry("fallout-maw.alpha", false),
+      entry("fallout-maw.beta", { code: "current" })
+    ],
+    saves: [save]
+  });
+  Object.assign(state, { activePresetId: main.id, appliedRevision: main.revision });
+  SETTINGS_PRESET_TESTING.installPresets([main, personal]);
+
+  const restored = await restoreSettingsPresetVersion(personal.id, save.id);
+  assert.equal(state.activePresetId, personal.id);
+  assert.deepEqual(restored.settings, save.settings);
+  assert.equal(restored.saves.length, 1);
+  assert.equal(restored.saves[0].id, save.id);
 });
 
 test("importing a matching active id applies its new revision even with activate false", async () => {

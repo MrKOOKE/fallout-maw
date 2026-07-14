@@ -1,7 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import {
   getSystemActionSettings,
-  resetSystemActionSettings,
   setSystemActionSettings
 } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -26,8 +25,7 @@ export class SystemActionSettingsConfig extends FalloutMaWFormApplicationV2 {
       closeOnSubmit: true
     },
     actions: {
-      browseActionImage: this.#onBrowseActionImage,
-      resetDefaults: this.#onResetDefaults
+      browseActionImage: this.#onBrowseActionImage
     }
   };
 
@@ -77,12 +75,6 @@ export class SystemActionSettingsConfig extends FalloutMaWFormApplicationV2 {
     return picker.render({ force: true });
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetSystemActionSettings();
-    this.actions = getSystemActionSettings();
-    return this.forceRender();
-  }
 
   #readActionsFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-system-action-row]") ?? []);

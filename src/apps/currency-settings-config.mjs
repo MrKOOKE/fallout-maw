@@ -1,6 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
-import { getCurrencySettings, resetCurrencySettings, setCurrencySettings } from "../settings/accessors.mjs";
+import { getCurrencySettings, setCurrencySettings } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
@@ -27,8 +27,7 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       browseCurrencyImage: this.#onBrowseCurrencyImage,
       createCurrency: this.#onCreateCurrency,
-      deleteCurrency: this.#onDeleteCurrency,
-      resetDefaults: this.#onResetDefaults
+      deleteCurrency: this.#onDeleteCurrency
     }
   };
 
@@ -113,12 +112,6 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
     return picker.render({ force: true });
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetCurrencySettings();
-    this.currencies = getCurrencySettings();
-    return this.forceRender();
-  }
 
   #readCurrenciesFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-currency-row]") ?? []);

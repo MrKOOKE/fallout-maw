@@ -5,7 +5,6 @@ import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import {
   getCoverSettings,
   getCharacteristicSettings,
-  resetCoverSettings,
   setCoverSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
@@ -40,8 +39,7 @@ export class CoverSettingsConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       addCoverEntry: this.#onAddCoverEntry,
       deleteCoverEntry: this.#onDeleteCoverEntry,
-      browseCoverImage: this.#onBrowseCoverImage,
-      resetDefaults: this.#onResetDefaults
+      browseCoverImage: this.#onBrowseCoverImage
     }
   };
 
@@ -122,12 +120,6 @@ export class CoverSettingsConfig extends FalloutMaWFormApplicationV2 {
     });
     await picker.browse(undefined, { render: false });
     return picker.render({ force: true });
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    this.settings = await resetCoverSettings();
-    return this.forceRender();
   }
 
   #readSettingsFromForm() {

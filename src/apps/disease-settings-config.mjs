@@ -6,7 +6,6 @@ import {
   getNeedSettings,
   getProficiencySettings,
   getSkillSettings,
-  resetDiseaseSettings,
   setDiseaseSettings
 } from "../settings/accessors.mjs";
 import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
@@ -43,8 +42,7 @@ export class DiseaseSettingsConfig extends FalloutMaWFormApplicationV2 {
       addDiseaseStage: this.#onAddDiseaseStage,
       deleteDiseaseStage: this.#onDeleteDiseaseStage,
       addDiseaseStageEffect: this.#onAddDiseaseStageEffect,
-      deleteDiseaseStageEffect: this.#onDeleteDiseaseStageEffect,
-      resetDefaults: this.#onResetDefaults
+      deleteDiseaseStageEffect: this.#onDeleteDiseaseStageEffect
     }
   };
 
@@ -152,12 +150,6 @@ export class DiseaseSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    this.settings = await resetDiseaseSettings();
-    this.#expandedDiseaseIds.clear();
-    return this.forceRender();
-  }
 
   #syncFromForm() {
     if (!this.form) return;

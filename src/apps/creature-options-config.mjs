@@ -11,10 +11,7 @@ import {
   getSkillSettings,
   setCreatureOptions
 } from "../settings/accessors.mjs";
-import { getMainPresetDefault } from "../settings/presets/manager.mjs";
-import { CREATURE_OPTIONS_SETTING } from "../settings/constants.mjs";
 import {
-  createEmptyCreatureOptions,
   createDefaultInventorySize,
   createDefaultRaceBaseParameters,
   createDefaultRegeneration,
@@ -96,8 +93,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       deleteRaceNeed: this.#onDeleteRaceNeed,
       openRaceNeedSettings: this.#onOpenRaceNeedSettings,
       deleteType: this.#onDeleteType,
-      deleteRace: this.#onDeleteRace,
-      resetToBaseline: this.#onResetToBaseline
+      deleteRace: this.#onDeleteRace
     }
   };
 
@@ -242,25 +238,6 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     this.activeTypeId = typeId;
     this.activeRaceId = id;
     this.#editorMode = "race";
-    return this.forceRender();
-  }
-
-  static async #onResetToBaseline(event) {
-    event.preventDefault();
-    const confirmed = await DialogV2.confirm({
-      window: { title: "Сбросить типы и расы" },
-      content: "<p>Текущие типы и расы существ будут заменены базовыми значениями системы. Продолжить?</p>",
-      rejectClose: false,
-      modal: true
-    });
-    if (!confirmed) return undefined;
-
-    await setCreatureOptions(getMainPresetDefault(CREATURE_OPTIONS_SETTING, createEmptyCreatureOptions()));
-    this.creatureOptions = getCreatureOptions();
-    this.activeTypeId = this.creatureOptions.types[0]?.id ?? "";
-    this.activeRaceId = this.creatureOptions.races.find(race => race.typeId === this.activeTypeId)?.id ?? "";
-    this.#editorMode = this.activeRaceId ? "race" : "type";
-    ui.notifications.info("Типы и расы существ сброшены до базовых значений.");
     return this.forceRender();
   }
 

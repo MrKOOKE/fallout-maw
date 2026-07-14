@@ -4,7 +4,6 @@ import {
   getDamageTypeSettings,
   getNeedSettings,
   getResourceSettings,
-  resetDamageTypeSettings,
   setDamageTypeSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
@@ -42,7 +41,6 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
       createDamageType: this.#onCreateDamageType,
       deleteDamageType: this.#onDeleteDamageType,
       browseDamageTypeImage: this.#onBrowseDamageTypeImage,
-      resetDefaults: this.#onResetDefaults,
       openDamageTypeSettings: this.#onOpenDamageTypeSettings
     }
   };
@@ -122,13 +120,6 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
 
     await picker.browse(undefined, { render: false });
     return picker.render({ force: true });
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetDamageTypeSettings();
-    this.damageTypes = getDamageTypeSettings();
-    return this.forceRender();
   }
 
   static #onOpenDamageTypeSettings(event, target) {

@@ -380,7 +380,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     const entry = this.ability.system.functions[functionIndex];
-    if ([ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(entry?.type)) entry?.changes?.push(createAbilityChange());
+    if ([ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(entry?.type)) {
+      entry?.changes?.push(createAbilityChange());
+    }
     return this.#persist({ render: true, sync: false });
   }
 
@@ -427,7 +429,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionRow = target.closest("[data-ability-function-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
     const entry = this.ability.system.functions[functionIndex];
-    if ([ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(entry?.type)) entry?.conditions?.push(createAbilityCondition(""));
+    if ([ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(entry?.type)) {
+      entry?.conditions?.push(createAbilityCondition(""));
+    }
     return this.#persist({ render: true, sync: false });
   }
 

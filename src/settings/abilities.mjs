@@ -446,12 +446,12 @@ export function normalizeActiveApplicationSettings(value = {}) {
   return {
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 0)),
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 0)),
-    overloadDurationSeconds: Math.max(1, toInteger(value?.overloadDurationSeconds ?? 12) || 12),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 0)),
     targetMode,
     targetLimit: Math.max(1, toInteger(value?.targetLimit ?? 1) || 1),
     targetGroups: targetGroups.length ? targetGroups : ["ally"],
     excludeSelf: value?.excludeSelf === undefined ? true : Boolean(value.excludeSelf),
-    durationSeconds: Math.max(1, toInteger(value?.durationSeconds ?? 12) || 12)
+    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 0))
   };
 }
 

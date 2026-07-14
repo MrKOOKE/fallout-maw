@@ -5,8 +5,6 @@ import {
   getCharacteristicSettings,
   getSkillDevelopmentCostSettings,
   getSkillSettings,
-  resetSkillDevelopmentCostSettings,
-  resetSkillSettings,
   setSkillDevelopmentCostSettings,
   setSkillSettings
 } from "../settings/accessors.mjs";
@@ -40,8 +38,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       createSkill: this.#onCreateSkill,
       createSkillCostThreshold: this.#onCreateSkillCostThreshold,
       deleteSkill: this.#onDeleteSkill,
-      deleteSkillCostThreshold: this.#onDeleteSkillCostThreshold,
-      resetDefaults: this.#onResetDefaults
+      deleteSkillCostThreshold: this.#onDeleteSkillCostThreshold
     }
   };
 
@@ -142,16 +139,6 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
 
     this.skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
     this.skillDevelopmentCosts.thresholds.splice(index, 1);
-    return this.forceRender();
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetSkillSettings();
-    await resetSkillDevelopmentCostSettings();
-    this.skills = getSkillSettings();
-    this.skillAdvancement = getSkillAdvancementSettings();
-    this.skillDevelopmentCosts = getSkillDevelopmentCostSettings();
     return this.forceRender();
   }
 

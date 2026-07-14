@@ -4,7 +4,6 @@ import {
   getCharacteristicSettings,
   getResourceSettings,
   getSkillSettings,
-  resetResourceSettings,
   setResourceSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
@@ -37,8 +36,7 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createResource: this.#onCreateResource,
-      deleteResource: this.#onDeleteResource,
-      resetDefaults: this.#onResetDefaults
+      deleteResource: this.#onDeleteResource
     }
   };
 
@@ -107,12 +105,6 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetResourceSettings();
-    this.resources = getResourceSettings();
-    return this.forceRender();
-  }
 
   #readResourcesFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-resource-row]") ?? []);

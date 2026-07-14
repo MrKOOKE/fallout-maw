@@ -9,7 +9,6 @@ import {
   getFactionSettings,
   getRelationFromScore,
   getRelationTo,
-  resetFactionSettings,
   setActorFactionBelongs,
   setActorFactionRelations,
   setFactionMatrix,
@@ -39,8 +38,7 @@ export class FactionSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createFaction: this.#onCreateFaction,
-      deleteFaction: this.#onDeleteFaction,
-      resetDefaults: this.#onResetDefaults
+      deleteFaction: this.#onDeleteFaction
     }
   };
 
@@ -91,12 +89,6 @@ export class FactionSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetFactionSettings();
-    this.factions = getFactionSettings();
-    return this.forceRender();
-  }
 
   #readFactionsFromForm() {
     return Array.from(this.form?.querySelectorAll("[data-faction-row]") ?? [])

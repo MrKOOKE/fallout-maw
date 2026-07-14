@@ -2,6 +2,7 @@ import {
   getTokenPrototypeDefaultForActorType,
   setTokenPrototypeDefault
 } from "../settings/token-prototype-defaults.mjs";
+import { openPresetMigrationForApplication } from "./settings-preset-migration.mjs";
 
 const ACTOR_TYPE_LABELS = Object.freeze({
   character: "Персонаж",
@@ -20,7 +21,8 @@ class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.Prototype
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-token-prototype-defaults",
     actions: {
-      assignToken: TokenPrototypeDefaultsConfig.onAssignToken
+      assignToken: TokenPrototypeDefaultsConfig.onAssignToken,
+      migratePresetSettings: TokenPrototypeDefaultsConfig.onMigratePresetSettings
     },
     form: {
       handler: TokenPrototypeDefaultsConfig.onSubmit,
@@ -30,6 +32,22 @@ class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.Prototype
 
   get title() {
     return `Базовый прототип токена: ${ACTOR_TYPE_LABELS[this.actorType] ?? this.actorType}`;
+  }
+
+  _prepareButtons() {
+    const buttons = super._prepareButtons();
+    buttons.unshift({
+      type: "button",
+      icon: "fa-solid fa-code-compare",
+      label: "Мигрировать из других пресетов",
+      action: "migratePresetSettings"
+    });
+    return buttons;
+  }
+
+  static onMigratePresetSettings(event) {
+    event.preventDefault();
+    return openPresetMigrationForApplication(this);
   }
 
   static async onAssignToken() {

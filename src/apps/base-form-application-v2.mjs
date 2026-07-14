@@ -3,6 +3,7 @@ import {
   preserveTextSelectionBeforePartSync,
   restoreTextSelectionAfterPartSync
 } from "../utils/application-focus-state.mjs";
+import { openPresetMigrationForApplication } from "./settings-preset-migration.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -29,8 +30,16 @@ export class FalloutMaWFormApplicationV2 extends HandlebarsApplicationMixin(Appl
       handler: FalloutMaWFormApplicationV2.handleFormSubmit,
       submitOnChange: false,
       closeOnSubmit: false
+    },
+    actions: {
+      migratePresetSettings: FalloutMaWFormApplicationV2.onMigratePresetSettings
     }
   };
+
+  static onMigratePresetSettings(event) {
+    event.preventDefault();
+    return openPresetMigrationForApplication(this);
+  }
 
   static async handleFormSubmit(event, form, formData) {
     event.preventDefault();

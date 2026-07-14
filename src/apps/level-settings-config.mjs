@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getLevelSettings, resetLevelSettings, setLevelSettings } from "../settings/accessors.mjs";
+import { getLevelSettings, setLevelSettings } from "../settings/accessors.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -26,8 +26,7 @@ export class LevelSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createLevel: this.#onCreateLevel,
-      deleteLevel: this.#onDeleteLevel,
-      resetDefaults: this.#onResetDefaults
+      deleteLevel: this.#onDeleteLevel
     }
   };
 
@@ -65,12 +64,6 @@ export class LevelSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetLevelSettings();
-    this.levels = getLevelSettings();
-    return this.forceRender();
-  }
 
   static #onCreateLevel(event) {
     event.preventDefault();

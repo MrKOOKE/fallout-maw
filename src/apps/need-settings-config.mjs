@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { createDefaultNeedSettings, IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
+import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getCharacteristicSettings,
   getDamageTypeSettings,
@@ -39,8 +39,7 @@ export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       createNeed: this.#onCreateNeed,
       deleteNeed: this.#onDeleteNeed,
-      openNeedSettings: this.#onOpenNeedSettings,
-      resetDefaults: this.#onResetDefaults
+      openNeedSettings: this.#onOpenNeedSettings
     }
   };
 
@@ -102,12 +101,6 @@ export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
 
     this.needs = this.#readNeedsFromForm();
     this.needs.splice(index, 1);
-    return this.forceRender();
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    this.needs = createDefaultNeedSettings();
     return this.forceRender();
   }
 

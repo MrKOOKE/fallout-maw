@@ -1,6 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
-import { getToolSettings, resetToolSettings, setToolSettings } from "../settings/accessors.mjs";
+import { getToolSettings, setToolSettings } from "../settings/accessors.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
@@ -26,8 +26,7 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createTool: this.#onCreateTool,
-      deleteTool: this.#onDeleteTool,
-      resetDefaults: this.#onResetDefaults
+      deleteTool: this.#onDeleteTool
     }
   };
 
@@ -83,12 +82,6 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetToolSettings();
-    this.tools = getToolSettings();
-    return this.forceRender();
-  }
 
   #readToolsFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-tool-row]") ?? []);

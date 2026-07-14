@@ -1,7 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import {
   getCombatSettings,
-  resetCombatSettings,
   setCombatSettings
 } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -45,9 +44,7 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
     form: {
       closeOnSubmit: true
     },
-    actions: {
-      resetDefaults: this.#onResetDefaults
-    }
+    actions: {}
   };
 
   static PARTS = {
@@ -94,10 +91,4 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetCombatSettings();
-    this.settings = getCombatSettings();
-    return this.forceRender();
-  }
 }

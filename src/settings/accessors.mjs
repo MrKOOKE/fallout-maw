@@ -65,7 +65,6 @@ import {
   createDefaultSkillDevelopmentCostSettings,
   normalizeSkillDevelopmentCostSettings
 } from "./skill-development-costs.mjs";
-import { getMainPresetDefault } from "./presets/manager.mjs";
 
 export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resultMode: "standard",
@@ -233,10 +232,6 @@ export async function setCharacteristicSettings(settings) {
   return normalized;
 }
 
-export async function resetCharacteristicSettings() {
-  return setCharacteristicSettings(getMainPresetDefault(CHARACTERISTICS_SETTING, createDefaultCharacteristicSettings()));
-}
-
 export function getSkillSettings() {
   try {
     return normalizeSkillSettings(game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING));
@@ -261,13 +256,6 @@ export async function setSkillSettings(settings) {
   return normalized;
 }
 
-export async function resetSkillSettings() {
-  return setSkillSettings(getMainPresetDefault(SKILL_SETTINGS_SETTING, {
-    entries: createDefaultSkillSettings(),
-    advancement: createDefaultSkillAdvancementSettings()
-  }));
-}
-
 export function getSkillDevelopmentCostSettings() {
   try {
     return normalizeSkillDevelopmentCostSettings(game.settings.get(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING));
@@ -280,10 +268,6 @@ export async function setSkillDevelopmentCostSettings(settings) {
   const normalized = normalizeSkillDevelopmentCostSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING, normalized);
   return normalized;
-}
-
-export async function resetSkillDevelopmentCostSettings() {
-  return setSkillDevelopmentCostSettings(getMainPresetDefault(SKILL_DEVELOPMENT_COSTS_SETTING, createDefaultSkillDevelopmentCostSettings()));
 }
 
 export function getProficiencySettings() {
@@ -308,10 +292,6 @@ export async function setAbilityCatalog(catalog) {
   return normalized;
 }
 
-export async function resetAbilityCatalog() {
-  return setAbilityCatalog(getMainPresetDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(getSkillSettings())));
-}
-
 export function getProficiencyInfluenceSettings() {
   try {
     return normalizeProficiencyInfluenceSettings(game.settings.get(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING));
@@ -331,13 +311,6 @@ export async function setProficiencySettings(settings) {
   return normalized;
 }
 
-export async function resetProficiencySettings() {
-  return setProficiencySettings(getMainPresetDefault(PROFICIENCY_SETTINGS_SETTING, {
-    entries: createDefaultProficiencySettings(),
-    influence: createDefaultProficiencyInfluenceSettings()
-  }));
-}
-
 export function getDamageTypeSettings() {
   try {
     return normalizeDamageTypeSettings(game.settings.get(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING));
@@ -352,10 +325,6 @@ export async function setDamageTypeSettings(settings) {
   await game.settings.set(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING, normalized);
   await setCreatureOptions(getCreatureOptions(characteristics, normalized), characteristics, normalized);
   return normalized;
-}
-
-export async function resetDamageTypeSettings() {
-  return setDamageTypeSettings(getMainPresetDefault(DAMAGE_TYPES_SETTING, createDefaultDamageTypeSettings()));
 }
 
 export function getCurrencySettings() {
@@ -377,10 +346,6 @@ export async function setCurrencySettings(settings) {
   return normalized;
 }
 
-export async function resetCurrencySettings() {
-  return setCurrencySettings(getMainPresetDefault(CURRENCY_SETTINGS_SETTING, createDefaultCurrencySettings()));
-}
-
 export function getItemCategorySettings() {
   try {
     return normalizeItemCategorySettings(game.settings.get(FALLOUT_MAW.id, ITEM_CATEGORIES_SETTING)).categories;
@@ -393,10 +358,6 @@ export async function setItemCategorySettings(settings) {
   const normalized = normalizeItemCategorySettings(settings);
   await game.settings.set(FALLOUT_MAW.id, ITEM_CATEGORIES_SETTING, normalized);
   return normalized.categories;
-}
-
-export async function resetItemCategorySettings() {
-  return setItemCategorySettings(getMainPresetDefault(ITEM_CATEGORIES_SETTING, createDefaultItemCategorySettings()));
 }
 
 export function getCreatureOptions(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
@@ -423,10 +384,6 @@ export async function setResourceSettings(settings) {
   const normalized = normalizeResourceSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING, normalized);
   return normalized;
-}
-
-export async function resetResourceSettings() {
-  return setResourceSettings(getMainPresetDefault(RESOURCE_SETTINGS_SETTING, createDefaultResourceSettings()));
 }
 
 export function getNeedSettings() {
@@ -499,10 +456,6 @@ export async function setCampSettings(value) {
   return normalized;
 }
 
-export async function resetCampSettings() {
-  return setCampSettings(getMainPresetDefault(CAMP_SETTINGS_SETTING, createDefaultCampSettings()));
-}
-
 export function getCampState() {
   try {
     return normalizeCampState(game.settings.get(FALLOUT_MAW.id, CAMP_STATE_SETTING));
@@ -531,10 +484,6 @@ export async function setDiseaseSettings(settings) {
   return normalized;
 }
 
-export async function resetDiseaseSettings() {
-  return setDiseaseSettings(getMainPresetDefault(DISEASE_SETTINGS_SETTING, createDefaultDiseaseSettings()));
-}
-
 export function getLevelSettings() {
   try {
     return normalizeLevelSettings(game.settings.get(FALLOUT_MAW.id, LEVELS_SETTING));
@@ -547,10 +496,6 @@ export async function setLevelSettings(settings) {
   const normalized = normalizeLevelSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, LEVELS_SETTING, normalized);
   return normalized;
-}
-
-export async function resetLevelSettings() {
-  return setLevelSettings(getMainPresetDefault(LEVELS_SETTING, createDefaultLevelSettings()));
 }
 
 export function getTraumaSettings(creatureOptions = getCreatureOptions(), damageTypes = getDamageTypeSettings()) {
@@ -567,10 +512,6 @@ export async function setTraumaSettings(settings, creatureOptions = getCreatureO
   return normalized;
 }
 
-export async function resetTraumaSettings() {
-  return setTraumaSettings(getMainPresetDefault(TRAUMA_SETTINGS_SETTING, createDefaultTraumaSettings()));
-}
-
 export function getToolSettings() {
   try {
     return normalizeToolSettings(game.settings.get(FALLOUT_MAW.id, TOOL_SETTINGS_SETTING));
@@ -583,10 +524,6 @@ export async function setToolSettings(settings) {
   const normalized = normalizeToolSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, TOOL_SETTINGS_SETTING, normalized);
   return normalized;
-}
-
-export async function resetToolSettings() {
-  return setToolSettings(getMainPresetDefault(TOOL_SETTINGS_SETTING, createDefaultToolSettings()));
 }
 
 export function getSystemActionSettings() {
@@ -603,10 +540,6 @@ export async function setSystemActionSettings(settings) {
   return normalized;
 }
 
-export async function resetSystemActionSettings() {
-  return setSystemActionSettings(getMainPresetDefault(SYSTEM_ACTION_SETTINGS_SETTING, createDefaultSystemActionSettings()));
-}
-
 export function getStealthSettings() {
   try {
     return normalizeStealthSettings(game.settings.get(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING));
@@ -619,10 +552,6 @@ export async function setStealthSettings(settings) {
   const normalized = normalizeStealthSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING, normalized);
   return normalized;
-}
-
-export async function resetStealthSettings() {
-  return setStealthSettings(getMainPresetDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings()));
 }
 
 export function getCombatSettings() {
@@ -660,10 +589,6 @@ export function getConstructPartNeedSettings(items) {
   return entries;
 }
 
-export async function resetCombatSettings() {
-  return setCombatSettings(getMainPresetDefault(COMBAT_SETTINGS_SETTING, createDefaultCombatSettings()));
-}
-
 export function getCoverSettings() {
   try {
     return normalizeCoverSettings(game.settings.get(FALLOUT_MAW.id, COVER_SETTINGS_SETTING));
@@ -676,10 +601,6 @@ export async function setCoverSettings(settings) {
   const normalized = normalizeCoverSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, COVER_SETTINGS_SETTING, normalized);
   return normalized;
-}
-
-export async function resetCoverSettings() {
-  return setCoverSettings(getMainPresetDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings()));
 }
 
 export function getSkillCheckControl() {

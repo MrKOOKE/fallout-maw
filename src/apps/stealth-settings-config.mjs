@@ -2,7 +2,6 @@ import { TEMPLATES } from "../constants.mjs";
 import {
   getStealthSettings,
   getSkillSettings,
-  resetStealthSettings,
   setStealthSettings
 } from "../settings/accessors.mjs";
 import { DEFAULT_STEALTH_SETTINGS } from "../stealth/settings.mjs";
@@ -39,7 +38,6 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
       closeOnSubmit: true
     },
     actions: {
-      resetDefaults: this.#onResetDefaults,
       addAttenuationLevel: this.#onAddAttenuationLevel,
       removeAttenuationLevel: this.#onRemoveAttenuationLevel,
       addDifficultyLevel: this.#onAddDifficultyLevel,
@@ -90,13 +88,6 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
     await setStealthSettings(data);
     this.settings = getStealthSettings();
     ui.notifications.info("Настройки скрытности сохранены.");
-    return this.forceRender();
-  }
-
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    await resetStealthSettings();
-    this.settings = getStealthSettings();
     return this.forceRender();
   }
 

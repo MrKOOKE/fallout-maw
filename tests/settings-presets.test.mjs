@@ -12,6 +12,7 @@ import {
   computePresetRevision,
   convertLegacyBaseline,
   createPresetDocument,
+  createPresetSave,
   createPresetTombstone,
   normalizePresetDocument,
   reconcilePresetSources
@@ -405,6 +406,34 @@ test("clonePresetFromMain creates an independent live preset from the main setti
     () => clonePresetFromMain(main, { id: MAIN_PRESET_ID, name: "Duplicate" }),
     /new id/i
   );
+});
+
+test("nested preset saves survive JSON round trips and are not copied into new presets", () => {
+  const save = createPresetSave({
+    id: "save-one",
+    name: "Before changes",
+    createdAt: "2026-07-14T12:00:00.000Z",
+    systemVersion: "0.2.1",
+    settings: [setting(WORLD_SETTING, { nested: { count: 1 } })]
+  });
+  const main = createPresetDocument({
+    id: MAIN_PRESET_ID,
+    name: "Fallout-MaW",
+    settings: [setting(WORLD_SETTING, { nested: { count: 2 } })],
+    saves: [save]
+  });
+  const normalized = normalizePresetDocument(JSON.parse(JSON.stringify(main)));
+
+  assert.equal(normalized.saves.length, 1);
+  assert.equal(normalized.saves[0].revision, save.revision);
+  assert.deepEqual(normalized.saves[0].settings, save.settings);
+  assert.throws(() => normalizePresetDocument({
+    ...JSON.parse(JSON.stringify(main)),
+    saves: [{ ...save, name: "Changed without revision" }]
+  }), /invalid revision/i);
+
+  const clone = clonePresetFromMain(main, { id: "clean-copy", name: "Clean copy" });
+  assert.equal(clone.saves, undefined);
 });
 
 test("reconcilePresetSources makes system copies and tombstones authoritative", () => {

@@ -41,7 +41,9 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
       export: SettingsPresetsConfig.#onExport,
       import: SettingsPresetsConfig.#onImport,
       refresh: SettingsPresetsConfig.#onRefresh,
-      rename: SettingsPresetsConfig.#onRename
+      rename: SettingsPresetsConfig.#onRename,
+      saveVersion: SettingsPresetsConfig.#onSaveVersion,
+      viewVersions: SettingsPresetsConfig.#onViewVersions
     }
   };
 
@@ -211,6 +213,80 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
     );
   }
 
+  static async #onSaveVersion(event, target) {
+    event.preventDefault();
+    const preset = await this.#getTargetPreset(target);
+    if (!preset) return undefined;
+    const name = await DialogV2.prompt({
+      window: { title: `Сохранить версию «${escapeHTML(preset.name)}»`, icon: "fa-solid fa-camera" },
+      content: `<label class="form-group"><span>Название сохранения</span><input type="text" name="name" placeholder="Дата и время" autocomplete="off"></label>`,
+      ok: { label: "Сохранить", callback: (_event, button) => button.form.elements.name.value },
+      rejectClose: false,
+      modal: true
+    });
+    if (name === null || name === undefined) return undefined;
+    return this.#runOperation(api => api.saveVersion(preset.id, String(name).trim()), null);
+  }
+
+  static async #onViewVersions(event, target) {
+    event.preventDefault();
+    const row = await this.#getTargetPreset(target);
+    if (!row) return undefined;
+    while (true) {
+      let preset;
+      try {
+        preset = await getSettingsPresetsApi().get(row.id);
+      } catch (error) {
+        notifyOperationError(error);
+        return undefined;
+      }
+      const saves = Array.isArray(preset?.saves) ? [...preset.saves].reverse() : [];
+      if (!saves.length) {
+        ui.notifications.info("У этого пресета пока нет сохранённых версий.");
+        await this.render({ force: true });
+        return undefined;
+      }
+      const rows = saves.map((save, index) => {
+        const date = save.createdAt ? new Date(save.createdAt).toLocaleString() : "";
+        return `<label class="fallout-maw-preset-save-row">
+          <input type="radio" name="saveId" value="${escapeAttribute(save.id)}"${index === 0 ? " checked" : ""}>
+          <span class="fallout-maw-preset-save-name">${escapeHTML(save.name)}</span>
+          <time>${escapeHTML(date)}</time>
+          <code title="${escapeAttribute(save.revision)}">${escapeHTML(shorten(save.revision, 14))}</code>
+        </label>`;
+      }).join("");
+      const selection = await DialogV2.wait({
+        window: { title: `Сохранения «${row.name}»`, icon: "fa-solid fa-clock-rotate-left", resizable: true },
+        content: `<div class="fallout-maw-preset-save-browser"><p class="hint">Выберите сохранённую версию. Установка заменит текущие настройки этого пресета и активирует его.</p><div class="fallout-maw-preset-save-list">${rows}</div></div>`,
+        buttons: [
+          { action: "install", label: "Установить", icon: "fa-solid fa-check", default: true, callback: (_event, button) => ({ action: "install", saveId: button.form.elements.saveId.value }) },
+          { action: "delete", label: "Удалить", icon: "fa-solid fa-trash", class: "danger", callback: (_event, button) => ({ action: "delete", saveId: button.form.elements.saveId.value }) },
+          { action: "cancel", label: "Отмена", callback: () => false }
+        ],
+        rejectClose: false,
+        modal: true,
+        position: { width: 760, height: "auto" }
+      });
+      if (!selection) return undefined;
+      if (selection.action === "install") {
+        return this.#runOperation(api => api.restoreVersion(row.id, selection.saveId), null);
+      }
+      if (selection.action !== "delete") return undefined;
+      const save = saves.find(entry => entry.id === selection.saveId);
+      const confirmed = await DialogV2.confirm({
+        window: { title: "Удалить сохранение", icon: "fa-solid fa-trash" },
+        content: `<p>Удалить сохранение «${escapeHTML(save?.name ?? selection.saveId)}»? Текущие настройки пресета не изменятся.</p>`,
+        yes: { label: "Удалить" },
+        no: { label: "Отмена" },
+        rejectClose: false,
+        modal: true
+      });
+      if (!confirmed) continue;
+      const removed = await this.#runOperation(api => api.removeVersion(row.id, selection.saveId), null, {}, { render: false });
+      if (!removed) return undefined;
+    }
+  }
+
   static async #onImport(event) {
     event.preventDefault();
     const input = this.element?.querySelector("[data-preset-import-file]");
@@ -338,7 +414,7 @@ export class SettingsPresetsConfig extends HandlebarsApplicationMixin(Applicatio
 
 function getSettingsPresetsApi() {
   const api = CONFIG.FalloutMaW?.settingsPresets;
-  const required = ["list", "activate", "create", "rename", "remove", "importFile", "export", "refresh"];
+  const required = ["list", "get", "activate", "create", "rename", "remove", "saveVersion", "restoreVersion", "removeVersion", "importFile", "export", "refresh"];
   if (!api || required.some(method => !(api[method] instanceof Function))) {
     throw new Error(localize(`${LOCALIZATION_ROOT}.Errors.ApiUnavailable`));
   }
@@ -387,6 +463,7 @@ function preparePresetContext(preset, activePresetId) {
     canRename: true,
     canDelete,
     canExport: true,
+    saveCount: Number(preset?.saveCount ?? 0),
     rowClass: active ? "is-active" : ""
   };
 }

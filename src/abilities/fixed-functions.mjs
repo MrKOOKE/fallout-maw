@@ -1102,8 +1102,11 @@ async function useActiveApplicationAbilityFunction(actor, abilityItem, abilityFu
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
-  await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, settings, targets);
-  if (settings.overloadEnergyCost > 0) {
+  if (settings.durationSeconds > 0) {
+    await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, settings, targets);
+  }
+  const appliesOverload = settings.overloadEnergyCost > 0 && settings.overloadDurationSeconds > 0;
+  if (appliesOverload) {
     await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
       name: getAbilityOverloadName(abilityItem),
       energyCost: settings.overloadEnergyCost,
@@ -1113,7 +1116,7 @@ async function useActiveApplicationAbilityFunction(actor, abilityItem, abilityFu
   await createAbilityChatMessage(
     actor,
     abilityItem,
-    settings.overloadEnergyCost > 0
+    appliesOverload
       ? `Применено. Перегрузка: +${settings.overloadEnergyCost} на ${formatDuration(settings.overloadDurationSeconds)}.`
       : "Применено."
   );
@@ -1167,6 +1170,7 @@ function getPrimaryActorToken(actor) {
 }
 
 async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, settings, targets = []) {
+  if (settings.durationSeconds <= 0) return;
   const startTime = Number(game.time?.worldTime) || 0;
   for (const target of targets) {
     const targetActor = target.actor;
@@ -1174,6 +1178,7 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
     const changes = getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target)
       .map(change => prepareEffectChangeForApplication(targetActor, change))
       .filter(change => change.key && change.value !== "");
+    if (!changes.length) continue;
     const signature = JSON.stringify(changes);
     await targetActor.createEmbeddedDocuments("ActiveEffect", [{
       type: "base",

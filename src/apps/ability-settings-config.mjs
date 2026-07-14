@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getAbilityCatalog, getSkillSettings, resetAbilityCatalog, setAbilityCatalog } from "../settings/accessors.mjs";
+import { getAbilityCatalog, getSkillSettings, setAbilityCatalog } from "../settings/accessors.mjs";
 import { ABILITY_CATALOG_DRAG_TYPE, LOCKED_FEATURES_CATEGORY_ID, normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { AbilityCatalogItemEditor } from "./ability-catalog-item-editor.mjs";
@@ -39,8 +39,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
       moveAbility: this.#onMoveAbility,
       toggleAbilityVisibility: this.#onToggleAbilityVisibility,
       editAbility: this.#onEditAbility,
-      deleteAbility: this.#onDeleteAbility,
-      resetDefaults: this.#onResetDefaults
+      deleteAbility: this.#onDeleteAbility
     }
   };
 
@@ -326,11 +325,6 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onResetDefaults(event) {
-    event.preventDefault();
-    this.catalog = await resetAbilityCatalog();
-    return this.forceRender();
-  }
 }
 
 function buildCategoryCollapseState(expanded = false) {
