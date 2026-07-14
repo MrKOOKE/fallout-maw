@@ -97,7 +97,11 @@ export function registerAbilityEffectHooks() {
   Hooks.on("fallout-maw.energyConsumptionChanged", actor => {
     queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
-  Hooks.on("canvasReady", () => void syncLoadedActorAbilityEffects());
+  Hooks.on("canvasReady", () => {
+    // Ready already runs a full sync; avoid overlapping ~300ms work during preset startup.
+    if (!game.ready) return;
+    void syncLoadedActorAbilityEffects();
+  });
   Hooks.on("createCombat", () => queueAuraStateSync());
   Hooks.on("updateCombat", () => queueAuraStateSync());
   Hooks.on("deleteCombat", () => queueAuraStateSync());

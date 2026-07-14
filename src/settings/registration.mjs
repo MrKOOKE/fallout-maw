@@ -37,7 +37,7 @@ import {
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
 import { SettingsPresetsConfig } from "../apps/settings-presets-config.mjs";
-import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
+import { refreshPreparedActors, refreshPreparedActorsAfterConfig, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
   createDefaultSettingsPresetState,
   getMainPresetDefault,
@@ -670,7 +670,8 @@ export async function finalizeSystemSettings() {
   await migrateSystemSettings();
   syncSettingsIntoSystemConfig();
   registerFactionApi();
-  refreshPreparedActors();
+  // Startup only needs world actors; token actors re-prepare when used.
+  refreshPreparedActorsAfterConfig({ worldOnly: true });
 }
 
 function onCreatureOptionsChanged() {

@@ -130,19 +130,7 @@ export async function finalizeSettingsPresetStartup() {
     runtime.deferredApplyEffects = false;
     await enqueuePresetApplyEffects({ skipCoreEffects: true });
   }
-  if (!isPrimaryGM()) return null;
-  return enqueueMutation(async () => {
-    try {
-      const preset = await flushActivePresetLocal();
-      if (preset) broadcastPresetChange();
-      return preset;
-    } catch (error) {
-      runtime.lastError = errorMessage(error);
-      console.error(`${SYSTEM_TITLE} | Failed to finalize settings preset startup`, error);
-      ui.notifications?.error?.(`${SYSTEM_TITLE}: ${runtime.lastError}`);
-      return null;
-    }
-  });
+  return null;
 }
 
 /** Return the main preset value used as a registration-time fallback after ready. */
@@ -470,7 +458,7 @@ export async function refreshSettingsPresets(options = {}) {
     if (runtime.autosaveDirty) await flushActivePresetLocal();
     const beforeState = getPresetState();
     const beforeRevision = runtime.presets.get(beforeState.activePresetId)?.revision ?? "";
-    await loadPresetSources();
+    await loadPresetSources({ bustCache: true });
     if (getPresetState().pendingPresetId) {
       await reconcilePendingWrite();
       if (getPresetState().pendingPresetId) {
@@ -507,7 +495,7 @@ async function initializePrimaryGM() {
     }
   }
   await restoreUniqueWorldPresets();
-  await backupSystemPresetsToWorld();
+  // World imprint is manual (preset save / refresh), not every world launch.
 
   const state = getPresetState();
   if (Number(state.migrationVersion || 0) < MIGRATION_VERSION) await migrateExistingWorld();
@@ -517,10 +505,10 @@ async function initializePrimaryGM() {
   if (nextState.pendingPresetId) await reconcilePendingWrite();
 }
 
-async function loadPresetSources() {
+async function loadPresetSources({ bustCache = false } = {}) {
   const [systemDocuments, worldDocuments] = await Promise.all([
-    readPresetDirectory(SYSTEM_PRESET_DIRECTORY, { required: true }),
-    readPresetDirectory(getWorldPresetDirectory(), { required: false })
+    readPresetDirectory(SYSTEM_PRESET_DIRECTORY, { required: true, bustCache }),
+    readPresetDirectory(getWorldPresetDirectory(), { required: false, bustCache })
   ]);
   const rawSystem = indexPresetDocuments(systemDocuments);
   const rawWorld = indexPresetDocuments(worldDocuments);
@@ -1394,7 +1382,7 @@ function clearPendingPresetRetry() {
   runtime.retryTimer = null;
 }
 
-async function readPresetDirectory(directory, { required = false } = {}) {
+async function readPresetDirectory(directory, { required = false, bustCache = false } = {}) {
   let browse;
   try {
     browse = await getFilePicker().browse("data", directory, { extensions: [".json"] });
@@ -1405,17 +1393,19 @@ async function readPresetDirectory(directory, { required = false } = {}) {
   const files = Array.from(browse?.files ?? [])
     .filter(path => String(path).toLowerCase().endsWith(".json"))
     .sort();
-  const documents = [];
-  for (const path of files) {
+  const documents = (await Promise.all(files.map(async path => {
     try {
-      const separator = String(path).includes("?") ? "&" : "?";
-      const response = await fetch(`${path}${separator}preset-cache=${Date.now()}`, { cache: "no-store" });
+      const url = bustCache
+        ? `${path}${String(path).includes("?") ? "&" : "?"}preset-cache=${Date.now()}`
+        : path;
+      const response = await fetch(url, bustCache ? { cache: "no-store" } : undefined);
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      documents.push(normalizePresetDocument(await response.json()));
+      return normalizePresetDocument(await response.json());
     } catch (error) {
       console.warn(`${SYSTEM_TITLE} | Ignoring unreadable settings preset file ${path}: ${errorMessage(error)}`);
+      return null;
     }
-  }
+  }))).filter(Boolean);
   return documents;
 }
 
@@ -1885,7 +1875,6 @@ async function promotePrimaryClient() {
   await enqueueMutation(async () => {
     await loadPresetSources();
     await initializePrimaryGM();
-    if (runtime.autosaveEnabled) await flushActivePresetLocal();
     broadcastPresetChange();
   });
 }

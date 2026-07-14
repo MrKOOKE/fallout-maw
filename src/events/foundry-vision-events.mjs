@@ -179,7 +179,7 @@ function resetVisionScene(scene = null) {
   const keys = sceneKey === null ? Array.from(pendingVisionTransitions.keys()) : [sceneKey];
   for (const key of keys) {
     const pending = pendingVisionTransitions.get(key);
-    if (pending?.timerId !== null) globalThis.clearTimeout(pending.timerId);
+    if (pending?.timerId != null) globalThis.clearTimeout(pending.timerId);
     pendingVisionTransitions.delete(key);
   }
   physicalLosCache.reset(sceneKey);

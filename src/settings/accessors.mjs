@@ -661,11 +661,15 @@ export function refreshPreparedActors() {
 }
 
 /** Refresh prepared Actor data after CONFIG has already been synchronized. */
-export function refreshPreparedActorsAfterConfig() {
+/** Refresh prepared Actor data after CONFIG has already been synchronized. */
+export function refreshPreparedActorsAfterConfig({ worldOnly = false } = {}) {
   syncActorTrackableAttributes();
-  for (const actor of getLoadedActors()) {
+  const actors = worldOnly
+    ? (game.actors?.contents ?? [])
+    : getLoadedActors();
+  for (const actor of actors) {
     actor.reset();
-    actor.sheet?.render(false);
+    if (actor.sheet?.rendered) actor.sheet.render(false);
   }
 }
 
