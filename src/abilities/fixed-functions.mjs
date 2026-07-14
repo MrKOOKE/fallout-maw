@@ -115,7 +115,11 @@ import {
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
-import { notifyCombatResourcesSpent, registerCombatResourceSpendingProvider, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
+import { notifyCombatResourcesSpent, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
+import {
+  OVERSIGHT_RESOURCE_SPENT_EVENT_KEY,
+  advanceOversightResourceThreshold
+} from "../events/oversight-resource-event.mjs";
 import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
@@ -143,6 +147,13 @@ import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../u
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import {
+  getSystemEventCancellationReason,
+  isSystemEventCancelled,
+  runTerminalSystemEventWorkflow,
+  serializeSystemWorkflowError
+} from "../utils/system-event-workflow.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -502,10 +513,6 @@ export function registerFixedAbilityFunctionHooks() {
   registerWhereAreYouGoingMovementProvider();
   registerOversightMovementProvider();
   CONFIG.queries[OVERSIGHT_QUERY_NAME] = handleOversightAttackQuery;
-  registerCombatResourceSpendingProvider({
-    id: OVERSIGHT_REACTION_PROVIDER_ID,
-    execute: processOversightResourceSpending
-  });
   Hooks.on("sightRefresh", () => scheduleOversightVisibilityRefresh());
   Hooks.on("canvasReady", () => scheduleOversightVisibilityRefresh());
   Hooks.on("deleteToken", token => {
@@ -1074,7 +1081,14 @@ function selectCommandBasicsTargets({ commander = null, command = "", limit = 1,
   });
 }
 
-export async function useAbilityFunctionItem({ actor = null, item = null, application = null } = {}) {
+export async function useAbilityFunctionItem({
+  actor = null,
+  item = null,
+  application = null,
+  chainRef = null,
+  options = {},
+  source = {}
+} = {}) {
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
     return false;
@@ -1083,44 +1097,410 @@ export async function useAbilityFunctionItem({ actor = null, item = null, applic
   const abilityFunction = normalizeAbilityFunctions(item.system?.functions ?? [])
     .find(entry => isActiveAbilityFunction(entry));
   if (!abilityFunction) return false;
-  if (isActiveApplicationAbilityFunction(abilityFunction)) {
-    const used = await useActiveApplicationAbilityFunction(actor, item, abilityFunction);
-    if (used) await application?.render?.({ force: true });
-    return true;
-  }
-  return useFixedAbilityFunctionItem({ actor, item, application });
+  const inheritedChainRef = chainRef
+    ?? options?.falloutMawSystemEventChainRef
+    ?? options?.chainRef
+    ?? source?.chainRef
+    ?? null;
+  const operationId = String(options?.operationId ?? source?.operationId ?? "").trim() || foundry.utils.randomID();
+  const activationOccurrenceId = String(options?.occurrenceId ?? source?.occurrenceId ?? "").trim() || foundry.utils.randomID();
+  const sourceToken = getPrimaryActorToken(actor);
+  const sourceParticipant = createAbilityEventParticipant(actor, sourceToken, item);
+
+  return withSystemEventRoot({
+    kind: "abilityUse",
+    operationId: `ability-use:${operationId}`,
+    sceneUuid: String((sourceToken?.document ?? sourceToken)?.parent?.uuid ?? canvas?.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: inheritedChainRef
+  }, async scope => {
+    if (isActiveApplicationAbilityFunction(abilityFunction)) {
+      return useActiveApplicationAbilityFunction(scope, actor, item, abilityFunction, {
+        application,
+        sourceParticipant,
+        occurrenceId: activationOccurrenceId
+      });
+    }
+    const workflow = await runTerminalSystemEventWorkflow({
+      scope,
+      beforeEventKey: "fallout-maw.ability.use.before",
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase: `ability-use:${scope.rootId}:${activationOccurrenceId}:${item.id}:${abilityFunction.id}`,
+      participants: { source: sourceParticipant, target: null, related: [] },
+      beforeData: buildAbilityUseEventData(actor, item, abilityFunction),
+      resolvedData: ({ status }) => ({
+        ...buildAbilityUseEventData(actor, item, abilityFunction),
+        status
+      }),
+      operation: () => useFixedAbilityFunctionItem({ actor, item, application })
+    });
+    return workflow.success && Boolean(workflow.value);
+  });
 }
 
-async function useActiveApplicationAbilityFunction(actor, abilityItem, abilityFunction) {
+async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, abilityFunction, {
+  application = null,
+  sourceParticipant = null,
+  occurrenceId = "activation"
+} = {}) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
-  const targets = await resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings);
-  if (!targets.length) return false;
-  if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+  const occurrenceBase = `ability-use:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`;
+  let targets;
+  try {
+    targets = await resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings);
+  } catch (error) {
+    await runTerminalSystemEventWorkflow({
+      scope,
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase,
+      participants: {
+        source: sourceParticipant ?? createAbilityEventParticipant(actor, getPrimaryActorToken(actor), abilityItem),
+        target: null,
+        related: []
+      },
+      resolvedData: ({ status }) => ({
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { energyCost, targetCount: 0 }),
+        status
+      }),
+      forcedResult: { status: "error", reason: "targetSelectionError", value: false, error }
+    });
     return false;
   }
-  if (!(await spendEnergy(actor, energyCost))) return false;
-  if (settings.durationSeconds > 0) {
-    await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, settings, targets);
-  }
-  const appliesOverload = settings.overloadEnergyCost > 0 && settings.overloadDurationSeconds > 0;
-  if (appliesOverload) {
-    await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-      name: getAbilityOverloadName(abilityItem),
-      energyCost: settings.overloadEnergyCost,
-      durationSeconds: settings.overloadDurationSeconds
+  const participants = {
+    source: sourceParticipant ?? createAbilityEventParticipant(actor, getPrimaryActorToken(actor), abilityItem),
+    target: null,
+    related: createActiveApplicationRelatedParticipants(targets)
+  };
+  if (!targets.length) {
+    await runTerminalSystemEventWorkflow({
+      scope,
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase,
+      participants,
+      resolvedData: ({ status }) => ({
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { energyCost, targetCount: 0 }),
+        status
+      }),
+      forcedResult: { status: "cancelled", reason: "targetSelectionCancelled", value: false }
     });
+    return false;
   }
-  await createAbilityChatMessage(
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    await runTerminalSystemEventWorkflow({
+      scope,
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase,
+      participants,
+      resolvedData: ({ status }) => ({
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { energyCost, targetCount: targets.length }),
+        status
+      }),
+      forcedResult: { status: "failed", reason: "insufficientEnergy", value: false }
+    });
+    return false;
+  }
+
+  const workflow = await runTerminalSystemEventWorkflow({
+    scope,
+    beforeEventKey: "fallout-maw.ability.use.before",
+    resolvedEventKey: "fallout-maw.ability.use.resolved",
+    occurrenceBase,
+    participants,
+    beforeData: buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
+      energyCost,
+      targetCount: targets.length
+    }),
+    resolvedData: ({ value, status }) => ({
+      ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
+        energyCost,
+        targetCount: targets.length,
+        appliedCount: Math.max(0, toInteger(value?.appliedCount))
+      }),
+      status
+    }),
+    operation: () => executeActiveApplicationUse(scope, {
+      actor,
+      abilityItem,
+      abilityFunction,
+      settings,
+      energyCost,
+      targets,
+      occurrenceId
+    }),
+    isSuccess: value => Boolean(value?.used),
+    getResultStatus: value => value?.cancelled ? "cancelled" : (value?.used ? "success" : "failed"),
+    getResultReason: value => String(value?.reason ?? "")
+  });
+  const used = workflow.success && Boolean(workflow.value?.used);
+  if (used) await application?.render?.({ force: true });
+  return used;
+}
+
+async function executeActiveApplicationUse(scope, {
+  actor,
+  abilityItem,
+  abilityFunction,
+  settings,
+  energyCost = 0,
+  targets = [],
+  occurrenceId = "activation"
+} = {}) {
+  const { allowed, terminalTargets } = await gateActiveApplicationTargets(scope, {
     actor,
     abilityItem,
-    appliesOverload
-      ? `Применено. Перегрузка: +${settings.overloadEnergyCost} на ${formatDuration(settings.overloadDurationSeconds)}.`
-      : "Применено."
-  );
-  return true;
+    abilityFunction,
+    settings,
+    energyCost,
+    targets,
+    occurrenceId
+  });
+  if (!allowed.length) return { used: false, appliedCount: 0, cancelled: true, reason: "applicationCancelled" };
+
+  try {
+    if (!(await spendEnergy(actor, energyCost, createAbilitySystemEventOptions(scope.chainRef)))) {
+      for (const entry of allowed) {
+        await emitActiveApplicationResolved(scope, entry, {
+          actor,
+          abilityItem,
+          abilityFunction,
+          settings,
+          energyCost,
+          status: "failed",
+          reason: "resourceSpendFailed",
+          terminalTargets
+        });
+      }
+      return { used: false, appliedCount: 0, reason: "resourceSpendFailed" };
+    }
+    if (settings.durationSeconds > 0) {
+      await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, settings, allowed.map(entry => entry.target), {
+        chainRef: scope.chainRef
+      });
+    }
+    const appliesOverload = settings.overloadEnergyCost > 0 && settings.overloadDurationSeconds > 0;
+    if (appliesOverload) {
+      await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+        name: getAbilityOverloadName(abilityItem),
+        energyCost: settings.overloadEnergyCost,
+        durationSeconds: settings.overloadDurationSeconds,
+        chainRef: scope.chainRef
+      });
+    }
+    await createAbilityChatMessage(
+      actor,
+      abilityItem,
+      appliesOverload
+        ? `Применено. Перегрузка: +${settings.overloadEnergyCost} на ${formatDuration(settings.overloadDurationSeconds)}.`
+        : "Применено."
+    );
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        energyCost,
+        status: "success",
+        reason: "resolved",
+        terminalTargets
+      });
+    }
+    return { used: true, appliedCount: allowed.length };
+  } catch (error) {
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        energyCost,
+        status: "error",
+        reason: "error",
+        error,
+        terminalTargets
+      });
+    }
+    throw error;
+  }
+}
+
+async function gateActiveApplicationTargets(scope, {
+  actor,
+  abilityItem,
+  abilityFunction,
+  settings,
+  energyCost = 0,
+  targets = [],
+  occurrenceId = "activation"
+} = {}) {
+  const allowed = [];
+  const terminalTargets = new Set();
+  let cancelRemaining = false;
+  for (const [index, target] of targets.entries()) {
+    const entry = {
+      target,
+      index,
+      occurrenceBase: `ability-application:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}:${index}:${target.actor?.uuid ?? "target"}`
+    };
+    if (cancelRemaining) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        energyCost,
+        status: "cancelled",
+        reason: "cancelRemaining",
+        terminalTargets
+      });
+      continue;
+    }
+    const participants = createActiveApplicationParticipants(actor, abilityItem, target);
+    const gate = await scope.emit("fallout-maw.ability.application.before", {
+      data: buildActiveApplicationEventData({
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        energyCost,
+        target,
+        index
+      })
+    }, {
+      occurrenceKey: `${entry.occurrenceBase}:before`,
+      participants
+    });
+    if (isSystemEventCancelled(gate)) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        energyCost,
+        status: "cancelled",
+        reason: getSystemEventCancellationReason(gate) || "cancelled",
+        terminalTargets
+      });
+      if (gate?.control?.remaining || gate?.control?.root) cancelRemaining = true;
+      continue;
+    }
+    allowed.push(entry);
+  }
+  return { allowed, terminalTargets };
+}
+
+async function emitActiveApplicationResolved(scope, entry, {
+  actor,
+  abilityItem,
+  abilityFunction,
+  settings,
+  energyCost = 0,
+  status = "failed",
+  reason = "failed",
+  error = null,
+  terminalTargets = new Set()
+} = {}) {
+  const terminalKey = entry?.occurrenceBase;
+  if (!terminalKey || terminalTargets.has(terminalKey)) return;
+  terminalTargets.add(terminalKey);
+  const target = entry.target;
+  await scope.emit("fallout-maw.ability.application.resolved", {
+    data: buildActiveApplicationEventData({
+      actor,
+      abilityItem,
+      abilityFunction,
+      settings,
+      energyCost,
+      target,
+      index: entry.index
+    }),
+    outcome: {
+      success: status === "success",
+      cancelled: status === "cancelled",
+      failed: status === "failed" || status === "error",
+      status,
+      ...(error ? { error: serializeSystemWorkflowError(error) } : {})
+    },
+    reason
+  }, {
+    occurrenceKey: `${entry.occurrenceBase}:resolved`,
+    participants: createActiveApplicationParticipants(actor, abilityItem, target)
+  });
+}
+
+function buildAbilityUseEventData(actor, abilityItem, abilityFunction, extra = {}) {
+  return {
+    actorUuid: String(actor?.uuid ?? ""),
+    abilityItemUuid: String(abilityItem?.uuid ?? ""),
+    abilityItemId: String(abilityItem?.id ?? ""),
+    abilityName: String(getAbilityDisplayName(abilityItem)),
+    functionId: String(abilityFunction?.id ?? ""),
+    functionType: String(abilityFunction?.type ?? ""),
+    fixedKey: String(abilityFunction?.fixedKey ?? ""),
+    ...extra
+  };
+}
+
+function buildActiveApplicationEventData({
+  actor,
+  abilityItem,
+  abilityFunction,
+  settings,
+  energyCost = 0,
+  target = null,
+  index = 0
+} = {}) {
+  return {
+    ...buildAbilityUseEventData(actor, abilityItem, abilityFunction),
+    targetIndex: Math.max(0, toInteger(index)),
+    targetActorUuid: String(target?.actor?.uuid ?? ""),
+    targetTokenUuid: String((target?.token?.document ?? target?.token)?.uuid ?? ""),
+    energyCost: Math.max(0, toInteger(energyCost)),
+    durationSeconds: Math.max(0, toInteger(settings?.durationSeconds)),
+    overloadEnergyCost: Math.max(0, toInteger(settings?.overloadEnergyCost)),
+    overloadDurationSeconds: Math.max(0, toInteger(settings?.overloadDurationSeconds))
+  };
+}
+
+function createActiveApplicationParticipants(actor, abilityItem, target = null) {
+  return {
+    source: createAbilityEventParticipant(actor, getPrimaryActorToken(actor), abilityItem),
+    target: createAbilityEventParticipant(target?.actor, target?.token),
+    related: []
+  };
+}
+
+function createAbilityEventParticipant(actor = null, token = null, item = null) {
+  const tokenDocument = token?.document ?? token ?? null;
+  const participant = {
+    actorUuid: String(actor?.uuid ?? tokenDocument?.actor?.uuid ?? "").trim(),
+    tokenUuid: String(tokenDocument?.uuid ?? "").trim(),
+    itemUuid: String(item?.uuid ?? "").trim()
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function createActiveApplicationRelatedParticipants(targets = []) {
+  const related = [];
+  const seen = new Set();
+  for (const target of targets) {
+    const participant = createAbilityEventParticipant(target?.actor, target?.token);
+    if (!participant) continue;
+    const key = `${participant.actorUuid}:${participant.tokenUuid}:${participant.itemUuid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    related.push(participant);
+  }
+  return related;
+}
+
+function createAbilitySystemEventOptions(chainRef = null) {
+  return chainRef
+    ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+    : {};
 }
 
 async function resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings) {
@@ -1169,7 +1549,9 @@ function getPrimaryActorToken(actor) {
   return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
-async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, settings, targets = []) {
+async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, settings, targets = [], {
+  chainRef = null
+} = {}) {
   if (settings.durationSeconds <= 0) return;
   const startTime = Number(game.time?.worldTime) || 0;
   for (const target of targets) {
@@ -1207,7 +1589,10 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
           }
         }
       }
-    }], { animate: false });
+    }], {
+      animate: false,
+      ...createAbilitySystemEventOptions(chainRef)
+    });
   }
 }
 
@@ -2879,32 +3264,6 @@ function getOversightActors() {
   return [...actors.values()];
 }
 
-async function processOversightResourceSpending({ actor, resources, context } = {}) {
-  if (!game.combat?.started || !actor) return;
-  const spent = Object.values(resources ?? {}).reduce((total, value) => total + Math.max(0, toInteger(value)), 0);
-  if (spent <= 0) return;
-  for (const effect of findOversightTrackingEffects(actor)) {
-    const data = foundry.utils.deepClone(effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {});
-    const threshold = Math.max(1, toInteger(data.resourceThreshold));
-    const total = Math.max(0, toInteger(data.accumulatedSpend)) + spent;
-    const triggerCount = Math.floor(total / threshold);
-    data.accumulatedSpend = total % threshold;
-    await effect.update({ [`flags.${SYSTEM_ID}.${OVERSIGHT_EFFECT_FLAG_KEY}`]: data });
-    for (let index = 0; index < triggerCount; index += 1) {
-      await requestReactionEvent(REACTION_EVENT_KEYS.oversightThreshold, {
-        activationId: data.activationId,
-        targetActorUuid: actor.uuid,
-        targetTokenUuid: data.targetTokenUuid,
-        sourceActorUuid: data.sourceActorUuid,
-        sourceTokenUuid: data.sourceTokenUuid,
-        spendingContext: context,
-        title: data.abilityName,
-        message: `${actor.name} потратил ${threshold} ОП/ОД/ОР.`
-      });
-    }
-  }
-}
-
 function registerOversightMovementProvider() {
   registerMovementInterruptionProvider({
     id: OVERSIGHT_MOVEMENT_PROVIDER_ID,
@@ -2966,31 +3325,42 @@ function registerOversightReactionProvider() {
   });
 }
 
-async function collectOversightReactionOffers({ eventKey, context } = {}) {
-  if (eventKey !== REACTION_EVENT_KEYS.oversightThreshold) return [];
-  const sourceActor = await fromUuid(String(context.sourceActorUuid ?? ""));
-  const sourceToken = await fromUuid(String(context.sourceTokenUuid ?? ""));
-  const targetToken = await fromUuid(String(context.targetTokenUuid ?? ""));
-  const targetActor = targetToken?.actor;
-  if (!sourceActor || !sourceToken || !targetToken || !targetActor) return [];
-  const tracking = findOversightTrackingEffects(targetActor).find(effect => (
-    effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY)?.activationId === context.activationId
-  ));
-  if (!tracking) return [];
-  const candidates = getOversightAttackCandidates(sourceActor, sourceToken, targetToken);
-  if (!candidates.length) return [];
-  const data = tracking.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
-  return [{
-    actorUuid: sourceActor.uuid,
-    reactionId: OVERSIGHT_REACTION_PROVIDER_ID,
-    offerId: `${OVERSIGHT_REACTION_PROVIDER_ID}:${data.activationId}:${foundry.utils.randomID()}`,
-    label: data.abilityName || "Надзор",
-    description: `Атаковать ${targetActor.name}.`,
-    img: data.abilityImg || "icons/svg/eye.svg",
-    activationId: data.activationId,
-    sourceTokenUuid: sourceToken.uuid,
-    targetTokenUuid: targetToken.uuid
-  }];
+async function collectOversightReactionOffers({ eventKey, context = {}, semanticEvent = null } = {}) {
+  if (![OVERSIGHT_RESOURCE_SPENT_EVENT_KEY, REACTION_EVENT_KEYS.oversightThreshold].includes(eventKey)) return [];
+  const envelope = semanticEvent ?? context.semanticEvent ?? context.envelope ?? null;
+  if (envelope?.key !== OVERSIGHT_RESOURCE_SPENT_EVENT_KEY) return [];
+  const targetActorUuid = String(envelope?.data?.actorUuid ?? envelope?.source?.actorUuid ?? "").trim();
+  const targetActor = targetActorUuid ? await fromUuid(targetActorUuid) : null;
+  if (!targetActor) return [];
+
+  const offers = [];
+  for (const tracking of findOversightTrackingEffects(targetActor)) {
+    const data = foundry.utils.deepClone(tracking.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {});
+    const threshold = advanceOversightResourceThreshold(data, envelope?.data?.resources ?? {});
+    if (threshold.spent <= 0) continue;
+    data.accumulatedSpend = threshold.accumulatedSpend;
+    await tracking.update({ [`flags.${SYSTEM_ID}.${OVERSIGHT_EFFECT_FLAG_KEY}`]: data });
+    if (threshold.triggerCount <= 0) continue;
+
+    const sourceActor = await fromUuid(String(data.sourceActorUuid ?? ""));
+    const sourceToken = await fromUuid(String(data.sourceTokenUuid ?? ""));
+    const targetToken = await fromUuid(String(data.targetTokenUuid ?? ""));
+    if (!sourceActor || !sourceToken || !targetToken || targetToken.actor?.uuid !== targetActor.uuid) continue;
+    const candidates = getOversightAttackCandidates(sourceActor, sourceToken, targetToken);
+    if (!candidates.length) continue;
+    offers.push({
+      actorUuid: sourceActor.uuid,
+      reactionId: OVERSIGHT_REACTION_PROVIDER_ID,
+      offerId: `${OVERSIGHT_REACTION_PROVIDER_ID}:${data.activationId}:${envelope.eventId}`,
+      label: data.abilityName || "Надзор",
+      description: `Атаковать ${targetActor.name}.`,
+      img: data.abilityImg || "icons/svg/eye.svg",
+      activationId: data.activationId,
+      sourceTokenUuid: sourceToken.uuid,
+      targetTokenUuid: targetToken.uuid
+    });
+  }
+  return offers;
 }
 
 async function executeOversightReaction({ offer } = {}) {
@@ -3819,7 +4189,7 @@ function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement,
   return [];
 }
 
-async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, movement, event } = {}) {
+async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, movement, event, chainRef = null } = {}) {
   const mover = tokenDocument?.actor;
   if (!mover) return;
   const result = await requestReactionEvent(REACTION_EVENT_KEYS.tokenLeavingAdjacency, {
@@ -3827,6 +4197,7 @@ async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, move
     moverActorUuid: mover.uuid,
     moverTokenUuid: tokenDocument.uuid,
     reactorTokenUuids: event?.reactorTokenUuids ?? [],
+    chainRef,
     title: "Реакция на перемещение",
     message: `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
   });
@@ -5900,12 +6271,12 @@ async function spendFullForceEnergy(actor, abilityItem, abilityFunction, energyC
   return spendEnergy(actor, cost);
 }
 
-async function spendEnergy(actor, energyCost = 0) {
+async function spendEnergy(actor, energyCost = 0, updateOptions = {}) {
   const cost = Math.max(0, toInteger(energyCost));
-  return runActorEnergyMutation(actor, () => spendEnergyNow(actor, cost));
+  return runActorEnergyMutation(actor, () => spendEnergyNow(actor, cost, updateOptions));
 }
 
-async function spendEnergyNow(actor, cost = 0) {
+async function spendEnergyNow(actor, cost = 0, updateOptions = {}) {
   if (!hasEnergy(actor, cost)) return false;
   if (!cost) return true;
   const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
@@ -5916,7 +6287,7 @@ async function spendEnergyNow(actor, cost = 0) {
   if (resource && Object.hasOwn(resource, "spent")) {
     update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
   }
-  await actor.update(update);
+  await actor.update(update, updateOptions);
   return true;
 }
 
@@ -6019,7 +6390,8 @@ async function applyCurseAndBlessingEffect(actor, abilityItem, abilityFunction, 
 async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
   name = "Перегрузка",
   energyCost = 0,
-  durationSeconds = 0
+  durationSeconds = 0,
+  chainRef = null
 } = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
   const startTime = Number(game.time?.worldTime) || 0;
@@ -6056,7 +6428,10 @@ async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
         }
       }
     }
-  }], { animate: false });
+  }], {
+    animate: false,
+    ...createAbilitySystemEventOptions(chainRef)
+  });
   return true;
 }
 

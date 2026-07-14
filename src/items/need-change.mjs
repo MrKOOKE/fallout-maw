@@ -8,8 +8,26 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
-export async function useNeedChangeItem({ targetActor = null, item = null } = {}) {
+export async function useNeedChangeItem({
+  targetActor = null,
+  item = null,
+  source = {},
+  chainRef = null,
+  options = {}
+} = {}) {
   if (!targetActor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.needChange)) return false;
+
+  const inheritedChainRef = chainRef
+    ?? options?.falloutMawSystemEventChainRef
+    ?? options?.chainRef
+    ?? source?.chainRef
+    ?? null;
+  const eventSource = {
+    type: "item",
+    itemUuid: item?.uuid ?? "",
+    itemName: item?.name ?? "",
+    ...(inheritedChainRef ? { chainRef: inheritedChainRef } : {})
+  };
 
   const needChange = getNeedChangeFunction(item);
   const charges = getNeedChangeChargesData(item);
@@ -34,7 +52,7 @@ export async function useNeedChangeItem({ targetActor = null, item = null } = {}
   }
 
   if (damages.length) {
-    await applyNeedChangeDamages(targetActor, damages, item);
+    await applyNeedChangeDamages(targetActor, damages, eventSource);
   }
 
   if (organismDevelopment.length) {
@@ -50,11 +68,7 @@ export async function useNeedChangeItem({ targetActor = null, item = null } = {}
       scope: "health",
       applyMitigation: false,
       processDamageTypeSettings: false,
-      source: {
-        type: "item",
-        itemUuid: item?.uuid ?? "",
-        itemName: item?.name ?? ""
-      }
+      source: eventSource
     });
   }
 
@@ -66,22 +80,11 @@ export async function useNeedChangeItem({ targetActor = null, item = null } = {}
       durationSeconds,
       intervalSeconds,
       changes,
-      source: {
-        type: "item",
-        itemUuid: item?.uuid ?? "",
-        itemName: item?.name ?? ""
-      }
+      source: eventSource
     });
   }
 
-  const sourceActor = item.actor ?? targetActor;
-  await spendNeedChangeItem(item, 1);
-  Hooks.callAll("fallout-maw.itemUsed", {
-    actor: sourceActor,
-    targetActor,
-    item,
-    action: "needChange"
-  });
+  await spendNeedChangeItem(item, 1, createNeedChangeDocumentOptions(inheritedChainRef));
   return true;
 }
 
@@ -119,55 +122,57 @@ export function normalizeNeedChangeOrganismDevelopment(entries = []) {
     .filter(entry => entry.characteristicKey && Number.isFinite(entry.value) && entry.value > 0);
 }
 
-async function applyNeedChangeDamages(actor, damages = [], item = null) {
+async function applyNeedChangeDamages(actor, damages = [], source = {}) {
   const requests = damages.map(entry => ({
     actor,
     amount: entry.value,
     damageTypeKey: entry.damageTypeKey,
-    source: {
-      type: "item",
-      itemUuid: item?.uuid ?? "",
-      itemName: item?.name ?? ""
-    }
+    source
   }));
   if (!requests.length) return [];
   return requestDamageApplications(requests);
 }
 
-async function spendNeedChangeItem(item, amount = 1) {
+async function spendNeedChangeItem(item, amount = 1, updateOptions = {}) {
   const quantity = getItemQuantity(item);
   const charges = getNeedChangeChargesData(item);
   const cost = Math.max(1, toInteger(amount));
   if (charges.max <= 1) {
     if (usesVirtualInventoryStacks(item)) {
       const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
       const { _id, ...changes } = updateData;
-      return item.update(changes);
+      return item.update(changes, updateOptions);
     }
     const next = Math.max(0, quantity - 1);
-    if (next <= 0) return item.delete();
-    return item.update({ "system.quantity": next });
+    if (next <= 0) return item.delete(updateOptions);
+    return item.update({ "system.quantity": next }, updateOptions);
   }
 
   const remainingCharges = Math.max(0, charges.value - cost);
   if (remainingCharges > 0) {
-    return item.update({ "system.functions.needChange.charges.value": remainingCharges });
+    return item.update({ "system.functions.needChange.charges.value": remainingCharges }, updateOptions);
   }
 
   const nextQuantity = Math.max(0, quantity - 1);
-  if (nextQuantity <= 0) return item.delete();
+  if (nextQuantity <= 0) return item.delete(updateOptions);
   if (usesVirtualInventoryStacks(item)) {
     const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
     const { _id, ...changes } = updateData;
     return item.update({
       ...changes,
       "system.functions.needChange.charges.value": charges.max
-    });
+    }, updateOptions);
   }
   return item.update({
     "system.quantity": nextQuantity,
     "system.functions.needChange.charges.value": charges.max
-  });
+  }, updateOptions);
+}
+
+function createNeedChangeDocumentOptions(chainRef = null) {
+  return chainRef
+    ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+    : {};
 }

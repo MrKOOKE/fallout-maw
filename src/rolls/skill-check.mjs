@@ -5,6 +5,8 @@ import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getActorCombatAttackEdgeCount, getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
+import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/dispatcher.mjs";
+import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -45,25 +47,84 @@ export async function requestSkillCheck({
   createMessage = true,
   messageData = {},
   prompt = false,
-  requester = ""
+  requester = "",
+  chainRef = null,
+  options = {},
+  source = {}
 } = {}) {
   const resolvedSkill = resolveSkill(actor, skillKey);
   if (!resolvedSkill) return undefined;
+  const initialData = normalizeRequestData(inheritSystemEventOperationId(data), requester);
+  const initialEventContext = createSkillCheckEventContext(actor, resolvedSkill, initialData, {
+    source,
+    rawData: data
+  });
+  const inheritedChainRef = resolveSkillCheckChainRef({ chainRef, options, source, data });
+  const checkOccurrenceId = getSkillCheckOccurrenceId(options, source);
 
-  const requestData = prompt ? await promptSkillCheckData(actor, resolvedSkill) : data;
-  if (!requestData) return undefined;
+  return withSystemEventRoot({
+    kind: "skillCheck",
+    operationId: getSkillCheckOperationId(initialData, options, source),
+    sceneUuid: initialEventContext.sceneUuid,
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: inheritedChainRef
+  }, async scope => {
+    let requestData;
+    try {
+      requestData = prompt ? await promptSkillCheckData(actor, resolvedSkill) : data;
+    } catch (error) {
+      await runTerminalSystemEventWorkflow({
+        scope,
+        resolvedEventKey: "fallout-maw.skill.check.resolved",
+        occurrenceBase: `skill:${scope.rootId}:${checkOccurrenceId}:${actor.uuid}:${resolvedSkill.key}`,
+        participants: initialEventContext.participants,
+        resolvedData: ({ status }) => buildSkillCheckResolvedEventData(undefined, resolvedSkill, initialData, status),
+        forcedResult: { status: "error", reason: "promptError", value: undefined, error }
+      });
+      return undefined;
+    }
+    if (!requestData) {
+      await runTerminalSystemEventWorkflow({
+        scope,
+        resolvedEventKey: "fallout-maw.skill.check.resolved",
+        occurrenceBase: `skill:${scope.rootId}:${checkOccurrenceId}:${actor.uuid}:${resolvedSkill.key}`,
+        participants: initialEventContext.participants,
+        resolvedData: ({ status }) => buildSkillCheckResolvedEventData(undefined, resolvedSkill, initialData, status),
+        forcedResult: { status: "cancelled", reason: "promptCancelled", value: undefined }
+      });
+      return undefined;
+    }
+    const normalizedData = normalizeRequestData(inheritSystemEventOperationId(requestData, initialData), requester);
+    const eventContext = createSkillCheckEventContext(actor, resolvedSkill, normalizedData, {
+      source,
+      rawData: requestData
+    });
+    const workflow = await runTerminalSystemEventWorkflow({
+      scope,
+      beforeEventKey: "fallout-maw.skill.check.beforeRoll",
+      resolvedEventKey: "fallout-maw.skill.check.resolved",
+      occurrenceBase: `skill:${scope.rootId}:${checkOccurrenceId}:${actor.uuid}:${resolvedSkill.key}`,
+      participants: eventContext.participants,
+      beforeData: buildSkillCheckBeforeEventData(resolvedSkill, normalizedData),
+      resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, resolvedSkill, normalizedData, status),
+      operation: () => performSkillCheck(actor, resolvedSkill, normalizedData)
+    });
+    const outcome = workflow.value;
+    if (!workflow.success || !outcome) return undefined;
 
-  const outcome = await performSkillCheck(actor, resolvedSkill, normalizeRequestData(requestData, requester));
-  Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
-  if (animate) await playSkillCheckAnimation(outcome);
-  if (!createMessage) return outcome;
+    // Compatibility mirror. Hooks are deliberately invoked only after the
+    // awaited semantic event has committed.
+    Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
+    if (animate) await playSkillCheckAnimation(outcome);
+    if (!createMessage) return outcome;
 
-  const resolvedMessageData = typeof messageData === "function" ? messageData(outcome) : messageData;
-  const message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(outcome, { requester, messageData: resolvedMessageData }));
-  return {
-    ...outcome,
-    message
-  };
+    const resolvedMessageData = typeof messageData === "function" ? messageData(outcome) : messageData;
+    const message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(outcome, { requester, messageData: resolvedMessageData }));
+    return {
+      ...outcome,
+      message
+    };
+  });
 }
 
 export async function requestSkillCheckBatch({
@@ -73,22 +134,99 @@ export async function requestSkillCheckBatch({
   animate = false,
   createMessage = true,
   requester = "",
-  title = ""
+  title = "",
+  chainRef = null,
+  options = {},
+  source = {}
 } = {}) {
   const preparedEntries = prepareSkillCheckBatchEntries({ actor, skillKey, entries });
   if (!preparedEntries) return undefined;
+  const firstData = preparedEntries[0]?.data ?? {};
+  const inheritedChainRef = resolveSkillCheckChainRef({ chainRef, options, source, data: firstData });
+  const operationId = String(options?.operationId ?? source?.operationId ?? "").trim() || foundry.utils.randomID();
+  const batchOccurrenceId = getSkillCheckOccurrenceId(options, source);
 
-  const outcomes = [];
-  for (const entry of preparedEntries) {
-    const outcome = await performSkillCheck(entry.actor, entry.skill, normalizeRequestData(entry.data, requester));
-    Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
-    if (animate) await playSkillCheckAnimation(outcome);
-    outcomes.push(outcome);
-  }
+  return withSystemEventRoot({
+    kind: "skillCheckBatch",
+    operationId: `skill-batch:${operationId}`,
+    sceneUuid: getSkillCheckSceneUuid(firstData?.actorToken),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: inheritedChainRef
+  }, async scope => {
+    const outcomes = [];
+    let cancelledCount = 0;
+    let failedCount = 0;
+    let cancelRemaining = false;
+    let operationError = null;
 
-  if (!createMessage) return { outcomes, message: undefined };
-  const message = await publishSkillCheckMessageSafely(() => publishSkillCheckBatchMessage(outcomes, { requester, title }));
-  return { outcomes, message };
+    for (const [index, entry] of preparedEntries.entries()) {
+      const normalizedData = normalizeRequestData(entry.data, requester);
+      const eventContext = createSkillCheckEventContext(entry.actor, entry.skill, normalizedData, {
+        source,
+        rawData: entry.data
+      });
+      const occurrenceBase = `skill:${scope.rootId}:${batchOccurrenceId}:${index}:${entry.actor.uuid}:${entry.skill.key}`;
+      try {
+        const workflow = await runTerminalSystemEventWorkflow({
+          scope,
+          beforeEventKey: "fallout-maw.skill.check.beforeRoll",
+          resolvedEventKey: "fallout-maw.skill.check.resolved",
+          occurrenceBase,
+          participants: eventContext.participants,
+          beforeData: buildSkillCheckBeforeEventData(entry.skill, normalizedData),
+          resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, entry.skill, normalizedData, status),
+          operation: () => performSkillCheck(entry.actor, entry.skill, normalizedData),
+          ...(cancelRemaining ? {
+            forcedResult: { status: "cancelled", reason: "cancelRemaining", value: undefined }
+          } : {})
+        });
+        if (workflow.cancelled) {
+          cancelledCount += 1;
+          if (workflow.gate?.control?.remaining || workflow.gate?.control?.root) cancelRemaining = true;
+          continue;
+        }
+        if (!workflow.success || !workflow.value) {
+          failedCount += 1;
+          continue;
+        }
+        Hooks.callAll("fallout-maw.skillCheckResolved", workflow.value);
+        if (animate) await playSkillCheckAnimation(workflow.value);
+        outcomes.push(workflow.value);
+      } catch (error) {
+        failedCount += 1;
+        operationError = error;
+        cancelRemaining = true;
+      }
+    }
+
+    await scope.emit("fallout-maw.skill.batch.resolved", {
+      data: {
+        requestedCount: preparedEntries.length,
+        resolvedCount: outcomes.length,
+        cancelledCount,
+        failedCount,
+        skillKeys: Array.from(new Set(preparedEntries.map(entry => entry.skill.key)))
+      },
+      outcome: {
+        success: !operationError && failedCount === 0,
+        cancelled: cancelledCount > 0,
+        failed: failedCount > 0
+      },
+      reason: operationError ? "error" : (cancelledCount ? "cancelled" : (failedCount ? "failed" : "resolved"))
+    }, {
+      occurrenceKey: `skill:${scope.rootId}:${batchOccurrenceId}:batch:resolved`,
+      participants: {
+        source: null,
+        target: null,
+        related: buildSkillCheckBatchParticipants(preparedEntries)
+      }
+    });
+
+    if (operationError) throw operationError;
+    if (!createMessage) return { outcomes, message: undefined };
+    const message = await publishSkillCheckMessageSafely(() => publishSkillCheckBatchMessage(outcomes, { requester, title }));
+    return { outcomes, message };
+  });
 }
 
 export function createSkillCheckBatchCollector({ requester = "", title = "" } = {}) {
@@ -220,6 +358,140 @@ function prepareSkillCheckBatchEntries({ actor, skillKey = "", entries = [] } = 
   }
 
   return preparedEntries;
+}
+
+function createSkillCheckEventContext(actor, skill, data = {}, { source = {}, rawData = {} } = {}) {
+  const sourceToken = getTokenDocument(data.actorToken);
+  const targetToken = getTokenDocument(data.targetToken);
+  const targetActor = data.targetActor ?? targetToken?.actor ?? null;
+  const itemUuid = String(
+    source?.itemUuid
+    ?? rawData?.itemUuid
+    ?? rawData?.sourceItemUuid
+    ?? data.weaponData?.uuid
+    ?? ""
+  ).trim();
+  return {
+    sceneUuid: getSkillCheckSceneUuid(sourceToken),
+    participants: {
+      source: normalizeSkillCheckParticipant({ actor, token: sourceToken, itemUuid }),
+      target: normalizeSkillCheckParticipant({ actor: targetActor, token: targetToken }),
+      related: []
+    },
+    skillKey: skill?.key ?? ""
+  };
+}
+
+function buildSkillCheckBeforeEventData(skill, data = {}) {
+  return {
+    systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
+    skill: {
+      key: String(skill?.key ?? ""),
+      label: String(skill?.label ?? ""),
+      value: toInteger(skill?.value),
+      advantage: Math.max(0, toInteger(skill?.advantage)),
+      disadvantage: Math.max(0, toInteger(skill?.disadvantage))
+    },
+    request: serializeSkillCheckRequest(data)
+  };
+}
+
+function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = "") {
+  return {
+    skillKey: String(outcome?.skill?.key ?? skill?.key ?? ""),
+    requester: String(data.requester ?? ""),
+    status: String(status ?? ""),
+    resultKey: String(outcome?.result?.key ?? ""),
+    automaticFailure: Boolean(outcome?.result?.autoFailure ?? outcome?.autoFailure),
+    difficulty: toInteger(outcome?.check?.difficulty ?? data.difficulty),
+    finalSkillValue: toInteger(outcome?.finalSkillValue),
+    rollTotal: toInteger(outcome?.selectedRoll?.total),
+    total: toInteger(outcome?.total),
+    rollCount: Array.isArray(outcome?.rolls) ? outcome.rolls.length : 0,
+    weaponAttackId: String(data.weaponAttackId ?? ""),
+    weaponActionKey: String(data.weaponActionKey ?? "")
+  };
+}
+
+function serializeSkillCheckRequest(data = {}) {
+  return {
+    difficulty: toInteger(data.difficulty),
+    situationalModifier: toInteger(data.situationalModifier),
+    criticalSuccessBonus: toInteger(data.criticalSuccessBonus),
+    criticalFailureBonus: toInteger(data.criticalFailureBonus),
+    advantageCount: Math.max(0, toInteger(data.advantageCount)),
+    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)),
+    requester: String(data.requester ?? ""),
+    systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
+    weaponAttackId: String(data.weaponAttackId ?? ""),
+    weaponActionKey: String(data.weaponActionKey ?? ""),
+    allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
+    allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
+    allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    smartFudgeResult: String(data.smartFudgeResult ?? "")
+  };
+}
+
+function buildSkillCheckBatchParticipants(entries = []) {
+  const participants = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    const participant = normalizeSkillCheckParticipant({
+      actor: entry.actor,
+      token: entry.data?.actorToken
+    });
+    if (!participant) continue;
+    const key = `${participant.actorUuid}:${participant.tokenUuid}:${participant.itemUuid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    participants.push(participant);
+  }
+  return participants;
+}
+
+function normalizeSkillCheckParticipant({ actor = null, token = null, itemUuid = "" } = {}) {
+  const tokenDocument = getTokenDocument(token);
+  const participant = {
+    actorUuid: String(actor?.uuid ?? tokenDocument?.actor?.uuid ?? "").trim(),
+    tokenUuid: String(tokenDocument?.uuid ?? "").trim(),
+    itemUuid: String(itemUuid ?? "").trim()
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function getTokenDocument(token = null) {
+  return token?.document ?? token ?? null;
+}
+
+function getSkillCheckSceneUuid(token = null) {
+  const document = getTokenDocument(token);
+  return String(document?.parent?.uuid ?? document?.scene?.uuid ?? canvas?.scene?.uuid ?? "").trim();
+}
+
+function resolveSkillCheckChainRef({ chainRef = null, options = {}, source = {}, data = {} } = {}) {
+  return chainRef
+    ?? options?.falloutMawSystemEventChainRef
+    ?? options?.chainRef
+    ?? source?.chainRef
+    ?? data?.source?.chainRef
+    ?? data?.chainRef
+    ?? null;
+}
+
+function getSkillCheckOperationId(data = {}, options = {}, source = {}) {
+  // Each skill-check root stays unique (dispatcher forbids reopening a closed operationId).
+  // Shared Event Reaction coalescing uses data.systemEventOperationId instead.
+  const id = String(
+    options?.operationId
+    ?? source?.operationId
+    ?? ""
+  ).trim() || foundry.utils.randomID();
+  return `skill:${id}`;
+}
+
+function getSkillCheckOccurrenceId(options = {}, source = {}) {
+  return String(options?.occurrenceId ?? source?.occurrenceId ?? "").trim()
+    || foundry.utils.randomID();
 }
 
 async function promptSkillCheckData(actor, skill) {
@@ -785,6 +1057,16 @@ function resolveSkill(actor, skillKey) {
   };
 }
 
+function inheritSystemEventOperationId(data = {}, fallbackData = {}) {
+  const source = data && typeof data === "object" ? data : {};
+  const fallback = fallbackData && typeof fallbackData === "object" ? fallbackData : {};
+  const explicit = String(source.systemEventOperationId ?? fallback.systemEventOperationId ?? "").trim();
+  const inherited = explicit || getActiveSystemEventOperationId();
+  if (!inherited) return data;
+  if (String(source.systemEventOperationId ?? "").trim() === inherited) return data;
+  return { ...source, systemEventOperationId: inherited };
+}
+
 function normalizeRequestData(data, requester = "") {
   data ??= {};
   const advantage = Boolean(data.advantage);
@@ -801,6 +1083,7 @@ function normalizeRequestData(data, requester = "") {
     targetToken: data.targetToken ?? null,
     targetActor: data.targetActor ?? null,
     weaponData: data.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
+    systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),

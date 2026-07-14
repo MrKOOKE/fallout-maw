@@ -141,6 +141,14 @@ function abilityFunctionField() {
     fixedKey: new StringField({ required: true, blank: true, initial: "" }),
     fixedSettings: new ObjectField({ required: true, initial: {} }),
     activeSettings: new ObjectField({ required: true, initial: {} }),
+    reactionSettings: new SchemaField({
+      durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      costs: new ArrayField(new SchemaField({
+        id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+        resourceKey: new StringField({ required: true, blank: true, initial: "" }),
+        formula: new StringField({ required: true, blank: true, initial: "0" })
+      }), { required: true, initial: [] })
+    }),
     changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
     conditions: new ArrayField(abilityConditionField(), { required: true, initial: [] }),
     penalties: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
@@ -179,8 +187,21 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "energyConsumption", "itemUse"],
+      choices: ["", "eventReaction", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "energyConsumption", "itemUse"],
       initial: ""
+    }),
+    eventKey: new StringField({ required: true, blank: true, initial: "" }),
+    reactorRole: new StringField({
+      required: true,
+      blank: false,
+      choices: ["source", "target", "observer", "any"],
+      initial: "any"
+    }),
+    eventSubject: new StringField({
+      required: true,
+      blank: false,
+      choices: ["reactor", "eventSource", "eventTarget"],
+      initial: "reactor"
     }),
     name: new StringField({ required: true, blank: true, initial: "" }),
     amountPerHour: new NumberField({ required: true, min: 0, initial: 0 }),

@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { withSystemEventRoot } from "../events/foundry-world-events.mjs";
 
 const CoreAmbientLightConfig = foundry.applications.sheets.AmbientLightConfig;
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -607,31 +608,59 @@ async function applyLightNetworkState({ sceneId = "", networkName = "", sourceLi
     return false;
   }
 
-  const updates = [];
-  for (const light of lights) {
-    const network = getLightNetworkData(light);
-    if (enabled) {
-      const baseData = network.active && network.baseData
-        ? network.baseData
-        : extractAmbientLightState(light);
-      updates.push({
-        _id: light.id,
-        ...getLightNetworkStateUpdateData(network.onData ?? light),
-        [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.active`]: true,
-        [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.baseData`]: baseData
-      });
-    } else {
-      const restoreData = network.baseData ? getLightNetworkStateUpdateData(network.baseData) : {};
-      updates.push({
-        _id: light.id,
-        ...restoreData,
-        [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.active`]: false,
-        [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.baseData`]: null
-      });
+  return withSystemEventRoot({
+    kind: "lightNetworkState",
+    operationId: `light-network:${scene.id}:${normalizeNetworkName(networkName) || sourceLightUuid}:${foundry.utils.randomID()}`,
+    sceneUuid: String(scene.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const beforeEnabled = isLightNetworkEnabled({ scene, networkName, sourceLightUuid });
+
+    const updates = [];
+    for (const light of lights) {
+      const network = getLightNetworkData(light);
+      if (enabled) {
+        const baseData = network.active && network.baseData
+          ? network.baseData
+          : extractAmbientLightState(light);
+        updates.push({
+          _id: light.id,
+          ...getLightNetworkStateUpdateData(network.onData ?? light),
+          [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.active`]: true,
+          [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.baseData`]: baseData
+        });
+      } else {
+        const restoreData = network.baseData ? getLightNetworkStateUpdateData(network.baseData) : {};
+        updates.push({
+          _id: light.id,
+          ...restoreData,
+          [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.active`]: false,
+          [`flags.${SYSTEM_ID}.${LIGHT_NETWORK_FLAG}.baseData`]: null
+        });
+      }
     }
-  }
-  await scene.updateEmbeddedDocuments("AmbientLight", updates);
-  return true;
+    await scene.updateEmbeddedDocuments("AmbientLight", updates, {
+      falloutMawSystemEventChainRef: scope.chainRef,
+      chainRef: scope.chainRef
+    });
+    const afterEnabled = isLightNetworkEnabled({ scene, networkName, sourceLightUuid });
+    await scope.emit("fallout-maw.environment.lightNetwork.changed", {
+      data: {
+        sceneUuid: String(scene.uuid ?? ""),
+        networkName: normalizeNetworkName(networkName),
+        sourceLightUuid: String(sourceLightUuid ?? ""),
+        enabled: afterEnabled,
+        lightUuids: lights.map(light => String(light.uuid ?? "")).filter(Boolean)
+      },
+      before: { enabled: beforeEnabled },
+      after: { enabled: afterEnabled },
+      delta: { enabled: afterEnabled === beforeEnabled ? 0 : (afterEnabled ? 1 : -1) }
+    }, {
+      occurrenceKey: `light-network:${scene.id}:${normalizeNetworkName(networkName) || sourceLightUuid}:${afterEnabled}`,
+      participants: { source: null, target: null, related: [] }
+    });
+    return true;
+  });
 }
 
 function getMatchingNetworkLights(scene, { networkName = "", sourceLightUuid = "" } = {}) {

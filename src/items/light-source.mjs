@@ -20,6 +20,8 @@ import {
   getItemQuantity,
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const ACTIVE_LIGHT_SOURCES_FLAG = "activeLightSources";
@@ -237,41 +239,138 @@ export function isLightSourceActive(tokenOrDocument = null, item = null) {
     .some(entry => entry.itemId === item.id);
 }
 
-export async function toggleLightSource(tokenOrDocument = null, item = null) {
-  return setLightSourceActive(tokenOrDocument, item, !isLightSourceActive(tokenOrDocument, item));
+export async function toggleLightSource(tokenOrDocument = null, item = null, eventOptions = {}) {
+  return setLightSourceActive(tokenOrDocument, item, !isLightSourceActive(tokenOrDocument, item), eventOptions);
 }
 
-export async function setLightSourceActive(tokenOrDocument = null, item = null, active = false) {
+export async function setLightSourceActive(tokenOrDocument = null, item = null, active = false, eventOptions = {}) {
   const tokenDocument = getTokenDocument(tokenOrDocument);
   if (!tokenDocument || !item?.id || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource)) return false;
   if (active && !canActivateLightSource(item)) {
     ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
     return false;
   }
+  const actor = tokenDocument.actor ?? item.actor ?? null;
+  const chainRef = eventOptions?.falloutMawSystemEventChainRef
+    ?? eventOptions?.chainRef
+    ?? eventOptions?.source?.chainRef
+    ?? null;
+  const operationId = String(eventOptions?.operationId ?? "").trim() || foundry.utils.randomID();
+  const occurrenceId = String(eventOptions?.occurrenceId ?? "").trim() || foundry.utils.randomID();
+  const participants = {
+    source: createLightSourceParticipant(actor, tokenDocument, item),
+    target: createLightSourceParticipant(actor, tokenDocument),
+    related: []
+  };
+
+  return withSystemEventRoot({
+    kind: "lightSourceUse",
+    operationId: `light-source:${operationId}`,
+    sceneUuid: String(tokenDocument.parent?.uuid ?? canvas?.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef
+  }, async scope => {
+    const beforeActive = isLightSourceActive(tokenDocument, item);
+    const occurrenceBase = `item-use:${scope.rootId}:${occurrenceId}:${item.uuid ?? item.id}:lightSource`;
+    const workflow = await runTerminalSystemEventWorkflow({
+      scope,
+      beforeEventKey: "fallout-maw.item.use.before",
+      resolvedEventKey: "fallout-maw.item.use.resolved",
+      occurrenceBase,
+      participants,
+      beforeData: buildLightSourceUseEventData(actor, item, beforeActive, active),
+      resolvedData: ({ status }) => ({
+        ...buildLightSourceUseEventData(actor, item, beforeActive, active),
+        status
+      }),
+      operation: async () => {
+        await setLightSourceActiveNow(tokenDocument, item, active, scope.chainRef);
+        await scope.emit("fallout-maw.item.lightSource.changed", {
+          data: buildLightSourceUseEventData(actor, item, beforeActive, active),
+          before: { active: beforeActive },
+          after: { active: Boolean(active) },
+          delta: { active: Number(Boolean(active)) - Number(beforeActive) },
+          outcome: { success: true },
+          reason: "changed"
+        }, {
+          occurrenceKey: `${occurrenceBase}:light-source:changed`,
+          participants
+        });
+        return true;
+      }
+    });
+    if (!workflow.success) return false;
+    if (active) {
+      Hooks.callAll("fallout-maw.itemUsed", {
+        actor,
+        token: tokenDocument,
+        targetActor: actor,
+        targetToken: tokenDocument,
+        item,
+        action: "lightSource",
+        active: true,
+        chainRef: scope.chainRef,
+        source: { chainRef: scope.chainRef },
+        falloutMawSemanticMirror: true
+      });
+    }
+    return true;
+  });
+}
+
+async function setLightSourceActiveNow(tokenDocument, item, active = false, chainRef = null) {
   let entries = getActiveLightSourceEntries(tokenDocument).filter(entry => entry.itemId !== item.id);
   if (active) {
     if (!entries.length && !tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG)) {
-      await tokenDocument.setFlag(SYSTEM_ID, BASE_LIGHT_FLAG, getTokenLightObject(tokenDocument));
+      await tokenDocument.update({
+        [`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`]: getTokenLightObject(tokenDocument)
+      }, createLightSourceDocumentOptions(chainRef));
     }
     entries.push({ itemId: item.id });
   }
   entries = normalizeActiveLightSourceEntries(entries);
-  if (entries.length) await tokenDocument.setFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG, entries);
-  else await tokenDocument.unsetFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG);
-  await syncTokenLightSources(tokenDocument);
+  await tokenDocument.update({
+    [`flags.${SYSTEM_ID}.${ACTIVE_LIGHT_SOURCES_FLAG}`]: entries.length ? entries : globalThis._del
+  }, createLightSourceDocumentOptions(chainRef));
+  await syncTokenLightSources(tokenDocument, createLightSourceDocumentOptions(chainRef));
   tokenDocument.actor?.render(false, {
     renderContext: "fallout-maw.lightSourceState",
     renderData: { itemId: item.id, active: Boolean(active), tokenId: tokenDocument.id }
   });
-  if (active) {
-    Hooks.callAll("fallout-maw.itemUsed", {
-      actor: tokenDocument.actor,
-      token: tokenDocument,
-      item,
-      action: "lightSource"
-    });
-  }
   return true;
+}
+
+function buildLightSourceUseEventData(actor, item, beforeActive, active) {
+  return {
+    action: "lightSource",
+    sourceActorUuid: String(actor?.uuid ?? ""),
+    targetActorUuid: String(actor?.uuid ?? ""),
+    active: Boolean(active),
+    previousActive: Boolean(beforeActive),
+    item: {
+      uuid: String(item?.uuid ?? ""),
+      id: String(item?.id ?? ""),
+      name: String(item?.name ?? ""),
+      type: String(item?.type ?? ""),
+      itemCategory: String(item?.system?.itemCategory ?? "")
+    }
+  };
+}
+
+function createLightSourceParticipant(actor = null, token = null, item = null) {
+  const tokenDocument = token?.document ?? token;
+  const participant = {
+    actorUuid: String(actor?.uuid ?? tokenDocument?.actor?.uuid ?? "").trim(),
+    tokenUuid: String(tokenDocument?.uuid ?? "").trim(),
+    itemUuid: String(item?.uuid ?? "").trim()
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function createLightSourceDocumentOptions(chainRef = null) {
+  return chainRef
+    ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+    : {};
 }
 
 export function getActiveEnergySourceItem(actor = null, consumerData = {}) {
@@ -418,7 +517,7 @@ export async function extractEnergyConsumerSource(actor = null, consumerItem = n
   return true;
 }
 
-export async function syncTokenLightSources(tokenOrDocument = null) {
+export async function syncTokenLightSources(tokenOrDocument = null, eventOptions = {}) {
   const tokenDocument = getTokenDocument(tokenOrDocument);
   const actor = tokenDocument?.actor;
   if (!tokenDocument || !actor) return;
@@ -434,19 +533,28 @@ export async function syncTokenLightSources(tokenOrDocument = null) {
 
   const normalizedEntries = activeSources.map(source => ({ itemId: source.item.id }));
   if (normalizedEntries.length !== entries.length) {
-    if (normalizedEntries.length) await tokenDocument.setFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG, normalizedEntries);
-    else await tokenDocument.unsetFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG);
+    await tokenDocument.update({
+      [`flags.${SYSTEM_ID}.${ACTIVE_LIGHT_SOURCES_FLAG}`]: normalizedEntries.length ? normalizedEntries : globalThis._del
+    }, eventOptions);
   }
 
   const selected = activeSources.sort(compareLightSourcesForToken).at(0) ?? null;
   if (selected) {
-    await tokenDocument.update(createTokenLightUpdate(selected.light), { falloutMawLightSourceSync: true });
+    await tokenDocument.update(createTokenLightUpdate(selected.light), {
+      falloutMawLightSourceSync: true,
+      ...eventOptions
+    });
     return;
   }
 
   const base = tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG);
-  await tokenDocument.update(createTokenLightUpdate(base ?? { dim: 0, bright: 0, angle: 360, color: null }), { falloutMawLightSourceSync: true });
-  await tokenDocument.unsetFlag(SYSTEM_ID, BASE_LIGHT_FLAG);
+  await tokenDocument.update({
+    ...createTokenLightUpdate(base ?? { dim: 0, bright: 0, angle: 360, color: null }),
+    [`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`]: globalThis._del
+  }, {
+    falloutMawLightSourceSync: true,
+    ...eventOptions
+  });
 }
 
 export async function syncActorLightSourceTokens(actor = null) {

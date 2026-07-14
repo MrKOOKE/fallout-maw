@@ -16,6 +16,11 @@ import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { analyzeLightingPoint } from "../stealth/index.mjs";
 import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import {
+  isSystemEventCancelled,
+  systemEventParticipant
+} from "../events/foundry-world-events.mjs";
+import { dispatchSystemEvent, withSystemEventRoot } from "../events/dispatcher.mjs";
+import {
   getMovementRouteSamples,
   getMovementSegmentSamples,
   registerMovementInterruptionProvider
@@ -372,7 +377,34 @@ async function handleTrapDetectionForToken(tile, token) {
     prompt: false,
     requester: "trapDetection"
   });
-  if (!isSkillCheckSuccess(outcome)) {
+  const detected = isSkillCheckSuccess(outcome);
+  const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
+  await dispatchSystemEvent("fallout-maw.trap.detection.resolved", {
+    data: {
+      sceneUuid: String(tile.parent?.uuid ?? ""),
+      tileUuid: String(tile.uuid ?? ""),
+      tileId: String(tile.id ?? ""),
+      trapName: String(tile.name ?? ""),
+      observerActorUuid: String(actor.uuid ?? ""),
+      observerTokenUuid: String((token?.document ?? token)?.uuid ?? ""),
+      skillKey,
+      difficulty,
+      detected
+    },
+    outcome: { success: detected, detected }
+  }, {
+    kind: "trapDetection",
+    operationId: `trap-detection:${tile.parent?.id}:${tile.id}:${actor.uuid}:${foundry.utils.randomID()}`,
+    sceneUuid: String(tile.parent?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    occurrenceKey: `trap-detection:${tile.parent?.id}:${tile.id}:${actor.uuid}`,
+    participants: {
+      source: trapSourceParticipant({ ownerActor, sourceItemUuid: trap.sourceItemUuid }),
+      target: systemEventParticipant({ actor, token }),
+      related: []
+    }
+  });
+  if (!detected) {
     notifyDangerSenseWarning(actor);
     return false;
   }
@@ -394,8 +426,42 @@ async function handleTrapActivationForToken(tile, token) {
   if (!tile || !actor || !trap || trap.armed === false) return;
   if (actor.uuid === trap.ownerActorUuid) return;
   if (isActorSafeForTrap(trap, actor)) return;
-  await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: false }, { render: false });
-  await triggerTrap(tile, token);
+  const scene = tile.parent ?? canvas.scene;
+  return withSystemEventRoot({
+    kind: "trapTrigger",
+    operationId: `trap-trigger:${scene?.id}:${tile.id}:${actor.uuid}:${foundry.utils.randomID()}`,
+    sceneUuid: String(scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
+    const source = trapSourceParticipant({ ownerActor, sourceItemUuid: trap.sourceItemUuid });
+    const target = systemEventParticipant({ actor, token });
+    const data = {
+      sceneUuid: String(scene?.uuid ?? ""),
+      tileUuid: String(tile.uuid ?? ""),
+      tileId: String(tile.id ?? ""),
+      trapName: String(tile.name ?? ""),
+      ownerActorUuid: String(trap.ownerActorUuid ?? ""),
+      sourceItemUuid: String(trap.sourceItemUuid ?? ""),
+      targetActorUuid: String(actor.uuid ?? ""),
+      targetTokenUuid: String((token?.document ?? token)?.uuid ?? "")
+    };
+    const gate = await scope.emit("fallout-maw.trap.trigger.before", { data }, {
+      occurrenceKey: `trap-trigger:${scene?.id}:${tile.id}:${actor.uuid}:before`,
+      participants: { source, target, related: [] }
+    });
+    if (isSystemEventCancelled(gate)) return false;
+    await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: false }, trapDocumentOptions(scope, { render: false }));
+    await triggerTrap(tile, token);
+    await scope.emit("fallout-maw.trap.trigger.triggered", {
+      data,
+      outcome: { success: true, triggered: true }
+    }, {
+      occurrenceKey: `trap-trigger:${scene?.id}:${tile.id}:${actor.uuid}:triggered`,
+      participants: { source, target, related: [] }
+    });
+    return true;
+  });
 }
 
 async function requestTrapActivation(tile, token, { announce = false } = {}) {
@@ -1473,27 +1539,62 @@ async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
   const actor = actorUuid ? await fromUuid(actorUuid) : null;
   const trap = getTrapFlag(tile);
   if (!scene || !tile || !actor || !trap || canActorPickupTrap(trap, actor)) return;
-
-  if (success) {
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<p><strong>${escapeHTML(actor.name)}</strong> обезвреживает ловушку <strong>${escapeHTML(tile.name)}</strong>.</p>`
+  return withSystemEventRoot({
+    kind: "trapDisarm",
+    operationId: `trap-disarm:${scene.id}:${tile.id}:${actor.uuid}:${foundry.utils.randomID()}`,
+    sceneUuid: String(scene.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
+    const toolItem = actor.items?.get(toolItemId) ?? null;
+    const source = systemEventParticipant({ actor, item: toolItem });
+    const target = trapSourceParticipant({ ownerActor, sourceItemUuid: trap.sourceItemUuid });
+    const remaining = Math.max(0, toInteger(attemptsRemaining));
+    const data = {
+      sceneUuid: String(scene.uuid ?? ""),
+      tileUuid: String(tile.uuid ?? ""),
+      tileId: String(tile.id ?? ""),
+      trapName: String(tile.name ?? ""),
+      actorUuid: String(actor.uuid ?? ""),
+      ownerActorUuid: String(trap.ownerActorUuid ?? ""),
+      sourceItemUuid: String(trap.sourceItemUuid ?? ""),
+      toolItemUuid: String(toolItem?.uuid ?? ""),
+      attemptsRemaining: remaining,
+      skillSucceeded: Boolean(success)
+    };
+    const gate = await scope.emit("fallout-maw.trap.disarm.before", { data }, {
+      occurrenceKey: `trap-disarm:${scene.id}:${tile.id}:${actor.uuid}:before`,
+      participants: { source, target, related: [] }
     });
-    ui.notifications.info(`${actor.name}: ловушка обезврежена.`);
-    await markTrapDisarmed(tile, actor, { toolItemId, attemptsRemaining });
-    return;
-  }
+    if (isSystemEventCancelled(gate)) return false;
 
-  const remaining = Math.max(0, toInteger(attemptsRemaining));
-  await tile.update({
-    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmAttemptsRemaining`]: remaining,
-    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.lastDisarmToolItemId`]: String(toolItemId ?? "")
-  }, { render: false });
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p><strong>${escapeHTML(actor.name)}</strong> не смог обезвредить ловушку <strong>${escapeHTML(tile.name)}</strong>. Осталось попыток: ${remaining}.</p>`
+    if (success) {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<p><strong>${escapeHTML(actor.name)}</strong> обезвреживает ловушку <strong>${escapeHTML(tile.name)}</strong>.</p>`
+      });
+      ui.notifications.info(`${actor.name}: ловушка обезврежена.`);
+      await markTrapDisarmed(tile, actor, { toolItemId, attemptsRemaining, scope });
+    } else {
+      await tile.update({
+        [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmAttemptsRemaining`]: remaining,
+        [`flags.${SYSTEM_ID}.${TRAP_FLAG}.lastDisarmToolItemId`]: String(toolItemId ?? "")
+      }, trapDocumentOptions(scope, { render: false }));
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<p><strong>${escapeHTML(actor.name)}</strong> не смог обезвредить ловушку <strong>${escapeHTML(tile.name)}</strong>. Осталось попыток: ${remaining}.</p>`
+      });
+      if (remaining <= 0) ui.notifications.warn(`${tile.name}: попытки обезвреживания закончились.`);
+    }
+    await scope.emit("fallout-maw.trap.disarm.resolved", {
+      data,
+      outcome: { success: Boolean(success), disarmed: Boolean(success) }
+    }, {
+      occurrenceKey: `trap-disarm:${scene.id}:${tile.id}:${actor.uuid}:resolved`,
+      participants: { source, target, related: [] }
+    });
+    return Boolean(success);
   });
-  if (remaining <= 0) ui.notifications.warn(`${tile.name}: попытки обезвреживания закончились.`);
 }
 
 async function restoreTrapItemToOwner(actor, trap) {
@@ -1545,8 +1646,37 @@ async function handleTrapSocketMessage(payload = {}) {
 
 async function createTrapDocumentsNow(request = {}) {
   const scene = game.scenes?.get(String(request.sceneId ?? "")) ?? canvas.scene;
-  if (!scene || !game.user?.isGM) return null;
+  if (!scene || !isCurrentActiveGM()) return null;
+  return withSystemEventRoot({
+    kind: "trapPlacement",
+    operationId: `trap-placement:${scene.id}:${request.sourceItemUuid || "trap"}:${foundry.utils.randomID()}`,
+    sceneUuid: String(scene.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const participant = trapSourceParticipant({
+      ownerActorUuid: request.ownerActorUuid,
+      sourceItemUuid: request.sourceItemUuid
+    });
+    let result;
+    try {
+      result = await createTrapDocumentsInRoot(request, scene, scope);
+    } catch (error) {
+      await emitTrapItemUseResolved(scope, request, scene, participant, {
+        status: "error",
+        reason: "error",
+        error
+      });
+      throw error;
+    }
+    const normalized = result && typeof result === "object" && Object.hasOwn(result, "status")
+      ? result
+      : { status: "failed", reason: "placementFailed", tile: null };
+    await emitTrapItemUseResolved(scope, request, scene, participant, normalized);
+    return normalized.tile ?? null;
+  });
+}
 
+async function createTrapDocumentsInRoot(request, scene, scope) {
   const point = serializePoint(request.point);
   const itemData = request.itemData ?? {};
   const trapData = normalizeTrapData(request.trapData);
@@ -1558,8 +1688,38 @@ async function createTrapDocumentsNow(request = {}) {
   const clipped = getTrapPlacementClippedArea(rect, scene);
   if (!clipped.polygons.length) {
     ui.notifications.warn(`${String(itemData.name ?? "Ловушка")}: стены полностью отсекают область установки.`);
-    return null;
+    return { status: "failed", reason: "blockedPlacement", tile: null };
   }
+  const source = trapSourceParticipant({ ownerActor, sourceItemUuid: request.sourceItemUuid });
+  const itemUseData = {
+    action: "trapPlacement",
+    sceneUuid: String(scene.uuid ?? ""),
+    ownerActorUuid: String(ownerActor?.uuid ?? request.ownerActorUuid ?? ""),
+    sourceItemUuid: String(request.sourceItemUuid ?? ""),
+    itemName: String(itemData.name ?? "Ловушка")
+  };
+  const itemGate = await scope.emit("fallout-maw.item.use.before", { data: itemUseData }, {
+    occurrenceKey: `trap-placement:${scene.id}:${request.sourceItemUuid || itemData.name}:item-use-before`,
+    participants: { source, target: source, related: [] }
+  });
+  if (isSystemEventCancelled(itemGate)) return { status: "cancelled", reason: "itemUseCancelled", tile: null };
+  const gate = await scope.emit("fallout-maw.trap.place.before", {
+    data: {
+      sceneUuid: String(scene.uuid ?? ""),
+      ownerActorUuid: String(ownerActor?.uuid ?? request.ownerActorUuid ?? ""),
+      sourceItemUuid: String(request.sourceItemUuid ?? ""),
+      trapName: String(itemData.name ?? "Ловушка"),
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      rotation
+    }
+  }, {
+    occurrenceKey: `trap-placement:${scene.id}:${request.sourceItemUuid || itemData.name}:before`,
+    participants: { source, target: null, related: [] }
+  });
+  if (isSystemEventCancelled(gate)) return { status: "cancelled", reason: "trapPlacementCancelled", tile: null };
   const width = rect.width;
   const height = rect.height;
   const tileDimensions = getTileDocumentDimensionsForVisualRect(rect, rotation);
@@ -1611,13 +1771,27 @@ async function createTrapDocumentsNow(request = {}) {
         }
       }
     }
-  }]);
+  }], trapDocumentOptions(scope));
   const tile = createdTiles?.[0] ?? null;
-  if (!tile) return null;
+  if (!tile) return { status: "failed", reason: "tileNotCreated", tile: null };
 
   await createTrapActivationDocuments(scene, tile, trapData, rect, clipped, request.ownerActorUuid);
+  await scope.emit("fallout-maw.trap.placed", {
+    data: {
+      sceneUuid: String(scene.uuid ?? ""),
+      tileUuid: String(tile.uuid ?? ""),
+      tileId: String(tile.id ?? ""),
+      trapName: String(tile.name ?? itemData.name ?? ""),
+      ownerActorUuid: String(ownerActor?.uuid ?? request.ownerActorUuid ?? ""),
+      sourceItemUuid: String(request.sourceItemUuid ?? "")
+    },
+    outcome: { success: true, placed: true }
+  }, {
+    occurrenceKey: `trap-placement:${scene.id}:${tile.id}:placed`,
+    participants: { source, target: null, related: [] }
+  });
   await processTrapInitialDetection(tile);
-  return tile;
+  return { status: "success", reason: "placed", tile };
 }
 
 async function createTrapActivationDocuments(scene, tile, trapData, rect, clipped = null, ownerActorUuid = "") {
@@ -1987,7 +2161,7 @@ async function deleteTrapRegions(tile) {
   if (regionIds.length) await scene.deleteEmbeddedDocuments("Region", regionIds);
 }
 
-async function markTrapDisarmed(tile, actor = null, { toolItemId = "", attemptsRemaining = null } = {}) {
+async function markTrapDisarmed(tile, actor = null, { toolItemId = "", attemptsRemaining = null, scope = null } = {}) {
   const trap = getTrapFlag(tile);
   if (!tile || !trap || !game.user?.isGM) return;
   await deleteTrapRegions(tile);
@@ -2007,7 +2181,7 @@ async function markTrapDisarmed(tile, actor = null, { toolItemId = "", attemptsR
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.lastDisarmToolItemId`]: String(toolItemId ?? ""),
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.detectionRegionId`]: "",
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.triggerRegionId`]: ""
-  }, { render: false });
+  }, trapDocumentOptions(scope, { render: false }));
   queueTrapTileVisibilityRefresh();
 }
 
@@ -3079,10 +3253,54 @@ function isSkillCheckSuccess(outcome) {
 }
 
 function getResponsibleGM() {
-  return game.users?.activeGM ?? (game.users?.contents ?? [])
-    .filter(user => user.active && user.isGM)
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .at(0) ?? null;
+  return game.users?.activeGM ?? null;
+}
+
+function isCurrentActiveGM() {
+  return Boolean(game.users?.activeGM?.id && game.users.activeGM.id === game.user?.id);
+}
+
+function trapSourceParticipant({ ownerActor = null, ownerActorUuid = "", sourceItemUuid = "" } = {}) {
+  const participant = {
+    actorUuid: String(ownerActor?.uuid ?? ownerActorUuid ?? ""),
+    tokenUuid: String(ownerActor?.token?.uuid ?? ownerActor?.token?.document?.uuid ?? ""),
+    itemUuid: String(sourceItemUuid ?? "")
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function trapDocumentOptions(scope, options = {}) {
+  return {
+    ...options,
+    falloutMawSystemEventChainRef: scope?.chainRef ?? null,
+    chainRef: scope?.chainRef ?? null
+  };
+}
+
+async function emitTrapItemUseResolved(scope, request, scene, participant, result = {}) {
+  const status = String(result.status ?? "failed");
+  const error = result.error;
+  await scope.emit("fallout-maw.item.use.resolved", {
+    data: {
+      action: "trapPlacement",
+      sceneUuid: String(scene?.uuid ?? ""),
+      ownerActorUuid: String(request.ownerActorUuid ?? ""),
+      sourceItemUuid: String(request.sourceItemUuid ?? ""),
+      itemName: String(request.itemData?.name ?? "Ловушка"),
+      tileUuid: String(result.tile?.uuid ?? "")
+    },
+    outcome: {
+      success: status === "success",
+      cancelled: status === "cancelled",
+      failed: status === "failed" || status === "error",
+      status,
+      ...(error ? { error: { name: String(error.name ?? "Error"), message: String(error.message ?? error) } } : {})
+    },
+    reason: String(result.reason ?? status)
+  }, {
+    occurrenceKey: `trap-placement:${scene?.id}:${request.sourceItemUuid || request.itemData?.name}:item-use-resolved`,
+    participants: { source: participant, target: participant, related: [] }
+  });
 }
 
 function createTrapTokenRequest(tile, token) {
@@ -3094,7 +3312,7 @@ function createTrapTokenRequest(tile, token) {
 }
 
 function pauseGameForTrap() {
-  if (!game.user?.isGM || game.paused) return;
+  if (!isCurrentActiveGM() || game.paused) return;
   game.togglePause(true, { broadcast: true });
 }
 

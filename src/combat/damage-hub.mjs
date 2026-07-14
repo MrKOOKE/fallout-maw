@@ -11,7 +11,7 @@ import {
 } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
-import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import { advanceWorldTime, registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
@@ -28,6 +28,7 @@ import { evaluateActorEffectChangeNumber, getActorSuppressedTraumaDiseaseIds } f
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import {
   getConstructPartLimbKey,
   getConstructPartSlotForLimb,
@@ -461,7 +462,313 @@ export async function requestFirstAidRemoveEffects({
 }
 
 async function applyDamageCycle(requests = []) {
-  return runDamageHubOperation(() => applyDamageCycleNow(requests));
+  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
+    requests,
+    allowedRequests => applyDamageCycleNow(allowedRequests),
+    { batch: true }
+  ));
+}
+
+async function executeDamageSystemEventWorkflow(requests = [], operation, {
+  single = false,
+  batch = false
+} = {}) {
+  const normalized = (Array.isArray(requests) ? requests : [requests])
+    .map(normalizeDamageRequest)
+    .filter(request => request.actorUuid);
+  if (!normalized.length) return single ? undefined : [];
+  const inheritedChainRef = normalized.find(request => request.source?.chainRef)?.source?.chainRef ?? null;
+  const operationId = String(
+    normalized.find(request => request.source?.attackId)?.source?.attackId
+    ?? normalized.find(request => request.source?.operationId)?.source?.operationId
+    ?? foundry.utils.randomID()
+  );
+
+  return withSystemEventRoot({
+    kind: "damageHub",
+    operationId: `damage:${operationId}`,
+    sceneUuid: getDamageRequestsSceneUuid(normalized),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: inheritedChainRef,
+    data: { systemEventOperationId: operationId }
+  }, async scope => {
+    const allowed = [];
+    const cancelled = [];
+    const beforeSnapshots = new Map();
+    for (const [index, request] of normalized.entries()) {
+      const actor = await fromUuid(request.actorUuid);
+      const before = getDamageEventActorSnapshot(actor, request);
+      const occurrenceBase = `damage:${scope.rootId}:${index}:${request.actorUuid}:${request.mode}`;
+      const beforeKey = request.mode === MODE_HEALING
+        ? "fallout-maw.healing.beforeApply"
+        : "fallout-maw.damage.beforeApply";
+      const gate = await scope.emit(beforeKey, {
+        data: { ...serializeDamageEventRequest(request), inDamageHubOperation: true },
+        before
+      }, {
+        occurrenceKey: `${occurrenceBase}:before`,
+        participants: getDamageEventParticipants(request, actor)
+      });
+      if (gate?.control?.current || gate?.control?.remaining || gate?.control?.root) {
+        const result = createCancelledDamageResult(actor, request, gate.control);
+        cancelled.push({ request, result, index, before, occurrenceBase });
+        await emitDamageResolvedSystemEvent(scope, request, result, {
+          index,
+          before,
+          occurrenceBase,
+          cancelled: true
+        });
+        if (gate?.control?.remaining || gate?.control?.root) {
+          for (let remainingIndex = index + 1; remainingIndex < normalized.length; remainingIndex += 1) {
+            const skippedRequest = normalized[remainingIndex];
+            const skippedActor = await fromUuid(skippedRequest.actorUuid);
+            const skippedBefore = getDamageEventActorSnapshot(skippedActor, skippedRequest);
+            const skippedBase = `damage:${scope.rootId}:${remainingIndex}:${skippedRequest.actorUuid}:${skippedRequest.mode}`;
+            const skippedResult = createCancelledDamageResult(skippedActor, skippedRequest, gate.control);
+            cancelled.push({
+              request: skippedRequest,
+              result: skippedResult,
+              index: remainingIndex,
+              before: skippedBefore,
+              occurrenceBase: skippedBase
+            });
+            await emitDamageResolvedSystemEvent(scope, skippedRequest, skippedResult, {
+              index: remainingIndex,
+              before: skippedBefore,
+              occurrenceBase: skippedBase,
+              cancelled: true
+            });
+          }
+          break;
+        }
+        continue;
+      }
+      allowed.push(request);
+      beforeSnapshots.set(request, { before, index, occurrenceBase });
+    }
+
+    let operationResult;
+    let operationError = null;
+    try {
+      operationResult = allowed.length ? await operation(allowed) : (single ? undefined : []);
+    } catch (error) {
+      operationError = error;
+    }
+
+    const flatResults = flattenDamageEventResults(operationResult);
+    for (const request of allowed) {
+      const metadata = beforeSnapshots.get(request);
+      const result = findDamageEventResult(request, flatResults) ?? createFailedDamageResult(request, operationError);
+      await emitDamageResolvedSystemEvent(scope, request, result, metadata);
+    }
+
+    if (batch || normalized.length > 1) {
+      await scope.emit("fallout-maw.damage.batch.resolved", {
+        data: {
+          requestCount: normalized.length,
+          appliedCount: allowed.length,
+          cancelledCount: cancelled.length,
+          inDamageHubOperation: true
+        },
+        outcome: {
+          success: !operationError,
+          cancelled: cancelled.length > 0,
+          resultCount: flatResults.length
+        },
+        reason: operationError ? "error" : (cancelled.length ? "cancelled" : "resolved")
+      }, {
+        occurrenceKey: `damage:${scope.rootId}:batch:resolved`,
+        participants: { source: null, target: null, related: [] }
+      });
+    }
+
+    if (operationError) throw operationError;
+    if (single) return operationResult ?? cancelled[0]?.result;
+    const cancelledResults = cancelled.map(entry => entry.result);
+    return Array.isArray(operationResult)
+      ? [...operationResult, ...cancelledResults]
+      : operationResult === undefined ? cancelledResults : [operationResult, ...cancelledResults];
+  });
+}
+
+async function emitDamageResolvedSystemEvent(scope, request, result = {}, {
+  index = 0,
+  before = null,
+  occurrenceBase = `damage:${scope?.rootId}:${index}`,
+  cancelled = false
+} = {}) {
+  const actor = result?.actor ?? await fromUuid(request.actorUuid);
+  const after = getDamageEventActorSnapshot(actor, request);
+  const resolvedKey = request.mode === MODE_HEALING
+    ? "fallout-maw.healing.resolved"
+    : "fallout-maw.damage.resolved";
+  return scope.emit(resolvedKey, {
+    data: {
+      ...serializeDamageEventRequest(request),
+      result: serializeDamageEventResult(result),
+      inDamageHubOperation: true
+    },
+    before,
+    after,
+    delta: getDamageEventDelta(before, after),
+    outcome: {
+      success: !result?.failed && !cancelled,
+      cancelled: Boolean(cancelled || result?.cancelled),
+      lethalDamagePrevented: Boolean(result?.lethalDamagePrevented)
+    },
+    reason: String(result?.reason ?? (cancelled ? "cancelled" : "resolved"))
+  }, {
+    occurrenceKey: `${occurrenceBase}:resolved`,
+    participants: getDamageEventParticipants(request, actor)
+  });
+}
+
+function serializeDamageEventRequest(request = {}) {
+  return {
+    actorUuid: String(request.actorUuid ?? ""),
+    limbKey: String(request.limbKey ?? ""),
+    itemId: String(request.itemId ?? ""),
+    amount: Math.max(0, Number(request.amount) || 0),
+    damageTypeKey: String(request.damageTypeKey ?? ""),
+    mode: String(request.mode ?? MODE_DAMAGE),
+    scope: String(request.scope ?? ""),
+    applyMitigation: request.applyMitigation !== false,
+    processDamageTypeSettings: request.processDamageTypeSettings !== false,
+    source: serializeDamageEventSource(request.source)
+  };
+}
+
+function serializeDamageEventSource(source = {}) {
+  if (!source || typeof source !== "object") return {};
+  const result = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (["string", "boolean"].includes(typeof value) || (typeof value === "number" && Number.isFinite(value))) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function serializeDamageEventResult(result = {}) {
+  return {
+    actorUuid: String(result?.actor?.uuid ?? result?.actorUuid ?? ""),
+    amount: Math.max(0, Number(result?.amount) || 0),
+    potentialAmount: Math.max(0, Number(result?.potentialAmount) || 0),
+    preventedAmount: Math.max(0, Number(result?.preventedAmount) || 0),
+    healthDelta: Number(result?.healthDelta) || 0,
+    resourceHealthDelta: Number(result?.resourceHealthDelta) || 0,
+    limbDelta: Number(result?.limbDelta) || 0,
+    itemConditionDelta: Number(result?.itemConditionDelta) || 0,
+    mode: String(result?.mode ?? ""),
+    scope: String(result?.scope ?? ""),
+    limbKey: String(result?.limbKey ?? ""),
+    damageTypeKey: String(result?.damageTypeKey ?? ""),
+    cancelled: Boolean(result?.cancelled),
+    failed: Boolean(result?.failed)
+  };
+}
+
+function getDamageEventActorSnapshot(actor, request = {}) {
+  if (!actor) return null;
+  const limb = request.limbKey ? actor.system?.limbs?.[request.limbKey] : null;
+  return {
+    health: Number(calculateAggregateHealth(actor).value) || 0,
+    limb: limb ? {
+      key: request.limbKey,
+      value: Number(limb.value) || 0,
+      missing: Boolean(limb.missing)
+    } : null
+  };
+}
+
+function getDamageEventDelta(before, after) {
+  if (!before || !after) return null;
+  return {
+    health: (Number(after.health) || 0) - (Number(before.health) || 0),
+    limb: before.limb && after.limb
+      ? (Number(after.limb.value) || 0) - (Number(before.limb.value) || 0)
+      : 0
+  };
+}
+
+function getDamageEventParticipants(request = {}, actor = null) {
+  const source = request.source ?? {};
+  return {
+    source: normalizeDamageParticipant({
+      actorUuid: source.attackerActorUuid ?? source.sourceActorUuid ?? source.actorUuid,
+      tokenUuid: source.attackerTokenUuid ?? source.sourceTokenUuid ?? source.tokenUuid,
+      itemUuid: source.sourceItemUuid ?? source.weaponUuid ?? source.itemUuid
+    }),
+    target: normalizeDamageParticipant({
+      actorUuid: actor?.uuid ?? request.actorUuid,
+      tokenUuid: source.targetTokenUuid,
+      itemUuid: request.itemId ? `${actor?.uuid ?? request.actorUuid}.Item.${request.itemId}` : ""
+    }),
+    related: []
+  };
+}
+
+function normalizeDamageParticipant(participant = {}) {
+  const result = {
+    actorUuid: String(participant.actorUuid ?? ""),
+    tokenUuid: String(participant.tokenUuid ?? ""),
+    itemUuid: String(participant.itemUuid ?? "")
+  };
+  return Object.values(result).some(Boolean) ? result : null;
+}
+
+function createCancelledDamageResult(actor, request, control = {}) {
+  return {
+    actor,
+    actorUuid: String(actor?.uuid ?? request.actorUuid),
+    amount: 0,
+    potentialAmount: request.amount,
+    healthDelta: 0,
+    limbDelta: 0,
+    mode: request.mode,
+    scope: request.scope,
+    limbKey: request.limbKey,
+    damageTypeKey: request.damageTypeKey,
+    cancelled: true,
+    reason: String(control?.reasons?.at?.(-1)?.reason ?? "eventReaction")
+  };
+}
+
+function createFailedDamageResult(request, error) {
+  return {
+    actorUuid: request.actorUuid,
+    amount: 0,
+    potentialAmount: request.amount,
+    healthDelta: 0,
+    limbDelta: 0,
+    mode: request.mode,
+    scope: request.scope,
+    limbKey: request.limbKey,
+    damageTypeKey: request.damageTypeKey,
+    failed: Boolean(error),
+    reason: error ? "error" : "noResult"
+  };
+}
+
+function flattenDamageEventResults(result) {
+  return (Array.isArray(result) ? result.flat(Infinity) : [result]).filter(Boolean);
+}
+
+function findDamageEventResult(request, results = []) {
+  return results.find(result => (
+    String(result?.actor?.uuid ?? result?.actorUuid ?? "") === request.actorUuid
+    && String(result?.mode ?? request.mode) === request.mode
+  )) ?? null;
+}
+
+function getDamageRequestsSceneUuid(requests = []) {
+  for (const request of requests) {
+    const source = request?.source ?? {};
+    const tokenUuid = String(source.targetTokenUuid ?? source.attackerTokenUuid ?? source.sourceTokenUuid ?? "");
+    const match = tokenUuid.match(/^(Scene\.[^.]+)/);
+    if (match) return match[1];
+  }
+  return String(canvas?.scene?.uuid ?? "");
 }
 
 async function applyDamageCycleNow(requests = []) {
@@ -514,7 +821,11 @@ export async function applyDamageRequestsInCurrentHubOperation(requests = [], lo
   const stamped = Number.isFinite(Number(logicalWorldTime))
     ? stampDamageRequestsLogicalWorldTime(requests, Number(logicalWorldTime))
     : requests;
-  return applyDamageCycleNow(stamped);
+  return executeDamageSystemEventWorkflow(
+    stamped,
+    allowedRequests => applyDamageCycleNow(allowedRequests),
+    { batch: true }
+  );
 }
 
 function serializeDamageCycleSocketResults(results = []) {
@@ -556,8 +867,14 @@ function respondDamageHubSocketAction(payload = {}, { ok = true, error = "", res
 export async function applyDamageApplication(request = {}, options = {}) {
   const data = normalizeDamageRequest(request);
   if (!data.actorUuid) return undefined;
-  return runDamageHubOperation(() => (
-    queueActorDamageMutation(data.actorUuid, () => applyDamageApplicationNow(data, options))
+  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
+    [data],
+    async allowedRequests => {
+      const allowed = allowedRequests[0];
+      if (!allowed) return undefined;
+      return queueActorDamageMutation(allowed.actorUuid, () => applyDamageApplicationNow(allowed, options));
+    },
+    { single: true }
   ));
 }
 
@@ -857,8 +1174,13 @@ export function estimateDamageApplication(request = {}) {
 export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}, options = {}) {
   const targetActorUuid = String(actorUuid ?? "").trim();
   if (!targetActorUuid) return undefined;
-  return runDamageHubOperation(() => (
-    queueActorDamageMutation(targetActorUuid, () => applyDamageApplicationsNow({ actorUuid: targetActorUuid, requests }, options))
+  const normalizedRequests = requests.map(request => normalizeDamageRequest({ ...request, actorUuid: targetActorUuid }));
+  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
+    normalizedRequests,
+    allowedRequests => queueActorDamageMutation(targetActorUuid, () => (
+      applyDamageApplicationsNow({ actorUuid: targetActorUuid, requests: allowedRequests }, options)
+    )),
+    { batch: normalizedRequests.length > 1 }
   ));
 }
 
@@ -3314,7 +3636,7 @@ async function advanceWorldTimeForCombatRound(combat, previous, current) {
   const previousWorldTime = combatRoundWorldTimes.get(combat.id) ?? (Number(game.time?.worldTime) || 0);
   const currentWorldTime = Number(game.time?.worldTime) || 0;
   const elapsed = Math.max(0, currentWorldTime - previousWorldTime);
-  if (elapsed < roundSeconds) await game.time.advance(roundSeconds - elapsed);
+  if (elapsed < roundSeconds) await advanceWorldTime(roundSeconds - elapsed, { source: "combatRound" });
   combatRoundWorldTimes.set(combat.id, Number(game.time?.worldTime) || currentWorldTime + roundSeconds);
 }
 
@@ -5718,14 +6040,13 @@ function normalizeScope(scope, limbKey = "", itemId = "") {
 }
 
 function canApplyDamageLocally(actor) {
-  return Boolean(game.user?.isGM || actor?.isOwner);
+  const activeGM = game.users?.activeGM ?? null;
+  if (activeGM) return activeGM.id === game.user?.id;
+  return Boolean(actor?.isOwner);
 }
 
 function getResponsibleGM() {
-  return (game.users?.contents ?? [])
-    .filter(user => user.active && user.isGM)
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .at(0) ?? null;
+  return game.users?.activeGM ?? null;
 }
 
 function synchronizeManualLimbValueUpdates(actor, changes = {}) {

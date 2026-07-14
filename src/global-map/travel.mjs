@@ -3,6 +3,11 @@ import { GLOBAL_MAP_SOCKET } from "./constants.mjs";
 import { cellKey, getLocationCells, pointToCell, tokenCenter, tokenTopLeftAtCell } from "./geometry.mjs";
 import { getSceneState } from "./storage.mjs";
 import {
+  isSystemEventCancelled,
+  systemEventParticipant,
+  withSystemEventRoot
+} from "../events/foundry-world-events.mjs";
+import {
   promptLocationEntry,
   promptLocationExit,
   travelToLocation as travelGroupToLocation
@@ -277,7 +282,84 @@ async function performDirectTravel(payload) {
   return performTravel({ ...payload, originScene, targetScene, anchorCells: payload.anchorCells ?? [] });
 }
 
-async function performTravel({ originScene, targetScene, tokenIds, requestingUserId, requestId, anchorCells }) {
+async function performTravel(args) {
+  const {
+    originScene,
+    targetScene,
+    tokenIds,
+    requestingUserId,
+    requestId
+  } = args;
+  const requestingUser = game.users?.get(requestingUserId);
+  const tokenDocuments = (tokenIds ?? [])
+    .map(id => originScene?.tokens?.get(id))
+    .filter(token => token && canUserMoveToken(requestingUser, token));
+  if (!originScene || !targetScene || !tokenDocuments.length) return performTravelNow(args);
+
+  return withSystemEventRoot({
+    kind: "directTravel",
+    operationId: `direct-travel:${requestId || foundry.utils.randomID()}`,
+    sceneUuid: String(originScene.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const participants = tokenDocuments.map(token => systemEventParticipant({ actor: token.actor, token })).filter(Boolean);
+    for (const [index, target] of participants.entries()) {
+      const common = {
+        originSceneUuid: String(originScene.uuid ?? ""),
+        targetSceneUuid: String(targetScene.uuid ?? ""),
+        requestingUserId: String(requestingUserId ?? ""),
+        requestId: String(requestId ?? ""),
+        actorUuid: target.actorUuid,
+        tokenUuid: target.tokenUuid
+      };
+      const departure = await scope.emit("fallout-maw.travel.departure.before", { data: common }, {
+        occurrenceKey: `direct-travel:${requestId}:departure-before:${target.tokenUuid || index}`,
+        participants: { source: target, target, related: participants.filter(entry => entry !== target) }
+      });
+      if (isSystemEventCancelled(departure)) return false;
+      const arrival = await scope.emit("fallout-maw.travel.arrival.before", { data: common }, {
+        occurrenceKey: `direct-travel:${requestId}:arrival-before:${target.tokenUuid || index}`,
+        participants: { source: target, target, related: participants.filter(entry => entry !== target) }
+      });
+      if (isSystemEventCancelled(arrival)) return false;
+    }
+
+    const completed = await performTravelNow({ ...args, chainRef: scope.chainRef });
+    if (!completed) return false;
+    for (const [index, target] of participants.entries()) {
+      const data = {
+        originSceneUuid: String(originScene.uuid ?? ""),
+        targetSceneUuid: String(targetScene.uuid ?? ""),
+        requestingUserId: String(requestingUserId ?? ""),
+        requestId: String(requestId ?? ""),
+        actorUuid: target.actorUuid,
+        tokenUuid: target.tokenUuid
+      };
+      const options = {
+        participants: { source: target, target, related: participants.filter(entry => entry !== target) }
+      };
+      await scope.emit("fallout-maw.travel.location.left", { data, outcome: { success: true } }, {
+        ...options,
+        occurrenceKey: `direct-travel:${requestId}:location-left:${target.tokenUuid || index}`
+      });
+      await scope.emit("fallout-maw.travel.departure.completed", { data, outcome: { success: true, completed: true } }, {
+        ...options,
+        occurrenceKey: `direct-travel:${requestId}:departure-completed:${target.tokenUuid || index}`
+      });
+      await scope.emit("fallout-maw.travel.location.entered", { data, outcome: { success: true } }, {
+        ...options,
+        occurrenceKey: `direct-travel:${requestId}:location-entered:${target.tokenUuid || index}`
+      });
+      await scope.emit("fallout-maw.travel.arrival.completed", { data, outcome: { success: true, completed: true } }, {
+        ...options,
+        occurrenceKey: `direct-travel:${requestId}:arrival-completed:${target.tokenUuid || index}`
+      });
+    }
+    return true;
+  });
+}
+
+async function performTravelNow({ originScene, targetScene, tokenIds, requestingUserId, requestId, anchorCells, chainRef = null }) {
   const requestingUser = game.users?.get(requestingUserId);
   const tokenDocuments = (tokenIds ?? [])
     .map(id => originScene.tokens?.get(id))
@@ -297,12 +379,21 @@ async function performTravel({ originScene, targetScene, tokenIds, requestingUse
 
   let created = [];
   try {
-    created = await targetScene.createEmbeddedDocuments("Token", createData);
+    created = await targetScene.createEmbeddedDocuments("Token", createData, {
+      falloutMawSystemEventChainRef: chainRef,
+      chainRef
+    });
     if (created.length !== createData.length) throw new Error("Not all target tokens were created.");
-    await originScene.deleteEmbeddedDocuments("Token", tokenDocuments.map(token => token.id));
+    await originScene.deleteEmbeddedDocuments("Token", tokenDocuments.map(token => token.id), {
+      falloutMawSystemEventChainRef: chainRef,
+      chainRef
+    });
   } catch (error) {
     if (created.length) {
-      await targetScene.deleteEmbeddedDocuments("Token", created.map(token => token.id)).catch(() => {});
+      await targetScene.deleteEmbeddedDocuments("Token", created.map(token => token.id), {
+        falloutMawSystemEventChainRef: chainRef,
+        chainRef
+      }).catch(() => {});
     }
     console.error(`${FALLOUT_MAW.id} | Global-map travel failed`, error);
     return emitTravelError({ requestingUserId, requestId }, "Перенос токенов не завершён; исходные токены сохранены.");

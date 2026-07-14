@@ -1364,6 +1364,39 @@
     </div>
     {{/if}}
 
+    {{#if eventReactionSettings}}
+    <div class="fallout-maw-ability-subsection fallout-maw-event-reaction-settings">
+      <div class="fallout-maw-panel-header">
+        <h3>{{localize "FALLOUTMAW.Events.Reaction.Settings"}}</h3>
+      </div>
+      <label>
+        <span>{{localize "FALLOUTMAW.Events.Reaction.DurationSeconds"}}</span>
+        <input type="number" data-field="reaction.durationSeconds" value="{{eventReactionSettings.durationSeconds}}" min="0" step="1">
+      </label>
+      <div class="fallout-maw-event-reaction-costs">
+        <div class="fallout-maw-item-use-category-header">
+          <span>{{localize "FALLOUTMAW.Events.Reaction.Costs"}}</span>
+          <button type="button" data-action="addFunctionReactionCost"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddCost"}}</button>
+        </div>
+        <div class="fallout-maw-event-reaction-cost-list">
+          {{#each eventReactionSettings.costs}}
+          <div class="fallout-maw-event-reaction-cost-row{{#if isUnsupportedResource}} unsupported{{/if}}" data-event-reaction-cost-row data-cost-id="{{id}}">
+            <select data-field="reaction.cost.resourceKey" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Resource'}}">
+              {{#each resourceChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <input type="text" data-field="reaction.cost.formula" value="{{formula}}" data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Formula'}}">
+            <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteFunctionReactionCost" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoCosts"}}</p>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+    {{/if}}
+
     {{#if canConfigureChanges}}
     <fieldset class="fallout-maw-fieldset">
       <legend>Изменения</legend>
@@ -1416,7 +1449,7 @@
         <div class="fallout-maw-ability-condition-or-group">
         {{/if}}
         {{#each conditions}}
-        <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-condition-row data-condition-id="{{id}}" data-condition-group-id="{{groupId}}">
+        <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}{{#if isUnsupportedEventCondition}} unsupported{{/if}}" data-ability-condition-row data-condition-id="{{id}}" data-condition-group-id="{{groupId}}">
           <input type="hidden" data-field="conditionGroupId" value="{{groupId}}">
           {{#if isPending}}
           <label>
@@ -1440,7 +1473,57 @@
                 <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteFunctionCondition" title="Удалить условие"><i class="fa-solid fa-trash"></i></button>
               </div>
             </div>
+            {{#if isUnsupportedEventCondition}}
+            <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedCondition"}}</p>
+            {{/if}}
             <div class="fallout-maw-ability-condition-fields">
+
+              {{#if isEventReaction}}
+              <div class="fallout-maw-event-reaction-event-field">
+                <label>
+                  <span>{{localize "FALLOUTMAW.Events.Reaction.Event"}}</span>
+                  <select data-field="conditionEventKey">
+                    <option value="" {{#unless selectedEvent}}selected{{/unless}}>{{localize "FALLOUTMAW.Events.Reaction.SelectEvent"}}</option>
+                    {{#each eventGroups}}
+                    <optgroup label="{{label}}">
+                      {{#each events}}
+                      <option value="{{key}}" title="{{description}}" {{#if selected}}selected{{/if}}>{{optionLabel}}</option>
+                      {{/each}}
+                    </optgroup>
+                    {{/each}}
+                  </select>
+                </label>
+                <label>
+                  <span>{{localize "FALLOUTMAW.Events.Reaction.ReactorRole"}}</span>
+                  <select data-field="conditionReactorRole">
+                    {{#each reactorRoleChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                {{#if selectedEvent}}
+                <div class="fallout-maw-event-reaction-event-summary{{#unless selectedEvent.supported}} unsupported{{/unless}}">
+                  <strong>{{selectedEvent.label}}</strong>
+                  <span>{{selectedEvent.description}}</span>
+                  <small>{{localize "FALLOUTMAW.Events.Reaction.Phase"}}: {{selectedEvent.phaseLabel}} · {{localize "FALLOUTMAW.Events.Reaction.Roles"}}: {{selectedEvent.rolesLabel}}</small>
+                </div>
+                {{/if}}
+                {{#if isUnsupportedEventKey}}
+                <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedEvent"}}</p>
+                {{/if}}
+              </div>
+              {{/if}}
+
+              {{#if showEventSubject}}
+              <label class="fallout-maw-event-reaction-subject-field">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.EventSubject"}}</span>
+                <select data-field="conditionEventSubject">
+                  {{#each eventSubjectChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{/if}}
 
               {{#if isHealth}}
               <label>
@@ -1724,11 +1807,14 @@
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-panel-header">
         <h3>Штрафы</h3>
-        <button type="button" data-action="addFunctionPenalty"><i class="fa-solid fa-plus"></i> Добавить строку</button>
+        <button type="button" data-action="addFunctionPenalty" {{#unless canAddPenalty}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить строку</button>
       </div>
+      {{#if hasUnsupportedEventReactionPenalties}}
+      <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedPenalties"}}</p>
+      {{/if}}
       <div data-ability-penalties>
         {{#each penalties}}
-        <div class="fallout-maw-ability-change-card" data-ability-penalty-row data-change-id="{{id}}">
+        <div class="fallout-maw-ability-change-card{{#if ../hasUnsupportedEventReactionPenalties}} unsupported{{/if}}" data-ability-penalty-row data-change-id="{{id}}">
           <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
             <span>Ключ</span>
             <span>Тип</span>

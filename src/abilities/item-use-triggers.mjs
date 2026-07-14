@@ -13,23 +13,69 @@ import {
   normalizeAbilityItemUseCategories
 } from "./runtime-state.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
+import { registerSystemEventObserver } from "../events/dispatcher.mjs";
 
 const ABILITY_ITEM_USE_EFFECT_FLAG_KEY = "abilityItemUseEffect";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+let itemUseObserverRegistered = false;
 
 export function registerAbilityItemUseHooks() {
-  Hooks.on("fallout-maw.itemUsed", context => {
-    void applyAbilityItemUseTriggers(context);
+  if (itemUseObserverRegistered) return;
+  itemUseObserverRegistered = true;
+  registerSystemEventObserver({
+    id: "fallout-maw.abilityItemUseTriggers",
+    eventKeys: ["fallout-maw.item.use.resolved"],
+    priority: 200,
+    observe: observeResolvedItemUse
   });
 }
 
-async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}) {
+async function observeResolvedItemUse({ event, scope } = {}) {
+  if (!event?.outcome?.success) return;
+  if (event?.data?.action === "lightSource" && event?.data?.active !== true) return;
+  const actorUuid = String(event?.source?.actorUuid ?? event?.data?.sourceActorUuid ?? "").trim();
+  if (!actorUuid) return;
+  let actor;
+  try {
+    actor = await fromUuid(actorUuid);
+  } catch (_error) {
+    return;
+  }
+  if (!actor) return;
+
+  const itemData = event?.data?.item ?? {};
+  const itemUuid = String(event?.source?.itemUuid ?? itemData.uuid ?? "").trim();
+  let item = null;
+  try {
+    item = itemUuid ? await fromUuid(itemUuid) : null;
+  } catch (_error) {
+    item = null;
+  }
+  item ??= createUsedItemSnapshot(itemData);
+  if (!item) return;
+  await applyAbilityItemUseTriggers({ actor, item }, { chainRef: scope?.chainRef ?? null });
+}
+
+function createUsedItemSnapshot(data = {}) {
+  const itemCategory = String(data?.itemCategory ?? "").trim();
+  if (!itemCategory) return null;
+  return {
+    id: String(data?.id ?? ""),
+    uuid: String(data?.uuid ?? ""),
+    name: String(data?.name ?? ""),
+    type: String(data?.type ?? ""),
+    system: { itemCategory }
+  };
+}
+
+async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}, { chainRef = null } = {}) {
   if (!actor?.isOwner || !item) return [];
 
   const entries = findTriggeredItemUseEntries(actor, item);
   const results = [];
   for (const entry of entries) {
-    const result = await advanceItemUseCounter(actor, entry);
+    const result = await advanceItemUseCounter(actor, entry, { chainRef });
     if (result) results.push(result);
   }
   return results;
@@ -42,6 +88,7 @@ function findTriggeredItemUseEntries(actor, usedItem) {
 
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
       if (abilityFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+      if (hasEventReactionCondition(abilityFunction.conditions)) continue;
 
       const matchingConditions = (abilityFunction.conditions ?? [])
         .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.itemUse)
@@ -95,7 +142,7 @@ function itemUseConditionMatches(condition = {}, item = null) {
   return categories.has(itemCategory);
 }
 
-async function advanceItemUseCounter(actor, entry) {
+async function advanceItemUseCounter(actor, entry, { chainRef = null } = {}) {
   const key = getAbilityItemUseCounterKey(entry);
   if (!key) return null;
 
@@ -103,18 +150,28 @@ async function advanceItemUseCounter(actor, entry) {
   const counters = foundry.utils.deepClone(entry.abilityItem.getFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY) ?? {});
   const nextCount = Math.max(0, toInteger(counters[key])) + 1;
   counters[key] = nextCount;
+  const updateOptions = createItemUseTriggerDocumentOptions(chainRef);
 
   if (nextCount < requiredCount) {
-    await entry.abilityItem.setFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY, counters);
+    await entry.abilityItem.update({
+      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: counters
+    }, updateOptions);
     return null;
   }
 
-  if (Object.keys(counters).length <= 1) await entry.abilityItem.unsetFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY);
-  else await entry.abilityItem.update({ [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}.${key}`]: globalThis._del });
-  return createTriggeredAbilityEffect(actor, entry);
+  if (Object.keys(counters).length <= 1) {
+    await entry.abilityItem.update({
+      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: globalThis._del
+    }, updateOptions);
+  } else {
+    await entry.abilityItem.update({
+      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}.${key}`]: globalThis._del
+    }, updateOptions);
+  }
+  return createTriggeredAbilityEffect(actor, entry, { chainRef });
 }
 
-async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunction, condition, usedItem } = {}) {
+async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunction, condition, usedItem } = {}, { chainRef = null } = {}) {
   const changes = await selectRuntimeChanges(abilityItem, abilityFunction);
   if (!changes?.length) return null;
 
@@ -152,8 +209,17 @@ async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunctio
     };
   }
 
-  const [created] = await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false });
+  const [created] = await actor.createEmbeddedDocuments("ActiveEffect", [effectData], {
+    animate: false,
+    ...createItemUseTriggerDocumentOptions(chainRef)
+  });
   return created ?? null;
+}
+
+function createItemUseTriggerDocumentOptions(chainRef = null) {
+  return chainRef
+    ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+    : {};
 }
 
 async function selectRuntimeChanges(abilityItem, abilityFunction = {}) {

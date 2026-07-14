@@ -55,6 +55,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
+  eventReaction: "eventReaction",
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
   targetFaction: "targetFaction",
@@ -70,6 +71,19 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   cooldown: "cooldown",
   energyConsumption: "energyConsumption",
   itemUse: "itemUse"
+});
+
+export const ABILITY_EVENT_REACTOR_ROLES = Object.freeze({
+  source: "source",
+  target: "target",
+  observer: "observer",
+  any: "any"
+});
+
+export const ABILITY_EVENT_SUBJECTS = Object.freeze({
+  reactor: "reactor",
+  eventSource: "eventSource",
+  eventTarget: "eventTarget"
 });
 
 export const ABILITY_AURA_MODES = Object.freeze({
@@ -293,6 +307,7 @@ export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChange
     fixedKey: options?.fixedKey,
     fixedSettings: options?.fixedSettings,
     activeSettings: options?.activeSettings,
+    reactionSettings: options?.reactionSettings,
     changes: [],
     conditions: [],
     penalties: []
@@ -406,6 +421,9 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     activeSettings: type === ABILITY_FUNCTION_TYPES.activeApplication
       ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
       : {},
+    reactionSettings: type === ABILITY_FUNCTION_TYPES.effectChanges
+      ? normalizeEventReactionSettings(value?.reactionSettings)
+      : { durationSeconds: 0, costs: [] },
     changes: isLegacy
       ? legacyFunctionToChanges(value)
       : normalizeAbilityChanges(value?.changes ?? value?.effects),
@@ -452,6 +470,19 @@ export function normalizeActiveApplicationSettings(value = {}) {
     targetGroups: targetGroups.length ? targetGroups : ["ally"],
     excludeSelf: value?.excludeSelf === undefined ? true : Boolean(value.excludeSelf),
     durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 0))
+  };
+}
+
+export function normalizeEventReactionSettings(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const rows = Array.isArray(source.costs) ? source.costs : Object.values(source.costs ?? {});
+  return {
+    durationSeconds: Math.max(0, toInteger(source.durationSeconds ?? source.duration ?? 0)),
+    costs: rows.map(row => ({
+      id: String(row?.id ?? "").trim() || foundry.utils.randomID(),
+      resourceKey: String(row?.resourceKey ?? row?.key ?? "").trim(),
+      formula: String(row?.formula ?? row?.value ?? "0").trim()
+    }))
   };
 }
 
@@ -521,11 +552,30 @@ function normalizeAbilityCondition(value = {}) {
 
   const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
 
+  if (type === ABILITY_CONDITION_TYPES.eventReaction) {
+    const rawRole = String(value?.reactorRole ?? value?.role ?? "").trim();
+    return {
+      id,
+      groupId,
+      type,
+      eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
+      reactorRole: Object.values(ABILITY_EVENT_REACTOR_ROLES).includes(rawRole)
+        ? rawRole
+        : ABILITY_EVENT_REACTOR_ROLES.any
+    };
+  }
+
+  const rawEventSubject = String(value?.eventSubject ?? "").trim();
+  const eventSubject = Object.values(ABILITY_EVENT_SUBJECTS).includes(rawEventSubject)
+    ? rawEventSubject
+    : ABILITY_EVENT_SUBJECTS.reactor;
+
   if (type === ABILITY_CONDITION_TYPES.targetFaction) {
     return {
       id,
       groupId,
       type,
+      eventSubject,
       targetFactionNames: normalizeStringList(value?.targetFactionNames ?? value?.factions ?? value?.faction)
     };
   }
@@ -535,6 +585,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       targetRaceId: String(value?.targetRaceId ?? value?.raceId ?? "").trim()
     };
   }
@@ -544,6 +595,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       targetTypeId: String(value?.targetTypeId ?? value?.typeId ?? "").trim()
     };
   }
@@ -556,6 +608,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       postureSubject,
       postureActions: normalizeStringList(value?.postureActions ?? value?.postures ?? value?.actions)
         .filter(action => ABILITY_POSTURE_ACTIONS.includes(action))
@@ -567,6 +620,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       coverKeys: normalizeStringList(value?.coverKeys ?? value?.covers ?? value?.cover)
     };
   }
@@ -576,6 +630,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       weaponActionKeys: normalizeConditionKeyList(value?.weaponActionKeys, value?.weaponActionKey)
     };
   }
@@ -585,6 +640,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey)
     };
   }
@@ -594,6 +650,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       proficiencyKeys: normalizeConditionKeyList(value?.proficiencyKeys, value?.proficiencyKey)
     };
   }
@@ -686,6 +743,7 @@ function normalizeAbilityCondition(value = {}) {
       id,
       groupId,
       type,
+      eventSubject,
       operator: String(value?.operator ?? "") === ABILITY_EQUIPMENT_OPERATORS.empty
         ? ABILITY_EQUIPMENT_OPERATORS.empty
         : ABILITY_EQUIPMENT_OPERATORS.occupied,
@@ -707,6 +765,7 @@ function normalizeAbilityCondition(value = {}) {
     id,
     groupId,
     type,
+    eventSubject,
     operator: String(value?.operator ?? "lte") === "gte" ? "gte" : "lte",
     percent: Math.max(0, Math.min(100, toInteger(value?.percent ?? 50))),
     equipmentSlotKey: "",

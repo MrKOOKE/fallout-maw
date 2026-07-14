@@ -1,4 +1,5 @@
 import { toInteger } from "../utils/numbers.mjs";
+import { dispatchSystemEvent } from "../events/dispatcher.mjs";
 
 export const COMBAT_RESOURCE_KEYS = Object.freeze({
   movement: "movementPoints",
@@ -6,7 +7,6 @@ export const COMBAT_RESOURCE_KEYS = Object.freeze({
   reaction: "reactionPoints"
 });
 
-const providers = new Map();
 const pendingByActor = new Map();
 const activeSpendingBarriers = new Map();
 
@@ -27,13 +27,6 @@ export function beginCombatResourceSpending(actor) {
   };
 }
 
-export function registerCombatResourceSpendingProvider(provider = {}) {
-  const id = String(provider?.id ?? "").trim();
-  if (!id || typeof provider.execute !== "function") return false;
-  providers.set(id, provider);
-  return true;
-}
-
 export function notifyCombatResourcesSpent(actor, resources = {}, context = {}) {
   if (!game.combat?.started || !actor) return [];
   const normalized = Object.fromEntries(Object.values(COMBAT_RESOURCE_KEYS)
@@ -44,21 +37,40 @@ export function notifyCombatResourcesSpent(actor, resources = {}, context = {}) 
   const actorKey = String(actor.uuid ?? actor.id ?? "");
   const previous = pendingByActor.get(actorKey) ?? Promise.resolve([]);
   const operation = previous.then(async () => {
-    const results = [];
-    for (const provider of providers.values()) {
-      try {
-        results.push(await provider.execute({ actor, resources: normalized, context }));
-      } catch (error) {
-        console.error(`Fallout MaW | Resource spending provider failed: ${provider.id}`, error);
+    return dispatchSystemEvent("fallout-maw.combat.resource.spent", {
+      data: {
+        actorUuid: String(actor.uuid ?? ""),
+        resources: normalized,
+        context: serializeResourceSpendingContext(context)
+      },
+      delta: { resources: Object.fromEntries(Object.entries(normalized).map(([key, value]) => [key, -value])) },
+      outcome: { spent: true }
+    }, {
+      kind: "combatResourceSpent",
+      operationId: `resource-spent:${actorKey}:${foundry.utils.randomID()}`,
+      sceneUuid: String(canvas?.scene?.uuid ?? ""),
+      combatUuid: String(game.combat?.uuid ?? ""),
+      chainRef: context?.chainRef ?? context?.falloutMawSystemEventChainRef ?? null,
+      participants: {
+        source: { actorUuid: String(actor.uuid ?? ""), tokenUuid: String(actor.token?.uuid ?? ""), itemUuid: "" },
+        target: null,
+        related: []
       }
-    }
-    return results;
+    });
   });
   pendingByActor.set(actorKey, operation);
   void operation.finally(() => {
     if (pendingByActor.get(actorKey) === operation) pendingByActor.delete(actorKey);
   });
   return operation;
+}
+
+function serializeResourceSpendingContext(context = {}) {
+  if (!context || typeof context !== "object") return {};
+  return Object.fromEntries(Object.entries(context).filter(([_key, value]) => (
+    ["string", "boolean"].includes(typeof value)
+    || (typeof value === "number" && Number.isFinite(value))
+  )));
 }
 
 export async function waitForCombatResourceSpending(actor) {

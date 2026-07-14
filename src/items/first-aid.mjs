@@ -31,7 +31,16 @@ export function registerFirstAidSocket() {
   game.socket.on(FIRST_AID_SOCKET, handleFirstAidSocketMessage);
 }
 
-export async function useFirstAidItem({ sourceActor = null, targetActor = null, sourceToken = null, targetToken = null, item = null } = {}) {
+export async function useFirstAidItem({
+  sourceActor = null,
+  targetActor = null,
+  sourceToken = null,
+  targetToken = null,
+  item = null,
+  source: workflowSource = {},
+  chainRef = null,
+  options = {}
+} = {}) {
   if (!sourceActor || !targetActor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.firstAid)) return false;
 
   const firstAid = getFirstAidFunction(item);
@@ -55,26 +64,25 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   }
   if (!(await spendActionPointsIfNeeded(sourceActor, firstAid))) return false;
 
+  const inheritedChainRef = chainRef
+    ?? options?.falloutMawSystemEventChainRef
+    ?? options?.chainRef
+    ?? workflowSource?.chainRef
+    ?? null;
   const source = {
     kind: "firstAid",
     sourceActorUuid: sourceActor.uuid,
     itemUuid: item.uuid,
     itemName: item.name,
-    worldTime: Number(game.time?.worldTime) || 0
+    worldTime: Number(game.time?.worldTime) || 0,
+    ...(inheritedChainRef ? { chainRef: inheritedChainRef } : {})
   };
 
-  const checkResult = await rollFirstAidCheck(sourceActor, targetContext, firstAid, item);
+  const checkResult = await rollFirstAidCheck(sourceActor, targetContext, firstAid, item, inheritedChainRef);
   const resultKey = checkResult?.result?.key ?? "success";
   if (resultKey === "criticalFailure") {
-    await spendFirstAidItem(item, chargeCost);
+    await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
     await applyCriticalFailureDamage(targetActor, firstAid, source);
-    Hooks.callAll("fallout-maw.itemUsed", {
-      actor: sourceActor,
-      targetActor,
-      item,
-      action: "firstAid",
-      source
-    });
     return true;
   }
   const resultMultiplier = resultKey === "failure" ? 0.5 : 1;
@@ -172,14 +180,7 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
     });
   }
 
-  await spendFirstAidItem(item, chargeCost);
-  Hooks.callAll("fallout-maw.itemUsed", {
-    actor: sourceActor,
-    targetActor,
-    item,
-    action: "firstAid",
-    source
-  });
+  await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
   return true;
 }
 
@@ -328,7 +329,7 @@ function scaleSignedValue(value, multiplier = 1) {
   return number < 0 ? -finalValue : finalValue;
 }
 
-async function rollFirstAidCheck(sourceActor, targetContext = null, firstAid = {}, item = null) {
+async function rollFirstAidCheck(sourceActor, targetContext = null, firstAid = {}, item = null, chainRef = null) {
   const difficulty = Math.max(0, toInteger(firstAid.difficulty));
   if (!difficulty) return null;
   const skillKey = targetContext?.isConstruct ? "repair" : "firstAid";
@@ -339,7 +340,12 @@ async function rollFirstAidCheck(sourceActor, targetContext = null, firstAid = {
       difficulty
     },
     animate: false,
-    requester: item?.name ?? ""
+    requester: item?.name ?? "",
+    chainRef,
+    source: {
+      itemUuid: item?.uuid ?? "",
+      chainRef
+    }
   });
 }
 
@@ -730,40 +736,46 @@ async function applyCriticalFailureDamage(actor, firstAid = {}, source = {}) {
   });
 }
 
-async function spendFirstAidItem(item, amount = 1) {
+async function spendFirstAidItem(item, amount = 1, updateOptions = {}) {
   const quantity = getItemQuantity(item);
   const charges = getFirstAidChargesData(item);
   const cost = Math.max(1, toInteger(amount));
   if (charges.max <= 1) {
     if (usesVirtualInventoryStacks(item)) {
       const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
       const { _id, ...changes } = updateData;
-      return item.update(changes);
+      return item.update(changes, updateOptions);
     }
     const next = Math.max(0, quantity - 1);
-    if (next <= 0) return item.delete();
-    return item.update({ "system.quantity": next });
+    if (next <= 0) return item.delete(updateOptions);
+    return item.update({ "system.quantity": next }, updateOptions);
   }
 
   const remainingCharges = Math.max(0, charges.value - cost);
   if (remainingCharges > 0) {
-    return item.update({ "system.functions.firstAid.charges.value": remainingCharges });
+    return item.update({ "system.functions.firstAid.charges.value": remainingCharges }, updateOptions);
   }
 
   const nextQuantity = Math.max(0, quantity - 1);
-  if (nextQuantity <= 0) return item.delete();
+  if (nextQuantity <= 0) return item.delete(updateOptions);
   if (usesVirtualInventoryStacks(item)) {
     const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
     const { _id, ...changes } = updateData;
     return item.update({
       ...changes,
       "system.functions.firstAid.charges.value": charges.max
-    });
+    }, updateOptions);
   }
   return item.update({
     "system.quantity": nextQuantity,
     "system.functions.firstAid.charges.value": charges.max
-  });
+  }, updateOptions);
+}
+
+function createFirstAidDocumentOptions(chainRef = null) {
+  return chainRef
+    ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+    : {};
 }

@@ -8,6 +8,7 @@ import {
   setTimeRestMode
 } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
+import { advanceWorldTime as advanceSystemWorldTime } from "../time/world-time-queue.mjs";
 
 const CONTROL_ID = "fallout-maw-world-time-control";
 const UNIT_SECONDS = Object.freeze({
@@ -22,7 +23,6 @@ let lastClockTick = 0;
 let clockTickInFlight = false;
 let resumeClockAfterCombat = false;
 let selectedUnit = "hours";
-let worldTimeAdvanceQueue = Promise.resolve();
 
 export function registerWorldTimeControlHooks() {
   if (hooksRegistered) return;
@@ -260,21 +260,17 @@ function isCombatActive() {
 export async function advanceWorldTime(seconds, {
   restMode = getTimeRestMode(),
   campRest = null,
-  forceTimeMechanics = false
+  forceTimeMechanics = false,
+  chainRef = null,
+  source = "worldTimeControl"
 } = {}) {
-  const amount = Math.trunc(Number(seconds) || 0);
-  if (!amount || !game.user?.isGM) return;
-  const advance = worldTimeAdvanceQueue.then(() => game.time.advance(amount, {
-    falloutMaw: {
-      restMode: Boolean(restMode),
-      forceTimeMechanics: Boolean(forceTimeMechanics),
-      ...(campRest ? { campRest } : {})
-    }
-  }));
-  worldTimeAdvanceQueue = advance.catch(error => {
-    console.error("Fallout MaW | Queued world time advance failed", error);
+  return advanceSystemWorldTime(seconds, {
+    restMode,
+    campRest,
+    forceTimeMechanics,
+    chainRef,
+    source
   });
-  await advance;
 }
 
 function getSelectedUnitSeconds() {

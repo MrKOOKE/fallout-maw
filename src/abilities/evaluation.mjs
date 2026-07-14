@@ -18,6 +18,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
 import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -79,6 +80,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 }
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
+  if (condition.type === ABILITY_CONDITION_TYPES.eventReaction) return false;
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return false;
   if (condition.type === ABILITY_CONDITION_TYPES.aura) return abilityAuraConditionApplies(actor, condition, context);
   if (condition.type === ABILITY_CONDITION_TYPES.energyConsumption) return energyConsumptionConditionApplies(actor, condition, context);
@@ -159,6 +161,7 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
 
 function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
+  if (hasEventReactionCondition(conditions)) return [];
   if (!conditions.length) return entry.changes ?? [];
   if ((hasAbilityTargetContextCondition(conditions) || hasWeaponContextCondition(conditions)) && !context?.allowContextual) return [];
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
@@ -171,6 +174,7 @@ function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
 
 export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry = {}, condition = {}, context = {}) {
   if (!entry || entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) return [];
+  if (hasEventReactionCondition(entry.conditions)) return [];
   if (hasItemUseCondition(entry.conditions)) return [];
   const applies = abilityConditionsApply(actor, entry.conditions ?? [], {
     ...context,

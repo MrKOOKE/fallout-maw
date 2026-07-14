@@ -21,6 +21,1082 @@
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
+    "Events": {
+      "Groups": {
+        "actor": {
+          "Label": "Actor"
+        },
+        "skill": {
+          "Label": "Skill checks"
+        },
+        "ability": {
+          "Label": "Abilities"
+        },
+        "research": {
+          "Label": "Research"
+        },
+        "progression": {
+          "Label": "Progression"
+        },
+        "combat": {
+          "Label": "Combat"
+        },
+        "weapon": {
+          "Label": "Weapons"
+        },
+        "damage": {
+          "Label": "Damage and healing"
+        },
+        "item": {
+          "Label": "Item use"
+        },
+        "inventory": {
+          "Label": "Inventory"
+        },
+        "craft": {
+          "Label": "Crafting"
+        },
+        "repair": {
+          "Label": "Repair"
+        },
+        "medicine": {
+          "Label": "Medicine"
+        },
+        "hacking": {
+          "Label": "Hacking"
+        },
+        "butchering": {
+          "Label": "Butchering"
+        },
+        "movement": {
+          "Label": "Movement"
+        },
+        "environment": {
+          "Label": "Environment"
+        },
+        "stealth": {
+          "Label": "Stealth"
+        },
+        "vision": {
+          "Label": "Physical vision"
+        },
+        "trap": {
+          "Label": "Traps"
+        },
+        "globalMap": {
+          "Label": "Global map"
+        },
+        "worldTime": {
+          "Label": "World time"
+        },
+        "camp": {
+          "Label": "Camp"
+        },
+        "travel": {
+          "Label": "Travel"
+        }
+      },
+      "Phases": {
+        "pre": {
+          "Label": "Before commit",
+          "Description": "Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "gate": {
+          "Label": "Reaction window",
+          "Description": "Awaited interruption window before the workflow continues."
+        },
+        "query": {
+          "Label": "Synchronous calculation",
+          "Description": "Synchronous calculation hook; API-only and not selectable as a reaction condition."
+        },
+        "enginePre": {
+          "Label": "Synchronous engine pre-hook",
+          "Description": "Synchronous engine pre-hook; API-only and not selectable as a reaction condition."
+        },
+        "committed": {
+          "Label": "After completion",
+          "Description": "Emitted after the workflow commits or reaches its terminal result."
+        },
+        "transition": {
+          "Label": "State transition",
+          "Description": "Emitted after a persisted gameplay state transition."
+        }
+      },
+      "Roles": {
+        "subject": {
+          "Label": "Subject"
+        },
+        "source": {
+          "Label": "Source"
+        },
+        "target": {
+          "Label": "Target"
+        },
+        "initiator": {
+          "Label": "Initiator"
+        },
+        "recipient": {
+          "Label": "Recipient"
+        },
+        "attacker": {
+          "Label": "Attacker"
+        },
+        "defender": {
+          "Label": "Defender"
+        },
+        "observer": {
+          "Label": "Observer"
+        },
+        "observed": {
+          "Label": "Observed target"
+        },
+        "healer": {
+          "Label": "Healer"
+        },
+        "patient": {
+          "Label": "Patient"
+        },
+        "vehicle": {
+          "Label": "Vehicle"
+        },
+        "passenger": {
+          "Label": "Passenger"
+        }
+      },
+      "Subjects": {
+        "actor": {
+          "Label": "Actor"
+        },
+        "item": {
+          "Label": "Item"
+        },
+        "activeEffect": {
+          "Label": "Active effect"
+        },
+        "combat": {
+          "Label": "Combat"
+        },
+        "combatant": {
+          "Label": "Combatant"
+        },
+        "resource": {
+          "Label": "Resource"
+        },
+        "roll": {
+          "Label": "Roll or check"
+        },
+        "workflow": {
+          "Label": "Gameplay workflow"
+        },
+        "token": {
+          "Label": "Token"
+        },
+        "region": {
+          "Label": "Region"
+        },
+        "trap": {
+          "Label": "Trap"
+        },
+        "scene": {
+          "Label": "Scene"
+        },
+        "camp": {
+          "Label": "Camp"
+        },
+        "travelGroup": {
+          "Label": "Travel group"
+        },
+        "worldTime": {
+          "Label": "World time"
+        },
+        "location": {
+          "Label": "Location"
+        },
+        "currency": {
+          "Label": "Currency"
+        }
+      },
+      "Reaction": {
+        "ConditionLabel": "Event reaction",
+        "Settings": "Reaction settings",
+        "DurationSeconds": "Effect duration, seconds (0 = event chain)",
+        "Costs": "Reaction costs",
+        "AddCost": "Add cost",
+        "Resource": "Resource",
+        "Formula": "Cost formula",
+        "NoCosts": "No resource costs configured.",
+        "Event": "Event",
+        "SelectEvent": "Select an event",
+        "ReactorRole": "Reactor role",
+        "EventSubject": "Filter subject",
+        "Phase": "Phase",
+        "Roles": "Participants",
+        "Unsupported": "unsupported",
+        "UnsupportedGroup": "Unsupported saved event",
+        "UnsupportedCondition": "This condition is not supported by event reactions. It is preserved but remains inert.",
+        "UnsupportedEvent": "This saved event is unavailable or cannot open a reaction window. The value is preserved but remains inert.",
+        "UnsupportedPenalties": "Failure penalties are not supported by event reactions. Existing rows are preserved but remain inert.",
+        "Unknown": "Unknown",
+        "UnknownEventDescription": "This saved event is not present in the current catalog.",
+        "Title": "Reaction",
+        "Opportunity": "Actors have an opportunity to react.",
+        "MovementLocked": "Waiting for reactions: movement is temporarily locked.",
+        "Accept": "React",
+        "Decline": "Decline",
+        "DeclineAll": "Decline all",
+        "CostSummary": "Cost: {cost}",
+        "CostUnavailable": "The reaction cost is no longer available.",
+        "ReactorRoles": {
+          "Source": "Event source",
+          "Target": "Event target",
+          "Observer": "Observer",
+          "Any": "Any matching actor"
+        },
+        "EventSubjects": {
+          "Reactor": "Reactor",
+          "EventSource": "Event source",
+          "EventTarget": "Event target"
+        },
+        "Resources": {
+          "ReactionPoints": "Reaction points"
+        },
+        "CostErrors": {
+          "InvalidFormula": "The reaction cost formula is invalid.",
+          "MissingResourceKey": "Select a resource for every reaction cost row.",
+          "UnknownResourceKey": "The configured reaction resource is unavailable.",
+          "MissingResource": "The reactor does not have the required resource.",
+          "InsufficientResource": "The reactor does not have enough resources.",
+          "StaleQuote": "The reaction cost changed; try again.",
+          "SpendFailed": "The reaction cost could not be spent."
+        }
+      },
+      "Entries": {
+        "ActorHealthChanged": {
+          "Label": "Actor · Health · Changed",
+          "Description": "Actor · Health · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorResourceChanged": {
+          "Label": "Actor · Resource · Changed",
+          "Description": "Actor · Resource · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorNeedChanged": {
+          "Label": "Actor · Need · Changed",
+          "Description": "Actor · Need · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorCurrencyChanged": {
+          "Label": "Actor · Currency · Changed",
+          "Description": "Actor · Currency · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorExperienceChanged": {
+          "Label": "Actor · Experience · Changed",
+          "Description": "Actor · Experience · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorLevelChanged": {
+          "Label": "Actor · Level · Changed",
+          "Description": "Actor · Level · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorLimbChanged": {
+          "Label": "Actor · Limb · Changed",
+          "Description": "Actor · Limb · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorLimbDestroyed": {
+          "Label": "Actor · Limb · Destroyed",
+          "Description": "Actor · Limb · Destroyed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorLimbRestored": {
+          "Label": "Actor · Limb · Restored",
+          "Description": "Actor · Limb · Restored. Emitted after a persisted gameplay state transition."
+        },
+        "ActorEffectApplied": {
+          "Label": "Actor · Effect · Applied",
+          "Description": "Actor · Effect · Applied. Emitted after a persisted gameplay state transition."
+        },
+        "ActorEffectChanged": {
+          "Label": "Actor · Effect · Changed",
+          "Description": "Actor · Effect · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorEffectRemoved": {
+          "Label": "Actor · Effect · Removed",
+          "Description": "Actor · Effect · Removed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorStatusGained": {
+          "Label": "Actor · Status · Gained",
+          "Description": "Actor · Status · Gained. Emitted after a persisted gameplay state transition."
+        },
+        "ActorStatusLost": {
+          "Label": "Actor · Status · Lost",
+          "Description": "Actor · Status · Lost. Emitted after a persisted gameplay state transition."
+        },
+        "ActorTraumaAcquired": {
+          "Label": "Actor · Trauma · Acquired",
+          "Description": "Actor · Trauma · Acquired. Emitted after a persisted gameplay state transition."
+        },
+        "ActorTraumaRecovered": {
+          "Label": "Actor · Trauma · Recovered",
+          "Description": "Actor · Trauma · Recovered. Emitted after a persisted gameplay state transition."
+        },
+        "ActorDiseaseAcquired": {
+          "Label": "Actor · Disease · Acquired",
+          "Description": "Actor · Disease · Acquired. Emitted after a persisted gameplay state transition."
+        },
+        "ActorDiseaseStageChanged": {
+          "Label": "Actor · Disease · Stage Changed",
+          "Description": "Actor · Disease · Stage Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorDiseaseRecovered": {
+          "Label": "Actor · Disease · Recovered",
+          "Description": "Actor · Disease · Recovered. Emitted after a persisted gameplay state transition."
+        },
+        "ActorDiseaseImmunityGained": {
+          "Label": "Actor · Disease · Immunity Gained",
+          "Description": "Actor · Disease · Immunity Gained. Emitted after a persisted gameplay state transition."
+        },
+        "ActorStateChanged": {
+          "Label": "Actor · State · Changed",
+          "Description": "Actor · State · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "SkillCheckBeforeRoll": {
+          "Label": "Skill · Check · Before Roll",
+          "Description": "Skill · Check · Before Roll. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "SkillCheckResolved": {
+          "Label": "Skill · Check · Resolved",
+          "Description": "Skill · Check · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "SkillBatchResolved": {
+          "Label": "Skill · Batch · Resolved",
+          "Description": "Skill · Batch · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "AbilityAcquired": {
+          "Label": "Ability · Acquired",
+          "Description": "Ability · Acquired. Emitted after a persisted gameplay state transition."
+        },
+        "AbilityRemoved": {
+          "Label": "Ability · Removed",
+          "Description": "Ability · Removed. Emitted after a persisted gameplay state transition."
+        },
+        "AbilityUseBefore": {
+          "Label": "Ability · Use · Before",
+          "Description": "Ability · Use · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "AbilityUseResolved": {
+          "Label": "Ability · Use · Resolved",
+          "Description": "Ability · Use · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "AbilityToggleChanged": {
+          "Label": "Ability · Toggle · Changed",
+          "Description": "Ability · Toggle · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "AbilityApplicationBefore": {
+          "Label": "Ability · Application · Before",
+          "Description": "Ability · Application · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "AbilityApplicationResolved": {
+          "Label": "Ability · Application · Resolved",
+          "Description": "Ability · Application · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "AbilityCooldownStarted": {
+          "Label": "Ability · Cooldown · Started",
+          "Description": "Ability · Cooldown · Started. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "AbilityCooldownRefreshed": {
+          "Label": "Ability · Cooldown · Refreshed",
+          "Description": "Ability · Cooldown · Refreshed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "AbilityCooldownEnded": {
+          "Label": "Ability · Cooldown · Ended",
+          "Description": "Ability · Cooldown · Ended. Emitted after a persisted gameplay state transition."
+        },
+        "AbilityAuraEntered": {
+          "Label": "Ability · Aura · Entered",
+          "Description": "Ability · Aura · Entered. Emitted after a persisted gameplay state transition."
+        },
+        "AbilityAuraLeft": {
+          "Label": "Ability · Aura · Left",
+          "Description": "Ability · Aura · Left. Emitted after a persisted gameplay state transition."
+        },
+        "ResearchStarted": {
+          "Label": "Research · Started",
+          "Description": "Research · Started. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ResearchProgressed": {
+          "Label": "Research · Progressed",
+          "Description": "Research · Progressed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ResearchCompleted": {
+          "Label": "Research · Completed",
+          "Description": "Research · Completed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ResearchCancelled": {
+          "Label": "Research · Cancelled",
+          "Description": "Research · Cancelled. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "OrganismDevelopmentGained": {
+          "Label": "Organism Development · Gained",
+          "Description": "Organism Development · Gained. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "OrganismDevelopmentUpgraded": {
+          "Label": "Organism Development · Upgraded",
+          "Description": "Organism Development · Upgraded. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ActorAdvancementApplied": {
+          "Label": "Actor · Advancement · Applied",
+          "Description": "Actor · Advancement · Applied. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ActorGenerated": {
+          "Label": "Actor · Generated",
+          "Description": "Actor · Generated. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ActorStructureChanged": {
+          "Label": "Actor · Structure · Changed",
+          "Description": "Actor · Structure · Changed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ActorRecipeLearned": {
+          "Label": "Actor · Recipe · Learned",
+          "Description": "Actor · Recipe · Learned. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatStarted": {
+          "Label": "Combat · Started",
+          "Description": "Combat · Started. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatEnded": {
+          "Label": "Combat · Ended",
+          "Description": "Combat · Ended. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatCombatantAdded": {
+          "Label": "Combat · Combatant · Added",
+          "Description": "Combat · Combatant · Added. Emitted after a persisted gameplay state transition."
+        },
+        "CombatCombatantRemoved": {
+          "Label": "Combat · Combatant · Removed",
+          "Description": "Combat · Combatant · Removed. Emitted after a persisted gameplay state transition."
+        },
+        "CombatRoundChanged": {
+          "Label": "Combat · Round · Changed",
+          "Description": "Combat · Round · Changed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatInitiativeRolled": {
+          "Label": "Combat · Initiative · Rolled",
+          "Description": "Combat · Initiative · Rolled. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatTurnBeforeEnd": {
+          "Label": "Combat · Turn · Before End",
+          "Description": "Combat · Turn · Before End. Awaited interruption window before the workflow continues."
+        },
+        "CombatTurnEnded": {
+          "Label": "Combat · Turn · Ended",
+          "Description": "Combat · Turn · Ended. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatTurnBeforeStart": {
+          "Label": "Combat · Turn · Before Start",
+          "Description": "Combat · Turn · Before Start. Awaited interruption window before the workflow continues."
+        },
+        "CombatTurnStarted": {
+          "Label": "Combat · Turn · Started",
+          "Description": "Combat · Turn · Started. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatTurnBlocked": {
+          "Label": "Combat · Turn · Blocked",
+          "Description": "Combat · Turn · Blocked. Emitted after a persisted gameplay state transition."
+        },
+        "CombatTurnUnblocked": {
+          "Label": "Combat · Turn · Unblocked",
+          "Description": "Combat · Turn · Unblocked. Emitted after a persisted gameplay state transition."
+        },
+        "CombatCombatantDefeated": {
+          "Label": "Combat · Combatant · Defeated",
+          "Description": "Combat · Combatant · Defeated. Emitted after a persisted gameplay state transition."
+        },
+        "CombatCombatantRestored": {
+          "Label": "Combat · Combatant · Restored",
+          "Description": "Combat · Combatant · Restored. Emitted after a persisted gameplay state transition."
+        },
+        "CombatResourceBeforeSpend": {
+          "Label": "Combat · Resource · Before Spend",
+          "Description": "Combat · Resource · Before Spend. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "CombatResourceSpent": {
+          "Label": "Combat · Resource · Spent",
+          "Description": "Combat · Resource · Spent. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatResourceRestored": {
+          "Label": "Combat · Resource · Restored",
+          "Description": "Combat · Resource · Restored. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatReactionRequested": {
+          "Label": "Combat · Reaction · Requested",
+          "Description": "Combat · Reaction · Requested. Awaited interruption window before the workflow continues."
+        },
+        "CombatReactionResolved": {
+          "Label": "Combat · Reaction · Resolved",
+          "Description": "Combat · Reaction · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatFinishingBlowResolved": {
+          "Label": "Combat · Finishing Blow · Resolved",
+          "Description": "Combat · Finishing Blow · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatPushBefore": {
+          "Label": "Combat · Push · Before",
+          "Description": "Combat · Push · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "CombatPushResolved": {
+          "Label": "Combat · Push · Resolved",
+          "Description": "Combat · Push · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatGrappleBefore": {
+          "Label": "Combat · Grapple · Before",
+          "Description": "Combat · Grapple · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "CombatGrappleModifiers": {
+          "Label": "Combat · Grapple · Modifiers",
+          "Description": "Synchronous grapple modifier query; API-only and not selectable as a reaction condition."
+        },
+        "CombatGrappleStarted": {
+          "Label": "Combat · Grapple · Started",
+          "Description": "Combat · Grapple · Started. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatGrappleEnded": {
+          "Label": "Combat · Grapple · Ended",
+          "Description": "Combat · Grapple · Ended. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatGrappleEscapeResolved": {
+          "Label": "Combat · Grapple · Escape · Resolved",
+          "Description": "Combat · Grapple · Escape · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatGrappleRepositioned": {
+          "Label": "Combat · Grapple · Repositioned",
+          "Description": "Combat · Grapple · Repositioned. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CombatKnockbackResolved": {
+          "Label": "Combat · Knockback · Resolved",
+          "Description": "Combat · Knockback · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponActionModifiers": {
+          "Label": "Weapon · Action · Modifiers",
+          "Description": "Weapon · Action · Modifiers. Synchronous calculation hook; API-only and not selectable as a reaction condition."
+        },
+        "WeaponActionBefore": {
+          "Label": "Weapon · Action · Before",
+          "Description": "Weapon · Action · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "WeaponActionResolved": {
+          "Label": "Weapon · Action · Resolved",
+          "Description": "Weapon · Action · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponReloadBefore": {
+          "Label": "Weapon · Reload · Before",
+          "Description": "Weapon · Reload · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "WeaponReloadResolved": {
+          "Label": "Weapon · Reload · Resolved",
+          "Description": "Weapon · Reload · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponDelayedVolleyArmed": {
+          "Label": "Weapon · Delayed Volley · Armed",
+          "Description": "Weapon · Delayed Volley · Armed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponDelayedVolleyDetonated": {
+          "Label": "Weapon · Delayed Volley · Detonated",
+          "Description": "Weapon · Delayed Volley · Detonated. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponAttackTargeted": {
+          "Label": "Weapon · Attack · Targeted",
+          "Description": "Weapon · Attack · Targeted. Awaited interruption window before the workflow continues."
+        },
+        "WeaponAttackCommitted": {
+          "Label": "Weapon · Attack · Committed",
+          "Description": "Weapon · Attack · Committed. Awaited interruption window before the workflow continues."
+        },
+        "WeaponAttackAimedLimbSelected": {
+          "Label": "Weapon · Attack · Aimed Limb Selected",
+          "Description": "Weapon · Attack · Aimed Limb Selected. Awaited interruption window before the workflow continues."
+        },
+        "WeaponAttackCheckResolved": {
+          "Label": "Weapon · Attack · Check Resolved",
+          "Description": "Weapon · Attack · Check Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponAttackDamagePrepared": {
+          "Label": "Weapon · Attack · Damage Prepared",
+          "Description": "Weapon · Attack · Damage Prepared. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "WeaponAttackDuplicateRequested": {
+          "Label": "Weapon · Attack · Duplicate Requested",
+          "Description": "Weapon · Attack · Duplicate Requested. Synchronous calculation hook; API-only and not selectable as a reaction condition."
+        },
+        "WeaponAttackResolved": {
+          "Label": "Weapon · Attack · Resolved",
+          "Description": "Weapon · Attack · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "DamageMitigationCalculated": {
+          "Label": "Damage · Mitigation · Calculated",
+          "Description": "Damage · Mitigation · Calculated. Synchronous calculation hook; API-only and not selectable as a reaction condition."
+        },
+        "DamageBeforeApply": {
+          "Label": "Damage · Before Apply",
+          "Description": "Damage · Before Apply. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "HealingBeforeApply": {
+          "Label": "Healing · Before Apply",
+          "Description": "Healing · Before Apply. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "DamageResolved": {
+          "Label": "Damage · Resolved",
+          "Description": "Damage · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "HealingResolved": {
+          "Label": "Healing · Resolved",
+          "Description": "Healing · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "DamageBatchResolved": {
+          "Label": "Damage · Batch · Resolved",
+          "Description": "Damage · Batch · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "DamagePeriodicTickResolved": {
+          "Label": "Damage · Periodic Tick · Resolved",
+          "Description": "Damage · Periodic Tick · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "HealingPeriodicTickResolved": {
+          "Label": "Healing · Periodic Tick · Resolved",
+          "Description": "Healing · Periodic Tick · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "DamageLethalPending": {
+          "Label": "Damage · Lethal · Pending",
+          "Description": "Damage · Lethal · Pending. Awaited interruption window before the workflow continues."
+        },
+        "DamageLethalPrevented": {
+          "Label": "Damage · Lethal · Prevented",
+          "Description": "Damage · Lethal · Prevented. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "DamageShockResolved": {
+          "Label": "Damage · Shock · Resolved",
+          "Description": "Damage · Shock · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemUseBefore": {
+          "Label": "Item · Use · Before",
+          "Description": "Item · Use · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "ItemUseResolved": {
+          "Label": "Item · Use · Resolved",
+          "Description": "Item · Use · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemOneTimeUseResolved": {
+          "Label": "Item · One Time Use · Resolved",
+          "Description": "Item · One Time Use · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemNeedChangeResolved": {
+          "Label": "Item · Need Change · Resolved",
+          "Description": "Item · Need Change · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MedicineFirstAidResolved": {
+          "Label": "Medicine · First Aid · Resolved",
+          "Description": "Medicine · First Aid · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemLightSourceChanged": {
+          "Label": "Item · Light Source · Changed",
+          "Description": "Item · Light Source · Changed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemEnergyConsumerChanged": {
+          "Label": "Item · Energy Consumer · Changed",
+          "Description": "Item · Energy Consumer · Changed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemEnergySourceInstalled": {
+          "Label": "Item · Energy Source · Installed",
+          "Description": "Item · Energy Source · Installed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ItemEnergySourceExtracted": {
+          "Label": "Item · Energy Source · Extracted",
+          "Description": "Item · Energy Source · Extracted. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemAdded": {
+          "Label": "Inventory · Item · Added",
+          "Description": "Inventory · Item · Added. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemRemoved": {
+          "Label": "Inventory · Item · Removed",
+          "Description": "Inventory · Item · Removed. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemQuantityChanged": {
+          "Label": "Inventory · Item · Quantity Changed",
+          "Description": "Inventory · Item · Quantity Changed. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemResourceChanged": {
+          "Label": "Inventory · Item · Resource Changed",
+          "Description": "Inventory · Item · Resource Changed. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemConditionChanged": {
+          "Label": "Inventory · Item · Condition Changed",
+          "Description": "Inventory · Item · Condition Changed. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemPlacementChanged": {
+          "Label": "Inventory · Item · Placement Changed",
+          "Description": "Inventory · Item · Placement Changed. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemEquipped": {
+          "Label": "Inventory · Item · Equipped",
+          "Description": "Inventory · Item · Equipped. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemUnequipped": {
+          "Label": "Inventory · Item · Unequipped",
+          "Description": "Inventory · Item · Unequipped. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemStateChanged": {
+          "Label": "Inventory · Item · State · Changed",
+          "Description": "Inventory · Item · State · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "InventoryItemTransferBefore": {
+          "Label": "Inventory · Item · Transfer · Before",
+          "Description": "Inventory · Item · Transfer · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "InventoryItemTransferTransferred": {
+          "Label": "Inventory · Item · Transferred",
+          "Description": "Inventory · Item · Transferred. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryCurrencyTransferBefore": {
+          "Label": "Inventory · Currency · Transfer · Before",
+          "Description": "Inventory · Currency · Transfer · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "InventoryCurrencyTransferTransferred": {
+          "Label": "Inventory · Currency · Transferred",
+          "Description": "Inventory · Currency · Transferred. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryTradeBefore": {
+          "Label": "Inventory · Trade · Before",
+          "Description": "Inventory · Trade · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "InventoryTradeResolved": {
+          "Label": "Inventory · Trade · Resolved",
+          "Description": "Inventory · Trade · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemSplit": {
+          "Label": "Inventory · Item · Split",
+          "Description": "Inventory · Item · Split. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemStacked": {
+          "Label": "Inventory · Item · Stacked",
+          "Description": "Inventory · Item · Stacked. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemRotated": {
+          "Label": "Inventory · Item · Rotated",
+          "Description": "Inventory · Item · Rotated. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemDropped": {
+          "Label": "Inventory · Item · Dropped",
+          "Description": "Inventory · Item · Dropped. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemPickedUp": {
+          "Label": "Inventory · Item · Picked Up",
+          "Description": "Inventory · Item · Picked Up. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemThrown": {
+          "Label": "Inventory · Item · Thrown",
+          "Description": "Inventory · Item · Thrown. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InventoryItemRetrieved": {
+          "Label": "Inventory · Item · Retrieved",
+          "Description": "Inventory · Item · Retrieved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CraftCreateBefore": {
+          "Label": "Craft · Create · Before",
+          "Description": "Craft · Create · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "CraftCreateResolved": {
+          "Label": "Craft · Create · Resolved",
+          "Description": "Craft · Create · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CraftDisassembleBefore": {
+          "Label": "Craft · Disassemble · Before",
+          "Description": "Craft · Disassemble · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "CraftDisassembleResolved": {
+          "Label": "Craft · Disassemble · Resolved",
+          "Description": "Craft · Disassemble · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "RepairBefore": {
+          "Label": "Repair · Before",
+          "Description": "Repair · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "RepairResolved": {
+          "Label": "Repair · Resolved",
+          "Description": "Repair · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "RepairBatchResolved": {
+          "Label": "Repair · Batch · Resolved",
+          "Description": "Repair · Batch · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MedicineTreatmentBefore": {
+          "Label": "Medicine · Treatment · Before",
+          "Description": "Medicine · Treatment · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "MedicineTreatmentResolved": {
+          "Label": "Medicine · Treatment · Resolved",
+          "Description": "Medicine · Treatment · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MedicineImplantInstalled": {
+          "Label": "Medicine · Implant · Installed",
+          "Description": "Medicine · Implant · Installed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MedicineImplantRemoved": {
+          "Label": "Medicine · Implant · Removed",
+          "Description": "Medicine · Implant · Removed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MedicineProsthesisInstalled": {
+          "Label": "Medicine · Prosthesis · Installed",
+          "Description": "Medicine · Prosthesis · Installed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MedicineProsthesisRemoved": {
+          "Label": "Medicine · Prosthesis · Removed",
+          "Description": "Medicine · Prosthesis · Removed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "HackingBefore": {
+          "Label": "Hacking · Before",
+          "Description": "Hacking · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "HackingResolved": {
+          "Label": "Hacking · Resolved",
+          "Description": "Hacking · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ButcheringBefore": {
+          "Label": "Butchering · Before",
+          "Description": "Butchering · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "ButcheringResolved": {
+          "Label": "Butchering · Resolved",
+          "Description": "Butchering · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MovementTokenBefore": {
+          "Label": "Movement · Token · Before",
+          "Description": "Movement · Token · Before. Synchronous engine pre-hook; API-only and not selectable as a reaction condition."
+        },
+        "MovementTokenBeforeStart": {
+          "Label": "Movement · Token · Before Start",
+          "Description": "Awaited reaction gate immediately before a token begins its controlled route."
+        },
+        "MovementTokenLeavingAdjacency": {
+          "Label": "Movement · Token · Leaving Adjacency",
+          "Description": "Awaited reaction gate when a token leaves an adjacent token."
+        },
+        "MovementTokenInterruptionRequested": {
+          "Label": "Movement · Token · Interruption Requested",
+          "Description": "Movement · Token · Interruption Requested. Awaited interruption window before the workflow continues."
+        },
+        "MovementTokenInterrupted": {
+          "Label": "Movement · Token · Interrupted",
+          "Description": "Movement · Token · Interrupted. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MovementTokenCompleted": {
+          "Label": "Movement · Token · Completed",
+          "Description": "Movement · Token · Completed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MovementTokenStopped": {
+          "Label": "Movement · Token · Stopped",
+          "Description": "Movement · Token · Stopped. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "MovementTokenUndone": {
+          "Label": "Movement · Token · Undone",
+          "Description": "Movement · Token · Undone. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "RegionTokenEntered": {
+          "Label": "Region · Token · Entered",
+          "Description": "Region · Token · Entered. Emitted after a persisted gameplay state transition."
+        },
+        "RegionTokenLeft": {
+          "Label": "Region · Token · Left",
+          "Description": "Region · Token · Left. Emitted after a persisted gameplay state transition."
+        },
+        "ActorPostureChanged": {
+          "Label": "Actor · Posture · Changed",
+          "Description": "Actor · Posture · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "ActorCoverChanged": {
+          "Label": "Actor · Cover · Changed",
+          "Description": "Actor · Cover · Changed. Emitted after a persisted gameplay state transition."
+        },
+        "VehiclePassengerBoarded": {
+          "Label": "Vehicle · Passenger · Boarded",
+          "Description": "Vehicle · Passenger · Boarded. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "VehiclePassengerExited": {
+          "Label": "Vehicle · Passenger · Exited",
+          "Description": "Vehicle · Passenger · Exited. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "VehiclePassengerSeatChanged": {
+          "Label": "Vehicle · Passenger · Seat Changed",
+          "Description": "Vehicle · Passenger · Seat Changed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "StealthEnterBefore": {
+          "Label": "Stealth · Enter · Before",
+          "Description": "Stealth · Enter · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "StealthEnterEntered": {
+          "Label": "Stealth · Entered",
+          "Description": "Stealth · Entered. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "StealthRevealBefore": {
+          "Label": "Stealth · Reveal · Before",
+          "Description": "Stealth · Reveal · Before. Awaited interruption window before the workflow continues."
+        },
+        "StealthRevealRevealed": {
+          "Label": "Stealth · Revealed",
+          "Description": "Stealth · Revealed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "VisionTargetGained": {
+          "Label": "Vision · Target · Gained",
+          "Description": "Vision · Target · Gained. Emitted after a persisted gameplay state transition."
+        },
+        "VisionTargetLost": {
+          "Label": "Vision · Target · Lost",
+          "Description": "Vision · Target · Lost. Emitted after a persisted gameplay state transition."
+        },
+        "EnvironmentLightNetworkChanged": {
+          "Label": "Environment · Light Network · Changed",
+          "Description": "Environment · Light Network · Changed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapPlaceBefore": {
+          "Label": "Trap · Place · Before",
+          "Description": "Trap · Place · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "TrapPlaced": {
+          "Label": "Trap · Placed",
+          "Description": "Trap · Placed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapDetectionResolved": {
+          "Label": "Trap · Detection · Resolved",
+          "Description": "Trap · Detection · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapTriggerBefore": {
+          "Label": "Trap · Trigger · Before",
+          "Description": "Trap · Trigger · Before. Awaited interruption window before the workflow continues."
+        },
+        "TrapTriggerTriggered": {
+          "Label": "Trap · Triggered",
+          "Description": "Trap · Triggered. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapDisarmBefore": {
+          "Label": "Trap · Disarm · Before",
+          "Description": "Trap · Disarm · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "TrapDisarmResolved": {
+          "Label": "Trap · Disarm · Resolved",
+          "Description": "Trap · Disarm · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapRearmed": {
+          "Label": "Trap · Rearmed",
+          "Description": "Trap · Rearmed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapPickupBefore": {
+          "Label": "Trap · Pickup · Before",
+          "Description": "Trap · Pickup · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "TrapPickedUp": {
+          "Label": "Trap · Picked Up",
+          "Description": "Trap · Picked Up. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TrapRemoved": {
+          "Label": "Trap · Removed",
+          "Description": "Trap · Removed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "GlobalMapLocationDiscovered": {
+          "Label": "Global Map · Location · Discovered",
+          "Description": "Global Map · Location · Discovered. Emitted after a persisted gameplay state transition."
+        },
+        "GlobalMapTransitionDiscovered": {
+          "Label": "Global Map · Transition · Discovered",
+          "Description": "Global Map · Transition · Discovered. Emitted after a persisted gameplay state transition."
+        },
+        "GlobalMapExitDiscovered": {
+          "Label": "Global Map · Exit · Discovered",
+          "Description": "Global Map · Exit · Discovered. Emitted after a persisted gameplay state transition."
+        },
+        "WorldTimeBeforeAdvance": {
+          "Label": "World · Time · Before Advance",
+          "Description": "World · Time · Before Advance. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "WorldTimeAdvanced": {
+          "Label": "World · Time · Advanced",
+          "Description": "World · Time · Advanced. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "ActorNeedThresholdEntered": {
+          "Label": "Actor · Need · Threshold Entered",
+          "Description": "Actor · Need · Threshold Entered. Emitted after a persisted gameplay state transition."
+        },
+        "ActorNeedThresholdLeft": {
+          "Label": "Actor · Need · Threshold Left",
+          "Description": "Actor · Need · Threshold Left. Emitted after a persisted gameplay state transition."
+        },
+        "CampStarted": {
+          "Label": "Camp · Started",
+          "Description": "Camp · Started. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CampParticipantJoined": {
+          "Label": "Camp · Participant Joined",
+          "Description": "Camp · Participant Joined. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CampParticipantLeft": {
+          "Label": "Camp · Participant Left",
+          "Description": "Camp · Participant Left. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CampClosed": {
+          "Label": "Camp · Closed",
+          "Description": "Camp · Closed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "CampRestBefore": {
+          "Label": "Camp · Rest · Before",
+          "Description": "Camp · Rest · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "CampRestCompleted": {
+          "Label": "Camp · Rest · Completed",
+          "Description": "Camp · Rest · Completed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelDepartureBefore": {
+          "Label": "Travel · Departure · Before",
+          "Description": "Travel · Departure · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "TravelDepartureCompleted": {
+          "Label": "Travel · Departure · Completed",
+          "Description": "Travel · Departure · Completed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelLocationLeft": {
+          "Label": "Travel · Location · Left",
+          "Description": "Travel · Location · Left. Emitted after a persisted gameplay state transition."
+        },
+        "TravelArrivalPending": {
+          "Label": "Travel · Arrival · Pending",
+          "Description": "Travel · Arrival · Pending. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelArrivalBefore": {
+          "Label": "Travel · Arrival · Before",
+          "Description": "Travel · Arrival · Before. Awaited before the action is committed; observers may modify or cancel it."
+        },
+        "TravelArrivalCompleted": {
+          "Label": "Travel · Arrival · Completed",
+          "Description": "Travel · Arrival · Completed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelLocationEntered": {
+          "Label": "Travel · Location · Entered",
+          "Description": "Travel · Location · Entered. Emitted after a persisted gameplay state transition."
+        },
+        "TravelMovementCompleted": {
+          "Label": "Travel · Movement · Completed",
+          "Description": "Travel · Movement · Completed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelGroupFormed": {
+          "Label": "Travel · Group · Formed",
+          "Description": "Travel · Group · Formed. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelGroupMemberJoined": {
+          "Label": "Travel · Group · Member Joined",
+          "Description": "Travel · Group · Member Joined. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelGroupMemberLeft": {
+          "Label": "Travel · Group · Member Left",
+          "Description": "Travel · Group · Member Left. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "TravelGroupDisbanded": {
+          "Label": "Travel · Group · Disbanded",
+          "Description": "Travel · Group · Disbanded. Emitted after the workflow commits or reaches its terminal result."
+        }
+      }
+    },
     "Tabs": {
       "IdentityData": "Identity Data",
       "Effects": "Effects",
@@ -789,6 +1865,8 @@
         "TurnOrderScheme": "Turn order scheme",
         "TurnOrderNormal": "Normal",
         "TurnOrderBlock": "Block",
+        "ReactionTimeoutSeconds": "Reaction decision time, seconds",
+        "ReactionTimeoutHint": "Shared timeout for collecting all owner responses. The default is 20 seconds.",
         "AreasTitle": "Areas",
         "AreaMovementDamageThresholdFormula": "Movement inside an area deals damage after N movement points",
         "AreaMovementDamageThresholdHint": "Evaluated per actor. ОД and ОП are the resource maximums; the result is rounded down with a minimum of 1."

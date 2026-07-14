@@ -21,6 +21,11 @@
         <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
       </label>
       <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutSeconds"}}</span>
+        <input type="number" name="reactions.timeoutSeconds" value="{{settings.reactions.timeoutSeconds}}" min="1" max="600" step="1">
+        <small>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutHint"}}</small>
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAttackCostPercent"}}</span>
         <input type="number" name="dodge.attackCostPercent" value="{{settings.dodge.attackCostPercent}}" min="0" max="100" step="1">
       </label>

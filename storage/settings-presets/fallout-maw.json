@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "5403b8a15676c2693b5d8e70a246796d9b2918596cdbac527406702c1dec66f4",
-  "updatedAt": "2026-07-13T18:24:23.545Z",
+  "revision": "12fd35c08f8a8fd789fe7a4199971bed64ccb4cec3441327219d2fe94ece2505",
+  "updatedAt": "2026-07-14T07:12:45.401Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -49,6 +49,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "glasses",
+                          "eventSubject": "reactor",
                           "groupId": "",
                           "healthTarget": "general",
                           "id": "j03C4sx6pbDZYJ5k",
@@ -72,6 +73,10 @@
                           "value": "-2"
                         }
                       ],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -128,6 +133,10 @@
                       "fixedSettings": {},
                       "id": "6QnjhsR4ovtoNI31",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -175,6 +184,10 @@
                       "fixedSettings": {},
                       "id": "cun6l601FwAEukjv",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "acquisitionChanges"
                     }
@@ -276,6 +289,10 @@
                       "fixedSettings": {},
                       "id": "cTZJBq0PZstYBQek",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -359,6 +376,10 @@
                       "fixedSettings": {},
                       "id": "oY5zpjJhiO3Vqwgl",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -403,6 +424,7 @@
                       ],
                       "conditions": [
                         {
+                          "eventSubject": "reactor",
                           "groupId": "",
                           "id": "IbeKirYyCm3wameN",
                           "skillKeys": [
@@ -427,6 +449,10 @@
                       "fixedSettings": {},
                       "id": "lAwDgX5mnYe3YB8s",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -474,6 +500,10 @@
                       "fixedSettings": {},
                       "id": "oteR0pZnPuBvqOQD",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -515,6 +545,10 @@
                       },
                       "id": "6VyXZIj8YJrLPV26",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -556,6 +590,10 @@
                       },
                       "id": "cE6dqpMhWMAE4hhi",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -600,6 +638,10 @@
                       },
                       "id": "OfkdnQNdCN1J18A8",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -642,6 +684,10 @@
                       },
                       "id": "0lNS8FhG3EpumGEI",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -694,6 +740,7 @@
                       ],
                       "conditions": [
                         {
+                          "eventSubject": "reactor",
                           "groupId": "",
                           "id": "diYZwY9RL3Zj0UEq",
                           "targetTypeId": "kt1u4nXGGEkDYWNW",
@@ -704,6 +751,10 @@
                       "fixedSettings": {},
                       "id": "H53OqeqYdCS0u6CS",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -744,6 +795,10 @@
                       },
                       "id": "JkpBZFRLuOFVg1Sc",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -788,6 +843,10 @@
                       },
                       "id": "gov0LXPs7otdx5Ee",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -826,6 +885,10 @@
                       "fixedSettings": {},
                       "id": "XfF4uEY1XlItTq9h",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -871,6 +934,10 @@
                       },
                       "id": "xm5Bbdg0ad49DOjp",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -933,6 +1000,10 @@
                       "fixedSettings": {},
                       "id": "Xny360S1rHC233Yb",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1001,6 +1072,10 @@
                       "fixedSettings": {},
                       "id": "bvi3Ui5k0T7QBE8z",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1044,6 +1119,10 @@
                       },
                       "id": "JLOQtj5aV6xwIlt5",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1087,6 +1166,10 @@
                       },
                       "id": "8an4FkuQiVp5iJnG",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1129,6 +1212,10 @@
                       },
                       "id": "bJMTTcKSzqMiEtkb",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1173,6 +1260,7 @@
                       ],
                       "conditions": [
                         {
+                          "eventSubject": "reactor",
                           "groupId": "",
                           "id": "Clbj1cNSPfB6CpnK",
                           "skillKeys": [
@@ -1185,6 +1273,10 @@
                       "fixedSettings": {},
                       "id": "FjxIb7wHHRphbAz2",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1228,6 +1320,10 @@
                       },
                       "id": "q5olLD7EFxiCIezP",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1271,6 +1367,10 @@
                       },
                       "id": "yOsVH4KU7Iapno4O",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1345,6 +1445,10 @@
                       "fixedSettings": {},
                       "id": "3jASjPuIgNucLAdf",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1387,6 +1491,10 @@
                       },
                       "id": "XwILAwAUauJdWQp3",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1431,6 +1539,10 @@
                       },
                       "id": "Yg07eygzP5bxQwCu",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -1493,6 +1605,10 @@
                       "fixedSettings": {},
                       "id": "92fiqPzv1Z7CkldI",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1556,6 +1672,10 @@
                       "fixedSettings": {},
                       "id": "RcoeNtllJJFxjucK",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1603,6 +1723,10 @@
                       "fixedSettings": {},
                       "id": "ne55LtLtPzLjUMsV",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1650,6 +1774,10 @@
                       "fixedSettings": {},
                       "id": "P1L4zUbIXzhFPDJk",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1697,6 +1825,10 @@
                       "fixedSettings": {},
                       "id": "XEMrtDzzo0yDU549",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1743,6 +1875,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "",
+                          "eventSubject": "reactor",
                           "groupId": "AscNIfLv73uju6I3",
                           "healthTarget": "criticalLimb",
                           "id": "6NaorK6Q2ztpLzv2",
@@ -1755,6 +1888,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "",
+                          "eventSubject": "reactor",
                           "groupId": "AscNIfLv73uju6I3",
                           "healthTarget": "criticalLimb",
                           "id": "uTFXIgJP2Th6OhcX",
@@ -1767,6 +1901,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "",
+                          "eventSubject": "reactor",
                           "groupId": "AscNIfLv73uju6I3",
                           "healthTarget": "general",
                           "id": "KLM0Ynw5Wo6eSso3",
@@ -1781,6 +1916,10 @@
                       "fixedSettings": {},
                       "id": "VMEez0y8JAHtE9Y5",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1828,6 +1967,10 @@
                       "fixedSettings": {},
                       "id": "kurh4woJgb2DHJhJ",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1875,6 +2018,10 @@
                       "fixedSettings": {},
                       "id": "7o1pNHR0zfV3c4Wh",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1938,6 +2085,10 @@
                       "fixedSettings": {},
                       "id": "WX54d7Oe499ZvixK",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -1987,6 +2138,10 @@
                       },
                       "id": "FAaKkX0xgxOGw0M7",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2028,6 +2183,10 @@
                       },
                       "id": "EKvr3nayDZ4UVTIb",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2077,6 +2236,10 @@
                       },
                       "id": "G3i9Euj4WewQfkgt",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2118,6 +2281,10 @@
                       },
                       "id": "wq6cf6uEcf2DK91J",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2169,6 +2336,10 @@
                       },
                       "id": "EzZvimotrCZIh9qo",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2223,6 +2394,10 @@
                       "fixedSettings": {},
                       "id": "M9rQWYe4gpqa9lAx",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -2269,6 +2444,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "",
+                          "eventSubject": "reactor",
                           "groupId": "0VmXLoesdZw7TVJG",
                           "healthTarget": "criticalLimb",
                           "id": "xsvwNzSo7dL7dSpX",
@@ -2281,6 +2457,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "",
+                          "eventSubject": "reactor",
                           "groupId": "0VmXLoesdZw7TVJG",
                           "healthTarget": "general",
                           "id": "Md2Kx5ojKgSYl7IF",
@@ -2293,6 +2470,7 @@
                         {
                           "durationSeconds": 0,
                           "equipmentSlotKey": "",
+                          "eventSubject": "reactor",
                           "groupId": "0VmXLoesdZw7TVJG",
                           "healthTarget": "criticalLimb",
                           "id": "IPf9inimqpqnphWU",
@@ -2307,6 +2485,10 @@
                       "fixedSettings": {},
                       "id": "x8agb8JFR9SvQq1Y",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -2367,6 +2549,10 @@
                       "fixedSettings": {},
                       "id": "icTEA8kLc1ScuJUw",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -2427,6 +2613,10 @@
                       "fixedSettings": {},
                       "id": "sTZ9W6A0laoefuaj",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -2474,6 +2664,10 @@
                       },
                       "id": "986uI7MJpHr7ljIs",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2520,6 +2714,10 @@
                       },
                       "id": "4YyScOSSiYUYsO2E",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2558,6 +2756,10 @@
                       "fixedSettings": {},
                       "id": "Y88FBGvUPNiKvA1Z",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2631,6 +2833,10 @@
                       "fixedSettings": {},
                       "id": "XmhtjfdRp6zfZT2r",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -2676,6 +2882,10 @@
                       },
                       "id": "o07B1xeqOmvoEbAL",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2784,6 +2994,10 @@
                       "fixedSettings": {},
                       "id": "6zUYzpgk749eWDlF",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -2829,6 +3043,10 @@
                       },
                       "id": "KMf6p2I6V0iXmar1",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2877,6 +3095,10 @@
                       },
                       "id": "Hy9zK24BFvu2mWwf",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -2909,7 +3131,7 @@
                   "functions": [
                     {
                       "activeSettings": {
-                        "durationSeconds": 10,
+                        "durationSeconds": 0,
                         "energyCost": 10,
                         "excludeSelf": true,
                         "overloadDurationSeconds": 3600,
@@ -2926,6 +3148,10 @@
                       "fixedSettings": {},
                       "id": "ZA308Slttp9kfDQp",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "activeApplication"
                     }
@@ -2972,6 +3198,10 @@
                       },
                       "id": "3hHIaTFDySq0Z3LL",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3025,6 +3255,10 @@
                       },
                       "id": "aFcKBtB0oiaz4fhb",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3047,7 +3281,92 @@
                   "acquisitionRequirements": [],
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "0Bl6RXA2jpZJCWhi",
+                          "key": "system.characteristics.strength",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "4"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventKey": "fallout-maw.skill.check.beforeRoll",
+                          "groupId": "",
+                          "id": "MHYrpgQLEKcIVRlm",
+                          "reactorRole": "any",
+                          "type": "eventReaction"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "tNHCOC5uyNaRn15N",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 24
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "",
+                "id": "m9sIw07DPEHqGNVQ",
+                "img": "icons/svg/aura.svg",
+                "name": "222",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "sTllFgyoguoMxlhu",
+                          "key": "system.characteristics.strength",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "6"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventKey": "fallout-maw.skill.check.beforeRoll",
+                          "groupId": "",
+                          "id": "MkKQZxenjeNacbKX",
+                          "reactorRole": "any",
+                          "type": "eventReaction"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "I88pXpQbb0z1nReh",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 24
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               }
@@ -3121,6 +3440,10 @@
                       "fixedSettings": {},
                       "id": "zOv3WYrBCKsMiYYs",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -3176,6 +3499,10 @@
                       "fixedSettings": {},
                       "id": "5PfmJyhkCoJBFvwC",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -3231,6 +3558,10 @@
                       },
                       "id": "lHEZyFnilBKm2oOk",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3278,6 +3609,10 @@
                       "fixedSettings": {},
                       "id": "Lnf2iZZThjd9iEwP",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "effectChanges"
                     }
@@ -3320,6 +3655,10 @@
                       },
                       "id": "U9cvop1SHa03FKwI",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3365,6 +3704,10 @@
                       },
                       "id": "UgNhPa99CEy0N3ol",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3406,6 +3749,10 @@
                       },
                       "id": "wU4RJh1iSOIU1c0N",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3448,6 +3795,10 @@
                       },
                       "id": "R8OwhOdLx05GU7ya",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3490,6 +3841,10 @@
                       },
                       "id": "yn8vGVtgBodE2fNX",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3533,6 +3888,10 @@
                       },
                       "id": "Wq4JEWDhFcugUswj",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }
@@ -3578,6 +3937,10 @@
                       },
                       "id": "mGmZ6IRQoOdw9a3p",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
                       "sort": 0,
                       "type": "fixed"
                     }

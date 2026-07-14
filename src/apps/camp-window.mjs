@@ -14,6 +14,11 @@ import {
 import { applyResearchTime } from "../research/research.mjs";
 import { getResearchById } from "../research/storage.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  isSystemEventCancelled,
+  systemEventParticipant,
+  withSystemEventRoot
+} from "../events/foundry-world-events.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { advanceWorldTime } from "./world-time-control.mjs";
 
@@ -530,43 +535,86 @@ async function restCamp(requesterUserId = "") {
   if (current.participants.some(participant => !participant.ready)) throw new Error("Не все участники готовы к отдыху.");
   if (current.restSeconds <= 0) throw new Error("Укажите время отдыха.");
 
-  const settings = getCampSettings();
-  const restPlaces = new Map(settings.restPlaces.map(place => [place.id, place]));
-  const fallbackPlace = settings.restPlaces[0] ?? null;
-  await advanceWorldTime(current.restSeconds, {
-    restMode: false,
-    forceTimeMechanics: true,
-    campRest: {
-      forceTimeMechanics: true,
-      participants: current.participants.map(participant => {
-        const watchSeconds = Math.min(current.restSeconds, Math.max(0, toInteger(participant.watchSeconds)));
-        const researchSeconds = getCampParticipantResearchSeconds(participant, current.restSeconds, watchSeconds);
-        const place = restPlaces.get(participant.restPlaceId) ?? fallbackPlace;
-        return {
-          actorUuid: participant.actorUuid,
-          normalSeconds: watchSeconds + researchSeconds,
-          restSeconds: Math.max(0, current.restSeconds - watchSeconds - researchSeconds),
-          effects: place?.effects ?? []
-        };
-      })
-    }
-  });
+  return withSystemEventRoot({
+    kind: "campRest",
+    operationId: `camp-rest:${current.id}:${foundry.utils.randomID()}`,
+    sceneUuid: String(canvas?.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const requester = game.users?.get(requesterUserId);
+    const sourceActor = participantActors.find(actor => requester?.isGM
+      ? actor?.uuid === requester?.character?.uuid
+      : actor?.testUserPermission?.(requester, "OWNER")) ?? null;
+    const source = systemEventParticipant({ actor: sourceActor });
+    const related = participantActors.map(actor => systemEventParticipant({ actor })).filter(Boolean);
+    const gate = await scope.emit("fallout-maw.camp.rest.before", {
+      data: {
+        campId: current.id,
+        requesterUserId,
+        restSeconds: current.restSeconds,
+        participantActorUuids: current.participants.map(participant => participant.actorUuid)
+      },
+      before: current
+    }, {
+      occurrenceKey: `camp-rest:${current.id}:before`,
+      participants: { source, target: null, related }
+    });
+    if (isSystemEventCancelled(gate)) return false;
 
-  for (let index = 0; index < current.participants.length; index += 1) {
-    const participant = current.participants[index];
-    const actor = participantActors[index];
-    const researchSeconds = getCampParticipantResearchSeconds(participant, current.restSeconds);
-    if (researchSeconds < 30 * 60) continue;
-    if (!getResearchById(actor.system?.researches, participant.researchId)) continue;
-    try {
-      await applyResearchTime(actor, participant.researchId, researchDurationFromSeconds(researchSeconds));
-    } catch (error) {
-      console.error(`${SYSTEM_ID} | Camp research failed for ${actor.name}`, error);
-      ui.notifications.warn(`${actor.name}: исследование не выполнено — ${error.message}`);
+    const settings = getCampSettings();
+    const restPlaces = new Map(settings.restPlaces.map(place => [place.id, place]));
+    const fallbackPlace = settings.restPlaces[0] ?? null;
+    const advanced = await advanceWorldTime(current.restSeconds, {
+      restMode: false,
+      forceTimeMechanics: true,
+      chainRef: scope.chainRef,
+      source: "campRest",
+      campRest: {
+        forceTimeMechanics: true,
+        participants: current.participants.map(participant => {
+          const watchSeconds = Math.min(current.restSeconds, Math.max(0, toInteger(participant.watchSeconds)));
+          const researchSeconds = getCampParticipantResearchSeconds(participant, current.restSeconds, watchSeconds);
+          const place = restPlaces.get(participant.restPlaceId) ?? fallbackPlace;
+          return {
+            actorUuid: participant.actorUuid,
+            normalSeconds: watchSeconds + researchSeconds,
+            restSeconds: Math.max(0, current.restSeconds - watchSeconds - researchSeconds),
+            effects: place?.effects ?? []
+          };
+        })
+      }
+    });
+    if (!advanced) return false;
+
+    for (let index = 0; index < current.participants.length; index += 1) {
+      const participant = current.participants[index];
+      const actor = participantActors[index];
+      const researchSeconds = getCampParticipantResearchSeconds(participant, current.restSeconds);
+      if (researchSeconds < 30 * 60) continue;
+      if (!getResearchById(actor.system?.researches, participant.researchId)) continue;
+      try {
+        await applyResearchTime(actor, participant.researchId, researchDurationFromSeconds(researchSeconds));
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Camp research failed for ${actor.name}`, error);
+        ui.notifications.warn(`${actor.name}: исследование не выполнено — ${error.message}`);
+      }
     }
-  }
-  await saveCampState(createEmptyCampState());
-  return createEmptyCampState();
+    await scope.emit("fallout-maw.camp.rest.completed", {
+      data: {
+        campId: current.id,
+        requesterUserId,
+        restSeconds: current.restSeconds,
+        participantActorUuids: current.participants.map(participant => participant.actorUuid)
+      },
+      outcome: { success: true, completed: true }
+    }, {
+      occurrenceKey: `camp-rest:${current.id}:completed`,
+      participants: { source, target: null, related }
+    });
+    const empty = createEmptyCampState();
+    await saveCampState(empty);
+    return empty;
+  });
 }
 
 function addParticipantsToCamp(state, actorUuids = [], userId = "", settings = getCampSettings()) {

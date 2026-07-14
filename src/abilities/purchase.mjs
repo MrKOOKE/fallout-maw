@@ -8,6 +8,7 @@ import {
   normalizeAbilityFunctions,
   prepareAbilityItemData
 } from "../settings/abilities.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
@@ -116,6 +117,7 @@ async function applyLimitedChangeSelectionsToReward(itemData = {}) {
 
   for (const entry of functions) {
     if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+    if (hasEventReactionCondition(entry.conditions)) continue;
 
     const limitedConditions = (entry.conditions ?? []).filter(condition => condition.type === ABILITY_CONDITION_TYPES.limitedChanges);
     if (!limitedConditions.length) continue;

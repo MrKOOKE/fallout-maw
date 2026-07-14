@@ -7,6 +7,7 @@ import {
 } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { syncActorAbilityEffects } from "./effects.mjs";
 import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
 import {
@@ -98,6 +99,7 @@ function findTriggeredCooldownEntries(actor, changeKeys, conditionContext = {}) 
     if (item?.type !== "ability") continue;
     for (const abilityFunction of normalizeAbilityFunctions(item.system?.functions ?? [])) {
       if (abilityFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+      if (hasEventReactionCondition(abilityFunction.conditions)) continue;
       const cooldownConditions = (abilityFunction.conditions ?? [])
         .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.cooldown)
         .filter(condition => getCooldownDurationSeconds(condition) > 0);

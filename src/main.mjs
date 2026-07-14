@@ -73,6 +73,21 @@ import { registerDangerSenseSocket } from "./abilities/danger-sense.mjs";
 import { actorHasAbility, grantCatalogAbility } from "./abilities/purchase.mjs";
 import { ABILITY_CATALOG_DRAG_TYPE, getAbilitySourceId } from "./settings/abilities.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
+import { registerSystemEventDispatcherSocket } from "./events/dispatcher.mjs";
+import {
+  publishFoundrySystemEventApi,
+  recoverFoundrySystemEventEffects,
+  registerFoundrySystemEventAuthorityHooks,
+  registerFoundrySystemEventIntegration
+} from "./events/foundry-integration.mjs";
+import { registerFoundryMovementSystemEventHooks } from "./events/foundry-movement-events.mjs";
+import {
+  armFoundryVisionTracking,
+  registerFoundryVisionSystemEventHooks
+} from "./events/foundry-vision-events.mjs";
+import { registerFoundryCompatibilitySystemEventHooks } from "./events/foundry-compatibility-events.mjs";
+import { registerFoundryDocumentSystemEventHooks } from "./events/foundry-document-events.mjs";
+import { registerFoundryWorldSystemEventHooks } from "./events/foundry-world-events.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
 import { registerNaturalRaceItemHooks, syncLoadedActorNaturalRaceItems } from "./races/natural-items.mjs";
@@ -118,6 +133,14 @@ Hooks.once("init", () => {
   CONFIG.ActiveEffect.expiryAction = "delete";
   registerDamageHubConfig();
   registerReactionHubConfig();
+  registerFoundrySystemEventIntegration();
+  registerFoundrySystemEventAuthorityHooks();
+  publishFoundrySystemEventApi();
+  registerFoundryMovementSystemEventHooks();
+  registerFoundryVisionSystemEventHooks();
+  registerFoundryCompatibilitySystemEventHooks();
+  registerFoundryDocumentSystemEventHooks();
+  registerFoundryWorldSystemEventHooks();
   CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();
@@ -179,6 +202,7 @@ Hooks.once("ready", async () => {
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();
   registerDamageSocket();
+  registerSystemEventDispatcherSocket();
   registerReactionHubSocket();
   registerAdvancementMediaSocket();
   registerAttackAnimationSocket();
@@ -208,6 +232,8 @@ Hooks.once("ready", async () => {
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();
   await syncPeriodicDamageRegionEffects();
+  await recoverFoundrySystemEventEffects();
+  await armFoundryVisionTracking();
   initializeCraftRecipeWorldIndex();
 });
 

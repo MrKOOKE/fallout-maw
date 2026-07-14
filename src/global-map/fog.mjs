@@ -1,5 +1,9 @@
 import { GLOBAL_MAP_SOCKET } from "./constants.mjs";
 import {
+  buildGlobalMapDiscoveryEvents,
+  withSystemEventRoot
+} from "../events/foundry-world-events.mjs";
+import {
   cellKey,
   getCellCluster,
   getCellVertices,
@@ -400,6 +404,7 @@ async function applyCellExploration(scene, keys) {
 
 async function applyDiscoveries(scene, locationIds, transitionIds, exitZoneIds = []) {
   if (!locationIds.length && !transitionIds.length && !exitZoneIds.length) return;
+  const beforeState = getSceneState(scene);
   await updateSceneState(scene, state => {
     state.discoveredLocationIds = Array.from(new Set([...state.discoveredLocationIds, ...locationIds]));
     state.discoveredTransitionIds = Array.from(new Set([...state.discoveredTransitionIds, ...transitionIds]));
@@ -416,6 +421,43 @@ async function applyDiscoveries(scene, locationIds, transitionIds, exitZoneIds =
     }
     return state;
   });
+  const afterState = getSceneState(scene);
+  const locationSet = new Set(locationIds.map(String));
+  const transitionSet = new Set(transitionIds.map(String));
+  const exitSet = new Set(exitZoneIds.map(String));
+  const discoveryEvents = buildGlobalMapDiscoveryEvents({
+    scene,
+    locations: afterState.locations.filter(entry => locationSet.has(String(entry.id))),
+    transitions: afterState.transitions.filter(entry => transitionSet.has(String(entry.id))),
+    exits: afterState.locationExitZones.filter(entry => exitSet.has(String(entry.id)))
+  });
+  if (discoveryEvents.length) {
+    await withSystemEventRoot({
+      kind: "globalMapDiscovery",
+      operationId: `global-map-discovery:${scene.id}:${foundry.utils.randomID()}`,
+      sceneUuid: String(scene.uuid ?? ""),
+      combatUuid: String(game.combat?.uuid ?? "")
+    }, async scope => {
+      for (const [index, event] of discoveryEvents.entries()) {
+        await scope.emit(event.key, {
+          data: event.data,
+          before: {
+            discoveredLocationIds: beforeState.discoveredLocationIds,
+            discoveredTransitionIds: beforeState.discoveredTransitionIds,
+            discoveredExitZoneIds: beforeState.discoveredExitZoneIds
+          },
+          after: {
+            discoveredLocationIds: afterState.discoveredLocationIds,
+            discoveredTransitionIds: afterState.discoveredTransitionIds,
+            discoveredExitZoneIds: afterState.discoveredExitZoneIds
+          }
+        }, {
+          occurrenceKey: `global-map-discovery:${scene.id}:${event.data.discoveryType}:${event.data.entryId}:${index}`,
+          participants: { source: null, target: null, related: [] }
+        });
+      }
+    });
+  }
   game.socket.emit(GLOBAL_MAP_SOCKET, {
     action: "globalMap.discovery.changed",
     sceneId: scene.id

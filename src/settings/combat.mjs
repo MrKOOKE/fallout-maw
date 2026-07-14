@@ -5,6 +5,9 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
   weaponSwitch: Object.freeze({
     actionPointCost: 3
   }),
+  reactions: Object.freeze({
+    timeoutSeconds: 20
+  }),
   knockback: Object.freeze({
     repeatDifficultyThreshold: 100,
     repeatDifficultyStep: 50
@@ -66,6 +69,9 @@ export function normalizeCombatSettings(value = {}) {
     },
     weaponSwitch: {
       actionPointCost: clampInteger(source.weaponSwitch?.actionPointCost, DEFAULT_COMBAT_SETTINGS.weaponSwitch.actionPointCost, 0, 100)
+    },
+    reactions: {
+      timeoutSeconds: clampInteger(source.reactions?.timeoutSeconds, DEFAULT_COMBAT_SETTINGS.reactions.timeoutSeconds, 1, 600)
     },
     knockback: {
       repeatDifficultyThreshold: clampInteger(source.knockback?.repeatDifficultyThreshold, DEFAULT_COMBAT_SETTINGS.knockback.repeatDifficultyThreshold, 1, 10000),

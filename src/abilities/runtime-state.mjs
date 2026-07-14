@@ -6,6 +6,7 @@ import {
   normalizeAbilityFunctions,
   normalizeAtRandomSettings
 } from "../settings/abilities.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -142,6 +143,7 @@ export function getAbilityItemUseProgressEntries(abilityItem) {
 
   for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
     if (abilityFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+    if (hasEventReactionCondition(abilityFunction.conditions)) continue;
 
     for (const condition of abilityFunction.conditions ?? []) {
       if (condition?.type !== ABILITY_CONDITION_TYPES.itemUse) continue;

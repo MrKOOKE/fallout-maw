@@ -1354,6 +1354,33 @@ body #prosemirror-dropdown {
   gap: 0.5rem;
 }
 
+.fallout-maw-reaction-actor {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid rgba(212, 181, 93, 0.5);
+}
+
+.fallout-maw-reaction-actor legend {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+
+.fallout-maw-reaction-actor legend img {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+}
+
+.fallout-maw-reaction-decline {
+  opacity: 0.78;
+}
+
 .fallout-maw-reaction-timer {
   height: 4px;
   overflow: hidden;
@@ -3336,6 +3363,83 @@ body #prosemirror-dropdown {
   display: grid;
   gap: 0.45rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.fallout-maw-event-reaction-settings {
+  background: rgba(72, 98, 132, 0.09);
+  border: 1px solid rgba(112, 158, 205, 0.28);
+  border-radius: 6px;
+  padding: 0.65rem;
+}
+
+.fallout-maw-event-reaction-settings > label,
+.fallout-maw-event-reaction-costs,
+.fallout-maw-event-reaction-cost-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.fallout-maw-event-reaction-settings > label {
+  grid-template-columns: minmax(180px, 1fr) minmax(90px, 160px);
+  align-items: center;
+}
+
+.fallout-maw-event-reaction-cost-row {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(170px, 0.9fr) minmax(180px, 1fr) auto;
+}
+
+.fallout-maw-event-reaction-event-field {
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr);
+}
+
+.fallout-maw-event-reaction-event-field > label,
+.fallout-maw-event-reaction-subject-field {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.fallout-maw-event-reaction-event-summary {
+  background: rgba(80, 112, 145, 0.13);
+  border-left: 3px solid rgba(112, 158, 205, 0.72);
+  display: grid;
+  gap: 0.2rem;
+  grid-column: 1 / -1;
+  padding: 0.45rem 0.6rem;
+}
+
+.fallout-maw-event-reaction-event-summary small {
+  opacity: 0.75;
+}
+
+.fallout-maw-event-reaction-warning {
+  background: rgba(165, 89, 66, 0.12);
+  border-left: 3px solid rgba(205, 111, 83, 0.78);
+  color: var(--color-text-light-highlight);
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+}
+
+.fallout-maw-ability-condition-row.unsupported .fallout-maw-ability-condition-card,
+.fallout-maw-ability-change-card.unsupported,
+.fallout-maw-event-reaction-cost-row.unsupported,
+.fallout-maw-event-reaction-event-summary.unsupported {
+  border-color: rgba(205, 111, 83, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(205, 111, 83, 0.12);
+}
+
+@media (max-width: 720px) {
+  .fallout-maw-event-reaction-event-field,
+  .fallout-maw-event-reaction-cost-row,
+  .fallout-maw-event-reaction-settings > label {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .fallout-maw-aura-condition-caption {

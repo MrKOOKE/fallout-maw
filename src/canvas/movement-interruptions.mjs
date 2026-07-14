@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
 
 export const CONTROLLED_MOVEMENT_INTERRUPTION_OPTION = "falloutMawControlledMovementInterruption";
 
@@ -99,11 +100,11 @@ function onPreMoveToken(tokenDocument, movement, options = {}) {
     || (left.priority - right.priority)
     || left.providerId.localeCompare(right.providerId)
   ));
-  void runMovementInterruption(tokenDocument, movement, candidates[0]);
+  void runMovementInterruption(tokenDocument, movement, candidates[0], options);
   return false;
 }
 
-async function runMovementInterruption(tokenDocument, movement, event) {
+async function runMovementInterruption(tokenDocument, movement, event, options = {}) {
   const key = [
     tokenDocument?.parent?.id ?? "",
     tokenDocument?.id ?? "",
@@ -114,12 +115,36 @@ async function runMovementInterruption(tokenDocument, movement, event) {
   if (!tokenDocument || pendingMovementKeys.has(key)) return;
   pendingMovementKeys.add(key);
   try {
-    if (event.moveToWaypoint !== false) {
-      const reached = await moveTokenToInterruption(tokenDocument, event.waypoint, movement);
-      if (!reached) return;
-    }
-    const provider = providers.get(event.providerId);
-    if (provider) await provider.execute({ tokenDocument, movement, event });
+    const inheritedChainRef = options?.falloutMawSystemEventChainRef ?? options?.chainRef ?? null;
+    await withSystemEventRoot({
+      kind: "movementInterruption",
+      operationId: `movement-interruption:${key}`,
+      sceneUuid: String(tokenDocument?.parent?.uuid ?? ""),
+      combatUuid: String(game.combat?.uuid ?? ""),
+      chainRef: inheritedChainRef
+    }, async scope => {
+      const participants = createMovementInterruptionParticipants(tokenDocument, event);
+      const requested = await scope.emit("fallout-maw.movement.token.interruptionRequested", {
+        data: createMovementInterruptionData(movement, event)
+      }, {
+        occurrenceKey: `${key}:requested`,
+        participants
+      });
+      if (requested?.control?.current || requested?.control?.remaining || requested?.control?.root) return;
+      if (event.moveToWaypoint !== false) {
+        const reached = await moveTokenToInterruption(tokenDocument, event.waypoint, movement, scope.chainRef);
+        if (!reached) return;
+      }
+      await scope.emit("fallout-maw.movement.token.interrupted", {
+        data: createMovementInterruptionData(movement, event),
+        outcome: { interrupted: true, providerId: event.providerId }
+      }, {
+        occurrenceKey: `${key}:interrupted`,
+        participants
+      });
+      const provider = providers.get(event.providerId);
+      if (provider) await provider.execute({ tokenDocument, movement, event, options, chainRef: scope.chainRef });
+    });
   } catch (error) {
     console.error(`${SYSTEM_ID} | Movement interruption failed: ${event?.providerId ?? "unknown"}`, error);
   } finally {
@@ -127,16 +152,48 @@ async function runMovementInterruption(tokenDocument, movement, event) {
   }
 }
 
-async function moveTokenToInterruption(tokenDocument, waypoint = {}, movement = {}) {
+async function moveTokenToInterruption(tokenDocument, waypoint = {}, movement = {}, chainRef = null) {
   const destination = prepareMovementWaypoint(waypoint, tokenDocument);
   if (!hasPositionChanged(tokenDocument, destination)) return true;
   await tokenDocument.move([destination], {
     [CONTROLLED_MOVEMENT_INTERRUPTION_OPTION]: true,
+    ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {}),
     autoRotate: Boolean(movement?.autoRotate),
     showRuler: false
   });
   await waitForMovementAnimation(tokenDocument);
   return isAtDestination(tokenDocument, destination);
+}
+
+function createMovementInterruptionParticipants(tokenDocument, event = {}) {
+  return {
+    source: {
+      actorUuid: String(tokenDocument?.actor?.uuid ?? ""),
+      tokenUuid: String(tokenDocument?.uuid ?? ""),
+      itemUuid: ""
+    },
+    target: null,
+    related: Array.from(new Set(event?.reactorTokenUuids ?? [])).map(tokenUuid => ({
+      actorUuid: "",
+      tokenUuid: String(tokenUuid ?? ""),
+      itemUuid: ""
+    })).filter(participant => participant.tokenUuid)
+  };
+}
+
+function createMovementInterruptionData(movement = {}, event = {}) {
+  return {
+    movementId: String(movement?.id ?? ""),
+    providerId: String(event?.providerId ?? ""),
+    type: String(event?.type ?? ""),
+    eventId: String(event?.eventId ?? ""),
+    routeOrder: Math.max(0, Number(event?.routeOrder) || 0),
+    waypoint: event?.waypoint ? {
+      x: Number(event.waypoint.x) || 0,
+      y: Number(event.waypoint.y) || 0,
+      elevation: Number(event.waypoint.elevation) || 0
+    } : null
+  };
 }
 
 function prepareMovementWaypoint(waypoint = {}, tokenDocument = null) {

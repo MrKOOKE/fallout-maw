@@ -30,6 +30,11 @@ import { findLocation, getGlobalMapFlag, getSceneState, setDiscovered, updateSce
 import { getTravelGroupImage, getTravelGroupPrototypeToken } from "./travel-settings.mjs";
 import { createTravelFormulaSnapshot, evaluateTravelSpeed } from "./travel-speed.mjs";
 import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
+import {
+  isSystemEventCancelled,
+  systemEventParticipant,
+  withSystemEventRoot
+} from "../events/foundry-world-events.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const TEMPLATE = `systems/${FALLOUT_MAW.id}/templates/global-map/travel-assembly.hbs`;
@@ -710,26 +715,50 @@ async function handleArrivalRequest(payload) {
     requestedByUserId: user.id,
     deadline: Date.now() + ARRIVAL_TIMEOUT_MS
   };
-  await token.update({ [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: pending });
-  const viewerUserIds = getTravelGroupViewerUserIds(token.actor);
-  if (!targetScene.active) await targetScene.activate();
-  game.socket.emit(GLOBAL_MAP_SOCKET, {
-    action: "travelGroup.arrival.open",
-    originSceneId: originScene.id,
-    tokenId: token.id,
-    ...pending,
-    viewerUserIds
-  });
-  if (viewerUserIds.includes(game.user.id)) {
-    runWhenCanvasSceneReady(targetScene.id, () => canvas.falloutMaWGlobalMap?.startArrivalSelection?.({
+  return withSystemEventRoot({
+    kind: "travelArrivalPending",
+    operationId: `travel-arrival-pending:${pending.groupId}:${foundry.utils.randomID()}`,
+    sceneUuid: String(originScene.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    await token.update({ [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: pending }, {
+      falloutMawSystemEventChainRef: scope.chainRef,
+      chainRef: scope.chainRef
+    });
+    const target = systemEventParticipant({ actor: token.actor, token });
+    await scope.emit("fallout-maw.travel.arrival.pending", {
+      data: {
+        ...pending,
+        originSceneUuid: String(originScene.uuid ?? ""),
+        targetSceneUuid: String(targetScene.uuid ?? ""),
+        carrierActorUuid: String(token.actor.uuid ?? ""),
+        carrierTokenUuid: String(token.uuid ?? "")
+      },
+      outcome: { success: true, pending: true }
+    }, {
+      occurrenceKey: `travel-arrival-pending:${pending.groupId}:${token.id}`,
+      participants: { source: target, target, related: [] }
+    });
+    const viewerUserIds = getTravelGroupViewerUserIds(token.actor);
+    if (!targetScene.active) await targetScene.activate();
+    game.socket.emit(GLOBAL_MAP_SOCKET, {
+      action: "travelGroup.arrival.open",
       originSceneId: originScene.id,
       tokenId: token.id,
       ...pending,
       viewerUserIds
-    }));
-  }
-  scheduleArrivalTimer(originScene.id, token.id, pending.deadline);
-  return true;
+    });
+    if (viewerUserIds.includes(game.user.id)) {
+      runWhenCanvasSceneReady(targetScene.id, () => canvas.falloutMaWGlobalMap?.startArrivalSelection?.({
+        originSceneId: originScene.id,
+        tokenId: token.id,
+        ...pending,
+        viewerUserIds
+      }));
+    }
+    scheduleArrivalTimer(originScene.id, token.id, pending.deadline);
+    return true;
+  });
 }
 
 async function handleArrivalSelectRequest(payload) {
@@ -746,12 +775,42 @@ async function handleArrivalSelectRequest(payload) {
   return performArrival(originScene, token, targetScene, zone, pending);
 }
 
-async function performDeparture({ scene, zone, tokenDocuments, model = null, requestingUserId, assemblyId = null }) {
+async function performDeparture(args) {
+  return withSystemEventRoot({
+    kind: "travelDeparture",
+    operationId: `travel-departure:${args.assemblyId || args.tokenDocuments?.[0]?.id || "group"}:${foundry.utils.randomID()}`,
+    sceneUuid: String(args.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, scope => performDepartureInRoot(args, scope));
+}
+
+async function performDepartureInRoot({ scene, zone, tokenDocuments, model = null, requestingUserId, assemblyId = null }, scope) {
   const sceneFlag = getGlobalMapFlag(scene);
   const parentScene = sceneFlag?.parentSceneId ? game.scenes?.get(sceneFlag.parentSceneId) : null;
   const location = parentScene ? getSceneState(parentScene).locations.find(entry => entry.id === sceneFlag.nodeId) : null;
   if (!parentScene || !location) throw new Error("Родительская карта локации не найдена.");
   const activeModel = model ?? await buildSoloAssemblyModel(scene, tokenDocuments[0]);
+  const eventParticipants = uniqueActorParticipants(activeModel.members.map(member => (
+    systemEventParticipant({ actor: member.actor, token: member.token ?? scene.tokens?.get(member.tokenId) })
+  )));
+  for (const [index, target] of eventParticipants.entries()) {
+    const gate = await scope.emit("fallout-maw.travel.departure.before", {
+      data: {
+        originSceneUuid: String(scene.uuid ?? ""),
+        targetSceneUuid: String(parentScene.uuid ?? ""),
+        locationId: String(location.id ?? ""),
+        exitZoneId: String(zone.id ?? ""),
+        assemblyId: String(assemblyId ?? ""),
+        requestingUserId: String(requestingUserId ?? ""),
+        actorUuid: target.actorUuid,
+        tokenUuid: target.tokenUuid
+      }
+    }, {
+      occurrenceKey: `travel-departure:${assemblyId || tokenDocuments[0]?.id}:before:${target.actorUuid || index}`,
+      participants: { source: target, target, related: eventParticipants.filter(entry => entry !== target) }
+    });
+    if (isSystemEventCancelled(gate)) return false;
+  }
   for (const member of activeModel.members.filter(entry => entry.placement)) {
     validateAssemblyPlacement(activeModel, member, member.placement);
   }
@@ -771,7 +830,7 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
       await plan.actor.update({
         ownership: plan.nextOwnership,
         [`flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`]: plan.nextPassengers
-      }, { [TRAVEL_BYPASS_OPTION]: true });
+      }, travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true }));
       appliedPlans.push(plan);
     }
     topUnits = buildTopTravelUnits(activeModel);
@@ -781,7 +840,8 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
       topUnits,
       allActors: activeModel.members.map(member => member.actor).filter(Boolean),
       requestingUserId,
-      assemblyId
+      assemblyId,
+      chainRef: scope.chainRef
     });
     const prototype = await carrierActor.getTokenDocument({}, { parent: parentScene });
     const carrierData = prototype.toObject();
@@ -795,37 +855,79 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
       groupId: group.groupId,
       pendingArrival: null
     });
-    [carrierToken] = await parentScene.createEmbeddedDocuments("Token", [carrierData]);
+    [carrierToken] = await parentScene.createEmbeddedDocuments("Token", [carrierData], travelDocumentOptions(scope));
     if (!carrierToken) throw new Error("Не удалось создать токен группы.");
     await scene.deleteEmbeddedDocuments(
       "Token",
       tokenDocuments.map(token => token.id),
-      { [TRAVEL_BYPASS_OPTION]: true }
+      travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
     );
   } catch (error) {
-    if (carrierToken) await parentScene.deleteEmbeddedDocuments("Token", [carrierToken.id], { [TRAVEL_BYPASS_OPTION]: true }).catch(() => {});
+    if (carrierToken) await parentScene.deleteEmbeddedDocuments(
+      "Token",
+      [carrierToken.id],
+      travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
+    ).catch(() => {});
     for (const plan of appliedPlans.reverse()) {
       await plan.actor.update({
         ownership: plan.originalOwnership,
         [`flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`]: plan.originalPassengers
-      }, { [TRAVEL_BYPASS_OPTION]: true }).catch(() => {});
+      }, travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })).catch(() => {});
     }
     const missing = tokenDocuments.filter(token => !scene.tokens?.get(token.id)).map(token => {
       const data = foundry.utils.deepClone(originalTokenData.get(token.id));
       delete data._id;
       return data;
     });
-    if (missing.length) await scene.createEmbeddedDocuments("Token", missing).catch(() => {});
-    if (carrierActor) await carrierActor.delete({ [TRAVEL_BYPASS_OPTION]: true }).catch(() => {});
+    if (missing.length) await scene.createEmbeddedDocuments("Token", missing, travelDocumentOptions(scope)).catch(() => {});
+    if (carrierActor) await carrierActor.delete(travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })).catch(() => {});
     throw error;
   }
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
   if (!parentScene.active) await parentScene.activate();
   notifyTravelComplete(parentScene.id, viewerUserIds);
+  const group = carrierActor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
+  const groupData = {
+    groupId: String(group?.groupId ?? ""),
+    assemblyId: String(assemblyId ?? ""),
+    originSceneUuid: String(scene.uuid ?? ""),
+    targetSceneUuid: String(parentScene.uuid ?? ""),
+    locationId: String(location.id ?? ""),
+    exitZoneId: String(zone.id ?? ""),
+    requestingUserId: String(requestingUserId ?? "")
+  };
+  await scope.emit("fallout-maw.travel.group.formed", {
+    data: {
+      ...groupData,
+      carrierActorUuid: String(carrierActor.uuid ?? ""),
+      carrierTokenUuid: String(carrierToken?.uuid ?? ""),
+      memberActorUuids: eventParticipants.map(entry => entry.actorUuid)
+    },
+    outcome: { success: true, formed: true }
+  }, {
+    occurrenceKey: `travel-group:${groupData.groupId}:formed`,
+    participants: { source: null, target: null, related: eventParticipants }
+  });
+  for (const [index, target] of eventParticipants.entries()) {
+    const participants = { source: null, target, related: eventParticipants.filter(entry => entry !== target) };
+    const data = { ...groupData, actorUuid: target.actorUuid, tokenUuid: target.tokenUuid };
+    await scope.emit("fallout-maw.travel.group.memberJoined", { data, outcome: { success: true, joined: true } }, {
+      occurrenceKey: `travel-group:${groupData.groupId}:member-joined:${target.actorUuid || index}`,
+      participants
+    });
+    await scope.emit("fallout-maw.travel.location.left", { data, outcome: { success: true } }, {
+      occurrenceKey: `travel-group:${groupData.groupId}:location-left:${target.actorUuid || index}`,
+      participants: { source: target, target, related: participants.related }
+    });
+    await scope.emit("fallout-maw.travel.departure.completed", { data, outcome: { success: true, completed: true } }, {
+      occurrenceKey: `travel-group:${groupData.groupId}:departure-completed:${target.actorUuid || index}`,
+      participants: { source: target, target, related: participants.related }
+    });
+  }
   return true;
 }
 
-async function createTravelCarrier({ originScene, targetScene, topUnits, allActors, requestingUserId, assemblyId }) {
+async function createTravelCarrier({ originScene, targetScene, topUnits, allActors, requestingUserId, assemblyId, chainRef = null }) {
   const folder = await ensureTravelGroupFolder();
   const configuredPrototype = foundry.utils.deepClone(getTravelGroupPrototypeToken());
   const image = getTravelGroupImage();
@@ -868,7 +970,12 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
         }
       }
     }
-  }, { renderSheet: false, [TRAVEL_BYPASS_OPTION]: true });
+  }, {
+    renderSheet: false,
+    [TRAVEL_BYPASS_OPTION]: true,
+    falloutMawSystemEventChainRef: chainRef,
+    chainRef
+  });
   if (!actor) throw new Error("Не удалось создать временного актёра группы.");
   return actor;
 }
@@ -916,10 +1023,37 @@ async function handleCarrierMovePassengerRequest(payload) {
 }
 
 async function performArrival(originScene, carrierToken, targetScene, zone, pending) {
+  return withSystemEventRoot({
+    kind: "travelArrival",
+    operationId: `travel-arrival:${pending?.groupId || carrierToken?.id || "group"}:${foundry.utils.randomID()}`,
+    sceneUuid: String(originScene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, scope => performArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope));
+}
+
+async function performArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope) {
   const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
   const units = getTravelCarrierUnits(carrierActor);
   if (!units.length) throw new Error("В группе нет участников для размещения.");
+  const eventParticipants = uniqueActorParticipants(units.map(unit => ({ actorUuid: String(unit.actorUuid ?? "") })));
+  for (const [index, target] of eventParticipants.entries()) {
+    const gate = await scope.emit("fallout-maw.travel.arrival.before", {
+      data: {
+        groupId: String(pending?.groupId ?? ""),
+        locationId: String(pending?.locationId ?? ""),
+        originSceneUuid: String(originScene.uuid ?? ""),
+        targetSceneUuid: String(targetScene.uuid ?? ""),
+        exitZoneId: String(zone.id ?? ""),
+        actorUuid: target.actorUuid,
+        requestedByUserId: String(pending?.requestedByUserId ?? "")
+      }
+    }, {
+      occurrenceKey: `travel-arrival:${pending?.groupId}:before:${target.actorUuid || index}`,
+      participants: { source: target, target, related: eventParticipants.filter(entry => entry !== target) }
+    });
+    if (isSystemEventCancelled(gate)) return false;
+  }
   const createData = [];
   const reserved = [];
   for (const unit of units) {
@@ -936,16 +1070,25 @@ async function performArrival(originScene, carrierToken, targetScene, zone, pend
   }
   let created = [];
   try {
-    created = await targetScene.createEmbeddedDocuments("Token", createData);
+    created = await targetScene.createEmbeddedDocuments("Token", createData, travelDocumentOptions(scope));
     if (created.length !== createData.length) throw new Error("Не все участники были размещены.");
-    await originScene.deleteEmbeddedDocuments("Token", [carrierToken.id], { [TRAVEL_BYPASS_OPTION]: true });
+    await originScene.deleteEmbeddedDocuments(
+      "Token",
+      [carrierToken.id],
+      travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
+    );
   } catch (error) {
-    if (created.length) await targetScene.deleteEmbeddedDocuments("Token", created.map(token => token.id)).catch(() => {});
+    if (created.length) await targetScene.deleteEmbeddedDocuments(
+      "Token",
+      created.map(token => token.id),
+      travelDocumentOptions(scope)
+    ).catch(() => {});
     throw error;
   }
-  await carrierActor.delete({ [TRAVEL_BYPASS_OPTION]: true }).catch(error => {
+  await carrierActor.delete(travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })).catch(error => {
     console.warn(`${FALLOUT_MAW.id} | Travel-group carrier actor cleanup failed`, error);
   });
+  const exitWasDiscovered = getSceneState(targetScene).discoveredExitZoneIds.includes(zone.id);
   await setDiscovered(targetScene, "exit", zone.id, true);
   clearArrivalTimer(originScene.id, carrierToken.id);
   if (!targetScene.active) await targetScene.activate();
@@ -958,6 +1101,51 @@ async function performArrival(originScene, carrierToken, targetScene, zone, pend
   game.socket.emit(GLOBAL_MAP_SOCKET, closedPayload);
   await restoreTokenControlsAfterArrival(closedPayload);
   notifyTravelComplete(targetScene.id, viewerUserIds, { activateTokenControls: true });
+  const commonData = {
+    groupId: String(pending?.groupId ?? ""),
+    locationId: String(pending?.locationId ?? ""),
+    originSceneUuid: String(originScene.uuid ?? ""),
+    targetSceneUuid: String(targetScene.uuid ?? ""),
+    exitZoneId: String(zone.id ?? ""),
+    requestedByUserId: String(pending?.requestedByUserId ?? "")
+  };
+  if (!exitWasDiscovered) {
+    await scope.emit("fallout-maw.globalMap.exit.discovered", {
+      data: {
+        sceneUuid: String(targetScene.uuid ?? ""),
+        sceneId: String(targetScene.id ?? ""),
+        discoveryType: "exit",
+        entryId: String(zone.id ?? ""),
+        entryName: String(zone.name ?? "")
+      }
+    }, {
+      occurrenceKey: `global-map-discovery:${targetScene.id}:exit:${zone.id}`,
+      participants: { source: null, target: null, related: eventParticipants }
+    });
+  }
+  for (const [index, target] of eventParticipants.entries()) {
+    const related = eventParticipants.filter(entry => entry !== target);
+    const data = { ...commonData, actorUuid: target.actorUuid };
+    await scope.emit("fallout-maw.travel.group.memberLeft", { data, outcome: { success: true, left: true } }, {
+      occurrenceKey: `travel-group:${commonData.groupId}:member-left:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+    await scope.emit("fallout-maw.travel.location.entered", { data, outcome: { success: true } }, {
+      occurrenceKey: `travel-group:${commonData.groupId}:location-entered:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+    await scope.emit("fallout-maw.travel.arrival.completed", { data, outcome: { success: true, completed: true } }, {
+      occurrenceKey: `travel-group:${commonData.groupId}:arrival-completed:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+  }
+  await scope.emit("fallout-maw.travel.group.disbanded", {
+    data: { ...commonData, memberActorUuids: eventParticipants.map(entry => entry.actorUuid) },
+    outcome: { success: true, disbanded: true }
+  }, {
+    occurrenceKey: `travel-group:${commonData.groupId}:disbanded`,
+    participants: { source: null, target: null, related: eventParticipants }
+  });
   return true;
 }
 
@@ -1892,6 +2080,27 @@ function emitGroupError(payload, message) {
   }, { recipients: [payload.requestingUserId] });
   if (payload.requestingUserId === game.user?.id) ui.notifications.error(message);
   return false;
+}
+
+function uniqueActorParticipants(entries = []) {
+  const actors = new Map();
+  for (const entry of entries) {
+    if (!entry?.actorUuid || actors.has(entry.actorUuid)) continue;
+    actors.set(entry.actorUuid, {
+      actorUuid: String(entry.actorUuid),
+      tokenUuid: String(entry.tokenUuid ?? ""),
+      itemUuid: String(entry.itemUuid ?? "")
+    });
+  }
+  return Array.from(actors.values());
+}
+
+function travelDocumentOptions(scope, options = {}) {
+  return {
+    ...options,
+    falloutMawSystemEventChainRef: scope?.chainRef ?? null,
+    chainRef: scope?.chainRef ?? null
+  };
 }
 
 function getResponsibleGM() {

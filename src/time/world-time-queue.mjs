@@ -1,7 +1,68 @@
+import { dispatchSystemEvent, withSystemEventRoot } from "../events/dispatcher.mjs";
+
 const queuedWorldTimeProcessors = new Map();
 const pendingWorldTimeUpdates = [];
 let worldTimeHookRegistered = false;
 let processingWorldTimeQueue = false;
+let worldTimeAdvanceQueue = Promise.resolve();
+const SYSTEM_TIME_ADVANCE_OPTION = "falloutMawSystemTimeAdvance";
+
+export async function advanceWorldTime(seconds, {
+  restMode = false,
+  campRest = null,
+  forceTimeMechanics = false,
+  chainRef = null,
+  source = "system"
+} = {}) {
+  const amount = Math.trunc(Number(seconds) || 0);
+  if (!amount || !game.user?.isGM) return false;
+  const advance = worldTimeAdvanceQueue.then(() => withSystemEventRoot({
+    kind: "worldTimeAdvance",
+    operationId: `world-time:${foundry.utils.randomID()}`,
+    sceneUuid: String(canvas?.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef
+  }, async scope => {
+    const before = Number(game.time?.worldTime) || 0;
+    const requested = await scope.emit("fallout-maw.world.time.beforeAdvance", {
+      data: { seconds: amount, source: String(source ?? "system") },
+      before: { worldTime: before },
+      after: { worldTime: before + amount },
+      delta: { worldTime: amount }
+    }, {
+      occurrenceKey: `world-time-before:${scope.rootId}:${before}:${amount}`,
+      participants: { source: null, target: null, related: [] }
+    });
+    if (requested?.control?.current || requested?.control?.remaining || requested?.control?.root) return false;
+    await game.time.advance(amount, {
+      [SYSTEM_TIME_ADVANCE_OPTION]: true,
+      falloutMawSystemEventChainRef: scope.chainRef,
+      chainRef: scope.chainRef,
+      falloutMaw: {
+        restMode: Boolean(restMode),
+        forceTimeMechanics: Boolean(forceTimeMechanics),
+        ...(campRest ? { campRest } : {})
+      }
+    });
+    const after = Number(game.time?.worldTime) || (before + amount);
+    await scope.emit("fallout-maw.world.time.advanced", {
+      data: { seconds: after - before, source: String(source ?? "system") },
+      before: { worldTime: before },
+      after: { worldTime: after },
+      delta: { worldTime: after - before },
+      outcome: { advanced: true }
+    }, {
+      occurrenceKey: `world-time-advanced:${scope.rootId}:${after}`,
+      participants: { source: null, target: null, related: [] }
+    });
+    return true;
+  }));
+  worldTimeAdvanceQueue = advance.catch(error => {
+    console.error("Fallout MaW | Queued world time advance failed", error);
+    return false;
+  });
+  return advance;
+}
 
 export function registerQueuedWorldTimeProcessor(processor, { priority = 0 } = {}) {
   if (typeof processor !== "function") return () => {};
@@ -13,7 +74,28 @@ export function registerQueuedWorldTimeProcessor(processor, { priority = 0 } = {
 function registerWorldTimeQueueHook() {
   if (worldTimeHookRegistered) return;
   Hooks.on("updateWorldTime", enqueueWorldTimeUpdate);
+  Hooks.on("updateWorldTime", emitExternalWorldTimeUpdate);
   worldTimeHookRegistered = true;
+}
+
+function emitExternalWorldTimeUpdate(worldTime, deltaTime, options = {}, userId = "") {
+  if (options?.[SYSTEM_TIME_ADVANCE_OPTION] || !isCurrentActiveGM()) return;
+  const after = Number(worldTime) || 0;
+  const delta = Number(deltaTime) || 0;
+  void dispatchSystemEvent("fallout-maw.world.time.advanced", {
+    data: { seconds: delta, source: "external", userId: String(userId ?? "") },
+    before: { worldTime: after - delta },
+    after: { worldTime: after },
+    delta: { worldTime: delta },
+    outcome: { advanced: true, external: true }
+  }, {
+    kind: "externalWorldTimeUpdate",
+    operationId: `world-time-external:${userId}:${after}:${delta}`,
+    sceneUuid: String(canvas?.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    occurrenceKey: `world-time-external:${userId}:${after}:${delta}`,
+    participants: { source: null, target: null, related: [] }
+  });
 }
 
 function enqueueWorldTimeUpdate(worldTime, deltaTime, options, userId) {
@@ -24,6 +106,10 @@ function enqueueWorldTimeUpdate(worldTime, deltaTime, options, userId) {
     userId
   });
   void processWorldTimeQueue();
+}
+
+function isCurrentActiveGM() {
+  return Boolean(game.users?.activeGM?.id && game.users.activeGM.id === game.user?.id);
 }
 
 function pullCoalescedWorldTimeUpdate() {

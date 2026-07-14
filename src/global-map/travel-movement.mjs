@@ -3,6 +3,8 @@ import { GLOBAL_MAP_SOCKET, TRAVEL_GROUP_FLAG } from "./constants.mjs";
 import { cellKey, getCellPath, pointToCell } from "./geometry.mjs";
 import { getSceneState } from "./storage.mjs";
 import { calculateTravelGroupSpeed, isTravelGroupCarrierActor } from "./travel-group-data.mjs";
+import { advanceWorldTime } from "../time/world-time-queue.mjs";
+import { systemEventParticipant, withSystemEventRoot } from "../events/foundry-world-events.mjs";
 
 const ARM_TIMEOUT_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -207,8 +209,31 @@ async function processCompletedTravelMovement(tokenDocument, movement, _operatio
   if (blocked) return emitMovementComplete(user.id, "Маршрут пересекает непроходимую местность; время не изменено.");
   const speedKmh = await calculateTravelGroupSpeed(tokenDocument.actor);
   if (!(speedKmh > 0)) return emitMovementComplete(user.id, "Скорость группы равна нулю; время не изменено.");
-  const { seconds } = calculateTravelMetrics(tokenDocument.parent, cells, speedKmh);
-  if (seconds > 0) await game.time.advance(seconds);
+  const { seconds, distanceKm } = calculateTravelMetrics(tokenDocument.parent, cells, speedKmh);
+  await withSystemEventRoot({
+    kind: "travelMovement",
+    operationId: `travel-movement:${tokenDocument.parent.id}:${tokenDocument.id}:${foundry.utils.randomID()}`,
+    sceneUuid: String(tokenDocument.parent?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, async scope => {
+    const target = systemEventParticipant({ actor: tokenDocument.actor, token: tokenDocument });
+    if (seconds > 0) await advanceWorldTime(seconds, { source: "travelMovement", chainRef: scope.chainRef });
+    await scope.emit("fallout-maw.travel.movement.completed", {
+      data: {
+        actorUuid: String(tokenDocument.actor?.uuid ?? ""),
+        tokenUuid: String(tokenDocument.uuid ?? ""),
+        requestingUserId: String(user.id),
+        speedKmh,
+        distanceKm,
+        seconds,
+        cells: cells.map(cell => ({ i: Number(cell.i) || 0, j: Number(cell.j) || 0 }))
+      },
+      outcome: { success: true, completed: true }
+    }, {
+      occurrenceKey: `travel-movement:${tokenDocument.parent.id}:${tokenDocument.id}:${seconds}`,
+      participants: { source: target, target, related: [] }
+    });
+  });
   const hours = seconds / 3600;
   emitMovementComplete(user.id, seconds > 0
     ? `Путешествие заняло ${formatTravelDuration(hours)}.`

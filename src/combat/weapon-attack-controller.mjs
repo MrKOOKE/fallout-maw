@@ -62,6 +62,10 @@ import {
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { energySourceMatchesConsumer, getActiveEnergySourceItem, getEnergySourceReserveState } from "../items/light-source.mjs";
 import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/construct-parts.mjs";
+import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
+
+export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -1309,6 +1313,7 @@ class WeaponAttackController {
     return {
       actorToken: this.token,
       targetToken,
+      systemEventOperationId: this.attackId,
       weaponAttackId: this.attackId,
       weaponActionKey: this.actionKey,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
@@ -1321,6 +1326,19 @@ class WeaponAttackController {
       }),
       ...extra
     };
+  }
+
+  stampAttackDamageSources(requests = []) {
+    const attackId = String(this.attackId ?? "").trim();
+    if (!attackId) return Array.isArray(requests) ? requests : [requests];
+    return (Array.isArray(requests) ? requests : [requests]).filter(Boolean).map(request => ({
+      ...request,
+      source: {
+        ...(request?.source ?? {}),
+        attackId,
+        systemEventOperationId: String(request?.source?.systemEventOperationId ?? attackId)
+      }
+    }));
   }
 
   createWeaponActionModifierContext(extra = {}) {
@@ -1970,7 +1988,7 @@ class WeaponAttackController {
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) {
-      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
     }
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2060,7 +2078,7 @@ class WeaponAttackController {
     }
     await checkBatch.publish({ forceBatch: targets.length > 1 || duplicatePlan.cycles > 1 });
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
-    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2126,7 +2144,7 @@ class WeaponAttackController {
     }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
-    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2325,7 +2343,7 @@ class WeaponAttackController {
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
     if (!this.attackCanceledByReaction && damageRequests.length) {
-      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
     }
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2436,7 +2454,7 @@ class WeaponAttackController {
     });
     await checkBatch?.publish({ forceBatch: duplicatePlan.cycles > 1 });
     await this.playAttackAnimationsIfNeeded(allTrajectories);
-    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
 
     this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2551,7 +2569,7 @@ class WeaponAttackController {
     }
     await checkBatch.publish({ forceBatch: duplicatePlan.cycles > 1 });
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
-    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests))));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -3062,7 +3080,7 @@ class WeaponAttackController {
     if (playEffects) await this.playVolleyAttackEffects(finalGeometries);
     const damageResults = this.attackCanceledByReaction
       ? []
-      : flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
+      : flattenDamageResults(await applyQueuedDamageAndRegionRequests(this.stampAttackDamageSources(damageRequests), regionRequests));
 
     this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -5544,51 +5562,6 @@ function hasLineOfSight(attackerToken, destination, origin) {
     type: "sight",
     mode: "any"
   });
-}
-
-export function canTokenPhysicallySeeTarget(attackerToken, targetToken) {
-  if (!canvas?.ready || !attackerToken || !targetToken) return false;
-  if (!canvas.visibility?.tokenVision) return true;
-  const tokenDocument = attackerToken.document ?? attackerToken;
-  const VisionSource = CONFIG.Canvas?.visionSourceClass;
-  if (!attackerToken.hasSight || !VisionSource || typeof attackerToken._getVisionSourceData !== "function") return false;
-  if (typeof canvas.visibility?._createVisibilityTestConfig !== "function") return false;
-
-  const source = new VisionSource({
-    sourceId: `${attackerToken.sourceId ?? tokenDocument.id}.counter-sniper.${foundry.utils.randomID()}`,
-    object: attackerToken
-  });
-  try {
-    Object.assign(source.blinded, attackerToken._getVisionBlindedStates?.() ?? {});
-    const sourceData = attackerToken._getVisionSourceData();
-    const origin = getTokenAimPoint(attackerToken);
-    source.initialize({
-      ...sourceData,
-      x: Number(origin?.x) || 0,
-      y: Number(origin?.y) || 0,
-      elevation: Number(origin?.elevation ?? sourceData?.elevation ?? tokenDocument.elevation) || 0,
-      disabled: false,
-      preview: false
-    });
-    if (source.isBlinded) return false;
-
-    const points = getTokenActorCoverSamplePoints(targetToken, origin);
-    const config = canvas.visibility._createVisibilityTestConfig(points, {
-      tolerance: 0,
-      object: targetToken
-    });
-    for (const modeId of ["basicSight", "lightPerception"]) {
-      const mode = tokenDocument.detectionModes?.[modeId];
-      const detectionMode = CONFIG.Canvas.detectionModes?.[modeId];
-      if (mode && detectionMode?.testVisibility(source, mode, config) === true) return true;
-    }
-    return false;
-  } catch (error) {
-    console.warn(`${SYSTEM_ID} | Counter sniper vision test failed`, error);
-    return false;
-  } finally {
-    source.destroy();
-  }
 }
 
 function getWallClippedEndpoint(attackerToken, origin, angle, distance, targetElevation = null) {
@@ -8160,18 +8133,97 @@ function addUniquePoint(points, point) {
 }
 
 async function applyQueuedDamageRequests(requests = []) {
-  notifyWeaponAttackDamageResolved(requests);
-  return requestDamageApplications(requests);
+  return withWeaponDamagePreparedEvents(requests, async prepared => {
+    notifyWeaponAttackDamageResolved(prepared);
+    return requestDamageApplications(prepared);
+  });
 }
 
 async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionRequests = []) {
   if (regionRequests.length) {
-    notifyWeaponAttackDamageResolved(damageRequests);
-    const result = await requestApplyDamageAndCreateVolleyDamageRegions(damageRequests, regionRequests);
-    return result?.damage ?? [];
+    return withWeaponDamagePreparedEvents(damageRequests, async prepared => {
+      notifyWeaponAttackDamageResolved(prepared);
+      const result = await requestApplyDamageAndCreateVolleyDamageRegions(prepared, regionRequests);
+      return result?.damage ?? [];
+    });
   }
   if (damageRequests.length) return applyQueuedDamageRequests(damageRequests);
   return [];
+}
+
+async function withWeaponDamagePreparedEvents(requests = [], operation) {
+  const sourceRequests = (Array.isArray(requests) ? requests : [requests]).filter(Boolean);
+  if (!sourceRequests.length) return operation([]);
+  const attackId = String(sourceRequests.find(request => request?.source?.attackId)?.source?.attackId ?? foundry.utils.randomID());
+  const inheritedChainRef = sourceRequests.find(request => request?.source?.chainRef)?.source?.chainRef ?? null;
+  return withSystemEventRoot({
+    kind: "weaponDamagePrepared",
+    operationId: `weapon-damage:${attackId}`,
+    sceneUuid: getWeaponDamageRequestSceneUuid(sourceRequests),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: inheritedChainRef,
+    data: { systemEventOperationId: attackId }
+  }, async scope => {
+    const prepared = [];
+    for (const [index, request] of sourceRequests.entries()) {
+      const actorUuid = String(request?.actor?.uuid ?? request?.actorUuid ?? "");
+      const actor = request?.actor ?? (actorUuid ? await fromUuid(actorUuid) : null);
+      if (!actorUuid || !actor) continue;
+      const source = request?.source ?? {};
+      const participants = {
+        source: {
+          actorUuid: String(source.attackerActorUuid ?? source.attackerUuid ?? ""),
+          tokenUuid: String(source.attackerTokenUuid ?? ""),
+          itemUuid: String(source.weaponUuid ?? source.sourceItemUuid ?? "")
+        },
+        target: {
+          actorUuid,
+          tokenUuid: String(source.targetTokenUuid ?? ""),
+          itemUuid: ""
+        },
+        related: []
+      };
+      const outcome = await scope.emit("fallout-maw.weapon.attack.damagePrepared", {
+        data: {
+          attackId,
+          systemEventOperationId: attackId,
+          actorUuid,
+          limbKey: String(request?.limbKey ?? ""),
+          amount: Math.max(0, Number(request?.amount) || 0),
+          damageTypeKey: String(request?.damageTypeKey ?? ""),
+          actionKey: String(source.actionKey ?? ""),
+          weaponFunctionId: String(source.weaponFunctionId ?? "")
+        }
+      }, {
+        occurrenceKey: `weapon-damage:${attackId}:${actorUuid}:${index}`,
+        participants
+      });
+      if (outcome?.control?.current || outcome?.control?.remaining || outcome?.control?.root) {
+        if (outcome?.control?.remaining || outcome?.control?.root) break;
+        continue;
+      }
+      prepared.push({
+        ...request,
+        source: {
+          ...(request.source ?? {}),
+          attackId,
+          systemEventOperationId: String(request.source?.systemEventOperationId ?? attackId),
+          chainRef: scope.chainRef
+        }
+      });
+    }
+    return operation(prepared);
+  });
+}
+
+function getWeaponDamageRequestSceneUuid(requests = []) {
+  for (const request of requests) {
+    const source = request?.source ?? {};
+    const tokenUuid = String(source.attackerTokenUuid ?? source.targetTokenUuid ?? "");
+    const match = tokenUuid.match(/^(Scene\.[^.]+)/);
+    if (match) return match[1];
+  }
+  return String(canvas?.scene?.uuid ?? "");
 }
 
 function flattenDamageResults(results = []) {

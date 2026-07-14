@@ -15,6 +15,7 @@ import {
 } from "./aura-conditions.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
 import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
@@ -356,6 +357,7 @@ function buildDesiredAuraGeneratedEffects() {
     for (const source of getAuraSourceFunctionSets(sourceActor)) {
       for (const entry of normalizeAbilityFunctions(source.functions)) {
         if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+        if (hasEventReactionCondition(entry.conditions)) continue;
         for (const condition of findAuraDistributionConditions(entry.conditions)) {
           const targets = getAuraGeneratedTargetTokens(sourceActor, condition, { actorToken: sourceToken });
           if (!targets.length) continue;
@@ -554,6 +556,7 @@ function getItemFreeSettingsEffectShowIcon(actor, item, context = {}) {
 function hasActiveRuntimeAbilityState(actor, item, context = {}) {
   return normalizeAbilityFunctions(item?.system?.functions ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .filter(entry => !hasEventReactionCondition(entry.conditions))
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
@@ -570,6 +573,7 @@ function hasActiveRuntimeAbilityState(actor, item, context = {}) {
 function hasActiveRuntimeItemFreeSettingsState(actor, item, context = {}) {
   return normalizeAbilityFunctions(item?.system?.functions?.freeSettings?.entries ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .filter(entry => !hasEventReactionCondition(entry.conditions))
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
@@ -602,12 +606,14 @@ function getItemFreeSettingsEffectOperationOptions(item) {
 function hasAuraConditionFunction(functions = []) {
   return normalizeAbilityFunctions(functions)
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .filter(entry => !hasEventReactionCondition(entry.conditions))
     .some(entry => (entry.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.aura));
 }
 
 function hasAuraPresenceConditionFunction(functions = []) {
   return normalizeAbilityFunctions(functions)
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .filter(entry => !hasEventReactionCondition(entry.conditions))
     .some(entry => (entry.conditions ?? []).some(condition => (
       condition?.type === ABILITY_CONDITION_TYPES.aura
       && condition?.auraMode !== "applyToTargets"

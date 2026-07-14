@@ -31,8 +31,14 @@ const LEGACY_SKILL_KEY_REMAPS = Object.freeze({
   intimidation: "speech"
 });
 
-export async function useOneTimeUseItem({ actor = null, item = null } = {}) {
+export async function useOneTimeUseItem({ actor = null, item = null, source = {}, chainRef = null, options = {} } = {}) {
   if (!actor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.oneTimeUse)) return false;
+  const inheritedChainRef = chainRef
+    ?? options?.falloutMawSystemEventChainRef
+    ?? options?.chainRef
+    ?? source?.chainRef
+    ?? null;
+  const documentOptions = createOneTimeUseDocumentOptions(inheritedChainRef);
 
   const oneTimeUse = getOneTimeUseFunction(item);
   const changes = normalizeOneTimeUseChanges(oneTimeUse.changes);
@@ -58,22 +64,16 @@ export async function useOneTimeUseItem({ actor = null, item = null } = {}) {
   }
 
   if (changes.length || Boolean(oneTimeUse.repeatApplicationBlocked)) {
-    await applyOneTimeUseChanges(actor, item, changes, studiedEffect);
+    await applyOneTimeUseChanges(actor, item, changes, studiedEffect, documentOptions);
   }
   const grantedRecipeItemUuids = await grantCraftItemKnowledge(actor, unknownRecipeItemUuids);
-  await spendOneTimeUseItem(item);
+  await spendOneTimeUseItem(item, documentOptions);
   if (grantedRecipeItemUuids.length) {
     const names = grantedRecipeItemUuids
       .map(uuid => resolveCraftKnowledgeItem(uuid)?.name ?? uuid)
       .join(", ");
     ui.notifications.info(`${actor.name}: изучены рецепты — ${names}.`);
   }
-  Hooks.callAll("fallout-maw.itemUsed", {
-    actor,
-    targetActor: actor,
-    item,
-    action: "oneTimeUse"
-  });
   return true;
 }
 
@@ -115,7 +115,7 @@ export function remapOneTimeUseChangeKey(key = "") {
   return normalized;
 }
 
-async function applyOneTimeUseChanges(actor, item, changes = [], studiedEffect = null) {
+async function applyOneTimeUseChanges(actor, item, changes = [], studiedEffect = null, documentOptions = {}) {
   const effect = studiedEffect ?? findOneTimeUseStudiedEffect(actor);
   const appliedItems = upsertStudiedAppliedItem(
     normalizeStudiedAppliedItems(getOneTimeUseStudiedAppliedItems(effect)),
@@ -144,11 +144,11 @@ async function applyOneTimeUseChanges(actor, item, changes = [], studiedEffect =
       [`flags.${SYSTEM_ID}.${ONE_TIME_USE_STUDIED_FLAG}`]: { appliedItems },
       [`flags.${SYSTEM_ID}.kind`]: "passive",
       disabled: false
-    }, { animate: false });
+    }, { animate: false, ...documentOptions });
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false });
+  await actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false, ...documentOptions });
 }
 
 export function findOneTimeUseStudiedEffect(actor) {
@@ -331,15 +331,21 @@ function formatOneTimeUseChangeValue(type = "add", value = "") {
   return normalizedValue;
 }
 
-async function spendOneTimeUseItem(item) {
+async function spendOneTimeUseItem(item, documentOptions = {}) {
   const quantity = getItemQuantity(item);
   if (usesVirtualInventoryStacks(item)) {
     const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete();
+    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(documentOptions);
     const { _id, ...changes } = updateData;
-    return item.update(changes);
+    return item.update(changes, documentOptions);
   }
   const next = Math.max(0, quantity - 1);
-  if (next <= 0) return item.delete();
-  return item.update({ "system.quantity": next });
+  if (next <= 0) return item.delete(documentOptions);
+  return item.update({ "system.quantity": next }, documentOptions);
+}
+
+function createOneTimeUseDocumentOptions(chainRef = null) {
+  return chainRef
+    ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+    : {};
 }

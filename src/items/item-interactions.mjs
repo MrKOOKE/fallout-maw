@@ -4,6 +4,7 @@ import {
   ABILITY_FUNCTION_TYPES,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import {
   ITEM_FUNCTIONS,
   getEnergyConsumerFunction,
@@ -18,6 +19,7 @@ export function getItemEnergyConsumptionConditions(item = null) {
   const conditions = [];
   for (const entry of normalizeAbilityFunctions(item.system?.functions?.freeSettings?.entries ?? [])) {
     if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+    if (hasEventReactionCondition(entry.conditions)) continue;
     for (const condition of entry.conditions ?? []) {
       if (condition?.type !== ABILITY_CONDITION_TYPES.energyConsumption) continue;
       const id = String(condition?.id ?? "").trim();
