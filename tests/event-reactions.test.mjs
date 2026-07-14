@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   eventReactionCombatAllows,
+  eventReactionSkillKeysMatch,
   eventReactionSubscriptionMatches,
   eventReactionTrackingTargetsMatch,
   getEventTrackingRelation
@@ -117,6 +118,37 @@ test("event subscription requires an exact stable event key", () => {
     envelope,
     "Actor.B",
     { reactorActor: { uuid: "Actor.B" }, sourceActor: { uuid: "Actor.A" }, targetActor: { uuid: "Actor.B" } }
+  ), false);
+});
+
+test("skill-check reactions can filter by skill keys or accept all", () => {
+  const beforeEnvelope = {
+    key: "fallout-maw.skill.check.beforeRoll",
+    data: { skill: { key: "athletics" } }
+  };
+  const resolvedEnvelope = {
+    key: "fallout-maw.skill.check.resolved",
+    data: { skillKey: "guns" }
+  };
+
+  assert.equal(eventReactionSkillKeysMatch({ eventKey: beforeEnvelope.key, skillKeys: [] }, beforeEnvelope), true);
+  assert.equal(eventReactionSkillKeysMatch({ eventKey: beforeEnvelope.key, skillKeys: ["*"] }, beforeEnvelope), true);
+  assert.equal(eventReactionSkillKeysMatch({ eventKey: beforeEnvelope.key, skillKeys: ["athletics"] }, beforeEnvelope), true);
+  assert.equal(eventReactionSkillKeysMatch({ eventKey: beforeEnvelope.key, skillKeys: ["guns"] }, beforeEnvelope), false);
+  assert.equal(eventReactionSkillKeysMatch({ eventKey: resolvedEnvelope.key, skillKeys: ["guns", "athletics"] }, resolvedEnvelope), true);
+  assert.equal(eventReactionSkillKeysMatch({ eventKey: EVENT_KEY, skillKeys: ["guns"] }, { key: EVENT_KEY, data: {} }), true);
+
+  assert.equal(eventReactionSubscriptionMatches(
+    { eventKey: beforeEnvelope.key, skillKeys: ["athletics"], trackingTargets: [] },
+    beforeEnvelope,
+    "Actor.A",
+    { reactorActor: { uuid: "Actor.A" }, sourceActor: { uuid: "Actor.A" }, targetActor: null }
+  ), true);
+  assert.equal(eventReactionSubscriptionMatches(
+    { eventKey: beforeEnvelope.key, skillKeys: ["guns"], trackingTargets: [] },
+    beforeEnvelope,
+    "Actor.A",
+    { reactorActor: { uuid: "Actor.A" }, sourceActor: { uuid: "Actor.A" }, targetActor: null }
   ), false);
 });
 

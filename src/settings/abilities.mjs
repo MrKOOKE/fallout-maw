@@ -671,7 +671,8 @@ function normalizeAbilityCondition(value = {}) {
       type,
       eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
       combatOnly: normalizeBoolean(value?.combatOnly, false),
-      trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets)
+      trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets),
+      skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey)
     };
   }
 

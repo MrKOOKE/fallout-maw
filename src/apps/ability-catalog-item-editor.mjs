@@ -64,10 +64,16 @@ import {
   normalizeWhereAreYouGoingSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
-import { isEventReactionFilterType } from "../events/event-reaction-schema.mjs";
+import {
+  EVENT_REACTION_SKILL_FILTER_ALL,
+  buildEventReactionPathLevels,
+  isEventReactionFilterType,
+  isEventReactionSkillCheckFamily,
+  normalizeEventReactionSkillKeys,
+  resolveEventKeyForPathPrefix
+} from "../events/event-reaction-schema.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
 import {
-  SYSTEM_EVENT_GROUPS,
   SYSTEM_EVENT_PHASES,
   SYSTEM_EVENT_ROLES,
   getSelectableSystemEvents,
@@ -139,6 +145,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteFunctionReactionCost: this.#onDeleteFunctionReactionCost,
       addConditionTrackingTarget: this.#onAddConditionTrackingTarget,
       deleteConditionTrackingTarget: this.#onDeleteConditionTrackingTarget,
+      addConditionEventSkill: this.#onAddConditionEventSkill,
+      deleteConditionEventSkill: this.#onDeleteConditionEventSkill,
       addConditionItemCategory: this.#onAddConditionItemCategory,
       deleteConditionItemCategory: this.#onDeleteConditionItemCategory,
       addConditionTargetFaction: this.#onAddConditionTargetFaction,
@@ -242,6 +250,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     });
     this.element?.querySelectorAll?.("[data-field='conditionEventKey']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='conditionEventPath']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onConditionEventPathChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='conditionHealthTarget']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
@@ -613,6 +624,50 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
     values.splice(index, 1);
     condition.trackingTargets = values;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  #onConditionEventPathChange(event) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(event.currentTarget);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const pathPrefix = String(event.currentTarget?.value ?? "").trim();
+    const nextKey = resolveCatalogEventKeyForPath(pathPrefix, condition.eventKey);
+    condition.eventKey = nextKey;
+    if (!isEventReactionSkillCheckFamily(nextKey)) condition.skillKeys = [];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionEventSkill(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) {
+      return this.#persist({ render: true, sync: false });
+    }
+    if (!isEventReactionSkillCheckFamily(condition.eventKey)) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = normalizeEventReactionSkillKeys(condition.skillKeys);
+    const next = getFirstUnusedEventReactionSkillKey(values);
+    if (next) condition.skillKeys = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionEventSkill(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-event-skill-index]")?.dataset.eventSkillIndex ?? -1);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || index < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = normalizeEventReactionSkillKeys(condition.skillKeys);
+    values.splice(index, 1);
+    condition.skillKeys = values;
     return this.#persist({ render: true, sync: false });
   }
 
@@ -1419,7 +1474,11 @@ function readAbilityConditions(root) {
       postureActions: readFieldValues(row, "[data-field='conditionPosture']"),
       coverKeys: readFieldValues(row, "[data-field='conditionCover']"),
       weaponActionKeys: readFieldValues(row, "[data-field='conditionWeaponAction']"),
-      skillKeys: readFieldValues(row, "[data-field='conditionSkill']"),
+      skillKeys: (() => {
+        const eventSkills = readFieldValues(row, "[data-field='conditionEventSkill']");
+        if (eventSkills.length) return eventSkills;
+        return readFieldValues(row, "[data-field='conditionSkill']");
+      })(),
       proficiencyKeys: readFieldValues(row, "[data-field='conditionProficiency']"),
       auraMode,
       auraTargetGroups: readFieldValues(row, "[data-field='conditionAuraTargetGroup']"),
@@ -2067,9 +2126,12 @@ function prepareConditionForDisplay(condition, {
   const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   const eventDisplay = isEventReaction
     ? buildEventReactionDisplay(condition?.eventKey)
-    : { groups: [], selectedEvent: null, isUnsupported: false };
+    : { pathLevels: [], selectedEvent: null, isUnsupported: false, showEventTiming: false, showEventSkillFilters: false };
   const trackingTargets = normalizeConditionValues(condition?.trackingTargets)
     .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
+  const eventSkillKeys = isEventReaction && eventDisplay.showEventSkillFilters
+    ? normalizeEventReactionSkillKeys(condition?.skillKeys)
+    : [];
   return {
     ...condition,
     healthTarget,
@@ -2082,6 +2144,15 @@ function prepareConditionForDisplay(condition, {
     combatOnly: Boolean(condition?.combatOnly),
     trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
+    showEventTiming: Boolean(eventDisplay.showEventTiming),
+    showEventSkillFilters: Boolean(eventDisplay.showEventSkillFilters),
+    eventPathLevels: eventDisplay.pathLevels ?? [],
+    eventSkillRows: eventDisplay.showEventSkillFilters
+      ? buildEventReactionSkillRows(eventSkillKeys)
+      : [],
+    canAddEventSkill: eventDisplay.showEventSkillFilters
+      ? Boolean(getFirstUnusedEventReactionSkillKey(eventSkillKeys))
+      : false,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -2114,7 +2185,7 @@ function prepareConditionForDisplay(condition, {
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
     typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, eventReactionMode }),
-    eventGroups: eventDisplay.groups,
+    eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
     eventSubjectChoices: buildEventSubjectChoices(condition?.eventSubject),
@@ -2324,33 +2395,29 @@ function buildEventReactionDisplay(selectedKey = "") {
     descriptors.push(selectedDescriptor);
   }
 
-  const groups = Object.values(SYSTEM_EVENT_GROUPS).flatMap(group => (
-    Object.values(SYSTEM_EVENT_PHASES).map(phase => ({
-      key: `${group.key}:${phase.key}`,
-      label: `${localizeCatalogValue(group.labelKey, group.key)} В· ${localizeCatalogValue(phase.labelKey, phase.key)}`,
-      events: descriptors
-        .filter(event => event.group === group.key && event.phase === phase.key)
-        .map(event => prepareEventReactionChoice(event, key))
-    }))
-  )).filter(group => group.events.length);
-
-  if (key && !selectedDescriptor) {
-    groups.unshift({
-      key: "unsupported",
-      label: localizeEventReactionUi("UnsupportedGroup", "Unsupported saved event"),
-      events: [{
-        key,
-        label: key,
-        optionLabel: key,
-        description: localizeEventReactionUi("UnknownEventDescription", "This saved event is not present in the current catalog."),
-        selected: true,
-        supported: false
-      }]
-    });
-  }
+  const pathLevels = buildEventReactionPathLevels(key, {
+    descriptors,
+    localizeEventLabel: descriptor => localizeCatalogValue(descriptor.labelKey, descriptor.key),
+    unsupportedLabel: localizeEventReactionUi("UnsupportedGroup", "Unsupported saved event")
+  }).map((level, index, levels) => ({
+    ...level,
+    levelLabel: index === 0
+      ? localizeEventReactionUi("Event", "Event")
+      : level.isLeafLevel
+        ? localizeEventReactionUi("Timing", "Timing")
+        : localizeEventReactionUi("SubEvent", "Sub-event"),
+    selectLabel: index === 0
+      ? localizeEventReactionUi("SelectEvent", "Select an event")
+      : level.isLeafLevel
+        ? localizeEventReactionUi("SelectTiming", "Select timing")
+        : localizeEventReactionUi("SelectSubEvent", "Select a sub-event"),
+    isLast: index === levels.length - 1
+  }));
 
   return {
-    groups,
+    pathLevels,
+    showEventTiming: false,
+    showEventSkillFilters: isEventReactionSkillCheckFamily(key),
     selectedEvent: selectedDescriptor
       ? prepareSelectedEventMetadata(selectedDescriptor)
       : key ? {
@@ -2362,15 +2429,6 @@ function buildEventReactionDisplay(selectedKey = "") {
         supported: false
       } : null,
     isUnsupported: Boolean(key && (!selectedDescriptor || !selectedDescriptor.selectable))
-  };
-}
-
-function prepareEventReactionChoice(descriptor, selectedKey = "") {
-  const metadata = prepareSelectedEventMetadata(descriptor);
-  return {
-    ...metadata,
-    optionLabel: `${metadata.label} · ${metadata.phaseLabel}`,
-    selected: descriptor.key === selectedKey
   };
 }
 
@@ -2386,6 +2444,54 @@ function prepareSelectedEventMetadata(descriptor) {
     rolesLabel: roleLabels.join(", "),
     supported: Boolean(descriptor.selectable)
   };
+}
+
+function resolveCatalogEventKeyForPath(pathPrefix = "", preferredEventKey = "") {
+  return resolveEventKeyForPathPrefix(pathPrefix, preferredEventKey, getSelectableSystemEvents());
+}
+
+function buildEventReactionSkillRows(value = []) {
+  const selected = normalizeEventReactionSkillKeys(value);
+  return selected.map((skillKey, index) => ({
+    index,
+    choices: buildEventReactionSkillChoices(skillKey, selected)
+  }));
+}
+
+function buildEventReactionSkillChoices(selectedKey = "", selectedKeys = []) {
+  const selected = String(selectedKey ?? "").trim();
+  const taken = new Set(normalizeEventReactionSkillKeys(selectedKeys));
+  const choices = [{
+    value: EVENT_REACTION_SKILL_FILTER_ALL,
+    label: localizeEventReactionUi("AllSkills", "All skills"),
+    selected: selected === EVENT_REACTION_SKILL_FILTER_ALL,
+    disabled: selected !== EVENT_REACTION_SKILL_FILTER_ALL && taken.has(EVENT_REACTION_SKILL_FILTER_ALL)
+  }];
+  for (const entry of getSkillSettings()) {
+    const value = String(entry?.key ?? "").trim();
+    if (!value) continue;
+    choices.push({
+      value,
+      label: entry.label || value,
+      selected: value === selected,
+      disabled: value !== selected && taken.has(value)
+    });
+  }
+  if (selected && selected !== EVENT_REACTION_SKILL_FILTER_ALL && !choices.some(choice => choice.value === selected)) {
+    choices.push({
+      value: selected,
+      label: selected,
+      selected: true,
+      disabled: false
+    });
+  }
+  return choices;
+}
+
+function getFirstUnusedEventReactionSkillKey(value = []) {
+  const selected = new Set(normalizeEventReactionSkillKeys(value));
+  if (!selected.has(EVENT_REACTION_SKILL_FILTER_ALL)) return EVENT_REACTION_SKILL_FILTER_ALL;
+  return getSkillSettings().find(entry => entry.key && !selected.has(entry.key))?.key ?? "";
 }
 
 function buildEventTrackingTargetRows(value = []) {

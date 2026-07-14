@@ -1659,19 +1659,51 @@
             <div class="fallout-maw-ability-condition-fields">
               {{#if isEventReaction}}
               <div class="fallout-maw-event-reaction-event-field">
+                {{#each eventPathLevels}}
                 <label>
-                  <span>{{localize "FALLOUTMAW.Events.Reaction.Event"}}</span>
-                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.eventKey">
-                    <option value="" {{#unless selectedEvent}}selected{{/unless}}>{{localize "FALLOUTMAW.Events.Reaction.SelectEvent"}}</option>
-                    {{#each eventGroups}}
-                    <optgroup label="{{label}}">
-                      {{#each events}}
-                      <option value="{{key}}" title="{{description}}" {{#if selected}}selected{{/if}}>{{optionLabel}}</option>
-                      {{/each}}
-                    </optgroup>
+                  <span>{{levelLabel}}</span>
+                  <select data-ability-event-path-level="{{depth}}" aria-label="{{levelLabel}}">
+                    {{#unless ../selectedEvent}}
+                    {{#if @first}}
+                    <option value="" selected>{{selectLabel}}</option>
+                    {{/if}}
+                    {{/unless}}
+                    {{#each choices}}
+                    <option value="{{path}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                     {{/each}}
                   </select>
                 </label>
+                {{else}}
+                <label>
+                  <span>{{localize "FALLOUTMAW.Events.Reaction.Event"}}</span>
+                  <select data-ability-event-path-level="0" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Event'}}">
+                    <option value="" selected>{{localize "FALLOUTMAW.Events.Reaction.SelectEvent"}}</option>
+                  </select>
+                </label>
+                {{/each}}
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.eventKey" value="{{selectedEvent.key}}">
+                {{#if showEventSkillFilters}}
+                <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-skills">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{localize "FALLOUTMAW.Events.Reaction.Skills"}}</span>
+                    <button type="button" data-add-ability-event-skill {{#unless canAddEventSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddSkill"}}</button>
+                  </div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each eventSkillRows}}
+                    <div class="fallout-maw-item-use-category-row" data-event-skill-index="{{index}}">
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.skillKeys.{{index}}">
+                        {{#each choices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-event-skill title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}
+                    <span class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoSkills"}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+                {{/if}}
                 {{#if selectedEvent}}
                 <div class="fallout-maw-event-reaction-event-summary{{#unless selectedEvent.supported}} unsupported{{/unless}}">
                   <strong>{{selectedEvent.label}}</strong>
@@ -2360,19 +2392,51 @@
             <div class="fallout-maw-ability-condition-fields">
               {{#if isEventReaction}}
               <div class="fallout-maw-event-reaction-event-field">
+                {{#each eventPathLevels}}
                 <label>
-                  <span>{{localize "FALLOUTMAW.Events.Reaction.Event"}}</span>
-                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.eventKey">
-                    <option value="" {{#unless selectedEvent}}selected{{/unless}}>{{localize "FALLOUTMAW.Events.Reaction.SelectEvent"}}</option>
-                    {{#each eventGroups}}
-                    <optgroup label="{{label}}">
-                      {{#each events}}
-                      <option value="{{key}}" title="{{description}}" {{#if selected}}selected{{/if}}>{{optionLabel}}</option>
-                      {{/each}}
-                    </optgroup>
+                  <span>{{levelLabel}}</span>
+                  <select data-ability-event-path-level="{{depth}}" aria-label="{{levelLabel}}">
+                    {{#unless ../selectedEvent}}
+                    {{#if @first}}
+                    <option value="" selected>{{selectLabel}}</option>
+                    {{/if}}
+                    {{/unless}}
+                    {{#each choices}}
+                    <option value="{{path}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                     {{/each}}
                   </select>
                 </label>
+                {{else}}
+                <label>
+                  <span>{{localize "FALLOUTMAW.Events.Reaction.Event"}}</span>
+                  <select data-ability-event-path-level="0" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Event'}}">
+                    <option value="" selected>{{localize "FALLOUTMAW.Events.Reaction.SelectEvent"}}</option>
+                  </select>
+                </label>
+                {{/each}}
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.eventKey" value="{{selectedEvent.key}}">
+                {{#if showEventSkillFilters}}
+                <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-skills">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{localize "FALLOUTMAW.Events.Reaction.Skills"}}</span>
+                    <button type="button" data-add-ability-event-skill {{#unless canAddEventSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddSkill"}}</button>
+                  </div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each eventSkillRows}}
+                    <div class="fallout-maw-item-use-category-row" data-event-skill-index="{{index}}">
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.skillKeys.{{index}}">
+                        {{#each choices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-event-skill title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}
+                    <span class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoSkills"}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+                {{/if}}
                 {{#if selectedEvent}}
                 <div class="fallout-maw-event-reaction-event-summary{{#unless selectedEvent.supported}} unsupported{{/unless}}">
                   <strong>{{selectedEvent.label}}</strong>

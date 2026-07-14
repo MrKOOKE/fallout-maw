@@ -95,10 +95,16 @@ import {
   normalizeVirtuosoSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
-import { isEventReactionFilterType } from "../events/event-reaction-schema.mjs";
+import {
+  EVENT_REACTION_SKILL_FILTER_ALL,
+  buildEventReactionPathLevels,
+  isEventReactionFilterType,
+  isEventReactionSkillCheckFamily,
+  normalizeEventReactionSkillKeys,
+  resolveEventKeyForPathPrefix
+} from "../events/event-reaction-schema.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
 import {
-  SYSTEM_EVENT_GROUPS,
   SYSTEM_EVENT_PHASES,
   SYSTEM_EVENT_ROLES,
   getSelectableSystemEvents,
@@ -942,6 +948,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-event-tracking-target]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityEventTrackingTarget(event));
+    });
+    this.element?.querySelectorAll("[data-ability-event-path-level]").forEach(select => {
+      select.addEventListener("change", event => this.#onAbilityEventPathChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-event-skill]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityEventSkill(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-event-skill]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityEventSkill(event));
     });
     this.element?.querySelectorAll("[data-add-ability-item-use-category]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityItemUseCategory(event));
@@ -2797,6 +2812,41 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
     values.splice(index, 1);
     condition.trackingTargets = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAbilityEventPathChange(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) return undefined;
+    const pathPrefix = String(event.currentTarget?.value ?? "").trim();
+    const nextKey = resolveAbilityEventKeyForPath(pathPrefix, condition.eventKey);
+    condition.eventKey = nextKey;
+    if (!isEventReactionSkillCheckFamily(nextKey)) condition.skillKeys = [];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityEventSkill(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) return undefined;
+    if (!isEventReactionSkillCheckFamily(condition.eventKey)) return undefined;
+    const values = normalizeEventReactionSkillKeys(condition.skillKeys);
+    const next = getFirstUnusedAbilityEventReactionSkillKey(values);
+    if (!next) return undefined;
+    condition.skillKeys = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityEventSkill(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-event-skill-index]")?.dataset.eventSkillIndex ?? -1);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || index < 0) return undefined;
+    const values = normalizeEventReactionSkillKeys(condition.skillKeys);
+    values.splice(index, 1);
+    condition.skillKeys = values;
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -6470,9 +6520,12 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   const eventDisplay = isEventReaction
     ? buildAbilityEventReactionDisplay(condition?.eventKey)
-    : { groups: [], selectedEvent: null, isUnsupported: false };
+    : { pathLevels: [], selectedEvent: null, isUnsupported: false, showEventTiming: false, showEventSkillFilters: false };
   const trackingTargets = normalizeAbilityConditionValues(condition?.trackingTargets)
     .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
+  const eventSkillKeys = isEventReaction && eventDisplay.showEventSkillFilters
+    ? normalizeEventReactionSkillKeys(condition?.skillKeys)
+    : [];
   return {
     ...condition,
     functionPath,
@@ -6488,6 +6541,15 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     combatOnly: Boolean(condition?.combatOnly),
     trackingTargetRows: buildAbilityEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
+    showEventTiming: Boolean(eventDisplay.showEventTiming),
+    showEventSkillFilters: Boolean(eventDisplay.showEventSkillFilters),
+    eventPathLevels: eventDisplay.pathLevels ?? [],
+    eventSkillRows: eventDisplay.showEventSkillFilters
+      ? buildAbilityEventReactionSkillRows(eventSkillKeys)
+      : [],
+    canAddEventSkill: eventDisplay.showEventSkillFilters
+      ? Boolean(getFirstUnusedAbilityEventReactionSkillKey(eventSkillKeys))
+      : false,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -6520,7 +6582,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: getAbilityConditionTypeLabel(type),
     typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, eventReactionMode }),
-    eventGroups: eventDisplay.groups,
+    eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
     eventSubjectChoices: buildAbilityEventSubjectChoices(condition?.eventSubject),
@@ -6684,33 +6746,29 @@ function buildAbilityEventReactionDisplay(selectedKey = "") {
     descriptors.push(selectedDescriptor);
   }
 
-  const groups = Object.values(SYSTEM_EVENT_GROUPS).flatMap(group => (
-    Object.values(SYSTEM_EVENT_PHASES).map(phase => ({
-      key: `${group.key}:${phase.key}`,
-      label: `${localizeAbilityCatalogValue(group.labelKey, group.key)} В· ${localizeAbilityCatalogValue(phase.labelKey, phase.key)}`,
-      events: descriptors
-        .filter(event => event.group === group.key && event.phase === phase.key)
-        .map(event => prepareAbilityEventReactionChoice(event, key))
-    }))
-  )).filter(group => group.events.length);
-
-  if (key && !selectedDescriptor) {
-    groups.unshift({
-      key: "unsupported",
-      label: localizeAbilityEventReactionUi("UnsupportedGroup", "Unsupported saved event"),
-      events: [{
-        key,
-        label: key,
-        optionLabel: key,
-        description: localizeAbilityEventReactionUi("UnknownEventDescription", "This saved event is not present in the current catalog."),
-        selected: true,
-        supported: false
-      }]
-    });
-  }
+  const pathLevels = buildEventReactionPathLevels(key, {
+    descriptors,
+    localizeEventLabel: descriptor => localizeAbilityCatalogValue(descriptor.labelKey, descriptor.key),
+    unsupportedLabel: localizeAbilityEventReactionUi("UnsupportedGroup", "Unsupported saved event")
+  }).map((level, index, levels) => ({
+    ...level,
+    levelLabel: index === 0
+      ? localizeAbilityEventReactionUi("Event", "Event")
+      : level.isLeafLevel
+        ? localizeAbilityEventReactionUi("Timing", "Timing")
+        : localizeAbilityEventReactionUi("SubEvent", "Sub-event"),
+    selectLabel: index === 0
+      ? localizeAbilityEventReactionUi("SelectEvent", "Select an event")
+      : level.isLeafLevel
+        ? localizeAbilityEventReactionUi("SelectTiming", "Select timing")
+        : localizeAbilityEventReactionUi("SelectSubEvent", "Select a sub-event"),
+    isLast: index === levels.length - 1
+  }));
 
   return {
-    groups,
+    pathLevels,
+    showEventTiming: false,
+    showEventSkillFilters: isEventReactionSkillCheckFamily(key),
     selectedEvent: selectedDescriptor
       ? prepareSelectedAbilityEventMetadata(selectedDescriptor)
       : key ? {
@@ -6722,15 +6780,6 @@ function buildAbilityEventReactionDisplay(selectedKey = "") {
         supported: false
       } : null,
     isUnsupported: Boolean(key && (!selectedDescriptor || !selectedDescriptor.selectable))
-  };
-}
-
-function prepareAbilityEventReactionChoice(descriptor, selectedKey = "") {
-  const metadata = prepareSelectedAbilityEventMetadata(descriptor);
-  return {
-    ...metadata,
-    optionLabel: `${metadata.label} · ${metadata.phaseLabel}`,
-    selected: descriptor.key === selectedKey
   };
 }
 
@@ -6746,6 +6795,54 @@ function prepareSelectedAbilityEventMetadata(descriptor) {
     rolesLabel: roleLabels.join(", "),
     supported: Boolean(descriptor.selectable)
   };
+}
+
+function resolveAbilityEventKeyForPath(pathPrefix = "", preferredEventKey = "") {
+  return resolveEventKeyForPathPrefix(pathPrefix, preferredEventKey, getSelectableSystemEvents());
+}
+
+function buildAbilityEventReactionSkillRows(value = []) {
+  const selected = normalizeEventReactionSkillKeys(value);
+  return selected.map((skillKey, index) => ({
+    index,
+    choices: buildAbilityEventReactionSkillChoices(skillKey, selected)
+  }));
+}
+
+function buildAbilityEventReactionSkillChoices(selectedKey = "", selectedKeys = []) {
+  const selected = String(selectedKey ?? "").trim();
+  const taken = new Set(normalizeEventReactionSkillKeys(selectedKeys));
+  const choices = [{
+    value: EVENT_REACTION_SKILL_FILTER_ALL,
+    label: localizeAbilityEventReactionUi("AllSkills", "All skills"),
+    selected: selected === EVENT_REACTION_SKILL_FILTER_ALL,
+    disabled: selected !== EVENT_REACTION_SKILL_FILTER_ALL && taken.has(EVENT_REACTION_SKILL_FILTER_ALL)
+  }];
+  for (const entry of getSkillSettings()) {
+    const value = String(entry?.key ?? "").trim();
+    if (!value) continue;
+    choices.push({
+      value,
+      label: entry.label || value,
+      selected: value === selected,
+      disabled: value !== selected && taken.has(value)
+    });
+  }
+  if (selected && selected !== EVENT_REACTION_SKILL_FILTER_ALL && !choices.some(choice => choice.value === selected)) {
+    choices.push({
+      value: selected,
+      label: selected,
+      selected: true,
+      disabled: false
+    });
+  }
+  return choices;
+}
+
+function getFirstUnusedAbilityEventReactionSkillKey(value = []) {
+  const selected = new Set(normalizeEventReactionSkillKeys(value));
+  if (!selected.has(EVENT_REACTION_SKILL_FILTER_ALL)) return EVENT_REACTION_SKILL_FILTER_ALL;
+  return getSkillSettings().find(entry => entry.key && !selected.has(entry.key))?.key ?? "";
 }
 
 function buildAbilityEventTrackingTargetRows(value = []) {
