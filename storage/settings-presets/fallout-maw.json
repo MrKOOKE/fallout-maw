@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "489afc0f040be833a7078af6c8459bba340d20eecaa368c6646223ff3a029d02",
-  "updatedAt": "2026-07-14T10:38:28.891Z",
+  "revision": "12fd35c08f8a8fd789fe7a4199971bed64ccb4cec3441327219d2fe94ece2505",
+  "updatedAt": "2026-07-14T11:04:53.813Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -53108,7 +53108,7 @@
     {
       "id": "fallout-maw.timeNeedsPlayersOnly",
       "scope": "world",
-      "value": false
+      "value": true
     },
     {
       "id": "fallout-maw.tokenActionHudDamageIcons",

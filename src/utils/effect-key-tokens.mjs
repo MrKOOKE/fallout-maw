@@ -14,6 +14,7 @@ import {
   ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  getAbilityOverloadCostEffectKey,
   DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
   DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
@@ -412,14 +413,41 @@ function getPostureEffectKeyEntries() {
 }
 
 function buildAbilityRuntimeEffectKeyTokens() {
-  return [
+  const abilityGroup = "Способности";
+  const overloadTokens = [
     createEffectKeyToken({
       code: "abilityOverloadEnergy",
       key: "abilityOverloadEnergy",
       label: "Расход энергии на способность",
       path: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
-      group: "Способности"
+      group: abilityGroup
     }),
+    ...getResourceSettings()
+      .map(entry => {
+        const resourceKey = String(entry?.key ?? "").trim();
+        if (!resourceKey || resourceKey === "power") return null;
+        const label = String(entry?.label ?? resourceKey).trim() || resourceKey;
+        return createEffectKeyToken({
+          code: `abilityOverload_${resourceKey}`,
+          key: `abilityOverload_${resourceKey}`,
+          label: `Расход ${label.toLocaleLowerCase()} на способность`,
+          path: getAbilityOverloadCostEffectKey(resourceKey),
+          group: abilityGroup
+        });
+      })
+      .filter(Boolean),
+    ...(getResourceSettings().some(entry => String(entry?.key ?? "").trim() === "reactionPoints")
+      ? []
+      : [createEffectKeyToken({
+        code: "abilityOverload_reactionPoints",
+        key: "abilityOverload_reactionPoints",
+        label: "Расход очков реакции на способность",
+        path: getAbilityOverloadCostEffectKey("reactionPoints"),
+        group: abilityGroup
+      })])
+  ];
+  return [
+    ...overloadTokens,
     createEffectKeyToken({
       code: "nextSkillModifier",
       key: "nextSkillModifier",

@@ -20,6 +20,28 @@ export const INITIATIVE_DISADVANTAGE_EFFECT_KEY = "system.attributes.initiative.
 export const ALL_LIMB_MAX_BONUS_EFFECT_KEY = "system.limbs.all.maxBonus";
 export const ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimitBonus";
 export const ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY = "fallout-maw.ability.overload.energyCost";
+/** Prefix for non-energy ability overload cost keys: `…resourceCost.<resourceKey>`. */
+export const ABILITY_OVERLOAD_RESOURCE_COST_EFFECT_KEY_PREFIX = "fallout-maw.ability.overload.resourceCost.";
+
+export function getAbilityOverloadCostEffectKey(resourceKey = "power") {
+  const key = String(resourceKey ?? "").trim() || "power";
+  if (key === "power" || key === "energy") return ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY;
+  return `${ABILITY_OVERLOAD_RESOURCE_COST_EFFECT_KEY_PREFIX}${key}`;
+}
+
+export function getResourceKeyFromOverloadEffectKey(effectKey = "") {
+  const key = String(effectKey ?? "").trim();
+  if (!key) return "";
+  if (key === ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY) return "power";
+  if (key.startsWith(ABILITY_OVERLOAD_RESOURCE_COST_EFFECT_KEY_PREFIX)) {
+    return key.slice(ABILITY_OVERLOAD_RESOURCE_COST_EFFECT_KEY_PREFIX.length).trim();
+  }
+  return "";
+}
+
+export function isAbilityOverloadCostEffectKey(effectKey = "") {
+  return Boolean(getResourceKeyFromOverloadEffectKey(effectKey));
+}
 export const TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY = "fallout-maw.suppression.traumas.count";
 export const DISEASE_SUPPRESSION_COUNT_EFFECT_KEY = "fallout-maw.suppression.diseases.count";
 export const TRAUMA_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.traumas.all";

@@ -8,9 +8,8 @@ import {
 import { eventReactionIndexHasKey } from "./event-reaction-index.mjs";
 import {
   applyAbilityFunctionOverloadCosts,
-  withAbilityOverloadEnergyCostRows
+  withAbilityOverloadCostRows
 } from "../abilities/overload.mjs";
-import { ENERGY_RESOURCE_KEY } from "../combat/energy-resource.mjs";
 import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
 
 export const GENERIC_EVENT_REACTION_PROVIDER_ID = "fallout-maw.genericEventReaction";
@@ -86,7 +85,7 @@ export function createGenericEventReactionProvider({
       };
       const baseQuote = await costRegistry.quote(actor, baseRows, quoteContext);
       if (!baseQuote.valid || !baseQuote.affordable) continue;
-      const costRows = withAbilityOverloadEnergyCostRows(
+      const costRows = withAbilityOverloadCostRows(
         actor,
         sourceItem,
         abilityFunction ?? { id: candidate.functionId },
@@ -137,7 +136,7 @@ export function createGenericEventReactionProvider({
       if (!matches) return failedResult("conditionsChanged");
 
       const baseRows = abilityFunction.reactionSettings?.costs ?? [];
-      const costRows = withAbilityOverloadEnergyCostRows(
+      const costRows = withAbilityOverloadCostRows(
         actor,
         sourceItem,
         abilityFunction,
@@ -234,7 +233,7 @@ function failedResult(reason) {
   };
 }
 
-/** Same display pattern as fixed-function reactions: "Энергия: X базовая / Y итоговая". */
+/** Same display pattern as fixed-function reactions: "Ресурс: X базовая / Y итоговая" when overload applies. */
 export function buildEventReactionCostLines(baseQuote = {}, totalQuote = {}) {
   const baseByKey = new Map((baseQuote?.costs ?? []).map(cost => [
     String(cost?.resourceKey ?? ""),
@@ -247,7 +246,7 @@ export function buildEventReactionCostLines(baseQuote = {}, totalQuote = {}) {
       const label = String(cost?.label ?? resourceKey);
       const totalAmount = Math.max(0, Math.trunc(Number(cost?.amount) || 0));
       const baseAmount = Math.max(0, Math.trunc(Number(baseByKey.get(resourceKey)?.amount) || 0));
-      if (resourceKey === ENERGY_RESOURCE_KEY || baseAmount !== totalAmount) {
+      if (baseAmount !== totalAmount) {
         return `${label}: ${baseAmount} базовая / ${totalAmount} итоговая`;
       }
       return `${label}: ${totalAmount}`;

@@ -47,6 +47,8 @@ import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  getAbilityOverloadCostEffectKey,
+  getResourceKeyFromOverloadEffectKey,
   getActorSuppressedTraumaDiseaseIds,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
@@ -7089,6 +7091,16 @@ function buildEffectPathLabelMap({
   map.set(ALL_COMBAT_ADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllAdvantage"));
   map.set(ALL_COMBAT_DISADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllDisadvantage"));
   map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, "Расход энергии на способность");
+  for (const entry of resourceSettings) {
+    const resourceKey = String(entry?.key ?? "").trim();
+    if (!resourceKey || resourceKey === "power") continue;
+    const resourceLabel = String(entry?.label ?? resourceKey).trim() || resourceKey;
+    map.set(
+      getAbilityOverloadCostEffectKey(resourceKey),
+      `Расход ${resourceLabel.toLocaleLowerCase()} на способность`
+    );
+  }
+  map.set(getAbilityOverloadCostEffectKey("reactionPoints"), "Расход очков реакции на способность");
   map.set(ONE_TIME_SKILL_MODIFIER_EFFECT_KEY, "Следующая проверка выбранного навыка");
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess, "Подтасовка: критический успех");
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.success, "Подтасовка: успех");
@@ -7196,7 +7208,13 @@ function addDamageEffectPathLabels(map, rootPath, rootLabel, limbs = [], damageT
 function getEffectPathLabel(path, pathLabels = new Map()) {
   const normalized = String(path ?? "").trim();
   if (!normalized) return localizeOrFallback("FALLOUTMAW.Common.Untitled", "Untitled");
-  return pathLabels.get(normalized) ?? humanizeEffectPath(normalized);
+  if (pathLabels.has(normalized)) return pathLabels.get(normalized);
+  const overloadResourceKey = getResourceKeyFromOverloadEffectKey(normalized);
+  if (overloadResourceKey === "power") return "Расход энергии на способность";
+  if (overloadResourceKey) {
+    return `Расход ${overloadResourceKey} на способность`;
+  }
+  return humanizeEffectPath(normalized);
 }
 
 function humanizeEffectPath(path) {

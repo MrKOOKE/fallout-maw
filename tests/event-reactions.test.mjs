@@ -28,9 +28,14 @@ import { createGenericEventReactionProvider, buildEventReactionCostLines } from 
 import {
   ABILITY_OVERLOAD_EFFECT_FLAG_KEY,
   ABILITY_OVERLOAD_REACTION_COST_ID,
+  getAbilityOverloadReactionCostId,
+  withAbilityOverloadCostRows,
   withAbilityOverloadEnergyCostRows
 } from "../src/abilities/overload.mjs";
-import { ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY } from "../src/utils/active-effect-changes.mjs";
+import {
+  ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  getAbilityOverloadCostEffectKey
+} from "../src/utils/active-effect-changes.mjs";
 import { SYSTEM_ID } from "../src/constants.mjs";
 
 const EVENT_KEY = "fallout-maw.weapon.attack.targeted";
@@ -433,7 +438,8 @@ test("ability overload adds energy cost rows for any use of the same ability", (
         [SYSTEM_ID]: {
           [ABILITY_OVERLOAD_EFFECT_FLAG_KEY]: {
             abilityItemId: "ability-1",
-            abilitySourceId: ""
+            abilitySourceId: "",
+            resourceKey: "power"
           }
         }
       },
@@ -456,6 +462,91 @@ test("ability overload adds energy cost rows for any use of the same ability", (
     ),
     ["Энергия: 1 базовая / 21 итоговая"]
   );
+});
+
+test("ability overload surcharge uses the cost row resource, not only energy", () => {
+  const abilityItem = { id: "ability-2", uuid: "Actor.C.Item.ability-2" };
+  const actor = {
+    effects: [{
+      disabled: false,
+      system: {
+        changes: [{
+          key: getAbilityOverloadCostEffectKey("health"),
+          type: "add",
+          value: "20",
+          phase: "initial"
+        }]
+      },
+      flags: {
+        [SYSTEM_ID]: {
+          [ABILITY_OVERLOAD_EFFECT_FLAG_KEY]: {
+            abilityItemId: "ability-2",
+            abilitySourceId: "",
+            resourceKey: "health"
+          }
+        }
+      },
+      getFlag(scope, key) {
+        return this.flags?.[scope]?.[key];
+      }
+    }]
+  };
+  const rows = withAbilityOverloadCostRows(actor, abilityItem, { id: "fn" }, [
+    { id: "base", resourceKey: "health", formula: "1" }
+  ]);
+  assert.deepEqual(rows.map(row => ({ id: row.id, resourceKey: row.resourceKey, formula: row.formula })), [
+    { id: "base", resourceKey: "health", formula: "1" },
+    { id: getAbilityOverloadReactionCostId("health"), resourceKey: "health", formula: "20" }
+  ]);
+  assert.deepEqual(
+    buildEventReactionCostLines(
+      { costs: [{ resourceKey: "health", label: "Здоровье", amount: 1 }] },
+      { costs: [{ resourceKey: "health", label: "Здоровье", amount: 21 }] }
+    ),
+    ["Здоровье: 1 базовая / 21 итоговая"]
+  );
+  assert.deepEqual(
+    buildEventReactionCostLines(
+      { costs: [{ resourceKey: "health", label: "Здоровье", amount: 1 }] },
+      { costs: [{ resourceKey: "health", label: "Здоровье", amount: 1 }] }
+    ),
+    ["Здоровье: 1"]
+  );
+});
+
+test("legacy energy overload effect without resourceKey flag still surcharges power", () => {
+  const abilityItem = { id: "ability-legacy", uuid: "Actor.C.Item.ability-legacy" };
+  const actor = {
+    effects: [{
+      disabled: false,
+      system: {
+        changes: [{
+          key: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+          type: "add",
+          value: "10",
+          phase: "initial"
+        }]
+      },
+      flags: {
+        [SYSTEM_ID]: {
+          [ABILITY_OVERLOAD_EFFECT_FLAG_KEY]: {
+            abilityItemId: "ability-legacy",
+            abilitySourceId: ""
+          }
+        }
+      },
+      getFlag(scope, key) {
+        return this.flags?.[scope]?.[key];
+      }
+    }]
+  };
+  const rows = withAbilityOverloadCostRows(actor, abilityItem, { id: "fn" }, [
+    { id: "base", resourceKey: "power", formula: "2" }
+  ]);
+  assert.deepEqual(rows.map(row => ({ id: row.id, resourceKey: row.resourceKey, formula: row.formula })), [
+    { id: "base", resourceKey: "power", formula: "2" },
+    { id: getAbilityOverloadReactionCostId("power"), resourceKey: "power", formula: "10" }
+  ]);
 });
 
 test("synthetic active-HUD module effects retain module provenance and use a valid host-item origin", () => {
