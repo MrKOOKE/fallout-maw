@@ -1354,6 +1354,53 @@ body #prosemirror-dropdown {
   gap: 0.5rem;
 }
 
+.fallout-maw-reaction-columns {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+}
+
+.fallout-maw-reaction-column {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid rgba(212, 181, 93, 0.5);
+}
+
+.fallout-maw-reaction-column legend {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+
+.fallout-maw-reaction-column legend img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: cover;
+  border-radius: 0.2rem;
+}
+
+.fallout-maw-reaction-column legend span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.fallout-maw-reaction-column legend small,
+.fallout-maw-reaction-column-condition {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.fallout-maw-reaction-column-condition {
+  margin: 0;
+  font-size: 0.85em;
+}
+
 .fallout-maw-reaction-actor {
   display: grid;
   gap: 0.5rem;

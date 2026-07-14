@@ -102,17 +102,25 @@ export function buildAbilityActionPointCostLine(actor, amount = 0) {
 
 export async function resolveAbilityActionTriggerTarget(envelope = {}) {
   const tokenUuid = getEventParticipantTokenUuid(envelope?.source);
+  const actorUuid = getEventParticipantActorUuid(envelope?.source);
+  let resolved = null;
+  let path = "none";
   if (tokenUuid) {
     const token = await globalThis.fromUuid?.(tokenUuid);
     const tokenObject = token?.object ?? token ?? null;
-    if (tokenObject?.actor) return tokenObject;
+    if (tokenObject?.actor) {
+      resolved = tokenObject;
+      path = "sourceTokenUuid";
+    }
   }
-  const actorUuid = getEventParticipantActorUuid(envelope?.source);
-  if (!actorUuid) return null;
-  const actor = await globalThis.fromUuid?.(actorUuid);
-  return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid)
-    ?? actor?.getActiveTokens?.()?.find(token => token?.scene?.id === canvas?.scene?.id)
-    ?? null;
+  if (!resolved && actorUuid) {
+    const actor = await globalThis.fromUuid?.(actorUuid);
+    resolved = canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid)
+      ?? actor?.getActiveTokens?.()?.find(token => token?.scene?.id === canvas?.scene?.id)
+      ?? null;
+    path = resolved ? "sourceActorUuidFallback" : "actorUuidMiss";
+  }
+  return resolved;
 }
 
 export async function executeAbilityWeaponAttackOption({

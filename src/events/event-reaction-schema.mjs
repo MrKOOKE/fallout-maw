@@ -3,11 +3,19 @@ import {
   ABILITY_EVENT_SUBJECTS,
   ABILITY_EVENT_TRACKING_TARGETS
 } from "../settings/abilities.mjs";
+import { getSystemEventDescriptor } from "./catalog.mjs";
 import {
   DEFAULT_FACTION_NAME,
   getActorFactionBelongs,
   getRelationTo
 } from "../settings/factions.mjs";
+
+const TRACKING_SOURCE_ROLES = new Set([
+  "subject", "source", "initiator", "attacker", "healer", "observer"
+]);
+const TRACKING_TARGET_ROLES = new Set([
+  "target", "defender", "patient", "observed", "recipient"
+]);
 
 export const EVENT_REACTION_CONDITION_TYPE = ABILITY_CONDITION_TYPES.eventReaction;
 
@@ -110,17 +118,46 @@ export function getEventTrackingRelation(reactorActor = null, otherActor = null,
   return "neutral";
 }
 
+export function getEventReactionTrackingParticipants({
+  eventKey = "",
+  sourceActor = null,
+  targetActor = null,
+  roles = null
+} = {}) {
+  const catalogRoles = Array.isArray(roles)
+    ? roles
+    : (getSystemEventDescriptor(String(eventKey ?? "").trim())?.roles ?? ["subject"]);
+  const includeSource = catalogRoles.some(role => TRACKING_SOURCE_ROLES.has(role));
+  const includeTarget = catalogRoles.some(role => TRACKING_TARGET_ROLES.has(role));
+  // Default subject-only events (skill checks, etc.): track who the event is about, not a
+  // collateral attack target attached on the envelope.
+  const participants = [];
+  if (includeSource || !includeTarget) {
+    if (sourceActor) participants.push(sourceActor);
+  }
+  if (includeTarget && targetActor) participants.push(targetActor);
+  return participants;
+}
+
 export function eventReactionTrackingTargetsMatch(condition = {}, {
   reactorActor = null,
   sourceActor = null,
   targetActor = null,
+  eventKey = "",
+  roles = null,
   resolveRelation = null
 } = {}) {
   const accepted = new Set(normalizeEventTrackingTargets(condition?.trackingTargets));
   if (!accepted.size) return true;
-  const participants = [sourceActor, targetActor].filter(Boolean);
+  const participants = getEventReactionTrackingParticipants({
+    eventKey: eventKey || condition?.eventKey,
+    sourceActor,
+    targetActor,
+    roles
+  });
   if (!participants.length) return false;
-  return participants.some(actor => accepted.has(getEventTrackingRelation(reactorActor, actor, { resolveRelation })));
+  const matched = participants.some(actor => accepted.has(getEventTrackingRelation(reactorActor, actor, { resolveRelation })));
+  return matched;
 }
 
 export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, reactorActorUuid = "", {
@@ -138,6 +175,7 @@ export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, 
     reactorActor: reactorActor ?? { uuid: reactorActorUuid },
     sourceActor: sourceActor ?? actorStubFromParticipant(envelope?.source),
     targetActor: targetActor ?? actorStubFromParticipant(envelope?.target),
+    eventKey,
     resolveRelation
   });
 }

@@ -11,6 +11,7 @@ import {
 } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
+import { withQueuedReactionOpportunityWave } from "./reaction-hub.mjs";
 import { advanceWorldTime, registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
@@ -2697,34 +2698,41 @@ async function resolveDeferredShockChecks(entries = [], {
 } = {}) {
   const queued = entries.filter(entry => entry?.actorUuid && entry?.shockCheck);
   if (!queued.length) return [];
-  const batch = createSkillCheckBatchCollector({
-    requester: "damageShock",
-    title: "Проверки стойкости: шок"
-  });
-  const outcomes = [];
-  for (const entry of queued) {
-    const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
-    if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
-    const shockCheck = entry.shockCheck;
-    const outcome = await requestSkillCheck({
-      actor,
-      skillKey: "resilience",
-      data: {
-        difficulty: shockCheck.difficulty,
-        damageHubOperationRef
-      },
-      chainRef,
-      animate: false,
-      createMessage: false,
-      requester: entry.requester
+
+  const runChecks = async () => {
+    const batch = createSkillCheckBatchCollector({
+      requester: "damageShock",
+      title: "Проверки стойкости: шок"
     });
-    batch.add(outcome);
-    if (outcome) outcomes.push(outcome);
-    const resultKey = String(outcome?.result?.key ?? "");
-    if (["failure", "criticalFailure"].includes(resultKey)) await createShockUnconsciousState(actor);
-  }
-  if (batch.size) await batch.publish({ forceBatch: true });
-  return outcomes;
+    const outcomes = [];
+    for (const entry of queued) {
+      const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
+      if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
+      const shockCheck = entry.shockCheck;
+      const outcome = await requestSkillCheck({
+        actor,
+        skillKey: "resilience",
+        data: {
+          difficulty: shockCheck.difficulty,
+          damageHubOperationRef
+        },
+        chainRef,
+        animate: false,
+        createMessage: false,
+        requester: entry.requester
+      });
+      batch.add(outcome);
+      if (outcome) outcomes.push(outcome);
+      const resultKey = String(outcome?.result?.key ?? "");
+      if (["failure", "criticalFailure"].includes(resultKey)) await createShockUnconsciousState(actor);
+    }
+    if (batch.size) await batch.publish({ forceBatch: true });
+    return outcomes;
+  };
+
+  // Multiple shock subjects → one reaction wave with a column per subject.
+  if (queued.length > 1) return withQueuedReactionOpportunityWave(runChecks);
+  return runChecks();
 }
 
 function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {

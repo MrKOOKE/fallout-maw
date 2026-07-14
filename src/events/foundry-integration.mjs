@@ -120,7 +120,8 @@ async function interceptEventReactions({ event, scope } = {}) {
 
   // Demand-driven: skip hub/scan when no scene ability subscribes to this event key.
   const managed = event?.data?.reactionHubManaged === true;
-  if (!managed && !(await eventReactionIndexHasKey(event.key))) {
+  const indexed = managed ? true : await eventReactionIndexHasKey(event.key);
+  if (!managed && !indexed) {
     return undefined;
   }
 
@@ -289,7 +290,8 @@ function consumeReactionExecutionBudget({ context = {}, semanticEvent = null } =
   const envelope = semanticEvent ?? context.semanticEvent ?? context.envelope ?? null;
   const consumers = reactionBudgetConsumers.get(String(envelope?.rootId ?? ""));
   const consume = consumers?.at(-1);
-  return typeof consume !== "function" || consume(1);
+  const ok = typeof consume !== "function" || consume(1);
+  return ok;
 }
 
 function pushReactionBudgetConsumer(rootId, consume) {

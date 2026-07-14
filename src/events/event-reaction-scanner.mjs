@@ -245,9 +245,13 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
   const functionId = String(abilityFunction?.id ?? "").trim();
   const rootId = String(envelope?.rootId ?? envelope?.eventId ?? "").trim();
   const eventKey = String(envelope?.key ?? "").trim();
-  const chanceScope = rootId;
-  // One accept/decline for this generic function during the entire event root.
-  const chanceKey = [rootId, actorUuid, sourceItemUuid, functionId].join("|");
+  const chanceScope = getEventReactionOpportunityScope(envelope) || rootId;
+  // Subject of the triggering event (e.g. who is rolling the skill check). Without this,
+  // one shot that forces checks on two actors shares one chance and only the first is offered.
+  const triggerActorUuid = getEventParticipantActorUuid(envelope?.source);
+  // One accept/decline per (logical operation × event × trigger subject × reactor × function).
+  // Keep rootId as the first segment so cleanupRoot(rootId) still clears nested scopes.
+  const chanceKey = [rootId, chanceScope, eventKey, triggerActorUuid, actorUuid, sourceItemUuid, functionId].join("|");
   return {
     actorUuid,
     sourceItemUuid,
@@ -255,6 +259,7 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
     functionId,
     rootId,
     chanceScope,
+    triggerActorUuid,
     eventId: String(envelope?.eventId ?? ""),
     eventKey,
     chanceKey,
@@ -268,7 +273,19 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
 }
 
 export function getEventReactionOpportunityScope(envelope = {}) {
-  return String(envelope?.rootId ?? envelope?.eventId ?? "").trim();
+  const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  const request = data.request && typeof data.request === "object" ? data.request : {};
+  for (const value of [
+    data.systemEventOperationId,
+    request.systemEventOperationId,
+    envelope?.operationId,
+    envelope?.rootId,
+    envelope?.eventId
+  ]) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
 }
 
 export function findEventReactionFunction(item = null, functionId = "", options = {}) {

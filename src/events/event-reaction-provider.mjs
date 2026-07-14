@@ -54,7 +54,9 @@ export function createGenericEventReactionProvider({
   async function collect({ eventKey = "", context = {}, semanticEvent = null } = {}) {
     const envelope = getReactionEnvelope(eventKey, { ...context, semanticEvent: semanticEvent ?? context?.semanticEvent });
     if (!envelope.key || !envelope.rootId || !canReactToEvent(envelope)) return [];
-    if (!(await hasEventKey(envelope.key))) return [];
+    if (!(await hasEventKey(envelope.key))) {
+      return [];
+    }
     const reactors = await getReactorActors(envelope);
     const candidates = await collectEventReactionCandidates({
       envelope,

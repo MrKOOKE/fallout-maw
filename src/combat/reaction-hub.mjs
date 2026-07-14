@@ -1,4 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { getSystemEventDescriptor } from "../events/catalog.mjs";
+import { getEventParticipantActorUuid } from "../events/event-reaction-schema.mjs";
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { canActorSpendEnergy } from "./energy-resource.mjs";
@@ -32,6 +34,10 @@ const UNABLE_TO_ACT_STATUSES = new Set(["dead", "unconscious", "stunned"]);
 const pendingReactionSocketRequests = new Map();
 const reactionProviders = new Map();
 const activeReactionLocks = new Map();
+/** Requests deferred while a reaction execute cycle is already running. */
+const pendingReactionRequests = [];
+let reactionExecutionDepth = 0;
+let drainingReactionQueue = false;
 let reactionHubHooksRegistered = false;
 let reactionEventSemanticAdapter = null;
 let reactionExecutionGuard = null;
@@ -67,6 +73,20 @@ export function registerReactionExecutionGuard(guard = null) {
   };
 }
 
+/**
+ * Run work while nesting reaction requests into the hub queue, then drain one
+ * opportunity wave (column hub, single choice) when the work finishes.
+ */
+export async function withQueuedReactionOpportunityWave(work) {
+  reactionExecutionDepth += 1;
+  try {
+    return await work();
+  } finally {
+    reactionExecutionDepth -= 1;
+    if (reactionExecutionDepth === 0) await drainPendingReactionRequests();
+  }
+}
+
 export function isReactionSystemLocked() {
   return activeReactionLocks.size > 0;
 }
@@ -92,10 +112,52 @@ export async function requestReactionEvent(eventKey = "", context = {}) {
     context: foundry.utils.deepClone(context ?? {}),
     requesterUserId: game.user?.id ?? ""
   };
-  if (isCurrentActiveGM()) return processReactionEventRequest(request);
+  if (isCurrentActiveGM()) return dispatchReactionEventRequest(request);
   const gm = getResponsibleGM();
   if (!gm) return createReactionHubResult({ reason: "noGM" });
   return requestReactionEventFromGM(gm, request, getReactionTimeoutMs());
+}
+
+/**
+ * Unified scheduling: while any reaction execute is in flight, new opportunities
+ * enqueue and return a non-cancelling result so the active cycle is not nested.
+ * Queued requests drain FIFO after the current execute cycle finishes.
+ */
+function dispatchReactionEventRequest(request = {}) {
+  if (reactionExecutionDepth > 0) {
+    const envelope = request?.context?.envelope ?? request?.context?.semanticEvent ?? null;
+    pendingReactionRequests.push(request);
+    return Promise.resolve(createReactionHubResult({ reason: "queued" }));
+  }
+  return processReactionEventRequest(request);
+}
+
+async function drainPendingReactionRequests() {
+  if (drainingReactionQueue || reactionExecutionDepth > 0) return;
+  drainingReactionQueue = true;
+  try {
+    while (pendingReactionRequests.length) {
+      // One wave = everything already queued. Collect all real opportunities first,
+      // then one column hub (one choice). Empty adapter/no-offer requests just clear.
+      const wave = pendingReactionRequests.splice(0, pendingReactionRequests.length);
+      const opportunities = [];
+      // Keep nested requestReactionEvent calls queued while we collect the wave.
+      reactionExecutionDepth += 1;
+      try {
+        for (const request of wave) {
+          const resolved = await resolveReactionRequestOffers(request);
+          if (resolved.adapterResult) continue;
+          if (!resolved.offers.length) continue;
+          opportunities.push(resolved);
+        }
+      } finally {
+        reactionExecutionDepth -= 1;
+      }
+      if (opportunities.length) await presentAndExecuteReactionOpportunities(opportunities);
+    }
+  } finally {
+    drainingReactionQueue = false;
+  }
 }
 
 function requestReactionEventFromGM(gm, request, timeoutMs = getReactionTimeoutMs()) {
@@ -124,7 +186,7 @@ async function handleReactionSocketMessage(payload = {}) {
   }
   if (payload.action === "requestReactionEvent") {
     if (!isCurrentActiveGM() || payload.targetUserId !== game.user.id) return;
-    const result = await processReactionEventRequest(payload.request ?? {});
+    const result = await dispatchReactionEventRequest(payload.request ?? {});
     game.socket.emit(REACTION_SOCKET, {
       scope: REACTION_SOCKET_SCOPE,
       action: "reactionEventResult",
@@ -143,34 +205,74 @@ async function handleReactionSocketMessage(payload = {}) {
 }
 
 async function processReactionEventRequest(request = {}) {
-  if (!isCurrentActiveGM()) return createReactionHubResult({ reason: "notGM" });
+  const resolved = await resolveReactionRequestOffers(request);
+  if (resolved.adapterResult) return resolved.adapterResult;
+  if (!resolved.offers.length) return createReactionHubResult();
+  return presentAndExecuteReactionOpportunities([resolved]);
+}
+
+/**
+ * Adapt/collect for one request without opening the hub UI.
+ * Returns either an early adapter result, or offers + column metadata for a wave.
+ */
+async function resolveReactionRequestOffers(request = {}) {
+  if (!isCurrentActiveGM()) {
+    return { adapterResult: createReactionHubResult({ reason: "notGM" }), offers: [], column: null, request };
+  }
   const eventKey = String(request.eventKey ?? "").trim();
   const context = request.context ?? {};
   const requiresSemanticAdapter = LEGACY_REACTION_EVENT_KEYS.has(eventKey)
     && !context?.falloutMawSemanticReactionAdapted;
   if (requiresSemanticAdapter) {
     if (!reactionEventSemanticAdapter) {
-      return createReactionHubResult({ reason: "semanticAdapterUnavailable" });
+      return {
+        adapterResult: createReactionHubResult({ reason: "semanticAdapterUnavailable" }),
+        offers: [],
+        column: null,
+        request
+      };
     }
     try {
       const adapted = await reactionEventSemanticAdapter(eventKey, context);
-      return createReactionHubResult(adapted ?? { reason: "semanticEventUnavailable" });
+      return {
+        adapterResult: createReactionHubResult(adapted ?? { reason: "semanticEventUnavailable" }),
+        offers: [],
+        column: null,
+        request
+      };
     } catch (error) {
       console.error(`${SYSTEM_ID} | Semantic reaction adapter failed for '${eventKey}'`, error);
-      return createReactionHubResult({ reason: "semanticAdapterError" });
+      return {
+        adapterResult: createReactionHubResult({ reason: "semanticAdapterError" }),
+        offers: [],
+        column: null,
+        request
+      };
     }
   }
   if (reactionEventSemanticAdapter && !context?.falloutMawSemanticReactionAdapted) {
     try {
       const adapted = await reactionEventSemanticAdapter(eventKey, context);
-      if (adapted !== undefined) return createReactionHubResult(adapted ?? {});
+      if (adapted !== undefined) {
+        return {
+          adapterResult: createReactionHubResult(adapted ?? {}),
+          offers: [],
+          column: null,
+          request
+        };
+      }
     } catch (error) {
       console.error(`${SYSTEM_ID} | Semantic reaction adapter failed for '${eventKey}'`, error);
-      return createReactionHubResult({ reason: "semanticAdapterError" });
+      return {
+        adapterResult: createReactionHubResult({ reason: "semanticAdapterError" }),
+        offers: [],
+        column: null,
+        request
+      };
     }
   }
+
   const semanticEvent = request.semanticEvent ?? context?.semanticEvent ?? null;
-  const timeoutMs = getReactionTimeoutMs();
   const offers = [];
   for (const provider of reactionProviders.values()) {
     let providerOffers = [];
@@ -193,64 +295,141 @@ async function processReactionEventRequest(request = {}) {
       });
     }
   }
-  if (!offers.length) return createReactionHubResult();
+  const column = await buildReactionOpportunityColumn(request, eventKey, context, semanticEvent);
+  return {
+    adapterResult: null,
+    offers,
+    column,
+    eventKey,
+    context,
+    semanticEvent,
+    request
+  };
+}
 
-  const lockId = foundry.utils.randomID();
+async function buildReactionOpportunityColumn(request = {}, eventKey = "", context = {}, semanticEvent = null) {
+  const envelope = semanticEvent
+    ?? context?.semanticEvent
+    ?? context?.envelope
+    ?? request?.semanticEvent
+    ?? null;
+  const triggerActorUuid = getEventParticipantActorUuid(envelope?.source);
+  let triggerActor = triggerActorUuid ? await fromUuid(triggerActorUuid).catch(() => null) : null;
+  if (!triggerActor && envelope?.source?.actor) triggerActor = envelope.source.actor;
+  const descriptor = getSystemEventDescriptor(eventKey);
+  const eventLabel = descriptor?.labelKey
+    ? localizeReactionText(descriptor.labelKey, eventKey)
+    : (context?.title || eventKey || localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction"));
+  const eventDescription = descriptor?.descriptionKey
+    ? localizeReactionText(descriptor.descriptionKey, "")
+    : String(context?.message ?? "");
+  return {
+    columnId: [
+      eventKey,
+      triggerActorUuid,
+      String(envelope?.rootId ?? ""),
+      String(envelope?.eventId ?? foundry.utils.randomID())
+    ].join("|"),
+    eventKey,
+    eventLabel,
+    eventDescription,
+    triggerActorUuid,
+    triggerActorName: String(triggerActor?.name ?? context?.triggerActorName ?? "").trim()
+      || localizeReactionText("FALLOUTMAW.Events.Reaction.UnknownSubject", "Unknown subject"),
+    triggerActorImg: normalizeImagePath(triggerActor?.img, "icons/svg/mystery-man.svg"),
+    rootId: String(envelope?.rootId ?? "")
+  };
+}
+
+async function presentAndExecuteReactionOpportunities(opportunities = []) {
+  const usable = (opportunities ?? []).filter(entry => entry?.offers?.length && entry?.column);
+  if (!usable.length) return createReactionHubResult();
+
+  const timeoutMs = getReactionTimeoutMs();
+  const allOffers = usable.flatMap(entry => entry.offers.map(offer => ({
+    ...offer,
+    __opportunity: entry
+  })));
   const offersByActor = new Map();
-  for (const offer of offers) {
+  for (const offer of allOffers) {
     if (!offersByActor.has(offer.actorUuid)) offersByActor.set(offer.actorUuid, []);
     offersByActor.get(offer.actorUuid).push(offer);
   }
   const actorOrder = await getStableReactionActorOrder(offersByActor.keys());
+  const columns = usable.map(entry => entry.column);
+  const lockId = foundry.utils.randomID();
   let responses = new Map();
-  // The global lock protects only the simultaneous decision window. A selected reaction may open another
-  // Reaction Hub while it executes, so keeping this lock through provider.execute would nest under the parent lock.
-  beginReactionLock(lockId, { reason: eventKey });
+  beginReactionLock(lockId, { reason: "reaction-opportunity-wave" });
   try {
-    await createReactionOpportunityMessage({ context, actorOrder, offersByActor });
-    responses = await queryReactionOwners(actorOrder, offersByActor, { eventKey, context, timeoutMs });
+    await createReactionOpportunityMessage({
+      context: usable[0]?.context ?? {},
+      actorOrder,
+      offersByActor
+    });
+    responses = await queryReactionOwners(actorOrder, offersByActor, {
+      eventKey: usable[0]?.eventKey ?? "",
+      context: usable[0]?.context ?? {},
+      timeoutMs,
+      columns,
+      singleSelection: true
+    });
   } finally {
     endReactionLock(lockId);
   }
 
-  let finalResult = createReactionHubResult();
+  // One choice for the whole wave: first non-empty selection in reactor order.
+  let selected = null;
   for (const actorUuid of actorOrder) {
-    const actorOffers = offersByActor.get(actorUuid) ?? [];
-    const actor = await fromUuid(actorUuid);
-    if (!canActorReact(actor)) continue;
     const response = responses.get(actorUuid) ?? null;
     if (!response?.offerId) continue;
-    const selectedOffer = actorOffers.find(offer => offer.offerId === response.offerId);
-    if (!selectedOffer) continue;
-    if (!canAffordReactionOffer(actor, selectedOffer)) continue;
-    const provider = reactionProviders.get(selectedOffer.providerId);
-    if (!provider) continue;
+    const offer = allOffers.find(entry => entry.actorUuid === actorUuid && entry.offerId === response.offerId);
+    if (offer) {
+      selected = { offer, response, opportunity: offer.__opportunity };
+      break;
+    }
+  }
+  if (!selected) return createReactionHubResult();
+
+  let finalResult = createReactionHubResult();
+  reactionExecutionDepth += 1;
+  try {
+    const { offer, response, opportunity } = selected;
+    const actor = await fromUuid(offer.actorUuid);
+    if (!canActorReact(actor) || !canAffordReactionOffer(actor, offer)) {
+      return createReactionHubResult({ reason: "unableToAct" });
+    }
+    const provider = reactionProviders.get(offer.providerId);
+    if (!provider) return createReactionHubResult({ reason: "missingProvider" });
+    const eventKey = opportunity.eventKey;
+    const context = opportunity.context ?? {};
+    const semanticEvent = opportunity.semanticEvent ?? null;
     try {
       if (reactionExecutionGuard) {
         const allowed = await reactionExecutionGuard({
           eventKey,
           context,
           semanticEvent,
-          offer: selectedOffer,
+          offer,
           response
         });
-        if (allowed === false) continue;
+        if (allowed === false) return createReactionHubResult({ reason: "guardBlocked" });
       }
       const result = await provider.execute({
         eventKey,
         context,
         semanticEvent,
-        offer: selectedOffer,
+        offer,
         response
       });
-      const normalized = createReactionHubResult(result ?? {});
-      finalResult = mergeReactionHubResults(finalResult, normalized);
-      if (normalized.cancelRemaining) break;
+      finalResult = createReactionHubResult(result ?? {});
     } catch (error) {
-      console.error(`${SYSTEM_ID} | Reaction execution failed: ${selectedOffer.providerId}`, error);
+      console.error(`${SYSTEM_ID} | Reaction execution failed: ${offer.providerId}`, error);
     }
+    return finalResult;
+  } finally {
+    reactionExecutionDepth -= 1;
+    if (reactionExecutionDepth === 0) await drainPendingReactionRequests();
   }
-  return finalResult;
 }
 
 function canAffordReactionOffer(actor, offer = {}) {
@@ -315,7 +494,9 @@ async function getStableReactionActorOrder(actorUuids = []) {
 async function queryReactionOwners(actorOrder = [], offersByActor = new Map(), {
   eventKey = "",
   context = {},
-  timeoutMs = getReactionTimeoutMs()
+  timeoutMs = getReactionTimeoutMs(),
+  columns = null,
+  singleSelection = false
 } = {}) {
   const groups = new Map();
   for (const actorUuid of actorOrder) {
@@ -330,7 +511,13 @@ async function queryReactionOwners(actorOrder = [], offersByActor = new Map(), {
   }
 
   const results = await Promise.all(Array.from(groups.values()).map(group => (
-    queryReactionOwnerGroup(group.owner, group.actors, { eventKey, context, timeoutMs })
+    queryReactionOwnerGroup(group.owner, group.actors, {
+      eventKey,
+      context,
+      timeoutMs,
+      columns,
+      singleSelection
+    })
   )));
   const responses = new Map();
   for (const result of results) {
@@ -346,20 +533,54 @@ async function queryReactionOwners(actorOrder = [], offersByActor = new Map(), {
 async function queryReactionOwnerGroup(owner, actors = [], {
   eventKey = "",
   context = {},
-  timeoutMs = getReactionTimeoutMs()
+  timeoutMs = getReactionTimeoutMs(),
+  columns = null,
+  singleSelection = false
 } = {}) {
   if (!owner || !actors.length) return { selections: [] };
   const offerLabels = Array.from(new Set(actors
     .flatMap(entry => entry.offers)
     .map(offer => String(offer?.label ?? "").trim())
     .filter(Boolean)));
+  const columnPayload = Array.isArray(columns) && columns.length
+    ? columns.map(column => {
+      const columnOffers = actors.flatMap(({ actor, offers }) => offers
+        .filter(offer => {
+          const opportunity = offer.__opportunity;
+          return !opportunity || opportunity.column?.columnId === column.columnId;
+        })
+        .map(offer => ({
+          offerId: offer.offerId,
+          actorUuid: actor.uuid,
+          actorName: actor.name,
+          label: String(offer.label ?? localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction")),
+          description: String(offer.description ?? ""),
+          img: normalizeImagePath(offer.img, "icons/svg/aura.svg"),
+          costLines: Array.isArray(offer.costLines) ? offer.costLines.map(line => String(line ?? "")) : []
+        })));
+      return {
+        columnId: column.columnId,
+        triggerActorUuid: column.triggerActorUuid,
+        triggerActorName: column.triggerActorName,
+        triggerActorImg: column.triggerActorImg,
+        eventKey: column.eventKey,
+        eventLabel: column.eventLabel,
+        eventDescription: column.eventDescription,
+        offers: columnOffers
+      };
+    }).filter(column => column.offers.length)
+    : null;
   const queryData = {
     eventKey,
     timeoutMs,
-    title: offerLabels.length === 1
-      ? offerLabels[0]
-      : (context?.title ?? localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction")),
+    singleSelection: Boolean(singleSelection || columnPayload?.length),
+    title: columnPayload?.length
+      ? localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction")
+      : (offerLabels.length === 1
+        ? offerLabels[0]
+        : (context?.title ?? localizeReactionText("FALLOUTMAW.Events.Reaction.Title", "Reaction"))),
     message: context?.message ?? "",
+    columns: columnPayload,
     actors: actors.map(({ actor, offers }) => ({
       actorUuid: actor.uuid,
       actorName: actor.name,
@@ -383,45 +604,93 @@ async function queryReactionOwnerGroup(owner, actors = [], {
 }
 
 async function handleReactionQuery(data = {}) {
+  const columns = Array.isArray(data.columns)
+    ? data.columns.filter(entry => Array.isArray(entry?.offers) && entry.offers.length)
+    : [];
   const actors = Array.isArray(data.actors)
     ? data.actors.filter(entry => Array.isArray(entry?.offers) && entry.offers.length)
     : [];
-  if (!actors.length) return { selections: [] };
+  if (!columns.length && !actors.length) return { selections: [] };
   const timeoutMs = normalizeReactionTimeoutMs(data.timeoutMs);
+  const useColumns = columns.length > 0;
   // Content must NOT wrap another <form>: DialogV2 already renders a top-level form, and nested
   // forms break button.form / FormDataExtended so accept/decline never see radio values.
-  const sections = actors.map((actor, actorIndex) => {
-    const options = actor.offers.map(offer => `
-      <label class="fallout-maw-reaction-option">
-        <input type="radio" name="offerId-${actorIndex}" value="${escapeHTML(offer.offerId)}">
-        <img src="${escapeHTML(offer.img)}" alt="">
-        <span>
-          <strong>${escapeHTML(offer.label)}</strong>
-          ${offer.description ? `<small>${escapeHTML(offer.description)}</small>` : ""}
-          ${(offer.costLines ?? []).map(line => `<em>${escapeHTML(line)}</em>`).join("")}
-        </span>
-      </label>
-    `).join("");
-    return `
-      <fieldset class="fallout-maw-reaction-actor" data-actor-uuid="${escapeHTML(actor.actorUuid)}">
-        <legend><img src="${escapeHTML(actor.actorImg)}" alt=""> ${escapeHTML(actor.actorName)}</legend>
+  let content;
+  if (useColumns) {
+    const columnSections = columns.map(column => {
+      const options = column.offers.map(offer => `
+        <label class="fallout-maw-reaction-option">
+          <input type="radio" name="selectedOfferId" value="${escapeHTML(offer.offerId)}">
+          <img src="${escapeHTML(offer.img)}" alt="">
+          <span>
+            <strong>${escapeHTML(offer.label)}</strong>
+            ${offer.actorName ? `<small>${escapeHTML(offer.actorName)}</small>` : ""}
+            ${offer.description ? `<small>${escapeHTML(offer.description)}</small>` : ""}
+            ${(offer.costLines ?? []).map(line => `<em>${escapeHTML(line)}</em>`).join("")}
+          </span>
+        </label>
+      `).join("");
+      return `
+        <fieldset class="fallout-maw-reaction-column" data-column-id="${escapeHTML(column.columnId)}">
+          <legend>
+            <img src="${escapeHTML(column.triggerActorImg)}" alt="">
+            <span>
+              <strong>${escapeHTML(column.triggerActorName)}</strong>
+              <small>${escapeHTML(column.eventLabel)}</small>
+            </span>
+          </legend>
+          ${column.eventDescription ? `<p class="fallout-maw-reaction-column-condition">${escapeHTML(column.eventDescription)}</p>` : ""}
+          ${options}
+        </fieldset>
+      `;
+    }).join("");
+    content = `
+      <div class="fallout-maw-reaction-dialog">
+        <div class="fallout-maw-reaction-timer" aria-hidden="true">
+          <span style="animation-duration: ${timeoutMs}ms;"></span>
+        </div>
+        ${data.message ? `<p>${escapeHTML(data.message)}</p>` : ""}
         <label class="fallout-maw-reaction-option fallout-maw-reaction-decline">
-          <input type="radio" name="offerId-${actorIndex}" value="" checked>
+          <input type="radio" name="selectedOfferId" value="" checked>
           <span><strong>${escapeHTML(localizeReactionText("FALLOUTMAW.Events.Reaction.Decline", "Decline"))}</strong></span>
         </label>
-        ${options}
-      </fieldset>
-    `;
-  }).join("");
-  const content = `
-    <div class="fallout-maw-reaction-dialog">
-      <div class="fallout-maw-reaction-timer" aria-hidden="true">
-        <span style="animation-duration: ${timeoutMs}ms;"></span>
+        <div class="fallout-maw-reaction-columns">${columnSections}</div>
       </div>
-      ${data.message ? `<p>${escapeHTML(data.message)}</p>` : ""}
-      <div class="fallout-maw-reaction-options">${sections}</div>
-    </div>
-  `;
+    `;
+  } else {
+    const sections = actors.map((actor, actorIndex) => {
+      const options = actor.offers.map(offer => `
+        <label class="fallout-maw-reaction-option">
+          <input type="radio" name="offerId-${actorIndex}" value="${escapeHTML(offer.offerId)}">
+          <img src="${escapeHTML(offer.img)}" alt="">
+          <span>
+            <strong>${escapeHTML(offer.label)}</strong>
+            ${offer.description ? `<small>${escapeHTML(offer.description)}</small>` : ""}
+            ${(offer.costLines ?? []).map(line => `<em>${escapeHTML(line)}</em>`).join("")}
+          </span>
+        </label>
+      `).join("");
+      return `
+        <fieldset class="fallout-maw-reaction-actor" data-actor-uuid="${escapeHTML(actor.actorUuid)}">
+          <legend><img src="${escapeHTML(actor.actorImg)}" alt=""> ${escapeHTML(actor.actorName)}</legend>
+          <label class="fallout-maw-reaction-option fallout-maw-reaction-decline">
+            <input type="radio" name="offerId-${actorIndex}" value="" checked>
+            <span><strong>${escapeHTML(localizeReactionText("FALLOUTMAW.Events.Reaction.Decline", "Decline"))}</strong></span>
+          </label>
+          ${options}
+        </fieldset>
+      `;
+    }).join("");
+    content = `
+      <div class="fallout-maw-reaction-dialog">
+        <div class="fallout-maw-reaction-timer" aria-hidden="true">
+          <span style="animation-duration: ${timeoutMs}ms;"></span>
+        </div>
+        ${data.message ? `<p>${escapeHTML(data.message)}</p>` : ""}
+        <div class="fallout-maw-reaction-options">${sections}</div>
+      </div>
+    `;
+  }
   let timeoutId = null;
   const formData = await DialogV2.input({
     window: {
@@ -441,7 +710,7 @@ async function handleReactionQuery(data = {}) {
       label: localizeReactionText("FALLOUTMAW.Events.Reaction.DeclineAll", "Decline all"),
       callback: () => ({ __reactionDeclineAll: true })
     }],
-    position: { width: 520 },
+    position: { width: useColumns && columns.length > 1 ? Math.min(420 * columns.length, 960) : 520 },
     rejectClose: false,
     render: (_event, dialog) => {
       timeoutId = globalThis.setTimeout(() => {
@@ -456,6 +725,18 @@ async function handleReactionQuery(data = {}) {
   });
   if (!formData || formData === "decline" || formData?.__reactionDeclineAll) {
     return { selections: [] };
+  }
+  if (useColumns) {
+    const offerId = String(formData?.selectedOfferId ?? "").trim();
+    if (!offerId) return { selections: [] };
+    const matched = columns.flatMap(column => column.offers).find(offer => offer.offerId === offerId);
+    if (!matched) return { selections: [] };
+    return {
+      selections: [{
+        actorUuid: String(matched.actorUuid ?? ""),
+        offerId
+      }]
+    };
   }
   const selections = actors.map((actor, index) => ({
     actorUuid: String(actor.actorUuid ?? ""),

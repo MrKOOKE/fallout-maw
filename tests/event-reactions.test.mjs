@@ -62,16 +62,34 @@ test("event reaction tracking targets match owner, ally, enemy and empty-any", (
     targetActor: ally,
     resolveRelation
   }), true);
+  // Subject-only events (skill checks): ally on target must not match.
   assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["ally"] }, {
     reactorActor: reactor,
     sourceActor: enemy,
     targetActor: ally,
+    eventKey: "fallout-maw.skill.check.beforeRoll",
+    resolveRelation
+  }), false);
+  // Dual-role events can match via defender/target.
+  assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["ally"] }, {
+    reactorActor: reactor,
+    sourceActor: enemy,
+    targetActor: ally,
+    eventKey: "fallout-maw.weapon.attack.committed",
     resolveRelation
   }), true);
   assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["enemy"] }, {
     reactorActor: reactor,
     sourceActor: ally,
     targetActor: null,
+    resolveRelation
+  }), false);
+  // Own skill check must not match enemy tracking just because attack target is enemy.
+  assert.equal(eventReactionTrackingTargetsMatch({ trackingTargets: ["enemy", "ally", "neutral"] }, {
+    reactorActor: reactor,
+    sourceActor: reactor,
+    targetActor: enemy,
+    eventKey: "fallout-maw.skill.check.beforeRoll",
     resolveRelation
   }), false);
 });
@@ -596,7 +614,7 @@ test("orphan cleanup removes only root-scoped managed effects", async () => {
   assert.deepEqual(actor.effects.map(effect => effect.id), ["timed"]);
 });
 
-test("generic provider consumes a declined opportunity for the whole root", async () => {
+test("generic provider consumes a declined opportunity for the same operation and event", async () => {
   const actor = { uuid: "Actor.C", items: [] };
   const item = createSourceItem(actor, {
     id: "ability",
@@ -632,6 +650,115 @@ test("generic provider consumes a declined opportunity for the whole root", asyn
   assert.equal((await provider.collect({ eventKey: EVENT_KEY, context })).length, 1);
 });
 
+test("generic provider allows a nested skill-check reaction under a new operation id", async () => {
+  const skillKey = "fallout-maw.skill.check.beforeRoll";
+  const actor = { uuid: "Actor.C", items: [] };
+  const item = createSourceItem(actor, {
+    id: "ability",
+    uuid: "Actor.C.Item.ability",
+    type: "ability",
+    functions: [eventFunction({
+      id: "skill-reaction",
+      eventKey: skillKey
+    })]
+  });
+  actor.items = [item];
+  const docs = new Map([[actor.uuid, actor], [item.uuid, item]]);
+  const provider = createGenericEventReactionProvider({
+    getReactorActors: () => [actor],
+    resolveUuid: uuid => docs.get(uuid) ?? null,
+    costRegistry: createResourceCostRegistry({
+      getResourceDefinitions: () => [],
+      evaluateFormula: () => 0
+    }),
+    effectManager: {
+      apply: async () => ({}),
+      cleanupRoot: async () => 0,
+      cleanupOrphans: async () => 0
+    },
+    conditionEvaluator: () => true,
+    normalizeFunctions: functions => functions,
+    hasEventKey: async () => true
+  });
+  const parent = await provider.collect({
+    eventKey: skillKey,
+    context: {
+      envelope: eventEnvelope({
+        key: skillKey,
+        rootId: "shared-root",
+        data: { systemEventOperationId: "skill:outer" }
+      })
+    }
+  });
+  const nested = await provider.collect({
+    eventKey: skillKey,
+    context: {
+      envelope: eventEnvelope({
+        key: skillKey,
+        rootId: "shared-root",
+        data: { systemEventOperationId: "attack:nested" }
+      })
+    }
+  });
+  assert.equal(parent.length, 1);
+  assert.equal(nested.length, 1);
+  assert.notEqual(parent[0].chanceKey, nested[0].chanceKey);
+});
+
+test("generic provider offers separately for two skill-check subjects in one operation", async () => {
+  const skillKey = "fallout-maw.skill.check.beforeRoll";
+  const actor = { uuid: "Actor.C", items: [] };
+  const item = createSourceItem(actor, {
+    id: "ability",
+    uuid: "Actor.C.Item.ability",
+    type: "ability",
+    functions: [eventFunction({ id: "skill-reaction", eventKey: skillKey })]
+  });
+  actor.items = [item];
+  const docs = new Map([[actor.uuid, actor], [item.uuid, item]]);
+  const provider = createGenericEventReactionProvider({
+    getReactorActors: () => [actor],
+    resolveUuid: uuid => docs.get(uuid) ?? null,
+    costRegistry: createResourceCostRegistry({
+      getResourceDefinitions: () => [],
+      evaluateFormula: () => 0
+    }),
+    effectManager: {
+      apply: async () => ({}),
+      cleanupRoot: async () => 0,
+      cleanupOrphans: async () => 0
+    },
+    conditionEvaluator: () => true,
+    normalizeFunctions: functions => functions,
+    hasEventKey: async () => true
+  });
+  const first = await provider.collect({
+    eventKey: skillKey,
+    context: {
+      envelope: eventEnvelope({
+        key: skillKey,
+        rootId: "shared-root",
+        source: { actorUuid: "Actor.VictimA" },
+        data: { systemEventOperationId: "attack:aoe" }
+      })
+    }
+  });
+  const second = await provider.collect({
+    eventKey: skillKey,
+    context: {
+      envelope: eventEnvelope({
+        key: skillKey,
+        rootId: "shared-root",
+        source: { actorUuid: "Actor.VictimB" },
+        data: { systemEventOperationId: "attack:aoe" }
+      })
+    }
+  });
+  assert.equal(first.length, 1);
+  assert.equal(second.length, 1);
+  assert.notEqual(first[0].chanceKey, second[0].chanceKey);
+});
+
 function eventEnvelope(overrides = {}) {
   return {
     key: EVENT_KEY,
@@ -644,7 +771,7 @@ function eventEnvelope(overrides = {}) {
   };
 }
 
-function eventFunction({ id, trackingTargets = [[]], extraConditions = [] }) {
+function eventFunction({ id, trackingTargets = [[]], extraConditions = [], eventKey = EVENT_KEY }) {
   return {
     id,
     type: "effectChanges",
@@ -656,7 +783,7 @@ function eventFunction({ id, trackingTargets = [[]], extraConditions = [] }) {
         id: `${id}-event-${index}`,
         groupId: "",
         type: "eventReaction",
-        eventKey: EVENT_KEY,
+        eventKey,
         combatOnly: false,
         trackingTargets: targets
       })),

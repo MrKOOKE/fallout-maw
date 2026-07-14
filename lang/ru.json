@@ -276,6 +276,7 @@
         "Accept": "Среагировать",
         "Decline": "Отказаться",
         "DeclineAll": "Отказаться от всех",
+        "UnknownSubject": "Неизвестный субъект",
         "CostSummary": "Стоимость: {cost}",
         "CostUnavailable": "Стоимость реакции больше недоступна.",
         "TrackingTargetOptions": {
