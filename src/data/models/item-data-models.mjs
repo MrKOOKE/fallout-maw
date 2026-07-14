@@ -152,6 +152,7 @@ function abilityFunctionField() {
       }), { required: true, initial: [] })
     }),
     changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
+    actions: new ArrayField(abilityActionField(), { required: true, initial: [] }),
     conditions: new ArrayField(abilityConditionField(), { required: true, initial: [] }),
     penalties: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
     target: new StringField({ required: true, blank: true, initial: "" }),
@@ -163,6 +164,28 @@ function abilityFunctionField() {
       percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
       equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
     })
+  });
+}
+
+function abilityActionField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    type: new StringField({ required: true, blank: false, choices: ["weaponAttack"], initial: "weaponAttack" }),
+    attackActionKeys: new ArrayField(new StringField({ required: true, blank: false }), { required: true, initial: ["all"] }),
+    targetMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["triggerActor", "triggerTarget", "free"],
+      initial: "triggerActor"
+    }),
+    actionPointCostMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["none", "fixed", "actual"],
+      initial: "none"
+    }),
+    fixedActionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    actualActionPointCostPercent: new NumberField({ required: true, integer: true, min: 0, initial: 100 })
   });
 }
 

@@ -127,6 +127,7 @@ const actorDamageMutationQueue = new Map();
 const pendingDamageSocketRequests = new Map();
 const lethalDamagePreventionHandlers = new Set();
 let damageHubOperationQueue = Promise.resolve();
+let activeDamageHubOperation = null;
 
 export function registerLethalDamagePreventionHandler(handler) {
   if (typeof handler !== "function") return () => undefined;
@@ -462,11 +463,12 @@ export async function requestFirstAidRemoveEffects({
 }
 
 async function applyDamageCycle(requests = []) {
+  const operationRef = getDamageHubOperationRefFromRequests(requests);
   return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
     requests,
-    allowedRequests => applyDamageCycleNow(allowedRequests),
+    (allowedRequests, scope) => applyDamageCycleNow(allowedRequests, { chainRef: scope?.chainRef ?? null }),
     { batch: true }
-  ));
+  ), { operationRef });
 }
 
 async function executeDamageSystemEventWorkflow(requests = [], operation, {
@@ -503,7 +505,11 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
         ? "fallout-maw.healing.beforeApply"
         : "fallout-maw.damage.beforeApply";
       const gate = await scope.emit(beforeKey, {
-        data: { ...serializeDamageEventRequest(request), inDamageHubOperation: true },
+        data: {
+          ...serializeDamageEventRequest(request),
+          inDamageHubOperation: true,
+          damageHubOperationRef: getCurrentDamageHubOperationRef()
+        },
         before
       }, {
         occurrenceKey: `${occurrenceBase}:before`,
@@ -550,7 +556,7 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
     let operationResult;
     let operationError = null;
     try {
-      operationResult = allowed.length ? await operation(allowed) : (single ? undefined : []);
+      operationResult = allowed.length ? await operation(allowed, scope) : (single ? undefined : []);
     } catch (error) {
       operationError = error;
     }
@@ -568,7 +574,8 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
           requestCount: normalized.length,
           appliedCount: allowed.length,
           cancelledCount: cancelled.length,
-          inDamageHubOperation: true
+          inDamageHubOperation: true,
+          damageHubOperationRef: getCurrentDamageHubOperationRef()
         },
         outcome: {
           success: !operationError,
@@ -606,7 +613,8 @@ async function emitDamageResolvedSystemEvent(scope, request, result = {}, {
     data: {
       ...serializeDamageEventRequest(request),
       result: serializeDamageEventResult(result),
-      inDamageHubOperation: true
+      inDamageHubOperation: true,
+      damageHubOperationRef: getCurrentDamageHubOperationRef()
     },
     before,
     after,
@@ -771,7 +779,7 @@ function getDamageRequestsSceneUuid(requests = []) {
   return String(canvas?.scene?.uuid ?? "");
 }
 
-async function applyDamageCycleNow(requests = []) {
+async function applyDamageCycleNow(requests = [], { chainRef = null } = {}) {
   const grouped = new Map();
   for (const request of requests) {
     const data = normalizeDamageRequest(request);
@@ -796,7 +804,10 @@ async function applyDamageCycleNow(requests = []) {
       if (Array.isArray(actorResults)) results.push(...actorResults);
     }
 
-    await resolveDeferredShockChecks(deferredShockChecks);
+    await resolveDeferredShockChecks(deferredShockChecks, {
+      chainRef,
+      damageHubOperationRef: getCurrentDamageHubOperationRef()
+    });
     await publishDamageSummaryMessage(results);
     notifyDamageApplied(results);
     return results;
@@ -823,7 +834,7 @@ export async function applyDamageRequestsInCurrentHubOperation(requests = [], lo
     : requests;
   return executeDamageSystemEventWorkflow(
     stamped,
-    allowedRequests => applyDamageCycleNow(allowedRequests),
+    (allowedRequests, scope) => applyDamageCycleNow(allowedRequests, { chainRef: scope?.chainRef ?? null }),
     { batch: true }
   );
 }
@@ -867,15 +878,19 @@ function respondDamageHubSocketAction(payload = {}, { ok = true, error = "", res
 export async function applyDamageApplication(request = {}, options = {}) {
   const data = normalizeDamageRequest(request);
   if (!data.actorUuid) return undefined;
+  const operationRef = getDamageHubOperationRefFromRequests([data]);
   return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
     [data],
-    async allowedRequests => {
+    async (allowedRequests, scope) => {
       const allowed = allowedRequests[0];
       if (!allowed) return undefined;
-      return queueActorDamageMutation(allowed.actorUuid, () => applyDamageApplicationNow(allowed, options));
+      return queueActorDamageMutation(allowed.actorUuid, () => applyDamageApplicationNow(allowed, {
+        ...options,
+        chainRef: scope?.chainRef ?? null
+      }));
     },
     { single: true }
-  ));
+  ), { operationRef });
 }
 
 async function applyDamageApplicationNow(request = {}, { createSummary = true } = {}) {
@@ -1440,9 +1455,11 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   const destroyedLimbKeys = mode === MODE_DAMAGE && actualLimbDelta > 0
     ? await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()))
     : new Set();
-  if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck);
+  if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck, { chainRef: data.source?.chainRef ?? null });
   const destroyedLimbShockCheck = aggregateNegativeLimbShockChecks(actor, buildDestroyedLimbShockChecks(actor, destroyedLimbKeys));
-  if (destroyedLimbShockCheck) await performNegativeLimbShockCheck(actor, destroyedLimbShockCheck);
+  if (destroyedLimbShockCheck) {
+    await performNegativeLimbShockCheck(actor, destroyedLimbShockCheck, { chainRef: data.source?.chainRef ?? null });
+  }
   await queueActorDamageStatusSync(actor);
 
   const createdTraumas = [];
@@ -1948,11 +1965,22 @@ function queueActorDamageStatusSync(actor) {
 function queueActorDamageMutation(actorOrUuid, operation) {
   const actorUuid = typeof actorOrUuid === "string" ? actorOrUuid : actorOrUuid?.uuid;
   if (!actorUuid) return operation(null);
+  const operationContext = activeDamageHubOperation;
+  if (operationContext?.reentrantDepth > 0 && operationContext.mutatingActorUuids?.has(actorUuid)) {
+    return Promise.resolve().then(() => operation(fromUuidSync(actorUuid)));
+  }
 
   const previous = actorDamageMutationQueue.get(actorUuid) ?? Promise.resolve();
   const next = previous
     .catch(() => undefined)
-    .then(() => operation(fromUuidSync(actorUuid)))
+    .then(async () => {
+      operationContext?.mutatingActorUuids?.add(actorUuid);
+      try {
+        return await operation(fromUuidSync(actorUuid));
+      } finally {
+        operationContext?.mutatingActorUuids?.delete(actorUuid);
+      }
+    })
     .finally(() => {
       if (actorDamageMutationQueue.get(actorUuid) === next) actorDamageMutationQueue.delete(actorUuid);
     });
@@ -1960,7 +1988,20 @@ function queueActorDamageMutation(actorOrUuid, operation) {
   return next;
 }
 
-export async function runDamageHubOperation(operation) {
+export async function runDamageHubOperation(operation, { operationRef = "" } = {}) {
+  const requestedRef = String(operationRef ?? "").trim();
+  // Damage may trigger an awaited check whose chosen reaction deals damage before the parent operation can finish.
+  // Only the opaque reference issued by that active operation may enter it recursively; unrelated damage stays queued.
+  if (requestedRef && activeDamageHubOperation?.id === requestedRef) {
+    const operationContext = activeDamageHubOperation;
+    operationContext.reentrantDepth += 1;
+    try {
+      return await operation(operationContext);
+    } finally {
+      operationContext.reentrantDepth = Math.max(0, operationContext.reentrantDepth - 1);
+    }
+  }
+
   const previous = damageHubOperationQueue.catch(() => undefined);
   let releaseQueuedOperation;
   const queuedOperation = new Promise(resolve => {
@@ -1968,12 +2009,31 @@ export async function runDamageHubOperation(operation) {
   });
   damageHubOperationQueue = previous.then(() => queuedOperation);
   await previous;
+  const operationContext = {
+    id: foundry.utils.randomID(),
+    reentrantDepth: 0,
+    mutatingActorUuids: new Set()
+  };
+  activeDamageHubOperation = operationContext;
 
   try {
-    return await operation();
+    return await operation(operationContext);
   } finally {
+    if (activeDamageHubOperation === operationContext) activeDamageHubOperation = null;
     releaseQueuedOperation();
   }
+}
+
+export function getCurrentDamageHubOperationRef() {
+  return String(activeDamageHubOperation?.id ?? "");
+}
+
+function getDamageHubOperationRefFromRequests(requests = []) {
+  for (const request of Array.isArray(requests) ? requests : [requests]) {
+    const ref = String(request?.source?.damageHubOperationRef ?? "").trim();
+    if (ref) return ref;
+  }
+  return "";
 }
 
 export async function applyDestroyedLimbConsequences(actor, limbKeys = [], options = {}) {
@@ -2595,14 +2655,19 @@ async function knockdownActorForIncapacitation(actor, state = "") {
   await setActorTokensPosture(actor, "knocked");
 }
 
-async function performNegativeLimbShockCheck(actor, shockCheck = null) {
+async function performNegativeLimbShockCheck(actor, shockCheck = null, {
+  chainRef = null,
+  damageHubOperationRef = getCurrentDamageHubOperationRef()
+} = {}) {
   if (!actor || !shockCheck || shockCheck.difficulty <= 0 || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
   const outcome = await requestSkillCheck({
     actor,
     skillKey: "resilience",
     data: {
-      difficulty: shockCheck.difficulty
+      difficulty: shockCheck.difficulty,
+      damageHubOperationRef
     },
+    chainRef,
     animate: false,
     createMessage: true,
     requester: getNegativeLimbShockRequester(actor, shockCheck)
@@ -2626,7 +2691,10 @@ async function queueOrPerformNegativeLimbShockCheck(actor, shockCheck = null, de
   return undefined;
 }
 
-async function resolveDeferredShockChecks(entries = []) {
+async function resolveDeferredShockChecks(entries = [], {
+  chainRef = null,
+  damageHubOperationRef = getCurrentDamageHubOperationRef()
+} = {}) {
   const queued = entries.filter(entry => entry?.actorUuid && entry?.shockCheck);
   if (!queued.length) return [];
   const batch = createSkillCheckBatchCollector({
@@ -2642,8 +2710,10 @@ async function resolveDeferredShockChecks(entries = []) {
       actor,
       skillKey: "resilience",
       data: {
-        difficulty: shockCheck.difficulty
+        difficulty: shockCheck.difficulty,
+        damageHubOperationRef
       },
+      chainRef,
       animate: false,
       createMessage: false,
       requester: entry.requester

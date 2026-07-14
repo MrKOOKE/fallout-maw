@@ -286,7 +286,7 @@ test("resource execution rejects stale quotes and serializes operations per acto
   assert.deepEqual(order, ["start-2", "end-2", "start-1", "end-1"]);
 });
 
-test("resource execution is reentrant for nested reactions in the same actor and root", async () => {
+test("resource execution releases the actor lock before a nested reaction workflow", async () => {
   const actor = { uuid: "Actor.C", resources: { actionPoints: 10 } };
   const order = [];
   const adapter = {
@@ -308,7 +308,7 @@ test("resource execution is reentrant for nested reactions in the same actor and
     afterSpend: async () => {
       order.push("nested-start");
       const nested = await registry.execute(actor, [{ id: "inner", resourceKey: "actionPoints", formula: "1" }], {
-        rootId: "same-root"
+        rootId: "nested-root"
       });
       assert.equal(nested.ok, true);
       order.push("nested-end");

@@ -1,6 +1,6 @@
 import { serializeSystemEventPayload } from "./catalog.mjs";
 
-const COMMON_FIELDS = Object.freeze(["title", "message"]);
+const COMMON_FIELDS = Object.freeze(["title", "message", "damageHubOperationRef"]);
 
 const LEGACY_CONTEXT_FIELDS = Object.freeze({
   weaponAttackTargeted: Object.freeze([

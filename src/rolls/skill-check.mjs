@@ -205,7 +205,8 @@ export async function requestSkillCheckBatch({
         resolvedCount: outcomes.length,
         cancelledCount,
         failedCount,
-        skillKeys: Array.from(new Set(preparedEntries.map(entry => entry.skill.key)))
+        skillKeys: Array.from(new Set(preparedEntries.map(entry => entry.skill.key))),
+        damageHubOperationRef: String(firstData?.damageHubOperationRef ?? source?.damageHubOperationRef ?? "")
       },
       outcome: {
         success: !operationError && failedCount === 0,
@@ -409,7 +410,8 @@ function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = ""
     total: toInteger(outcome?.total),
     rollCount: Array.isArray(outcome?.rolls) ? outcome.rolls.length : 0,
     weaponAttackId: String(data.weaponAttackId ?? ""),
-    weaponActionKey: String(data.weaponActionKey ?? "")
+    weaponActionKey: String(data.weaponActionKey ?? ""),
+    damageHubOperationRef: String(data.damageHubOperationRef ?? "")
   };
 }
 
@@ -428,6 +430,7 @@ function serializeSkillCheckRequest(data = {}) {
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    damageHubOperationRef: String(data.damageHubOperationRef ?? ""),
     smartFudgeResult: String(data.smartFudgeResult ?? "")
   };
 }
@@ -1089,6 +1092,7 @@ function normalizeRequestData(data, requester = "") {
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    damageHubOperationRef: String(data.damageHubOperationRef ?? ""),
     smartFudgeResult: normalizeForcedResult(data.smartFudgeResult)
   };
 }

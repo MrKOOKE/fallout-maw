@@ -44,6 +44,10 @@ import {
 } from "../settings/abilities.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
 import {
+  executePreparedAbilityFunctionActions,
+  prepareAbilityFunctionActions
+} from "./ability-actions.mjs";
+import {
   ATTACKING_WEAPON_ACTION_KEYS,
   getActionBlockEffectKey,
   getWeaponActionBlockState
@@ -77,6 +81,7 @@ import {
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
   WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK,
   WEAPON_ATTACK_RESOLVED_HOOK,
+  registerWeaponAttackResolvedHandler,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
 import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
@@ -511,6 +516,7 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on("updateActor", actor => queueActiveApplicationEffectSync(actor));
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
+  registerWeaponAttackResolvedHandler("fallout-maw.fixed.counterAttack", requestCounterAttackReaction);
   registerOversightReactionProvider();
   registerWatchOutReactionProvider();
   registerCounterSniperReactionProvider();
@@ -538,7 +544,6 @@ export function registerFixedAbilityFunctionHooks() {
     void processReaperAttackResolution(context);
     void updateVirtuosoLastWeapon(context);
     void processKeepAwayAttackResolution(context);
-    void requestCounterAttackReaction(context);
   });
   Hooks.on(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, context => {
     void consumeVirtuosoAttackBonus(context);
@@ -1264,6 +1269,28 @@ async function executeActiveApplicationUse(scope, {
   });
   if (!allowed.length) return { used: false, appliedCount: 0, cancelled: true, reason: "applicationCancelled" };
 
+  const preparedActions = await prepareAbilityFunctionActions({
+    actor,
+    abilityFunction,
+    triggerTargets: allowed.map(entry => entry.target),
+    title: getAbilityDisplayName(abilityItem)
+  });
+  if (preparedActions.cancelled) {
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        energyCost,
+        status: "cancelled",
+        reason: "actionSelectionCancelled",
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, cancelled: true, reason: "actionSelectionCancelled" };
+  }
+
   try {
     if (!(await spendEnergy(actor, energyCost, createAbilitySystemEventOptions(scope.chainRef)))) {
       for (const entry of allowed) {
@@ -1293,6 +1320,26 @@ async function executeActiveApplicationUse(scope, {
         durationSeconds: settings.overloadDurationSeconds,
         chainRef: scope.chainRef
       });
+    }
+    const actionResult = await executePreparedAbilityFunctionActions({
+      actor,
+      executions: preparedActions.executions,
+      chainRef: scope.chainRef
+    });
+    if (actionResult.executed !== actionResult.attempted) {
+      for (const entry of allowed) {
+        await emitActiveApplicationResolved(scope, entry, {
+          actor,
+          abilityItem,
+          abilityFunction,
+          settings,
+          energyCost,
+          status: "failed",
+          reason: "actionFailed",
+          terminalTargets
+        });
+      }
+      return { used: false, appliedCount: actionResult.executed, reason: "actionFailed" };
     }
     await createAbilityChatMessage(
       actor,
@@ -4464,6 +4511,8 @@ async function requestCounterAttackReaction(context = {}) {
     weaponUuid: context?.weaponUuid ?? "",
     actionKey: context?.actionKey ?? "",
     weaponFunctionId: context?.weaponFunctionId ?? "",
+    chainRef: context?.chainRef ?? null,
+    damageHubOperationRef: context?.damageHubOperationRef ?? "",
     title: "Ответная реакция",
     message: "Атака завершена. Доступна реакция контратаки."
   });
@@ -4523,7 +4572,7 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
   return offers;
 }
 
-async function executeCounterAttackReaction({ offer = {} } = {}) {
+async function executeCounterAttackReaction({ context = {}, offer = {} } = {}) {
   const defender = await fromUuid(String(offer.actorUuid ?? ""));
   const defenderTokenDocument = await fromUuid(String(offer.defenderTokenUuid ?? ""));
   const attackerTokenDocument = await fromUuid(String(offer.attackerTokenUuid ?? ""));
@@ -4555,8 +4604,11 @@ async function executeCounterAttackReaction({ offer = {} } = {}) {
     weapon: entry.weapon,
     actionKey: "meleeAttack",
     weaponFunctionId: entry.weaponFunctionId,
+    chainRef: context?.chainRef ?? null,
+    damageHubOperationRef: context?.damageHubOperationRef ?? "",
     skipActionPointCost: true,
-    ignoreReactionLock: true
+    ignoreReactionLock: true,
+    suspendActiveAttack: true
   });
   if (!used) {
     await createAbilityChatMessage(defender, entry.abilityItem, "Не удалось выполнить удар.");
@@ -5545,7 +5597,9 @@ async function executeCounterSniperReaction({ context = {}, offer = {} } = {}) {
     reactorTokenUuid: reactorToken.uuid,
     attackerTokenUuid: attackerToken.uuid,
     weaponUuid: entry.weapon.uuid,
-    weaponFunctionId: entry.weaponFunctionId
+    weaponFunctionId: entry.weaponFunctionId,
+    chainRef: context?.chainRef ?? null,
+    damageHubOperationRef: context?.damageHubOperationRef ?? ""
   };
   let used = false;
   try {
@@ -5570,7 +5624,9 @@ async function handleCounterSniperAimQuery(data = {}) {
     attackerToken: reactorTokenDocument.object ?? reactorTokenDocument,
     targetToken: attackerTokenDocument.object ?? attackerTokenDocument,
     weapon,
-    weaponFunctionId: String(data.weaponFunctionId ?? "")
+    weaponFunctionId: String(data.weaponFunctionId ?? ""),
+    chainRef: data.chainRef ?? null,
+    damageHubOperationRef: data.damageHubOperationRef ?? ""
   });
 }
 

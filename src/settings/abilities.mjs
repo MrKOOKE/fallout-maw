@@ -15,6 +15,33 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
   fixed: "fixed"
 });
 
+export const ABILITY_ACTION_TYPES = Object.freeze({
+  weaponAttack: "weaponAttack"
+});
+
+export const ABILITY_ATTACKING_WEAPON_ACTION_KEYS = Object.freeze([
+  "aimedShot",
+  "snapshot",
+  "burst",
+  "volley",
+  "meleeAttack",
+  "aimedMeleeAttack",
+  "push"
+]);
+
+export const ABILITY_ATTACK_ACTION_ALL = "all";
+
+export const ABILITY_ACTION_TARGET_MODES = Object.freeze({
+  triggerActor: "triggerActor",
+  free: "free"
+});
+
+export const ABILITY_ACTION_POINT_COST_MODES = Object.freeze({
+  none: "none",
+  fixed: "fixed",
+  actual: "actual"
+});
+
 export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   deusExMachina: "deusExMachina",
   curseAndBlessing: "curseAndBlessing",
@@ -305,8 +332,21 @@ export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChange
     activeSettings: options?.activeSettings,
     reactionSettings: options?.reactionSettings,
     changes: [],
+    actions: [],
     conditions: [],
     penalties: []
+  });
+}
+
+export function createAbilityAction(type = ABILITY_ACTION_TYPES.weaponAttack) {
+  return normalizeAbilityAction({
+    id: foundry.utils.randomID(),
+    type,
+    attackActionKeys: [ABILITY_ATTACK_ACTION_ALL],
+    targetMode: ABILITY_ACTION_TARGET_MODES.triggerActor,
+    actionPointCostMode: ABILITY_ACTION_POINT_COST_MODES.none,
+    fixedActionPointCost: 0,
+    actualActionPointCostPercent: 100
   });
 }
 
@@ -438,9 +478,49 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     changes: isLegacy
       ? legacyFunctionToChanges(value)
       : normalizeAbilityChanges(value?.changes ?? value?.effects),
+    actions: [ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication].includes(type)
+      ? normalizeAbilityActions(value?.actions)
+      : [],
     conditions,
     penalties: normalizeAbilityChanges(value?.penalties),
     sort: index
+  };
+}
+
+export function normalizeAbilityActions(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(entry => normalizeAbilityAction(entry));
+}
+
+export function normalizeAbilityAction(value = {}) {
+  const rawType = String(value?.type ?? "").trim();
+  const type = Object.values(ABILITY_ACTION_TYPES).includes(rawType)
+    ? rawType
+    : ABILITY_ACTION_TYPES.weaponAttack;
+  const rawKeys = Array.isArray(value?.attackActionKeys)
+    ? value.attackActionKeys
+    : Object.values(value?.attackActionKeys ?? {});
+  const keys = Array.from(new Set(rawKeys.map(key => String(key ?? "").trim()).filter(Boolean)));
+  const attackActionKeys = keys.includes(ABILITY_ATTACK_ACTION_ALL)
+    ? [ABILITY_ATTACK_ACTION_ALL]
+    : keys.filter(key => ABILITY_ATTACKING_WEAPON_ACTION_KEYS.includes(key));
+  const rawTargetMode = String(value?.targetMode ?? "");
+  const targetMode = rawTargetMode === "triggerTarget"
+    ? ABILITY_ACTION_TARGET_MODES.triggerActor
+    : Object.values(ABILITY_ACTION_TARGET_MODES).includes(rawTargetMode)
+      ? rawTargetMode
+      : ABILITY_ACTION_TARGET_MODES.triggerActor;
+  const actionPointCostMode = Object.values(ABILITY_ACTION_POINT_COST_MODES).includes(value?.actionPointCostMode)
+    ? value.actionPointCostMode
+    : ABILITY_ACTION_POINT_COST_MODES.none;
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    type,
+    attackActionKeys: attackActionKeys.length ? attackActionKeys : [ABILITY_ATTACK_ACTION_ALL],
+    targetMode,
+    actionPointCostMode,
+    fixedActionPointCost: Math.max(0, toInteger(value?.fixedActionPointCost)),
+    actualActionPointCostPercent: Math.max(0, toInteger(value?.actualActionPointCostPercent ?? 100))
   };
 }
 

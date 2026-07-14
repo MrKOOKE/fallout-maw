@@ -21,6 +21,33 @@
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
+    "Ability": {
+      "Actions": {
+        "Add": "Add attacking action",
+        "Title": "Actions",
+        "WeaponAttack": "Attacking action",
+        "AllowedAttacks": "Available attack types",
+        "AddAttackVariant": "Add attack variant",
+        "AllAttacks": "All attacking actions",
+        "TargetMode": "Target selection",
+        "TargetTrigger": "Only the triggering actor",
+        "TargetFree": "Free aiming",
+        "ActionPointCost": "Action point cost",
+        "CostNone": "No action point cost",
+        "CostFixed": "Fixed cost",
+        "CostActual": "Actual attack cost",
+        "FixedCost": "Fixed AP cost",
+        "ActualPercent": "Actual cost, %",
+        "CostHint": "The percentage applies to the final attack cost and is rounded up (50% of 5 = 3).",
+        "ActionPoints": "AP",
+        "SelectAttack": "Select an attacking action",
+        "SelectWeapon": "Select a weapon",
+        "SelectAction": "Select an action",
+        "Weapon": "Weapon",
+        "Next": "Next",
+        "Execute": "Attack"
+      }
+    },
     "Events": {
       "Groups": {
         "actor": {

@@ -21,7 +21,8 @@ async function emitWeaponActionResolved(context = {}) {
       actorUuid: String(actor.uuid ?? ""),
       weaponUuid: String(context.weapon?.uuid ?? ""),
       actionKey: String(context.actionKey ?? context.weaponActionKey ?? ""),
-      weaponFunctionId: String(context.weaponFunctionId ?? "")
+      weaponFunctionId: String(context.weaponFunctionId ?? ""),
+      damageHubOperationRef: String(context.damageHubOperationRef ?? "")
     },
     outcome: { success: true }
   }, {
@@ -38,6 +39,8 @@ async function emitWeaponAttackCheckResolved(context = {}) {
   const actor = context.actor ?? context.token?.actor ?? null;
   if (!actor) return;
   const outcome = context.outcome ?? {};
+  const checkOccurrenceId = String(context.checkOccurrenceId ?? "").trim()
+    || `${String(context.weaponAttackId ?? "check")}:${foundry.utils.randomID()}`;
   await dispatchSystemEvent("fallout-maw.weapon.attack.checkResolved", {
     data: {
       actorUuid: String(actor.uuid ?? ""),
@@ -46,7 +49,8 @@ async function emitWeaponAttackCheckResolved(context = {}) {
       weaponFunctionId: String(context.weaponFunctionId ?? ""),
       attackId: String(context.weaponAttackId ?? ""),
       resultKey: String(outcome?.result?.key ?? outcome?.resultKey ?? ""),
-      success: Boolean(outcome?.success ?? outcome?.result?.success)
+      success: Boolean(outcome?.success ?? outcome?.result?.success),
+      damageHubOperationRef: String(context.damageHubOperationRef ?? "")
     },
     outcome: {
       success: Boolean(outcome?.success ?? outcome?.result?.success),
@@ -54,7 +58,7 @@ async function emitWeaponAttackCheckResolved(context = {}) {
     }
   }, {
     kind: "legacyWeaponAttackCheckResolved",
-    operationId: `weapon-check:${context.weaponAttackId ?? foundry.utils.randomID()}`,
+    operationId: `weapon-check:${checkOccurrenceId}`,
     sceneUuid: String(context.token?.document?.parent?.uuid ?? canvas?.scene?.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? ""),
     chainRef: context?.chainRef ?? null,

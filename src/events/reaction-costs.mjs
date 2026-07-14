@@ -138,7 +138,7 @@ export function createResourceCostRegistry({
     ...context
   } = {}) {
     const lockScope = String(actorLockScope || context.rootId || "").trim();
-    return withActorLock(actor, async leaseToken => {
+    const spendResult = await withActorLock(actor, async leaseToken => {
       const executionContext = { ...context, actorLockToken: leaseToken };
       const current = await quote(actor, rows, executionContext);
       if (!current.valid) return { ok: false, reason: current.reason, quote: current };
@@ -162,8 +162,7 @@ export function createResourceCostRegistry({
             await getAdapter(cost.resourceKey).spend(actor, cost.amount, definition, executionContext);
           }
         }
-        const afterResult = typeof afterSpend === "function" ? await afterSpend(current, executionContext) : undefined;
-        return { ok: true, reason: "", quote: current, afterResult };
+        return { ok: true, reason: "", quote: current };
       } catch (error) {
         logger?.error?.("fallout-maw | Event Reaction resource spend failed.", error);
         return {
@@ -174,6 +173,20 @@ export function createResourceCostRegistry({
         };
       }
     }, actorLockToken, lockScope);
+    if (!spendResult.ok || typeof afterSpend !== "function") return spendResult;
+
+    try {
+      const afterResult = await afterSpend(spendResult.quote, context);
+      return { ...spendResult, afterResult };
+    } catch (error) {
+      logger?.error?.("fallout-maw | Event Reaction post-spend execution failed.", error);
+      return {
+        ok: false,
+        reason: REACTION_COST_FAILURES.spendFailed,
+        quote: spendResult.quote,
+        error
+      };
+    }
   }
 
   function withActorLock(actor, operation, actorLockToken = null, actorLockScope = "") {

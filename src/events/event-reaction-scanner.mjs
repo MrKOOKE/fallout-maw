@@ -245,9 +245,9 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
   const functionId = String(abilityFunction?.id ?? "").trim();
   const rootId = String(envelope?.rootId ?? envelope?.eventId ?? "").trim();
   const eventKey = String(envelope?.key ?? "").trim();
-  const chanceScope = getEventReactionOpportunityScope(envelope);
-  // One accept/decline per (logical operation × event × reactor × function), independent of per-target roots.
-  const chanceKey = [chanceScope, eventKey, actorUuid, sourceItemUuid, functionId].join("|");
+  const chanceScope = rootId;
+  // One accept/decline for this generic function during the entire event root.
+  const chanceKey = [rootId, actorUuid, sourceItemUuid, functionId].join("|");
   return {
     actorUuid,
     sourceItemUuid,
@@ -267,25 +267,8 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
   };
 }
 
-/**
- * Logical operation scope for Event Reaction chances.
- * Callers that emit multiple related system events (multi-target checks, batches, etc.)
- * must put the same `systemEventOperationId` on event data. No domain-specific keys here.
- */
 export function getEventReactionOpportunityScope(envelope = {}) {
-  const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
-  const request = data.request && typeof data.request === "object" ? data.request : {};
-  for (const value of [
-    data.systemEventOperationId,
-    request.systemEventOperationId,
-    envelope?.operationId,
-    envelope?.rootId,
-    envelope?.eventId
-  ]) {
-    const normalized = String(value ?? "").trim();
-    if (normalized) return normalized;
-  }
-  return "";
+  return String(envelope?.rootId ?? envelope?.eventId ?? "").trim();
 }
 
 export function findEventReactionFunction(item = null, functionId = "", options = {}) {

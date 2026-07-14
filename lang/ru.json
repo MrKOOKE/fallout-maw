@@ -20,6 +20,33 @@
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
+    "Ability": {
+      "Actions": {
+        "Add": "Добавить атакующее действие",
+        "Title": "Действия",
+        "WeaponAttack": "Атакующее действие",
+        "AllowedAttacks": "Доступные виды атак",
+        "AddAttackVariant": "Добавить вариант атаки",
+        "AllAttacks": "Все атакующие действия",
+        "TargetMode": "Выбор цели",
+        "TargetTrigger": "Только инициатор срабатывания",
+        "TargetFree": "Свободное наведение",
+        "ActionPointCost": "Трата ОД",
+        "CostNone": "Без траты ОД",
+        "CostFixed": "Фиксированная стоимость",
+        "CostActual": "Фактическая стоимость атаки",
+        "FixedCost": "Фиксированная стоимость ОД",
+        "ActualPercent": "Доля фактической стоимости, %",
+        "CostHint": "Процент применяется к итоговой стоимости атаки с округлением вверх (50% от 5 = 3).",
+        "ActionPoints": "ОД",
+        "SelectAttack": "Выбор атакующего действия",
+        "SelectWeapon": "Выбор оружия",
+        "SelectAction": "Выбор действия",
+        "Weapon": "Оружие",
+        "Next": "Далее",
+        "Execute": "Атаковать"
+      }
+    },
     "Events": {
       "Groups": {
         "actor": {

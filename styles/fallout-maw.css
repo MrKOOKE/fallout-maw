@@ -3359,6 +3359,50 @@ body #prosemirror-dropdown {
   margin: 0;
 }
 
+.fallout-maw-ability-action-section,
+.fallout-maw-ability-action-choice-list,
+.fallout-maw-ability-action-cost-detail {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fallout-maw-ability-action-section {
+  border-bottom: 1px solid rgba(210, 190, 140, 0.14);
+  padding-bottom: 0.6rem;
+}
+
+.fallout-maw-ability-action-choice-row {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fallout-maw-ability-action-main-settings {
+  padding-top: 0.1rem;
+}
+
+.fallout-maw-ability-action-cost-detail {
+  background: rgba(80, 112, 145, 0.08);
+  border-left: 3px solid rgba(112, 158, 205, 0.5);
+  padding: 0.5rem 0.65rem;
+}
+
+.fallout-maw-ability-action-cost-detail[hidden] {
+  display: none;
+}
+
+.fallout-maw-ability-action-cost-detail > label {
+  display: grid;
+  gap: 0.2rem;
+  grid-template-columns: minmax(180px, 1fr) minmax(90px, 180px);
+  align-items: center;
+}
+
+.fallout-maw-ability-action-cost-detail .hint {
+  margin: 0;
+}
+
 .fallout-maw-ability-condition-fields {
   display: grid;
   gap: 0.45rem;

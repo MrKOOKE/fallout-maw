@@ -319,8 +319,16 @@ export function createSystemEventDispatcher({
     if (knownRootId) {
       const knownRoot = roots.get(knownRootId);
       if (knownRoot && !knownRoot.closeRequested) {
+        const leaseId = resolvedRuntime.randomId();
+        knownRoot.leases.set(leaseId, {
+          id: leaseId,
+          userId: requesterUserId,
+          owner: false,
+          parentEventId: null,
+          lineage: new Set()
+        });
         touchRoot(knownRoot);
-        return buildOpenedRootResult(knownRoot, knownRoot.ownerLeaseId, true);
+        return buildOpenedRootResult(knownRoot, leaseId, false);
       }
       throw createDispatcherError("rootClosed", `System event operation '${normalizedMeta.operationId}' is already closed.`);
     }

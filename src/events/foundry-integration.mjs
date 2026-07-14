@@ -26,6 +26,13 @@ import {
   eventReactionIndexHasKey,
   registerEventReactionSubscriptionIndexHooks
 } from "./event-reaction-index.mjs";
+import {
+  collectAbilityWeaponAttackOptions,
+  executeAbilityWeaponAttackOption,
+  registerAbilityActionQueries,
+  resolveAbilityActionTriggerTarget,
+  selectAbilityWeaponAttackOption
+} from "../abilities/ability-actions.mjs";
 
 const LEGACY_REACTION_EVENT_MAP = Object.freeze({
   weaponAttackTargeted: "fallout-maw.weapon.attack.targeted",
@@ -46,10 +53,17 @@ let activeGmId = "";
 export function registerFoundrySystemEventIntegration() {
   if (registered) return eventRuntime;
   registered = true;
+  registerAbilityActionQueries();
 
   eventRuntime = createFoundryEventReactionRuntime({
     registerRootFinalizer: registerSystemEventRootFinalizer,
     canReactToEvent: envelope => envelope?.data?.suppressGenericEventReactions !== true,
+    actionRuntime: {
+      collectOptions: collectAbilityWeaponAttackOptions,
+      selectOption: selectAbilityWeaponAttackOption,
+      execute: executeAbilityWeaponAttackOption,
+      resolveTriggerTarget: resolveAbilityActionTriggerTarget
+    },
     warn: warning => console.warn(`${SYSTEM_ID} | Event Reaction condition ignored`, warning)
   });
   registerReactionProvider(eventRuntime.provider);
@@ -114,13 +128,20 @@ async function interceptEventReactions({ event, scope } = {}) {
   const baseContext = managed && event.data.legacyContext && typeof event.data.legacyContext === "object"
     ? event.data.legacyContext
     : {};
+  const damageHubOperationRef = String(
+    event?.data?.damageHubOperationRef
+    ?? event?.data?.request?.damageHubOperationRef
+    ?? baseContext?.damageHubOperationRef
+    ?? ""
+  ).trim();
   const context = {
     ...baseContext,
     envelope: event,
     semanticEvent: event,
     chainRef: scope?.chainRef ?? null,
-    inDamageHubOperation: Boolean(event?.data?.inDamageHubOperation),
-    damageHubOperation: event?.data?.inDamageHubOperation ? "current" : "",
+    inDamageHubOperation: Boolean(event?.data?.inDamageHubOperation || damageHubOperationRef),
+    damageHubOperation: event?.data?.inDamageHubOperation || damageHubOperationRef ? "current" : "",
+    damageHubOperationRef,
     logicalWorldTime: Number(event?.occurredAt?.worldTime) || null,
     falloutMawSemanticReactionAdapted: true
   };
@@ -150,9 +171,10 @@ async function adaptLegacyReactionEvent(eventKey, context = {}) {
     ?? normalizedContext.eventId
     ?? foundry.utils.randomID()
   );
+  const occurrenceScope = occurrences.map(occurrence => occurrence.occurrenceKey).join("|");
   return withSystemEventRoot({
     kind: `legacyReaction:${eventKey}`,
-    operationId: `reaction:${eventKey}:${operationId}`,
+    operationId: `reaction:${eventKey}:${operationId}:${occurrenceScope}`,
     sceneUuid: getContextSceneUuid(normalizedContext),
     combatUuid: String(game.combat?.uuid ?? ""),
     chainRef: normalizedContext.chainRef ?? null

@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
+  ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   normalizeAbilityFunctions,
@@ -13,15 +14,7 @@ import { toInteger } from "../utils/numbers.mjs";
 export const ABILITY_FUNCTION_COOLDOWN_FLAG_KEY = "abilityFunctionCooldown";
 export const ABILITY_ITEM_USE_COUNTERS_FLAG_KEY = "abilityItemUseCounters";
 export const ACTION_BLOCK_EFFECT_KEY_PREFIX = "system.blocks.actions.";
-export const ATTACKING_WEAPON_ACTION_KEYS = Object.freeze([
-  "aimedShot",
-  "snapshot",
-  "burst",
-  "volley",
-  "meleeAttack",
-  "aimedMeleeAttack",
-  "push"
-]);
+export const ATTACKING_WEAPON_ACTION_KEYS = ABILITY_ATTACKING_WEAPON_ACTION_KEYS;
 
 export function hasActorFixedAbilityFunction(actor, fixedKey = "") {
   const key = String(fixedKey ?? "").trim();

@@ -202,51 +202,55 @@ async function processReactionEventRequest(request = {}) {
     offersByActor.get(offer.actorUuid).push(offer);
   }
   const actorOrder = await getStableReactionActorOrder(offersByActor.keys());
+  let responses = new Map();
+  // The global lock protects only the simultaneous decision window. A selected reaction may open another
+  // Reaction Hub while it executes, so keeping this lock through provider.execute would nest under the parent lock.
   beginReactionLock(lockId, { reason: eventKey });
   try {
     await createReactionOpportunityMessage({ context, actorOrder, offersByActor });
-    const responses = await queryReactionOwners(actorOrder, offersByActor, { eventKey, context, timeoutMs });
-    let finalResult = createReactionHubResult();
-    for (const actorUuid of actorOrder) {
-      const actorOffers = offersByActor.get(actorUuid) ?? [];
-      const actor = await fromUuid(actorUuid);
-      if (!canActorReact(actor)) continue;
-      const response = responses.get(actorUuid) ?? null;
-      if (!response?.offerId) continue;
-      const selectedOffer = actorOffers.find(offer => offer.offerId === response.offerId);
-      if (!selectedOffer) continue;
-      if (!canAffordReactionOffer(actor, selectedOffer)) continue;
-      const provider = reactionProviders.get(selectedOffer.providerId);
-      if (!provider) continue;
-      try {
-        if (reactionExecutionGuard) {
-          const allowed = await reactionExecutionGuard({
-            eventKey,
-            context,
-            semanticEvent,
-            offer: selectedOffer,
-            response
-          });
-          if (allowed === false) continue;
-        }
-        const result = await provider.execute({
+    responses = await queryReactionOwners(actorOrder, offersByActor, { eventKey, context, timeoutMs });
+  } finally {
+    endReactionLock(lockId);
+  }
+
+  let finalResult = createReactionHubResult();
+  for (const actorUuid of actorOrder) {
+    const actorOffers = offersByActor.get(actorUuid) ?? [];
+    const actor = await fromUuid(actorUuid);
+    if (!canActorReact(actor)) continue;
+    const response = responses.get(actorUuid) ?? null;
+    if (!response?.offerId) continue;
+    const selectedOffer = actorOffers.find(offer => offer.offerId === response.offerId);
+    if (!selectedOffer) continue;
+    if (!canAffordReactionOffer(actor, selectedOffer)) continue;
+    const provider = reactionProviders.get(selectedOffer.providerId);
+    if (!provider) continue;
+    try {
+      if (reactionExecutionGuard) {
+        const allowed = await reactionExecutionGuard({
           eventKey,
           context,
           semanticEvent,
           offer: selectedOffer,
           response
         });
-        const normalized = createReactionHubResult(result ?? {});
-        finalResult = mergeReactionHubResults(finalResult, normalized);
-        if (normalized.cancelRemaining) break;
-      } catch (error) {
-        console.error(`${SYSTEM_ID} | Reaction execution failed: ${selectedOffer.providerId}`, error);
+        if (allowed === false) continue;
       }
+      const result = await provider.execute({
+        eventKey,
+        context,
+        semanticEvent,
+        offer: selectedOffer,
+        response
+      });
+      const normalized = createReactionHubResult(result ?? {});
+      finalResult = mergeReactionHubResults(finalResult, normalized);
+      if (normalized.cancelRemaining) break;
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Reaction execution failed: ${selectedOffer.providerId}`, error);
     }
-    return finalResult;
-  } finally {
-    endReactionLock(lockId);
   }
+  return finalResult;
 }
 
 function canAffordReactionOffer(actor, offer = {}) {
@@ -465,7 +469,7 @@ function localizeReactionText(key, fallback) {
   return localized && localized !== key ? localized : fallback;
 }
 
-function getReactionTimeoutMs() {
+export function getReactionTimeoutMs() {
   const seconds = Number(getCombatSettings()?.reactions?.timeoutSeconds);
   return normalizeReactionTimeoutMs(Number.isFinite(seconds) ? seconds * 1000 : DEFAULT_REACTION_TIMEOUT_MS);
 }
@@ -584,7 +588,7 @@ function isCurrentActiveGM() {
   return Boolean(activeGM && game.user?.id === activeGM.id);
 }
 
-function getResponsibleOwner(actor) {
+export function getResponsibleOwner(actor) {
   return (game.users?.contents ?? [])
     .filter(user => user.active && !user.isGM && actor?.testUserPermission?.(user, "OWNER"))
     .sort((left, right) => left.id.localeCompare(right.id))

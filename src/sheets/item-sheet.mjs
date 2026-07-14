@@ -37,6 +37,10 @@ import {
   hasPersistedContainerSpecialGridBaseAnchor
 } from "../utils/inventory-containers.mjs";
 import {
+  ABILITY_ACTION_POINT_COST_MODES,
+  ABILITY_ACTION_TARGET_MODES,
+  ABILITY_ATTACK_ACTION_ALL,
+  ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
   ABILITY_AURA_MODES,
@@ -51,6 +55,7 @@ import {
   ABILITY_HEALTH_TARGETS,
   ABILITY_POSTURE_ACTIONS,
   ABILITY_POSTURE_SUBJECTS,
+  createAbilityAction,
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
@@ -896,6 +901,26 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-change]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-action]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityAction(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-action]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityAction(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-attack-choice]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityAttackChoice(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-attack-choice]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityAttackChoice(event));
+    });
+    this.element?.querySelectorAll("[data-ability-action-cost-mode]").forEach(select => {
+      select.addEventListener("change", () => syncItemAbilityActionCostVisibility(select));
+      syncItemAbilityActionCostVisibility(select);
+    });
+    this.element?.querySelectorAll("[data-ability-attack-choice]").forEach(select => {
+      select.addEventListener("change", () => syncItemAbilityAttackChoiceControls(select));
+      syncItemAbilityAttackChoiceControls(select);
     });
     this.element?.querySelectorAll("[data-add-ability-condition]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityCondition(event));
@@ -2622,6 +2647,58 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]?.changes?.[changeIndex]) return undefined;
     functions[functionIndex].changes.splice(changeIndex, 1);
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityAction(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const entry = functions[functionIndex];
+    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication].includes(entry?.type)) return undefined;
+    entry.actions ??= [];
+    entry.actions.push(createAbilityAction());
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityAction(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const actionIndex = Number(event.currentTarget?.closest?.("[data-ability-action-row]")?.dataset.actionIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    if (!functions[functionIndex]?.actions?.[actionIndex]) return undefined;
+    functions[functionIndex].actions.splice(actionIndex, 1);
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityAttackChoice(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const actionIndex = Number(event.currentTarget?.closest?.("[data-ability-action-row]")?.dataset.actionIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const action = functions[functionIndex]?.actions?.[actionIndex];
+    if (!action || action.attackActionKeys?.includes(ABILITY_ATTACK_ACTION_ALL)) return undefined;
+    const nextKey = ABILITY_ATTACKING_WEAPON_ACTION_KEYS.find(key => !action.attackActionKeys.includes(key));
+    if (!nextKey) return undefined;
+    action.attackActionKeys.push(nextKey);
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityAttackChoice(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const actionIndex = Number(event.currentTarget?.closest?.("[data-ability-action-row]")?.dataset.actionIndex ?? -1);
+    const choiceIndex = Number(event.currentTarget?.closest?.("[data-ability-attack-choice-row]")?.dataset.choiceIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const choices = functions[functionIndex]?.actions?.[actionIndex]?.attackActionKeys;
+    if (!Array.isArray(choices) || choices.length <= 1 || choiceIndex < 0) return undefined;
+    choices.splice(choiceIndex, 1);
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -5898,6 +5975,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     isActiveApplication,
     isFixed,
     canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
+    canConfigureActions: isEffectChanges || isActiveApplication,
     fixedKey,
     activeApplicationSettings,
     fixedDeusSettings,
@@ -5937,12 +6015,49 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
+    actions: (entry?.actions ?? []).map((action, index) => prepareItemAbilityActionForDisplay(action, index, functionIndex, functionPath)),
     conditions,
     conditionGroups: buildAbilityConditionDisplayGroups(conditions),
     penalties: (entry?.penalties ?? []).map((change, index) => prepareAbilityPenaltyForDisplay(change, functionIndex, index, functionPath)),
     hasConditions: Boolean(entry?.conditions?.length),
     hasPenalties: Boolean(entry?.penalties?.length),
     canAddPenalty: !hasEventReaction && hasRuntimeConditions
+  };
+}
+
+function prepareItemAbilityActionForDisplay(action, index, functionIndex, functionPath) {
+  const selected = new Set(action?.attackActionKeys ?? []);
+  const allSelected = selected.has(ABILITY_ATTACK_ACTION_ALL);
+  const choices = [
+    { key: ABILITY_ATTACK_ACTION_ALL, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.AllAttacks") },
+    ...buildAbilityWeaponActionEntries()
+  ];
+  return {
+    ...action,
+    index,
+    functionIndex,
+    functionPath,
+    isWeaponAttack: action?.type === "weaponAttack",
+    attackActionRows: (allSelected ? [ABILITY_ATTACK_ACTION_ALL] : action.attackActionKeys).map((selectedKey, choiceIndex) => ({
+      choiceIndex,
+      functionPath,
+      functionIndex,
+      actionIndex: index,
+      choices: choices.map(choice => ({ ...choice, selected: choice.key === selectedKey }))
+    })),
+    canAddAttackAction: !allSelected && selected.size < ABILITY_ATTACKING_WEAPON_ACTION_KEYS.length,
+    canDeleteAttackAction: !allSelected && selected.size > 1,
+    usesFixedActionPointCost: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed,
+    usesActualActionPointCost: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual,
+    targetModeChoices: [
+      { value: ABILITY_ACTION_TARGET_MODES.triggerActor, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetTrigger"), selected: action?.targetMode === ABILITY_ACTION_TARGET_MODES.triggerActor },
+      { value: ABILITY_ACTION_TARGET_MODES.free, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetFree"), selected: action?.targetMode === ABILITY_ACTION_TARGET_MODES.free }
+    ],
+    costModeChoices: [
+      { value: ABILITY_ACTION_POINT_COST_MODES.none, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostNone"), selected: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.none },
+      { value: ABILITY_ACTION_POINT_COST_MODES.fixed, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostFixed"), selected: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed },
+      { value: ABILITY_ACTION_POINT_COST_MODES.actual, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostActual"), selected: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual }
+    ]
   };
 }
 
@@ -6729,8 +6844,32 @@ function buildAbilityWeaponActionEntries() {
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley") },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack") },
-    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack") }
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack") },
+    { key: "push", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush") }
   ];
+}
+
+function syncItemAbilityActionCostVisibility(select) {
+  const actionRow = select?.closest?.("[data-ability-action-row]");
+  if (!actionRow) return;
+  const mode = String(select.value ?? "");
+  const fixed = actionRow.querySelector("[data-ability-action-fixed-cost]");
+  const actual = actionRow.querySelector("[data-ability-action-actual-cost]");
+  if (fixed) fixed.hidden = mode !== ABILITY_ACTION_POINT_COST_MODES.fixed;
+  if (actual) actual.hidden = mode !== ABILITY_ACTION_POINT_COST_MODES.actual;
+}
+
+function syncItemAbilityAttackChoiceControls(select) {
+  const actionRow = select?.closest?.("[data-ability-action-row]");
+  if (!actionRow) return;
+  const selects = Array.from(actionRow.querySelectorAll("[data-ability-attack-choice]"));
+  const selected = new Set(selects.map(entry => String(entry.value ?? "")));
+  const locked = selected.has(ABILITY_ATTACK_ACTION_ALL);
+  const add = actionRow.querySelector("[data-add-ability-attack-choice]");
+  if (add) add.disabled = locked || selected.size >= ABILITY_ATTACKING_WEAPON_ACTION_KEYS.length;
+  for (const button of actionRow.querySelectorAll("[data-delete-ability-attack-choice]")) {
+    button.disabled = locked || selects.length <= 1;
+  }
 }
 
 function buildAbilityWeaponActionRows(value = []) {

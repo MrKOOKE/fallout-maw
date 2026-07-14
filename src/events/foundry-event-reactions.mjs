@@ -13,6 +13,7 @@ export function createFoundryEventReactionRuntime({
   resourceSettings = null,
   evaluateCostFormula = null,
   applyHealthCost = null,
+  actionRuntime = null,
   logger = console,
   warn = undefined
 } = {}) {
@@ -35,6 +36,7 @@ export function createFoundryEventReactionRuntime({
     conditionEvaluator: abilityConditionApplies,
     registerRootCleanup,
     canReactToEvent,
+    actionRuntime,
     warn,
     logger
   });

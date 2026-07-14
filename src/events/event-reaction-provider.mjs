@@ -28,6 +28,7 @@ export function createGenericEventReactionProvider({
   effectManager,
   registerRootCleanup = null,
   canReactToEvent = () => true,
+  actionRuntime = null,
   hasEventKey = eventReactionIndexHasKey,
   warn = undefined,
   logger = console
@@ -93,8 +94,8 @@ export function createGenericEventReactionProvider({
       );
       const quote = await costRegistry.quote(actor, costRows, quoteContext);
       if (!quote.valid || !quote.affordable) continue;
-      consumedChances.add(candidate.chanceKey);
-      ensureRootCleanup(candidate.rootId);
+      const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
+      if (!variants.length) continue;
       offers.push({
         ...candidate,
         energyCost: 0,
@@ -109,6 +110,8 @@ export function createGenericEventReactionProvider({
           costFingerprint: quote.fingerprint
         }
       });
+      consumedChances.add(candidate.chanceKey);
+      ensureRootCleanup(candidate.rootId);
     }
     return offers;
   }
@@ -117,74 +120,104 @@ export function createGenericEventReactionProvider({
     const envelope = getReactionEnvelope(eventKey, { ...context, semanticEvent: semanticEvent ?? context?.semanticEvent });
     const actor = await safeResolve(offer.actorUuid, resolveUuid);
     if (!actor || !canOfferToActor(actor, envelope) || !canReactToEvent(envelope)) return failedResult("invalidReactor");
-    return costRegistry.withActorLock(actor, async actorLockToken => {
-      const sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);
-      if (!sourceItem) {
-        return failedResult("invalidSourceItem");
-      }
-      const abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
-      if (!abilityFunction) return failedResult("invalidFunction");
-      const matches = await eventReactionFunctionMatches({
-        reactor: actor,
-        item: sourceItem,
-        abilityFunction,
-        envelope,
-        resolveUuid,
-        ...(conditionEvaluator ? { conditionEvaluator } : {}),
-        warn
-      });
-      if (!matches) return failedResult("conditionsChanged");
+    let sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);
+    if (!sourceItem) return failedResult("invalidSourceItem");
+    let abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
+    if (!abilityFunction) return failedResult("invalidFunction");
+    if (!(await matchesCurrentEventReaction(actor, sourceItem, abilityFunction, envelope))) {
+      return failedResult("conditionsChanged");
+    }
 
-      const baseRows = abilityFunction.reactionSettings?.costs ?? [];
-      const costRows = withAbilityOverloadCostRows(
-        actor,
-        sourceItem,
-        abilityFunction,
-        baseRows
-      );
-      const execution = await costRegistry.execute(actor, costRows, {
-        expectedFingerprint: String(offer.costFingerprint ?? offer.eventReaction?.costFingerprint ?? ""),
-        actorLockToken,
-        rootId: envelope.rootId,
-        eventId: envelope.eventId,
-        sourceItemUuid: sourceItem.uuid,
-        functionId: abilityFunction.id,
-        chainRef: context?.chainRef,
-        inDamageHubOperation: Boolean(context?.inDamageHubOperation),
-        damageHubOperation: context?.damageHubOperation,
-        logicalWorldTime: context?.logicalWorldTime,
-        afterSpend: async (_quote, executionContext) => {
-          const effect = await effectManager.apply({
+    const actionSelection = await resolveActionSelection({
+      actor,
+      abilityFunction,
+      envelope,
+      offer,
+      actionRuntime
+    });
+    if (!actionSelection.ok) return failedResult(actionSelection.reason);
+
+    // Selection can remain open while the world changes. Re-read the source and trigger immediately before payment.
+    sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);
+    if (!sourceItem) return failedResult("invalidSourceItem");
+    abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
+    if (!abilityFunction) return failedResult("invalidFunction");
+    if (!(await matchesCurrentEventReaction(actor, sourceItem, abilityFunction, envelope))) {
+      return failedResult("conditionsChanged");
+    }
+
+    const baseRows = abilityFunction.reactionSettings?.costs ?? [];
+    const costRows = withAbilityOverloadCostRows(
+      actor,
+      sourceItem,
+      abilityFunction,
+      baseRows
+    );
+    const execution = await costRegistry.execute(actor, costRows, {
+      expectedFingerprint: String(offer.costFingerprint ?? offer.eventReaction?.costFingerprint ?? ""),
+      rootId: envelope.rootId,
+      eventId: envelope.eventId,
+      sourceItemUuid: sourceItem.uuid,
+      functionId: abilityFunction.id,
+      chainRef: context?.chainRef,
+      inDamageHubOperation: Boolean(context?.inDamageHubOperation),
+      damageHubOperation: context?.damageHubOperation,
+      logicalWorldTime: context?.logicalWorldTime,
+      afterSpend: async (_quote, executionContext) => {
+        const effect = abilityFunction.changes?.length
+          ? await effectManager.apply({
             actor,
             sourceItem,
             abilityFunction,
             envelope,
             chainRef: context?.chainRef
-          });
-          await applyAbilityFunctionOverloadCosts(actor, sourceItem, abilityFunction, {
-            chainRef: context?.chainRef
-          });
-          if (getAbilityFunctionEffectDurationSeconds(abilityFunction) === 0) ensureRootCleanup(envelope.rootId);
-          return { effect, executionContext };
-        }
-      });
-      if (!execution.ok) return failedResult(execution.reason);
-      return {
-        handled: true,
-        status: REACTION_SUCCESS,
-        cancelCurrent: false,
-        cancelRemaining: false,
-        difficultyBonus: 0,
-        reason: "eventReactionApplied"
-      };
-    }, null, envelope.rootId);
+          })
+          : null;
+        await applyAbilityFunctionOverloadCosts(actor, sourceItem, abilityFunction, {
+          chainRef: context?.chainRef
+        });
+        if (effect && getAbilityFunctionEffectDurationSeconds(abilityFunction) === 0) ensureRootCleanup(envelope.rootId);
+        const actionUsed = actionSelection.option
+          ? await actionRuntime.execute({
+            actor,
+            option: actionSelection.option,
+            targetToken: actionSelection.targetToken,
+            chainRef: context?.chainRef,
+            damageHubOperationRef: context?.damageHubOperationRef,
+            ignoreReactionLock: true
+          })
+          : true;
+        return { effect, actionUsed, executionContext };
+      }
+    });
+    if (!execution.ok) return failedResult(execution.reason);
+    if (execution.afterResult?.actionUsed === false) return failedResult("actionFailed");
+    return {
+      handled: true,
+      status: REACTION_SUCCESS,
+      cancelCurrent: false,
+      cancelRemaining: false,
+      difficultyBonus: 0,
+      reason: "eventReactionApplied"
+    };
+  }
+
+  function matchesCurrentEventReaction(actor, sourceItem, abilityFunction, envelope) {
+    return eventReactionFunctionMatches({
+      reactor: actor,
+      item: sourceItem,
+      abilityFunction,
+      envelope,
+      resolveUuid,
+      ...(conditionEvaluator ? { conditionEvaluator } : {}),
+      warn
+    });
   }
 
   async function cleanupRoot(rootId = "") {
     const normalized = String(rootId ?? "").trim();
     if (!normalized) return 0;
     for (const chance of Array.from(consumedChances)) {
-      // Root-scoped keys start with rootId|; attack-scoped keys keep until session end (ids are unique).
       if (chance.startsWith(`${normalized}|`)) consumedChances.delete(chance);
     }
     registeredRootCleanups.delete(normalized);
@@ -206,6 +239,40 @@ export function createGenericEventReactionProvider({
     cleanupOrphans: activeRootIds => effectManager.cleanupOrphans(activeRootIds),
     hasConsumedChance: chanceKey => consumedChances.has(String(chanceKey ?? ""))
   });
+}
+
+async function collectActionVariants(actor, abilityFunction, envelope, actionRuntime) {
+  const actions = abilityFunction?.actions ?? [];
+  if (!actions.length) return [{ action: null, option: null }];
+  if (!actionRuntime?.collectOptions || !actionRuntime?.selectOption || !actionRuntime?.execute) return [];
+  const variants = [];
+  for (const action of actions) {
+    const targetToken = action.targetMode === "free"
+      ? null
+      : await actionRuntime.resolveTriggerTarget?.(envelope);
+    if (action.targetMode !== "free" && !targetToken) continue;
+    for (const option of await actionRuntime.collectOptions(actor, action)) variants.push({ action, option, targetToken });
+  }
+  return variants;
+}
+
+async function resolveActionSelection({ actor, abilityFunction, envelope, offer, actionRuntime }) {
+  const actions = abilityFunction?.actions ?? [];
+  if (!actions.length) return { ok: true, option: null, targetToken: null };
+  if (!actionRuntime?.collectOptions || !actionRuntime?.selectOption || !actionRuntime?.execute) {
+    return { ok: false, reason: "actionRuntimeUnavailable" };
+  }
+  const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
+  if (!variants.length) return { ok: false, reason: "actionUnavailable" };
+  const option = await actionRuntime.selectOption(actor, variants.map(variant => variant.option), {
+    title: String(offer?.label ?? ""),
+    targetName: String(variants.find(variant => variant.targetToken)?.targetToken?.actor?.name ?? "")
+  });
+  if (!option) return { ok: false, reason: "actionDeclined" };
+  const selected = variants.find(variant => variant.option.id === option.id);
+  return selected
+    ? { ok: true, option: selected.option, targetToken: selected.targetToken }
+    : { ok: false, reason: "actionChanged" };
 }
 
 export function getReactionEnvelope(eventKey = "", context = {}) {
