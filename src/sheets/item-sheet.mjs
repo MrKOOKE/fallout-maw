@@ -112,6 +112,14 @@ import {
   getFirstUnusedEventReactionDepthFilterValue,
   setEventReactionDepthFilterValues
 } from "../events/event-reaction-depth-ui.mjs";
+import {
+  EVENT_REACTION_PROGRESS_FLAG_KEY,
+  getEventReactionProgressCurrent,
+  getEventReactionProgressKey,
+  getEventReactionProgressLabel,
+  isEventReactionProgressTracked,
+  normalizeEventReactionProgressRequired
+} from "../events/event-reaction-progress.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
 import {
   SYSTEM_EVENT_PHASES,
@@ -521,7 +529,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasFreeSettingsFunction,
       itemFreeSettingsFunctionPath: "system.functions.freeSettings.entries",
       itemFreeSettingsFunctions: normalizeAbilityFunctions(item.system?.functions?.freeSettings?.entries ?? [])
-        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions.freeSettings.entries")),
+        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions.freeSettings.entries", item)),
       hasImplantFunction,
       implantLimbRows: buildImplantLimbRows(item, creatureOptions),
       canAddImplantLimb: canAddImplantLimb(item, creatureOptions),
@@ -978,6 +986,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-event-depth-filter]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityEventDepthFilter(event));
+    });
+    this.element?.querySelectorAll("[data-event-reaction-progress-current]").forEach(input => {
+      const markDirty = () => {
+        input.dataset.eventReactionProgressDirty = "true";
+      };
+      input.addEventListener("input", markDirty);
+      input.addEventListener("change", markDirty);
     });
     this.element?.querySelectorAll("[data-add-ability-item-use-category]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityItemUseCategory(event));
@@ -6094,7 +6109,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     allowEventReaction: isEffectChanges,
     eventReactionMode: hasEventReaction,
     eventReactionSettings,
-    functionPath
+    functionPath,
+    item,
+    abilityFunction: entry
   }));
   const hasRuntimeConditions = (entry?.conditions ?? []).some(condition => isAbilityRuntimeCondition(condition?.type));
   return {
@@ -6592,7 +6609,9 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   allowEventReaction = false,
   eventReactionMode = false,
   eventReactionSettings = null,
-  functionPath = "system.functions"
+  functionPath = "system.functions",
+  item = null,
+  abilityFunction = null
 } = {}) {
   const type = String(condition?.type ?? "");
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
@@ -6642,6 +6661,11 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
       localize: localizeAbilityCatalogValue
     })
     : [];
+  const eventProgressRequired = normalizeEventReactionProgressRequired(condition?.progressRequired);
+  const showEventProgress = isEventReaction && isEventReactionProgressTracked(condition?.eventKey);
+  const eventProgressCurrent = showEventProgress
+    ? getEventReactionProgressCurrent(item, abilityFunction, condition)
+    : 0;
   return {
     ...condition,
     functionPath,
@@ -6654,6 +6678,10 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
     eventReactionSettings: isEventReaction ? eventReactionSettings : null,
+    showEventProgress,
+    eventProgressLabel: showEventProgress ? getEventReactionProgressLabel(condition?.eventKey) : "",
+    eventProgressCurrent,
+    eventProgressRequired,
     combatOnly: Boolean(condition?.combatOnly),
     autoApply: Boolean(condition?.autoApply),
     trackingTargetRows: buildAbilityEventTrackingTargetRows(trackingTargets),
@@ -7615,6 +7643,23 @@ function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) 
       if (type !== ABILITY_CONDITION_TYPES.eventReaction) continue;
       const conditionIndex = Number(conditionRow.dataset.conditionIndex ?? -1);
       if (conditionIndex < 0) continue;
+      const functionId = String(
+        row.dataset.functionId
+        ?? row.querySelector("input[name$='.id']")?.value
+        ?? ""
+      ).trim();
+      const conditionId = String(conditionRow.querySelector("input[name$='.id']")?.value ?? "").trim();
+      const eventKey = String(conditionRow.querySelector("input[name$='.eventKey']")?.value ?? "").trim();
+      const progressInput = conditionRow.querySelector("[data-event-reaction-progress-current]");
+      const rawProgressCurrent = Number(progressInput?.value);
+      const progressRequired = normalizeEventReactionProgressRequired(
+        conditionRow.querySelector("input[name$='.progressRequired']")?.value
+      );
+      const progressCurrent = Math.max(0, Math.min(
+        progressRequired,
+        Number.isFinite(rawProgressCurrent) ? rawProgressCurrent : 0
+      ));
+      const progressKey = getEventReactionProgressKey({ functionId, conditionId });
       const combatOnly = Boolean(conditionRow.querySelector("[data-ability-event-reaction-combat-only]")?.checked);
       const autoApply = Boolean(conditionRow.querySelector("[data-ability-event-reaction-auto-apply]")?.checked);
       foundry.utils.setProperty(
@@ -7627,6 +7672,28 @@ function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) 
         `${functionPath}.${functionIndex}.conditions.${conditionIndex}.autoApply`,
         autoApply
       );
+      if (progressKey && progressInput?.dataset.eventReactionProgressDirty === "true") {
+        foundry.utils.setProperty(
+          submitData,
+          `flags.${SYSTEM_ID}.${EVENT_REACTION_PROGRESS_FLAG_KEY}.${progressKey}.functionId`,
+          functionId
+        );
+        foundry.utils.setProperty(
+          submitData,
+          `flags.${SYSTEM_ID}.${EVENT_REACTION_PROGRESS_FLAG_KEY}.${progressKey}.conditionId`,
+          conditionId
+        );
+        foundry.utils.setProperty(
+          submitData,
+          `flags.${SYSTEM_ID}.${EVENT_REACTION_PROGRESS_FLAG_KEY}.${progressKey}.eventKey`,
+          eventKey
+        );
+        foundry.utils.setProperty(
+          submitData,
+          `flags.${SYSTEM_ID}.${EVENT_REACTION_PROGRESS_FLAG_KEY}.${progressKey}.current`,
+          Math.round((progressCurrent + Number.EPSILON) * 10000) / 10000
+        );
+      }
     }
 
     if (!settingsRoot) continue;

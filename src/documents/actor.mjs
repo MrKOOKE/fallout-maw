@@ -8,6 +8,7 @@ import {
   normalizeResearchCollection,
   prepareResearchForStorage
 } from "../research/storage.mjs";
+import { commitResearchEvent, RESEARCH_EVENT_KEYS, resolveResearchChainRef } from "../research/events.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -285,33 +286,80 @@ export class FalloutMaWActor extends Actor {
     return getResearchById(this.system?.researches, researchId);
   }
 
-  async createResearch(data = {}) {
+  async createResearch(data = {}, options = {}) {
     const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
-    researches.push(prepareResearchForStorage(data));
-    return this.update({ "system.researches": researches });
+    const research = prepareResearchForStorage(data);
+    researches.push(research);
+    return commitResearchEvent({
+      actor: this,
+      eventKey: RESEARCH_EVENT_KEYS.started,
+      beforeResearch: null,
+      afterResearch: research,
+      options: {
+        ...options,
+        reason: String(options?.reason ?? "started")
+      },
+      operation: documentOptions => this.update({ "system.researches": researches }, documentOptions)
+    });
   }
 
-  async updateResearch(researchId = "", data = {}) {
+  async updateResearch(researchId = "", data = {}, options = {}) {
     const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
     const index = researches.findIndex(research => research.id === researchId);
     if (index < 0) return this;
 
+    const beforeResearch = researches[index];
     researches[index] = prepareResearchForStorage({
-      ...researches[index],
+      ...beforeResearch,
       ...data,
-      id: researches[index].id
+      id: beforeResearch.id
     }, {
       generateId: false
     });
+    const afterResearch = researches[index];
+    const documentOptions = {
+      ...(options?.documentOptions ?? {}),
+      falloutMawSystemEventChainRef: resolveResearchChainRef(options),
+      chainRef: resolveResearchChainRef(options)
+    };
 
-    return this.update({ "system.researches": researches });
+    // Research metadata can be edited independently. A semantic progress event
+    // represents only a real increase of the filled amount.
+    if (Number(afterResearch.progress) <= Number(beforeResearch.progress)) {
+      return this.update({ "system.researches": researches }, documentOptions);
+    }
+
+    return commitResearchEvent({
+      actor: this,
+      eventKey: RESEARCH_EVENT_KEYS.progressed,
+      beforeResearch,
+      afterResearch,
+      options: {
+        ...options,
+        reason: String(options?.reason ?? "progressed")
+      },
+      operation: eventDocumentOptions => this.update({ "system.researches": researches }, eventDocumentOptions)
+    });
   }
 
-  async deleteResearch(researchId = "") {
+  async deleteResearch(researchId = "", options = {}) {
     const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+    const research = researches.find(entry => entry.id === researchId) ?? null;
     const nextResearches = researches.filter(research => research.id !== researchId);
     if (nextResearches.length === researches.length) return this;
-    return this.update({ "system.researches": nextResearches });
+    const completionRequested = options?.event === "completed" || options?.completed === true;
+    const completed = completionRequested && Number(research.progress) >= Number(research.target);
+    return commitResearchEvent({
+      actor: this,
+      eventKey: completed ? RESEARCH_EVENT_KEYS.completed : RESEARCH_EVENT_KEYS.cancelled,
+      beforeResearch: research,
+      afterResearch: completed ? research : null,
+      options: {
+        ...options,
+        reason: String(options?.reason ?? (completed ? "completed" : "cancelled"))
+      },
+      operation: documentOptions => this.update({ "system.researches": nextResearches }, documentOptions)
+    });
   }
 
   getDamageDefense(damageTypeKey, limbKey = "") {

@@ -175,6 +175,7 @@ import {
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries, getActorAtRandomActionPointCostReduction } from "../abilities/runtime-state.mjs";
+import { getEventReactionProgressEntries } from "../events/event-reaction-progress.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
 import { actorHasAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
@@ -4720,7 +4721,8 @@ function renderAbilityItemTooltipContentHTML(item, actor, { descriptionHTML = ""
 function buildAbilityTooltipFunctionSections(item, actor = null) {
   const progressRows = [
     ...getAbilityItemUseProgressEntries(item),
-    ...getFixedAbilityFunctionProgressEntries(item)
+    ...getFixedAbilityFunctionProgressEntries(item),
+    ...getEventReactionProgressEntries(item)
   ]
     .map(entry => [entry.label, entry.value ?? `${entry.current} / ${entry.required}`]);
   const energyRows = buildAbilityEnergyCostRows(item, actor);

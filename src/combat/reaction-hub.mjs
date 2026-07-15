@@ -404,7 +404,16 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
       }
     }
   }
-  if (!selected) return createReactionHubResult();
+  if (!selected) {
+    await notifyDeclinedReactionOffers(allOffers, { reason: "declined" });
+    return createReactionHubResult();
+  }
+  if (!autoOffer) {
+    await notifyDeclinedReactionOffers(
+      allOffers.filter(offer => offer.offerId !== selected.offer.offerId),
+      { reason: "notSelected" }
+    );
+  }
 
   let finalResult = createReactionHubResult();
   reactionExecutionDepth += 1;
@@ -445,6 +454,25 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
   } finally {
     reactionExecutionDepth -= 1;
     if (reactionExecutionDepth === 0) await drainPendingReactionRequests();
+  }
+}
+
+async function notifyDeclinedReactionOffers(offers = [], { reason = "declined" } = {}) {
+  for (const offer of offers ?? []) {
+    const provider = reactionProviders.get(offer?.providerId);
+    if (typeof provider?.decline !== "function") continue;
+    const opportunity = offer?.__opportunity ?? {};
+    try {
+      await provider.decline({
+        eventKey: opportunity.eventKey ?? "",
+        context: opportunity.context ?? {},
+        semanticEvent: opportunity.semanticEvent ?? null,
+        offer,
+        reason
+      });
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Reaction decline handling failed: ${offer?.providerId ?? "unknown"}`, error);
+    }
   }
 }
 

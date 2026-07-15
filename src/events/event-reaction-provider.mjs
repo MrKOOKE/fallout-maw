@@ -1,8 +1,8 @@
 import {
   collectActiveSceneReactorActors,
   collectEventReactionCandidates,
-  eventReactionFunctionMatches,
   findEventReactionFunction,
+  getMatchingEventReactionSubscriptionIds,
   getActorEventReactionSourceItems
 } from "./event-reaction-scanner.mjs";
 import { eventReactionIndexHasKey } from "./event-reaction-index.mjs";
@@ -12,6 +12,7 @@ import {
 } from "../abilities/overload.mjs";
 import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
 import { getEventReactionSubscriptions } from "./event-reaction-schema.mjs";
+import { createEventReactionProgressManager } from "./event-reaction-progress.mjs";
 
 export const GENERIC_EVENT_REACTION_PROVIDER_ID = "fallout-maw.genericEventReaction";
 const REACTION_SUCCESS = "success";
@@ -30,6 +31,7 @@ export function createGenericEventReactionProvider({
   registerRootCleanup = null,
   canReactToEvent = () => true,
   actionRuntime = null,
+  progressManager = createEventReactionProgressManager(),
   hasEventKey = eventReactionIndexHasKey,
   warn = undefined,
   logger = console
@@ -39,6 +41,9 @@ export function createGenericEventReactionProvider({
   }
   if (!effectManager?.apply || !effectManager?.cleanupRoot) {
     throw new Error("Generic Event Reaction provider requires an effect manager.");
+  }
+  if (!progressManager?.advance || !progressManager?.isReady || !progressManager?.reset) {
+    throw new Error("Generic Event Reaction provider requires an Event Reaction progress manager.");
   }
   const consumedChances = new Set();
   const registeredRootCleanups = new Set();
@@ -70,15 +75,32 @@ export function createGenericEventReactionProvider({
     });
     const offers = [];
     for (const candidate of candidates) {
-      if (consumedChances.has(candidate.chanceKey)) {
-        continue;
-      }
       const actor = await safeResolve(candidate.actorUuid, resolveUuid);
-      if (!actor || !canOfferToActor(actor, envelope)) continue;
+      if (!actor) continue;
       const sourceItem = resolveOfferSource(actor, candidate.sourceItemUuid);
       const abilityFunction = sourceItem
         ? findEventReactionFunction(sourceItem, candidate.functionId, functionLookupOptions)
         : null;
+      if (!abilityFunction) continue;
+      let progress;
+      try {
+        progress = await progressManager.advance({
+          item: sourceItem,
+          abilityFunction,
+          conditionIds: candidate.matchedConditionIds,
+          envelope,
+          chainRef: context?.chainRef
+        });
+      } catch (error) {
+        logger?.warn?.("fallout-maw | Event Reaction progress advance failed; offer was skipped.", error);
+        continue;
+      }
+      const progressConditionIds = normalizeConditionIds(progress?.readyConditionIds);
+      if (!progress?.ready || !progressConditionIds.length) continue;
+      if (!canOfferToActor(actor, envelope)) continue;
+      // The persistent counter still receives nested events after the function
+      // has spent its single offer for this root.
+      if (consumedChances.has(candidate.chanceKey)) continue;
       const baseRows = candidate.reactionSettings?.costs ?? [];
       const quoteContext = {
         rootId: candidate.rootId,
@@ -99,11 +121,14 @@ export function createGenericEventReactionProvider({
       if (!quote.valid || !quote.affordable) continue;
       const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
       if (!variants.length) continue;
-      const autoApply = getEventReactionSubscriptions(abilityFunction?.conditions).some(condition => condition?.autoApply);
+      const readyIds = new Set(progressConditionIds);
+      const autoApply = getEventReactionSubscriptions(abilityFunction?.conditions)
+        .some(condition => readyIds.has(String(condition?.id ?? "")) && condition?.autoApply);
       offers.push({
         ...candidate,
         energyCost: 0,
         autoApply,
+        progressConditionIds,
         actionVariants: autoApply ? variants : undefined,
         costFingerprint: quote.fingerprint,
         costLines: buildEventReactionCostLines(baseQuote, quote),
@@ -113,6 +138,7 @@ export function createGenericEventReactionProvider({
           sourceItemUuid: candidate.sourceItemUuid,
           functionId: candidate.functionId,
           chanceKey: candidate.chanceKey,
+          progressConditionIds,
           costFingerprint: quote.fingerprint
         }
       });
@@ -130,9 +156,23 @@ export function createGenericEventReactionProvider({
     if (!sourceItem) return failedResult("invalidSourceItem");
     let abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
     if (!abilityFunction) return failedResult("invalidFunction");
-    if (!(await matchesCurrentEventReaction(actor, sourceItem, abilityFunction, envelope))) {
-      return failedResult("conditionsChanged");
-    }
+    const offeredProgressConditionIds = normalizeConditionIds(
+      offer.progressConditionIds ?? offer.eventReaction?.progressConditionIds
+    );
+    if (!offeredProgressConditionIds.length) return failedResult("progressNotReady");
+    let currentProgressConditionIds = await getCurrentMatchingEventReactionIds(
+      actor,
+      sourceItem,
+      abilityFunction,
+      envelope,
+      offeredProgressConditionIds
+    );
+    if (!currentProgressConditionIds.length) return failedResult("conditionsChanged");
+    if (!(await progressManager.isReady({
+      item: sourceItem,
+      abilityFunction,
+      conditionIds: currentProgressConditionIds
+    }))) return failedResult("progressNotReady");
 
     const actionSelection = await resolveActionSelection({
       actor,
@@ -148,9 +188,19 @@ export function createGenericEventReactionProvider({
     if (!sourceItem) return failedResult("invalidSourceItem");
     abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
     if (!abilityFunction) return failedResult("invalidFunction");
-    if (!(await matchesCurrentEventReaction(actor, sourceItem, abilityFunction, envelope))) {
-      return failedResult("conditionsChanged");
-    }
+    currentProgressConditionIds = await getCurrentMatchingEventReactionIds(
+      actor,
+      sourceItem,
+      abilityFunction,
+      envelope,
+      offeredProgressConditionIds
+    );
+    if (!currentProgressConditionIds.length) return failedResult("conditionsChanged");
+    if (!(await progressManager.isReady({
+      item: sourceItem,
+      abilityFunction,
+      conditionIds: currentProgressConditionIds
+    }))) return failedResult("progressNotReady");
 
     const baseRows = abilityFunction.reactionSettings?.costs ?? [];
     const costRows = withAbilityOverloadCostRows(
@@ -200,6 +250,16 @@ export function createGenericEventReactionProvider({
     });
     if (!execution.ok) return failedResult(execution.reason);
     if (execution.afterResult?.actionUsed === false) return failedResult("actionFailed");
+    try {
+      await progressManager.reset({
+        item: sourceItem,
+        abilityFunction,
+        conditionIds: currentProgressConditionIds,
+        chainRef: context?.chainRef
+      });
+    } catch (error) {
+      logger?.warn?.("fallout-maw | Event Reaction progress reset failed after successful execution.", error);
+    }
     return {
       handled: true,
       status: REACTION_SUCCESS,
@@ -210,8 +270,34 @@ export function createGenericEventReactionProvider({
     };
   }
 
-  function matchesCurrentEventReaction(actor, sourceItem, abilityFunction, envelope) {
-    return eventReactionFunctionMatches({
+  async function decline({ context = {}, offer = {} } = {}) {
+    if (offer?.autoApply) return false;
+    const actor = await safeResolve(offer.actorUuid, resolveUuid);
+    if (!actor) return false;
+    const sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);
+    if (!sourceItem) return false;
+    const abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
+    if (!abilityFunction) return false;
+    const conditionIds = normalizeConditionIds(
+      offer.progressConditionIds ?? offer.eventReaction?.progressConditionIds
+    );
+    if (!conditionIds.length) return false;
+    try {
+      await progressManager.reset({
+        item: sourceItem,
+        abilityFunction,
+        conditionIds,
+        chainRef: context?.chainRef
+      });
+      return true;
+    } catch (error) {
+      logger?.warn?.("fallout-maw | Event Reaction progress reset failed after decline.", error);
+      return false;
+    }
+  }
+
+  async function getCurrentMatchingEventReactionIds(actor, sourceItem, abilityFunction, envelope, conditionIds) {
+    const options = {
       reactor: actor,
       item: sourceItem,
       abilityFunction,
@@ -219,7 +305,10 @@ export function createGenericEventReactionProvider({
       resolveUuid,
       ...(conditionEvaluator ? { conditionEvaluator } : {}),
       warn
-    });
+    };
+    const accepted = new Set(normalizeConditionIds(conditionIds));
+    const matching = await getMatchingEventReactionSubscriptionIds(options);
+    return matching.filter(conditionId => accepted.has(conditionId));
   }
 
   async function cleanupRoot(rootId = "") {
@@ -243,6 +332,7 @@ export function createGenericEventReactionProvider({
     id: String(id ?? GENERIC_EVENT_REACTION_PROVIDER_ID),
     collect,
     execute,
+    decline,
     cleanupRoot,
     cleanupOrphans: activeRootIds => effectManager.cleanupOrphans(activeRootIds),
     hasConsumedChance: chanceKey => consumedChances.has(String(chanceKey ?? ""))
@@ -349,6 +439,13 @@ async function safeResolve(uuid, resolveUuid) {
   } catch (error) {
     return null;
   }
+}
+
+function normalizeConditionIds(value = []) {
+  const source = Array.isArray(value) ? value : Object.values(value ?? {});
+  return Array.from(new Set(source
+    .map(conditionId => String(conditionId ?? "").trim())
+    .filter(Boolean)));
 }
 
 function defaultCanOfferToActor(actor) {

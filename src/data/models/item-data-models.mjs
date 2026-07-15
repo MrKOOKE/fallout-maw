@@ -216,6 +216,7 @@ function abilityConditionField() {
       initial: ""
     }),
     eventKey: new StringField({ required: true, blank: true, initial: "" }),
+    progressRequired: new NumberField({ required: true, min: 0.01, initial: 1 }),
     combatOnly: new BooleanField({ required: true, initial: false }),
     autoApply: new BooleanField({ required: true, initial: false }),
     trackingTargets: new ArrayField(new StringField({

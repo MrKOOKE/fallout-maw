@@ -109,6 +109,12 @@ export const ABILITY_EVENT_SUBJECTS = Object.freeze({
   eventTarget: "eventTarget"
 });
 
+export function normalizeEventReactionProgressRequired(value = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 1;
+  return Math.max(0.01, Math.round((numeric + Number.EPSILON) * 10000) / 10000);
+}
+
 export const ABILITY_AURA_MODES = Object.freeze({
   applyToTargets: "applyToTargets",
   selfWhenPresent: "selfWhenPresent"
@@ -684,6 +690,7 @@ function normalizeAbilityCondition(value = {}) {
       groupId,
       type,
       eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
+      progressRequired: normalizeEventReactionProgressRequired(value?.progressRequired),
       combatOnly: normalizeBoolean(value?.combatOnly, false),
       autoApply: normalizeBoolean(value?.autoApply, false),
       trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets),

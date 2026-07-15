@@ -44,7 +44,9 @@ export async function openCreateResearchDialog(actor) {
 
   if (!formData) return null;
 
-  await actor.createResearch(normalizeResearchFormData(formData));
+  await actor.createResearch(normalizeResearchFormData(formData), {
+    progressSource: "researchCreateDialog"
+  });
   ui.notifications.info(localize("FALLOUTMAW.Messages.ResearchCreated"));
   return true;
 }
@@ -89,7 +91,9 @@ export async function openManageResearchDialog(actor, researchId) {
 
   if (!result || (result === "cancel")) return null;
 
-  await actor.updateResearch(researchId, normalizeResearchFormData(result.data));
+  await actor.updateResearch(researchId, normalizeResearchFormData(result.data), {
+    progressSource: "researchManageDialog"
+  });
   ui.notifications.info(localize("FALLOUTMAW.Messages.ResearchUpdated"));
   return true;
 }
@@ -115,7 +119,10 @@ export async function deleteResearchWithConfirm(actor, researchId) {
 
   if (!confirmed) return null;
 
-  await actor.deleteResearch(researchId);
+  await actor.deleteResearch(researchId, {
+    progressSource: "researchDeleteDialog",
+    reason: "cancelledByUser"
+  });
   ui.notifications.info(localize("FALLOUTMAW.Messages.ResearchDeleted"));
   return true;
 }

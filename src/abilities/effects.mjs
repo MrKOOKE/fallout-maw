@@ -40,7 +40,8 @@ export function registerAbilityEffectHooks() {
       });
     }
   });
-  Hooks.on("updateItem", (item, changes) => {
+  Hooks.on("updateItem", (item, changes, options = {}) => {
+    if (options?.falloutMawEventReactionProgress === true) return;
     if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) {
       queueActorAbilityEffectSync(item.parent, {}, {
         aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)

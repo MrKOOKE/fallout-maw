@@ -1549,6 +1549,14 @@
                 </label>
                 {{/each}}
                 <input type="hidden" data-field="conditionEventKey" value="{{selectedEvent.key}}">
+                {{#if showEventProgress}}
+                <label>
+                  <span>{{eventProgressLabel}}</span>
+                  <input type="number" data-field="conditionEventProgressRequired" value="{{eventProgressRequired}}" min="0.01" step="0.01">
+                </label>
+                {{else}}
+                <input type="hidden" data-field="conditionEventProgressRequired" value="{{eventProgressRequired}}">
+                {{/if}}
                 {{#if showEventSkillFilters}}
                 <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-skills">
                   <div class="fallout-maw-item-use-category-header">

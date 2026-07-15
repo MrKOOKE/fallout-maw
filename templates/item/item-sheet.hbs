@@ -1704,6 +1704,18 @@
                 </label>
                 {{/each}}
                 <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.eventKey" value="{{selectedEvent.key}}">
+                {{#if showEventProgress}}
+                <label>
+                  <span>{{eventProgressLabel}}</span>
+                  <div class="fallout-maw-fixed-progress-inputs">
+                    <input type="number" value="{{eventProgressCurrent}}" min="0" max="{{eventProgressRequired}}" step="0.01" data-event-reaction-progress-current aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Progress.Current'}}">
+                    <b>/</b>
+                    <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.progressRequired" value="{{eventProgressRequired}}" min="0.01" step="0.01" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Progress.Required'}}">
+                  </div>
+                </label>
+                {{else}}
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.progressRequired" value="{{eventProgressRequired}}">
+                {{/if}}
                 {{#if showEventSkillFilters}}
                 <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-skills">
                   <div class="fallout-maw-item-use-category-header">
@@ -2508,6 +2520,18 @@
                 </label>
                 {{/each}}
                 <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.eventKey" value="{{selectedEvent.key}}">
+                {{#if showEventProgress}}
+                <label>
+                  <span>{{eventProgressLabel}}</span>
+                  <div class="fallout-maw-fixed-progress-inputs">
+                    <input type="number" value="{{eventProgressCurrent}}" min="0" max="{{eventProgressRequired}}" step="0.01" data-event-reaction-progress-current aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Progress.Current'}}">
+                    <b>/</b>
+                    <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.progressRequired" value="{{eventProgressRequired}}" min="0.01" step="0.01" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Progress.Required'}}">
+                  </div>
+                </label>
+                {{else}}
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.progressRequired" value="{{eventProgressRequired}}">
+                {{/if}}
                 {{#if showEventSkillFilters}}
                 <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-skills">
                   <div class="fallout-maw-item-use-category-header">

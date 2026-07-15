@@ -46,7 +46,7 @@ export async function grantCatalogAbility(actor, sourceId = "") {
   return item;
 }
 
-export async function completeAbilityResearch(actor, researchId = "") {
+export async function completeAbilityResearch(actor, researchId = "", options = {}) {
   const research = getResearchById(actor?.system?.researches, researchId);
   if (!research || research.type !== "ability") return null;
   if (Number(research.progress) < Number(research.target)) return null;
@@ -57,7 +57,12 @@ export async function completeAbilityResearch(actor, researchId = "") {
     item: null,
     blocked: true
   };
-  await actor.deleteResearch(researchId);
+  await actor.deleteResearch(researchId, {
+    ...options,
+    event: "completed",
+    progressSource: String(options?.progressSource ?? "abilityResearchReward"),
+    reason: String(options?.reason ?? "completed")
+  });
   return {
     research,
     item: created

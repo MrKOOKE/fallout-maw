@@ -84,7 +84,7 @@ export async function collectEventReactionCandidates({
     seenActors.add(actorUuid);
     for (const item of getActorEventReactionSourceItems(reactor, { getItems })) {
       for (const abilityFunction of getEventReactionItemFunctions(item, { normalizeFunctions })) {
-        if (!(await eventReactionFunctionMatches({
+        const matchedConditionIds = await getMatchingEventReactionSubscriptionIds({
           reactor,
           item,
           abilityFunction,
@@ -92,8 +92,15 @@ export async function collectEventReactionCandidates({
           participants,
           conditionEvaluator,
           warn
-        }))) continue;
-        candidates.push(buildEventReactionCandidate({ reactor, item, abilityFunction, envelope }));
+        });
+        if (!matchedConditionIds.length) continue;
+        candidates.push(buildEventReactionCandidate({
+          reactor,
+          item,
+          abilityFunction,
+          envelope,
+          matchedConditionIds
+        }));
       }
     }
   }
@@ -110,16 +117,40 @@ export async function eventReactionFunctionMatches({
   conditionEvaluator = defaultConditionEvaluator,
   warn = defaultWarn
 } = {}) {
+  return (await getMatchingEventReactionSubscriptionIds({
+    reactor,
+    item,
+    abilityFunction,
+    envelope,
+    participants,
+    resolveUuid,
+    conditionEvaluator,
+    warn
+  })).length > 0;
+}
+
+/** Return the matching Event Reaction subscription ids after all secondary filters pass. */
+export async function getMatchingEventReactionSubscriptionIds({
+  reactor = null,
+  item = null,
+  abilityFunction = {},
+  envelope = {},
+  participants = null,
+  resolveUuid = defaultResolveUuid,
+  conditionEvaluator = defaultConditionEvaluator,
+  warn = defaultWarn
+} = {}) {
   const reactorActorUuid = String(reactor?.uuid ?? "").trim();
-  if (!reactorActorUuid || abilityFunction?.type !== ABILITY_FUNCTION_TYPES.effectChanges) return false;
+  if (!reactorActorUuid || abilityFunction?.type !== ABILITY_FUNCTION_TYPES.effectChanges) return [];
   const resolved = participants ?? await resolveEventReactionParticipants(envelope, resolveUuid);
   const subscriptions = getEventReactionSubscriptions(abilityFunction.conditions);
-  if (!subscriptions.some(condition => eventReactionSubscriptionMatches(condition, envelope, reactorActorUuid, {
+  const matchedConditionIds = subscriptions.filter(condition => eventReactionSubscriptionMatches(condition, envelope, reactorActorUuid, {
     reactorActor: reactor,
     sourceActor: resolved.sourceActor,
     targetActor: resolved.targetActor
-  }))) return false;
-  return evaluateEventReactionSecondaryConditions({
+  })).map(condition => String(condition?.id ?? "").trim()).filter(Boolean);
+  if (!matchedConditionIds.length) return [];
+  const secondaryMatches = await evaluateEventReactionSecondaryConditions({
     reactor,
     item,
     abilityFunction,
@@ -128,6 +159,7 @@ export async function eventReactionFunctionMatches({
     conditionEvaluator,
     warn
   });
+  return secondaryMatches ? Array.from(new Set(matchedConditionIds)) : [];
 }
 
 export async function evaluateEventReactionSecondaryConditions({
@@ -239,7 +271,13 @@ export async function resolveEventReactionParticipants(envelope = {}, resolveUui
   };
 }
 
-export function buildEventReactionCandidate({ reactor = null, item = null, abilityFunction = {}, envelope = {} } = {}) {
+export function buildEventReactionCandidate({
+  reactor = null,
+  item = null,
+  abilityFunction = {},
+  envelope = {},
+  matchedConditionIds = []
+} = {}) {
   const actorUuid = String(reactor?.uuid ?? "").trim();
   const sourceItemUuid = String(item?.uuid ?? "").trim();
   const functionId = String(abilityFunction?.id ?? "").trim();
@@ -249,9 +287,9 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
   // Subject of the triggering event (e.g. who is rolling the skill check). Without this,
   // one shot that forces checks on two actors shares one chance and only the first is offered.
   const triggerActorUuid = getEventParticipantActorUuid(envelope?.source);
-  // One accept/decline per (logical operation × event × trigger subject × reactor × function).
-  // Keep rootId as the first segment so cleanupRoot(rootId) still clears nested scopes.
-  const chanceKey = [rootId, chanceScope, eventKey, triggerActorUuid, actorUuid, sourceItemUuid, functionId].join("|");
+  // One accept/decline for this function across the whole root, including
+  // nested events and their participants.
+  const chanceKey = [rootId, actorUuid, sourceItemUuid, functionId].join("|");
   return {
     actorUuid,
     sourceItemUuid,
@@ -262,6 +300,9 @@ export function buildEventReactionCandidate({ reactor = null, item = null, abili
     triggerActorUuid,
     eventId: String(envelope?.eventId ?? ""),
     eventKey,
+    matchedConditionIds: Array.from(new Set((matchedConditionIds ?? [])
+      .map(conditionId => String(conditionId ?? "").trim())
+      .filter(Boolean))),
     chanceKey,
     offerId: `event-reaction:${chanceKey}`,
     label: String(item?.name ?? ""),

@@ -62,6 +62,7 @@ import {
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
+  normalizeEventReactionProgressRequired,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -81,6 +82,10 @@ import {
   getFirstUnusedEventReactionDepthFilterValue,
   setEventReactionDepthFilterValues
 } from "../events/event-reaction-depth-ui.mjs";
+import {
+  getEventReactionProgressLabel,
+  isEventReactionProgressTracked
+} from "../events/event-reaction-progress.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
 import {
   SYSTEM_EVENT_PHASES,
@@ -1544,6 +1549,7 @@ function readAbilityConditions(root) {
       groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
       type: row.querySelector("[data-field='conditionType']")?.value || "",
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
+      progressRequired: row.querySelector("[data-field='conditionEventProgressRequired']")?.value ?? 1,
       combatOnly: Boolean(row.querySelector("[data-field='conditionCombatOnly']")?.checked),
       autoApply: Boolean(row.querySelector("[data-field='conditionAutoApply']")?.checked),
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
@@ -2250,6 +2256,7 @@ function prepareConditionForDisplay(condition, {
   const eventDepthFilterGroups = isEventReaction
     ? buildEventReactionDepthFilterGroups(condition, condition?.eventKey, { localize: localizeCatalogValue })
     : [];
+  const showEventProgress = isEventReaction && isEventReactionProgressTracked(condition?.eventKey);
   return {
     ...condition,
     healthTarget,
@@ -2259,6 +2266,9 @@ function prepareConditionForDisplay(condition, {
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
     eventReactionSettings: isEventReaction ? eventReactionSettings : null,
+    showEventProgress,
+    eventProgressLabel: showEventProgress ? getEventReactionProgressLabel(condition?.eventKey) : "",
+    eventProgressRequired: normalizeEventReactionProgressRequired(condition?.progressRequired),
     combatOnly: Boolean(condition?.combatOnly),
     autoApply: Boolean(condition?.autoApply),
     trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),

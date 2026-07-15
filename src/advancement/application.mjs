@@ -937,7 +937,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const targetValue = Math.max(1, Number(research.target) || toInteger(entry.ability.system?.cost) || 1);
     const currentProgress = Math.max(0, Number(research.progress) || 0);
     if (currentProgress >= targetValue) {
-      await completeAbilityResearch(this.actor, research.id);
+      await completeAbilityResearch(this.actor, research.id, {
+        progressSource: "advancementResearchInvestment"
+      });
       this.#syncDraftFromActor();
       return this.forceRender();
     }
@@ -957,9 +959,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       progress: nextProgress,
       target: targetValue,
       freeSpent: Math.max(0, Number(research.freeSpent) || 0) + investment
+    }, {
+      progressSource: "advancementResearchInvestment",
+      gain: investment
     });
 
-    if (nextProgress >= targetValue) await completeAbilityResearch(this.actor, research.id);
+    if (nextProgress >= targetValue) {
+      await completeAbilityResearch(this.actor, research.id, {
+        progressSource: "advancementResearchInvestment"
+      });
+    }
     this.#syncDraftFromActor();
     return this.forceRender();
   }
@@ -975,7 +984,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (this.#getAbilityResearch(sourceId)) return this.forceRender();
 
-    await this.actor.createResearch(this.#createAbilityResearchData(entry));
+    await this.actor.createResearch(this.#createAbilityResearchData(entry), {
+      progressSource: "advancementManualResearch"
+    });
     return this.forceRender();
   }
 
@@ -1012,7 +1023,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const granted = await grantCatalogAbility(this.actor, sourceId);
     if (granted) {
       const research = this.#getAbilityResearch(sourceId);
-      if (research) await this.actor.deleteResearch(research.id);
+      if (research) {
+        await this.actor.deleteResearch(research.id, {
+          progressSource: "advancementAbilityGrant",
+          reason: "abilityGranted"
+        });
+      }
       this.#selectedAbilitySourceId = "";
       this.#syncDraftFromActor();
     }

@@ -6,7 +6,8 @@ const OCCURRENCE_BASE_OPTION = "falloutMawSystemEventOccurrenceBase";
 const MANAGED_REACTION_OPTIONS = Object.freeze([
   "falloutMawEventReactionEffect",
   "falloutMawEventReactionManaged",
-  "falloutMawEventReactionCleanup"
+  "falloutMawEventReactionCleanup",
+  "falloutMawEventReactionProgress"
 ]);
 
 const INVENTORY_SPECIAL_TYPES = new Set(["ability", "trauma", "disease"]);
@@ -123,7 +124,8 @@ export function classifyItemDelete(item, { before = null } = {}) {
   return [createEventDescriptor("inventory.item.removed", context, [])];
 }
 
-export function classifyItemUpdate(item, changes = {}, { before = null, after = null } = {}) {
+export function classifyItemUpdate(item, changes = {}, { before = null, after = null, options = {} } = {}) {
+  if (isManagedReactionOperation(options)) return [];
   const actor = getOwningActor(item);
   if (!actor) return [];
   const previous = normalizeSnapshot(before);
@@ -324,7 +326,10 @@ export function registerFoundryDocumentSystemEventHooks({
   });
   on("createItem", (item, options = {}, userId = "") => emitAfterCommit(classifyItemCreate(item), item, options, userId));
   on("updateItem", (item, changes, options = {}, userId = "") => {
-    emitAfterCommit(classifyItemUpdate(item, changes, snapshotOptions(item, options)), item, options, userId);
+    emitAfterCommit(classifyItemUpdate(item, changes, {
+      ...snapshotOptions(item, options),
+      options
+    }), item, options, userId);
   });
   on("deleteItem", (item, options = {}, userId = "") => {
     emitAfterCommit(classifyItemDelete(item, { before: getBeforeSnapshot(item, options) }), item, options, userId);
