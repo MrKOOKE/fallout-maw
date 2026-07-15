@@ -161,6 +161,88 @@ export function eventReactionTrackingTargetsMatch(condition = {}, {
 }
 
 export const EVENT_REACTION_SKILL_FILTER_ALL = "*";
+export const EVENT_REACTION_EXPECTED_RESULT_KEYS = Object.freeze([
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+]);
+
+const EVENT_REACTION_SKILL_FILTER_EVENTS = new Set([
+  "fallout-maw.trap.detection.resolved"
+]);
+
+const SKILL_CHECK_PAYLOAD_EVENTS = new Set([
+  "fallout-maw.skill.check.beforeRoll",
+  "fallout-maw.skill.check.resolved"
+]);
+
+const EVENT_REACTION_EXPECTED_RESULT_EVENTS = new Set([
+  "fallout-maw.skill.check.resolved",
+  "fallout-maw.weapon.attack.checkResolved"
+]);
+
+export const EVENT_REACTION_DEPTH_FILTER_DEFINITIONS = Object.freeze({
+  weaponAction: Object.freeze({ id: "weaponAction", storageKey: "weaponActionKeys", choiceSource: "weaponActions" }),
+  damageType: Object.freeze({ id: "damageType", storageKey: "damageTypeKeys", choiceSource: "damageTypes" }),
+  damageScope: Object.freeze({ id: "damageScope", storageKey: "damageScopeKeys", choiceSource: "damageScopes" }),
+  limb: Object.freeze({ id: "limb", storageKey: "limbKeys", choiceSource: "limbs" }),
+  resource: Object.freeze({ id: "resource", storageKey: "resourceKeys", choiceSource: "resources" }),
+  need: Object.freeze({ id: "need", storageKey: "needKeys", choiceSource: "needs" }),
+  currency: Object.freeze({ id: "currency", storageKey: "currencyKeys", choiceSource: "currencies" }),
+  status: Object.freeze({ id: "status", storageKey: "statusIds", choiceSource: "statuses" }),
+  itemType: Object.freeze({ id: "itemType", storageKey: "itemTypes", choiceSource: "itemTypes" }),
+  trapDetected: Object.freeze({ id: "trapDetected", storageKey: "trapDetectedValues", choiceSource: "trapDetected" })
+});
+
+const DAMAGE_WORKFLOW_EVENTS = new Set([
+  "fallout-maw.damage.beforeApply",
+  "fallout-maw.healing.beforeApply",
+  "fallout-maw.damage.resolved",
+  "fallout-maw.healing.resolved"
+]);
+
+const WEAPON_ACTION_PAYLOAD_EVENTS = new Set([
+  "fallout-maw.weapon.action.resolved",
+  "fallout-maw.weapon.attack.targeted",
+  "fallout-maw.weapon.attack.committed",
+  "fallout-maw.weapon.attack.aimedLimbSelected",
+  "fallout-maw.weapon.attack.checkResolved",
+  "fallout-maw.weapon.attack.damagePrepared",
+  "fallout-maw.weapon.attack.resolved"
+]);
+
+const ITEM_TYPE_EVENTS = new Set([
+  "fallout-maw.ability.acquired",
+  "fallout-maw.ability.removed",
+  "fallout-maw.ability.toggle.changed",
+  "fallout-maw.actor.trauma.acquired",
+  "fallout-maw.actor.trauma.recovered",
+  "fallout-maw.actor.disease.acquired",
+  "fallout-maw.actor.disease.stageChanged",
+  "fallout-maw.actor.disease.recovered",
+  "fallout-maw.inventory.item.added",
+  "fallout-maw.inventory.item.removed",
+  "fallout-maw.inventory.item.quantityChanged",
+  "fallout-maw.inventory.item.resourceChanged",
+  "fallout-maw.inventory.item.conditionChanged",
+  "fallout-maw.inventory.item.placementChanged",
+  "fallout-maw.inventory.item.equipped",
+  "fallout-maw.inventory.item.unequipped",
+  "fallout-maw.item.lightSource.changed"
+]);
+
+const ACTOR_LIMB_PAYLOAD_EVENTS = new Set([
+  "fallout-maw.actor.limb.changed",
+  "fallout-maw.actor.limb.destroyed",
+  "fallout-maw.actor.limb.restored"
+]);
+
+const ACTOR_NEED_PAYLOAD_EVENTS = new Set([
+  "fallout-maw.actor.need.changed",
+  "fallout-maw.actor.need.thresholdEntered",
+  "fallout-maw.actor.need.thresholdLeft"
+]);
 
 export function getEventReactionPathSegments(eventKey = "") {
   const key = String(eventKey ?? "").trim();
@@ -183,6 +265,108 @@ export function isEventReactionSkillCheckFamily(eventKey = "") {
   return segments[0] === "skill" && segments[1] === "check";
 }
 
+export function getEventReactionDepthProfile(eventKey = "") {
+  const key = String(eventKey ?? "").trim();
+  const filterIds = new Set();
+  if (
+    SKILL_CHECK_PAYLOAD_EVENTS.has(key)
+    || WEAPON_ACTION_PAYLOAD_EVENTS.has(key)
+  ) filterIds.add("weaponAction");
+  if (DAMAGE_WORKFLOW_EVENTS.has(key)) {
+    filterIds.add("damageType");
+    filterIds.add("damageScope");
+    filterIds.add("limb");
+  }
+  if (key === "fallout-maw.weapon.attack.damagePrepared") {
+    filterIds.add("damageType");
+    filterIds.add("limb");
+  }
+  if (key === "fallout-maw.weapon.attack.aimedLimbSelected") filterIds.add("limb");
+  if (ACTOR_LIMB_PAYLOAD_EVENTS.has(key)) filterIds.add("limb");
+  if (key === "fallout-maw.actor.resource.changed" || key === "fallout-maw.combat.resource.spent") filterIds.add("resource");
+  if (ACTOR_NEED_PAYLOAD_EVENTS.has(key)) filterIds.add("need");
+  if (key === "fallout-maw.actor.currency.changed") filterIds.add("currency");
+  if (key === "fallout-maw.actor.status.gained" || key === "fallout-maw.actor.status.lost") filterIds.add("status");
+  if (ITEM_TYPE_EVENTS.has(key)) filterIds.add("itemType");
+  if (key === "fallout-maw.trap.detection.resolved") filterIds.add("trapDetected");
+  return Object.freeze({
+    skillKeys: SKILL_CHECK_PAYLOAD_EVENTS.has(key) || EVENT_REACTION_SKILL_FILTER_EVENTS.has(key),
+    expectedResultKeys: EVENT_REACTION_EXPECTED_RESULT_EVENTS.has(key),
+    filters: Object.freeze(Array.from(filterIds, id => EVENT_REACTION_DEPTH_FILTER_DEFINITIONS[id]).filter(Boolean))
+  });
+}
+
+export function normalizeEventReactionDepthFilterMap(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).map(([key, entries]) => [
+    String(key ?? "").trim(),
+    normalizeEventReactionDepthFilterValues(entries)
+  ]).filter(([key]) => Boolean(key)));
+}
+
+export function normalizeEventReactionDepthFilterValues(value = []) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [value];
+  return Array.from(new Set(source.map(entry => String(entry ?? "").trim()).filter(Boolean)));
+}
+
+export function eventReactionDepthFiltersMatch(condition = {}, envelope = {}) {
+  const profile = getEventReactionDepthProfile(condition?.eventKey || envelope?.key);
+  const filters = normalizeEventReactionDepthFilterMap(condition?.eventFilters);
+  for (const definition of profile.filters) {
+    const accepted = filters[definition.storageKey] ?? [];
+    if (!accepted.length) continue;
+    const actual = getEventEnvelopeDepthFilterValues(definition.id, envelope);
+    if (!actual.some(value => accepted.includes(value))) return false;
+  }
+  return true;
+}
+
+export function getEventEnvelopeDepthFilterValues(filterId = "", envelope = {}) {
+  const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  const request = data.request && typeof data.request === "object" ? data.request : {};
+  const source = data.source && typeof data.source === "object" ? data.source : {};
+  let values = [];
+  switch (String(filterId ?? "").trim()) {
+    case "weaponAction":
+      values = [data.weaponActionKey, data.actionKey, request.weaponActionKey, request.actionKey, source.actionKey];
+      break;
+    case "damageType":
+      values = [data.damageTypeKey, request.damageTypeKey];
+      break;
+    case "damageScope":
+      values = [data.scope, request.scope];
+      break;
+    case "limb":
+      values = [data.limbKey, request.limbKey];
+      break;
+    case "resource":
+      values = [data.resourceKey, ...Object.entries(data.resources ?? {})
+        .filter(([, amount]) => Number(amount) > 0)
+        .map(([key]) => key)];
+      break;
+    case "need":
+      values = [data.needKey];
+      break;
+    case "currency":
+      values = [data.currencyKey];
+      break;
+    case "status":
+      values = [data.statusId];
+      break;
+    case "itemType":
+      values = [data.itemType, data.item?.type, request.itemType];
+      break;
+    case "trapDetected":
+      values = typeof data.detected === "boolean" ? [String(data.detected)] : [];
+      break;
+    default:
+      values = [];
+  }
+  return Array.from(new Set(values.map(value => String(value ?? "").trim()).filter(Boolean)));
+}
+
 export function getEventEnvelopeSkillKey(envelope = {}) {
   const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
   return String(data.skillKey ?? data.skill?.key ?? data.request?.skillKey ?? "").trim();
@@ -196,11 +380,40 @@ export function normalizeEventReactionSkillKeys(value = []) {
 }
 
 export function eventReactionSkillKeysMatch(condition = {}, envelope = {}) {
-  if (!isEventReactionSkillCheckFamily(condition?.eventKey || envelope?.key)) return true;
+  if (!getEventReactionDepthProfile(condition?.eventKey || envelope?.key).skillKeys) return true;
   const accepted = normalizeEventReactionSkillKeys(condition?.skillKeys);
   if (!accepted.length || accepted.includes(EVENT_REACTION_SKILL_FILTER_ALL)) return true;
   const skillKey = getEventEnvelopeSkillKey(envelope);
   return Boolean(skillKey && accepted.includes(skillKey));
+}
+
+export function normalizeEventReactionExpectedResultKeys(value = []) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [value];
+  return Array.from(new Set(source
+    .map(entry => String(entry ?? "").trim())
+    .filter(Boolean)));
+}
+
+export function getEventEnvelopeExpectedResultKey(envelope = {}) {
+  const data = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  const outcome = envelope?.outcome && typeof envelope.outcome === "object" ? envelope.outcome : {};
+  return String(
+    data.resultKey
+    ?? data.result?.key
+    ?? outcome.resultKey
+    ?? outcome.result?.key
+    ?? ""
+  ).trim();
+}
+
+export function eventReactionExpectedResultsMatch(condition = {}, envelope = {}) {
+  if (!getEventReactionDepthProfile(condition?.eventKey || envelope?.key).expectedResultKeys) return true;
+  const accepted = normalizeEventReactionExpectedResultKeys(condition?.expectedResultKeys);
+  if (!accepted.length) return true;
+  const resultKey = getEventEnvelopeExpectedResultKey(envelope);
+  return Boolean(resultKey && accepted.includes(resultKey));
 }
 
 export function buildEventReactionPathTree(descriptors = [], { localizeEventLabel = null } = {}) {
@@ -375,6 +588,8 @@ export function eventReactionSubscriptionMatches(condition = {}, envelope = {}, 
   if (!String(reactorActorUuid ?? "").trim()) return false;
   if (!eventReactionCombatAllows(condition, { inCombat })) return false;
   if (!eventReactionSkillKeysMatch(condition, envelope)) return false;
+  if (!eventReactionExpectedResultsMatch(condition, envelope)) return false;
+  if (!eventReactionDepthFiltersMatch(condition, envelope)) return false;
   return eventReactionTrackingTargetsMatch(condition, {
     reactorActor: reactorActor ?? { uuid: reactorActorUuid },
     sourceActor: sourceActor ?? actorStubFromParticipant(envelope?.source),

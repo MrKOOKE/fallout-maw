@@ -8,7 +8,10 @@ export function registerFoundryCompatibilitySystemEventHooks() {
   if (hooksRegistered) return;
   hooksRegistered = true;
   Hooks.on("fallout-maw.weaponActionResolved", context => void emitWeaponActionResolved(context));
-  Hooks.on("fallout-maw.weaponAttackCheckResolved", context => void emitWeaponAttackCheckResolved(context));
+  Hooks.on("fallout-maw.weaponAttackCheckResolved", context => {
+    if (context?.falloutMawSemanticMirror === true) return;
+    void emitWeaponAttackCheckResolved(context);
+  });
   Hooks.on("fallout-maw.energyConsumptionChanged", actor => void emitEnergyConsumptionChanged(actor));
   Hooks.on(`${SYSTEM_ID}.recipeKnowledgeUpdated`, context => void emitRecipeKnowledgeChanged(context));
 }
@@ -35,7 +38,7 @@ async function emitWeaponActionResolved(context = {}) {
   });
 }
 
-async function emitWeaponAttackCheckResolved(context = {}) {
+export async function emitWeaponAttackCheckResolved(context = {}) {
   const actor = context.actor ?? context.token?.actor ?? null;
   if (!actor) return;
   const outcome = context.outcome ?? {};

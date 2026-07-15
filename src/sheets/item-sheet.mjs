@@ -96,13 +96,22 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
+  EVENT_REACTION_EXPECTED_RESULT_KEYS,
   EVENT_REACTION_SKILL_FILTER_ALL,
   buildEventReactionPathLevels,
+  getEventReactionDepthProfile,
   isEventReactionFilterType,
-  isEventReactionSkillCheckFamily,
+  normalizeEventReactionExpectedResultKeys,
   normalizeEventReactionSkillKeys,
   resolveEventKeyForPathPrefix
 } from "../events/event-reaction-schema.mjs";
+import {
+  buildEventReactionDepthFilterGroups,
+  buildHiddenEventReactionDepthFilterRows,
+  getEventReactionDepthFilterValues,
+  getFirstUnusedEventReactionDepthFilterValue,
+  setEventReactionDepthFilterValues
+} from "../events/event-reaction-depth-ui.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
 import {
   SYSTEM_EVENT_PHASES,
@@ -957,6 +966,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-event-skill]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityEventSkill(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-event-expected-result]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityEventExpectedResult(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-event-expected-result]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityEventExpectedResult(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-event-depth-filter]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityEventDepthFilter(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-event-depth-filter]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityEventDepthFilter(event));
     });
     this.element?.querySelectorAll("[data-add-ability-item-use-category]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityItemUseCategory(event));
@@ -2825,7 +2846,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const pathPrefix = String(event.currentTarget?.value ?? "").trim();
     const nextKey = resolveAbilityEventKeyForPath(pathPrefix, condition.eventKey);
     condition.eventKey = nextKey;
-    if (!isEventReactionSkillCheckFamily(nextKey)) condition.skillKeys = [];
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -2833,7 +2853,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
     if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) return undefined;
-    if (!isEventReactionSkillCheckFamily(condition.eventKey)) return undefined;
+    if (!getEventReactionDepthProfile(condition.eventKey).skillKeys) return undefined;
     const values = normalizeEventReactionSkillKeys(condition.skillKeys);
     const next = getFirstUnusedAbilityEventReactionSkillKey(values);
     if (!next) return undefined;
@@ -2850,6 +2870,56 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const values = normalizeEventReactionSkillKeys(condition.skillKeys);
     values.splice(index, 1);
     condition.skillKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityEventExpectedResult(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) return undefined;
+    if (!getEventReactionDepthProfile(condition.eventKey).expectedResultKeys) return undefined;
+    const values = normalizeEventReactionExpectedResultKeys(condition.expectedResultKeys);
+    const next = EVENT_REACTION_EXPECTED_RESULT_KEYS.find(key => !values.includes(key));
+    if (!next) return undefined;
+    condition.expectedResultKeys = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityEventExpectedResult(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-event-expected-result-index]")?.dataset.eventExpectedResultIndex ?? -1);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || index < 0) return undefined;
+    const values = normalizeEventReactionExpectedResultKeys(condition.expectedResultKeys);
+    values.splice(index, 1);
+    condition.expectedResultKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityEventDepthFilter(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) return undefined;
+    const storageKey = String(event.currentTarget?.dataset.eventDepthStorageKey ?? "").trim();
+    const next = getFirstUnusedEventReactionDepthFilterValue(condition, condition.eventKey, storageKey);
+    if (!next) return undefined;
+    const values = getEventReactionDepthFilterValues(condition, storageKey);
+    setEventReactionDepthFilterValues(condition, storageKey, [...values, next]);
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityEventDepthFilter(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const row = event.currentTarget?.closest?.("[data-event-depth-filter-index]");
+    const index = Number(row?.dataset.eventDepthFilterIndex ?? -1);
+    const storageKey = String(row?.dataset.eventDepthStorageKey ?? "").trim();
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || !storageKey || index < 0) return undefined;
+    const values = getEventReactionDepthFilterValues(condition, storageKey);
+    values.splice(index, 1);
+    setEventReactionDepthFilterValues(condition, storageKey, values);
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -6555,11 +6625,22 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   const eventDisplay = isEventReaction
     ? buildAbilityEventReactionDisplay(condition?.eventKey)
-    : { pathLevels: [], selectedEvent: null, isUnsupported: false, showEventTiming: false, showEventSkillFilters: false };
+    : { pathLevels: [], selectedEvent: null, isUnsupported: false, showEventTiming: false, showEventSkillFilters: false, showEventExpectedResultFilters: false };
   const trackingTargets = normalizeAbilityConditionValues(condition?.trackingTargets)
     .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
-  const eventSkillKeys = isEventReaction && eventDisplay.showEventSkillFilters
+  const eventSkillKeys = isEventReaction
     ? normalizeEventReactionSkillKeys(condition?.skillKeys)
+    : [];
+  const eventExpectedResultKeys = isEventReaction
+    ? normalizeEventReactionExpectedResultKeys(condition?.expectedResultKeys)
+    : [];
+  const showEventSkillFilters = isEventReaction && eventDisplay.showEventSkillFilters;
+  const showEventExpectedResultFilters = isEventReaction && eventDisplay.showEventExpectedResultFilters;
+  const eventDepthFilterGroups = isEventReaction
+    ? buildEventReactionDepthFilterGroups(condition, condition?.eventKey, {
+      inputNamePrefix: `${functionPath}.${functionIndex}.conditions.${index}.eventFilters`,
+      localize: localizeAbilityCatalogValue
+    })
     : [];
   return {
     ...condition,
@@ -6578,14 +6659,33 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     trackingTargetRows: buildAbilityEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     showEventTiming: Boolean(eventDisplay.showEventTiming),
-    showEventSkillFilters: Boolean(eventDisplay.showEventSkillFilters),
+    showEventSkillFilters,
     eventPathLevels: eventDisplay.pathLevels ?? [],
-    eventSkillRows: eventDisplay.showEventSkillFilters
+    eventSkillRows: showEventSkillFilters
       ? buildAbilityEventReactionSkillRows(eventSkillKeys)
       : [],
     canAddEventSkill: eventDisplay.showEventSkillFilters
       ? Boolean(getFirstUnusedAbilityEventReactionSkillKey(eventSkillKeys))
       : false,
+    hiddenEventSkillRows: isEventReaction && !showEventSkillFilters
+      ? eventSkillKeys.map((value, rowIndex) => ({ value, index: rowIndex }))
+      : [],
+    showEventExpectedResultFilters,
+    eventExpectedResultRows: showEventExpectedResultFilters
+      ? buildAbilityEventReactionExpectedResultRows(eventExpectedResultKeys)
+      : [],
+    canAddEventExpectedResult: eventDisplay.showEventExpectedResultFilters
+      ? Boolean(getFirstUnusedAbilityEventReactionExpectedResultKey(eventExpectedResultKeys))
+      : false,
+    hiddenEventExpectedResultRows: isEventReaction && !showEventExpectedResultFilters
+      ? eventExpectedResultKeys.map((value, rowIndex) => ({ value, index: rowIndex }))
+      : [],
+    eventDepthFilterGroups,
+    hiddenEventDepthFilterRows: isEventReaction
+      ? buildHiddenEventReactionDepthFilterRows(condition, condition?.eventKey, {
+        inputNamePrefix: `${functionPath}.${functionIndex}.conditions.${index}.eventFilters`
+      })
+      : [],
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -6776,6 +6876,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
 
 function buildAbilityEventReactionDisplay(selectedKey = "") {
   const key = String(selectedKey ?? "").trim();
+  const depth = getEventReactionDepthProfile(key);
   const selectedDescriptor = getSystemEventDescriptor(key);
   const descriptors = [...getSelectableSystemEvents()];
   if (selectedDescriptor && !descriptors.some(event => event.key === selectedDescriptor.key)) {
@@ -6804,7 +6905,8 @@ function buildAbilityEventReactionDisplay(selectedKey = "") {
   return {
     pathLevels,
     showEventTiming: false,
-    showEventSkillFilters: isEventReactionSkillCheckFamily(key),
+    showEventSkillFilters: depth.skillKeys,
+    showEventExpectedResultFilters: depth.expectedResultKeys,
     selectedEvent: selectedDescriptor
       ? prepareSelectedAbilityEventMetadata(selectedDescriptor)
       : key ? {
@@ -6879,6 +6981,40 @@ function getFirstUnusedAbilityEventReactionSkillKey(value = []) {
   const selected = new Set(normalizeEventReactionSkillKeys(value));
   if (!selected.has(EVENT_REACTION_SKILL_FILTER_ALL)) return EVENT_REACTION_SKILL_FILTER_ALL;
   return getSkillSettings().find(entry => entry.key && !selected.has(entry.key))?.key ?? "";
+}
+
+function buildAbilityEventReactionExpectedResultRows(value = []) {
+  const selected = normalizeEventReactionExpectedResultKeys(value);
+  return selected.map((resultKey, index) => ({
+    index,
+    choices: buildAbilityEventReactionExpectedResultChoices(resultKey, selected)
+  }));
+}
+
+function buildAbilityEventReactionExpectedResultChoices(selectedKey = "", selectedKeys = []) {
+  const selected = String(selectedKey ?? "").trim();
+  const taken = new Set(normalizeEventReactionExpectedResultKeys(selectedKeys));
+  const labels = {
+    criticalFailure: localizeAbilityCatalogValue("FALLOUTMAW.SkillCheck.CriticalFailure", "Critical failure"),
+    failure: localizeAbilityCatalogValue("FALLOUTMAW.SkillCheck.Failure", "Failure"),
+    success: localizeAbilityCatalogValue("FALLOUTMAW.SkillCheck.Success", "Success"),
+    criticalSuccess: localizeAbilityCatalogValue("FALLOUTMAW.SkillCheck.CriticalSuccess", "Critical success")
+  };
+  const choices = EVENT_REACTION_EXPECTED_RESULT_KEYS.map(value => ({
+    value,
+    label: labels[value] ?? value,
+    selected: value === selected,
+    disabled: value !== selected && taken.has(value)
+  }));
+  if (selected && !choices.some(choice => choice.value === selected)) {
+    choices.push({ value: selected, label: selected, selected: true, disabled: false });
+  }
+  return choices;
+}
+
+function getFirstUnusedAbilityEventReactionExpectedResultKey(value = []) {
+  const selected = new Set(normalizeEventReactionExpectedResultKeys(value));
+  return EVENT_REACTION_EXPECTED_RESULT_KEYS.find(key => !selected.has(key)) ?? "";
 }
 
 function buildAbilityEventTrackingTargetRows(value = []) {

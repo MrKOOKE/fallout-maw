@@ -63,6 +63,32 @@ test("terminal workflow awaits pre, operation, and exactly one resolved event in
   assert.equal(calls[1].options.occurrenceKey, "skill:one:resolved");
 });
 
+test("terminal workflow does not emit resolved until its completion barrier releases", async () => {
+  const { scope, calls } = createScope();
+  let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  let barrierReached;
+  const reached = new Promise(resolve => { barrierReached = resolve; });
+
+  const workflow = runTerminalSystemEventWorkflow({
+    scope,
+    resolvedEventKey: "fallout-maw.skill.check.resolved",
+    occurrenceBase: "skill:presentation",
+    operation: async () => ({ key: "success" }),
+    beforeTerminal: async () => {
+      barrierReached();
+      await barrier;
+    }
+  });
+
+  await reached;
+  assert.equal(calls.length, 0);
+  release();
+  await workflow;
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].key, "fallout-maw.skill.check.resolved");
+});
+
 test("pre cancellation skips the operation and still consumes one terminal event", async () => {
   const { scope, calls } = createScope({ cancel: { scope: "remaining", reason: "reaction" } });
   let operationCalls = 0;

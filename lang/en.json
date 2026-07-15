@@ -266,6 +266,66 @@
         "AddSkill": "Add",
         "AllSkills": "All skills",
         "NoSkills": "All skills (no filter).",
+        "ExpectedResults": "Expected result",
+        "AddExpectedResult": "Add",
+        "NoExpectedResults": "Any result (no filter).",
+        "DepthFilters": {
+          "weaponAction": {
+            "Label": "Attacking action",
+            "Any": "Any attacking action (no filter)."
+          },
+          "damageType": {
+            "Label": "Damage type",
+            "Any": "Any damage type (no filter)."
+          },
+          "damageScope": {
+            "Label": "Damage scope",
+            "Any": "Any damage scope (no filter).",
+            "Options": {
+              "limb": "Limb",
+              "health": "Health",
+              "healthAndLimb": "Health and limb",
+              "itemCondition": "Item condition"
+            }
+          },
+          "limb": {
+            "Label": "Limb",
+            "Any": "Any limb (no filter)."
+          },
+          "resource": {
+            "Label": "Resource",
+            "Any": "Any resource (no filter).",
+            "Options": {
+              "movementPoints": "Movement points",
+              "actionPoints": "Action points",
+              "reactionPoints": "Reaction points"
+            }
+          },
+          "need": {
+            "Label": "Need",
+            "Any": "Any need (no filter)."
+          },
+          "currency": {
+            "Label": "Currency",
+            "Any": "Any currency (no filter)."
+          },
+          "status": {
+            "Label": "Status",
+            "Any": "Any status (no filter)."
+          },
+          "itemType": {
+            "Label": "Item type",
+            "Any": "Any item type (no filter)."
+          },
+          "trapDetected": {
+            "Label": "Trap detection result",
+            "Any": "Any detection result (no filter).",
+            "Options": {
+              "true": "Detected",
+              "false": "Not detected"
+            }
+          }
+        },
         "CombatOnly": "Triggers only in combat?",
         "AutoApply": "Automatic application?",
         "TrackingTargets": "Tracking target",

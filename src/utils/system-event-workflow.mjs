@@ -16,6 +16,7 @@ export async function runTerminalSystemEventWorkflow({
   before = null,
   after = null,
   operation,
+  beforeTerminal = null,
   isSuccess = value => Boolean(value),
   getResultStatus = null,
   getResultReason = null,
@@ -62,7 +63,22 @@ export async function runTerminalSystemEventWorkflow({
     }
   }
 
-  const terminalContext = createTerminalContext({ gate, value, status, reason, error });
+  let terminalContext = createTerminalContext({ gate, value, status, reason, error });
+  if (typeof beforeTerminal === "function") {
+    try {
+      await beforeTerminal(terminalContext);
+    } catch (caught) {
+      // Presentation or another completion barrier is part of the workflow. Its
+      // failure must still produce the same single terminal event before the
+      // error is rethrown to the caller.
+      if (!error) {
+        error = caught;
+        status = "error";
+        reason = "error";
+      }
+      terminalContext = createTerminalContext({ gate, value, status, reason, error });
+    }
+  }
   await scope.emit(resolvedEventKey, {
     data: resolveValue(resolvedData, terminalContext) ?? {},
     ...(after === null ? {} : { after: resolveValue(after, terminalContext) }),

@@ -1726,6 +1726,59 @@
                   </div>
                 </div>
                 {{/if}}
+                {{#each hiddenEventSkillRows}}
+                <input type="hidden" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.skillKeys.{{index}}" value="{{value}}">
+                {{/each}}
+                {{#if showEventExpectedResultFilters}}
+                <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-expected-results">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{localize "FALLOUTMAW.Events.Reaction.ExpectedResults"}}</span>
+                    <button type="button" data-add-ability-event-expected-result {{#unless canAddEventExpectedResult}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddExpectedResult"}}</button>
+                  </div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each eventExpectedResultRows}}
+                    <div class="fallout-maw-item-use-category-row" data-event-expected-result-index="{{index}}">
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.expectedResultKeys.{{index}}">
+                        {{#each choices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-event-expected-result title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}
+                    <span class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoExpectedResults"}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+                {{/if}}
+                {{#each hiddenEventExpectedResultRows}}
+                <input type="hidden" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.expectedResultKeys.{{index}}" value="{{value}}">
+                {{/each}}
+                {{#each eventDepthFilterGroups}}
+                <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-depth-filter" data-event-depth-storage-key="{{storageKey}}">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{label}}</span>
+                    <button type="button" data-add-ability-event-depth-filter data-event-depth-storage-key="{{storageKey}}" {{#unless canAdd}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+                  </div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each rows}}
+                    <div class="fallout-maw-item-use-category-row" data-event-depth-filter-index="{{index}}" data-event-depth-storage-key="{{../storageKey}}">
+                      <select name="{{inputName}}">
+                        {{#each choices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-event-depth-filter title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}
+                    <span class="fallout-maw-empty-list">{{emptyLabel}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+                {{/each}}
+                {{#each hiddenEventDepthFilterRows}}
+                <input type="hidden" name="{{inputName}}" value="{{value}}">
+                {{/each}}
                 {{#if selectedEvent}}
                 <div class="fallout-maw-event-reaction-event-summary{{#unless selectedEvent.supported}} unsupported{{/unless}}">
                   <strong>{{selectedEvent.label}}</strong>
@@ -2477,6 +2530,59 @@
                   </div>
                 </div>
                 {{/if}}
+                {{#each hiddenEventSkillRows}}
+                <input type="hidden" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.skillKeys.{{index}}" value="{{value}}">
+                {{/each}}
+                {{#if showEventExpectedResultFilters}}
+                <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-expected-results">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{localize "FALLOUTMAW.Events.Reaction.ExpectedResults"}}</span>
+                    <button type="button" data-add-ability-event-expected-result {{#unless canAddEventExpectedResult}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddExpectedResult"}}</button>
+                  </div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each eventExpectedResultRows}}
+                    <div class="fallout-maw-item-use-category-row" data-event-expected-result-index="{{index}}">
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.expectedResultKeys.{{index}}">
+                        {{#each choices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-event-expected-result title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}
+                    <span class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoExpectedResults"}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+                {{/if}}
+                {{#each hiddenEventExpectedResultRows}}
+                <input type="hidden" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.expectedResultKeys.{{index}}" value="{{value}}">
+                {{/each}}
+                {{#each eventDepthFilterGroups}}
+                <div class="fallout-maw-item-use-category-field fallout-maw-event-reaction-depth-filter" data-event-depth-storage-key="{{storageKey}}">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{label}}</span>
+                    <button type="button" data-add-ability-event-depth-filter data-event-depth-storage-key="{{storageKey}}" {{#unless canAdd}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+                  </div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each rows}}
+                    <div class="fallout-maw-item-use-category-row" data-event-depth-filter-index="{{index}}" data-event-depth-storage-key="{{../storageKey}}">
+                      <select name="{{inputName}}">
+                        {{#each choices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-event-depth-filter title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}
+                    <span class="fallout-maw-empty-list">{{emptyLabel}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+                {{/each}}
+                {{#each hiddenEventDepthFilterRows}}
+                <input type="hidden" name="{{inputName}}" value="{{value}}">
+                {{/each}}
                 {{#if selectedEvent}}
                 <div class="fallout-maw-event-reaction-event-summary{{#unless selectedEvent.supported}} unsupported{{/unless}}">
                   <strong>{{selectedEvent.label}}</strong>

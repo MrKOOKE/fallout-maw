@@ -50,10 +50,14 @@ export async function requestSkillCheck({
   requester = "",
   chainRef = null,
   options = {},
-  source = {}
+  source = {},
+  completionCollector = null
 } = {}) {
   const resolvedSkill = resolveSkill(actor, skillKey);
   if (!resolvedSkill) return undefined;
+  if (completionCollector && typeof completionCollector.deferTerminal !== "function") {
+    throw new TypeError("A skill-check completion collector must provide deferTerminal().");
+  }
   const initialData = normalizeRequestData(inheritSystemEventOperationId(data), requester);
   const initialEventContext = createSkillCheckEventContext(actor, resolvedSkill, initialData, {
     source,
@@ -62,7 +66,9 @@ export async function requestSkillCheck({
   const inheritedChainRef = resolveSkillCheckChainRef({ chainRef, options, source, data });
   const checkOccurrenceId = getSkillCheckOccurrenceId(options, source);
 
-  return withSystemEventRoot({
+  const deferredReturn = completionCollector ? createDeferredSkillCheckBarrier() : null;
+  let rootPromise;
+  rootPromise = withSystemEventRoot({
     kind: "skillCheck",
     operationId: getSkillCheckOperationId(initialData, options, source),
     sceneUuid: initialEventContext.sceneUuid,
@@ -99,6 +105,7 @@ export async function requestSkillCheck({
       source,
       rawData: requestData
     });
+    let message;
     const workflow = await runTerminalSystemEventWorkflow({
       scope,
       beforeEventKey: "fallout-maw.skill.check.beforeRoll",
@@ -107,7 +114,24 @@ export async function requestSkillCheck({
       participants: eventContext.participants,
       beforeData: buildSkillCheckBeforeEventData(resolvedSkill, normalizedData),
       resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, resolvedSkill, normalizedData, status),
-      operation: () => performSkillCheck(actor, resolvedSkill, normalizedData)
+      operation: () => performSkillCheck(actor, resolvedSkill, normalizedData),
+      beforeTerminal: async ({ success, value }) => {
+        if (!success || !value) return;
+        if (animate) await playSkillCheckAnimation(value);
+        if (!createMessage) {
+          if (!completionCollector) return;
+          const presentationBarrier = completionCollector.deferTerminal(value, () => rootPromise);
+          deferredReturn.resolve(value);
+          await presentationBarrier;
+          return;
+        }
+
+        const resolvedMessageData = typeof messageData === "function" ? messageData(value) : messageData;
+        message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(value, {
+          requester,
+          messageData: resolvedMessageData
+        }));
+      }
     });
     const outcome = workflow.value;
     if (!workflow.success || !outcome) return undefined;
@@ -115,16 +139,15 @@ export async function requestSkillCheck({
     // Compatibility mirror. Hooks are deliberately invoked only after the
     // awaited semantic event has committed.
     Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
-    if (animate) await playSkillCheckAnimation(outcome);
     if (!createMessage) return outcome;
-
-    const resolvedMessageData = typeof messageData === "function" ? messageData(outcome) : messageData;
-    const message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(outcome, { requester, messageData: resolvedMessageData }));
     return {
       ...outcome,
       message
     };
   });
+  if (!deferredReturn) return rootPromise;
+  void rootPromise.then(deferredReturn.resolve, deferredReturn.reject);
+  return deferredReturn.promise;
 }
 
 export async function requestSkillCheckBatch({
@@ -154,10 +177,34 @@ export async function requestSkillCheckBatch({
     chainRef: inheritedChainRef
   }, async scope => {
     const outcomes = [];
+    const pendingChecks = [];
     let cancelledCount = 0;
     let failedCount = 0;
     let cancelRemaining = false;
     let operationError = null;
+    const finalizePendingCheck = async pending => {
+      if (pending.presentationError) pending.terminalRelease.reject(pending.presentationError);
+      else pending.terminalRelease.resolve();
+
+      try {
+        const workflow = await pending.workflowPromise;
+        if (workflow.cancelled) {
+          cancelledCount += 1;
+          return false;
+        }
+        if (!workflow.success || !workflow.value) {
+          failedCount += 1;
+          return false;
+        }
+        outcomes.push(workflow.value);
+        Hooks.callAll("fallout-maw.skillCheckResolved", workflow.value);
+        return false;
+      } catch (error) {
+        failedCount += 1;
+        operationError ??= error;
+        return true;
+      }
+    };
 
     for (const [index, entry] of preparedEntries.entries()) {
       const normalizedData = normalizeRequestData(entry.data, requester);
@@ -166,37 +213,78 @@ export async function requestSkillCheckBatch({
         rawData: entry.data
       });
       const occurrenceBase = `skill:${scope.rootId}:${batchOccurrenceId}:${index}:${entry.actor.uuid}:${entry.skill.key}`;
+      const terminalReady = createDeferredSkillCheckBarrier();
+      const terminalRelease = createDeferredSkillCheckBarrier();
+      const workflowPromise = runTerminalSystemEventWorkflow({
+        scope,
+        beforeEventKey: "fallout-maw.skill.check.beforeRoll",
+        resolvedEventKey: "fallout-maw.skill.check.resolved",
+        occurrenceBase,
+        participants: eventContext.participants,
+        beforeData: buildSkillCheckBeforeEventData(entry.skill, normalizedData),
+        resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, entry.skill, normalizedData, status),
+        operation: () => performSkillCheck(entry.actor, entry.skill, normalizedData),
+        beforeTerminal: terminalContext => {
+          terminalReady.resolve(terminalContext);
+          return terminalRelease.promise;
+        },
+        ...(cancelRemaining ? {
+          forcedResult: { status: "cancelled", reason: "cancelRemaining", value: undefined }
+        } : {})
+      });
+      // Observe an unexpected pre-terminal rejection immediately so it cannot
+      // become an unhandled promise while the rest of the batch is prepared.
+      void workflowPromise.catch(error => terminalReady.reject(error));
+
       try {
-        const workflow = await runTerminalSystemEventWorkflow({
-          scope,
-          beforeEventKey: "fallout-maw.skill.check.beforeRoll",
-          resolvedEventKey: "fallout-maw.skill.check.resolved",
-          occurrenceBase,
-          participants: eventContext.participants,
-          beforeData: buildSkillCheckBeforeEventData(entry.skill, normalizedData),
-          resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, entry.skill, normalizedData, status),
-          operation: () => performSkillCheck(entry.actor, entry.skill, normalizedData),
-          ...(cancelRemaining ? {
-            forcedResult: { status: "cancelled", reason: "cancelRemaining", value: undefined }
-          } : {})
-        });
-        if (workflow.cancelled) {
-          cancelledCount += 1;
-          if (workflow.gate?.control?.remaining || workflow.gate?.control?.root) cancelRemaining = true;
+        const terminalContext = await terminalReady.promise;
+        const pending = {
+          workflowPromise,
+          terminalRelease,
+          terminalContext,
+          presentationError: null
+        };
+        if (terminalContext.cancelled && (terminalContext.gate?.control?.remaining || terminalContext.gate?.control?.root)) {
+          cancelRemaining = true;
+        }
+        if (terminalContext.error) cancelRemaining = true;
+        if (createMessage && terminalContext.success && terminalContext.value) {
+          pendingChecks.push(pending);
           continue;
         }
-        if (!workflow.success || !workflow.value) {
-          failedCount += 1;
-          continue;
+
+        if (terminalContext.success && terminalContext.value && animate) {
+          try {
+            await playSkillCheckAnimation(terminalContext.value);
+          } catch (error) {
+            pending.presentationError = error;
+          }
         }
-        Hooks.callAll("fallout-maw.skillCheckResolved", workflow.value);
-        if (animate) await playSkillCheckAnimation(workflow.value);
-        outcomes.push(workflow.value);
+        if (await finalizePendingCheck(pending)) cancelRemaining = true;
       } catch (error) {
-        failedCount += 1;
-        operationError = error;
+        operationError ??= error;
         cancelRemaining = true;
       }
+    }
+
+    for (const pending of pendingChecks) {
+      if (!pending.terminalContext.success || !pending.terminalContext.value || !animate) continue;
+      try {
+        await playSkillCheckAnimation(pending.terminalContext.value);
+      } catch (error) {
+        pending.presentationError = error;
+      }
+    }
+
+    const presentableOutcomes = pendingChecks
+      .filter(pending => pending.terminalContext.success && pending.terminalContext.value && !pending.presentationError)
+      .map(pending => pending.terminalContext.value);
+    const message = createMessage
+      ? await publishSkillCheckMessageSafely(() => publishSkillCheckBatchMessage(presentableOutcomes, { requester, title }))
+      : undefined;
+
+    for (const pending of pendingChecks) {
+      await finalizePendingCheck(pending);
     }
 
     await scope.emit("fallout-maw.skill.batch.resolved", {
@@ -224,28 +312,118 @@ export async function requestSkillCheckBatch({
     });
 
     if (operationError) throw operationError;
-    if (!createMessage) return { outcomes, message: undefined };
-    const message = await publishSkillCheckMessageSafely(() => publishSkillCheckBatchMessage(outcomes, { requester, title }));
     return { outcomes, message };
   });
 }
 
+function createDeferredSkillCheckBarrier() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 export function createSkillCheckBatchCollector({ requester = "", title = "" } = {}) {
   const outcomes = [];
+  const outcomeSet = new Set();
+  const pendingTerminals = [];
+  const pendingByOutcome = new Map();
+  const settledCallbacks = new Set();
+  let settlePromise = null;
+  let settled = false;
+  const add = outcome => {
+    if (!outcome || outcomeSet.has(outcome)) return outcome;
+    outcomeSet.add(outcome);
+    outcomes.push(outcome);
+    return outcome;
+  };
+  const settle = ({ createMessage = false, forceBatch = true } = {}) => {
+    if (settlePromise) return settlePromise;
+    settlePromise = (async () => {
+      let message;
+      let firstError = null;
+      try {
+        if (createMessage) {
+          const normalizedOutcomes = outcomes.filter(Boolean);
+          message = normalizedOutcomes.length === 1 && !forceBatch
+            ? await publishSkillCheckMessage(normalizedOutcomes[0], { requester })
+            : await publishSkillCheckBatchMessage(normalizedOutcomes, { requester, title });
+        }
+      } catch (error) {
+        firstError = error;
+      }
+
+      // A collected check owns an explicit terminal barrier. Whether its
+      // owner publishes the common card or aborts the surrounding operation,
+      // every barrier is released exactly once and completed in stable order.
+      for (const pending of pendingTerminals) {
+        pending.release.resolve();
+        try {
+          await pending.getCompletionPromise?.();
+        } catch (error) {
+          firstError ??= error;
+        }
+        for (const callback of pending.callbacks) {
+          try {
+            await callback();
+          } catch (error) {
+            firstError ??= error;
+          }
+        }
+      }
+
+      if (firstError) throw firstError;
+      return message;
+    })().finally(() => {
+      settled = true;
+      for (const callback of settledCallbacks) {
+        try {
+          callback();
+        } catch (error) {
+          console.error(`${SYSTEM_ID} | Skill check collector settlement callback failed`, error);
+        }
+      }
+      settledCallbacks.clear();
+    });
+    return settlePromise;
+  };
   return {
     get size() {
       return outcomes.length;
     },
-    add(outcome) {
-      if (outcome) outcomes.push(outcome);
-      return outcome;
+    get settled() {
+      return settled;
     },
-    async publish({ forceBatch = true } = {}) {
-      const normalizedOutcomes = outcomes.filter(Boolean);
-      if (normalizedOutcomes.length === 1 && !forceBatch) {
-        return publishSkillCheckMessage(normalizedOutcomes[0], { requester });
-      }
-      return publishSkillCheckBatchMessage(normalizedOutcomes, { requester, title });
+    add,
+    deferTerminal(outcome, getCompletionPromise) {
+      if (settlePromise) throw new Error("Cannot add a skill check after its completion has started settling.");
+      add(outcome);
+      const release = createDeferredSkillCheckBarrier();
+      const pending = { release, getCompletionPromise, callbacks: [] };
+      pendingTerminals.push(pending);
+      pendingByOutcome.set(outcome, pending);
+      return release.promise;
+    },
+    afterTerminal(outcome, callback) {
+      const pending = pendingByOutcome.get(outcome);
+      if (!pending || typeof callback !== "function") return false;
+      pending.callbacks.push(callback);
+      return true;
+    },
+    onSettled(callback) {
+      if (typeof callback !== "function") return false;
+      if (settled) callback();
+      else settledCallbacks.add(callback);
+      return true;
+    },
+    publish({ forceBatch = true } = {}) {
+      return settle({ createMessage: true, forceBatch });
+    },
+    abort() {
+      return settle({ createMessage: false });
     }
   };
 }
@@ -723,10 +901,12 @@ async function showSkillCheckAnimation(context) {
       controller.closing = true;
       const hostToRemove = controller.host;
       hostToRemove?.classList.add("is-closing");
-      window.setTimeout(() => hostToRemove?.remove(), SKILL_CHECK_ANIMATION_LAYOUT.closeAnimationMs);
+      window.setTimeout(() => {
+        hostToRemove?.remove();
+        resolvePromise();
+      }, SKILL_CHECK_ANIMATION_LAYOUT.closeAnimationMs);
       ACTIVE_SKILL_CHECK_ANIMATIONS.delete(context.checkId);
       scheduleSkillCheckAnimationLayoutAfterClose();
-      resolvePromise();
     },
     promise
   };
@@ -756,6 +936,7 @@ async function showSkillCheckAnimation(context) {
   const tracks = getSkillCheckAnimationTracks(host);
   if (!animationElement || !tracks.length || tracks.some(track => !track.cells.length)) {
     controller.close();
+    await controller.promise;
     throw new Error("Skill check animation template is missing required elements.");
   }
 

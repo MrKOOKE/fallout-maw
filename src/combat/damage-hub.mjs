@@ -2705,29 +2705,36 @@ async function resolveDeferredShockChecks(entries = [], {
       title: "Проверки стойкости: шок"
     });
     const outcomes = [];
-    for (const entry of queued) {
-      const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
-      if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
-      const shockCheck = entry.shockCheck;
-      const outcome = await requestSkillCheck({
-        actor,
-        skillKey: "resilience",
-        data: {
-          difficulty: shockCheck.difficulty,
-          damageHubOperationRef
-        },
-        chainRef,
-        animate: false,
-        createMessage: false,
-        requester: entry.requester
-      });
-      batch.add(outcome);
-      if (outcome) outcomes.push(outcome);
-      const resultKey = String(outcome?.result?.key ?? "");
-      if (["failure", "criticalFailure"].includes(resultKey)) await createShockUnconsciousState(actor);
+    try {
+      for (const entry of queued) {
+        const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
+        if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
+        const shockCheck = entry.shockCheck;
+        const outcome = await requestSkillCheck({
+          actor,
+          skillKey: "resilience",
+          data: {
+            difficulty: shockCheck.difficulty,
+            damageHubOperationRef
+          },
+          chainRef,
+          animate: false,
+          createMessage: false,
+          completionCollector: batch,
+          requester: entry.requester
+        });
+        batch.add(outcome);
+        if (outcome) outcomes.push(outcome);
+        const resultKey = String(outcome?.result?.key ?? "");
+        if (["failure", "criticalFailure"].includes(resultKey)) await createShockUnconsciousState(actor);
+      }
+      if (batch.size) await batch.publish({ forceBatch: true });
+      return outcomes;
+    } finally {
+      // Release every collected terminal event if a later shock side effect or
+      // card publication fails. abort() is idempotent after publish().
+      await Promise.allSettled([batch.abort()]);
     }
-    if (batch.size) await batch.publish({ forceBatch: true });
-    return outcomes;
   };
 
   // Multiple shock subjects → one reaction wave with a column per subject.

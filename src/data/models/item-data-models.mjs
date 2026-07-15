@@ -267,6 +267,15 @@ function abilityConditionField() {
       required: true,
       initial: []
     }),
+    expectedResultKeys: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      initial: "failure"
+    }), {
+      required: true,
+      initial: []
+    }),
+    eventFilters: new ObjectField({ required: true, nullable: false, initial: {} }),
     proficiencyKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
       required: true,
       initial: []

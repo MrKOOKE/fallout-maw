@@ -65,13 +65,22 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
+  EVENT_REACTION_EXPECTED_RESULT_KEYS,
   EVENT_REACTION_SKILL_FILTER_ALL,
   buildEventReactionPathLevels,
+  getEventReactionDepthProfile,
   isEventReactionFilterType,
-  isEventReactionSkillCheckFamily,
+  normalizeEventReactionExpectedResultKeys,
   normalizeEventReactionSkillKeys,
   resolveEventKeyForPathPrefix
 } from "../events/event-reaction-schema.mjs";
+import {
+  buildEventReactionDepthFilterGroups,
+  buildHiddenEventReactionDepthFilterRows,
+  getEventReactionDepthFilterValues,
+  getFirstUnusedEventReactionDepthFilterValue,
+  setEventReactionDepthFilterValues
+} from "../events/event-reaction-depth-ui.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
 import {
   SYSTEM_EVENT_PHASES,
@@ -147,6 +156,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteConditionTrackingTarget: this.#onDeleteConditionTrackingTarget,
       addConditionEventSkill: this.#onAddConditionEventSkill,
       deleteConditionEventSkill: this.#onDeleteConditionEventSkill,
+      addConditionEventExpectedResult: this.#onAddConditionEventExpectedResult,
+      deleteConditionEventExpectedResult: this.#onDeleteConditionEventExpectedResult,
+      addConditionEventDepthFilter: this.#onAddConditionEventDepthFilter,
+      deleteConditionEventDepthFilter: this.#onDeleteConditionEventDepthFilter,
       addConditionItemCategory: this.#onAddConditionItemCategory,
       deleteConditionItemCategory: this.#onDeleteConditionItemCategory,
       addConditionTargetFaction: this.#onAddConditionTargetFaction,
@@ -648,7 +661,6 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const pathPrefix = String(event.currentTarget?.value ?? "").trim();
     const nextKey = resolveCatalogEventKeyForPath(pathPrefix, condition.eventKey);
     condition.eventKey = nextKey;
-    if (!isEventReactionSkillCheckFamily(nextKey)) condition.skillKeys = [];
     return this.#persist({ render: true, sync: false });
   }
 
@@ -659,7 +671,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) {
       return this.#persist({ render: true, sync: false });
     }
-    if (!isEventReactionSkillCheckFamily(condition.eventKey)) {
+    if (!getEventReactionDepthProfile(condition.eventKey).skillKeys) {
       return this.#persist({ render: true, sync: false });
     }
     const values = normalizeEventReactionSkillKeys(condition.skillKeys);
@@ -679,6 +691,68 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const values = normalizeEventReactionSkillKeys(condition.skillKeys);
     values.splice(index, 1);
     condition.skillKeys = values;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionEventExpectedResult(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) {
+      return this.#persist({ render: true, sync: false });
+    }
+    if (!getEventReactionDepthProfile(condition.eventKey).expectedResultKeys) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = normalizeEventReactionExpectedResultKeys(condition.expectedResultKeys);
+    const next = EVENT_REACTION_EXPECTED_RESULT_KEYS.find(key => !values.includes(key));
+    if (next) condition.expectedResultKeys = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionEventExpectedResult(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-event-expected-result-index]")?.dataset.eventExpectedResultIndex ?? -1);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || index < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = normalizeEventReactionExpectedResultKeys(condition.expectedResultKeys);
+    values.splice(index, 1);
+    condition.expectedResultKeys = values;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionEventDepthFilter(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const storageKey = String(target?.dataset.eventDepthStorageKey ?? "").trim();
+    const next = getFirstUnusedEventReactionDepthFilterValue(condition, condition.eventKey, storageKey);
+    if (next) {
+      const values = getEventReactionDepthFilterValues(condition, storageKey);
+      setEventReactionDepthFilterValues(condition, storageKey, [...values, next]);
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionEventDepthFilter(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const row = target.closest("[data-event-depth-filter-index]");
+    const index = Number(row?.dataset.eventDepthFilterIndex ?? -1);
+    const storageKey = String(row?.dataset.eventDepthStorageKey ?? "").trim();
+    if (!condition || condition.type !== ABILITY_CONDITION_TYPES.eventReaction || !storageKey || index < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const values = getEventReactionDepthFilterValues(condition, storageKey);
+    values.splice(index, 1);
+    setEventReactionDepthFilterValues(condition, storageKey, values);
     return this.#persist({ render: true, sync: false });
   }
 
@@ -1491,6 +1565,8 @@ function readAbilityConditions(root) {
         if (eventSkills.length) return eventSkills;
         return readFieldValues(row, "[data-field='conditionSkill']");
       })(),
+      expectedResultKeys: readFieldValues(row, "[data-field='conditionEventExpectedResult']"),
+      eventFilters: readEventReactionDepthFilters(row),
       proficiencyKeys: readFieldValues(row, "[data-field='conditionProficiency']"),
       auraMode,
       auraTargetGroups: readFieldValues(row, "[data-field='conditionAuraTargetGroup']"),
@@ -2160,11 +2236,19 @@ function prepareConditionForDisplay(condition, {
   const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   const eventDisplay = isEventReaction
     ? buildEventReactionDisplay(condition?.eventKey)
-    : { pathLevels: [], selectedEvent: null, isUnsupported: false, showEventTiming: false, showEventSkillFilters: false };
+    : { pathLevels: [], selectedEvent: null, isUnsupported: false, showEventTiming: false, showEventSkillFilters: false, showEventExpectedResultFilters: false };
   const trackingTargets = normalizeConditionValues(condition?.trackingTargets)
     .filter(group => ABILITY_EVENT_TRACKING_TARGETS.includes(group));
-  const eventSkillKeys = isEventReaction && eventDisplay.showEventSkillFilters
+  const eventSkillKeys = isEventReaction
     ? normalizeEventReactionSkillKeys(condition?.skillKeys)
+    : [];
+  const eventExpectedResultKeys = isEventReaction
+    ? normalizeEventReactionExpectedResultKeys(condition?.expectedResultKeys)
+    : [];
+  const showEventSkillFilters = isEventReaction && eventDisplay.showEventSkillFilters;
+  const showEventExpectedResultFilters = isEventReaction && eventDisplay.showEventExpectedResultFilters;
+  const eventDepthFilterGroups = isEventReaction
+    ? buildEventReactionDepthFilterGroups(condition, condition?.eventKey, { localize: localizeCatalogValue })
     : [];
   return {
     ...condition,
@@ -2180,14 +2264,31 @@ function prepareConditionForDisplay(condition, {
     trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     showEventTiming: Boolean(eventDisplay.showEventTiming),
-    showEventSkillFilters: Boolean(eventDisplay.showEventSkillFilters),
+    showEventSkillFilters,
     eventPathLevels: eventDisplay.pathLevels ?? [],
-    eventSkillRows: eventDisplay.showEventSkillFilters
+    eventSkillRows: showEventSkillFilters
       ? buildEventReactionSkillRows(eventSkillKeys)
       : [],
     canAddEventSkill: eventDisplay.showEventSkillFilters
       ? Boolean(getFirstUnusedEventReactionSkillKey(eventSkillKeys))
       : false,
+    hiddenEventSkillRows: isEventReaction && !showEventSkillFilters
+      ? eventSkillKeys.map((value, index) => ({ value, index }))
+      : [],
+    showEventExpectedResultFilters,
+    eventExpectedResultRows: showEventExpectedResultFilters
+      ? buildEventReactionExpectedResultRows(eventExpectedResultKeys)
+      : [],
+    canAddEventExpectedResult: eventDisplay.showEventExpectedResultFilters
+      ? Boolean(getFirstUnusedEventReactionExpectedResultKey(eventExpectedResultKeys))
+      : false,
+    hiddenEventExpectedResultRows: isEventReaction && !showEventExpectedResultFilters
+      ? eventExpectedResultKeys.map((value, index) => ({ value, index }))
+      : [],
+    eventDepthFilterGroups,
+    hiddenEventDepthFilterRows: isEventReaction
+      ? buildHiddenEventReactionDepthFilterRows(condition, condition?.eventKey)
+      : [],
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -2424,6 +2525,7 @@ function buildConditionTypeChoices(selected = "", {
 
 function buildEventReactionDisplay(selectedKey = "") {
   const key = String(selectedKey ?? "").trim();
+  const depth = getEventReactionDepthProfile(key);
   const selectedDescriptor = getSystemEventDescriptor(key);
   const descriptors = [...getSelectableSystemEvents()];
   if (selectedDescriptor && !descriptors.some(event => event.key === selectedDescriptor.key)) {
@@ -2452,7 +2554,8 @@ function buildEventReactionDisplay(selectedKey = "") {
   return {
     pathLevels,
     showEventTiming: false,
-    showEventSkillFilters: isEventReactionSkillCheckFamily(key),
+    showEventSkillFilters: depth.skillKeys,
+    showEventExpectedResultFilters: depth.expectedResultKeys,
     selectedEvent: selectedDescriptor
       ? prepareSelectedEventMetadata(selectedDescriptor)
       : key ? {
@@ -2527,6 +2630,40 @@ function getFirstUnusedEventReactionSkillKey(value = []) {
   const selected = new Set(normalizeEventReactionSkillKeys(value));
   if (!selected.has(EVENT_REACTION_SKILL_FILTER_ALL)) return EVENT_REACTION_SKILL_FILTER_ALL;
   return getSkillSettings().find(entry => entry.key && !selected.has(entry.key))?.key ?? "";
+}
+
+function buildEventReactionExpectedResultRows(value = []) {
+  const selected = normalizeEventReactionExpectedResultKeys(value);
+  return selected.map((resultKey, index) => ({
+    index,
+    choices: buildEventReactionExpectedResultChoices(resultKey, selected)
+  }));
+}
+
+function buildEventReactionExpectedResultChoices(selectedKey = "", selectedKeys = []) {
+  const selected = String(selectedKey ?? "").trim();
+  const taken = new Set(normalizeEventReactionExpectedResultKeys(selectedKeys));
+  const labels = {
+    criticalFailure: localizeCatalogValue("FALLOUTMAW.SkillCheck.CriticalFailure", "Critical failure"),
+    failure: localizeCatalogValue("FALLOUTMAW.SkillCheck.Failure", "Failure"),
+    success: localizeCatalogValue("FALLOUTMAW.SkillCheck.Success", "Success"),
+    criticalSuccess: localizeCatalogValue("FALLOUTMAW.SkillCheck.CriticalSuccess", "Critical success")
+  };
+  const choices = EVENT_REACTION_EXPECTED_RESULT_KEYS.map(value => ({
+    value,
+    label: labels[value] ?? value,
+    selected: value === selected,
+    disabled: value !== selected && taken.has(value)
+  }));
+  if (selected && !choices.some(choice => choice.value === selected)) {
+    choices.push({ value: selected, label: selected, selected: true, disabled: false });
+  }
+  return choices;
+}
+
+function getFirstUnusedEventReactionExpectedResultKey(value = []) {
+  const selected = new Set(normalizeEventReactionExpectedResultKeys(value));
+  return EVENT_REACTION_EXPECTED_RESULT_KEYS.find(key => !selected.has(key)) ?? "";
 }
 
 function buildEventTrackingTargetRows(value = []) {
@@ -2968,6 +3105,21 @@ function normalizeItemUseCategoryValues(value = []) {
   return Array.from(new Set((Array.isArray(value) ? value : Object.values(value ?? {}))
     .map(category => String(category ?? "").trim())
     .filter(Boolean)));
+}
+
+function readEventReactionDepthFilters(row) {
+  const filters = {};
+  for (const input of row?.querySelectorAll?.(
+    "[data-field='conditionEventDepthFilter'][data-event-depth-storage-key]"
+  ) ?? []) {
+    const storageKey = String(input.dataset.eventDepthStorageKey ?? "").trim();
+    const value = String(input.value ?? "").trim();
+    if (!storageKey || !value) continue;
+    const entries = filters[storageKey] ?? [];
+    if (!entries.includes(value)) entries.push(value);
+    filters[storageKey] = entries;
+  }
+  return filters;
 }
 
 function readFieldValues(root, selector) {

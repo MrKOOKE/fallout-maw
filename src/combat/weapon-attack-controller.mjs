@@ -64,6 +64,7 @@ import { energySourceMatchesConsumer, getActiveEnergySourceItem, getEnergySource
 import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/construct-parts.mjs";
 import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -1442,6 +1443,7 @@ class WeaponAttackController {
     this.attackCommitted = false;
     this.attackCheckCount = 0;
     this.attackCheckEventSequence = 0;
+    this.skillCheckCollectors = new Set();
     this.reactionTargetKeys = new Set();
     this.attackedTargetActorUuids = new Set();
     this.attackedTargetTokenUuids = new Set();
@@ -1503,21 +1505,44 @@ class WeaponAttackController {
     });
   }
 
-  notifyAttackCheckResolved(outcome = null) {
-    const checkOccurrenceId = `${this.attackId}:${++this.attackCheckEventSequence}`;
-    Hooks.callAll(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, {
-      actor: this.token?.actor ?? null,
-      token: this.token,
-      weapon: this.weapon,
-      actionKey: this.actionKey,
-      weaponFunctionId: this.weaponFunctionId,
-      weaponAttackId: this.attackId,
-      checkOccurrenceId,
-      chainRef: this.chainRef,
-      damageHubOperationRef: this.damageHubOperationRef,
-      modifierState: this.getWeaponActionModifierState(),
-      outcome
-    });
+  async notifyAttackCheckResolved(outcome = null, completionCollector = null) {
+    const notify = async () => {
+      const checkOccurrenceId = `${this.attackId}:${++this.attackCheckEventSequence}`;
+      const context = {
+        actor: this.token?.actor ?? null,
+        token: this.token,
+        weapon: this.weapon,
+        actionKey: this.actionKey,
+        weaponFunctionId: this.weaponFunctionId,
+        weaponAttackId: this.attackId,
+        checkOccurrenceId,
+        chainRef: this.chainRef,
+        damageHubOperationRef: this.damageHubOperationRef,
+        modifierState: this.getWeaponActionModifierState(),
+        outcome
+      };
+      await emitWeaponAttackCheckResolved(context);
+      Hooks.callAll(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, {
+        ...context,
+        falloutMawSemanticMirror: true
+      });
+    };
+    if (completionCollector?.afterTerminal?.(outcome, notify)) return true;
+    await notify();
+    return true;
+  }
+
+  createSkillCheckCollector(options = {}) {
+    const collector = createSkillCheckBatchCollector(options);
+    this.skillCheckCollectors.add(collector);
+    collector.onSettled(() => this.skillCheckCollectors.delete(collector));
+    return collector;
+  }
+
+  async abortSkillCheckCollectors() {
+    const collectors = Array.from(this.skillCheckCollectors);
+    if (!collectors.length) return;
+    await Promise.allSettled(collectors.map(collector => collector.abort()));
   }
 
   createAllOrNothingAttackContext({ mode = "", index = 0, count = 1 } = {}) {
@@ -1776,6 +1801,7 @@ class WeaponAttackController {
 
   completeProcessingCycle({ refresh = true } = {}) {
     this.processing = false;
+    void this.abortSkillCheckCollectors();
     if (this.attackModifier?.finishAfterAttack || this.finishAfterAttack) this.finishRequested = true;
     if (!this.finishRequested && !this.attackCanceledByReaction && !this.canContinueAfterProcessing()) {
       this.finishRequested = true;
@@ -1823,6 +1849,7 @@ class WeaponAttackController {
       return await operation();
     } catch (error) {
       console.error("Fallout MaW | Weapon attack processing failed", error);
+      await this.abortSkillCheckCollectors();
       if (this.processing) this.completeProcessingCycle({ refresh: false });
       else if (this.finishAfterAttack && !this.destroyed) {
         if (activeAttack === this) activeAttack = null;
@@ -1920,6 +1947,7 @@ class WeaponAttackController {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    void this.abortSkillCheckCollectors();
     if (typeof this.attackModifier?.onDestroy === "function") {
       try {
         void this.attackModifier.onDestroy({
@@ -2259,7 +2287,7 @@ class WeaponAttackController {
     const forceBatchCheckMessage = totalAttackCount > 1;
     const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
     const checkBatch = collectCheckMessages
-      ? createSkillCheckBatchCollector({
+      ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
       })
@@ -2335,7 +2363,7 @@ class WeaponAttackController {
     const damageResults = [];
     const hitTargets = [];
     const attemptedTargets = [];
-    const checkBatch = createSkillCheckBatchCollector({
+    const checkBatch = this.createSkillCheckCollector({
       requester: "weaponAttack",
       title: this.attackModifier?.label || this.weapon.name
     });
@@ -2402,7 +2430,7 @@ class WeaponAttackController {
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1 || this.targets.length > 1 || pelletCount > 1;
     const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0
-      ? createSkillCheckBatchCollector({
+      ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
       })
@@ -2514,7 +2542,7 @@ class WeaponAttackController {
     const trajectories = buildAttackTrajectories(this.token, this.geometry, targets, Math.max(1, targets.length))
       .map(trajectory => ({ ...trajectory, delayGroup: 0 }));
     const forceBatchCheckMessage = targets.length > 1;
-    const checkBatch = createSkillCheckBatchCollector({
+    const checkBatch = this.createSkillCheckCollector({
       requester: "weaponPush",
       title: this.weapon.name
     });
@@ -2572,13 +2600,14 @@ class WeaponAttackController {
       },
       animate: false,
       createMessage: !checkBatch,
+      completionCollector: checkBatch,
       prompt: false,
       requester: "weaponPush"
     });
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
-    this.notifyAttackCheckResolved(outcome);
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
     return {
       attempted: true,
       success: isSuccessfulAttack(outcome)
@@ -2598,7 +2627,7 @@ class WeaponAttackController {
     const forceBatchCheckMessage = totalAttackCount > 1;
     const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
     const checkBatch = collectCheckMessages
-      ? createSkillCheckBatchCollector({
+      ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
       })
@@ -2726,7 +2755,7 @@ class WeaponAttackController {
     const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(pelletCount).fill(1));
     const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
     const checkBatch = (duplicatePlan.cycles > 1 || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0)
-      ? createSkillCheckBatchCollector({
+      ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
       })
@@ -2841,7 +2870,7 @@ class WeaponAttackController {
     let trajectories = [];
     let attempted = false;
 
-    const checkBatch = createSkillCheckBatchCollector({
+    const checkBatch = this.createSkillCheckCollector({
       requester: "weaponAttack",
       title: this.weapon.name
     });
@@ -3010,6 +3039,7 @@ class WeaponAttackController {
       },
       animate: false,
       createMessage: !checkBatch,
+      completionCollector: checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
@@ -3017,7 +3047,7 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) {
-      this.notifyAttackCheckResolved(outcome);
+      await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
@@ -3025,7 +3055,7 @@ class WeaponAttackController {
       limbKey: resolvedLimbKey
     }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
-    this.notifyAttackCheckResolved(outcome);
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,
@@ -3046,7 +3076,7 @@ class WeaponAttackController {
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     checkBatch ??= penetrationPower > 0
-      ? createSkillCheckBatchCollector({
+      ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
       })
@@ -3241,6 +3271,7 @@ class WeaponAttackController {
       },
       animate: false,
       createMessage: !checkBatch,
+      completionCollector: checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
@@ -3248,7 +3279,7 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) {
-      this.notifyAttackCheckResolved(outcome);
+      await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
     const damageContext = this.createWeaponDamageContext({
@@ -3258,7 +3289,7 @@ class WeaponAttackController {
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
     damageAmount = applyRicochetDamageBonus(this.weapon, damageAmount, damageContext);
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
-    this.notifyAttackCheckResolved(outcome);
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,
@@ -3299,7 +3330,7 @@ class WeaponAttackController {
     const blastOutcomes = [];
     const regionRequests = [];
     const checkBatch = totalAttackCount > 1
-      ? createSkillCheckBatchCollector({
+      ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
       })
@@ -3419,6 +3450,7 @@ class WeaponAttackController {
       },
       animate: false,
       createMessage: !checkBatch,
+      completionCollector: checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
@@ -3431,7 +3463,7 @@ class WeaponAttackController {
       radiusPixels: geometry.radiusPixels,
       outcome
     });
-    this.notifyAttackCheckResolved(outcome);
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
     return {
       outcome,
       center,
@@ -3535,6 +3567,7 @@ class WeaponAttackController {
       },
       animate: false,
       createMessage: !checkBatch,
+      completionCollector: checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
@@ -3542,7 +3575,7 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) {
-      this.notifyAttackCheckResolved(outcome);
+      await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
@@ -3550,7 +3583,7 @@ class WeaponAttackController {
       limbKey
     }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
-    this.notifyAttackCheckResolved(outcome);
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,
@@ -3594,6 +3627,7 @@ class WeaponAttackController {
       },
       animate: false,
       createMessage: !checkBatch,
+      completionCollector: checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
@@ -3601,13 +3635,13 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) {
-      this.notifyAttackCheckResolved(outcome);
+      await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
 
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
-    this.notifyAttackCheckResolved(outcome);
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
     const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,

@@ -2801,6 +2801,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         data: { difficulty: link.difficulty },
         animate: false,
         createMessage: createMessages,
+        completionCollector: createMessages ? null : collector,
         requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт"
       });
       if (!outcome) return null;
@@ -2898,6 +2899,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (warning) ui.notifications.warn(warning);
       if (summary.completed) await this.#showCraftBatchSummary(summary);
     } finally {
+      // A failed attempt must not leave earlier collected checks waiting for a
+      // common card that the batch can no longer publish.
+      await Promise.allSettled([collector.abort()]);
       this.#busy = false;
       if (this.rendered) {
         this.#captureScrollPositions();

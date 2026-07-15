@@ -687,7 +687,9 @@ function normalizeAbilityCondition(value = {}) {
       combatOnly: normalizeBoolean(value?.combatOnly, false),
       autoApply: normalizeBoolean(value?.autoApply, false),
       trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets),
-      skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey)
+      skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey),
+      expectedResultKeys: normalizeConditionKeyList(value?.expectedResultKeys, value?.expectedResultKey),
+      eventFilters: normalizeEventReactionDepthFilterMap(value?.eventFilters)
     };
   }
 
@@ -929,6 +931,14 @@ function normalizeConditionKeyList(value = [], previous = "") {
   const previousKey = String(previous ?? "").trim();
   if (previousKey && !normalized.includes(previousKey)) normalized.push(previousKey);
   return normalized;
+}
+
+function normalizeEventReactionDepthFilterMap(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).map(([key, entries]) => [
+    String(key ?? "").trim(),
+    normalizeStringList(entries)
+  ]).filter(([key]) => Boolean(key)));
 }
 
 function normalizeAuraMode(value) {
