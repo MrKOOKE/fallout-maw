@@ -490,6 +490,24 @@ function normalizeAbilityFunction(value = {}, index = 0) {
       })
     ];
   }
+  const activeSettings = type === ABILITY_FUNCTION_TYPES.activeApplication
+    ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
+    : {};
+  const legacyActiveDuration = type === ABILITY_FUNCTION_TYPES.activeApplication
+    ? Math.max(0, toInteger(value?.activeSettings?.durationSeconds ?? value?.settings?.durationSeconds ?? 0))
+    : 0;
+  if (
+    legacyActiveDuration > 0
+    && !conditions.some(condition => condition?.type === ABILITY_CONDITION_TYPES.duration)
+  ) {
+    conditions = [
+      ...conditions,
+      normalizeAbilityCondition({
+        type: ABILITY_CONDITION_TYPES.duration,
+        durationSeconds: legacyActiveDuration
+      })
+    ];
+  }
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
@@ -497,9 +515,7 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     fixedSettings: type === ABILITY_FUNCTION_TYPES.fixed
       ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
       : {},
-    activeSettings: type === ABILITY_FUNCTION_TYPES.activeApplication
-      ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
-      : {},
+    activeSettings,
     // Legacy storage is intentionally cleared after its rows have been migrated
     // into the standalone triggerCost condition above.
     reactionSettings: { durationSeconds: 0, costs: [] },
@@ -594,16 +610,28 @@ export function normalizeActiveApplicationSettings(value = {}) {
     : ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self;
   const targetGroups = normalizeStringList(value?.targetGroups)
     .filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  const rawCosts = Array.isArray(value?.costs) ? value.costs : Object.values(value?.costs ?? {});
+  const costs = rawCosts.map(row => normalizeEventReactionCost(row));
+  if (!costs.length) {
+    const legacyEnergyCost = Math.max(0, toInteger(value?.energyCost ?? 0));
+    const legacyOverloadAmount = Math.max(0, toInteger(value?.overloadEnergyCost ?? 0));
+    const legacyOverloadDurationSeconds = Math.max(0, toInteger(value?.overloadDurationSeconds ?? 0));
+    if (legacyEnergyCost > 0 || (legacyOverloadAmount > 0 && legacyOverloadDurationSeconds > 0)) {
+      costs.push(normalizeEventReactionCost({
+        resourceKey: "power",
+        formula: String(legacyEnergyCost),
+        overloadAmount: legacyOverloadAmount,
+        overloadDurationSeconds: legacyOverloadDurationSeconds
+      }));
+    }
+  }
   return {
     name: String(value?.name ?? "").trim(),
-    energyCost: Math.max(0, toInteger(value?.energyCost ?? 0)),
-    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 0)),
-    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 0)),
+    costs,
     targetMode,
     targetLimit: Math.max(1, toInteger(value?.targetLimit ?? 1) || 1),
     targetGroups: targetGroups.length ? targetGroups : ["ally"],
-    excludeSelf: value?.excludeSelf === undefined ? true : Boolean(value.excludeSelf),
-    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 0))
+    excludeSelf: value?.excludeSelf === undefined ? true : Boolean(value.excludeSelf)
   };
 }
 

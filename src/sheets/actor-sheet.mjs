@@ -4725,27 +4725,40 @@ function buildAbilityTooltipFunctionSections(item, actor = null) {
     ...getEventReactionProgressEntries(item)
   ]
     .map(entry => [entry.label, entry.value ?? `${entry.current} / ${entry.required}`]);
-  const energyRows = buildAbilityEnergyCostRows(item, actor);
+  const hasActiveApplication = normalizeAbilityFunctions(item?.system?.functions ?? [])
+    .some(abilityFunction => abilityFunction.type === ABILITY_FUNCTION_TYPES.activeApplication);
+  const resourceCostRows = buildAbilityResourceCostRows(item, actor);
   const sections = [
-    renderTooltipFunctionSection("Энергия", energyRows),
+    renderTooltipFunctionSection(
+      hasActiveApplication
+        ? game.i18n.localize("FALLOUTMAW.Ability.ActiveApplication.ActivationCosts")
+        : "Энергия",
+      resourceCostRows
+    ),
     renderTooltipFunctionSection("Прогресс условий", progressRows)
   ].filter(Boolean);
   if (!sections.length) return "";
   return `<section class="functions">${sections.join("")}</section>`;
 }
 
-function buildAbilityEnergyCostRows(item, actor = null) {
+function buildAbilityResourceCostRows(item, actor = null) {
   if (!actor || item?.type !== "ability") return [];
   const functions = normalizeAbilityFunctions(item.system?.functions ?? []);
   const activeApplicationEntry = functions.find(abilityFunction => abilityFunction.type === ABILITY_FUNCTION_TYPES.activeApplication);
   if (activeApplicationEntry) {
     const settings = normalizeActiveApplicationSettings(activeApplicationEntry.activeSettings);
-    return [
-      ["Стоимость: базовый расход", String(settings.energyCost)],
-      ["Стоимость: итог", String(getFixedAbilityEnergyCost(actor, item, activeApplicationEntry, settings.energyCost))],
-      ["Перегрузка", `${settings.overloadEnergyCost} на ${formatDurationShort(settings.overloadDurationSeconds)}`],
-      ["Длительность", formatDurationShort(settings.durationSeconds)]
-    ];
+    const resourceLabels = new Map(getResourceSettings().map(resource => [resource.key, resource.label]));
+    resourceLabels.set(
+      "reactionPoints",
+      game.i18n.localize("FALLOUTMAW.Events.Reaction.Resources.ReactionPoints")
+    );
+    return settings.costs.flatMap(cost => {
+      const rows = [[resourceLabels.get(cost.resourceKey) ?? cost.resourceKey, String(cost.formula)]];
+      if (cost.overloadAmount > 0 && cost.overloadDurationSeconds > 0) {
+        rows.push(["Перегрузка", `${cost.overloadAmount} на ${formatDurationShort(cost.overloadDurationSeconds)}`]);
+      }
+      return rows;
+    });
   }
   const entry = functions
     .find(abilityFunction => (

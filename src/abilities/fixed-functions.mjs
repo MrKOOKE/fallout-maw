@@ -5,6 +5,7 @@ import {
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   createAbilityFunction,
+  getAbilityFunctionEffectDurationSeconds,
   getAbilitySourceId,
   normalizeActiveApplicationSettings,
   normalizeAbilityFunctions,
@@ -165,6 +166,10 @@ import {
   getAbilityOverloadEnergyCost,
   getAbilityOverloadName
 } from "./overload.mjs";
+import {
+  notifyAbilityTriggerCostFailure,
+  payAbilityFunctionResourceCosts
+} from "./trigger-cost-runtime.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -1154,9 +1159,9 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
   sourceParticipant = null,
   occurrenceId = "activation"
 } = {}) {
-  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
-  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const activationCosts = settings.costs;
+  const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const occurrenceBase = `ability-use:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`;
   let targets;
   try {
@@ -1172,7 +1177,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
         related: []
       },
       resolvedData: ({ status }) => ({
-        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { energyCost, targetCount: 0 }),
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { activationCosts, durationSeconds, targetCount: 0 }),
         status
       }),
       forcedResult: { status: "error", reason: "targetSelectionError", value: false, error }
@@ -1191,25 +1196,10 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       occurrenceBase,
       participants,
       resolvedData: ({ status }) => ({
-        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { energyCost, targetCount: 0 }),
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { activationCosts, durationSeconds, targetCount: 0 }),
         status
       }),
       forcedResult: { status: "cancelled", reason: "targetSelectionCancelled", value: false }
-    });
-    return false;
-  }
-  if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
-    await runTerminalSystemEventWorkflow({
-      scope,
-      resolvedEventKey: "fallout-maw.ability.use.resolved",
-      occurrenceBase,
-      participants,
-      resolvedData: ({ status }) => ({
-        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, { energyCost, targetCount: targets.length }),
-        status
-      }),
-      forcedResult: { status: "failed", reason: "insufficientEnergy", value: false }
     });
     return false;
   }
@@ -1221,12 +1211,14 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     occurrenceBase,
     participants,
     beforeData: buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
-      energyCost,
+      activationCosts,
+      durationSeconds,
       targetCount: targets.length
     }),
     resolvedData: ({ value, status }) => ({
       ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
-        energyCost,
+        activationCosts,
+        durationSeconds,
         targetCount: targets.length,
         appliedCount: Math.max(0, toInteger(value?.appliedCount))
       }),
@@ -1237,7 +1229,8 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       abilityItem,
       abilityFunction,
       settings,
-      energyCost,
+      activationCosts,
+      durationSeconds,
       targets,
       occurrenceId
     }),
@@ -1255,7 +1248,8 @@ async function executeActiveApplicationUse(scope, {
   abilityItem,
   abilityFunction,
   settings,
-  energyCost = 0,
+  activationCosts = [],
+  durationSeconds = 0,
   targets = [],
   occurrenceId = "activation"
 } = {}) {
@@ -1264,7 +1258,8 @@ async function executeActiveApplicationUse(scope, {
     abilityItem,
     abilityFunction,
     settings,
-    energyCost,
+    activationCosts,
+    durationSeconds,
     targets,
     occurrenceId
   });
@@ -1283,7 +1278,8 @@ async function executeActiveApplicationUse(scope, {
         abilityItem,
         abilityFunction,
         settings,
-        energyCost,
+        activationCosts,
+        durationSeconds,
         status: "cancelled",
         reason: "actionSelectionCancelled",
         terminalTargets
@@ -1293,14 +1289,27 @@ async function executeActiveApplicationUse(scope, {
   }
 
   try {
-    if (!(await spendEnergy(actor, energyCost, createAbilitySystemEventOptions(scope.chainRef)))) {
+    const payment = await payAbilityFunctionResourceCosts({
+      actor,
+      sourceItem: abilityItem,
+      abilityFunction,
+      costRows: activationCosts,
+      context: {
+        rootId: scope.rootId,
+        chainRef: scope.chainRef,
+        occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
+      }
+    });
+    if (!payment.ok) {
+      notifyAbilityTriggerCostFailure(payment);
       for (const entry of allowed) {
         await emitActiveApplicationResolved(scope, entry, {
           actor,
           abilityItem,
           abilityFunction,
           settings,
-          energyCost,
+          activationCosts,
+          durationSeconds,
           status: "failed",
           reason: "resourceSpendFailed",
           terminalTargets
@@ -1308,17 +1317,8 @@ async function executeActiveApplicationUse(scope, {
       }
       return { used: false, appliedCount: 0, reason: "resourceSpendFailed" };
     }
-    if (settings.durationSeconds > 0) {
-      await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, settings, allowed.map(entry => entry.target), {
-        chainRef: scope.chainRef
-      });
-    }
-    const appliesOverload = settings.overloadEnergyCost > 0 && settings.overloadDurationSeconds > 0;
-    if (appliesOverload) {
-      await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-        name: getAbilityOverloadName(abilityItem),
-        energyCost: settings.overloadEnergyCost,
-        durationSeconds: settings.overloadDurationSeconds,
+    if (durationSeconds > 0) {
+      await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
         chainRef: scope.chainRef
       });
     }
@@ -1334,7 +1334,8 @@ async function executeActiveApplicationUse(scope, {
           abilityItem,
           abilityFunction,
           settings,
-          energyCost,
+          activationCosts,
+          durationSeconds,
           status: "failed",
           reason: "actionFailed",
           terminalTargets
@@ -1342,20 +1343,15 @@ async function executeActiveApplicationUse(scope, {
       }
       return { used: false, appliedCount: actionResult.executed, reason: "actionFailed" };
     }
-    await createAbilityChatMessage(
-      actor,
-      abilityItem,
-      appliesOverload
-        ? `Применено. Перегрузка: +${settings.overloadEnergyCost} на ${formatDuration(settings.overloadDurationSeconds)}.`
-        : "Применено."
-    );
+    await createAbilityChatMessage(actor, abilityItem, "Применено.");
     for (const entry of allowed) {
       await emitActiveApplicationResolved(scope, entry, {
         actor,
         abilityItem,
         abilityFunction,
         settings,
-        energyCost,
+        activationCosts,
+        durationSeconds,
         status: "success",
         reason: "resolved",
         terminalTargets
@@ -1369,7 +1365,8 @@ async function executeActiveApplicationUse(scope, {
         abilityItem,
         abilityFunction,
         settings,
-        energyCost,
+        activationCosts,
+        durationSeconds,
         status: "error",
         reason: "error",
         error,
@@ -1385,7 +1382,8 @@ async function gateActiveApplicationTargets(scope, {
   abilityItem,
   abilityFunction,
   settings,
-  energyCost = 0,
+  activationCosts = [],
+  durationSeconds = 0,
   targets = [],
   occurrenceId = "activation"
 } = {}) {
@@ -1404,7 +1402,8 @@ async function gateActiveApplicationTargets(scope, {
         abilityItem,
         abilityFunction,
         settings,
-        energyCost,
+        activationCosts,
+        durationSeconds,
         status: "cancelled",
         reason: "cancelRemaining",
         terminalTargets
@@ -1418,7 +1417,8 @@ async function gateActiveApplicationTargets(scope, {
         abilityItem,
         abilityFunction,
         settings,
-        energyCost,
+        activationCosts,
+        durationSeconds,
         target,
         index
       })
@@ -1432,7 +1432,8 @@ async function gateActiveApplicationTargets(scope, {
         abilityItem,
         abilityFunction,
         settings,
-        energyCost,
+        activationCosts,
+        durationSeconds,
         status: "cancelled",
         reason: getSystemEventCancellationReason(gate) || "cancelled",
         terminalTargets
@@ -1450,7 +1451,8 @@ async function emitActiveApplicationResolved(scope, entry, {
   abilityItem,
   abilityFunction,
   settings,
-  energyCost = 0,
+  activationCosts = [],
+  durationSeconds = 0,
   status = "failed",
   reason = "failed",
   error = null,
@@ -1466,7 +1468,8 @@ async function emitActiveApplicationResolved(scope, entry, {
       abilityItem,
       abilityFunction,
       settings,
-      energyCost,
+      activationCosts,
+      durationSeconds,
       target,
       index: entry.index
     }),
@@ -1502,7 +1505,8 @@ function buildActiveApplicationEventData({
   abilityItem,
   abilityFunction,
   settings,
-  energyCost = 0,
+  activationCosts = [],
+  durationSeconds = 0,
   target = null,
   index = 0
 } = {}) {
@@ -1511,10 +1515,14 @@ function buildActiveApplicationEventData({
     targetIndex: Math.max(0, toInteger(index)),
     targetActorUuid: String(target?.actor?.uuid ?? ""),
     targetTokenUuid: String((target?.token?.document ?? target?.token)?.uuid ?? ""),
-    energyCost: Math.max(0, toInteger(energyCost)),
-    durationSeconds: Math.max(0, toInteger(settings?.durationSeconds)),
-    overloadEnergyCost: Math.max(0, toInteger(settings?.overloadEnergyCost)),
-    overloadDurationSeconds: Math.max(0, toInteger(settings?.overloadDurationSeconds))
+    activationCosts: (Array.isArray(activationCosts) ? activationCosts : Object.values(activationCosts ?? {})).map(row => ({
+      id: String(row?.id ?? ""),
+      resourceKey: String(row?.resourceKey ?? ""),
+      formula: String(row?.formula ?? "0"),
+      overloadAmount: Math.max(0, toInteger(row?.overloadAmount)),
+      overloadDurationSeconds: Math.max(0, toInteger(row?.overloadDurationSeconds))
+    })),
+    durationSeconds: Math.max(0, toInteger(durationSeconds))
   };
 }
 
@@ -1602,10 +1610,10 @@ function getPrimaryActorToken(actor) {
   return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
-async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, settings, targets = [], {
+async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, durationSeconds, targets = [], {
   chainRef = null
 } = {}) {
-  if (settings.durationSeconds <= 0) return;
+  if (durationSeconds <= 0) return;
   const startTime = Number(game.time?.worldTime) || 0;
   for (const target of targets) {
     const targetActor = target.actor;
@@ -1623,10 +1631,8 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
       transfer: false,
       disabled: false,
       showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-      duration: {
-        seconds: settings.durationSeconds,
-        startTime
-      },
+      start: { time: startTime },
+      duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
       system: { changes },
       flags: {
         [SYSTEM_ID]: {

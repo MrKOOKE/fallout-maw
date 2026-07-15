@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "a7a1ead2f863edd923876da1ce2f27dee0ca0be699649054ec62d663c2ed65a1",
-  "updatedAt": "2026-07-15T11:06:44.172Z",
+  "revision": "263f1af2f8da6b759227ce130619fdd1e7905654aea89c87b9c7a3a110f38064",
+  "updatedAt": "2026-07-15T12:01:21.707Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3240,12 +3240,17 @@
                     {
                       "actions": [],
                       "activeSettings": {
-                        "durationSeconds": 0,
-                        "energyCost": 10,
+                        "costs": [
+                          {
+                            "formula": "10",
+                            "id": "IX7mmDDG5hF6ODxR",
+                            "overloadAmount": 40,
+                            "overloadDurationSeconds": 3600,
+                            "resourceKey": "power"
+                          }
+                        ],
                         "excludeSelf": true,
                         "name": "",
-                        "overloadDurationSeconds": 3600,
-                        "overloadEnergyCost": 40,
                         "targetGroups": [
                           "ally"
                         ],
@@ -3454,20 +3459,47 @@
                     {
                       "actions": [],
                       "activeSettings": {
-                        "durationSeconds": 0,
-                        "energyCost": 0,
+                        "costs": [
+                          {
+                            "formula": "20",
+                            "id": "uiUKO3iMFkBugcGM",
+                            "overloadAmount": 40,
+                            "overloadDurationSeconds": 7200,
+                            "resourceKey": "power"
+                          }
+                        ],
                         "excludeSelf": true,
                         "name": "Усиленное влияние",
-                        "overloadDurationSeconds": 0,
-                        "overloadEnergyCost": 0,
                         "targetGroups": [
                           "ally"
                         ],
                         "targetLimit": 1,
                         "targetMode": "self"
                       },
-                      "changes": [],
-                      "conditions": [],
+                      "changes": [
+                        {
+                          "id": "itdwM3185SLOdM4p",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "30"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 18,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "Xl2Qvd3OAa9Jgozj",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "yZpSrh7AmL6VuP6J",

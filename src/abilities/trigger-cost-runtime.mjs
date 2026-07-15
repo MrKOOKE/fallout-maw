@@ -65,6 +65,25 @@ export async function payAbilityFunctionTriggerCost({
   if (!hasTriggerCostCondition(abilityFunction)) return successfulPayment({ charged: false });
 
   const baseRows = getAbilityFunctionTriggerCostRows(abilityFunction);
+  return payAbilityFunctionResourceCosts({
+    actor,
+    sourceItem,
+    abilityFunction,
+    costRows: baseRows,
+    context
+  });
+}
+
+/** Pay an explicit function-owned resource vector through the shared registry. */
+export async function payAbilityFunctionResourceCosts({
+  actor = null,
+  sourceItem = null,
+  abilityFunction = null,
+  costRows: rows = [],
+  context = {}
+} = {}) {
+  if (!actor || !sourceItem || !abilityFunction) return failedPayment("invalidTriggerSource");
+  const baseRows = Array.isArray(rows) ? rows : Object.values(rows ?? {});
   if (!baseRows.length) {
     return successfulPayment({ charged: false, entries: [{ sourceItem, abilityFunction, baseRows }] });
   }

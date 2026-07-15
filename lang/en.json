@@ -66,6 +66,9 @@
         "Enabled": "{name}: enabled.",
         "Disabled": "{name}: disabled."
       },
+      "ActiveApplication": {
+        "ActivationCosts": "Activation resource costs"
+      },
       "TriggerCost": {
         "ConditionLabel": "Trigger cost",
         "Costs": "Trigger cost",

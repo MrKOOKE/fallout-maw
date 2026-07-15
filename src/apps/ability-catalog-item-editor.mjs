@@ -157,6 +157,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addFunctionCondition: this.#onAddFunctionCondition,
       addFunctionConditionAlternative: this.#onAddFunctionConditionAlternative,
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
+      addActiveApplicationCost: this.#onAddActiveApplicationCost,
+      deleteActiveApplicationCost: this.#onDeleteActiveApplicationCost,
       addConditionTriggerCost: this.#onAddConditionTriggerCost,
       deleteConditionTriggerCost: this.#onDeleteConditionTriggerCost,
       addConditionTrackingTarget: this.#onAddConditionTrackingTarget,
@@ -609,6 +611,44 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       overloadDurationSeconds: 0
     });
     condition.costs = costs;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddActiveApplicationCost(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const abilityFunction = this.ability.system.functions?.[functionIndex];
+    if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.activeApplication) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+    settings.costs.push({
+      id: foundry.utils.randomID(),
+      resourceKey: REACTION_POINTS_RESOURCE_KEY,
+      formula: "1",
+      overloadAmount: 0,
+      overloadDurationSeconds: 0
+    });
+    abilityFunction.activeSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteActiveApplicationCost(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const costRow = target.closest("[data-active-application-cost-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const costIndex = getRowIndex(functionRow, "[data-active-application-cost-row]", costRow);
+    const abilityFunction = this.ability.system.functions?.[functionIndex];
+    if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.activeApplication || costIndex < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+    settings.costs.splice(costIndex, 1);
+    abilityFunction.activeSettings = settings;
     return this.#persist({ render: true, sync: false });
   }
 
@@ -1107,21 +1147,17 @@ function readActiveApplicationSettings(row) {
   if (row?.dataset?.functionType !== ABILITY_FUNCTION_TYPES.activeApplication) return {};
   return {
     name: row.querySelector("[data-field='active.name']")?.value ?? "",
-    energyCost: row.querySelector("[data-field='active.energyCost']")?.value,
-    overloadEnergyCost: row.querySelector("[data-field='active.overloadEnergyCost']")?.value,
-    overloadDurationSeconds: durationPartsToSeconds(
-      row.querySelector("[data-field='active.overloadDurationAmount']")?.value,
-      row.querySelector("[data-field='active.overloadDurationUnit']")?.value
-    ),
+    costs: readActiveApplicationCostRows(row),
     targetMode: row.querySelector("[data-field='active.targetMode']")?.value,
     targetLimit: row.querySelector("[data-field='active.targetLimit']")?.value,
     targetGroups: readFieldValues(row, "[data-field='active.targetGroup']"),
-    excludeSelf: readBooleanField(row.querySelector("[data-field='active.excludeSelf']"), true),
-    durationSeconds: durationPartsToSeconds(
-      row.querySelector("[data-field='active.durationAmount']")?.value,
-      row.querySelector("[data-field='active.durationUnit']")?.value
-    )
+    excludeSelf: readBooleanField(row.querySelector("[data-field='active.excludeSelf']"), true)
   };
+}
+
+function readActiveApplicationCostRows(row) {
+  return Array.from(row?.querySelectorAll("[data-active-application-cost-row]") ?? [])
+    .map(costRow => readTriggerCostRow(costRow));
 }
 
 function syncFixedRescueCountVisibility(select) {
@@ -1587,24 +1623,27 @@ function readAbilityConditions(root) {
 }
 
 function readTriggerCostRows(conditionRow) {
-  return Array.from(conditionRow?.querySelectorAll("[data-trigger-cost-row]") ?? []).map(costRow => {
-    const overloadDurationRaw = costRow.querySelector("[data-field='triggerCost.overloadDurationAmount']")?.value;
-    const overloadDurationSeconds = overloadDurationRaw === "" || overloadDurationRaw === undefined || overloadDurationRaw === null
-      ? 0
-      : durationPartsToSeconds(
-        overloadDurationRaw,
-        costRow.querySelector("[data-field='triggerCost.overloadDurationUnit']")?.value
-      );
-    return {
-      id: costRow.dataset.costId || foundry.utils.randomID(),
-      resourceKey: costRow.querySelector("[data-field='triggerCost.resourceKey']")?.value ?? "",
-      formula: costRow.querySelector("[data-field='triggerCost.formula']")?.value ?? "0",
-      overloadAmount: overloadDurationSeconds > 0
-        ? Math.max(0, toInteger(costRow.querySelector("[data-field='triggerCost.overloadAmount']")?.value ?? 0))
-        : 0,
-      overloadDurationSeconds
-    };
-  });
+  return Array.from(conditionRow?.querySelectorAll("[data-trigger-cost-row]") ?? [])
+    .map(costRow => readTriggerCostRow(costRow));
+}
+
+function readTriggerCostRow(costRow) {
+  const overloadDurationRaw = costRow.querySelector("[data-field='triggerCost.overloadDurationAmount']")?.value;
+  const overloadDurationSeconds = overloadDurationRaw === "" || overloadDurationRaw === undefined || overloadDurationRaw === null
+    ? 0
+    : durationPartsToSeconds(
+      overloadDurationRaw,
+      costRow.querySelector("[data-field='triggerCost.overloadDurationUnit']")?.value
+    );
+  return {
+    id: costRow.dataset.costId || foundry.utils.randomID(),
+    resourceKey: costRow.querySelector("[data-field='triggerCost.resourceKey']")?.value ?? "",
+    formula: costRow.querySelector("[data-field='triggerCost.formula']")?.value ?? "0",
+    overloadAmount: overloadDurationSeconds > 0
+      ? Math.max(0, toInteger(costRow.querySelector("[data-field='triggerCost.overloadAmount']")?.value ?? 0))
+      : 0,
+    overloadDurationSeconds
+  };
 }
 
 function readAcquisitionRequirements(root) {
@@ -2082,14 +2121,9 @@ function getAbilityFunctionTypeLabel(entry, fixedKey = "") {
 
 function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
-  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
-  const duration = splitDurationSeconds(normalized.durationSeconds);
   return {
     ...normalized,
-    overloadDurationAmount: overloadDuration.amount,
-    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
-    durationAmount: duration.amount,
-    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    activationCosts: prepareTriggerCostRowsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }

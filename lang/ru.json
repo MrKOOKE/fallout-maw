@@ -65,6 +65,9 @@
         "Enabled": "{name}: включено.",
         "Disabled": "{name}: выключено."
       },
+      "ActiveApplication": {
+        "ActivationCosts": "Расход ресурсов на активацию"
+      },
       "TriggerCost": {
         "ConditionLabel": "Стоимость срабатывания",
         "Costs": "Стоимость срабатывания",

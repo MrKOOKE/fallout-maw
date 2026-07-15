@@ -721,7 +721,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
     normalizeSubmittedToggleableConditions(form, submitData);
-    normalizeSubmittedActiveApplicationFunctions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
@@ -963,6 +962,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-trigger-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityTriggerCost(event));
+    });
+    this.element?.querySelectorAll("[data-add-active-application-cost]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddActiveApplicationCost(event));
+    });
+    this.element?.querySelectorAll("[data-delete-active-application-cost]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteActiveApplicationCost(event));
     });
     this.element?.querySelectorAll("[data-add-ability-event-tracking-target]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityEventTrackingTarget(event));
@@ -2824,6 +2829,40 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const costs = normalizeAbilityTriggerCostRows(condition.costs);
     costs.splice(costIndex, 1);
     condition.costs = costs;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddActiveApplicationCost(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const abilityFunction = functions[functionIndex];
+    if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.activeApplication) return undefined;
+    const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+    settings.costs.push({
+      id: foundry.utils.randomID(),
+      resourceKey: REACTION_POINTS_RESOURCE_KEY,
+      formula: "1",
+      overloadAmount: 0,
+      overloadDurationSeconds: 0
+    });
+    abilityFunction.activeSettings = settings;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteActiveApplicationCost(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const costIndex = Number(event.currentTarget?.closest?.("[data-active-application-cost-row]")?.dataset.costIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const abilityFunction = functions[functionIndex];
+    if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.activeApplication || costIndex < 0) return undefined;
+    const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+    settings.costs.splice(costIndex, 1);
+    abilityFunction.activeSettings = settings;
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -6284,14 +6323,9 @@ function getAbilityFunctionTypeLabel(entry = {}, fixedKey = "") {
 
 function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
-  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
-  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
   return {
     ...normalized,
-    overloadDurationAmount: overloadDuration.amount,
-    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
-    durationAmount: duration.amount,
-    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    activationCosts: prepareAbilityTriggerCostsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
@@ -7703,34 +7737,36 @@ function normalizeSubmittedTriggerCostConditions(form = null, submitData = {}) {
     if (!functionPath || functionIndex < 0 || conditionIndex < 0) continue;
 
     const costs = Array.from(conditionRow.querySelectorAll("[data-ability-trigger-cost-row]") ?? [])
-      .map((costRow, index) => {
-        const rawDuration = costRow.querySelector("[data-ability-trigger-cost-overload-duration-amount]")?.value;
-        const overloadDurationSeconds = rawDuration === "" || rawDuration === undefined || rawDuration === null
-          ? 0
-          : abilityDurationPartsToSeconds(
-            rawDuration,
-            costRow.querySelector("[data-ability-trigger-cost-overload-duration-unit]")?.value
-          );
-        return {
-          id: String(
-            costRow.querySelector("[data-ability-trigger-cost-id]")?.value
-            ?? costRow.dataset.costId
-            ?? `cost-${index + 1}`
-          ).trim(),
-          resourceKey: String(costRow.querySelector("[data-ability-trigger-cost-resource-key]")?.value ?? "").trim(),
-          formula: String(costRow.querySelector("[data-ability-trigger-cost-formula]")?.value ?? "0").trim(),
-          overloadAmount: overloadDurationSeconds > 0
-            ? Math.max(0, toInteger(costRow.querySelector("[data-ability-trigger-cost-overload-amount]")?.value ?? 0))
-            : 0,
-          overloadDurationSeconds
-        };
-      });
+      .map((costRow, index) => readAbilityTriggerCostRow(costRow, index));
     foundry.utils.setProperty(
       submitData,
       `${functionPath}.${functionIndex}.conditions.${conditionIndex}.costs`,
       costs
     );
   }
+}
+
+function readAbilityTriggerCostRow(costRow, index = 0) {
+  const rawDuration = costRow.querySelector("[data-ability-trigger-cost-overload-duration-amount]")?.value;
+  const overloadDurationSeconds = rawDuration === "" || rawDuration === undefined || rawDuration === null
+    ? 0
+    : abilityDurationPartsToSeconds(
+      rawDuration,
+      costRow.querySelector("[data-ability-trigger-cost-overload-duration-unit]")?.value
+    );
+  return {
+    id: String(
+      costRow.querySelector("[data-ability-trigger-cost-id]")?.value
+      ?? costRow.dataset.costId
+      ?? `cost-${index + 1}`
+    ).trim(),
+    resourceKey: String(costRow.querySelector("[data-ability-trigger-cost-resource-key]")?.value ?? "").trim(),
+    formula: String(costRow.querySelector("[data-ability-trigger-cost-formula]")?.value ?? "0").trim(),
+    overloadAmount: overloadDurationSeconds > 0
+      ? Math.max(0, toInteger(costRow.querySelector("[data-ability-trigger-cost-overload-amount]")?.value ?? 0))
+      : 0,
+    overloadDurationSeconds
+  };
 }
 
 function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) {
@@ -7811,16 +7847,9 @@ function normalizeSubmittedActiveApplicationFunctions(form = null, submitData = 
     const functionPath = String(row.dataset.functionPath ?? "");
     const functionIndex = Number(row.dataset.functionIndex ?? -1);
     if (!functionPath || functionIndex < 0) continue;
-    const overloadDurationSeconds = abilityDurationPartsToSeconds(
-      row.querySelector("[data-active-application-overload-duration-amount]")?.value,
-      row.querySelector("[data-active-application-overload-duration-unit]")?.value
-    );
-    const durationSeconds = abilityDurationPartsToSeconds(
-      row.querySelector("[data-active-application-duration-amount]")?.value,
-      row.querySelector("[data-active-application-duration-unit]")?.value
-    );
-    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.overloadDurationSeconds`, overloadDurationSeconds);
-    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.durationSeconds`, durationSeconds);
+    const costs = Array.from(row.querySelectorAll("[data-active-application-cost-row]") ?? [])
+      .map((costRow, index) => readAbilityTriggerCostRow(costRow, index));
+    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.costs`, costs);
   }
 }
 

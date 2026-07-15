@@ -1465,28 +1465,35 @@
           <input type="text" name="{{functionPath}}.{{functionIndex}}.activeSettings.name" value="{{activeApplicationSettings.name}}" placeholder="{{localize 'FALLOUTMAW.Ability.Toggle.OriginalName'}}">
         </label>
       </fieldset>
-      <fieldset class="fallout-maw-fieldset fallout-maw-active-application-energy">
-        <legend>Энергия</legend>
-        <div class="fallout-maw-fixed-settings-row">
-          <label>
-            <span>Стоимость</span>
-            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.energyCost" value="{{activeApplicationSettings.energyCost}}" min="0" step="1">
-          </label>
-          <label>
-            <span>Перегрузка</span>
-            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.overloadEnergyCost" value="{{activeApplicationSettings.overloadEnergyCost}}" min="0" step="1">
-          </label>
-          <label>
-            <span>Длительность</span>
-            <div class="fallout-maw-split-number-field-control">
-              <input type="number" value="{{activeApplicationSettings.overloadDurationAmount}}" min="0" step="1" data-active-application-overload-duration-amount>
-              <select data-active-application-overload-duration-unit>
-                {{#each activeApplicationSettings.overloadDurationUnitChoices}}
-                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                {{/each}}
+      <fieldset class="fallout-maw-fieldset fallout-maw-active-application-costs">
+        <legend>{{localize "FALLOUTMAW.Ability.ActiveApplication.ActivationCosts"}}</legend>
+        <div class="fallout-maw-event-reaction-costs">
+          <div class="fallout-maw-item-use-category-header">
+            <span>{{localize "FALLOUTMAW.Ability.ActiveApplication.ActivationCosts"}}</span>
+            <button type="button" data-add-active-application-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.TriggerCost.AddCost"}}</button>
+          </div>
+          <div class="fallout-maw-event-reaction-cost-list">
+            {{#each activeApplicationSettings.activationCosts}}
+            <div class="fallout-maw-event-reaction-cost-row{{#if isUnsupportedResource}} unsupported{{/if}}" data-active-application-cost-row data-cost-index="{{index}}" data-cost-id="{{id}}">
+              <input type="hidden" name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.id" value="{{id}}" data-ability-trigger-cost-id>
+              <select name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.resourceKey" data-ability-trigger-cost-resource-key aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Resource'}}">
+                {{#each resourceChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
               </select>
+              <input type="text" name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.formula" value="{{formula}}" data-ability-trigger-cost-formula data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}">
+              <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-active-application-cost title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              <div class="fallout-maw-event-reaction-cost-overload">
+                <span>{{localize "FALLOUTMAW.Ability.TriggerCost.Overload"}}</span>
+                <input type="number" name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.overloadAmount" value="{{overloadAmount}}" min="0" step="1" data-ability-trigger-cost-overload-amount aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadAmount'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadAmount'}}">
+                <input type="number" value="{{overloadDurationAmount}}" min="0" step="1" data-ability-trigger-cost-overload-duration-amount aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}">
+                <select data-ability-trigger-cost-overload-duration-unit aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}">
+                  {{#each overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </div>
             </div>
-          </label>
+            {{else}}
+            <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Ability.TriggerCost.NoCosts"}}</p>
+            {{/each}}
+          </div>
         </div>
       </fieldset>
       <fieldset class="fallout-maw-fieldset fallout-maw-active-application-targets">
@@ -1525,20 +1532,6 @@
           </div>
           {{/if}}
         </div>
-      </fieldset>
-      <fieldset class="fallout-maw-fieldset fallout-maw-active-application-duration">
-        <legend>Длительность</legend>
-        <label>
-          <span>Длительность</span>
-          <div class="fallout-maw-split-number-field-control">
-            <input type="number" value="{{activeApplicationSettings.durationAmount}}" min="0" step="1" data-active-application-duration-amount>
-            <select data-active-application-duration-unit>
-              {{#each activeApplicationSettings.durationUnitChoices}}
-              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-              {{/each}}
-            </select>
-          </div>
-        </label>
       </fieldset>
     </div>
     {{/if}}
