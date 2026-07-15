@@ -15,6 +15,7 @@ import {
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
+  ABILITY_EVENT_REACTION_MODES,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
@@ -40,6 +41,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
   normalizeEventReactionSettings,
+  normalizeEventReactionMode,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -1544,6 +1546,7 @@ function readAbilityChanges(root, selector) {
 function readAbilityConditions(root) {
   return Array.from(root?.querySelectorAll("[data-ability-condition-row]") ?? []).map(row => {
     const auraMode = row.querySelector("[data-field='conditionAuraMode']")?.value ?? ABILITY_AURA_MODES.applyToTargets;
+    const reactionMode = normalizeEventReactionMode(row.querySelector("[data-field='conditionReactionMode']")?.value);
     return {
       id: row.dataset.conditionId || foundry.utils.randomID(),
       groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
@@ -1551,7 +1554,8 @@ function readAbilityConditions(root) {
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
       progressRequired: row.querySelector("[data-field='conditionEventProgressRequired']")?.value ?? 1,
       combatOnly: Boolean(row.querySelector("[data-field='conditionCombatOnly']")?.checked),
-      autoApply: Boolean(row.querySelector("[data-field='conditionAutoApply']")?.checked),
+      reactionMode,
+      autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
       operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
@@ -2257,6 +2261,7 @@ function prepareConditionForDisplay(condition, {
     ? buildEventReactionDepthFilterGroups(condition, condition?.eventKey, { localize: localizeCatalogValue })
     : [];
   const showEventProgress = isEventReaction && isEventReactionProgressTracked(condition?.eventKey);
+  const reactionMode = normalizeEventReactionMode(condition?.reactionMode, condition?.autoApply);
   return {
     ...condition,
     healthTarget,
@@ -2266,11 +2271,13 @@ function prepareConditionForDisplay(condition, {
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
     eventReactionSettings: isEventReaction ? eventReactionSettings : null,
+    reactionMode,
+    reactionModeChoices: buildEventReactionModeChoices(reactionMode),
     showEventProgress,
     eventProgressLabel: showEventProgress ? getEventReactionProgressLabel(condition?.eventKey) : "",
     eventProgressRequired: normalizeEventReactionProgressRequired(condition?.progressRequired),
     combatOnly: Boolean(condition?.combatOnly),
-    autoApply: Boolean(condition?.autoApply),
+    autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
     trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     showEventTiming: Boolean(eventDisplay.showEventTiming),
@@ -2596,6 +2603,19 @@ function prepareSelectedEventMetadata(descriptor) {
 
 function resolveCatalogEventKeyForPath(pathPrefix = "", preferredEventKey = "") {
   return resolveEventKeyForPathPrefix(pathPrefix, preferredEventKey, getSelectableSystemEvents());
+}
+
+function buildEventReactionModeChoices(selectedMode = ABILITY_EVENT_REACTION_MODES.standard) {
+  return [
+    {
+      value: ABILITY_EVENT_REACTION_MODES.standard,
+      label: localizeEventReactionUi("ReactionModes.Standard", "Standard reaction")
+    },
+    {
+      value: ABILITY_EVENT_REACTION_MODES.isolatedAuto,
+      label: localizeEventReactionUi("ReactionModes.IsolatedAuto", "Isolated automatic application")
+    }
+  ].map(choice => ({ ...choice, selected: choice.value === selectedMode }));
 }
 
 function buildEventReactionSkillRows(value = []) {

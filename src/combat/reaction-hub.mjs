@@ -356,35 +356,55 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
     ...offer,
     __opportunity: entry
   })));
-  const offersByActor = new Map();
+  const allOffersByActor = new Map();
   for (const offer of allOffers) {
-    if (!offersByActor.has(offer.actorUuid)) offersByActor.set(offer.actorUuid, []);
-    offersByActor.get(offer.actorUuid).push(offer);
+    if (!allOffersByActor.has(offer.actorUuid)) allOffersByActor.set(offer.actorUuid, []);
+    allOffersByActor.get(offer.actorUuid).push(offer);
   }
-  const actorOrder = await getStableReactionActorOrder(offersByActor.keys());
-  const columns = usable.map(entry => entry.column);
-  const lockId = foundry.utils.randomID();
-  let selected = null;
+  const allActorOrder = await getStableReactionActorOrder(allOffersByActor.keys());
+  const isolatedAutomaticOffers = allActorOrder.flatMap(actorUuid => (
+    (allOffersByActor.get(actorUuid) ?? []).filter(isIsolatedAutomaticOffer)
+  ));
+  const standardOffers = allActorOrder.flatMap(actorUuid => (
+    (allOffersByActor.get(actorUuid) ?? []).filter(offer => !isIsolatedAutomaticOffer(offer))
+  ));
+  let finalResult = createReactionHubResult();
 
-  const autoOffer = pickAutoApplyReactionOffer(actorOrder, offersByActor);
-  if (autoOffer) {
-    selected = {
-      offer: autoOffer,
-      response: { offerId: autoOffer.offerId },
-      opportunity: autoOffer.__opportunity
-    };
-  } else {
+  reactionExecutionDepth += 1;
+  try {
+    for (const offer of isolatedAutomaticOffers) {
+      const result = await executeReactionOffer({
+        offer,
+        response: { offerId: offer.offerId, isolatedAutomatic: true },
+        opportunity: offer.__opportunity
+      });
+      finalResult = mergeReactionHubResults(finalResult, result);
+      if (finalResult.cancelRemaining) return finalResult;
+    }
+
+    if (!standardOffers.length) return finalResult;
+    const offersByActor = new Map();
+    for (const offer of standardOffers) {
+      if (!offersByActor.has(offer.actorUuid)) offersByActor.set(offer.actorUuid, []);
+      offersByActor.get(offer.actorUuid).push(offer);
+    }
+    const actorOrder = allActorOrder.filter(actorUuid => offersByActor.has(actorUuid));
+    const standardOpportunityIds = new Set(standardOffers.map(offer => offer.__opportunity?.column?.columnId));
+    const columns = usable
+      .filter(entry => standardOpportunityIds.has(entry.column?.columnId))
+      .map(entry => entry.column);
+    const lockId = foundry.utils.randomID();
     let responses = new Map();
     beginReactionLock(lockId, { reason: "reaction-opportunity-wave" });
     try {
       await createReactionOpportunityMessage({
-        context: usable[0]?.context ?? {},
+        context: standardOffers[0]?.__opportunity?.context ?? {},
         actorOrder,
         offersByActor
       });
       responses = await queryReactionOwners(actorOrder, offersByActor, {
-        eventKey: usable[0]?.eventKey ?? "",
-        context: usable[0]?.context ?? {},
+        eventKey: standardOffers[0]?.__opportunity?.eventKey ?? "",
+        context: standardOffers[0]?.__opportunity?.context ?? {},
         timeoutMs,
         columns,
         singleSelection: true
@@ -393,67 +413,64 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
       endReactionLock(lockId);
     }
 
+    let selected = null;
     // One choice for the whole wave: first non-empty selection in reactor order.
     for (const actorUuid of actorOrder) {
       const response = responses.get(actorUuid) ?? null;
       if (!response?.offerId) continue;
-      const offer = allOffers.find(entry => entry.actorUuid === actorUuid && entry.offerId === response.offerId);
+      const offer = standardOffers.find(entry => entry.actorUuid === actorUuid && entry.offerId === response.offerId);
       if (offer) {
         selected = { offer, response, opportunity: offer.__opportunity };
         break;
       }
     }
-  }
-  if (!selected) {
-    await notifyDeclinedReactionOffers(allOffers, { reason: "declined" });
-    return createReactionHubResult();
-  }
-  if (!autoOffer) {
+    if (!selected) {
+      await notifyDeclinedReactionOffers(standardOffers, { reason: "declined" });
+      return finalResult;
+    }
     await notifyDeclinedReactionOffers(
-      allOffers.filter(offer => offer.offerId !== selected.offer.offerId),
+      standardOffers.filter(offer => offer.offerId !== selected.offer.offerId),
       { reason: "notSelected" }
     );
+    finalResult = mergeReactionHubResults(finalResult, await executeReactionOffer(selected));
+    return finalResult;
+  } finally {
+    reactionExecutionDepth -= 1;
+    if (reactionExecutionDepth === 0) await drainPendingReactionRequests();
   }
+}
 
-  let finalResult = createReactionHubResult();
-  reactionExecutionDepth += 1;
+async function executeReactionOffer({ offer = {}, response = {}, opportunity = {} } = {}) {
+  const actor = await fromUuid(offer.actorUuid);
+  if (!canActorReact(actor) || !canAffordReactionOffer(actor, offer)) {
+    return createReactionHubResult({ status: REACTION_RESULT.failed, reason: "unableToAct" });
+  }
+  const provider = reactionProviders.get(offer.providerId);
+  if (!provider) return createReactionHubResult({ status: REACTION_RESULT.failed, reason: "missingProvider" });
+  const eventKey = opportunity.eventKey ?? "";
+  const context = opportunity.context ?? {};
+  const semanticEvent = opportunity.semanticEvent ?? null;
   try {
-    const { offer, response, opportunity } = selected;
-    const actor = await fromUuid(offer.actorUuid);
-    if (!canActorReact(actor) || !canAffordReactionOffer(actor, offer)) {
-      return createReactionHubResult({ reason: "unableToAct" });
-    }
-    const provider = reactionProviders.get(offer.providerId);
-    if (!provider) return createReactionHubResult({ reason: "missingProvider" });
-    const eventKey = opportunity.eventKey;
-    const context = opportunity.context ?? {};
-    const semanticEvent = opportunity.semanticEvent ?? null;
-    try {
-      if (reactionExecutionGuard) {
-        const allowed = await reactionExecutionGuard({
-          eventKey,
-          context,
-          semanticEvent,
-          offer,
-          response
-        });
-        if (allowed === false) return createReactionHubResult({ reason: "guardBlocked" });
-      }
-      const result = await provider.execute({
+    if (reactionExecutionGuard) {
+      const allowed = await reactionExecutionGuard({
         eventKey,
         context,
         semanticEvent,
         offer,
         response
       });
-      finalResult = createReactionHubResult(result ?? {});
-    } catch (error) {
-      console.error(`${SYSTEM_ID} | Reaction execution failed: ${offer.providerId}`, error);
+      if (allowed === false) return createReactionHubResult({ status: REACTION_RESULT.failed, reason: "guardBlocked" });
     }
-    return finalResult;
-  } finally {
-    reactionExecutionDepth -= 1;
-    if (reactionExecutionDepth === 0) await drainPendingReactionRequests();
+    return createReactionHubResult(await provider.execute({
+      eventKey,
+      context,
+      semanticEvent,
+      offer,
+      response
+    }) ?? {});
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Reaction execution failed: ${offer.providerId}`, error);
+    return createReactionHubResult({ status: REACTION_RESULT.failed, reason: "executionError" });
   }
 }
 
@@ -476,12 +493,8 @@ async function notifyDeclinedReactionOffers(offers = [], { reason = "declined" }
   }
 }
 
-function pickAutoApplyReactionOffer(actorOrder = [], offersByActor = new Map()) {
-  for (const actorUuid of actorOrder) {
-    const offer = (offersByActor.get(actorUuid) ?? []).find(entry => entry?.autoApply);
-    if (offer) return offer;
-  }
-  return null;
+function isIsolatedAutomaticOffer(offer = {}) {
+  return String(offer?.reactionMode ?? "") === "isolatedAuto";
 }
 
 function canAffordReactionOffer(actor, offer = {}) {

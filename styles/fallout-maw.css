@@ -3503,12 +3503,17 @@ body #prosemirror-dropdown {
 .fallout-maw-event-reaction-event-field > label,
 .fallout-maw-event-reaction-subject-field,
 .fallout-maw-event-reaction-combat-only,
+.fallout-maw-event-reaction-mode,
 .fallout-maw-event-reaction-auto-apply,
 .fallout-maw-event-reaction-tracking-targets,
 .fallout-maw-event-reaction-skills {
   display: grid;
   gap: 0.18rem;
   grid-column: 1 / -1;
+}
+
+.fallout-maw-event-reaction-mode > select {
+  width: 100%;
 }
 
 .fallout-maw-event-reaction-combat-only,

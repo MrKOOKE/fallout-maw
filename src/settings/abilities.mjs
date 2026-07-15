@@ -109,6 +109,19 @@ export const ABILITY_EVENT_SUBJECTS = Object.freeze({
   eventTarget: "eventTarget"
 });
 
+export const ABILITY_EVENT_REACTION_MODES = Object.freeze({
+  standard: "standard",
+  isolatedAuto: "isolatedAuto"
+});
+
+export function normalizeEventReactionMode(value = "", legacyAutoApply = false) {
+  const normalized = String(value ?? "").trim();
+  if (Object.values(ABILITY_EVENT_REACTION_MODES).includes(normalized)) return normalized;
+  return normalizeBoolean(legacyAutoApply, false)
+    ? ABILITY_EVENT_REACTION_MODES.isolatedAuto
+    : ABILITY_EVENT_REACTION_MODES.standard;
+}
+
 export function normalizeEventReactionProgressRequired(value = 1) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return 1;
@@ -685,6 +698,7 @@ function normalizeAbilityCondition(value = {}) {
   const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
 
   if (type === ABILITY_CONDITION_TYPES.eventReaction) {
+    const reactionMode = normalizeEventReactionMode(value?.reactionMode, value?.autoApply);
     return {
       id,
       groupId,
@@ -692,7 +706,9 @@ function normalizeAbilityCondition(value = {}) {
       eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
       progressRequired: normalizeEventReactionProgressRequired(value?.progressRequired),
       combatOnly: normalizeBoolean(value?.combatOnly, false),
-      autoApply: normalizeBoolean(value?.autoApply, false),
+      reactionMode,
+      // Kept as a serialized compatibility mirror for already saved data.
+      autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
       trackingTargets: normalizeEventTrackingTargets(value?.trackingTargets),
       skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey),
       expectedResultKeys: normalizeConditionKeyList(value?.expectedResultKeys, value?.expectedResultKey),

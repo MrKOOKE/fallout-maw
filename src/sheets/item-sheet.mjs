@@ -50,6 +50,7 @@ import {
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
+  ABILITY_EVENT_REACTION_MODES,
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
   ABILITY_HEALTH_TARGETS,
@@ -61,6 +62,7 @@ import {
   createAbilityFunction,
   normalizeActiveApplicationSettings,
   normalizeEventReactionSettings,
+  normalizeEventReactionMode,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
   normalizeAtRandomSettings,
@@ -6662,6 +6664,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     })
     : [];
   const eventProgressRequired = normalizeEventReactionProgressRequired(condition?.progressRequired);
+  const reactionMode = normalizeEventReactionMode(condition?.reactionMode, condition?.autoApply);
   const showEventProgress = isEventReaction && isEventReactionProgressTracked(condition?.eventKey);
   const eventProgressCurrent = showEventProgress
     ? getEventReactionProgressCurrent(item, abilityFunction, condition)
@@ -6678,12 +6681,14 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
     eventReactionSettings: isEventReaction ? eventReactionSettings : null,
+    reactionMode,
+    reactionModeChoices: buildAbilityEventReactionModeChoices(reactionMode),
     showEventProgress,
     eventProgressLabel: showEventProgress ? getEventReactionProgressLabel(condition?.eventKey) : "",
     eventProgressCurrent,
     eventProgressRequired,
     combatOnly: Boolean(condition?.combatOnly),
-    autoApply: Boolean(condition?.autoApply),
+    autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
     trackingTargetRows: buildAbilityEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
     showEventTiming: Boolean(eventDisplay.showEventTiming),
@@ -6965,6 +6970,19 @@ function prepareSelectedAbilityEventMetadata(descriptor) {
 
 function resolveAbilityEventKeyForPath(pathPrefix = "", preferredEventKey = "") {
   return resolveEventKeyForPathPrefix(pathPrefix, preferredEventKey, getSelectableSystemEvents());
+}
+
+function buildAbilityEventReactionModeChoices(selectedMode = ABILITY_EVENT_REACTION_MODES.standard) {
+  return [
+    {
+      value: ABILITY_EVENT_REACTION_MODES.standard,
+      label: localizeAbilityEventReactionUi("ReactionModes.Standard", "Standard reaction")
+    },
+    {
+      value: ABILITY_EVENT_REACTION_MODES.isolatedAuto,
+      label: localizeAbilityEventReactionUi("ReactionModes.IsolatedAuto", "Isolated automatic application")
+    }
+  ].map(choice => ({ ...choice, selected: choice.value === selectedMode }));
 }
 
 function buildAbilityEventReactionSkillRows(value = []) {
@@ -7661,7 +7679,9 @@ function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) 
       ));
       const progressKey = getEventReactionProgressKey({ functionId, conditionId });
       const combatOnly = Boolean(conditionRow.querySelector("[data-ability-event-reaction-combat-only]")?.checked);
-      const autoApply = Boolean(conditionRow.querySelector("[data-ability-event-reaction-auto-apply]")?.checked);
+      const reactionMode = normalizeEventReactionMode(
+        conditionRow.querySelector("[data-ability-event-reaction-mode]")?.value
+      );
       foundry.utils.setProperty(
         submitData,
         `${functionPath}.${functionIndex}.conditions.${conditionIndex}.combatOnly`,
@@ -7669,8 +7689,13 @@ function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) 
       );
       foundry.utils.setProperty(
         submitData,
+        `${functionPath}.${functionIndex}.conditions.${conditionIndex}.reactionMode`,
+        reactionMode
+      );
+      foundry.utils.setProperty(
+        submitData,
         `${functionPath}.${functionIndex}.conditions.${conditionIndex}.autoApply`,
-        autoApply
+        reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto
       );
       if (progressKey && progressInput?.dataset.eventReactionProgressDirty === "true") {
         foundry.utils.setProperty(

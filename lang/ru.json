@@ -340,6 +340,11 @@
         },
         "CombatOnly": "Срабатывает только в бою?",
         "AutoApply": "Автоматическое применение?",
+        "ReactionMode": "Режим реагирования",
+        "ReactionModes": {
+          "Standard": "Стандартная реакция",
+          "IsolatedAuto": "Обособленное автоматическое применение"
+        },
         "TrackingTargets": "Цель для отслеживания",
         "AddTrackingTarget": "Добавить",
         "NoTrackingTargets": "Цели не выбраны.",

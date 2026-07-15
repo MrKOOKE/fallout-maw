@@ -10,7 +10,11 @@ import {
   applyAbilityFunctionOverloadCosts,
   withAbilityOverloadCostRows
 } from "../abilities/overload.mjs";
-import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
+import {
+  ABILITY_EVENT_REACTION_MODES,
+  getAbilityFunctionEffectDurationSeconds,
+  normalizeEventReactionMode
+} from "../settings/abilities.mjs";
 import { getEventReactionSubscriptions } from "./event-reaction-schema.mjs";
 import { createEventReactionProgressManager } from "./event-reaction-progress.mjs";
 
@@ -122,11 +126,17 @@ export function createGenericEventReactionProvider({
       const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
       if (!variants.length) continue;
       const readyIds = new Set(progressConditionIds);
-      const autoApply = getEventReactionSubscriptions(abilityFunction?.conditions)
-        .some(condition => readyIds.has(String(condition?.id ?? "")) && condition?.autoApply);
+      const readySubscriptions = getEventReactionSubscriptions(abilityFunction?.conditions)
+        .filter(condition => readyIds.has(String(condition?.id ?? "")));
+      const reactionMode = normalizeEventReactionMode(
+        readySubscriptions[0]?.reactionMode,
+        readySubscriptions[0]?.autoApply
+      );
+      const autoApply = reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto;
       offers.push({
         ...candidate,
         energyCost: 0,
+        reactionMode,
         autoApply,
         progressConditionIds,
         actionVariants: autoApply ? variants : undefined,
@@ -271,7 +281,7 @@ export function createGenericEventReactionProvider({
   }
 
   async function decline({ context = {}, offer = {} } = {}) {
-    if (offer?.autoApply) return false;
+    if (normalizeEventReactionMode(offer?.reactionMode, offer?.autoApply) === ABILITY_EVENT_REACTION_MODES.isolatedAuto) return false;
     const actor = await safeResolve(offer.actorUuid, resolveUuid);
     if (!actor) return false;
     const sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);

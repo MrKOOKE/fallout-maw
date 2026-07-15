@@ -1521,9 +1521,11 @@
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
                 <input type="checkbox" data-field="conditionCombatOnly" {{checked combatOnly}}>
               </label>
-              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-auto-apply">
-                <span>{{localize "FALLOUTMAW.Events.Reaction.AutoApply"}}</span>
-                <input type="checkbox" data-field="conditionAutoApply" {{checked autoApply}}>
+              <label class="fallout-maw-event-reaction-mode">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
+                <select data-field="conditionReactionMode">
+                  {{#each reactionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
               </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}

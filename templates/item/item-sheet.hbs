@@ -1676,9 +1676,11 @@
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
                 <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
               </label>
-              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-auto-apply">
-                <span>{{localize "FALLOUTMAW.Events.Reaction.AutoApply"}}</span>
-                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.autoApply" data-ability-event-reaction-auto-apply {{checked autoApply}}>
+              <label class="fallout-maw-event-reaction-mode">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.reactionMode" data-ability-event-reaction-mode>
+                  {{#each reactionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
               </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}
@@ -2492,9 +2494,11 @@
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
                 <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
               </label>
-              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-auto-apply">
-                <span>{{localize "FALLOUTMAW.Events.Reaction.AutoApply"}}</span>
-                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.autoApply" data-ability-event-reaction-auto-apply {{checked autoApply}}>
+              <label class="fallout-maw-event-reaction-mode">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.reactionMode" data-ability-event-reaction-mode>
+                  {{#each reactionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
               </label>
               <div class="fallout-maw-event-reaction-event-field">
                 {{#each eventPathLevels}}

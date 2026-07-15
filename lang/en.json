@@ -341,6 +341,11 @@
         },
         "CombatOnly": "Triggers only in combat?",
         "AutoApply": "Automatic application?",
+        "ReactionMode": "Reaction mode",
+        "ReactionModes": {
+          "Standard": "Standard reaction",
+          "IsolatedAuto": "Isolated automatic application"
+        },
         "TrackingTargets": "Tracking target",
         "AddTrackingTarget": "Add",
         "NoTrackingTargets": "No targets selected.",
