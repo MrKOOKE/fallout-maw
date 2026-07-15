@@ -142,6 +142,16 @@ export const ABILITY_ACTIVE_APPLICATION_TARGET_MODES = Object.freeze({
   others: "others"
 });
 
+export const ABILITY_ACTIVE_APPLICATION_SELECTION_MODES = Object.freeze({
+  manual: "manual",
+  all: "all"
+});
+
+// Stable source id of the catalog entry supplied with the current world
+// preset.  Keeping the constructor keyed by source id means user-renamed
+// entries and localized names remain migratable without fuzzy matching.
+export const ENCOURAGING_SPEECH_ABILITY_ID = "8RIZvth6Ul0Pjl0n";
+
 export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
   self: "self",
   target: "target"
@@ -426,6 +436,164 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
   };
 }
 
+/**
+ * Build the catalog function for "Encouraging Speech" entirely from the
+ * configured skill list.  Existing ids are retained by semantic key so the
+ * migration is stable and does not churn otherwise unchanged catalog data.
+ */
+export function buildEncouragingSpeechAbilityFunction(
+  existingFunction = {},
+  skillSettings = createDefaultSkillSettings()
+) {
+  const skills = normalizeSkillSettings(skillSettings);
+  const functionId = String(existingFunction?.id ?? "").trim() || `${ENCOURAGING_SPEECH_ABILITY_ID}-application`;
+  const speechSkill = skills.find(skill => skill.key === "speech");
+  const speechVariable = String(speechSkill?.abbr ?? speechSkill?.key ?? "spe").trim() || "spe";
+  const bonusFormula = `10+${speechVariable}/10`;
+  const limitFormula = `1+${speechVariable}/50`;
+  const radiusFormula = `10+${speechVariable}/10`;
+
+  const existingChanges = Array.isArray(existingFunction?.changes)
+    ? existingFunction.changes
+    : Object.values(existingFunction?.changes ?? {});
+  const changesByKey = new Map(existingChanges
+    .map(change => [String(change?.key ?? "").trim(), change])
+    .filter(([key]) => key));
+  const changes = skills.map(skill => {
+    const key = `system.skills.${skill.key}.bonus`;
+    const current = changesByKey.get(key) ?? {};
+    return {
+      ...current,
+      id: String(current?.id ?? "").trim() || `${functionId}-${skill.key}-bonus`,
+      key,
+      type: ABILITY_CHANGE_TYPES.add,
+      value: bonusFormula,
+      phase: "initial",
+      priority: null
+    };
+  });
+
+  const existingSettings = existingFunction?.activeSettings ?? {};
+  const existingExcludeSelf = existingSettings?.excludeSelf === undefined
+    ? existingSettings?.includeSelf === undefined ? false : !normalizeBoolean(existingSettings.includeSelf, true)
+    : normalizeBoolean(existingSettings.excludeSelf, false);
+  const existingCosts = Array.isArray(existingSettings?.costs)
+    ? existingSettings.costs
+    : Object.values(existingSettings?.costs ?? {});
+  const costsByResource = new Map(existingCosts
+    .map(cost => [String(cost?.resourceKey ?? "").trim(), cost])
+    .filter(([key]) => key));
+  const buildCost = (resourceKey, formula, overloadAmount = 0, overloadDurationSeconds = 0) => {
+    const current = costsByResource.get(resourceKey) ?? {};
+    return {
+      ...current,
+      id: String(current?.id ?? "").trim() || `${functionId}-cost-${resourceKey}`,
+      resourceKey,
+      formula,
+      overloadAmount,
+      overloadDurationSeconds
+    };
+  };
+
+  const existingConditions = Array.isArray(existingFunction?.conditions)
+    ? existingFunction.conditions
+    : Object.values(existingFunction?.conditions ?? {});
+  const limited = existingConditions.find(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedChanges) ?? {};
+  const duration = existingConditions.find(condition => condition?.type === ABILITY_CONDITION_TYPES.duration) ?? {};
+  const preservedConditions = existingConditions.filter(condition => ![
+    ABILITY_CONDITION_TYPES.limitedChanges,
+    ABILITY_CONDITION_TYPES.duration
+  ].includes(condition?.type));
+
+  return normalizeAbilityFunctions([{
+    ...existingFunction,
+    id: functionId,
+    type: ABILITY_FUNCTION_TYPES.activeApplication,
+    fixedKey: "",
+    fixedSettings: {},
+    activeSettings: {
+      ...existingSettings,
+      costs: [
+        buildCost("power", "30", 60, 4 * 60 * 60),
+        buildCost("actionPoints", "5")
+      ],
+      targetMode: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
+      targetSelectionMode: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all,
+      targetGroups: ["ally"],
+      targetLimit: Math.max(1, toInteger(existingSettings?.targetLimit ?? 1) || 1),
+      includeSelf: !existingExcludeSelf,
+      excludeSelf: existingExcludeSelf,
+      radiusFormula,
+      wallsBlock: false,
+      changeEvaluation: "source"
+    },
+    changes,
+    conditions: [
+      ...preservedConditions,
+      {
+        ...limited,
+        id: String(limited?.id ?? "").trim() || `${functionId}-limited-changes`,
+        groupId: "",
+        type: ABILITY_CONDITION_TYPES.limitedChanges,
+        limit: 1,
+        limitFormula
+      },
+      {
+        ...duration,
+        id: String(duration?.id ?? "").trim() || `${functionId}-duration`,
+        groupId: "",
+        type: ABILITY_CONDITION_TYPES.duration,
+        durationSeconds: 60 * 60
+      }
+    ]
+  }])[0];
+}
+
+/**
+ * Targeted and idempotent catalog migration.  It deliberately leaves every
+ * field outside this one function (description, acquisition, category,
+ * images and user metadata) untouched.
+ */
+export function migrateEncouragingSpeechCatalog(
+  catalog = {},
+  skillSettings = createDefaultSkillSettings()
+) {
+  const migrated = cloneAbilityData(catalog);
+  const matches = [];
+  for (const category of migrated?.categories ?? []) {
+    for (const ability of category?.abilities ?? []) {
+      if (String(ability?.id ?? "").trim() === ENCOURAGING_SPEECH_ABILITY_ID) {
+        matches.push(ability);
+      }
+    }
+  }
+  if (matches.length !== 1) return { catalog, changed: false, matchCount: matches.length };
+
+  const ability = matches[0];
+  const functions = Array.isArray(ability?.system?.functions)
+    ? ability.system.functions
+    : Object.values(ability?.system?.functions ?? {});
+  const activeIndex = functions.findIndex(entry => entry?.type === ABILITY_FUNCTION_TYPES.activeApplication);
+  const current = activeIndex >= 0 ? functions[activeIndex] : {};
+  const nextFunction = buildEncouragingSpeechAbilityFunction(current, skillSettings);
+  const nextFunctions = activeIndex >= 0
+    ? functions.map((entry, index) => index === activeIndex ? nextFunction : entry)
+    : [...functions, nextFunction];
+  ability.system = {
+    ...(ability.system ?? {}),
+    functions: nextFunctions
+  };
+
+  const changed = JSON.stringify(catalog) !== JSON.stringify(migrated);
+  return { catalog: changed ? migrated : catalog, changed, matchCount: 1 };
+}
+
+function cloneAbilityData(value) {
+  if (globalThis.foundry?.utils?.deepClone) return foundry.utils.deepClone(value);
+  if (typeof globalThis.structuredClone === "function") return globalThis.structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
 export function getAbilitySourceId(item) {
   return String(item?.getFlag?.("fallout-maw", ABILITY_SOURCE_FLAG)?.id ?? item?.flags?.["fallout-maw"]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
 }
@@ -608,6 +776,10 @@ export function normalizeActiveApplicationSettings(value = {}) {
   const targetMode = String(value?.targetMode ?? "").trim() === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others
     ? ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others
     : ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self;
+  const targetSelectionMode = String(value?.targetSelectionMode ?? value?.selectionMode ?? "").trim()
+    === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all
+    ? ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all
+    : ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual;
   const targetGroups = normalizeStringList(value?.targetGroups)
     .filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
   const rawCosts = Array.isArray(value?.costs) ? value.costs : Object.values(value?.costs ?? {});
@@ -625,13 +797,26 @@ export function normalizeActiveApplicationSettings(value = {}) {
       }));
     }
   }
+  const excludeSelf = value?.excludeSelf === undefined
+    ? value?.includeSelf === undefined ? true : !normalizeBoolean(value.includeSelf, false)
+    : normalizeBoolean(value.excludeSelf, true);
   return {
     name: String(value?.name ?? "").trim(),
     costs,
     targetMode,
+    targetSelectionMode,
     targetLimit: Math.max(1, toInteger(value?.targetLimit ?? 1) || 1),
     targetGroups: targetGroups.length ? targetGroups : ["ally"],
-    excludeSelf: value?.excludeSelf === undefined ? true : Boolean(value.excludeSelf)
+    excludeSelf,
+    includeSelf: !excludeSelf,
+    radiusFormula: normalizeFormulaText(value?.radiusFormula ?? value?.targetRadiusFormula, ""),
+    wallsBlock: normalizeBoolean(value?.wallsBlock ?? value?.targetWallsBlock, false),
+    // Active applications historically evaluated each change against the
+    // recipient actor.  Keep that behavior unless a constructor explicitly
+    // requests a source snapshot (as Encouraging Speech does).
+    changeEvaluation: String(value?.changeEvaluation ?? value?.formulaContext ?? "").trim() === "source"
+      ? "source"
+      : "target"
   };
 }
 
@@ -965,6 +1150,10 @@ function normalizeAbilityCondition(value = {}) {
   }
 
   if (type === ABILITY_CONDITION_TYPES.limitedChanges) {
+    const rawLimit = value?.limit ?? value?.count ?? 1;
+    const legacyLimit = Math.max(1, toInteger(rawLimit));
+    const rawFormula = value?.limitFormula ?? value?.formula
+      ?? (typeof rawLimit === "string" && !Number.isFinite(Number(rawLimit)) ? rawLimit : String(legacyLimit));
     return {
       id,
       groupId,
@@ -974,7 +1163,10 @@ function normalizeAbilityCondition(value = {}) {
       equipmentSlotKey: "",
       healthTarget: ABILITY_HEALTH_TARGETS.general,
       limbKey: ABILITY_HEALTH_LIMB_ALL,
-      limit: Math.max(1, toInteger(value?.limit ?? value?.count ?? 1)),
+      // `limit` remains as a numeric compatibility field for old sheets and
+      // migrations.  New constructors may use an actor formula instead.
+      limit: legacyLimit,
+      limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
       durationSeconds: 0
     };
   }

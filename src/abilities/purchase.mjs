@@ -13,7 +13,9 @@ import { escapeHtml } from "../utils/dom.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { getAbilityAcquisitionChanges } from "./evaluation.mjs";
+import { formatLimitedChangeDisplayValue, resolveLimitedChangeSet } from "./limited-changes.mjs";
 import { getResearchById } from "../research/storage.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -82,7 +84,7 @@ export async function grantAbilityResearchReward(actor, research = {}) {
   const rewardSourceId = getRewardAbilitySourceId(normalizedItemData) || sourceId;
   if (rewardSourceId && actorHasAbility(actor, rewardSourceId)) return null;
 
-  const preparedItemData = await applyLimitedChangeSelectionsToReward(normalizedItemData);
+  const preparedItemData = await applyLimitedChangeSelectionsToReward(normalizedItemData, actor);
   if (!preparedItemData) {
     ui.notifications.warn("Выбор изменений способности не завершён. Завершённое исследование оставлено без выдачи награды.");
     return REWARD_SELECTION_ABORTED;
@@ -116,7 +118,7 @@ function getRewardAbilitySourceId(itemData = {}) {
   return String(itemData?.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
 }
 
-async function applyLimitedChangeSelectionsToReward(itemData = {}) {
+async function applyLimitedChangeSelectionsToReward(itemData = {}, actor = null) {
   const functions = normalizeAbilityFunctions(itemData.system?.functions ?? []);
   let changed = false;
 
@@ -129,57 +131,94 @@ async function applyLimitedChangeSelectionsToReward(itemData = {}) {
 
     changed = true;
     entry.conditions = (entry.conditions ?? []).filter(condition => condition.type !== ABILITY_CONDITION_TYPES.limitedChanges);
-    const changes = entry.changes ?? [];
-    if (!changes.length) continue;
-
-    const limit = Math.max(1, Math.min(
-      changes.length,
-      ...limitedConditions.map(condition => toInteger(condition.limit ?? 1))
-    ));
-    if (limit >= changes.length) continue;
-
-    const selectedIds = await requestLimitedChangeSelection({
-      abilityName: itemData.name,
-      changes,
-      limit
+    const selection = await resolveLimitedChangeSet({
+      changes: entry.changes ?? [],
+      conditions: limitedConditions,
+      actor,
+      evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+        fallback: 1,
+        minimum: 1,
+        context: "ability reward change limit"
+      }),
+      choose: ({ changes, selectionIds, limit, actor: evaluationActor }) => requestLimitedChangeSelection({
+        abilityName: itemData.name,
+        changes,
+        selectionIds,
+        limit,
+        evaluationActors: [evaluationActor]
+      })
     });
-    if (!selectedIds) return null;
-
-    const selected = new Set(selectedIds);
-    entry.changes = changes.filter((change, index) => selected.has(getChangeSelectionId(change, index)));
+    if (selection.cancelled) return null;
+    entry.changes = selection.changes;
   }
 
   if (changed) itemData.system.functions = functions;
   return itemData;
 }
 
-export async function requestLimitedChangeSelection({ abilityName = "", changes = [], limit = 1 } = {}) {
+export async function requestLimitedChangeSelection({
+  abilityName = "",
+  changes = [],
+  selectionIds = [],
+  limit = 1,
+  evaluationActors = []
+} = {}) {
   const normalizedLimit = Math.max(1, Math.min(changes.length, toInteger(limit)));
   const rows = changes.map((change, index) => {
-    const id = getChangeSelectionId(change, index);
+    const id = String(selectionIds?.[index] ?? "").trim() || getChangeSelectionId(change, index);
+    const display = getAbilityChangeDisplayData(change, evaluationActors);
+    const tooltip = display.formula
+      ? ` data-tooltip="${escapeAttribute(`Формула: ${display.formula}`)}"`
+      : "";
     return `
-      <label class="fallout-maw-ability-change-choice">
-        <input type="checkbox" value="${escapeHtml(id)}" data-limited-change-choice>
-        <span>${escapeHtml(getAbilityChangeDisplayLabel(change))}</span>
+      <label class="checkbox fallout-maw-ability-change-choice">
+        <input type="checkbox" name="limitedChanges" value="${escapeAttribute(id)}" data-limited-change-choice>
+        <span class="fallout-maw-ability-change-choice-name ellipsis">${escapeHtml(display.label)}</span>
+        <output class="fallout-maw-ability-change-choice-value"${tooltip}>${escapeHtml(display.value)}</output>
       </label>
     `;
   }).join("");
 
   const result = await DialogV2.wait({
-    window: { title: `Выбор изменений: ${abilityName}` },
+    classes: ["dialog", "fallout-maw", "fallout-maw-ability-change-dialog"],
+    window: {
+      icon: "fa-solid fa-list-check",
+      title: `Выбор изменений: ${abilityName}`
+    },
+    position: { width: 560 },
+    modal: true,
     content: `
-      <p>Выберите <strong data-limited-change-selected>0</strong> из <strong>${normalizedLimit}</strong> изменений.</p>
-      <div class="fallout-maw-ability-change-choice-list">${rows}</div>
+      <section class="fallout-maw-ability-change-picker">
+        <header class="fallout-maw-ability-change-picker-summary">
+          <div>
+            <h3>Выберите ${normalizedLimit} из ${changes.length}</h3>
+            <p class="hint">Нужно выбрать ровно ${normalizedLimit}. Значения формул уже рассчитаны для текущего применения.</p>
+          </div>
+          <output class="fallout-maw-ability-change-picker-counter" data-limited-change-counter aria-live="polite">
+            <strong data-limited-change-selected>0</strong><span aria-hidden="true"> / </span><strong>${normalizedLimit}</strong>
+          </output>
+        </header>
+        <fieldset class="fallout-maw-ability-change-picker-fieldset">
+          <legend>Доступные изменения</legend>
+          <div class="fallout-maw-ability-change-choice-list scrollable" role="group" aria-label="Доступные изменения">${rows}</div>
+        </fieldset>
+      </section>
     `,
     render: (_event, dialog) => activateLimitedChangeSelection(dialog, normalizedLimit),
     buttons: [
       {
         action: "apply",
-        label: "Выбрать",
+        label: "Применить",
         icon: "fa-solid fa-check",
         default: true,
         disabled: true,
         callback: (_event, button) => collectLimitedChangeSelection(button.form, normalizedLimit)
+      },
+      {
+        action: "cancel",
+        label: "Отмена",
+        icon: "fa-solid fa-xmark",
+        callback: () => false
       }
     ]
   });
@@ -193,9 +232,14 @@ function activateLimitedChangeSelection(dialog, limit) {
 
   const applyButton = form.querySelector('button[data-action="apply"]');
   const selectedElement = form.querySelector("[data-limited-change-selected]");
+  const counterElement = form.querySelector("[data-limited-change-counter]");
   const update = () => {
     const selected = form.querySelectorAll("[data-limited-change-choice]:checked").length;
     if (selectedElement) selectedElement.textContent = String(selected);
+    if (counterElement) {
+      counterElement.classList.toggle("complete", selected === limit);
+      counterElement.setAttribute("aria-label", `Выбрано ${selected} из ${limit}`);
+    }
     if (applyButton) applyButton.disabled = selected !== limit;
     for (const checkbox of form.querySelectorAll("[data-limited-change-choice]")) {
       const unavailable = !checkbox.checked && selected >= limit;
@@ -226,10 +270,14 @@ function getChangeSelectionId(change = {}, index = 0) {
   return String(change?.id ?? "").trim() || `change-${index}`;
 }
 
-function getAbilityChangeDisplayLabel(change = {}) {
-  const keyLabel = getEffectKeyLabel(change.key);
-  const value = getChangeValueDisplay(change);
-  return value ? `${keyLabel}: ${value}` : keyLabel;
+function getAbilityChangeDisplayData(change = {}, evaluationActors = []) {
+  const values = resolveAbilityChangePreviewValues(change, evaluationActors);
+  const rawValue = String(change?.value ?? "").trim();
+  return {
+    label: getEffectKeyLabel(change.key),
+    value: formatLimitedChangeDisplayValue(change, values),
+    formula: values.length && rawValue && !Number.isFinite(Number(rawValue)) ? rawValue : ""
+  };
 }
 
 function getEffectKeyLabel(key = "") {
@@ -246,22 +294,21 @@ function getEffectKeyLabel(key = "") {
     .join(" / ");
 }
 
-function getChangeValueDisplay(change = {}) {
-  const type = String(change?.type ?? "add");
-  const value = String(change?.value ?? "").trim();
-  if (!value) return "";
+function resolveAbilityChangePreviewValues(change = {}, evaluationActors = []) {
+  const actors = (Array.isArray(evaluationActors) ? evaluationActors : [evaluationActors]).filter(Boolean);
+  if (!actors.length) return [];
+  const values = actors.map(actor => evaluateEffectChangeNumber(actor, change?.value, {
+    fallback: Number.NaN,
+    stage: "prepared"
+  }));
+  return values.every(Number.isFinite) ? values : [];
+}
 
-  if (type === "add") {
-    const number = Number(value);
-    if (Number.isFinite(number)) return number >= 0 ? `+${value}` : value;
-    return value.startsWith("-") ? value : `+${value}`;
-  }
-
-  if (type === "override") return `= ${value}`;
-  if (type === "multiply") return `× ${value}`;
-  if (type === "upgrade") return `≥ ${value}`;
-  if (type === "downgrade") return `≤ ${value}`;
-  return value;
+function escapeAttribute(value) {
+  return escapeHtml(value)
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
+    .replaceAll("`", "&#096;");
 }
 
 async function applyAbilityAcquisitionChanges(actor, item) {

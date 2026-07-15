@@ -8,6 +8,7 @@ import {
   ABILITY_ATTACK_ACTION_ALL,
   ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
   ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
+  ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_CHANGE_TYPES,
@@ -285,7 +286,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='conditionAuraMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
-    this.element?.querySelectorAll?.("[data-field='active.targetMode']")?.forEach(select => {
+    this.element?.querySelectorAll?.("[data-field='active.targetMode'], [data-field='active.targetSelectionMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onActiveApplicationTargetModeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='action.actionPointCostMode']")?.forEach(select => {
@@ -1149,9 +1150,13 @@ function readActiveApplicationSettings(row) {
     name: row.querySelector("[data-field='active.name']")?.value ?? "",
     costs: readActiveApplicationCostRows(row),
     targetMode: row.querySelector("[data-field='active.targetMode']")?.value,
+    targetSelectionMode: row.querySelector("[data-field='active.targetSelectionMode']")?.value,
     targetLimit: row.querySelector("[data-field='active.targetLimit']")?.value,
     targetGroups: readFieldValues(row, "[data-field='active.targetGroup']"),
-    excludeSelf: readBooleanField(row.querySelector("[data-field='active.excludeSelf']"), true)
+    excludeSelf: readBooleanField(row.querySelector("[data-field='active.excludeSelf']"), true),
+    radiusFormula: row.querySelector("[data-field='active.radiusFormula']")?.value ?? "",
+    wallsBlock: readBooleanField(row.querySelector("[data-field='active.wallsBlock']"), false),
+    changeEvaluation: row.querySelector("[data-field='active.changeEvaluation']")?.value ?? "target"
   };
 }
 
@@ -1602,7 +1607,10 @@ function readAbilityConditions(root) {
       auraCombatantsOnly: readBooleanField(row.querySelector("[data-field='conditionAuraCombatantsOnly']"), false),
       auraIgnoreIncapacitated: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreIncapacitated']"), true),
       auraIgnoreHidden: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreHidden']"), true),
-      limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
+      limit: row.querySelector("[data-field='conditionLimitLegacy']")?.value ?? 1,
+      limitFormula: row.querySelector("[data-field='conditionLimitFormula']")?.value
+        ?? row.querySelector("[data-field='conditionLimit']")?.value
+        ?? 1,
       name: row.querySelector("[data-field='conditionToggleName']")?.value
         ?? row.querySelector("[data-field='conditionEnergyConsumptionName']")?.value
         ?? "",
@@ -2128,7 +2136,16 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
     ],
+    targetSelectionModeChoices: [
+      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual, label: "Ручной выбор", selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual },
+      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all, label: "Все подходящие", selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all }
+    ],
+    changeEvaluationChoices: [
+      { value: "target", label: "От параметров цели", selected: normalized.changeEvaluation === "target" },
+      { value: "source", label: "От параметров активатора (снимок)", selected: normalized.changeEvaluation === "source" }
+    ],
     isTargetOthers: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
+    isManualTargetSelection: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual,
     targetGroupChoices: buildTargetGroupChoices(normalized.targetGroups)
   };
 }
@@ -2384,6 +2401,7 @@ function prepareConditionForDisplay(condition, {
       : toggleCooldown.amount,
     toggleCooldownUnitChoices: buildDurationUnitChoices(toggleCooldown.unit),
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
+    changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
     requiredCount: isAura ? normalizeFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),

@@ -127,14 +127,14 @@ function evaluateAuraFormula(formula, actor = null, { fallback = 0, minimum = 0,
   return Math.max(minimum, toInteger(evaluateActorFormula(formula, actor, { fallback, minimum, context })));
 }
 
-function hasAuraLineOfSight(sourceToken, targetToken) {
+export function hasAuraLineOfSight(sourceToken, targetToken) {
   if (!sourceToken?.checkCollision) return false;
   const origin = getTokenCenter(sourceToken);
   const destination = getTokenCenter(targetToken);
   return !sourceToken.checkCollision(destination, { origin, type: "sight", mode: "any" });
 }
 
-function measureTokenDistanceMeters(sourceToken, targetToken) {
+export function measureTokenDistanceMeters(sourceToken, targetToken) {
   const origin = getTokenCenter(sourceToken);
   const destination = getTokenCenter(targetToken);
   const measured = canvas?.grid?.measurePath?.([origin, destination])?.distance;
@@ -146,7 +146,7 @@ function measureTokenDistanceMeters(sourceToken, targetToken) {
   return (distancePixels / gridSize) * gridDistance;
 }
 
-function getTokenCenter(token) {
+export function getTokenCenter(token) {
   return token?.center ?? {
     x: Number(token?.document?.x ?? 0) + Math.max(1, Number(token?.w) || Number(canvas?.grid?.size) || 100) / 2,
     y: Number(token?.document?.y ?? 0) + Math.max(1, Number(token?.h) || Number(canvas?.grid?.size) || 100) / 2
@@ -161,7 +161,7 @@ function auraTargetRelationMatches(sourceActor, targetActor, targetGroups = []) 
   return accepted.has(relation);
 }
 
-function getAuraRelation(sourceActor, targetActor) {
+export function getAuraRelation(sourceActor, targetActor) {
   const sourcePrimary = getActorPrimaryFaction(sourceActor);
   const targetFactions = getActorFactionBelongs(targetActor);
   const factions = targetFactions.length ? targetFactions : [DEFAULT_FACTION_NAME];

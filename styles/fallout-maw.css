@@ -11470,47 +11470,122 @@ html.fallout-maw-token-action-hud-open #hotbar {
   text-align: center;
 }
 
+.application.fallout-maw-ability-change-dialog .window-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fallout-maw-ability-change-dialog :is(
+  .dialog-form,
+  .dialog-content,
+  .fallout-maw-ability-change-picker,
+  .fallout-maw-ability-change-picker-fieldset
+) {
+  min-height: 0;
+}
+
+.fallout-maw-ability-change-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-12);
+}
+
+.fallout-maw-ability-change-picker-summary {
+  align-items: center;
+  display: flex;
+  gap: var(--spacer-16);
+  justify-content: space-between;
+}
+
+.fallout-maw-ability-change-picker-summary > div {
+  min-width: 0;
+}
+
+.fallout-maw-ability-change-picker-summary h3,
+.fallout-maw-ability-change-picker-summary .hint {
+  margin: 0;
+}
+
+.fallout-maw-ability-change-picker-summary h3 {
+  font-size: var(--font-size-18);
+  line-height: 1.2;
+}
+
+.fallout-maw-ability-change-picker-summary .hint {
+  margin-top: var(--spacer-4);
+}
+
+.fallout-maw-ability-change-picker-counter {
+  align-items: baseline;
+  background: var(--color-data-background);
+  border: 1px solid var(--color-data-border);
+  border-radius: 4px;
+  display: flex;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  gap: 0.2rem;
+  justify-content: center;
+  min-width: 4.5rem;
+  padding: var(--spacer-4) var(--spacer-8);
+}
+
+.fallout-maw-ability-change-picker-counter.complete {
+  border-color: var(--color-warm-2);
+  color: var(--color-text-emphatic);
+}
+
+.standard-form .fallout-maw-ability-change-picker-fieldset {
+  gap: var(--spacer-4);
+  padding: var(--spacer-8) var(--spacer-12) var(--spacer-12);
+}
+
 .fallout-maw-ability-change-choice-list {
   display: grid;
-  gap: 0.35rem;
-  margin-top: 0.65rem;
-  max-height: 22rem;
-  overflow-y: auto;
+  gap: var(--spacer-4) var(--spacer-12);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  max-height: min(55vh, 28rem);
+  padding-block: var(--spacer-4);
 }
 
-.fallout-maw-ability-change-choice {
-  align-items: center;
-  background: rgba(12, 13, 11, 0.82);
-  border: 1px solid rgba(212, 181, 93, 0.42);
-  display: grid;
-  gap: 0.55rem;
-  grid-template-columns: auto minmax(0, 1fr);
-  min-height: 2.4rem;
-  padding: 0.4rem 0.55rem;
+label.checkbox.fallout-maw-ability-change-choice {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: var(--cursor-pointer);
+  font-size: var(--font-size-14);
+  gap: var(--spacer-8);
+  min-height: var(--input-height);
+  min-width: 0;
+  padding: var(--spacer-4) var(--spacer-8);
 }
 
-.fallout-maw-ability-change-choice input {
-  accent-color: #d6a84f;
+.fallout-maw-ability-change-choice:hover:not(.unavailable),
+.fallout-maw-ability-change-choice.selected {
+  background: var(--color-data-background);
 }
 
 .fallout-maw-ability-change-choice.selected {
-  background: rgba(232, 212, 136, 0.12);
-  border-color: rgba(245, 221, 141, 0.62);
+  border-color: var(--color-warm-2);
 }
 
 .fallout-maw-ability-change-choice.unavailable {
-  background: rgba(8, 9, 8, 0.58);
-  border-color: rgba(212, 181, 93, 0.14);
-  opacity: 0.42;
+  color: var(--color-text-subtle);
+  cursor: var(--cursor-default);
+  opacity: 0.7;
 }
 
-.fallout-maw-ability-change-choice.unavailable input {
-  opacity: 0.35;
-}
-
-.fallout-maw-ability-change-choice span {
-  color: var(--fallout-maw-adv-text);
+.fallout-maw-ability-change-choice-name {
+  flex: 1;
   min-width: 0;
+}
+
+.fallout-maw-ability-change-choice-value {
+  color: var(--color-text-emphatic);
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  min-width: 3rem;
+  text-align: right;
 }
 
 .fallout-maw-token-hud-action-tile {

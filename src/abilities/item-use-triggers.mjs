@@ -8,6 +8,8 @@ import {
 } from "../settings/abilities.mjs";
 import { abilityConditionApplies } from "./evaluation.mjs";
 import { requestLimitedChangeSelection } from "./purchase.mjs";
+import { resolveLimitedChangeSet } from "./limited-changes.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
   ABILITY_ITEM_USE_COUNTERS_FLAG_KEY,
   getAbilityItemUseCounterKey,
@@ -210,7 +212,7 @@ async function advanceItemUseCounter(actor, entry, {
     return committedEffect;
   }
 
-  const changes = await selectRuntimeChanges(entry.abilityItem, entry.abilityFunction);
+  const changes = await selectRuntimeChanges(actor, entry.abilityItem, entry.abilityFunction);
   if (!changes?.length) {
     if (!committedCost) {
       await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions);
@@ -314,34 +316,25 @@ function createItemUseTriggerDocumentOptions(chainRef = null) {
     : {};
 }
 
-async function selectRuntimeChanges(abilityItem, abilityFunction = {}) {
-  const changes = (abilityFunction.changes ?? [])
-    .filter(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "");
-  if (!changes.length) return [];
-
-  const limitedConditions = (abilityFunction.conditions ?? [])
-    .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedChanges);
-  if (!limitedConditions.length) return changes;
-
-  const limit = Math.max(1, Math.min(
-    changes.length,
-    ...limitedConditions.map(condition => toInteger(condition.limit ?? 1))
-  ));
-  if (limit >= changes.length) return changes;
-
-  const selectedIds = await requestLimitedChangeSelection({
-    abilityName: abilityItem.name,
-    changes,
-    limit
+async function selectRuntimeChanges(actor, abilityItem, abilityFunction = {}) {
+  const selection = await resolveLimitedChangeSet({
+    changes: abilityFunction?.changes ?? [],
+    conditions: abilityFunction?.conditions ?? [],
+    actor,
+    evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+      fallback: 1,
+      minimum: 1,
+      context: "item-use change limit"
+    }),
+    choose: ({ changes, selectionIds, limit, actor: evaluationActor }) => requestLimitedChangeSelection({
+      abilityName: abilityItem.name,
+      changes,
+      selectionIds,
+      limit,
+      evaluationActors: [evaluationActor]
+    })
   });
-  if (!selectedIds) return null;
-
-  const selected = new Set(selectedIds);
-  return changes.filter((change, index) => selected.has(getChangeSelectionId(change, index)));
-}
-
-function getChangeSelectionId(change = {}, index = 0) {
-  return String(change?.id ?? "").trim() || `change-${index}`;
+  return selection.cancelled ? null : selection.changes;
 }
 
 function isActiveFreeSettingsGear(item = null) {

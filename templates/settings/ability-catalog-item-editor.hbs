@@ -1348,8 +1348,37 @@
           </label>
           {{#if activeApplicationSettings.isTargetOthers}}
           <label>
+            <span>Выбор целей</span>
+            <select data-field="active.targetSelectionMode">
+              {{#each activeApplicationSettings.targetSelectionModeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Радиус, м (пусто — без ограничения)</span>
+            <input type="text" data-field="active.radiusFormula" value="{{activeApplicationSettings.radiusFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label class="fallout-maw-inline-checkbox">
+            <span>Блокировать стенами</span>
+            <input type="checkbox" data-field="active.wallsBlock" {{checked activeApplicationSettings.wallsBlock}}>
+          </label>
+          <label>
+            <span>Формулы изменений</span>
+            <select data-field="active.changeEvaluation">
+              {{#each activeApplicationSettings.changeEvaluationChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
             <span>Число целей</span>
+            {{#if activeApplicationSettings.isManualTargetSelection}}
             <input type="number" data-field="active.targetLimit" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1">
+            {{else}}
+            <input type="number" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1" disabled>
+            <input type="hidden" data-field="active.targetLimit" value="{{activeApplicationSettings.targetLimit}}">
+            {{/if}}
           </label>
           <label class="fallout-maw-inline-checkbox">
             <span>Исключить себя</span>
@@ -1944,7 +1973,8 @@
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать изменений</span>
-                <input type="number" data-field="conditionLimit" value="{{changeLimit}}" min="1" max="{{changeLimitMax}}" step="1">
+                <input type="text" data-field="conditionLimitFormula" value="{{changeLimitFormula}}" data-formula-autocomplete="all">
+                <input type="hidden" data-field="conditionLimitLegacy" value="{{changeLimit}}">
               </label>
               <label>
                 <span>Всего изменений</span>

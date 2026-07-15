@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "263f1af2f8da6b759227ce130619fdd1e7905654aea89c87b9c7a3a110f38064",
-  "updatedAt": "2026-07-15T12:01:21.707Z",
+  "revision": "f4b338e60b0232783878006d59bd9db2036feead37fd59b487be41520c3dadb8",
+  "updatedAt": "2026-07-15T15:29:53.671Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -288,6 +288,7 @@
                           "id": "zrPm53SuMu7W4cf5",
                           "limbKey": "all",
                           "limit": 1,
+                          "limitFormula": "1",
                           "operator": "lte",
                           "percent": 50,
                           "type": "limitedChanges"
@@ -3240,6 +3241,7 @@
                     {
                       "actions": [],
                       "activeSettings": {
+                        "changeEvaluation": "target",
                         "costs": [
                           {
                             "formula": "10",
@@ -3250,12 +3252,16 @@
                           }
                         ],
                         "excludeSelf": true,
+                        "includeSelf": false,
                         "name": "",
+                        "radiusFormula": "",
                         "targetGroups": [
                           "ally"
                         ],
                         "targetLimit": 1,
-                        "targetMode": "self"
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
                       },
                       "changes": [],
                       "conditions": [],
@@ -3459,6 +3465,7 @@
                     {
                       "actions": [],
                       "activeSettings": {
+                        "changeEvaluation": "target",
                         "costs": [
                           {
                             "formula": "20",
@@ -3469,12 +3476,16 @@
                           }
                         ],
                         "excludeSelf": true,
+                        "includeSelf": false,
                         "name": "Усиленное влияние",
+                        "radiusFormula": "",
                         "targetGroups": [
                           "ally"
                         ],
                         "targetLimit": 1,
-                        "targetMode": "self"
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
                       },
                       "changes": [
                         {
@@ -3509,6 +3520,250 @@
                         "durationSeconds": 0
                       },
                       "sort": 1,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 4 часа.</p><p>После активации все ваши союзники в радиусе [[10+speech/10]] метров получат +[[10+speech/10]] к [[1+speech/50]] выбранным навыкам.</p><p>Длительность бонуса: 1 час</p>",
+                "id": "8RIZvth6Ul0Pjl0n",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Ободряющая речь",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "TxhzXBWHlaUC6Spg",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "Ybn2bEToS8PK96oC",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 14400,
+                            "resourceKey": "power"
+                          },
+                          {
+                            "formula": "5",
+                            "id": "fNUeKtYjrdDmIuY7-cost-actionPoints",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "resourceKey": "actionPoints"
+                          }
+                        ],
+                        "excludeSelf": false,
+                        "includeSelf": true,
+                        "name": "",
+                        "radiusFormula": "10+spe/10",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": 1,
+                        "targetMode": "others",
+                        "targetSelectionMode": "all",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-meleeCombat-bonus",
+                          "key": "system.skills.meleeCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "uRPrCRJir6HrkFXg",
+                          "key": "system.skills.rangedCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-athletics-bonus",
+                          "key": "system.skills.athletics.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-energy-bonus",
+                          "key": "system.skills.energy.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-resilience-bonus",
+                          "key": "system.skills.resilience.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-throwing-bonus",
+                          "key": "system.skills.throwing.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-firstAid-bonus",
+                          "key": "system.skills.firstAid.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-doctor-bonus",
+                          "key": "system.skills.doctor.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-naturalist-bonus",
+                          "key": "system.skills.naturalist.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-stealth-bonus",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-lockpicking-bonus",
+                          "key": "system.skills.lockpicking.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-theft-bonus",
+                          "key": "system.skills.theft.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-traps-bonus",
+                          "key": "system.skills.traps.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-science-bonus",
+                          "key": "system.skills.science.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-repair-bonus",
+                          "key": "system.skills.repair.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-speech-bonus",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-barter-bonus",
+                          "key": "system.skills.barter.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        },
+                        {
+                          "id": "fNUeKtYjrdDmIuY7-gambling-bonus",
+                          "key": "system.skills.gambling.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+spe/10"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 0,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "25CCabV3yiV9qTBZ",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "limitFormula": "1+spe/50",
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "limitedChanges"
+                        },
+                        {
+                          "durationSeconds": 3600,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "fNUeKtYjrdDmIuY7-duration",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "fNUeKtYjrdDmIuY7",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
                       "type": "activeApplication"
                     }
                   ]

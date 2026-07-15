@@ -43,6 +43,7 @@ import {
   ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
+  ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_CHANGE_TYPES,
@@ -6330,7 +6331,16 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }
     ],
+    targetSelectionModeChoices: [
+      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual, label: "Ручной выбор", selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual },
+      { value: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all, label: "Все подходящие", selected: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all }
+    ],
+    changeEvaluationChoices: [
+      { value: "target", label: "От параметров цели", selected: normalized.changeEvaluation === "target" },
+      { value: "source", label: "От параметров активатора (снимок)", selected: normalized.changeEvaluation === "source" }
+    ],
     isTargetOthers: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
+    isManualTargetSelection: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual,
     targetGroupChoices: buildActiveApplicationTargetGroupChoices(normalized.targetGroups)
   };
 }
@@ -6796,6 +6806,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
       : toggleCooldown.amount,
     toggleCooldownUnitChoices: buildAbilityDurationUnitChoices(toggleCooldown.unit),
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
+    changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
     requiredCount: isAura ? normalizeAbilityFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),

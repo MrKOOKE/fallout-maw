@@ -3,6 +3,7 @@ import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
+  ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
   createAbilityFunction,
   getAbilityFunctionEffectDurationSeconds,
@@ -170,6 +171,17 @@ import {
   notifyAbilityTriggerCostFailure,
   payAbilityFunctionResourceCosts
 } from "./trigger-cost-runtime.mjs";
+import { requestLimitedChangeSelection } from "./purchase.mjs";
+import {
+  getSelectableAbilityChanges,
+  resolveLimitedChangeLimit,
+  resolveLimitedChangeSet
+} from "./limited-changes.mjs";
+import {
+  getAuraRelation as getSharedAbilityTargetRelation,
+  hasAuraLineOfSight as hasActiveApplicationLineOfSight,
+  measureTokenDistanceMeters as measureActiveApplicationTokenDistance
+} from "./aura-conditions.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -204,6 +216,7 @@ const WHERE_ARE_YOU_GOING_RESUME_OPTION = "falloutMawWhereAreYouGoingResume";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS = 60000;
+const ACTIVE_APPLICATION_AUTHORITY_CACHE_MS = 5 * 60 * 1000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -211,6 +224,9 @@ const STATUS_EFFECTS = Object.freeze({
   dead: "dead"
 });
 const pendingFixedAbilitySocketRequests = new Map();
+const activeApplicationAuthorityOperations = new Map();
+const activeApplicationAuthorityRequestsByUse = new Map();
+const activeApplicationAuthorityRequestsById = new Map();
 const actorEnergyMutationQueue = new Map();
 const activeApplicationEffectSyncTimers = new Map();
 
@@ -1099,6 +1115,7 @@ function selectCommandBasicsTargets({ commander = null, command = "", limit = 1,
 export async function useAbilityFunctionItem({
   actor = null,
   item = null,
+  token = null,
   application = null,
   functionId = "",
   chainRef = null,
@@ -1120,7 +1137,10 @@ export async function useAbilityFunctionItem({
     ?? null;
   const operationId = String(options?.operationId ?? source?.operationId ?? "").trim() || foundry.utils.randomID();
   const activationOccurrenceId = String(options?.occurrenceId ?? source?.occurrenceId ?? "").trim() || foundry.utils.randomID();
-  const sourceToken = getPrimaryActorToken(actor);
+  const requestedToken = token?.object ?? token ?? options?.token?.object ?? options?.token ?? source?.token?.object ?? source?.token ?? null;
+  const sourceToken = requestedToken?.actor?.uuid === actor?.uuid
+    ? requestedToken
+    : getPrimaryActorToken(actor);
   const sourceParticipant = createAbilityEventParticipant(actor, sourceToken, item);
 
   return withSystemEventRoot({
@@ -1134,6 +1154,7 @@ export async function useAbilityFunctionItem({
       return useActiveApplicationAbilityFunction(scope, actor, item, abilityFunction, {
         application,
         sourceParticipant,
+        sourceToken,
         occurrenceId: activationOccurrenceId
       });
     }
@@ -1157,6 +1178,7 @@ export async function useAbilityFunctionItem({
 async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, abilityFunction, {
   application = null,
   sourceParticipant = null,
+  sourceToken = null,
   occurrenceId = "activation"
 } = {}) {
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
@@ -1165,14 +1187,14 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
   const occurrenceBase = `ability-use:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`;
   let targets;
   try {
-    targets = await resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings);
+    targets = await resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings, sourceToken);
   } catch (error) {
     await runTerminalSystemEventWorkflow({
       scope,
       resolvedEventKey: "fallout-maw.ability.use.resolved",
       occurrenceBase,
       participants: {
-        source: sourceParticipant ?? createAbilityEventParticipant(actor, getPrimaryActorToken(actor), abilityItem),
+        source: sourceParticipant ?? createAbilityEventParticipant(actor, sourceToken ?? getPrimaryActorToken(actor), abilityItem),
         target: null,
         related: []
       },
@@ -1185,7 +1207,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     return false;
   }
   const participants = {
-    source: sourceParticipant ?? createAbilityEventParticipant(actor, getPrimaryActorToken(actor), abilityItem),
+    source: sourceParticipant ?? createAbilityEventParticipant(actor, sourceToken ?? getPrimaryActorToken(actor), abilityItem),
     target: null,
     related: createActiveApplicationRelatedParticipants(targets)
   };
@@ -1232,6 +1254,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       activationCosts,
       durationSeconds,
       targets,
+      sourceToken,
       occurrenceId
     }),
     isSuccess: value => Boolean(value?.used),
@@ -1251,6 +1274,7 @@ async function executeActiveApplicationUse(scope, {
   activationCosts = [],
   durationSeconds = 0,
   targets = [],
+  sourceToken = null,
   occurrenceId = "activation"
 } = {}) {
   const { allowed, terminalTargets } = await gateActiveApplicationTargets(scope, {
@@ -1261,9 +1285,77 @@ async function executeActiveApplicationUse(scope, {
     activationCosts,
     durationSeconds,
     targets,
+    sourceToken,
     occurrenceId
   });
   if (!allowed.length) return { used: false, appliedCount: 0, cancelled: true, reason: "applicationCancelled" };
+
+  const hasLimitedChanges = (abilityFunction?.conditions ?? [])
+    .some(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedChanges);
+  let changeSelection;
+  try {
+    changeSelection = await resolveLimitedChangeSet({
+      changes: abilityFunction?.changes ?? [],
+      conditions: abilityFunction?.conditions ?? [],
+      actor,
+      evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+        fallback: 1,
+        minimum: 1,
+        context: "active application change limit"
+      }),
+      choose: ({ changes, selectionIds, limit, actor: sourceActor }) => requestLimitedChangeSelection({
+        abilityName: getAbilityDisplayName(abilityItem),
+        changes,
+        selectionIds,
+        limit,
+        evaluationActors: settings.changeEvaluation === "source"
+          ? [sourceActor]
+          : allowed.map(entry => entry.target?.actor).filter(Boolean)
+      })
+    });
+  } catch (error) {
+    console.warn("Fallout MaW | Active application change selection failed", error);
+    changeSelection = { changes: [], ids: [], cancelled: true };
+  }
+  if (changeSelection.cancelled || (hasLimitedChanges && !changeSelection.changes.length)) {
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "cancelled",
+        reason: "changeSelectionCancelled",
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, cancelled: true, reason: "changeSelectionCancelled" };
+  }
+  const requiresRemoteAuthority = durationSeconds > 0
+    && !game.user?.isGM
+    && allowed.some(entry => !entry.target?.actor?.isOwner);
+  if (
+    requiresRemoteAuthority
+    && !getResponsibleGM()
+  ) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: нет активного GM для применения эффекта к чужим актёрам.`);
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "failed",
+        reason: "missingAuthority",
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, reason: "missingAuthority" };
+  }
 
   const preparedActions = await prepareAbilityFunctionActions({
     actor,
@@ -1288,39 +1380,83 @@ async function executeActiveApplicationUse(scope, {
     return { used: false, appliedCount: 0, cancelled: true, reason: "actionSelectionCancelled" };
   }
 
+  const paymentContext = {
+    rootId: scope.rootId,
+    chainRef: scope.chainRef,
+    occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
+  };
   try {
-    const payment = await payAbilityFunctionResourceCosts({
-      actor,
-      sourceItem: abilityItem,
-      abilityFunction,
-      costRows: activationCosts,
-      context: {
-        rootId: scope.rootId,
+    if (requiresRemoteAuthority) {
+      const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
         chainRef: scope.chainRef,
-        occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
-      }
-    });
-    if (!payment.ok) {
-      notifyAbilityTriggerCostFailure(payment);
-      for (const entry of allowed) {
-        await emitActiveApplicationResolved(scope, entry, {
-          actor,
-          abilityItem,
-          abilityFunction,
-          settings,
-          activationCosts,
-          durationSeconds,
-          status: "failed",
-          reason: "resourceSpendFailed",
-          terminalTargets
-        });
-      }
-      return { used: false, appliedCount: 0, reason: "resourceSpendFailed" };
-    }
-    if (durationSeconds > 0) {
-      await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
-        chainRef: scope.chainRef
+        sourceToken,
+        selectedChanges: changeSelection.changes,
+        payCostsRemotely: true,
+        costContext: paymentContext
       });
+      if (!effectsApplied) {
+        ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: операция GM не подтверждена; при задержке ответа не запускайте её повторно.`);
+        for (const entry of allowed) {
+          await emitActiveApplicationResolved(scope, entry, {
+            actor,
+            abilityItem,
+            abilityFunction,
+            settings,
+            activationCosts,
+            durationSeconds,
+            status: "failed",
+            reason: "authorityOperationFailed",
+            terminalTargets
+          });
+        }
+        return { used: false, appliedCount: 0, reason: "authorityOperationFailed" };
+      }
+    } else {
+      const paymentEffectIds = getActorEffectIdSet(actor);
+      const payment = await payAbilityFunctionResourceCosts({
+        actor,
+        sourceItem: abilityItem,
+        abilityFunction,
+        costRows: activationCosts,
+        context: paymentContext
+      });
+      if (!payment.ok) {
+        notifyAbilityTriggerCostFailure(payment);
+        for (const entry of allowed) {
+          await emitActiveApplicationResolved(scope, entry, {
+            actor,
+            abilityItem,
+            abilityFunction,
+            settings,
+            activationCosts,
+            durationSeconds,
+            status: "failed",
+            reason: "resourceSpendFailed",
+            terminalTargets
+          });
+        }
+        return { used: false, appliedCount: 0, reason: "resourceSpendFailed" };
+      }
+      if (durationSeconds > 0) {
+        try {
+          const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
+            chainRef: scope.chainRef,
+            sourceToken,
+            selectedChanges: changeSelection.changes
+          });
+          if (!effectsApplied) throw new Error("Active application effects could not be created.");
+        } catch (error) {
+          await rollbackActiveApplicationPayment({
+            actor,
+            abilityItem,
+            abilityFunction,
+            payment,
+            previousEffectIds: paymentEffectIds,
+            chainRef: scope.chainRef
+          });
+          throw error;
+        }
+      }
     }
     const actionResult = await executePreparedAbilityFunctionActions({
       actor,
@@ -1385,6 +1521,7 @@ async function gateActiveApplicationTargets(scope, {
   activationCosts = [],
   durationSeconds = 0,
   targets = [],
+  sourceToken = null,
   occurrenceId = "activation"
 } = {}) {
   const allowed = [];
@@ -1393,6 +1530,7 @@ async function gateActiveApplicationTargets(scope, {
   for (const [index, target] of targets.entries()) {
     const entry = {
       target,
+      sourceToken,
       index,
       occurrenceBase: `ability-application:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}:${index}:${target.actor?.uuid ?? "target"}`
     };
@@ -1410,7 +1548,7 @@ async function gateActiveApplicationTargets(scope, {
       });
       continue;
     }
-    const participants = createActiveApplicationParticipants(actor, abilityItem, target);
+    const participants = createActiveApplicationParticipants(actor, abilityItem, target, sourceToken);
     const gate = await scope.emit("fallout-maw.ability.application.before", {
       data: buildActiveApplicationEventData({
         actor,
@@ -1483,7 +1621,7 @@ async function emitActiveApplicationResolved(scope, entry, {
     reason
   }, {
     occurrenceKey: `${entry.occurrenceBase}:resolved`,
-    participants: createActiveApplicationParticipants(actor, abilityItem, target)
+    participants: createActiveApplicationParticipants(actor, abilityItem, target, entry?.sourceToken)
   });
 }
 
@@ -1526,9 +1664,9 @@ function buildActiveApplicationEventData({
   };
 }
 
-function createActiveApplicationParticipants(actor, abilityItem, target = null) {
+function createActiveApplicationParticipants(actor, abilityItem, target = null, sourceToken = null) {
   return {
-    source: createAbilityEventParticipant(actor, getPrimaryActorToken(actor), abilityItem),
+    source: createAbilityEventParticipant(actor, sourceToken ?? getPrimaryActorToken(actor), abilityItem),
     target: createAbilityEventParticipant(target?.actor, target?.token),
     related: []
   };
@@ -1564,11 +1702,28 @@ function createAbilitySystemEventOptions(chainRef = null) {
     : {};
 }
 
-async function resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings) {
+async function resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings, sourceToken = null) {
+  const sourcePlaceable = sourceToken?.object ?? sourceToken ?? getPrimaryActorToken(actor);
   if (settings.targetMode !== "others") {
-    return [{ actor, token: getPrimaryActorToken(actor), selected: true }];
+    return [{ actor, token: sourcePlaceable, selected: true }];
   }
-  const rows = collectActiveApplicationTargetRows(actor, settings);
+  const rows = collectActiveApplicationTargetRows(actor, settings, sourcePlaceable);
+  if (settings.targetSelectionMode === "all") {
+    const seen = new Set();
+    const targets = rows
+      .filter(row => row.selectable)
+      .map(row => ({ actor: row.token.actor, token: row.token }))
+      .filter(row => {
+        const actorUuid = String(row.actor?.uuid ?? "").trim();
+        if (!actorUuid || seen.has(actorUuid)) return false;
+        seen.add(actorUuid);
+        return true;
+      });
+    if (!targets.length) {
+      ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`);
+    }
+    return targets;
+  }
   const selection = await requestCustomTokenSelection({
     rows,
     limit: settings.targetLimit,
@@ -1576,22 +1731,52 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
     instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${settings.targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
   });
-  return selection.map(row => ({ actor: row.token.actor, token: row.token })).filter(row => row.actor);
+  const seen = new Set();
+  return selection
+    .map(row => ({ actor: row.token.actor, token: row.token }))
+    .filter(row => {
+      const actorUuid = String(row.actor?.uuid ?? "").trim();
+      if (!actorUuid || seen.has(actorUuid)) return false;
+      seen.add(actorUuid);
+      return true;
+    });
 }
 
-function collectActiveApplicationTargetRows(sourceActor, settings) {
+function collectActiveApplicationTargetRows(sourceActor, settings, sourceToken = null) {
   const accepted = new Set(settings.targetGroups ?? []);
+  const radiusFormula = String(settings?.radiusFormula ?? "").trim();
+  const radiusMeters = radiusFormula
+    ? Math.max(0, evaluateActorFormula(radiusFormula, sourceActor, {
+      fallback: 0,
+      minimum: 0,
+      context: "active application radius"
+    }))
+    : null;
+  const sourcePlaceable = sourceToken?.object ?? sourceToken ?? null;
   return (canvas?.tokens?.placeables ?? [])
     .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
     .map(token => {
       const isSelf = token.actor.uuid === sourceActor?.uuid;
       const relation = getActiveApplicationTargetRelation(sourceActor, token.actor);
-      const selectable = (!settings.excludeSelf || !isSelf) && accepted.has(relation);
+      const relationAllowed = accepted.has(relation);
+      const selfAllowed = !settings.excludeSelf || !isSelf;
+      const distanceAllowed = radiusMeters === null
+        ? true
+        : Boolean(sourcePlaceable) && (isSelf || measureActiveApplicationTokenDistance(sourcePlaceable, token) <= radiusMeters);
+      const lineOfSightAllowed = !settings.wallsBlock
+        || isSelf
+        || (Boolean(sourcePlaceable) && hasActiveApplicationLineOfSight(sourcePlaceable, token));
+      const selectable = relationAllowed && selfAllowed && distanceAllowed && lineOfSightAllowed;
+      let reason = "";
+      if (!selfAllowed) reason = "активатор исключён";
+      else if (!relationAllowed) reason = "тип цели не подходит";
+      else if (!distanceAllowed) reason = sourcePlaceable ? "вне радиуса" : "нет токена активатора";
+      else if (!lineOfSightAllowed) reason = "цель закрыта стеной";
       return {
         token,
         actorUuid: token.actor.uuid,
         selectable,
-        reason: selectable ? "" : "тип цели не подходит"
+        reason
       };
     });
 }
@@ -1599,68 +1784,497 @@ function collectActiveApplicationTargetRows(sourceActor, settings) {
 function getActiveApplicationTargetRelation(sourceActor, targetActor) {
   if (!sourceActor || !targetActor) return "neutral";
   if (sourceActor.uuid === targetActor.uuid) return "ally";
-  const targetFactions = getActorFactionBelongs(targetActor);
-  const factions = targetFactions.length ? targetFactions : [DEFAULT_FACTION_NAME];
-  if (factions.some(faction => getRelationTo(sourceActor, faction) === "ally")) return "ally";
-  if (factions.some(faction => getRelationTo(sourceActor, faction) === "enemy")) return "enemy";
-  return "neutral";
+  return getSharedAbilityTargetRelation(sourceActor, targetActor);
 }
 
 function getPrimaryActorToken(actor) {
   return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
-async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, durationSeconds, targets = [], {
-  chainRef = null
+async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, durationSeconds, targets = [], options = {}) {
+  const requiresAuthority = !game.user?.isGM && targets.some(target => !target?.actor?.isOwner);
+  if (!requiresAuthority) {
+    return applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abilityFunction, durationSeconds, targets, options);
+  }
+  const sourceTokenDocument = options?.sourceToken?.document ?? options?.sourceToken ?? null;
+  const targetTokenUuids = targets
+    .map(target => String((target?.token?.document ?? target?.token)?.uuid ?? "").trim())
+    .filter(Boolean);
+  if (!sourceTokenDocument?.uuid || targetTokenUuids.length !== targets.length) return false;
+  return requestActiveApplicationEffectOperation({
+    actorUuid: sourceActor?.uuid ?? "",
+    sourceTokenUuid: sourceTokenDocument?.uuid ?? "",
+    abilityItemId: abilityItem?.id ?? "",
+    abilityFunctionId: abilityFunction?.id ?? "",
+    chainRef: options?.chainRef ?? null,
+    authorityOperationId: [
+      String(options?.costContext?.rootId ?? "").trim(),
+      String(options?.costContext?.occurrenceId ?? "").trim()
+    ].filter(Boolean).join(":"),
+    payCostsRemotely: options?.payCostsRemotely === true,
+    costContext: {
+      rootId: String(options?.costContext?.rootId ?? "").trim(),
+      occurrenceId: String(options?.costContext?.occurrenceId ?? "").trim(),
+      chainRef: options?.costContext?.chainRef ?? options?.chainRef ?? null
+    },
+    targetTokenUuids,
+    selectedChangeIds: (options?.selectedChanges ?? [])
+      .map(change => String(change?.id ?? "").trim())
+      .filter(Boolean)
+  });
+}
+
+async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abilityFunction, durationSeconds, targets = [], {
+  chainRef = null,
+  sourceToken = null,
+  selectedChanges = null
 } = {}) {
-  if (durationSeconds <= 0) return;
+  if (durationSeconds <= 0) return true;
   const startTime = Number(game.time?.worldTime) || 0;
-  for (const target of targets) {
-    const targetActor = target.actor;
-    if (!targetActor) continue;
-    const changes = getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target)
-      .map(change => prepareEffectChangeForApplication(targetActor, change))
-      .filter(change => change.key && change.value !== "");
-    if (!changes.length) continue;
-    const signature = JSON.stringify(changes);
-    await targetActor.createEmbeddedDocuments("ActiveEffect", [{
-      type: "base",
-      name: getAbilityDisplayName(abilityItem),
-      img: abilityItem.img || "icons/svg/aura.svg",
-      origin: abilityItem.uuid,
-      transfer: false,
-      disabled: false,
-      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-      start: { time: startTime },
-      duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
-      system: { changes },
-      flags: {
-        [SYSTEM_ID]: {
-          kind: "temporary",
-          [ACTIVE_APPLICATION_EFFECT_FLAG_KEY]: {
-            abilityItemId: abilityItem.id,
-            abilitySourceId: getAbilitySourceId(abilityItem),
-            sourceActorUuid: sourceActor.uuid,
-            functionData: foundry.utils.deepClone(abilityFunction),
-            signature,
-            functionId: abilityFunction.id,
-            createdAt: startTime
+  const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
+  const selectedFunction = Array.isArray(selectedChanges)
+    ? { ...abilityFunction, changes: selectedChanges }
+    : abilityFunction;
+  const plans = targets
+    .filter(target => target?.actor)
+    .map(target => ({
+      target,
+      rawChanges: getActiveApplicationEffectChanges(sourceActor, abilityItem, selectedFunction, target, sourceToken)
+        .filter(change => change?.key && String(change?.value ?? "") !== "")
+    }));
+  if (settings.changeEvaluation === "source") {
+    const snapshots = new Map();
+    for (const plan of plans) {
+      const rawSignature = JSON.stringify(plan.rawChanges);
+      if (!snapshots.has(rawSignature)) {
+        snapshots.set(rawSignature, plan.rawChanges
+          .map(change => prepareEffectChangeForApplication(sourceActor, change))
+          .filter(change => change.key && change.value !== ""));
+      }
+      plan.preparedChanges = foundry.utils.deepClone(snapshots.get(rawSignature));
+    }
+  }
+  const createdEffects = [];
+  try {
+    for (const plan of plans) {
+      const target = plan.target;
+      const targetActor = target.actor;
+      const changes = settings.changeEvaluation === "source"
+        ? plan.preparedChanges
+        : plan.rawChanges
+          .map(change => prepareEffectChangeForApplication(targetActor, change))
+          .filter(change => change.key && change.value !== "");
+      if (!changes.length) continue;
+      const signature = JSON.stringify(changes);
+      const created = await targetActor.createEmbeddedDocuments("ActiveEffect", [{
+        type: "base",
+        name: getAbilityDisplayName(abilityItem),
+        img: abilityItem.img || "icons/svg/aura.svg",
+        origin: abilityItem.uuid,
+        transfer: false,
+        disabled: false,
+        showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+        start: { time: startTime },
+        duration: { value: durationSeconds, units: "seconds", expiry: null, expired: false },
+        system: { changes },
+        flags: {
+          [SYSTEM_ID]: {
+            kind: "temporary",
+            [ACTIVE_APPLICATION_EFFECT_FLAG_KEY]: {
+              abilityItemId: abilityItem.id,
+              abilitySourceId: getAbilitySourceId(abilityItem),
+              sourceActorUuid: sourceActor.uuid,
+              functionData: foundry.utils.deepClone(selectedFunction),
+              signature,
+              changeEvaluation: settings.changeEvaluation,
+              changeSnapshot: settings.changeEvaluation === "source"
+                ? foundry.utils.deepClone(changes)
+                : null,
+              functionId: abilityFunction.id,
+              createdAt: startTime
+            }
           }
         }
-      }
-    }], {
-      animate: false,
-      ...createAbilitySystemEventOptions(chainRef)
-    });
+      }], {
+        animate: false,
+        ...createAbilitySystemEventOptions(chainRef)
+      });
+      createdEffects.push(...(created ?? []));
+    }
+  } catch (error) {
+    await deleteActiveApplicationEffectsSafely(createdEffects, chainRef);
+    throw error;
+  }
+  return true;
+}
+
+async function deleteActiveApplicationEffectsSafely(effects = [], chainRef = null) {
+  for (const effect of [...effects].reverse()) {
+    try {
+      await effect?.delete?.({
+        animate: false,
+        ...createAbilitySystemEventOptions(chainRef)
+      });
+    } catch (error) {
+      console.error("Fallout MaW | Failed to roll back a partial active application effect", error);
+    }
   }
 }
 
-function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target = {}) {
+function getActorEffectIdSet(actor = null) {
+  return new Set(Array.from(actor?.effects ?? [])
+    .map(effect => String(effect?.id ?? "").trim())
+    .filter(Boolean));
+}
+
+async function rollbackActiveApplicationPayment({
+  actor = null,
+  abilityItem = null,
+  abilityFunction = null,
+  payment = null,
+  previousEffectIds = new Set(),
+  chainRef = null
+} = {}) {
+  if (!actor || !payment?.ok) return false;
+  let complete = true;
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  const overloadEffectIds = Array.from(actor.effects ?? [])
+    .filter(effect => !previousEffectIds.has(String(effect?.id ?? "")))
+    .filter(effect => {
+      const overload = effect?.getFlag?.(SYSTEM_ID, ABILITY_OVERLOAD_EFFECT_FLAG_KEY)
+        ?? effect?.flags?.[SYSTEM_ID]?.[ABILITY_OVERLOAD_EFFECT_FLAG_KEY];
+      if (!overload) return false;
+      if (String(overload?.functionId ?? "") !== String(abilityFunction?.id ?? "")) return false;
+      const sourceMatches = abilitySourceId && overload?.abilitySourceId
+        ? String(overload.abilitySourceId) === abilitySourceId
+        : String(overload?.abilityItemId ?? "") === String(abilityItem?.id ?? "");
+      return sourceMatches;
+    })
+    .map(effect => String(effect?.id ?? "").trim())
+    .filter(Boolean);
+  if (overloadEffectIds.length) {
+    try {
+      await actor.deleteEmbeddedDocuments("ActiveEffect", overloadEffectIds, {
+        animate: false,
+        falloutMawTriggerCostRollback: true,
+        ...createAbilitySystemEventOptions(chainRef)
+      });
+    } catch (error) {
+      complete = false;
+      console.error("Fallout MaW | Failed to roll back active application overload", error);
+    }
+  }
+
+  const updates = {};
+  for (const cost of payment?.execution?.quote?.costs ?? []) {
+    const resourceKey = String(cost?.resourceKey ?? "").trim();
+    const amount = Math.max(0, toInteger(cost?.amount));
+    if (!resourceKey || amount <= 0) continue;
+    const resource = actor.system?.resources?.[resourceKey];
+    if (!resource) {
+      complete = false;
+      console.error(`Fallout MaW | Cannot roll back missing active application resource '${resourceKey}'.`);
+      continue;
+    }
+    const current = toInteger(resource.value);
+    const maximum = Number(resource.max);
+    const next = Number.isFinite(maximum)
+      ? Math.min(toInteger(maximum), current + amount)
+      : current + amount;
+    updates[`system.resources.${resourceKey}.value`] = next;
+    if (Number.isFinite(maximum)) {
+      updates[`system.resources.${resourceKey}.spent`] = Math.max(0, toInteger(maximum) - next);
+    }
+  }
+  if (Object.keys(updates).length) {
+    try {
+      await actor.update(updates, {
+        falloutMawTriggerCostRollback: true,
+        ...createAbilitySystemEventOptions(chainRef)
+      });
+    } catch (error) {
+      complete = false;
+      console.error("Fallout MaW | Failed to refund active application resources", error);
+    }
+  }
+  return complete;
+}
+
+async function requestActiveApplicationEffectOperation(payload = {}) {
+  if (game.user?.isGM) {
+    return processActiveApplicationEffectOperationOnce({
+      ...payload,
+      senderUserId: game.user.id
+    });
+  }
+  const gm = getResponsibleGM();
+  if (!gm) return false;
+  const useKey = [payload?.actorUuid, payload?.abilityItemId, payload?.abilityFunctionId]
+    .map(value => String(value ?? "").trim())
+    .join(":");
+  if (activeApplicationAuthorityRequestsByUse.has(useKey)) {
+    ui.notifications.warn("Предыдущее применение этой способности ещё ожидает подтверждения GM.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const tracking = { requestId, useKey, state: "pending", cleanupTimeout: null };
+    activeApplicationAuthorityRequestsByUse.set(useKey, tracking);
+    activeApplicationAuthorityRequestsById.set(requestId, tracking);
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      tracking.state = "uncertain";
+      ui.notifications.warn("Ответ GM на применение способности задерживается. Не повторяйте применение до позднего ответа или снятия ожидания.");
+      tracking.cleanupTimeout = window.setTimeout(
+        () => clearActiveApplicationAuthorityRequest(requestId),
+        ACTIVE_APPLICATION_AUTHORITY_CACHE_MS
+      );
+      resolve(false);
+    }, DISARM_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, activeApplicationUseKey: useKey });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performActiveApplicationEffects",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+function clearActiveApplicationAuthorityRequest(requestId = "") {
+  const tracking = activeApplicationAuthorityRequestsById.get(String(requestId ?? ""));
+  if (!tracking) return null;
+  if (tracking.cleanupTimeout) window.clearTimeout(tracking.cleanupTimeout);
+  activeApplicationAuthorityRequestsById.delete(tracking.requestId);
+  if (activeApplicationAuthorityRequestsByUse.get(tracking.useKey) === tracking) {
+    activeApplicationAuthorityRequestsByUse.delete(tracking.useKey);
+  }
+  return tracking;
+}
+
+async function processActiveApplicationEffectSocketRequest(message = {}) {
+  let applied = false;
+  try {
+    applied = await processActiveApplicationEffectOperationOnce({
+      ...(message.payload ?? {}),
+      senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Active application authority operation failed", error);
+  }
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "activeApplicationEffectsResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { applied: Boolean(applied) }
+  });
+}
+
+function processActiveApplicationEffectOperationOnce(payload = {}) {
+  const operationId = String(payload?.authorityOperationId ?? "").trim();
+  if (!operationId) return processActiveApplicationEffectOperation(payload);
+  const operationKey = [
+    payload?.senderUserId,
+    payload?.actorUuid,
+    payload?.abilityItemId,
+    payload?.abilityFunctionId,
+    operationId
+  ].map(value => String(value ?? "").trim()).join(":");
+  const cached = activeApplicationAuthorityOperations.get(operationKey);
+  if (cached) return cached;
+
+  const operation = Promise.resolve().then(() => processActiveApplicationEffectOperation(payload));
+  activeApplicationAuthorityOperations.set(operationKey, operation);
+  const scheduleCleanup = () => globalThis.setTimeout(() => {
+    if (activeApplicationAuthorityOperations.get(operationKey) === operation) {
+      activeApplicationAuthorityOperations.delete(operationKey);
+    }
+  }, ACTIVE_APPLICATION_AUTHORITY_CACHE_MS);
+  operation.then(scheduleCleanup, scheduleCleanup);
+  return operation;
+}
+
+async function processActiveApplicationEffectOperation(payload = {}) {
+  const sourceActor = await fromUuid(String(payload?.actorUuid ?? ""));
+  const sourceTokenDocument = await fromUuid(String(payload?.sourceTokenUuid ?? ""));
+  const abilityItem = sourceActor?.items?.get(String(payload?.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === String(payload?.abilityFunctionId ?? "") && isActiveApplicationAbilityFunction(entry));
+  const sender = game.users?.get(String(payload?.senderUserId ?? ""));
+  if (
+    !sourceActor
+    || sourceTokenDocument?.documentName !== "Token"
+    || !sourceTokenDocument.actor
+    || !abilityItem
+    || !abilityFunction
+  ) return false;
+  if (sourceTokenDocument.actor.uuid !== sourceActor.uuid) return false;
+  if (!sender || (!sender.isGM && !sourceActor.testUserPermission(sender, "OWNER"))) return false;
+
+  const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+  const requestedTokenUuids = Array.from(new Set((payload?.targetTokenUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  if (!requestedTokenUuids.length) return false;
+  if (settings.targetSelectionMode !== "all" && requestedTokenUuids.length > settings.targetLimit) return false;
+
+  const targetTokenDocuments = await Promise.all(requestedTokenUuids.map(uuid => fromUuid(uuid)));
+  const sourceSceneUuid = String(sourceTokenDocument.parent?.uuid ?? "").trim();
+  if (!sourceSceneUuid || targetTokenDocuments.some(tokenDocument => (
+    !tokenDocument?.actor
+    || tokenDocument.documentName !== "Token"
+    || String(tokenDocument.parent?.uuid ?? "") !== sourceSceneUuid
+  ))) return false;
+  if (targetTokenDocuments.some(targetTokenDocument => !isActiveApplicationTokenDocumentAllowed({
+    sourceActor,
+    sourceTokenDocument,
+    targetTokenDocument,
+    settings,
+    sender
+  }))) return false;
+  if (new Set(targetTokenDocuments.map(tokenDocument => tokenDocument.actor?.uuid).filter(Boolean)).size
+    !== targetTokenDocuments.length) return false;
+
+  const available = getSelectableAbilityChanges(abilityFunction.changes ?? []);
+  const configuredLimit = resolveLimitedChangeLimit(abilityFunction.conditions ?? [], sourceActor, {
+    evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
+      fallback: 1,
+      minimum: 1,
+      context: "active application authority limit"
+    })
+  });
+  const expectedCount = configuredLimit === null
+    ? available.length
+    : Math.min(available.length, configuredLimit);
+  const selectedIds = Array.from(new Set((payload?.selectedChangeIds ?? [])
+    .map(id => String(id ?? "").trim())
+    .filter(Boolean)));
+  if (selectedIds.length !== expectedCount) return false;
+  const selected = new Set(selectedIds);
+  const selectedChanges = available.filter(entry => selected.has(entry.id)).map(entry => entry.change);
+  if (selectedChanges.length !== expectedCount) return false;
+
+  const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
+  if (durationSeconds <= 0) return false;
+  let payment = null;
+  const paymentEffectIds = getActorEffectIdSet(sourceActor);
+  if (payload?.payCostsRemotely === true || !sender.isGM) {
+    payment = await payAbilityFunctionResourceCosts({
+      actor: sourceActor,
+      sourceItem: abilityItem,
+      abilityFunction,
+      costRows: settings.costs,
+      context: {
+        rootId: String(payload?.costContext?.rootId ?? "").trim(),
+        occurrenceId: String(payload?.costContext?.occurrenceId ?? "").trim(),
+        chainRef: payload?.costContext?.chainRef ?? payload?.chainRef ?? null
+      }
+    });
+    if (!payment.ok) return false;
+  }
+
+  const sourceToken = sourceTokenDocument.object ?? sourceTokenDocument;
+  try {
+    return await applyActiveApplicationEffectsDirect(
+      sourceActor,
+      abilityItem,
+      abilityFunction,
+      durationSeconds,
+      targetTokenDocuments.map(tokenDocument => ({
+        token: tokenDocument.object ?? tokenDocument,
+        actor: tokenDocument.actor
+      })),
+      { chainRef: payload?.chainRef ?? null, sourceToken, selectedChanges }
+    );
+  } catch (error) {
+    if (payment?.ok) {
+      await rollbackActiveApplicationPayment({
+        actor: sourceActor,
+        abilityItem,
+        abilityFunction,
+        payment,
+        previousEffectIds: paymentEffectIds,
+        chainRef: payload?.chainRef ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+function isActiveApplicationTokenDocumentAllowed({
+  sourceActor = null,
+  sourceTokenDocument = null,
+  targetTokenDocument = null,
+  settings = {},
+  sender = null
+} = {}) {
+  const targetActor = targetTokenDocument?.actor;
+  if (!sourceActor || !sourceTokenDocument?.actor || !targetActor) return false;
+  const isSelf = targetActor.uuid === sourceActor.uuid;
+  if (settings.targetMode !== "others") {
+    return isSelf && targetTokenDocument.uuid === sourceTokenDocument.uuid;
+  }
+  if (!sender?.isGM && targetTokenDocument.hidden) return false;
+  if (settings.excludeSelf && isSelf) return false;
+  if (!new Set(settings.targetGroups ?? []).has(getActiveApplicationTargetRelation(sourceActor, targetActor))) return false;
+
+  const radiusFormula = String(settings.radiusFormula ?? "").trim();
+  if (radiusFormula && !isSelf) {
+    const radiusMeters = Math.max(0, evaluateActorFormula(radiusFormula, sourceActor, {
+      fallback: 0,
+      minimum: 0,
+      context: "active application authority radius"
+    }));
+    if (measureActiveApplicationTokenDocumentDistance(sourceTokenDocument, targetTokenDocument) > radiusMeters) {
+      return false;
+    }
+  }
+  if (settings.wallsBlock && !isSelf) {
+    if (String(canvas?.scene?.uuid ?? "") !== String(sourceTokenDocument.parent?.uuid ?? "")) return false;
+    const sourceToken = sourceTokenDocument.object ?? null;
+    const targetToken = targetTokenDocument.object ?? null;
+    if (!sourceToken || !targetToken || !hasActiveApplicationLineOfSight(sourceToken, targetToken)) return false;
+  }
+  return true;
+}
+
+function measureActiveApplicationTokenDocumentDistance(sourceTokenDocument, targetTokenDocument) {
+  const scene = sourceTokenDocument?.parent ?? null;
+  if (!scene || String(scene.uuid ?? "") !== String(targetTokenDocument?.parent?.uuid ?? "")) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const sourceCenter = getActiveApplicationTokenDocumentCenter(sourceTokenDocument, scene);
+  const targetCenter = getActiveApplicationTokenDocumentCenter(targetTokenDocument, scene);
+  const measured = scene.grid?.measurePath?.([sourceCenter, targetCenter])?.distance;
+  if (Number.isFinite(Number(measured))) return Math.max(0, Number(measured));
+
+  const distancePixels = Math.hypot(targetCenter.x - sourceCenter.x, targetCenter.y - sourceCenter.y);
+  const gridSize = Math.max(1, Number(scene.grid?.size ?? scene.grid?.sizeX) || 100);
+  const gridDistance = Math.max(0.0001, Number(scene.grid?.distance) || 1);
+  return (distancePixels / gridSize) * gridDistance;
+}
+
+function getActiveApplicationTokenDocumentCenter(tokenDocument, scene = null) {
+  const center = tokenDocument?.getCenterPoint?.();
+  if (Number.isFinite(Number(center?.x)) && Number.isFinite(Number(center?.y))) {
+    return { x: Number(center.x), y: Number(center.y) };
+  }
+  const gridSize = Math.max(1, Number(scene?.grid?.size ?? scene?.grid?.sizeX) || 100);
+  return {
+    x: Number(tokenDocument?.x ?? 0) + (Math.max(0.01, Number(tokenDocument?.width) || 1) * gridSize / 2),
+    y: Number(tokenDocument?.y ?? 0) + (Math.max(0.01, Number(tokenDocument?.height) || 1) * gridSize / 2)
+  };
+}
+
+function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target = {}, sourceToken = null) {
   const subjectActor = target.actor ?? sourceActor;
   const context = {
     abilityItemId: abilityItem.id,
     functionId: abilityFunction.id,
-    actorToken: getPrimaryActorToken(sourceActor),
+    actorToken: sourceToken ?? getPrimaryActorToken(sourceActor),
     targetActor: target.actor,
     targetToken: target.token,
     allowContextual: true
@@ -1702,12 +2316,15 @@ async function syncActorActiveApplicationEffects(actor) {
         }
       }
     };
-    const changes = getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, {
-      actor,
-      token: getPrimaryActorToken(actor)
-    })
-      .map(change => prepareEffectChangeForApplication(actor, change))
-      .filter(change => change.key && change.value !== "");
+    const snapshot = Array.isArray(flag?.changeSnapshot) ? flag.changeSnapshot : null;
+    const changes = snapshot
+      ? foundry.utils.deepClone(snapshot)
+      : getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, {
+        actor,
+        token: getPrimaryActorToken(actor)
+      })
+        .map(change => prepareEffectChangeForApplication(actor, change))
+        .filter(change => change.key && change.value !== "");
     const signature = JSON.stringify(changes);
     if (signature === String(flag?.signature ?? "")) continue;
     await effect.update({
@@ -6174,6 +6791,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processToTheEndSocketRequest(message);
     return;
   }
+  if (message.action === "performActiveApplicationEffects") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processActiveApplicationEffectSocketRequest(message);
+    return;
+  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -6221,6 +6843,25 @@ function handleFixedAbilitySocketMessage(message = {}) {
     window.clearTimeout(pending.timeout);
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.applied));
+  }
+  if (message.action === "activeApplicationEffectsResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const applied = Boolean(message.result?.applied);
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) {
+      const late = clearActiveApplicationAuthorityRequest(message.requestId);
+      if (late) {
+        const notify = applied ? ui.notifications.info : ui.notifications.warn;
+        notify.call(ui.notifications, applied
+          ? "GM завершил задержавшееся применение способности. Повторный запуск не требуется."
+          : "GM отклонил задержавшееся применение способности; теперь его можно повторить.");
+      }
+      return;
+    }
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    clearActiveApplicationAuthorityRequest(message.requestId);
+    pending.resolve(applied);
   }
 }
 
