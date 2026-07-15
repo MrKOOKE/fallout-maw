@@ -1864,6 +1864,11 @@ body #prosemirror-dropdown {
   grid-template-columns: minmax(0, 1fr) minmax(7rem, auto);
 }
 
+.fallout-maw-condition-duration-control {
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, 14rem);
+  width: 100%;
+}
+
 .fallout-maw-radio-card {
   align-items: flex-start;
   border: 1px solid var(--fallout-maw-border);

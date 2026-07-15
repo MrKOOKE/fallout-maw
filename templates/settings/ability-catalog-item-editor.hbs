@@ -2009,17 +2009,14 @@
               {{/if}}
 
               {{#if isDuration}}
-              <label>
-                <span>Длительность</span>
-                <div class="fallout-maw-inline-duration">
-                  <input type="number" data-field="conditionDurationAmount" value="{{durationAmount}}" min="0" step="1">
-                  <select data-field="conditionDurationUnit">
-                    {{#each durationUnitChoices}}
-                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                    {{/each}}
-                  </select>
-                </div>
-              </label>
+              <div class="fallout-maw-split-number-field-control fallout-maw-condition-duration-control">
+                <input type="number" data-field="conditionDurationAmount" value="{{durationAmount}}" min="0" step="1" aria-label="Длительность">
+                <select data-field="conditionDurationUnit" aria-label="Единицы длительности">
+                  {{#each durationUnitChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </div>
               {{/if}}
 
             </div>
