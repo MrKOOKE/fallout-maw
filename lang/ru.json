@@ -21,6 +21,14 @@
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Ability": {
+      "Category": {
+        "Label": "Категория",
+        "Placeholder": "Без категории",
+        "Active": "Активные",
+        "Passive": "Пассивные",
+        "NoActive": "Активных способностей нет.",
+        "NoPassive": "Пассивных способностей нет."
+      },
       "Actions": {
         "Add": "Добавить действие",
         "Title": "Действия",

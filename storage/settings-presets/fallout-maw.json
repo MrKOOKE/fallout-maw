@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "bdce89c069eb2c6e6aa8aa81b616d037569249470ece7fbbb4266f8a79cc54e1",
-  "updatedAt": "2026-07-15T03:19:46.463Z",
+  "revision": "8a48851538bf3b8c11944eaae7085f33f2e0df83aff99770fa1b73d6b90d98ea",
+  "updatedAt": "2026-07-15T08:15:57.239Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -34,6 +34,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -101,6 +102,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -168,6 +170,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -212,6 +215,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -331,6 +335,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -411,6 +416,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -484,6 +490,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -535,6 +542,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -580,6 +588,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -625,6 +634,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -673,6 +683,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -719,6 +730,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -786,6 +798,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -830,6 +843,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -878,6 +892,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -920,6 +935,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -976,6 +992,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1035,6 +1052,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1107,6 +1125,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1154,6 +1173,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1201,6 +1221,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1247,6 +1268,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1308,6 +1330,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1355,6 +1378,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1402,6 +1426,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1480,6 +1505,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1526,6 +1552,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -1581,6 +1608,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1640,6 +1668,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1707,6 +1736,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1758,6 +1788,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1809,6 +1840,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1860,6 +1892,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -1951,6 +1984,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2002,6 +2036,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2053,6 +2088,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2120,6 +2156,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2173,6 +2210,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2218,6 +2256,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2271,6 +2310,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2323,6 +2363,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2378,6 +2419,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2429,6 +2471,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2533,6 +2576,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2597,6 +2641,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2648,6 +2693,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2699,6 +2745,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2749,6 +2796,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2817,6 +2865,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -2868,6 +2917,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -2960,6 +3010,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -3029,6 +3080,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3078,6 +3130,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3130,10 +3183,12 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {
                         "durationSeconds": 0,
                         "energyCost": 10,
                         "excludeSelf": true,
+                        "name": "",
                         "overloadDurationSeconds": 3600,
                         "overloadEnergyCost": 40,
                         "targetGroups": [
@@ -3183,6 +3238,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3233,6 +3289,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3267,103 +3324,100 @@
                 "visible": true
               },
               {
-                "description": "",
-                "id": "UAaBspLDcZXaLVmO",
-                "img": "icons/svg/aura.svg",
-                "name": "123",
+                "description": "<p>Переключаемая способность.<br>Имеет 2 варинта переключения (можно поддерживаить оба одновременно).</p><p>1) Пока активна дает +30 к Красноречию, но уменьшает все остальные навыки на 10.<br>2) Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p>",
+                "id": "sgY5ccFsQBPkDDLV",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Усиленный голос",
                 "system": {
                   "acquisition": {
-                    "difficulty": 60,
+                    "difficulty": 150,
                     "onlyFree": false,
                     "onlyManual": false,
-                    "skillKey": "meleeCombat"
+                    "skillKey": "speech"
                   },
-                  "acquisitionRequirements": [],
-                  "cost": 0,
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3pWmqfeGCCSaTHpa",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "cost": 3000,
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
-                          "id": "0Bl6RXA2jpZJCWhi",
-                          "key": "system.characteristics.strength",
+                          "id": "bn7cAYtlweaG3P1W",
+                          "key": "system.skills.speech.bonus",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "4"
+                          "value": "40"
+                        },
+                        {
+                          "id": "JJZRbf7CEuVXzLIA",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
                         }
                       ],
                       "conditions": [
                         {
-                          "eventKey": "fallout-maw.skill.check.beforeRoll",
+                          "cooldownSeconds": null,
                           "groupId": "",
-                          "id": "MHYrpgQLEKcIVRlm",
-                          "reactorRole": "any",
-                          "type": "eventReaction"
+                          "id": "NxbdGh2wyQcWfiQp",
+                          "name": "Усиленный голос (1)",
+                          "type": "toggleable"
                         }
                       ],
                       "fixedKey": "",
                       "fixedSettings": {},
-                      "id": "tNHCOC5uyNaRn15N",
+                      "id": "dTPvGa17o49KUkRQ",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
-                        "durationSeconds": 24
+                        "durationSeconds": 0
                       },
                       "sort": 0,
                       "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "",
-                "id": "m9sIw07DPEHqGNVQ",
-                "img": "icons/svg/aura.svg",
-                "name": "222",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "cost": 0,
-                  "formula": "",
-                  "functions": [
+                    },
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
-                          "id": "sTllFgyoguoMxlhu",
-                          "key": "system.characteristics.strength",
+                          "id": "aIL0WWmB8ysWDbAH",
+                          "key": "system.skills.speech.advantage",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "6"
+                          "value": "1"
                         }
                       ],
                       "conditions": [
                         {
-                          "eventKey": "fallout-maw.skill.check.beforeRoll",
+                          "cooldownSeconds": null,
                           "groupId": "",
-                          "id": "MkKQZxenjeNacbKX",
-                          "reactorRole": "any",
-                          "type": "eventReaction"
+                          "id": "AkU4lqGPPXLZdK1D",
+                          "name": "Усиленный голос (2)",
+                          "type": "toggleable"
                         }
                       ],
                       "fixedKey": "",
                       "fixedSettings": {},
-                      "id": "I88pXpQbb0z1nReh",
+                      "id": "9cgId47MAJgytqI3",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
-                        "durationSeconds": 24
+                        "durationSeconds": 0
                       },
-                      "sort": 0,
+                      "sort": 1,
                       "type": "effectChanges"
                     }
                   ]
@@ -3407,6 +3461,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -3475,6 +3530,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -3534,6 +3590,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3593,6 +3650,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
@@ -3644,6 +3702,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3690,6 +3749,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3739,6 +3799,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3784,6 +3845,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3830,6 +3892,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3876,6 +3939,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
@@ -3923,6 +3987,7 @@
                   "formula": "",
                   "functions": [
                     {
+                      "actions": [],
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],

@@ -22,6 +22,14 @@
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Ability": {
+      "Category": {
+        "Label": "Category",
+        "Placeholder": "Uncategorized",
+        "Active": "Active",
+        "Passive": "Passive",
+        "NoActive": "No active abilities.",
+        "NoPassive": "No passive abilities."
+      },
       "Actions": {
         "Add": "Add action",
         "Title": "Actions",

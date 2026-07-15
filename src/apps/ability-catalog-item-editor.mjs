@@ -1060,6 +1060,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       description: readFieldValue(this.form.querySelector("[data-field='description']"), this.ability.description),
       system: {
         ...(this.ability.system ?? {}),
+        category: this.form.querySelector("[data-field='category']")?.value ?? this.ability.system?.category,
         acquisition: {
           onlyFree,
           onlyManual: onlyFree ? false : (onlyManualInput ? Boolean(onlyManualInput.checked) : Boolean(acquisition.onlyManual)),

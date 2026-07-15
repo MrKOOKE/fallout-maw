@@ -115,6 +115,7 @@ export class AbilityDataModel extends BaseItemDataModel {
   static defineSchema() {
     return {
       ...super.defineSchema(),
+      category: new StringField({ required: true, blank: true, initial: "" }),
       cost: new NumberField({ required: true, min: 0, initial: 0 }),
       formula: new StringField({ required: true, blank: true, initial: "" }),
       acquisition: new SchemaField({

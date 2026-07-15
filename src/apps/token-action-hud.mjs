@@ -492,6 +492,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipSuppressHudActivationTimer = null;
   #actionPointCostTooltipTimer = null;
   #actionPointCostTooltipElement = null;
+  #collapsedAbilityCategoryKeys = new Set();
   #editableMeterSections = {
     resources: false,
     needs: false
@@ -568,6 +569,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#activeTray = "";
       this.#weaponEquipTarget = null;
       this.#dualWeaponActionSelection = null;
+      this.#collapsedAbilityCategoryKeys.clear();
       this.#editableMeterSections.resources = false;
       this.#editableMeterSections.needs = false;
     }
@@ -601,7 +603,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const actionGroups = prepareActionGroups(activeActions, systemActions);
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, passengers, hudIcons);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers, {
+      collapsedAbilityCategoryKeys: this.#collapsedAbilityCategoryKeys
+    });
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(
@@ -643,6 +647,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       silhouette.addEventListener("pointermove", event => this.#onLimbPopoverMove(event));
       silhouette.addEventListener("pointerleave", () => this.#onLimbPopoverLeaveRoot());
       this.#limbPopover.boundRoot = silhouette;
+    }
+    for (const details of this.element?.querySelectorAll("[data-ability-category-key]") ?? []) {
+      details.addEventListener("toggle", () => {
+        const key = String(details.dataset.abilityCategoryKey ?? "");
+        if (!key) return;
+        if (details.open) this.#collapsedAbilityCategoryKeys.delete(key);
+        else this.#collapsedAbilityCategoryKeys.add(key);
+        this.#scheduleLayout();
+      });
     }
     this.applyMovementResourcePreview(tokenActionHudMovementPreview);
     this.#scheduleLayout();
@@ -2581,6 +2594,7 @@ function prepareOwnedAbilityButtons(actor, fallbackIcon) {
 
 function prepareAbilityItemButtons(item, fallbackIcon) {
   const image = normalizeImagePath(item.img, fallbackIcon);
+  const category = String(item.system?.category ?? "").trim();
   const functions = normalizeAbilityFunctions(item.system?.functions ?? []);
   const toggleEntries = new Set(getAbilityToggleConditionEntries(item).map(entry => (
     `${entry.abilityFunction.id}:${entry.condition.id}`
@@ -2626,6 +2640,7 @@ function prepareAbilityItemButtons(item, fallbackIcon) {
       id: item.id,
       name: item.name,
       img: image,
+      category,
       active: isActiveAbility(item),
       toggleable: false,
       toggled: false
@@ -2635,24 +2650,47 @@ function prepareAbilityItemButtons(item, fallbackIcon) {
     id: item.id,
     name: descriptor.customName || (index ? `${item.name} ${index + 1}` : item.name),
     img: image,
+    category,
     active: true,
     ...descriptor
   }));
 }
 
-function prepareAbilityGroups(abilities = []) {
+function prepareAbilityGroups(abilities = [], collapsedCategoryKeys = new Set()) {
+  const prepareCategories = (items, groupKey) => {
+    const categories = new Map();
+    for (const ability of items) {
+      const categoryName = String(ability.category ?? "").trim();
+      if (!categories.has(categoryName)) {
+        const key = `${groupKey}:${categoryName}`;
+        categories.set(categoryName, {
+          key,
+          label: categoryName || game.i18n.localize("FALLOUTMAW.Common.Uncategorized"),
+          items: [],
+          count: 0,
+          open: !collapsedCategoryKeys.has(key)
+        });
+      }
+      const category = categories.get(categoryName);
+      category.items.push(ability);
+      category.count += 1;
+    }
+    return Array.from(categories.values());
+  };
+  const active = abilities.filter(ability => ability.active);
+  const passive = abilities.filter(ability => !ability.active);
   return [
     {
       key: "active",
-      label: "Активные",
-      items: abilities.filter(ability => ability.active),
-      emptyLabel: "Активных способностей нет."
+      label: game.i18n.localize("FALLOUTMAW.Ability.Category.Active"),
+      categories: prepareCategories(active, "active"),
+      emptyLabel: game.i18n.localize("FALLOUTMAW.Ability.Category.NoActive")
     },
     {
       key: "passive",
-      label: "Пассивные",
-      items: abilities.filter(ability => !ability.active),
-      emptyLabel: "Пассивных способностей нет."
+      label: game.i18n.localize("FALLOUTMAW.Ability.Category.Passive"),
+      categories: prepareCategories(passive, "passive"),
+      emptyLabel: game.i18n.localize("FALLOUTMAW.Ability.Category.NoPassive")
     }
   ];
 }
@@ -2743,7 +2781,7 @@ function prepareActionGroups(activeActions = [], systemActions = []) {
   ];
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = [], weaponEquipChoices = [], passengers = []) {
+function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = [], weaponEquipChoices = [], passengers = [], options = {}) {
   const weaponActionGroups = prepareWeaponActionGroups(weaponActionRows);
   const trayItems = activeTray === "skills"
     ? skills
@@ -2766,7 +2804,7 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
     skills,
     items,
     abilities,
-    abilityGroups: prepareAbilityGroups(abilities),
+    abilityGroups: prepareAbilityGroups(abilities, options.collapsedAbilityCategoryKeys),
     activeActions,
     systemActions,
     actionGroups,

@@ -3456,6 +3456,21 @@ body #prosemirror-dropdown {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.fallout-maw-ability-category-panel {
+  padding-block: 0.65rem;
+}
+
+.fallout-maw-ability-category-field {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.fallout-maw-ability-category-field > span {
+  color: var(--fallout-maw-actor-text-strong);
+  font-weight: 700;
+}
+
 .fallout-maw-ability-condition-fields > .hint {
   grid-column: 1 / -1;
   margin: 0;
@@ -10278,6 +10293,113 @@ html.fallout-maw-token-action-hud-open #hotbar {
   flex-wrap: nowrap;
   justify-content: flex-start;
   width: var(--fallout-maw-token-hud-actions-width);
+}
+
+.fallout-maw-token-hud-ability-section {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 5px;
+  min-width: 0;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-ability-section + .fallout-maw-token-hud-ability-section {
+  border-top: 1px solid rgba(231, 204, 128, 0.4);
+  margin-top: 4px;
+  padding-top: 7px;
+}
+
+.fallout-maw-token-hud-ability-section-title {
+  color: var(--fallout-maw-actor-text-strong);
+  font-size: 1.08rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+  padding: 0 2px 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+.fallout-maw-token-hud-ability-category {
+  background: linear-gradient(180deg, rgba(43, 42, 32, 0.92), rgba(20, 20, 17, 0.94));
+  border: 1px solid rgba(210, 186, 112, 0.38);
+  border-radius: 4px;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-ability-category[open] {
+  border-color: rgba(231, 204, 128, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(255, 239, 173, 0.04);
+}
+
+.fallout-maw-token-hud-ability-category-summary {
+  align-items: center;
+  color: var(--fallout-maw-actor-text-strong);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 700;
+  gap: 7px;
+  justify-content: flex-start;
+  line-height: 1.2;
+  list-style: none;
+  min-height: 28px;
+  padding: 5px 8px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.fallout-maw-token-hud-ability-category-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallout-maw-token-hud-ability-category-summary::before {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 6px;
+  margin-left: 2px;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+  width: 6px;
+}
+
+.fallout-maw-token-hud-ability-category[open] > .fallout-maw-token-hud-ability-category-summary::before {
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.fallout-maw-token-hud-ability-category-summary:hover,
+.fallout-maw-token-hud-ability-category-summary:focus-visible {
+  background: rgba(231, 204, 128, 0.1);
+  outline: 0;
+}
+
+.fallout-maw-token-hud-ability-category-summary > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-token-hud-ability-category-summary > strong {
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(231, 204, 128, 0.28);
+  border-radius: 999px;
+  color: rgba(255, 239, 173, 0.88);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: auto;
+  min-width: 1.45rem;
+  padding: 3px 5px;
+  text-align: center;
+}
+
+.fallout-maw-token-hud-ability-category-buttons {
+  border-top: 1px solid rgba(231, 204, 128, 0.22);
+  padding: 6px;
 }
 
 .fallout-maw-token-hud-popup.weapon-equip {

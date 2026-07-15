@@ -165,19 +165,27 @@
 
       {{#if (eq activeTray "abilities")}}
       {{#each tray.abilityGroups}}
-      <div class="fallout-maw-token-hud-action-row fallout-maw-token-hud-ability-row">
-        <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
-        <div class="fallout-maw-token-hud-action-row-buttons">
-          {{#each items}}
-          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile{{#if toggleable}} toggleable{{/if}}{{#if toggled}} toggled{{/if}}" data-action="useAbility" data-item-id="{{id}}" data-ability-function-id="{{functionId}}" data-ability-toggle-condition-id="{{toggleConditionId}}" data-hud-tooltip-item="{{id}}" aria-label="{{name}}" aria-pressed="{{#if toggled}}true{{else}}false{{/if}}">
-            <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../fallbackIcon}}'">
-            <span>{{name}}</span>
-          </button>
-          {{else}}
-          <div class="fallout-maw-token-hud-empty">{{emptyLabel}}</div>
-          {{/each}}
-        </div>
-      </div>
+      <section class="fallout-maw-token-hud-ability-section" aria-labelledby="fallout-maw-ability-group-{{key}}">
+        <h3 id="fallout-maw-ability-group-{{key}}" class="fallout-maw-token-hud-ability-section-title">{{label}}</h3>
+        {{#each categories}}
+        <details class="fallout-maw-token-hud-ability-category" data-ability-category-key="{{key}}" {{#if open}}open{{/if}}>
+          <summary class="fallout-maw-token-hud-ability-category-summary">
+            <span>{{label}}</span>
+            <strong>{{count}}</strong>
+          </summary>
+          <div class="fallout-maw-token-hud-action-row-buttons fallout-maw-token-hud-ability-category-buttons">
+            {{#each items}}
+            <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile{{#if toggleable}} toggleable{{/if}}{{#if toggled}} toggled{{/if}}" data-action="useAbility" data-item-id="{{id}}" data-ability-function-id="{{functionId}}" data-ability-toggle-condition-id="{{toggleConditionId}}" data-hud-tooltip-item="{{id}}" aria-label="{{name}}" aria-pressed="{{#if toggled}}true{{else}}false{{/if}}">
+              <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../../fallbackIcon}}'">
+              <span>{{name}}</span>
+            </button>
+            {{/each}}
+          </div>
+        </details>
+        {{else}}
+        <div class="fallout-maw-token-hud-empty">{{emptyLabel}}</div>
+        {{/each}}
+      </section>
       {{/each}}
       {{/if}}
 

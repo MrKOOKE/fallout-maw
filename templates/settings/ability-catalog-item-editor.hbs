@@ -14,6 +14,13 @@
 
 {{#if isDetailsTab}}
 <section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
+  <section class="fallout-maw-panel fallout-maw-ability-category-panel">
+    <label class="fallout-maw-ability-category-field">
+      <span>{{localize "FALLOUTMAW.Ability.Category.Label"}}</span>
+      <input type="text" data-field="category" value="{{system.category}}" placeholder="{{localize "FALLOUTMAW.Ability.Category.Placeholder"}}">
+    </label>
+  </section>
+
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
       <h2>Условия приобретения</h2>

@@ -254,6 +254,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
       name: isFeatures ? "Новая особенность" : "Новая способность",
       img: isFeatures ? "icons/svg/upgrade.svg" : "icons/svg/aura.svg",
       system: {
+        category: category.name,
         cost: 0,
         acquisition: {
           onlyFree: false,

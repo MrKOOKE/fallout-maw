@@ -329,6 +329,7 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
     visible: value?.visible !== false,
     description: String(value?.description ?? system.description ?? "").trim(),
     system: {
+      category: String(system.category ?? value?.category ?? "").trim(),
       cost: Math.max(0, toInteger(system.cost ?? value?.cost)),
       formula: String(system.formula ?? value?.formula ?? "").trim(),
       acquisition: normalizeAbilityAcquisition(system.acquisition ?? value?.acquisition),
@@ -406,6 +407,7 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
     img: normalized.img || "icons/svg/aura.svg",
     system: {
       description: normalized.description,
+      category: normalized.system.category,
       cost: normalized.system.cost,
       formula: normalized.system.formula,
       acquisition: foundry.utils.deepClone(normalized.system.acquisition),
