@@ -46,6 +46,16 @@
         "Weapon": "Оружие",
         "Next": "Далее",
         "Execute": "Атаковать"
+      },
+      "Toggle": {
+        "ConditionLabel": "Переключаемость активности",
+        "ButtonSettings": "Кнопка способности",
+        "ButtonName": "Название кнопки",
+        "OriginalName": "Название способности",
+        "CooldownDuration": "Длительность перезарядки переключения",
+        "TimeLocked": "Переключение будет доступно через {seconds} сек.",
+        "Enabled": "{name}: включено.",
+        "Disabled": "{name}: выключено."
       }
     },
     "Events": {

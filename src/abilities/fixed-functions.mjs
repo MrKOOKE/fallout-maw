@@ -773,14 +773,14 @@ export async function spendActorTwoHandsEnergy(actor, entry = getActorTwoHandsEn
   return spendEnergy(actor, cost);
 }
 
-export async function useFixedAbilityFunctionItem({ actor = null, item = null, application = null } = {}) {
+export async function useFixedAbilityFunctionItem({ actor = null, item = null, application = null, functionId = "" } = {}) {
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
     return false;
   }
   if (!actor?.isOwner || item?.type !== "ability") return false;
   const abilityFunction = normalizeAbilityFunctions(item.system?.functions ?? [])
-    .find(entry => isFixedAbilityFunctionActive(entry));
+    .find(entry => isFixedAbilityFunctionActive(entry) && (!functionId || entry.id === functionId));
   if (!abilityFunction) return false;
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
@@ -1095,6 +1095,7 @@ export async function useAbilityFunctionItem({
   actor = null,
   item = null,
   application = null,
+  functionId = "",
   chainRef = null,
   options = {},
   source = {}
@@ -1105,7 +1106,7 @@ export async function useAbilityFunctionItem({
   }
   if (!actor?.isOwner || item?.type !== "ability") return false;
   const abilityFunction = normalizeAbilityFunctions(item.system?.functions ?? [])
-    .find(entry => isActiveAbilityFunction(entry));
+    .find(entry => isActiveAbilityFunction(entry) && (!functionId || entry.id === functionId));
   if (!abilityFunction) return false;
   const inheritedChainRef = chainRef
     ?? options?.falloutMawSystemEventChainRef
@@ -1142,7 +1143,7 @@ export async function useAbilityFunctionItem({
         ...buildAbilityUseEventData(actor, item, abilityFunction),
         status
       }),
-      operation: () => useFixedAbilityFunctionItem({ actor, item, application })
+      operation: () => useFixedAbilityFunctionItem({ actor, item, application, functionId: abilityFunction.id })
     });
     return workflow.success && Boolean(workflow.value);
   });

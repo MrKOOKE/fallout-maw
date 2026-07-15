@@ -3456,6 +3456,11 @@ body #prosemirror-dropdown {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.fallout-maw-ability-condition-fields > .hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .fallout-maw-event-reaction-settings {
   background: rgba(72, 98, 132, 0.09);
   border: 1px solid rgba(112, 158, 205, 0.28);

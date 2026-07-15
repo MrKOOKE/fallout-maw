@@ -82,6 +82,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
+  toggleable: "toggleable",
   eventReaction: "eventReaction",
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
@@ -586,6 +587,7 @@ export function normalizeActiveApplicationSettings(value = {}) {
   const targetGroups = normalizeStringList(value?.targetGroups)
     .filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
   return {
+    name: String(value?.name ?? "").trim(),
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 0)),
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 0)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 0)),
@@ -696,6 +698,16 @@ function normalizeAbilityCondition(value = {}) {
   if (!type) return { id: String(value?.id ?? "").trim() || "", groupId, type: "" };
 
   const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
+
+  if (type === ABILITY_CONDITION_TYPES.toggleable) {
+    return {
+      id,
+      groupId,
+      type,
+      name: String(value?.name ?? value?.toggleName ?? "").trim(),
+      cooldownSeconds: normalizeOptionalSeconds(value?.cooldownSeconds)
+    };
+  }
 
   if (type === ABILITY_CONDITION_TYPES.eventReaction) {
     const reactionMode = normalizeEventReactionMode(value?.reactionMode, value?.autoApply);
@@ -988,6 +1000,12 @@ function normalizeBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return Boolean(fallback);
   if (typeof value === "string") return value === "true";
   return Boolean(value);
+}
+
+function normalizeOptionalSeconds(value) {
+  if (value === "" || value === undefined || value === null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : null;
 }
 
 function normalizeFixedFunctionKey(value = "") {

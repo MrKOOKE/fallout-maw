@@ -691,6 +691,7 @@ function isAbilityTogglePath(path) {
     "system.use.enabled",
     "flags.fallout-maw.active"
   ].some(root => pathMatchesRoot(root)(path))) return true;
+  if (pathMatchesRoot("flags.fallout-maw.abilityToggleConditions")(path)) return true;
   return path.startsWith("flags.fallout-maw.abilityFixedFunctionState.") && path.endsWith(".active");
 }
 

@@ -58,6 +58,10 @@ export function getEventReactionSecondaryConditions(conditions = [], { warn = nu
   for (const condition of conditions ?? []) {
     const type = String(condition?.type ?? "").trim();
     if (!type || type === EVENT_REACTION_CONDITION_TYPE) continue;
+    if (type === ABILITY_CONDITION_TYPES.toggleable) {
+      accepted.push(condition);
+      continue;
+    }
     if (FILTER_TYPES.has(type)) {
       accepted.push(condition);
       continue;

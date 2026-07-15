@@ -212,7 +212,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "eventReaction", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     eventKey: new StringField({ required: true, blank: true, initial: "" }),
@@ -238,6 +238,7 @@ function abilityConditionField() {
       initial: "reactor"
     }),
     name: new StringField({ required: true, blank: true, initial: "" }),
+    cooldownSeconds: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
     amountPerHour: new NumberField({ required: true, min: 0, initial: 0 }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
     percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),

@@ -1287,6 +1287,13 @@
 
     {{#if activeApplicationSettings}}
     <div class="fallout-maw-ability-subsection">
+      <fieldset class="fallout-maw-fieldset">
+        <legend>{{localize "FALLOUTMAW.Ability.Toggle.ButtonSettings"}}</legend>
+        <label>
+          <span>{{localize "FALLOUTMAW.Ability.Toggle.ButtonName"}}</span>
+          <input type="text" data-field="active.name" value="{{activeApplicationSettings.name}}" placeholder="{{localize 'FALLOUTMAW.Ability.Toggle.OriginalName'}}">
+        </label>
+      </fieldset>
       <fieldset class="fallout-maw-fieldset fallout-maw-active-application-energy">
         <legend>Энергия</legend>
         <div class="fallout-maw-fixed-settings-row">
@@ -1712,6 +1719,25 @@
                 </select>
               </label>
               {{/if}}
+
+              {{#if isToggleable}}
+              <label>
+                <span>{{localize "FALLOUTMAW.Ability.Toggle.ButtonName"}}</span>
+                <input type="text" data-field="conditionToggleName" value="{{toggleName}}" placeholder="{{localize 'FALLOUTMAW.Ability.Toggle.OriginalName'}}">
+              </label>
+              <label class="fallout-maw-split-number-field">
+                <span>{{localize "FALLOUTMAW.Ability.Toggle.CooldownDuration"}}</span>
+                <div>
+                  <input type="number" data-field="conditionToggleCooldownAmount" value="{{toggleCooldownAmount}}" min="0" step="1">
+                  <select data-field="conditionToggleCooldownUnit">
+                    {{#each toggleCooldownUnitChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </div>
+              </label>
+              {{/if}}
+
 
               {{#if isHealth}}
               <label>

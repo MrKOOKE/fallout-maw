@@ -721,6 +721,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
+    normalizeSubmittedToggleableConditions(form, submitData);
     normalizeSubmittedActiveApplicationFunctions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
@@ -735,6 +736,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
+    normalizeSubmittedToggleableConditions(form, submitData);
     normalizeSubmittedActiveApplicationFunctions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
@@ -6105,10 +6107,15 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const eventReactionSettings = isEffectChanges && hasEventReaction
     ? prepareAbilityEventReactionSettingsForDisplay(entry?.reactionSettings)
     : null;
+  const hasToggleableCondition = (entry?.conditions ?? [])
+    .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges || isActiveApplication,
     allowEventReaction: isEffectChanges,
+    allowToggleable: item?.type === "ability"
+      && isEffectChanges
+      && (!hasToggleableCondition || condition?.type === ABILITY_CONDITION_TYPES.toggleable),
     eventReactionMode: hasEventReaction,
     eventReactionSettings,
     functionPath,
@@ -6609,6 +6616,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   changeCount = 0,
   allowLimitedChanges = false,
   allowEventReaction = false,
+  allowToggleable = false,
   eventReactionMode = false,
   eventReactionSettings = null,
   functionPath = "system.functions",
@@ -6616,11 +6624,12 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   abilityFunction = null
 } = {}) {
   const type = String(condition?.type ?? "");
+  const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isEventReaction && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -6638,6 +6647,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
   const duration = splitAbilityDurationSeconds(condition?.durationSeconds);
+  const toggleCooldown = splitAbilityDurationSeconds(condition?.cooldownSeconds ?? 0);
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -6675,7 +6685,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isToggleable,
     isEventReaction,
     isEventReactionFilter,
     isUnsupportedEventCondition,
@@ -6739,7 +6750,12 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    toggleName: String(condition?.name ?? "").trim(),
+    toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
+      ? ""
+      : toggleCooldown.amount,
+    toggleCooldownUnitChoices: buildAbilityDurationUnitChoices(toggleCooldown.unit),
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
@@ -6750,7 +6766,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     durationAmount: duration.amount,
     durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: getAbilityConditionTypeLabel(type),
-    typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, eventReactionMode }),
+    typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowToggleable, eventReactionMode }),
     eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
@@ -6839,6 +6855,7 @@ function buildAbilityChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
 function buildAbilityConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
+  allowToggleable = false,
   eventReactionMode = false
 } = {}) {
   const choices = [
@@ -6855,6 +6872,13 @@ function buildAbilityConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
     { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
+  if (allowToggleable || selected === ABILITY_CONDITION_TYPES.toggleable) {
+    choices.splice(1, 0, {
+      value: ABILITY_CONDITION_TYPES.toggleable,
+      label: game.i18n.localize("FALLOUTMAW.Ability.Toggle.ConditionLabel"),
+      selected: selected === ABILITY_CONDITION_TYPES.toggleable
+    });
+  }
   if (allowEventReaction || selected === ABILITY_CONDITION_TYPES.eventReaction) {
     choices.splice(1, 0, {
       value: ABILITY_CONDITION_TYPES.eventReaction,
@@ -6893,6 +6917,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
   return choices
     .filter(choice => (
       !choice.value
+      || choice.value === ABILITY_CONDITION_TYPES.toggleable
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
       || choice.value === ABILITY_CONDITION_TYPES.duration
       || isEventReactionFilterType(choice.value)
@@ -6900,6 +6925,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
     ))
     .map(choice => choice.value === selected
       && choice.value
+      && choice.value !== ABILITY_CONDITION_TYPES.toggleable
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
       && choice.value !== ABILITY_CONDITION_TYPES.duration
       && !isEventReactionFilterType(choice.value)
@@ -7255,6 +7281,7 @@ function getFirstUnusedAbilityProficiencyKey(value = []) {
 
 function isAbilityRuntimeCondition(type = "") {
   return [
+    ABILITY_CONDITION_TYPES.toggleable,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.targetFaction,
@@ -7787,6 +7814,29 @@ function normalizeSubmittedActiveApplicationFunctions(form = null, submitData = 
     );
     foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.overloadDurationSeconds`, overloadDurationSeconds);
     foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.durationSeconds`, durationSeconds);
+  }
+}
+
+function normalizeSubmittedToggleableConditions(form = null, submitData = {}) {
+  for (const row of form?.querySelectorAll?.("[data-ability-condition-row]") ?? []) {
+    const amountInput = row.querySelector("[data-ability-toggle-cooldown-amount]");
+    if (!amountInput) continue;
+    const functionRow = row.closest("[data-ability-function-row]");
+    const functionPath = String(functionRow?.dataset.functionPath ?? "");
+    const functionIndex = Number(functionRow?.dataset.functionIndex ?? -1);
+    const conditionIndex = Number(row.dataset.conditionIndex ?? -1);
+    if (!functionPath || functionIndex < 0 || conditionIndex < 0) continue;
+    const value = String(amountInput.value ?? "").trim() === ""
+      ? null
+      : abilityDurationPartsToSeconds(
+        amountInput.value,
+        row.querySelector("[data-ability-toggle-cooldown-unit]")?.value
+      );
+    foundry.utils.setProperty(
+      submitData,
+      `${functionPath}.${functionIndex}.conditions.${conditionIndex}.cooldownSeconds`,
+      value
+    );
   }
 }
 

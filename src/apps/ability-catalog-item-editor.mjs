@@ -1131,6 +1131,7 @@ function readEventReactionSettings(row) {
 function readActiveApplicationSettings(row) {
   if (row?.dataset?.functionType !== ABILITY_FUNCTION_TYPES.activeApplication) return {};
   return {
+    name: row.querySelector("[data-field='active.name']")?.value ?? "",
     energyCost: row.querySelector("[data-field='active.energyCost']")?.value,
     overloadEnergyCost: row.querySelector("[data-field='active.overloadEnergyCost']")?.value,
     overloadDurationSeconds: durationPartsToSeconds(
@@ -1590,7 +1591,17 @@ function readAbilityConditions(root) {
       auraIgnoreIncapacitated: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreIncapacitated']"), true),
       auraIgnoreHidden: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreHidden']"), true),
       limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
-      name: row.querySelector("[data-field='conditionEnergyConsumptionName']")?.value ?? "",
+      name: row.querySelector("[data-field='conditionToggleName']")?.value
+        ?? row.querySelector("[data-field='conditionEnergyConsumptionName']")?.value
+        ?? "",
+      cooldownSeconds: (() => {
+        const amount = row.querySelector("[data-field='conditionToggleCooldownAmount']")?.value;
+        if (String(amount ?? "").trim() === "") return null;
+        return durationPartsToSeconds(
+          amount,
+          row.querySelector("[data-field='conditionToggleCooldownUnit']")?.value
+        );
+      })(),
       amountPerHour: row.querySelector("[data-field='conditionAmountPerHour']")?.value ?? 0,
       requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
       itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
@@ -1731,10 +1742,14 @@ function prepareFunctionForDisplay(entry) {
   const eventReactionSettings = isEffectChanges && hasEventReaction
     ? prepareEventReactionSettingsForDisplay(normalized.reactionSettings)
     : null;
+  const hasToggleableCondition = normalized.conditions
+    .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges || isActiveApplication,
     allowEventReaction: isEffectChanges,
+    allowToggleable: isEffectChanges
+      && (!hasToggleableCondition || condition?.type === ABILITY_CONDITION_TYPES.toggleable),
     eventReactionMode: hasEventReaction,
     eventReactionSettings
   }));
@@ -2212,15 +2227,17 @@ function prepareConditionForDisplay(condition, {
   changeCount = 0,
   allowLimitedChanges = false,
   allowEventReaction = false,
+  allowToggleable = false,
   eventReactionMode = false,
   eventReactionSettings = null
 } = {}) {
   const type = String(condition?.type ?? "");
+  const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isEventReaction && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -2238,6 +2255,7 @@ function prepareConditionForDisplay(condition, {
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
   const duration = splitDurationSeconds(condition?.durationSeconds);
+  const toggleCooldown = splitDurationSeconds(condition?.cooldownSeconds ?? 0);
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -2265,7 +2283,8 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isToggleable,
     isEventReaction,
     isEventReactionFilter,
     isUnsupportedEventCondition,
@@ -2326,7 +2345,12 @@ function prepareConditionForDisplay(condition, {
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    toggleName: String(condition?.name ?? "").trim(),
+    toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
+      ? ""
+      : toggleCooldown.amount,
+    toggleCooldownUnitChoices: buildDurationUnitChoices(toggleCooldown.unit),
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
@@ -2337,7 +2361,7 @@ function prepareConditionForDisplay(condition, {
     durationAmount: duration.amount,
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
-    typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, eventReactionMode }),
+    typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowToggleable, eventReactionMode }),
     eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
@@ -2472,6 +2496,7 @@ function buildChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
 function buildConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
+  allowToggleable = false,
   eventReactionMode = false
 } = {}) {
   const choices = [
@@ -2488,6 +2513,13 @@ function buildConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
     { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
+  if (allowToggleable || selected === ABILITY_CONDITION_TYPES.toggleable) {
+    choices.splice(1, 0, {
+      value: ABILITY_CONDITION_TYPES.toggleable,
+      label: game.i18n.localize("FALLOUTMAW.Ability.Toggle.ConditionLabel"),
+      selected: selected === ABILITY_CONDITION_TYPES.toggleable
+    });
+  }
   if (allowEventReaction || selected === ABILITY_CONDITION_TYPES.eventReaction) {
     choices.splice(1, 0, {
       value: ABILITY_CONDITION_TYPES.eventReaction,
@@ -2526,6 +2558,7 @@ function buildConditionTypeChoices(selected = "", {
   return choices
     .filter(choice => (
       !choice.value
+      || choice.value === ABILITY_CONDITION_TYPES.toggleable
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
       || choice.value === ABILITY_CONDITION_TYPES.duration
       || isEventReactionFilterType(choice.value)
@@ -2533,6 +2566,7 @@ function buildConditionTypeChoices(selected = "", {
     ))
     .map(choice => choice.value === selected
       && choice.value
+      && choice.value !== ABILITY_CONDITION_TYPES.toggleable
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
       && choice.value !== ABILITY_CONDITION_TYPES.duration
       && !isEventReactionFilterType(choice.value)
@@ -2782,6 +2816,7 @@ function localizeEventReactionUi(path = "", fallback = "") {
 
 function isRuntimeCondition(type = "") {
   return [
+    ABILITY_CONDITION_TYPES.toggleable,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.targetFaction,

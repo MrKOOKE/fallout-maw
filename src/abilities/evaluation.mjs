@@ -19,6 +19,7 @@ import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
 import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
+import { isAbilityToggleConditionActive } from "./toggleable-conditions.mjs";
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -80,6 +81,14 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 }
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
+  if (condition.type === ABILITY_CONDITION_TYPES.toggleable) {
+    return isAbilityToggleConditionActive(
+      actor,
+      context?.abilityItemId,
+      context?.functionId,
+      condition?.id
+    );
+  }
   if (condition.type === ABILITY_CONDITION_TYPES.eventReaction) return false;
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return false;
   if (condition.type === ABILITY_CONDITION_TYPES.aura) return abilityAuraConditionApplies(actor, condition, context);

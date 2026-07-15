@@ -47,6 +47,16 @@
         "Weapon": "Weapon",
         "Next": "Next",
         "Execute": "Attack"
+      },
+      "Toggle": {
+        "ConditionLabel": "Toggleable",
+        "ButtonSettings": "Ability button",
+        "ButtonName": "Button name",
+        "OriginalName": "Ability name",
+        "CooldownDuration": "Toggle cooldown duration",
+        "TimeLocked": "The toggle will be available in {seconds} sec.",
+        "Enabled": "{name}: enabled.",
+        "Disabled": "{name}: disabled."
       }
     },
     "Events": {

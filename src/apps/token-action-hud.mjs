@@ -99,10 +99,21 @@ import {
   getActorTwoHandsEntry,
   getFixedAbilityToggleState,
   hasActiveAbilityFunction,
+  isFixedAbilityFunctionActive,
   hasActorTwoHandsActive,
   spendActorTwoHandsEnergy,
   useAbilityFunctionItem
 } from "../abilities/fixed-functions.mjs";
+import {
+  ABILITY_CONDITION_TYPES,
+  ABILITY_FUNCTION_TYPES,
+  normalizeAbilityFunctions
+} from "../settings/abilities.mjs";
+import {
+  getAbilityToggleConditionEntries,
+  getAbilityToggleConditionState,
+  toggleAbilityCondition
+} from "../abilities/toggleable-conditions.mjs";
 import {
   canUseWeaponSlotForItem,
   getRequiredWeaponSlotsForItem,
@@ -1204,11 +1215,24 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
+    const functionId = String(target.dataset.abilityFunctionId ?? "");
+    const toggleConditionId = String(target.dataset.abilityToggleConditionId ?? "");
+    if (toggleConditionId) {
+      const toggled = await toggleAbilityCondition({
+        actor: this.actor,
+        item,
+        functionId,
+        conditionId: toggleConditionId
+      });
+      if (toggled) await this.render({ force: true });
+      return toggled;
+    }
     if (!hasActiveAbilityFunction(item)) return undefined;
     return useAbilityFunctionItem({
       actor: this.actor,
       token: this.token,
       item,
+      functionId,
       application: this
     });
   }
@@ -2552,17 +2576,68 @@ function isHudEquipmentLightSource(item = null) {
 function prepareOwnedAbilityButtons(actor, fallbackIcon) {
   return actor.items
     .filter(item => item.type === "ability")
-    .map(item => {
-      const toggleState = getFixedAbilityToggleState(item);
-      return {
-        id: item.id,
-        name: item.name,
-        img: normalizeImagePath(item.img, fallbackIcon),
-        active: isActiveAbility(item),
-        toggleable: toggleState.toggleable,
-        toggled: toggleState.active
-      };
-    });
+    .flatMap(item => prepareAbilityItemButtons(item, fallbackIcon));
+}
+
+function prepareAbilityItemButtons(item, fallbackIcon) {
+  const image = normalizeImagePath(item.img, fallbackIcon);
+  const functions = normalizeAbilityFunctions(item.system?.functions ?? []);
+  const toggleEntries = new Set(getAbilityToggleConditionEntries(item).map(entry => (
+    `${entry.abilityFunction.id}:${entry.condition.id}`
+  )));
+  const descriptors = [];
+  let fixedAdded = false;
+  for (const abilityFunction of functions) {
+    if (abilityFunction.type === ABILITY_FUNCTION_TYPES.fixed && !fixedAdded && isFixedAbilityFunctionActive(abilityFunction)) {
+      const fixedState = getFixedAbilityToggleState(item);
+      descriptors.push({
+        functionId: abilityFunction.id,
+        customName: "",
+        toggleable: fixedState.toggleable,
+        toggled: fixedState.active
+      });
+      fixedAdded = true;
+      continue;
+    }
+    if (abilityFunction.type === ABILITY_FUNCTION_TYPES.activeApplication) {
+      descriptors.push({
+        functionId: abilityFunction.id,
+        customName: String(abilityFunction.activeSettings?.name ?? "").trim(),
+        toggleable: false,
+        toggled: false
+      });
+      continue;
+    }
+    for (const condition of abilityFunction.conditions ?? []) {
+      if (condition?.type !== ABILITY_CONDITION_TYPES.toggleable) continue;
+      if (!toggleEntries.has(`${abilityFunction.id}:${condition.id}`)) continue;
+      descriptors.push({
+        functionId: abilityFunction.id,
+        toggleConditionId: condition.id,
+        customName: String(condition.name ?? "").trim(),
+        toggleable: true,
+        toggled: getAbilityToggleConditionState(item, abilityFunction.id, condition.id).active
+      });
+    }
+  }
+
+  if (!descriptors.length) {
+    return [{
+      id: item.id,
+      name: item.name,
+      img: image,
+      active: isActiveAbility(item),
+      toggleable: false,
+      toggled: false
+    }];
+  }
+  return descriptors.map((descriptor, index) => ({
+    id: item.id,
+    name: descriptor.customName || (index ? `${item.name} ${index + 1}` : item.name),
+    img: image,
+    active: true,
+    ...descriptor
+  }));
 }
 
 function prepareAbilityGroups(abilities = []) {
