@@ -8,6 +8,7 @@ import {
 } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
+import { isAbilityResourceCostActive } from "./resource-cost-policy.mjs";
 
 export const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 /** @deprecated Prefer getAbilityOverloadReactionCostId(resourceKey); kept for energy/power rows. */
@@ -166,6 +167,7 @@ export async function applyAbilityFunctionOverloadCosts(actor, abilityItem, abil
   let applied = 0;
   for (const row of rows) {
     const resourceKey = String(row?.resourceKey ?? "").trim();
+    if (!isAbilityResourceCostActive(actor, resourceKey)) continue;
     const overloadAmount = Math.max(0, toInteger(row?.overloadAmount ?? row?.overload ?? 0));
     const durationSeconds = Math.max(0, toInteger(row?.overloadDurationSeconds ?? 0));
     if (!resourceKey || overloadAmount <= 0 || durationSeconds <= 0) continue;

@@ -27,7 +27,7 @@ let skillCheckInterceptorRegistered = false;
 
 /** Share the same atomic resource-cost registry used by Event Reaction. */
 export function configureAbilityTriggerCostRuntime({ costRegistry = null } = {}) {
-  if (!costRegistry?.execute) {
+  if (!costRegistry?.quote || !costRegistry?.execute) {
     throw new TypeError("Ability trigger costs require a resource-cost registry.");
   }
   resourceCostRegistry = costRegistry;
@@ -59,6 +59,7 @@ export async function payAbilityFunctionTriggerCost({
   actor = null,
   sourceItem = null,
   abilityFunction = null,
+  expectedFingerprint = "",
   context = {}
 } = {}) {
   if (!actor || !sourceItem || !abilityFunction) return failedPayment("invalidTriggerSource");
@@ -70,7 +71,61 @@ export async function payAbilityFunctionTriggerCost({
     sourceItem,
     abilityFunction,
     costRows: baseRows,
+    expectedFingerprint,
     context
+  });
+}
+
+/** Quote one trigger-cost function without changing actor state. */
+export async function quoteAbilityFunctionTriggerCost({
+  actor = null,
+  sourceItem = null,
+  abilityFunction = null,
+  context = {}
+} = {}) {
+  if (!actor || !sourceItem || !abilityFunction) return failedPayment("invalidTriggerSource");
+  if (!hasTriggerCostCondition(abilityFunction)) return successfulPayment({ charged: false, fingerprint: "" });
+  return quoteAbilityFunctionResourceCosts({
+    actor,
+    sourceItem,
+    abilityFunction,
+    costRows: getAbilityFunctionTriggerCostRows(abilityFunction),
+    context
+  });
+}
+
+/** Quote an explicit function-owned resource vector without spending it. */
+export async function quoteAbilityFunctionResourceCosts({
+  actor = null,
+  sourceItem = null,
+  abilityFunction = null,
+  costRows: rows = [],
+  context = {}
+} = {}) {
+  if (!actor || !sourceItem || !abilityFunction) return failedPayment("invalidTriggerSource");
+  const prepared = prepareAbilityFunctionResourceCostRows(actor, sourceItem, abilityFunction, rows);
+  if (!prepared.rawBaseRows.length) {
+    return successfulPayment({
+      charged: false,
+      fingerprint: "",
+      quote: null,
+      entries: [{ sourceItem, abilityFunction, baseRows: prepared.effectiveBaseRows }]
+    });
+  }
+  const registry = resourceCostRegistry;
+  if (!registry?.quote) return failedPayment("costRegistryUnavailable");
+  const quote = await registry.quote(actor, prepared.costRows, createExecutionContext(context, {
+    sourceItem,
+    abilityFunction
+  }));
+  if (!quote?.valid || !quote?.affordable) {
+    return failedPayment(quote?.reason || "spendFailed", { quote, fingerprint: quote?.fingerprint ?? "" });
+  }
+  return successfulPayment({
+    charged: quote.costs?.some(cost => Number(cost?.amount) > 0) === true,
+    fingerprint: String(quote.fingerprint ?? ""),
+    quote,
+    entries: [{ sourceItem, abilityFunction, baseRows: prepared.effectiveBaseRows }]
   });
 }
 
@@ -80,30 +135,36 @@ export async function payAbilityFunctionResourceCosts({
   sourceItem = null,
   abilityFunction = null,
   costRows: rows = [],
+  expectedFingerprint = "",
   context = {}
 } = {}) {
   if (!actor || !sourceItem || !abilityFunction) return failedPayment("invalidTriggerSource");
-  const baseRows = Array.isArray(rows) ? rows : Object.values(rows ?? {});
-  if (!baseRows.length) {
-    return successfulPayment({ charged: false, entries: [{ sourceItem, abilityFunction, baseRows }] });
+  const prepared = prepareAbilityFunctionResourceCostRows(actor, sourceItem, abilityFunction, rows);
+  if (!prepared.rawBaseRows.length) {
+    return successfulPayment({
+      charged: false,
+      entries: [{ sourceItem, abilityFunction, baseRows: prepared.effectiveBaseRows }]
+    });
   }
-  const costRows = namespaceCostRows(
-    withAbilityOverloadCostRows(actor, sourceItem, abilityFunction, baseRows),
-    getFunctionIdentity(sourceItem, abilityFunction)
-  );
   const registry = resourceCostRegistry;
   if (!registry?.execute) return failedPayment("costRegistryUnavailable");
-  const execution = await registry.execute(actor, costRows, createExecutionContext(context, {
-    sourceItem,
-    abilityFunction
-  }));
+  const execution = await registry.execute(actor, prepared.costRows, {
+    ...createExecutionContext(context, { sourceItem, abilityFunction }),
+    expectedFingerprint: String(expectedFingerprint ?? "")
+  });
   if (!execution?.ok) return failedPayment(execution?.reason || "spendFailed", { execution });
 
-  await applyTriggerCostOverloadSafely(actor, sourceItem, abilityFunction, baseRows, context?.chainRef);
+  await applyTriggerCostOverloadSafely(
+    actor,
+    sourceItem,
+    abilityFunction,
+    prepared.effectiveBaseRows,
+    context?.chainRef
+  );
   return successfulPayment({
     charged: execution.quote?.costs?.some(cost => Number(cost?.amount) > 0) === true,
     execution,
-    entries: [{ sourceItem, abilityFunction, baseRows }]
+    entries: [{ sourceItem, abilityFunction, baseRows: prepared.effectiveBaseRows }]
   });
 }
 
@@ -121,34 +182,41 @@ export async function paySkillCheckTriggerCosts({
   const entries = collectSkillCheckTriggerCostEntries({ actor, skillKey, context });
   if (!entries.length) return successfulPayment({ charged: false, entries: [] });
 
-  const costRows = entries.flatMap(entry => entry.baseRows.length
-    ? namespaceCostRows(
-      withAbilityOverloadCostRows(actor, entry.sourceItem, entry.abilityFunction, entry.baseRows),
-      entry.identity
-    )
-    : []);
-  if (!costRows.length) return successfulPayment({ charged: false, entries });
-
-  const registry = resourceCostRegistry;
-  if (!registry?.execute) return failedPayment("costRegistryUnavailable", { entries });
-  const execution = await registry.execute(actor, costRows, createExecutionContext(context, {
-    entries
-  }));
-  if (!execution?.ok) return failedPayment(execution?.reason || "spendFailed", { execution, entries });
-
-  for (const entry of entries) {
-    await applyTriggerCostOverloadSafely(
+  const preparedEntries = entries.map(entry => ({
+    ...entry,
+    ...prepareAbilityFunctionResourceCostRows(
       actor,
       entry.sourceItem,
       entry.abilityFunction,
       entry.baseRows,
+      entry.identity
+    )
+  }));
+  const costRows = preparedEntries.flatMap(entry => entry.costRows);
+  if (!costRows.length) return successfulPayment({ charged: false, entries: preparedEntries });
+
+  const registry = resourceCostRegistry;
+  if (!registry?.execute) return failedPayment("costRegistryUnavailable", { entries: preparedEntries });
+  const execution = await registry.execute(actor, costRows, createExecutionContext(context, {
+    entries: preparedEntries
+  }));
+  if (!execution?.ok) {
+    return failedPayment(execution?.reason || "spendFailed", { execution, entries: preparedEntries });
+  }
+
+  for (const entry of preparedEntries) {
+    await applyTriggerCostOverloadSafely(
+      actor,
+      entry.sourceItem,
+      entry.abilityFunction,
+      entry.effectiveBaseRows,
       context?.chainRef
     );
   }
   return successfulPayment({
     charged: execution.quote?.costs?.some(cost => Number(cost?.amount) > 0) === true,
     execution,
-    entries
+    entries: preparedEntries
   });
 }
 
@@ -210,12 +278,18 @@ export function notifyAbilityTriggerCostFailure(result = {}) {
   const localized = globalThis.game?.i18n?.localize?.(key);
   const fallbackKey = "FALLOUTMAW.Ability.TriggerCost.CostUnavailable";
   const fallback = globalThis.game?.i18n?.localize?.(fallbackKey);
+  const baseMessage = localized && localized !== key
+    ? localized
+    : fallback && fallback !== fallbackKey
+      ? fallback
+      : "Trigger cost could not be spent.";
+  const quote = result?.quote ?? result?.execution?.quote ?? null;
+  const shortages = (quote?.costs ?? [])
+    .filter(cost => Number(cost?.amount) > Number(cost?.available))
+    .map(cost => `${String(cost?.label ?? cost?.resourceKey ?? "").trim()}: ${cost.amount} > ${cost.available}`)
+    .filter(Boolean);
   globalThis.ui?.notifications?.warn?.(
-    localized && localized !== key
-      ? localized
-      : fallback && fallback !== fallbackKey
-        ? fallback
-        : "Trigger cost could not be spent."
+    shortages.length ? `${baseMessage} ${shortages.join("; ")}` : baseMessage
   );
 }
 
@@ -391,6 +465,31 @@ function getFunctionIdentity(sourceItem = null, abilityFunction = null) {
   ).trim();
   const functionId = String(abilityFunction?.id ?? "").trim();
   return itemIdentity && functionId ? `${itemIdentity}:${functionId}` : "";
+}
+
+function prepareAbilityFunctionResourceCostRows(
+  actor,
+  sourceItem,
+  abilityFunction,
+  rows = [],
+  identity = getFunctionIdentity(sourceItem, abilityFunction)
+) {
+  const rawBaseRows = (Array.isArray(rows) ? rows : Object.values(rows ?? {})).map(row => ({ ...row }));
+  // Keep combat-only rows until the registry quotes under its actor lock.
+  // The Foundry adapter turns them into zero-cost rows outside combat. Filtering
+  // here would let an actor enter combat while queued and commit an obsolete free vector.
+  const effectiveBaseRows = rawBaseRows.map(row => ({ ...row }));
+  const overloadedRows = withAbilityOverloadCostRows(
+    actor,
+    sourceItem,
+    abilityFunction,
+    effectiveBaseRows
+  );
+  const costRows = namespaceCostRows(
+    overloadedRows,
+    identity
+  );
+  return { rawBaseRows, effectiveBaseRows, costRows };
 }
 
 function namespaceCostRows(rows = [], identity = "") {

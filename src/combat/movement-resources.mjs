@@ -4,9 +4,11 @@ import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movemen
 import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { beginCombatResourceSpending, notifyCombatResourcesSpent } from "./resource-spending.mjs";
+import { ACTION_RESOURCE_KEY } from "./strict-action-points.mjs";
+import { getActorActiveCombat, isActorInActiveCombat } from "./combat-membership.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
-export const ACTION_RESOURCE_KEY = "actionPoints";
+export { ACTION_RESOURCE_KEY };
 export const MOVEMENT_RESOURCE_PREVIEW_HOOK = "falloutMawMovementResourcePreview";
 export const ABILITY_FREE_MOVEMENT_OPTION = "falloutMawAbilityFreeMovement";
 const MOVEMENT_RESOURCE_SPENDING_FLAG = "movementResourceSpending";
@@ -169,8 +171,7 @@ function measureRawMovementPathCost(tokenDocument, waypoints = [], options = {})
 }
 
 export function isCombatMovementTracked(tokenDocument) {
-  const combat = game.combat;
-  return Boolean(combat && tokenDocument?.actor);
+  return isActorInActiveCombat(tokenDocument?.actor);
 }
 
 export function isGMDebugMovementBypassActive() {
@@ -211,6 +212,7 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
   const finishSpending = beginCombatResourceSpending(actor);
   try {
     await waitForMovementAnimation(movement);
+    if (!isCombatMovementTracked(tokenDocument)) return;
 
     const state = getCombatMovementResourceState(actor);
     if (!state || cost > state.total) return;
@@ -326,13 +328,14 @@ export async function restoreActorMovementResources(actor) {
 }
 
 function createMovementResourceSpendingEntry(tokenDocument, movement, resources) {
+  const actor = tokenDocument?.actor;
   return {
     id: foundry.utils.randomID(),
     movementId: movement?.id ?? "",
-    actorUuid: tokenDocument?.actor?.uuid ?? "",
+    actorUuid: actor?.uuid ?? "",
     sceneId: tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "",
     tokenId: tokenDocument?.id ?? "",
-    round: game.combat?.round ?? 0,
+    round: getActorActiveCombat(actor)?.round ?? 0,
     resources
   };
 }
@@ -344,7 +347,7 @@ function getMovementResourceSpendingStack(actor) {
 
 export function hasActorCombatMovementInCurrentTurn(actor) {
   if (!actor) return false;
-  const currentRound = Math.max(0, toInteger(game.combat?.round));
+  const currentRound = Math.max(0, toInteger(getActorActiveCombat(actor)?.round));
   return getMovementResourceSpendingStack(actor).some(entry => {
     if (String(entry?.actorUuid ?? "") !== String(actor.uuid ?? "")) return false;
     if (currentRound > 0 && toInteger(entry?.round) !== currentRound) return false;

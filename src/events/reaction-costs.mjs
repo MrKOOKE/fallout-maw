@@ -19,6 +19,7 @@ export function createResourceCostRegistry({
   adapters = {},
   defaultAdapter = null,
   spendVector = null,
+  afterCommit = null,
   formatCostLine = defaultFormatCostLine,
   logger = console
 } = {}) {
@@ -149,8 +150,9 @@ export function createResourceCostRegistry({
         return { ok: false, reason: REACTION_COST_FAILURES.insufficientResource, quote: current };
       }
       try {
+        let spendReceipt = null;
         if (typeof spendVector === "function") {
-          await spendVector(actor, current.costs, {
+          spendReceipt = await spendVector(actor, current.costs, {
             ...executionContext,
             quote: current,
             getAdapter
@@ -162,18 +164,35 @@ export function createResourceCostRegistry({
             await getAdapter(cost.resourceKey).spend(actor, cost.amount, definition, executionContext);
           }
         }
-        return { ok: true, reason: "", quote: current };
+        return { ok: true, reason: "", quote: current, spendReceipt };
       } catch (error) {
         logger?.error?.("fallout-maw | Trigger-cost resource spend failed.", error);
+        const failureReason = Object.values(REACTION_COST_FAILURES).includes(error?.reason)
+          ? error.reason
+          : REACTION_COST_FAILURES.spendFailed;
         return {
           ok: false,
-          reason: REACTION_COST_FAILURES.spendFailed,
+          reason: failureReason,
           quote: current,
           error
         };
       }
     }, actorLockToken, lockScope);
-    if (!spendResult.ok || typeof afterSpend !== "function") return spendResult;
+    if (!spendResult.ok) return spendResult;
+
+    if (typeof afterCommit === "function") {
+      try {
+        await afterCommit(actor, spendResult.quote, {
+          ...context,
+          spendReceipt: spendResult.spendReceipt
+        });
+      } catch (error) {
+        // The vector is already committed. A secondary notification failure
+        // cannot make the paid action retryable.
+        logger?.error?.("fallout-maw | Trigger-cost commit notification failed.", error);
+      }
+    }
+    if (typeof afterSpend !== "function") return spendResult;
 
     try {
       const afterResult = await afterSpend(spendResult.quote, context);
@@ -278,6 +297,8 @@ export async function spendActorResourceCostVector(actor, costs = [], {
   const healthCost = vector.get(healthResourceKey) ?? 0;
   vector.delete(healthResourceKey);
   const updates = {};
+  const rollbackUpdates = {};
+  const paidCosts = [];
   for (const [resourceKey, amount] of vector) {
     if (amount <= 0) continue;
     const resource = actor.system?.resources?.[resourceKey];
@@ -288,18 +309,42 @@ export async function spendActorResourceCostVector(actor, costs = [], {
     if (next < minimum) throw new Error(`Insufficient trigger-cost resource '${resourceKey}'.`);
     updates[`system.resources.${resourceKey}.value`] = next;
     updates[`system.resources.${resourceKey}.spent`] = Math.max(0, Math.trunc(Number(resource.max) || 0) - next);
+    rollbackUpdates[`system.resources.${resourceKey}.value`] = current;
+    if (resource.spent !== undefined) {
+      rollbackUpdates[`system.resources.${resourceKey}.spent`] = resource.spent;
+    }
+    paidCosts.push({ resourceKey, amount });
   }
+  let ordinaryCommitted = false;
   if (Object.keys(updates).length) {
     await actor.update(updates, {
       [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
       falloutMawTriggerCost: true,
       ...updateOptions
     });
+    ordinaryCommitted = true;
   }
-  if (healthCost > 0) {
-    if (typeof spendHealth !== "function") throw new Error("Trigger health-cost adapter is unavailable.");
-    await spendHealth(actor, healthCost, context);
+  try {
+    if (healthCost > 0) {
+      if (typeof spendHealth !== "function") throw new Error("Trigger health-cost adapter is unavailable.");
+      await spendHealth(actor, healthCost, context);
+      paidCosts.push({ resourceKey: healthResourceKey, amount: healthCost });
+    }
+  } catch (error) {
+    if (ordinaryCommitted) {
+      try {
+        await actor.update(rollbackUpdates, {
+          [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
+          falloutMawTriggerCostRollback: true,
+          ...updateOptions
+        });
+      } catch (rollbackError) {
+        error.rollbackError = rollbackError;
+      }
+    }
+    throw error;
   }
+  return { costs: paidCosts };
 }
 
 export function applyReactionHealthCost(request, context = {}, {

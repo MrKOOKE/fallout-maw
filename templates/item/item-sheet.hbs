@@ -1522,8 +1522,7 @@
           </label>
           <label class="fallout-maw-inline-checkbox">
             <span>Блокировать стенами</span>
-            <input type="hidden" name="{{functionPath}}.{{functionIndex}}.activeSettings.wallsBlock" value="false">
-            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.wallsBlock" value="true" {{checked activeApplicationSettings.wallsBlock}}>
+            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.wallsBlock" data-active-application-walls-block {{checked activeApplicationSettings.wallsBlock}}>
           </label>
           <label>
             <span>Формулы изменений</span>
@@ -1544,8 +1543,7 @@
           </label>
           <label class="fallout-maw-inline-checkbox">
             <span>Исключить себя</span>
-            <input type="hidden" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" value="false">
-            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" value="true" {{checked activeApplicationSettings.excludeSelf}}>
+            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" data-active-application-exclude-self {{checked activeApplicationSettings.excludeSelf}}>
           </label>
           <div class="fallout-maw-item-use-category-field">
             <div class="fallout-maw-item-use-category-header">
@@ -1555,7 +1553,7 @@
               {{#each activeApplicationSettings.targetGroupChoices}}
               <label class="fallout-maw-checkbox-row">
                 <span>{{label}}</span>
-                <input type="checkbox" name="{{../functionPath}}.{{../functionIndex}}.activeSettings.targetGroups.{{@index}}" value="{{value}}" {{checked selected}}>
+                <input type="checkbox" name="{{../functionPath}}.{{../functionIndex}}.activeSettings.targetGroups.{{@index}}" value="{{value}}" data-active-application-target-group {{checked selected}}>
               </label>
               {{/each}}
             </div>
@@ -3269,8 +3267,7 @@
       </label>
       <label class="fallout-maw-inline-checkbox">
         <span>Критическая деталь</span>
-        <input type="hidden" name="system.functions.constructPart.critical" value="false">
-        <input type="checkbox" name="system.functions.constructPart.critical" value="true" data-construct-part-critical {{checked system.functions.constructPart.critical}}>
+        <input type="checkbox" name="system.functions.constructPart.critical" data-construct-part-critical {{checked system.functions.constructPart.critical}}>
       </label>
     </div>
     <div class="fallout-maw-panel-header subsection">
@@ -3389,8 +3386,7 @@
       </label>
       <label class="fallout-maw-inline-checkbox">
         <span>{{localize "FALLOUTMAW.Item.FirstAidHealingPercent"}}</span>
-        <input type="hidden" name="system.functions.firstAid.healingIsPercentage" value="false">
-        <input type="checkbox" name="system.functions.firstAid.healingIsPercentage" value="true" {{checked system.functions.firstAid.healingIsPercentage}}>
+        <input type="checkbox" name="system.functions.firstAid.healingIsPercentage" {{checked system.functions.firstAid.healingIsPercentage}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.FirstAidActionPointCost"}}</span>

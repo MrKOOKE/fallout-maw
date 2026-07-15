@@ -22,7 +22,9 @@ import {
 import { createForcedAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import {
   canSpendStrictActionPoints,
+  getActorActiveCombat,
   getStrictActionPointState,
+  isActorInActiveCombat,
   spendStrictActionPoints
 } from "../combat/reaction-resources.mjs";
 import { getReactionTimeoutMs, getResponsibleOwner } from "../combat/reaction-hub.mjs";
@@ -106,7 +108,7 @@ export function abilityWeaponAttackOptionCanReach(actor, option = null, targetTo
 }
 
 export function getConfiguredActionPointCost(actor, weapon, actionKey, weaponFunctionId, actionSource = {}) {
-  if (!globalThis.game?.combat?.started) return 0;
+  if (!isActorInActiveCombat(actor)) return 0;
   const action = normalizeAbilityAction(actionSource);
   if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.none) return 0;
   if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed) {
@@ -343,18 +345,20 @@ function findFreshOption(actor, option) {
 }
 
 function canAffordConfiguredActionPointCost(actor, amount) {
-  if (!game.combat?.started || amount <= 0) return true;
+  if (!isActorInActiveCombat(actor) || amount <= 0) return true;
   const state = getStrictActionPointState(actor);
   return Boolean(state && amount <= state.current);
 }
 
 async function handleAbilityActionAttackQuery(data = {}) {
   const executionId = String(data.executionId ?? "").trim() || foundry.utils.randomID();
+  const actor = data.actorUuid ? await globalThis.fromUuid?.(data.actorUuid) : null;
+  const combat = getActorActiveCombat(actor);
   return withSystemEventRoot({
     kind: "abilityActionAttack",
     operationId: `ability-action-attack:${executionId}`,
     sceneUuid: getSceneUuidFromTokenUuid(data.attackerTokenUuid),
-    combatUuid: String(game.combat?.uuid ?? ""),
+    combatUuid: String(combat?.uuid ?? ""),
     chainRef: data.chainRef ?? null
   }, scope => executeAbilityActionAttackQuery(data, scope.chainRef));
 }

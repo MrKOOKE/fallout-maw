@@ -15,6 +15,7 @@ import {
 } from "./grapple-modifiers.mjs";
 import { isActorUnableToAct } from "./reaction-hub.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
+import { isActorInActiveCombat } from "./combat-membership.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
@@ -864,7 +865,7 @@ async function spendActionPoints(actor, amount = 0) {
 }
 
 function canSpendMovementThenAction(actor, amount = 0) {
-  if (!game.combat) return true;
+  if (!isActorInActiveCombat(actor)) return true;
   const cost = Math.max(0, toInteger(amount));
   const state = getCombatMovementResourceState(actor);
   if (!state || cost <= state.total) return true;
@@ -879,7 +880,7 @@ function canSpendMovementThenAction(actor, amount = 0) {
 }
 
 async function spendMovementThenAction(actor, amount = 0) {
-  if (!game.combat) return;
+  if (!isActorInActiveCombat(actor)) return;
   const cost = Math.max(0, toInteger(amount));
   const state = getCombatMovementResourceState(actor);
   if (!state || cost <= 0) return;

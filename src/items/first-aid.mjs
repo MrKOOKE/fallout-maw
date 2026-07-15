@@ -6,7 +6,11 @@
   requestFirstAidRemoveEffects,
   requestFirstAidWithdrawalEffect
 } from "../combat/damage-hub.mjs";
-import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
+import {
+  canSpendCombatActionPoints,
+  isActorInActiveCombat,
+  spendCombatActionPoints
+} from "../combat/reaction-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
@@ -672,14 +676,10 @@ function getResponsibleGM() {
 
 async function spendActionPointsIfNeeded(actor, firstAid = {}) {
   const cost = Math.max(0, toInteger(firstAid.actionPointCost));
-  if (!cost || !isActorInCombat(actor)) return true;
+  if (!cost || !isActorInActiveCombat(actor)) return true;
   if (!canSpendCombatActionPoints(actor, cost, { label: "первой помощи" })) return false;
   await spendCombatActionPoints(actor, cost);
   return true;
-}
-
-function isActorInCombat(actor) {
-  return Boolean(game.combat?.started && game.combat.combatants.some(combatant => combatant.actor?.uuid === actor.uuid));
 }
 
 export function isTargetInFirstAidRange(sourceToken, targetToken, firstAid = {}, { warn = true } = {}) {

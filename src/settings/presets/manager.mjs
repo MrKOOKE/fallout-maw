@@ -1492,9 +1492,7 @@ function assertUploadResponse(response, id, destination) {
 }
 
 function getFilePicker() {
-  const picker = globalThis.CONFIG?.ux?.FilePicker
-    ?? globalThis.foundry?.applications?.apps?.FilePicker
-    ?? globalThis.FilePicker;
+  const picker = foundry.applications.apps.FilePicker.implementation;
   if (!picker) throw new Error("Foundry FilePicker is unavailable.");
   return picker;
 }

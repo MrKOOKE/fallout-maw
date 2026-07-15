@@ -5,6 +5,8 @@ import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-ap
 
 const TRADE_DIRECTIONS = new Set(["increase", "decrease"]);
 const TRADE_OVERRIDE_MODES = new Set(["percent", "fixed"]);
+const FormDataExtended = foundry.applications.ux.FormDataExtended;
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(actor, options = {}) {

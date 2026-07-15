@@ -6,6 +6,7 @@ import {
   DODGE_LOSS_MODIFIER_EFFECT_KEY,
   DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
 } from "./dodge-effect-keys.mjs";
+import { isActorInActiveCombat } from "./combat-membership.mjs";
 
 const DODGE_RESOURCE_KEY = "dodge";
 const DODGE_SOCKET_ACTION_SPEND = "spendDodgeResource";
@@ -135,7 +136,7 @@ async function spendActorDodgeResource(actor, multiplier = 1) {
 async function spendActorDodgeResourceNow(actor, multiplier = 1) {
   const settings = getDodgeSettings();
   if (!settings.enabled) return;
-  if (!isActiveCombatRunning()) return;
+  if (!isActorInActiveCombat(actor)) return;
   const resource = getDodgeResource(actor);
   if (!resource) return;
 
@@ -247,7 +248,8 @@ async function handleDodgeSocketMessage(payload = {}) {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
   let success = false;
   try {
-    if (actor?.isOwner) {
+    const combatSpendAllowed = payload.action !== DODGE_SOCKET_ACTION_SPEND || isActorInActiveCombat(actor);
+    if (actor?.isOwner && combatSpendAllowed) {
       await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: Math.max(0, toInteger(payload.value)) });
       success = true;
     }
@@ -282,10 +284,6 @@ function getCombatDodgeActors(combat) {
 
 function getDodgeSettings() {
   return getCombatSettings().dodge;
-}
-
-function isActiveCombatRunning() {
-  return Boolean(game.combat?.started);
 }
 
 function getResponsibleGM() {

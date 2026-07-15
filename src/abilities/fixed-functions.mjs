@@ -61,6 +61,7 @@ import {
   isLimbDestroyed,
   registerLethalDamagePreventionHandler,
   requestDamageApplications,
+  restoreActorHealthCost,
   restoreDestroyedLimb,
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
@@ -121,7 +122,11 @@ import {
 } from "../rolls/one-time-skill-modifiers.mjs";
 import { requestSkillCheck, requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
-import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
+import {
+  canSpendCombatActionPoints,
+  isActorInActiveCombat,
+  spendCombatActionPoints
+} from "../combat/reaction-resources.mjs";
 import { notifyCombatResourcesSpent, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
 import {
   OVERSIGHT_RESOURCE_SPENT_EVENT_KEY,
@@ -169,7 +174,8 @@ import {
 } from "./overload.mjs";
 import {
   notifyAbilityTriggerCostFailure,
-  payAbilityFunctionResourceCosts
+  payAbilityFunctionResourceCosts,
+  quoteAbilityFunctionResourceCosts
 } from "./trigger-cost-runtime.mjs";
 import { requestLimitedChangeSelection } from "./purchase.mjs";
 import {
@@ -185,6 +191,7 @@ import {
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
+const { renderTemplate } = foundry.applications.handlebars;
 export const ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY = "abilityFixedFunctionState";
 const DEUS_EX_MACHINA_INSIGHT_EFFECT_FLAG_KEY = "deusExMachinaInsight";
 const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
@@ -1185,6 +1192,45 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
   const activationCosts = settings.costs;
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const occurrenceBase = `ability-use:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`;
+  const sourceEventParticipant = sourceParticipant
+    ?? createAbilityEventParticipant(actor, sourceToken ?? getPrimaryActorToken(actor), abilityItem);
+  const paymentContext = {
+    rootId: scope.rootId,
+    chainRef: scope.chainRef,
+    occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
+  };
+  let costPreflight;
+  try {
+    costPreflight = await quoteAbilityFunctionResourceCosts({
+      actor,
+      sourceItem: abilityItem,
+      abilityFunction,
+      costRows: activationCosts,
+      context: paymentContext
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Active application cost preflight failed", error);
+    costPreflight = { ok: false, reason: "spendFailed", error };
+  }
+  if (!costPreflight.ok) {
+    notifyAbilityTriggerCostFailure(costPreflight);
+    await runTerminalSystemEventWorkflow({
+      scope,
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase,
+      participants: { source: sourceEventParticipant, target: null, related: [] },
+      resolvedData: ({ status }) => ({
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
+          activationCosts,
+          durationSeconds,
+          targetCount: 0
+        }),
+        status
+      }),
+      forcedResult: { status: "failed", reason: "resourcePreflightFailed", value: false }
+    });
+    return false;
+  }
   let targets;
   try {
     targets = await resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings, sourceToken);
@@ -1194,7 +1240,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       resolvedEventKey: "fallout-maw.ability.use.resolved",
       occurrenceBase,
       participants: {
-        source: sourceParticipant ?? createAbilityEventParticipant(actor, sourceToken ?? getPrimaryActorToken(actor), abilityItem),
+        source: sourceEventParticipant,
         target: null,
         related: []
       },
@@ -1207,7 +1253,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     return false;
   }
   const participants = {
-    source: sourceParticipant ?? createAbilityEventParticipant(actor, sourceToken ?? getPrimaryActorToken(actor), abilityItem),
+    source: sourceEventParticipant,
     target: null,
     related: createActiveApplicationRelatedParticipants(targets)
   };
@@ -1255,7 +1301,8 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       durationSeconds,
       targets,
       sourceToken,
-      occurrenceId
+      occurrenceId,
+      costFingerprint: costPreflight.fingerprint
     }),
     isSuccess: value => Boolean(value?.used),
     getResultStatus: value => value?.cancelled ? "cancelled" : (value?.used ? "success" : "failed"),
@@ -1275,7 +1322,8 @@ async function executeActiveApplicationUse(scope, {
   durationSeconds = 0,
   targets = [],
   sourceToken = null,
-  occurrenceId = "activation"
+  occurrenceId = "activation",
+  costFingerprint = ""
 } = {}) {
   const { allowed, terminalTargets } = await gateActiveApplicationTargets(scope, {
     actor,
@@ -1392,7 +1440,8 @@ async function executeActiveApplicationUse(scope, {
         sourceToken,
         selectedChanges: changeSelection.changes,
         payCostsRemotely: true,
-        costContext: paymentContext
+        costContext: paymentContext,
+        costFingerprint
       });
       if (!effectsApplied) {
         ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: операция GM не подтверждена; при задержке ответа не запускайте её повторно.`);
@@ -1418,6 +1467,7 @@ async function executeActiveApplicationUse(scope, {
         sourceItem: abilityItem,
         abilityFunction,
         costRows: activationCosts,
+        expectedFingerprint: costFingerprint,
         context: paymentContext
       });
       if (!payment.ok) {
@@ -1817,6 +1867,7 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
       occurrenceId: String(options?.costContext?.occurrenceId ?? "").trim(),
       chainRef: options?.costContext?.chainRef ?? options?.chainRef ?? null
     },
+    costFingerprint: String(options?.costFingerprint ?? ""),
     targetTokenUuids,
     selectedChangeIds: (options?.selectedChanges ?? [])
       .map(change => String(change?.id ?? "").trim())
@@ -1966,10 +2017,19 @@ async function rollbackActiveApplicationPayment({
   }
 
   const updates = {};
-  for (const cost of payment?.execution?.quote?.costs ?? []) {
+  let healthRefund = 0;
+  const receiptCosts = payment?.execution?.spendReceipt?.costs;
+  const paidCosts = Array.isArray(receiptCosts)
+    ? receiptCosts
+    : payment?.execution?.quote?.costs ?? [];
+  for (const cost of paidCosts) {
     const resourceKey = String(cost?.resourceKey ?? "").trim();
     const amount = Math.max(0, toInteger(cost?.amount));
     if (!resourceKey || amount <= 0) continue;
+    if (resourceKey === HEALTH_RESOURCE_KEY) {
+      healthRefund += amount;
+      continue;
+    }
     const resource = actor.system?.resources?.[resourceKey];
     if (!resource) {
       complete = false;
@@ -1995,6 +2055,20 @@ async function rollbackActiveApplicationPayment({
     } catch (error) {
       complete = false;
       console.error("Fallout MaW | Failed to refund active application resources", error);
+    }
+  }
+  if (healthRefund > 0) {
+    try {
+      const result = await restoreActorHealthCost(actor, healthRefund, { chainRef });
+      if (Math.max(0, toInteger(result?.healthDelta)) !== healthRefund) {
+        complete = false;
+        console.error(
+          `Fallout MaW | Active application health refund was incomplete (${result?.healthDelta ?? 0} != ${healthRefund}).`
+        );
+      }
+    } catch (error) {
+      complete = false;
+      console.error("Fallout MaW | Failed to refund active application health cost", error);
     }
   }
   return complete;
@@ -2167,6 +2241,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
       sourceItem: abilityItem,
       abilityFunction,
       costRows: settings.costs,
+      expectedFingerprint: String(payload?.costFingerprint ?? ""),
       context: {
         rootId: String(payload?.costContext?.rootId ?? "").trim(),
         occurrenceId: String(payload?.costContext?.occurrenceId ?? "").trim(),
@@ -2781,6 +2856,10 @@ async function useLook(actor, abilityItem, abilityFunction) {
     ui.notifications.warn(`${abilityName}: у цели нет навыка проверки.`);
     return false;
   }
+  if (!isActorInActiveCombat(targetToken.actor)) {
+    ui.notifications.warn(`${abilityName}: цель не участвует в активном бою.`);
+    return false;
+  }
 
   if (!(await spendEnergy(actor, energyCost))) return false;
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -3222,7 +3301,9 @@ async function processLookResourceLossOperation(payload = {}) {
 
 async function spendActorActionAndMovement(actor, amount = 0) {
   const cost = Math.max(0, toInteger(amount));
-  if (!actor || cost <= 0) return { actionSpent: 0, movementSpent: 0 };
+  if (!actor || cost <= 0 || !isActorInActiveCombat(actor)) {
+    return { actionSpent: 0, movementSpent: 0 };
+  }
   const action = actor.system?.resources?.[ACTION_RESOURCE_KEY];
   const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
   const actionCurrent = Math.max(0, toInteger(action?.value));
@@ -7387,7 +7468,7 @@ async function processAtRandomAttackResolution(context = {}) {
 
 async function applyDefensiveTacticsAtTurnEnd({ actor = null } = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
-  if (!game.combat?.started) return;
+  if (!isActorInActiveCombat(actor)) return;
   if (hasActorCombatMovementInCurrentTurn(actor)) return;
 
   const entries = getActorDefensiveTacticsEntries(actor);
@@ -7673,6 +7754,7 @@ function rollReaperChance(actor, formula = "", context = "Способность
 }
 
 async function restoreReaperActionPoints(actor, amount = 0) {
+  if (!isActorInActiveCombat(actor)) return 0;
   const resource = actor?.system?.resources?.[ACTION_RESOURCE_KEY];
   if (!resource) return 0;
   const current = Math.max(0, toInteger(resource.value));

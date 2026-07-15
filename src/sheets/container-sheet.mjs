@@ -63,6 +63,7 @@ import {
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #draggedItemData = null;
@@ -361,8 +362,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
 
     try {
-      const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
-      const data = textEditor.getDragEventData(event);
+      const data = TextEditor.getDragEventData(event);
       if (data && (typeof data === "object")) return data;
     } catch (_error) {
       // Fall through.

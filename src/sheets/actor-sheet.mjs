@@ -251,6 +251,7 @@ import { resolveInventoryPointerPlacement } from "../utils/inventory-grid-hover.
 const { ActorSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const ACTOR_SHEET_REFERENCE_WIDTH = 2560;
 const ACTOR_SHEET_REFERENCE_HEIGHT = 1440;
 const ACTOR_SHEET_FALLBACK_VIEWPORT_WIDTH = 1280;
@@ -2247,8 +2248,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
 
     try {
-      const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
-      const data = textEditor.getDragEventData(event);
+      const data = TextEditor.getDragEventData(event);
       if (data && (typeof data === "object")) return data;
     } catch (_error) {
       // Fall through to explicit transfer payloads.

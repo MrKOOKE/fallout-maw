@@ -8,6 +8,7 @@ import { DEFAULT_STEALTH_SETTINGS } from "../stealth/settings.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
+const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const DETECTION_RANGE_FORMULA_VARIABLES = Object.freeze([
   { key: "skill", abbr: "skill", label: "Навык обнаружения" },
   { key: "skill", abbr: "навык", label: "Навык обнаружения" }

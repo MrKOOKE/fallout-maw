@@ -51,6 +51,7 @@ import { canStackItems } from "./search-inventory.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const BaseFilePicker = foundry.applications.apps.FilePicker.implementation;
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 const DEFAULT_NAME_BLOCK_IDS = Object.freeze({
   male: "default-male-names",
@@ -746,8 +747,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
 
     try {
-      const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
-      const data = textEditor.getDragEventData(event);
+      const data = TextEditor.getDragEventData(event);
       if (data && (typeof data === "object")) return data;
     } catch (_error) {
       // Fall through to explicit transfer payloads.

@@ -41,6 +41,7 @@ import {
   normalizeAtRandomSettings,
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
+  preserveMissingActiveApplicationTargetSettings,
   normalizeEventReactionSettings,
   normalizeEventReactionMode,
   normalizeFourLeafCloverSettings,
@@ -1109,25 +1110,34 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
         },
         cost: this.#isFeature ? 0 : this.form.querySelector("[data-field='cost']")?.value ?? this.ability.system?.cost,
         acquisitionRequirements: acquisitionRequirementsRoot ? readAcquisitionRequirements(acquisitionRequirementsRoot) : this.ability.system?.acquisitionRequirements,
-        functions: this.#activeTab === "functions" ? readAbilityFunctions(this.form) : this.ability.system?.functions
+        functions: this.#activeTab === "functions"
+          ? readAbilityFunctions(this.form, this.ability.system?.functions)
+          : this.ability.system?.functions
       }
     });
   }
 }
 
-function readAbilityFunctions(root) {
-  return Array.from(root.querySelectorAll("[data-ability-function-row]") ?? []).map(row => ({
-    id: row.dataset.functionId || foundry.utils.randomID(),
-    type: row.dataset.functionType,
-    fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
-    fixedSettings: readFixedFunctionSettings(row),
-    activeSettings: readActiveApplicationSettings(row),
-    reactionSettings: { durationSeconds: 0, costs: [] },
-    changes: readAbilityChanges(row.querySelector("[data-ability-changes]"), "[data-ability-change-row]"),
-    actions: readAbilityActions(row),
-    conditions: readAbilityConditions(row.querySelector("[data-ability-conditions]")),
-    penalties: readAbilityChanges(row.querySelector("[data-ability-penalties]"), "[data-ability-penalty-row]")
-  }));
+function readAbilityFunctions(root, previousValue = []) {
+  const previousFunctions = Array.isArray(previousValue) ? previousValue : Object.values(previousValue ?? {});
+  return Array.from(root.querySelectorAll("[data-ability-function-row]") ?? []).map((row, index) => {
+    const id = row.dataset.functionId || foundry.utils.randomID();
+    const indexedFunction = previousFunctions[index];
+    const previousFunction = previousFunctions.find(entry => String(entry?.id ?? "") === id)
+      ?? (indexedFunction?.type === row.dataset.functionType ? indexedFunction : null);
+    return {
+      id,
+      type: row.dataset.functionType,
+      fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
+      fixedSettings: readFixedFunctionSettings(row),
+      activeSettings: readActiveApplicationSettings(row, previousFunction?.activeSettings),
+      reactionSettings: { durationSeconds: 0, costs: [] },
+      changes: readAbilityChanges(row.querySelector("[data-ability-changes]"), "[data-ability-change-row]"),
+      actions: readAbilityActions(row),
+      conditions: readAbilityConditions(row.querySelector("[data-ability-conditions]")),
+      penalties: readAbilityChanges(row.querySelector("[data-ability-penalties]"), "[data-ability-penalty-row]")
+    };
+  });
 }
 
 function readAbilityActions(row) {
@@ -1144,20 +1154,33 @@ function readAbilityActions(row) {
   }));
 }
 
-function readActiveApplicationSettings(row) {
+function readActiveApplicationSettings(row, previousValue = {}) {
   if (row?.dataset?.functionType !== ABILITY_FUNCTION_TYPES.activeApplication) return {};
-  return {
+  const targetSelectionModeInput = row.querySelector("[data-field='active.targetSelectionMode']");
+  const targetLimitInput = row.querySelector("[data-field='active.targetLimit']");
+  const targetGroupInputs = Array.from(row.querySelectorAll("[data-field='active.targetGroup']") ?? []);
+  const excludeSelfInput = row.querySelector("[data-field='active.excludeSelf']");
+  const radiusFormulaInput = row.querySelector("[data-field='active.radiusFormula']");
+  const wallsBlockInput = row.querySelector("[data-field='active.wallsBlock']");
+  const changeEvaluationInput = row.querySelector("[data-field='active.changeEvaluation']");
+  const settings = {
     name: row.querySelector("[data-field='active.name']")?.value ?? "",
     costs: readActiveApplicationCostRows(row),
-    targetMode: row.querySelector("[data-field='active.targetMode']")?.value,
-    targetSelectionMode: row.querySelector("[data-field='active.targetSelectionMode']")?.value,
-    targetLimit: row.querySelector("[data-field='active.targetLimit']")?.value,
-    targetGroups: readFieldValues(row, "[data-field='active.targetGroup']"),
-    excludeSelf: readBooleanField(row.querySelector("[data-field='active.excludeSelf']"), true),
-    radiusFormula: row.querySelector("[data-field='active.radiusFormula']")?.value ?? "",
-    wallsBlock: readBooleanField(row.querySelector("[data-field='active.wallsBlock']"), false),
-    changeEvaluation: row.querySelector("[data-field='active.changeEvaluation']")?.value ?? "target"
+    targetMode: row.querySelector("[data-field='active.targetMode']")?.value
   };
+  if (targetSelectionModeInput) settings.targetSelectionMode = targetSelectionModeInput.value;
+  if (targetLimitInput) settings.targetLimit = targetLimitInput.value;
+  if (targetGroupInputs.length) {
+    settings.targetGroups = targetGroupInputs
+      .filter(input => input.checked)
+      .map(input => String(input.value ?? "").trim())
+      .filter(Boolean);
+  }
+  if (excludeSelfInput) settings.excludeSelf = Boolean(excludeSelfInput.checked);
+  if (radiusFormulaInput) settings.radiusFormula = radiusFormulaInput.value;
+  if (wallsBlockInput) settings.wallsBlock = Boolean(wallsBlockInput.checked);
+  if (changeEvaluationInput) settings.changeEvaluation = changeEvaluationInput.value;
+  return preserveMissingActiveApplicationTargetSettings(settings, previousValue);
 }
 
 function readActiveApplicationCostRows(row) {
@@ -1673,6 +1696,7 @@ function readFieldValue(element, fallback = "") {
 
 function readBooleanField(element, fallback = false) {
   if (!element) return Boolean(fallback);
+  if (String(element.type ?? "").toLowerCase() === "checkbox") return Boolean(element.checked);
   return String(readFieldValue(element, fallback ? "true" : "false")) === "true";
 }
 

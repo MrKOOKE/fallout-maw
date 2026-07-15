@@ -5,8 +5,7 @@
       <input class="fallout-maw-title-input" name="name" type="text" value="{{source.name}}" placeholder="{{localize 'FALLOUTMAW.Effects.Name'}}">
       <div class="fallout-maw-active-effect-summary">
         <label class="checkbox">
-          <input type="hidden" name="disabled" value="false">
-          <input type="checkbox" name="disabled" value="true" {{checked source.disabled}}>
+          <input type="checkbox" name="disabled" {{checked source.disabled}}>
           <span>{{localize "FALLOUTMAW.Effects.Disabled"}}</span>
         </label>
         <label>

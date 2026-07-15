@@ -16,6 +16,7 @@ import {
 } from "../utils/limb-silhouette.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const FilePicker = foundry.applications.apps.FilePicker.implementation;
 const ALPHA_CONTOUR_THRESHOLD = 0.48;
 const ALPHA_BLUR_RADIUS = 2;
 const VIEW_ZOOM_MIN = 1;

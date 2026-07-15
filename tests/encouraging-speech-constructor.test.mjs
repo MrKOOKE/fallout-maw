@@ -8,7 +8,9 @@ import {
   ENCOURAGING_SPEECH_ABILITY_ID,
   buildEncouragingSpeechAbilityFunction,
   migrateEncouragingSpeechCatalog,
-  normalizeAbilityFunctions
+  normalizeActiveApplicationSettings,
+  normalizeAbilityFunctions,
+  preserveMissingActiveApplicationTargetSettings
 } from "../src/settings/abilities.mjs";
 import { computePresetRevision } from "../src/settings/presets/schema.mjs";
 
@@ -73,6 +75,79 @@ test("limitedChanges normalization preserves formula and legacy numeric fallback
   assert.equal(normalized.conditions[0].limit, 1);
   assert.equal(normalized.conditions[0].limitFormula, "1+spe/50");
   assert.equal(normalized.conditions[1].limitFormula, "2");
+});
+
+test("active application preserves an explicit empty target relation selection", () => {
+  assert.deepEqual(normalizeActiveApplicationSettings({}).targetGroups, ["ally"]);
+  assert.deepEqual(normalizeActiveApplicationSettings({ targetGroups: [] }).targetGroups, []);
+  assert.deepEqual(
+    normalizeActiveApplicationSettings({ targetGroups: { 0: null, 1: null, 2: null } }).targetGroups,
+    []
+  );
+  assert.deepEqual(normalizeActiveApplicationSettings({ targetGroups: ["invalid"] }).targetGroups, []);
+
+  const [first] = normalizeAbilityFunctions([{
+    id: "active",
+    type: "activeApplication",
+    activeSettings: {
+      targetMode: "others",
+      targetGroups: []
+    }
+  }]);
+  const [second] = normalizeAbilityFunctions([first]);
+  assert.deepEqual(first.activeSettings.targetGroups, []);
+  assert.deepEqual(second.activeSettings.targetGroups, []);
+});
+
+test("active application defensively normalizes legacy duplicate checkbox values", () => {
+  const unchecked = normalizeActiveApplicationSettings({
+    wallsBlock: ["false", null],
+    excludeSelf: ["false", null]
+  });
+  const checked = normalizeActiveApplicationSettings({
+    wallsBlock: ["false", "true"],
+    excludeSelf: ["false", "true"]
+  });
+
+  assert.equal(unchecked.wallsBlock, false);
+  assert.equal(unchecked.excludeSelf, false);
+  assert.equal(checked.wallsBlock, true);
+  assert.equal(checked.excludeSelf, true);
+});
+
+test("hidden active-application target controls retain their previous configuration", () => {
+  const previous = {
+    targetSelectionMode: "all",
+    targetLimit: 5,
+    targetGroups: [],
+    excludeSelf: false,
+    radiusFormula: "10+spe/10",
+    wallsBlock: true,
+    changeEvaluation: "source"
+  };
+  const selfModeSubmit = preserveMissingActiveApplicationTargetSettings({
+    name: "Speech",
+    costs: [],
+    targetMode: "self"
+  }, previous);
+
+  assert.equal(selfModeSubmit.targetSelectionMode, "all");
+  assert.equal(selfModeSubmit.targetLimit, 5);
+  assert.deepEqual(selfModeSubmit.targetGroups, []);
+  assert.equal(selfModeSubmit.excludeSelf, false);
+  assert.equal(selfModeSubmit.radiusFormula, "10+spe/10");
+  assert.equal(selfModeSubmit.wallsBlock, true);
+  assert.equal(selfModeSubmit.changeEvaluation, "source");
+
+  const explicitOthersSubmit = preserveMissingActiveApplicationTargetSettings({
+    targetMode: "others",
+    targetGroups: ["enemy", "neutral"],
+    excludeSelf: true,
+    wallsBlock: false
+  }, previous);
+  assert.deepEqual(explicitOthersSubmit.targetGroups, ["enemy", "neutral"]);
+  assert.equal(explicitOthersSubmit.excludeSelf, true);
+  assert.equal(explicitOthersSubmit.wallsBlock, false);
 });
 
 test("catalog migration targets one source id, preserves metadata, and is idempotent", () => {

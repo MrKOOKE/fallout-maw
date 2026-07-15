@@ -8,6 +8,7 @@ import {
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 import { deferActorPosture, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
+import { getActorActiveCombat, isActorInActiveCombat } from "../combat/combat-membership.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -405,8 +406,7 @@ function getDepthForMovementAction(baseDepth, action) {
 function getPostureChangeResourceCost(tokenDocument, previousAction, nextAction, options = {}) {
   if (options?.[AUTOMATIC_POSTURE_OPTION]) return 0;
   if (options?.isUndo) return 0;
-  if (!game.combat) return 0;
-  if (!tokenDocument?.actor) return 0;
+  if (!isActorInActiveCombat(tokenDocument?.actor)) return 0;
   if (previousAction === nextAction) return 0;
   if (!POSTURE_ACTION_CONFIGS[previousAction] || !POSTURE_ACTION_CONFIGS[nextAction]) return 0;
   return POSTURE_CHANGE_ACTION_POINT_COST;
@@ -420,6 +420,7 @@ function canSpendPostureChangeResources(actor, amount) {
 
 async function spendPostureChangeResources(tokenDocument, amount, pending = {}) {
   const actor = tokenDocument?.actor;
+  if (!isActorInActiveCombat(actor)) return;
   const state = getPostureChangeResourceState(actor);
   if (!state || !actor?.isOwner) return;
 
@@ -476,12 +477,13 @@ async function restoreLastPostureChangeResources(tokenDocument) {
 }
 
 function createPostureResourceSpendingEntry(tokenDocument, pending = {}, resources = {}) {
+  const actor = tokenDocument?.actor;
   return {
     id: pending.id || foundry.utils.randomID(),
-    actorUuid: tokenDocument?.actor?.uuid ?? "",
+    actorUuid: actor?.uuid ?? "",
     sceneId: tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "",
     tokenId: tokenDocument?.id ?? "",
-    round: game.combat?.round ?? 0,
+    round: getActorActiveCombat(actor)?.round ?? 0,
     resources,
     posture: {
       previousAction: normalizeMovementAction(pending.previousAction),

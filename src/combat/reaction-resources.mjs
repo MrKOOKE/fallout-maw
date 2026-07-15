@@ -2,9 +2,16 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
-import { actorHasIncapacitatingStatus } from "./reaction-hub.mjs";
 import {
   ACTION_RESOURCE_KEY,
+  canSpendStrictActionPoints,
+  getActorActiveCombat,
+  getStrictActionPointState,
+  isActorInActiveCombat,
+  spendStrictActionPoints
+} from "./strict-action-points.mjs";
+import { actorHasIncapacitatingStatus } from "./reaction-hub.mjs";
+import {
   MOVEMENT_RESOURCE_KEY,
   restoreActorMovementResources
 } from "./movement-resources.mjs";
@@ -25,6 +32,13 @@ import {
 
 export const REACTION_RESOURCE_KEY = "reactionPoints";
 export const ONE_TIME_ACTION_POINTS_KEY = "system.resources.actionPoints.once";
+export {
+  canSpendStrictActionPoints,
+  getActorActiveCombat,
+  getStrictActionPointState,
+  isActorInActiveCombat,
+  spendStrictActionPoints
+};
 
 export const TURN_CONVERSION_MODES = Object.freeze({
   dodge: "dodge",
@@ -293,7 +307,8 @@ export function getOneTimeActionPointTotal(actor) {
 export function decorateActionPointHudEntry(actor, entry) {
   if (!entry?.key || entry.key !== ACTION_RESOURCE_KEY) return entry;
   const reactionValue = getReactionPointValue(actor);
-  if (game.combat?.started && !isActorCurrentCombatant(actor)) {
+  const combat = getActorActiveCombat(actor);
+  if (combat && !isActorCurrentCombatant(actor, combat)) {
     const reactionMax = Math.max(0, toInteger(actor?.system?.resources?.[REACTION_RESOURCE_KEY]?.max));
     return {
       ...entry,
@@ -325,7 +340,8 @@ export function getCombatActionPointState(actor) {
   const actionValue = Math.max(0, toInteger(action.value));
   const reactionValue = Math.max(0, toInteger(reaction?.value));
   const onceValue = getOneTimeActionPointTotal(actor);
-  const ownTurn = !game.combat?.started || isActorCurrentCombatant(actor);
+  const combat = getActorActiveCombat(actor);
+  const ownTurn = !combat || isActorCurrentCombatant(actor, combat);
   return {
     ownTurn,
     key: ownTurn ? ACTION_RESOURCE_KEY : REACTION_RESOURCE_KEY,
@@ -341,7 +357,7 @@ export function getCombatActionPointState(actor) {
 }
 
 export function canSpendCombatActionPoints(actor, amount = 0, { label = "" } = {}) {
-  if (!game.combat?.started) return true;
+  if (!isActorInActiveCombat(actor)) return true;
   const cost = Math.max(0, toInteger(amount));
   const state = getCombatActionPointState(actor);
   if (!state || cost <= state.value) return true;
@@ -349,44 +365,8 @@ export function canSpendCombatActionPoints(actor, amount = 0, { label = "" } = {
   return false;
 }
 
-export function getStrictActionPointState(actor) {
-  const resource = actor?.system?.resources?.[ACTION_RESOURCE_KEY];
-  if (!resource) return null;
-  return {
-    key: ACTION_RESOURCE_KEY,
-    current: Math.max(0, toInteger(resource.value)),
-    max: Math.max(0, toInteger(resource.max))
-  };
-}
-
-export function canSpendStrictActionPoints(actor, amount = 0, { label = "" } = {}) {
-  if (!game.combat?.started) return true;
-  const cost = Math.max(0, toInteger(amount));
-  const state = getStrictActionPointState(actor);
-  if (state && cost <= state.current) return true;
-  ui.notifications.warn(`${actor?.name ?? ""}: не хватает ОД${label ? ` для ${label}` : ""} (${cost} > ${state?.current ?? 0}).`);
-  return false;
-}
-
-export async function spendStrictActionPoints(actor, amount = 0, context = {}) {
-  if (!game.combat?.started) return [];
-  const cost = Math.max(0, toInteger(amount));
-  const state = getStrictActionPointState(actor);
-  if (!actor?.isOwner || cost <= 0 || !state || cost > state.current) return [];
-  const next = state.current - cost;
-  await actor.update({
-    [`system.resources.${ACTION_RESOURCE_KEY}.value`]: next,
-    [`system.resources.${ACTION_RESOURCE_KEY}.spent`]: Math.max(0, state.max - next)
-  }, context?.chainRef ? {
-    chainRef: context.chainRef,
-    falloutMawSystemEventChainRef: context.chainRef
-  } : {});
-  if (context?.suppressResourceNotification) return [];
-  return notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
-}
-
 export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
-  if (!game.combat?.started) return;
+  if (!isActorInActiveCombat(actor)) return [];
   const cost = Math.max(0, toInteger(amount));
   if (!actor?.isOwner || cost <= 0) return;
 
@@ -482,7 +462,7 @@ async function resetActorReactionResources(actor, { restore = false } = {}) {
 }
 
 async function convertInTurnReactionPoints(actor, rawValue) {
-  if (!actor?.isOwner || !isActorCurrentCombatant(actor)) return;
+  if (!actor?.isOwner || !isActorCurrentCombatant(actor, getActorActiveCombat(actor))) return;
   const nextValue = Math.max(0, toInteger(rawValue));
   if (!nextValue) return;
   await addOneTimeActionPointEffect(actor, nextValue, { source: IN_TURN_REACTION_SOURCE });
@@ -699,8 +679,7 @@ function buildOneTimeActionPointEffectData(actor, value, { source = "" } = {}) {
   };
 }
 
-function isActorCurrentCombatant(actor) {
-  const combat = game.combat;
+function isActorCurrentCombatant(actor, combat = getActorActiveCombat(actor)) {
   if (!combat?.started || !actor?.uuid) return false;
   if (isBlockTurnOrderEnabled(combat)) return isActorPendingInActiveBlock(actor, combat);
   return combat.combatant?.actor?.uuid === actor.uuid;

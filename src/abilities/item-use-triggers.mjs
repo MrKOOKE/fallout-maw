@@ -22,7 +22,8 @@ import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 import {
   notifyAbilityTriggerCostFailure,
-  payAbilityFunctionTriggerCost
+  payAbilityFunctionTriggerCost,
+  quoteAbilityFunctionTriggerCost
 } from "./trigger-cost-runtime.mjs";
 import { getCurrentDamageHubOperationRef } from "../combat/damage-hub.mjs";
 
@@ -212,6 +213,34 @@ async function advanceItemUseCounter(actor, entry, {
     return committedEffect;
   }
 
+  const paymentContext = {
+    rootId,
+    eventId,
+    chainRef,
+    occurrenceId: `item-use:${entry.abilityItem.uuid}:${key}`,
+    inDamageHubOperation: Boolean(damageHubOperationRef),
+    damageHubOperation: damageHubOperationRef ? "current" : null
+  };
+  let costPreflight = null;
+  if (!committedCost) {
+    try {
+      costPreflight = await quoteAbilityFunctionTriggerCost({
+        actor,
+        sourceItem: entry.abilityItem,
+        abilityFunction: entry.abilityFunction,
+        context: paymentContext
+      });
+    } catch (error) {
+      console.error("Fallout MaW | Item-use trigger cost preflight failed", error);
+      costPreflight = { ok: false, reason: "spendFailed", error };
+    }
+    if (!costPreflight.ok) {
+      notifyAbilityTriggerCostFailure(costPreflight);
+      await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions);
+      return null;
+    }
+  }
+
   const changes = await selectRuntimeChanges(actor, entry.abilityItem, entry.abilityFunction);
   if (!changes?.length) {
     if (!committedCost) {
@@ -225,14 +254,8 @@ async function advanceItemUseCounter(actor, entry, {
       actor,
       sourceItem: entry.abilityItem,
       abilityFunction: entry.abilityFunction,
-      context: {
-        rootId,
-        eventId,
-        chainRef,
-        occurrenceId: `item-use:${entry.abilityItem.uuid}:${key}`,
-        inDamageHubOperation: Boolean(damageHubOperationRef),
-        damageHubOperation: damageHubOperationRef ? "current" : null
-      }
+      expectedFingerprint: costPreflight?.fingerprint ?? "",
+      context: paymentContext
     });
     if (!payment.ok) {
       notifyAbilityTriggerCostFailure(payment);

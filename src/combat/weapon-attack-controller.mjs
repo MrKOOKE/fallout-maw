@@ -65,6 +65,7 @@ import { getConstructPartLimbKey, getConstructPartSlotId } from "../utils/constr
 import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
+import { isActorInActiveCombat } from "./combat-membership.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -486,9 +487,9 @@ export function startDualWeaponAttack({
       if (!validateDualWeaponAttackResources(actor, captured, label)) return false;
       if (typeof canSpendEnergy === "function" && canSpendEnergy() === false) return false;
       const actionPointCost = Math.max(0, ...captured.map(entry => getWeaponActionPointCost(actor, entry.weapon, entry.actionKey, entry.weaponFunctionId)));
-      if (isCombatActionPointSpendingActive() && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
+      if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
-      if (isCombatActionPointSpendingActive() && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
+      if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
       const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, {
         skipActionPointCost: true,
         reactionCoordinator
@@ -1477,7 +1478,7 @@ class WeaponAttackController {
 
   async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
     if (!attempted) return;
-    const actionPointCost = isCombatActionPointSpendingActive()
+    const actionPointCost = isCombatActionPointSpendingActive(this.token?.actor)
       ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
       : 0;
     await publishWeaponAttackResolved({
@@ -5321,8 +5322,8 @@ export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunct
   return null;
 }
 
-export function isCombatActionPointSpendingActive() {
-  return Boolean(game.combat);
+export function isCombatActionPointSpendingActive(actor = null) {
+  return isActorInActiveCombat(actor);
 }
 
 export function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "") {
@@ -5337,14 +5338,14 @@ export function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctio
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
-  if (!isCombatActionPointSpendingActive()) return true;
+  if (!isCombatActionPointSpendingActive(actor)) return true;
   const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return true;
   return canSpendCombatActionPoints(actor, cost, { label: "действия" });
 }
 
 function canSpendRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
-  if (!game.combat?.started) return true;
+  if (!isCombatActionPointSpendingActive(actor)) return true;
   const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return true;
   const state = getCombatActionPointState(actor);
@@ -5358,11 +5359,18 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   damageHubOperationRef = ""
 } = {}) {
   if (actionKey !== "reload") await revealActorFromStealth(actor);
-  if (spendActionPoints && isCombatActionPointSpendingActive()) {
+  if (spendActionPoints && isCombatActionPointSpendingActive(actor)) {
     const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
     if (cost > 0) {
       const state = getCombatActionPointState(actor);
-      if (state && cost <= state.value) await spendCombatActionPoints(actor, cost);
+      if (state && cost <= state.value) {
+        await spendCombatActionPoints(actor, cost, {
+          source: "weaponAction",
+          actionKey,
+          chainRef,
+          damageHubOperationRef
+        });
+      }
     }
   }
   if (emitActionResolved && actionKey !== "reload") {

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build:animations": "node scripts/build-animation-database.mjs",
-    "check": "node scripts/validate-manifest.mjs && node scripts/check-syntax.mjs",
+    "check": "node scripts/validate-manifest.mjs && node scripts/check-syntax.mjs && node --test tests/foundry-form-checkboxes.test.mjs tests/encouraging-speech-constructor.test.mjs tests/foundry-api-namespaces.test.mjs tests/ability-resource-cost-preflight.test.mjs tests/strict-action-points.test.mjs tests/resource-spending-queue.test.mjs tests/oversight-resource-event.test.mjs",
     "check:manifest": "node scripts/validate-manifest.mjs",
     "check:syntax": "node scripts/check-syntax.mjs",
     "test": "node --test",

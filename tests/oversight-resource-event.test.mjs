@@ -43,7 +43,7 @@ test("oversight fixed provider no longer opens a second legacy semantic event", 
     /collectOversightReactionOffers\(\{ eventKey, context = \{\}, semanticEvent = null \}/u
   );
   assert.equal(
-    spendingSource.match(/dispatchSystemEvent\("fallout-maw\.combat\.resource\.spent"/gu)?.length,
+    spendingSource.match(/scope\.emit\("fallout-maw\.combat\.resource\.spent"/gu)?.length,
     1
   );
 });

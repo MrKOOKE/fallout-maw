@@ -19,6 +19,7 @@ import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
 import { resetCellFog } from "./fog.mjs";
 
 const TEMPLATE_ROOT = "systems/fallout-maw/templates/global-map";
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
   #initialPositionApplied = false;

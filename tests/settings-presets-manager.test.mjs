@@ -84,6 +84,15 @@ function installFoundryMock({ storedIds = [], values = {}, modifyBatch } = {}) {
   };
   globalThis.foundry = {
     abstract: { DataModel: class DataModel {} },
+    applications: {
+      apps: {
+        FilePicker: {
+          get implementation() {
+            return globalThis.CONFIG?.ux?.FilePicker;
+          }
+        }
+      }
+    },
     data: { fields: { DataField: class DataField {} } },
     documents: {
       modifyBatch: modifyBatch ?? (async operations => operations.map(operation => (

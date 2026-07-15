@@ -773,6 +773,9 @@ function normalizeAbilityChanges(value = []) {
 }
 
 export function normalizeActiveApplicationSettings(value = {}) {
+  const hasExplicitTargetGroups = value !== null
+    && typeof value === "object"
+    && Object.hasOwn(value, "targetGroups");
   const targetMode = String(value?.targetMode ?? "").trim() === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others
     ? ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others
     : ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self;
@@ -806,7 +809,7 @@ export function normalizeActiveApplicationSettings(value = {}) {
     targetMode,
     targetSelectionMode,
     targetLimit: Math.max(1, toInteger(value?.targetLimit ?? 1) || 1),
-    targetGroups: targetGroups.length ? targetGroups : ["ally"],
+    targetGroups: hasExplicitTargetGroups ? targetGroups : ["ally"],
     excludeSelf,
     includeSelf: !excludeSelf,
     radiusFormula: normalizeFormulaText(value?.radiusFormula ?? value?.targetRadiusFormula, ""),
@@ -818,6 +821,29 @@ export function normalizeActiveApplicationSettings(value = {}) {
       ? "source"
       : "target"
   };
+}
+
+const ACTIVE_APPLICATION_TARGET_SETTING_KEYS = Object.freeze([
+  "targetSelectionMode",
+  "targetLimit",
+  "targetGroups",
+  "excludeSelf",
+  "radiusFormula",
+  "wallsBlock",
+  "changeEvaluation"
+]);
+
+export function preserveMissingActiveApplicationTargetSettings(value = {}, previous = {}) {
+  const current = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? { ...value }
+    : {};
+  const previousSettings = normalizeActiveApplicationSettings(previous);
+  for (const key of ACTIVE_APPLICATION_TARGET_SETTING_KEYS) {
+    if (Object.hasOwn(current, key)) continue;
+    const previousValue = previousSettings[key];
+    current[key] = Array.isArray(previousValue) ? [...previousValue] : previousValue;
+  }
+  return current;
 }
 
 export function normalizeEventReactionSettings(value = {}) {
@@ -1317,6 +1343,10 @@ function normalizeFormulaText(value = "", fallback = "0") {
 
 function normalizeBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return Boolean(fallback);
+  if (Array.isArray(value)) {
+    const selected = value.findLast(entry => entry !== undefined && entry !== null && entry !== "");
+    return normalizeBoolean(selected, fallback);
+  }
   if (typeof value === "string") return value === "true";
   return Boolean(value);
 }

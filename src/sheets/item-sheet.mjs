@@ -62,6 +62,7 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeActiveApplicationSettings,
+  preserveMissingActiveApplicationTargetSettings,
   normalizeEventReactionMode,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
@@ -208,6 +209,8 @@ const activeContainerSpecialGridApps = new WeakMap();
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #scrollPositions = new Map();
+  #handledFormChangeEvents = new WeakSet();
+  #submitQueue = Promise.resolve();
   #functionPickerActive = false;
   #fixedAbilityFunctionPickerActive = false;
   #mitigationFillDrag = null;
@@ -654,10 +657,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }, { inplace: false });
   }
 
-  async _processSubmitData(event, form, submitData, options = {}) {
-    if (hasSubmittedStackShapeChange(this.item, submitData)) {
-      options.falloutMawRepackStacks = true;
-    }
+  _onChangeForm(formConfig, event) {
+    // Native change events are not cancelable, so preventDefault() cannot
+    // distinguish a custom one-shot handler from Foundry autosubmit.
+    if (this.#handledFormChangeEvents.has(event)) return;
+    return super._onChangeForm(formConfig, event);
+  }
+
+  _processSubmitData(event, form, submitData, options = {}) {
     if (form?.querySelector?.("[data-implant-limb-key-list]")) {
       const limbKeys = Array.from(form.querySelectorAll("[data-implant-limb-key-list] select"))
         .map(input => String(input.value ?? "").trim())
@@ -727,7 +734,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedFirstAidDurations(form, submitData);
     normalizeSubmittedNeedChangeDurations(form, submitData);
     preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
-    return super._processSubmitData(event, form, submitData, options);
+    // Keep every DOM read above synchronous while its form snapshot is live.
+    // Only document writes are serialized so a slower update cannot win later.
+    const process = () => {
+      if (hasSubmittedStackShapeChange(this.item, submitData)) {
+        options.falloutMawRepackStacks = true;
+      }
+      return super._processSubmitData(event, form, submitData, options);
+    };
+    const pending = this.#submitQueue.then(process, process);
+    this.#submitQueue = pending.catch(() => undefined);
+    return pending;
   }
 
   _processFormData(event, form, formData) {
@@ -737,13 +754,21 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedTriggerCostConditions(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
     normalizeSubmittedToggleableConditions(form, submitData);
-    normalizeSubmittedActiveApplicationFunctions(form, submitData);
+    normalizeSubmittedActiveApplicationFunctions(form, submitData, this.item);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
     normalizeSubmittedNeedChangeDurations(form, submitData);
     preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
     return submitData;
+  }
+
+  #addHandledFormChangeListener(element, listener) {
+    element?.addEventListener("change", event => {
+      // Target listeners run before Foundry's bubbling form listener.
+      this.#handledFormChangeEvents.add(event);
+      return listener(event);
+    });
   }
 
   async _onRender(context, options) {
@@ -766,7 +791,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-weapon-damage-percent]").forEach(input => {
       input.addEventListener("input", event => this.#onWeaponDamagePercentInput(event));
-      input.addEventListener("change", event => this.#onWeaponDamagePercentChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onWeaponDamagePercentChange(event));
     });
     this.element?.querySelectorAll("[data-add-damage-source-damage-type]").forEach(button => {
       button.addEventListener("click", event => this.#onAddDamageSourceDamageType(event));
@@ -776,7 +801,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-damage-source-percent]").forEach(input => {
       input.addEventListener("input", event => this.#onDamageSourcePercentInput(event));
-      input.addEventListener("change", event => this.#onDamageSourcePercentChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onDamageSourcePercentChange(event));
     });
     this.element?.querySelectorAll("[data-add-damage-source-volley-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onAddDamageSourceVolleyRegionDamage(event));
@@ -792,7 +817,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-trap-damage-percent]").forEach(input => {
       input.addEventListener("input", event => this.#onTrapDamagePercentInput(event));
-      input.addEventListener("change", event => this.#onTrapDamagePercentChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onTrapDamagePercentChange(event));
     });
     this.element?.querySelectorAll("[data-add-trap-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onAddTrapRegionDamage(event));
@@ -805,7 +830,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteTrapDetectionCondition(event));
     });
     this.element?.querySelectorAll("[data-trap-detection-condition-type]").forEach(select => {
-      select.addEventListener("change", event => this.#onTrapDetectionConditionTypeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onTrapDetectionConditionTypeChange(event));
     });
     this.element?.querySelectorAll("[data-add-trap-lighting-threshold]").forEach(button => {
       button.addEventListener("click", event => this.#onAddTrapLightingThreshold(event));
@@ -814,10 +839,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteTrapLightingThreshold(event));
     });
     this.element?.querySelectorAll("[data-trap-effect-mode]").forEach(select => {
-      select.addEventListener("change", event => this.#onTrapEffectModeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onTrapEffectModeChange(event));
     });
     this.element?.querySelectorAll("[data-weapon-damage-mode]").forEach(select => {
-      select.addEventListener("change", event => this.#onWeaponDamageModeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onWeaponDamageModeChange(event));
     });
     this.element?.querySelectorAll("[data-weapon-magazine-source-drop]").forEach(zone => {
       zone.addEventListener("dragover", event => this.#onWeaponMagazineSourceDragOver(event));
@@ -850,7 +875,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteVolleyRegionDamage(event));
     });
     this.element?.querySelectorAll("[data-weapon-attack-mode-enabled]").forEach(input => {
-      input.addEventListener("change", event => this.#onWeaponAttackModeEnabledChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onWeaponAttackModeEnabledChange(event));
     });
     this.element?.querySelectorAll("[data-browse-weapon-attack-sound]").forEach(button => {
       button.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
@@ -891,7 +916,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-open-construct-part-need-settings]").forEach(button => {
       button.addEventListener("click", event => this.#onOpenConstructPartNeedSettings(event));
     });
-    this.element?.querySelector("[data-construct-part-critical]")?.addEventListener("change", event => this.#onConstructPartCriticalChange(event));
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-construct-part-critical]"),
+      event => this.#onConstructPartCriticalChange(event)
+    );
     this.element?.querySelectorAll("[data-add-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityFunction(event));
     });
@@ -906,9 +934,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-select-weapon-function-tab]").forEach(button => {
       button.addEventListener("click", event => this.#onSelectWeaponFunctionTab(event));
     });
-    this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
-    this.element?.querySelector("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseAbilityFunction(event));
-    this.element?.querySelector("[data-choose-fixed-ability-function]")?.addEventListener("change", event => this.#onChooseFixedAbilityFunction(event));
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-choose-item-function]"),
+      event => this.#onChooseItemFunction(event)
+    );
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-choose-ability-function]"),
+      event => this.#onChooseAbilityFunction(event)
+    );
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-choose-fixed-ability-function]"),
+      event => this.#onChooseFixedAbilityFunction(event)
+    );
     this.element?.querySelector("[data-fixed-ability-function-search]")?.addEventListener("input", event => this.#onFixedAbilityFunctionSearch(event));
     this.element?.querySelectorAll("[data-fixed-rescue-mode]").forEach(select => {
       select.addEventListener("change", () => syncFixedRescueCountVisibility(select));
@@ -977,7 +1014,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteAbilityEventTrackingTarget(event));
     });
     this.element?.querySelectorAll("[data-ability-event-path-level]").forEach(select => {
-      select.addEventListener("change", event => this.#onAbilityEventPathChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityEventPathChange(event));
     });
     this.element?.querySelectorAll("[data-add-ability-event-skill]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityEventSkill(event));
@@ -1011,7 +1048,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteAbilityItemUseCategory(event));
     });
     this.element?.querySelectorAll("select[data-ability-item-use-category]").forEach(select => {
-      select.addEventListener("change", event => this.#onAbilityItemUseCategoryChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityItemUseCategoryChange(event));
     });
     this.element?.querySelectorAll("[data-add-ability-target-faction]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityTargetFaction(event));
@@ -1056,7 +1093,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteAbilityAuraTargetGroup(event));
     });
     this.element?.querySelectorAll("[data-ability-aura-mode]").forEach(select => {
-      select.addEventListener("change", event => this.#onAbilityAuraModeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityAuraModeChange(event));
     });
     this.element?.querySelectorAll("[data-add-ability-penalty]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityPenalty(event));
@@ -1065,19 +1102,25 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteAbilityPenalty(event));
     });
     this.element?.querySelectorAll("[data-ability-condition-type]").forEach(select => {
-      select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityConditionTypeChange(event));
     });
     this.element?.querySelectorAll("[data-ability-action-type]").forEach(select => {
-      select.addEventListener("change", event => this.#onAbilityActionTypeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityActionTypeChange(event));
     });
     this.element?.querySelectorAll("[data-ability-condition-health-target]").forEach(select => {
-      select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityConditionTypeChange(event));
     });
-    this.element?.querySelector("[data-ability-only-free]")?.addEventListener("change", event => this.#onAbilityOnlyFreeChange(event));
-    this.element?.querySelector("[data-ability-only-manual]")?.addEventListener("change", event => this.#onAbilityOnlyManualChange(event));
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-ability-only-free]"),
+      event => this.#onAbilityOnlyFreeChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-ability-only-manual]"),
+      event => this.#onAbilityOnlyManualChange(event)
+    );
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
       input.addEventListener("input", event => this.#onContainerLoadReductionInput(event));
-      input.addEventListener("change", event => this.#onContainerLoadReductionChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onContainerLoadReductionChange(event));
     });
     this.element?.querySelector("[data-open-container-special-grids]")?.addEventListener("click", event => this.#onOpenContainerSpecialGrids(event));
     this.element?.querySelector("[data-add-actor-container-slot]")?.addEventListener("click", event => this.#onAddActorContainerSlot(event));
@@ -1097,7 +1140,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onAddWeaponModuleSlot(event));
     });
     this.element?.querySelectorAll("[data-weapon-module-slot-key-select]").forEach(select => {
-      select.addEventListener("change", event => this.#onWeaponModuleSlotKeyChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onWeaponModuleSlotKeyChange(event));
     });
     this.element?.querySelectorAll("[data-delete-weapon-module-slot]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponModuleSlot(event));
@@ -1150,16 +1193,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteOneTimeUseRecipe(event));
     });
     this.element?.querySelectorAll("[data-need-change-charge-input]").forEach(input => {
-      input.addEventListener("change", event => this.#onNeedChangeChargeInputChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onNeedChangeChargeInputChange(event));
     });
     this.element?.querySelector("[data-add-first-aid-remove-effect]")?.addEventListener("click", event => this.#onAddFirstAidRemoveEffect(event));
     this.element?.querySelectorAll("[data-delete-first-aid-remove-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteFirstAidRemoveEffect(event));
     });
     this.element?.querySelectorAll("[data-first-aid-charge-input]").forEach(input => {
-      input.addEventListener("change", event => this.#onFirstAidChargeInputChange(event));
+      this.#addHandledFormChangeListener(input, event => this.#onFirstAidChargeInputChange(event));
     });
-    this.element?.querySelector("[data-tool-function-key]")?.addEventListener("change", event => this.#onToolFunctionKeyChange(event));
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-tool-function-key]"),
+      event => this.#onToolFunctionKeyChange(event)
+    );
     activateItemEffectKeyAutocompletes(this.element);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
@@ -1170,7 +1216,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
     });
     this.element?.querySelectorAll("[data-weapon-special-property-type]").forEach(select => {
-      select.addEventListener("change", event => this.#onWeaponSpecialPropertyTypeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onWeaponSpecialPropertyTypeChange(event));
     });
     this.element?.querySelectorAll("[data-delete-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponSpecialProperty(event));
@@ -1182,7 +1228,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteWeaponRequirement(event));
     });
     this.element?.querySelectorAll("[data-weapon-requirement-type]").forEach(select => {
-      select.addEventListener("change", event => this.#onWeaponRequirementTypeChange(event));
+      this.#addHandledFormChangeListener(select, event => this.#onWeaponRequirementTypeChange(event));
     });
     this.element?.querySelectorAll("[data-add-weapon-critical-failure-consequence]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponCriticalFailureConsequence(event));
@@ -1243,14 +1289,38 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-delete-link]")?.addEventListener("click", event => this.#onCraftDeleteLink(event));
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
-    workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
-    workspace.querySelector("[data-craft-node-tool-use-as-item]")?.addEventListener("change", event => this.#onCraftNodeToolUseAsItemChange(event));
-    workspace.querySelector("[data-craft-block-limit]")?.addEventListener("change", event => this.#onCraftBlockLimitChange(event));
-    workspace.querySelector("[data-craft-link-skill]")?.addEventListener("change", event => this.#onCraftLinkSkillChange(event));
-    workspace.querySelector("[data-craft-link-difficulty]")?.addEventListener("change", event => this.#onCraftLinkDifficultyChange(event));
-    workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
-    workspace.querySelector("[data-craft-link-failure-result]")?.addEventListener("change", event => this.#onCraftLinkFailureResultChange(event));
-    this.element?.querySelector("[data-craft-recipe-select]")?.addEventListener("change", event => this.#onCraftRecipeSelect(event));
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-node-quantity]"),
+      event => this.#onCraftNodeQuantityChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-node-tool-use-as-item]"),
+      event => this.#onCraftNodeToolUseAsItemChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-block-limit]"),
+      event => this.#onCraftBlockLimitChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-link-skill]"),
+      event => this.#onCraftLinkSkillChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-link-difficulty]"),
+      event => this.#onCraftLinkDifficultyChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-link-no-check]"),
+      event => this.#onCraftLinkNoCheckChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      workspace.querySelector("[data-craft-link-failure-result]"),
+      event => this.#onCraftLinkFailureResultChange(event)
+    );
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-craft-recipe-select]"),
+      event => this.#onCraftRecipeSelect(event)
+    );
     this.element?.querySelector("[data-craft-add-recipe]")?.addEventListener("click", event => this.#onCraftAddRecipe(event));
     this.element?.querySelector("[data-craft-delete-recipe]")?.addEventListener("click", event => this.#onCraftDeleteRecipe(event));
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
@@ -4049,8 +4119,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
 
     try {
-      const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
-      const data = textEditor.getDragEventData(event);
+      const data = TextEditor.getDragEventData(event);
       if (data && (typeof data === "object")) return data;
     } catch (_error) {
       // Fall through to explicit transfer payloads.
@@ -7853,14 +7922,50 @@ function normalizeSubmittedEventReactionFunctions(form = null, submitData = {}) 
   }
 }
 
-function normalizeSubmittedActiveApplicationFunctions(form = null, submitData = {}) {
+function normalizeSubmittedActiveApplicationFunctions(form = null, submitData = {}, currentItem = null) {
   for (const row of form?.querySelectorAll?.("[data-ability-function-row][data-function-type='activeApplication']") ?? []) {
     const functionPath = String(row.dataset.functionPath ?? "");
     const functionIndex = Number(row.dataset.functionIndex ?? -1);
     if (!functionPath || functionIndex < 0) continue;
+    const settingsPath = `${functionPath}.${functionIndex}.activeSettings`;
+    const functionId = String(row.dataset.functionId ?? "").trim();
+    const currentFunctionSource = currentItem
+      ? foundry.utils.getProperty(currentItem, functionPath) ?? []
+      : [];
+    const currentFunctions = Array.isArray(currentFunctionSource)
+      ? currentFunctionSource
+      : Object.values(currentFunctionSource);
+    const indexedFunction = currentFunctions[functionIndex];
+    const currentFunction = currentFunctions.find(entry => functionId && String(entry?.id ?? "") === functionId)
+      ?? (indexedFunction?.type === ABILITY_FUNCTION_TYPES.activeApplication ? indexedFunction : null);
+    const submittedSettings = foundry.utils.getProperty(submitData, settingsPath) ?? {};
+    foundry.utils.setProperty(
+      submitData,
+      settingsPath,
+      preserveMissingActiveApplicationTargetSettings(submittedSettings, currentFunction?.activeSettings)
+    );
     const costs = Array.from(row.querySelectorAll("[data-active-application-cost-row]") ?? [])
       .map((costRow, index) => readAbilityTriggerCostRow(costRow, index));
-    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.activeSettings.costs`, costs);
+    foundry.utils.setProperty(submitData, `${settingsPath}.costs`, costs);
+
+    const wallsBlockInput = row.querySelector("[data-active-application-walls-block]");
+    if (wallsBlockInput) {
+      foundry.utils.setProperty(submitData, `${settingsPath}.wallsBlock`, Boolean(wallsBlockInput.checked));
+    }
+
+    const excludeSelfInput = row.querySelector("[data-active-application-exclude-self]");
+    if (excludeSelfInput) {
+      foundry.utils.setProperty(submitData, `${settingsPath}.excludeSelf`, Boolean(excludeSelfInput.checked));
+    }
+
+    const targetGroupInputs = Array.from(row.querySelectorAll("[data-active-application-target-group]") ?? []);
+    if (targetGroupInputs.length) {
+      const targetGroups = targetGroupInputs
+        .filter(input => input.checked)
+        .map(input => String(input.value ?? "").trim())
+        .filter(Boolean);
+      foundry.utils.setProperty(submitData, `${settingsPath}.targetGroups`, targetGroups);
+    }
   }
 }
 

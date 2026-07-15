@@ -1628,7 +1628,7 @@ async function publishFinishingBlowMessage({
       description: `Общее здоровье цели ${roundedHealthPercent}% ниже порога ${threshold}%. Критическая часть уничтожена.${chanceText}`
     }
   };
-  const content = await renderTemplate(TEMPLATES.finishingBlowChatCard, context);
+  const content = await foundry.applications.handlebars.renderTemplate(TEMPLATES.finishingBlowChatCard, context);
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: attacker ?? target }),
     content,
@@ -1836,6 +1836,47 @@ export async function fullyRestoreActorDamageState(actor) {
     if (prosthesisUpdates.length) await freshActor.updateEmbeddedDocuments("Item", prosthesisUpdates);
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
+  });
+}
+
+/**
+ * Reverse health paid as a system resource cost without treating the reversal as healing.
+ * This bypasses healing blocks, healing modifiers, and trauma healing caps while preserving
+ * the normal aggregate-health distribution across limbs and integrated prostheses.
+ */
+export async function restoreActorHealthCost(actor, amount = 0, { chainRef = null } = {}) {
+  const requested = Math.max(0, roundDamageAmount(amount));
+  if (!actor?.isOwner || requested <= 0) {
+    return { actor, requested, healthDelta: 0 };
+  }
+  return queueActorDamageMutation(actor.uuid, async freshActor => {
+    if (!freshActor?.isOwner) return { actor: freshActor ?? actor, requested, healthDelta: 0 };
+    const result = await calculateManualAggregateHealthAdjustment(
+      freshActor,
+      requested,
+      MODE_HEALING,
+      { ignoreHealingCaps: true }
+    );
+    const updates = {};
+    for (const [limbKey, state] of result.limbStates ?? []) {
+      if (!state?.totalDelta) continue;
+      setLimbValueUpdate(updates, freshActor, limbKey, state.nextValue);
+    }
+    for (const [limbKey, accumulation] of result.damageAccumulation ?? []) {
+      updates[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
+    }
+    if (Object.keys(updates).length) {
+      await freshActor.update(updates, {
+        falloutMawSkipDamageStatusSync: true,
+        falloutMawHealthCostRollback: true,
+        ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
+      });
+    }
+    if (result.prosthesisHealthAdjustments?.length) {
+      await applyManualProsthesisHealthAdjustments(freshActor, result.prosthesisHealthAdjustments);
+    }
+    await queueActorDamageStatusSync(freshActor);
+    return { ...result, actor: freshActor, requested };
   });
 }
 
@@ -4723,7 +4764,7 @@ async function publishDamageSummaryMessage(results = []) {
   const context = buildDamageSummaryViewContext(results);
   if (!context.victims.length) return undefined;
 
-  const content = await renderTemplate(TEMPLATES.damageSummaryChatCard, context);
+  const content = await foundry.applications.handlebars.renderTemplate(TEMPLATES.damageSummaryChatCard, context);
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: context.primaryActor }),
     content,
@@ -5081,14 +5122,19 @@ function toIntegratedProsthesisHealthValue(value = 0, integration = 0) {
   return roundDamageAmount((Math.max(0, toInteger(value)) * Math.max(0, Math.min(100, toInteger(integration)))) / 100);
 }
 
-async function calculateManualAggregateHealthAdjustment(actor, amount = 0, mode = MODE_DAMAGE) {
+async function calculateManualAggregateHealthAdjustment(
+  actor,
+  amount = 0,
+  mode = MODE_DAMAGE,
+  { ignoreHealingCaps = false } = {}
+) {
   const limbStates = new Map();
   const damageAccumulation = new Map();
   const requested = roundDamageAmount(amount);
   if (requested <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
 
   const targets = mode === MODE_HEALING
-    ? getManualHealthHealingTargets(actor)
+    ? getManualHealthHealingTargets(actor, { ignoreHealingCaps })
     : getManualHealthDamageTargets(actor);
   const targetsByKey = new Map(targets.map(target => [target.key, target]));
   const allocations = distributeCappedIntegerAmount(requested, targets.map(target => ({
@@ -5148,12 +5194,15 @@ function getManualHealthDamageTargets(actor) {
   ];
 }
 
-function getManualHealthHealingTargets(actor) {
+function getManualHealthHealingTargets(actor, { ignoreHealingCaps = false } = {}) {
   const limbTargets = Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => {
       const currentPositive = Math.max(0, getEffectiveLimbStateValue(actor, key));
-      const cap = Math.min(Math.max(0, toInteger(limb?.max)), getLimbHealingCap(actor, key));
+      const physicalMaximum = Math.max(0, toInteger(limb?.max));
+      const cap = ignoreHealingCaps
+        ? physicalMaximum
+        : Math.min(physicalMaximum, getLimbHealingCap(actor, key));
       return {
         type: "limb",
         key,
