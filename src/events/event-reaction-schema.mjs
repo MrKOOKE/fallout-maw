@@ -66,7 +66,10 @@ export function getEventReactionSecondaryConditions(conditions = [], { warn = nu
       accepted.push(condition);
       continue;
     }
-    if (type === ABILITY_CONDITION_TYPES.duration) continue;
+    if ([
+      ABILITY_CONDITION_TYPES.duration,
+      ABILITY_CONDITION_TYPES.triggerCost
+    ].includes(type)) continue;
     if (IGNORED_TYPES.has(type)) {
       warn?.({ type, condition, source, reason: "unsupportedEventReactionCondition" });
       continue;

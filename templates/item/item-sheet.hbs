@@ -1684,7 +1684,7 @@
             {{#if isUnsupportedEventCondition}}
             <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedCondition"}}</p>
             {{/if}}
-            <div class="fallout-maw-ability-condition-fields">
+            <div class="fallout-maw-ability-condition-fields" data-ability-trigger-cost-ui>
               {{#if isEventReaction}}
               <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
@@ -1837,42 +1837,43 @@
                     {{/each}}
                   </div>
                 </div>
-                {{#with eventReactionSettings}}
-                <div class="fallout-maw-event-reaction-settings" data-ability-reaction-settings>
-                  <div class="fallout-maw-event-reaction-costs">
-                    <div class="fallout-maw-item-use-category-header">
-                      <span>{{localize "FALLOUTMAW.Events.Reaction.Costs"}}</span>
-                      <button type="button" data-add-ability-reaction-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddCost"}}</button>
-                    </div>
-                    <div class="fallout-maw-event-reaction-cost-list">
-                      {{#each costs}}
-                      <div class="fallout-maw-event-reaction-cost-row{{#if isUnsupportedResource}} unsupported{{/if}}" data-ability-reaction-cost-row data-cost-index="{{index}}" data-cost-id="{{id}}">
-                        <input type="hidden" name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.id" value="{{id}}" data-ability-reaction-cost-id>
-                        <select name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.resourceKey" data-ability-reaction-resource-key aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Resource'}}">
-                          {{#each resourceChoices}}
+              </div>
+              {{/if}}
+
+              {{#if isTriggerCost}}
+              <div class="fallout-maw-event-reaction-settings fallout-maw-trigger-cost-settings">
+                <div class="fallout-maw-event-reaction-costs">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{localize "FALLOUTMAW.Ability.TriggerCost.Costs"}}</span>
+                    <button type="button" data-add-ability-trigger-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.TriggerCost.AddCost"}}</button>
+                  </div>
+                  <div class="fallout-maw-event-reaction-cost-list">
+                    {{#each triggerCosts}}
+                    <div class="fallout-maw-event-reaction-cost-row{{#if isUnsupportedResource}} unsupported{{/if}}" data-ability-trigger-cost-row data-cost-index="{{index}}" data-cost-id="{{id}}">
+                      <input type="hidden" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.id" value="{{id}}" data-ability-trigger-cost-id>
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.resourceKey" data-ability-trigger-cost-resource-key aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Resource'}}">
+                        {{#each resourceChoices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <input type="text" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.formula" value="{{formula}}" data-ability-trigger-cost-formula data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}">
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-trigger-cost title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                      <div class="fallout-maw-event-reaction-cost-overload">
+                        <span>{{localize "FALLOUTMAW.Ability.TriggerCost.Overload"}}</span>
+                        <input type="number" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.overloadAmount" value="{{overloadAmount}}" min="0" step="1" data-ability-trigger-cost-overload-amount aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadAmount'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadAmount'}}">
+                        <input type="number" value="{{overloadDurationAmount}}" min="0" step="1" data-ability-trigger-cost-overload-duration-amount aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}">
+                        <select data-ability-trigger-cost-overload-duration-unit aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}">
+                          {{#each overloadDurationUnitChoices}}
                           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                           {{/each}}
                         </select>
-                        <input type="text" name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.formula" value="{{formula}}" data-ability-reaction-cost-formula data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Formula'}}" placeholder="{{localize 'FALLOUTMAW.Events.Reaction.Formula'}}">
-                        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-reaction-cost title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-                        <div class="fallout-maw-event-reaction-cost-overload">
-                          <span>{{localize "FALLOUTMAW.Events.Reaction.Overload"}}</span>
-                          <input type="number" name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.overloadAmount" value="{{overloadAmount}}" min="0" step="1" data-ability-reaction-cost-overload-amount aria-label="{{localize 'FALLOUTMAW.Events.Reaction.OverloadAmount'}}" placeholder="{{localize 'FALLOUTMAW.Events.Reaction.OverloadAmount'}}">
-                          <input type="number" value="{{overloadDurationAmount}}" min="0" step="1" data-ability-reaction-cost-overload-duration-amount aria-label="{{localize 'FALLOUTMAW.Events.Reaction.OverloadDuration'}}" placeholder="{{localize 'FALLOUTMAW.Events.Reaction.OverloadDuration'}}">
-                          <select data-ability-reaction-cost-overload-duration-unit aria-label="{{localize 'FALLOUTMAW.Events.Reaction.OverloadDuration'}}">
-                            {{#each overloadDurationUnitChoices}}
-                            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                            {{/each}}
-                          </select>
-                        </div>
                       </div>
-                      {{else}}
-                      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoCosts"}}</p>
-                      {{/each}}
                     </div>
+                    {{else}}
+                    <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Ability.TriggerCost.NoCosts"}}</p>
+                    {{/each}}
                   </div>
                 </div>
-                {{/with}}
               </div>
               {{/if}}
 
@@ -2521,7 +2522,44 @@
             {{#if isUnsupportedEventCondition}}
             <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedCondition"}}</p>
             {{/if}}
-            <div class="fallout-maw-ability-condition-fields">
+            <div class="fallout-maw-ability-condition-fields" data-ability-trigger-cost-ui>
+              {{#if isTriggerCost}}
+              <div class="fallout-maw-event-reaction-settings fallout-maw-trigger-cost-settings">
+                <div class="fallout-maw-event-reaction-costs">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>{{localize "FALLOUTMAW.Ability.TriggerCost.Costs"}}</span>
+                    <button type="button" data-add-ability-trigger-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Ability.TriggerCost.AddCost"}}</button>
+                  </div>
+                  <div class="fallout-maw-event-reaction-cost-list">
+                    {{#each triggerCosts}}
+                    <div class="fallout-maw-event-reaction-cost-row{{#if isUnsupportedResource}} unsupported{{/if}}" data-ability-trigger-cost-row data-cost-index="{{index}}" data-cost-id="{{id}}">
+                      <input type="hidden" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.id" value="{{id}}" data-ability-trigger-cost-id>
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.resourceKey" data-ability-trigger-cost-resource-key aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Resource'}}">
+                        {{#each resourceChoices}}
+                        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                        {{/each}}
+                      </select>
+                      <input type="text" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.formula" value="{{formula}}" data-ability-trigger-cost-formula data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}">
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-trigger-cost title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                      <div class="fallout-maw-event-reaction-cost-overload">
+                        <span>{{localize "FALLOUTMAW.Ability.TriggerCost.Overload"}}</span>
+                        <input type="number" name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.costs.{{index}}.overloadAmount" value="{{overloadAmount}}" min="0" step="1" data-ability-trigger-cost-overload-amount aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadAmount'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadAmount'}}">
+                        <input type="number" value="{{overloadDurationAmount}}" min="0" step="1" data-ability-trigger-cost-overload-duration-amount aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}">
+                        <select data-ability-trigger-cost-overload-duration-unit aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.OverloadDuration'}}">
+                          {{#each overloadDurationUnitChoices}}
+                          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                          {{/each}}
+                        </select>
+                      </div>
+                    </div>
+                    {{else}}
+                    <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Ability.TriggerCost.NoCosts"}}</p>
+                    {{/each}}
+                  </div>
+                </div>
+              </div>
+              {{/if}}
+
               {{#if isEventReaction}}
               <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
@@ -2674,42 +2712,6 @@
                     {{/each}}
                   </div>
                 </div>
-                {{#with eventReactionSettings}}
-                <div class="fallout-maw-event-reaction-settings" data-ability-reaction-settings>
-                  <div class="fallout-maw-event-reaction-costs">
-                    <div class="fallout-maw-item-use-category-header">
-                      <span>{{localize "FALLOUTMAW.Events.Reaction.Costs"}}</span>
-                      <button type="button" data-add-ability-reaction-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Events.Reaction.AddCost"}}</button>
-                    </div>
-                    <div class="fallout-maw-event-reaction-cost-list">
-                      {{#each costs}}
-                      <div class="fallout-maw-event-reaction-cost-row{{#if isUnsupportedResource}} unsupported{{/if}}" data-ability-reaction-cost-row data-cost-index="{{index}}" data-cost-id="{{id}}">
-                        <input type="hidden" name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.id" value="{{id}}" data-ability-reaction-cost-id>
-                        <select name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.resourceKey" data-ability-reaction-resource-key aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Resource'}}">
-                          {{#each resourceChoices}}
-                          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                          {{/each}}
-                        </select>
-                        <input type="text" name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.formula" value="{{formula}}" data-ability-reaction-cost-formula data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Events.Reaction.Formula'}}" placeholder="{{localize 'FALLOUTMAW.Events.Reaction.Formula'}}">
-                        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-reaction-cost title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-                        <div class="fallout-maw-event-reaction-cost-overload">
-                          <span>{{localize "FALLOUTMAW.Events.Reaction.Overload"}}</span>
-                          <input type="number" name="{{../../functionPath}}.{{../../functionIndex}}.reactionSettings.costs.{{index}}.overloadAmount" value="{{overloadAmount}}" min="0" step="1" data-ability-reaction-cost-overload-amount aria-label="{{localize 'FALLOUTMAW.Events.Reaction.OverloadAmount'}}" placeholder="{{localize 'FALLOUTMAW.Events.Reaction.OverloadAmount'}}">
-                          <input type="number" value="{{overloadDurationAmount}}" min="0" step="1" data-ability-reaction-cost-overload-duration-amount aria-label="{{localize 'FALLOUTMAW.Events.Reaction.OverloadDuration'}}" placeholder="{{localize 'FALLOUTMAW.Events.Reaction.OverloadDuration'}}">
-                          <select data-ability-reaction-cost-overload-duration-unit aria-label="{{localize 'FALLOUTMAW.Events.Reaction.OverloadDuration'}}">
-                            {{#each overloadDurationUnitChoices}}
-                            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                            {{/each}}
-                          </select>
-                        </div>
-                      </div>
-                      {{else}}
-                      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Events.Reaction.NoCosts"}}</p>
-                      {{/each}}
-                    </div>
-                  </div>
-                </div>
-                {{/with}}
               </div>
               {{/if}}
 

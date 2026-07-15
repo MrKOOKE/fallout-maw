@@ -2,10 +2,11 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
+  getAbilityFunctionTriggerCostRows,
   getAbilitySourceId,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
-import { abilityConditionsApply, getAbilityEffectChanges, getAbilityEffectChangesFromFunctions, getAbilityFunctionChangesForSatisfiedAuraCondition } from "./evaluation.mjs";
+import { abilityConditionsApply, getAbilityEffectChangesFromFunctions, getAbilityFunctionChangesForSatisfiedAuraCondition } from "./evaluation.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
   AURA_GENERATED_EFFECT_FLAG_KEY,
@@ -16,6 +17,11 @@ import {
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
 import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
+import {
+  syncTimedTriggerCostEffects,
+  withoutTimedTriggerCostFunctions
+} from "./trigger-cost-effects.mjs";
+import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
@@ -42,6 +48,7 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("updateItem", (item, changes, options = {}) => {
     if (options?.falloutMawEventReactionProgress === true) return;
+    if (options?.falloutMawTriggerTransitionState === true) return;
     if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) {
       queueActorAbilityEffectSync(item.parent, {}, {
         aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)
@@ -231,9 +238,16 @@ export async function syncActorAbilityEffects(actor, context = {}) {
 
     for (const item of abilityItems) {
       await syncSingleAbilityEffect(actor, item, context);
+      await syncTimedTriggerCostEffects(actor, item, item.system?.functions ?? [], context);
     }
     for (const item of itemFreeSettingsItems) {
       await syncSingleItemFreeSettingsEffect(actor, item, context);
+      await syncTimedTriggerCostEffects(
+        actor,
+        item,
+        item.system?.functions?.freeSettings?.entries ?? [],
+        context
+      );
     }
 
     const stale = actor.effects
@@ -383,7 +397,8 @@ function buildDesiredAuraGeneratedEffects() {
               entry.id,
               condition.id
             ].join(".");
-            const signature = JSON.stringify({ key, changes });
+            const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
+            const signature = JSON.stringify({ key, changes, triggerCost });
             const data = buildAuraGeneratedActiveEffectData(source, sourceActor, entry, condition, changes, key, signature);
             const actorDesired = desired.get(targetActor.uuid) ?? new Map();
             actorDesired.set(key, data);
@@ -411,11 +426,12 @@ function getAuraSourceFunctionSets(actor) {
 }
 
 function buildAuraGeneratedActiveEffectData(source, sourceActor, entry, condition, changes, key, signature) {
+  const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
   return {
     type: "base",
     name: source.item.name,
     img: source.item.img || "icons/svg/aura.svg",
-    origin: source.item.uuid,
+    origin: getAbilityEffectOriginUuid(sourceActor, source.item),
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -430,10 +446,31 @@ function buildAuraGeneratedActiveEffectData(source, sourceActor, entry, conditio
           sourceActorUuid: sourceActor.uuid,
           itemId: source.item.id,
           functionId: entry.id,
-          conditionId: condition.id
+          conditionId: condition.id,
+          ...(triggerCost ? { triggerCost } : {})
         }
       }
     }
+  };
+}
+
+function buildAuraTriggerCostData(sourceActor, source, entry) {
+  if (!(entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerCost)) {
+    return null;
+  }
+  const sourceActorUuid = String(sourceActor?.uuid ?? "").trim();
+  const sourceItemUuid = String(source?.item?.uuid ?? "").trim();
+  if (!sourceActorUuid || !sourceItemUuid) return null;
+  // Aura ingress is passive. Carry the cost to the recipient effect so a
+  // concrete consumer (for example, a skill check) charges that recipient.
+  return {
+    sourceIdentity: `${sourceActorUuid}:${sourceItemUuid}`,
+    sourceItemUuid,
+    sourceItemId: String(source?.item?.id ?? ""),
+    sourceItemName: String(source?.item?.name ?? ""),
+    sourceItemImg: String(source?.item?.img ?? ""),
+    functionId: String(entry?.id ?? ""),
+    costs: getAbilityFunctionTriggerCostRows(entry)
   };
 }
 
@@ -534,12 +571,18 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
 }
 
 function buildAbilityEffectChanges(actor, item, context = {}) {
-  return getAbilityEffectChanges(actor, item, context)
+  return getAbilityEffectChangesFromFunctions(
+    actor,
+    withoutTimedTriggerCostFunctions(item?.system?.functions ?? []),
+    { ...context, abilityItemId: item?.id ?? "" }
+  )
     .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
 }
 
 function buildItemFreeSettingsEffectChanges(actor, item, context = {}) {
-  return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions?.freeSettings?.entries ?? [], {
+  return getAbilityEffectChangesFromFunctions(actor, withoutTimedTriggerCostFunctions(
+    item?.system?.functions?.freeSettings?.entries ?? []
+  ), {
     ...context,
     abilityItemId: item?.id ?? ""
   })
@@ -559,7 +602,7 @@ function getItemFreeSettingsEffectShowIcon(actor, item, context = {}) {
 }
 
 function hasActiveRuntimeAbilityState(actor, item, context = {}) {
-  return normalizeAbilityFunctions(item?.system?.functions ?? [])
+  return withoutTimedTriggerCostFunctions(item?.system?.functions ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
     .filter(entry => !hasEventReactionCondition(entry.conditions))
     .some(entry => {
@@ -576,7 +619,7 @@ function hasActiveRuntimeAbilityState(actor, item, context = {}) {
 }
 
 function hasActiveRuntimeItemFreeSettingsState(actor, item, context = {}) {
-  return normalizeAbilityFunctions(item?.system?.functions?.freeSettings?.entries ?? [])
+  return withoutTimedTriggerCostFunctions(item?.system?.functions?.freeSettings?.entries ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
     .filter(entry => !hasEventReactionCondition(entry.conditions))
     .some(entry => {
@@ -598,6 +641,7 @@ function hasRuntimeConditions(conditions = []) {
     && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
     && condition.type !== ABILITY_CONDITION_TYPES.cooldown
     && condition.type !== ABILITY_CONDITION_TYPES.duration
+    && condition.type !== ABILITY_CONDITION_TYPES.triggerCost
   ));
 }
 

@@ -213,9 +213,16 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "triggerCost", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
+    costs: new ArrayField(new SchemaField({
+      id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+      resourceKey: new StringField({ required: true, blank: true, initial: "" }),
+      formula: new StringField({ required: true, blank: true, initial: "0" }),
+      overloadAmount: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      overloadDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    }), { required: true, initial: [] }),
     eventKey: new StringField({ required: true, blank: true, initial: "" }),
     progressRequired: new NumberField({ required: true, min: 0.01, initial: 1 }),
     combatOnly: new BooleanField({ required: true, initial: false }),

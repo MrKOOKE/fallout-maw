@@ -34,6 +34,10 @@ import {
   resolveAbilityActionTriggerTarget,
   selectAbilityWeaponAttackOption
 } from "../abilities/ability-actions.mjs";
+import {
+  configureAbilityTriggerCostRuntime,
+  registerAbilityTriggerCostInterceptors
+} from "../abilities/trigger-cost-runtime.mjs";
 
 const LEGACY_REACTION_EVENT_MAP = Object.freeze({
   weaponAttackTargeted: "fallout-maw.weapon.attack.targeted",
@@ -68,6 +72,7 @@ export function registerFoundrySystemEventIntegration() {
     },
     warn: warning => console.warn(`${SYSTEM_ID} | Event Reaction condition ignored`, warning)
   });
+  configureAbilityTriggerCostRuntime({ costRegistry: eventRuntime.costRegistry });
   registerReactionProvider(eventRuntime.provider);
   registerReactionExecutionGuard(consumeReactionExecutionBudget);
   registerReactionEventSemanticAdapter(adaptLegacyReactionEvent);
@@ -79,6 +84,7 @@ export function registerFoundrySystemEventIntegration() {
     guardRecursion: false,
     intercept: interceptEventReactions
   });
+  registerAbilityTriggerCostInterceptors({ registerInterceptor: registerSystemEventInterceptor });
   return eventRuntime;
 }
 

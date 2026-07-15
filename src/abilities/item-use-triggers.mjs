@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
+  getAbilityFunctionEffectDurationSeconds,
   getAbilitySourceId,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -15,9 +16,18 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { registerSystemEventObserver } from "../events/dispatcher.mjs";
+import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
+import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
+import {
+  notifyAbilityTriggerCostFailure,
+  payAbilityFunctionTriggerCost
+} from "./trigger-cost-runtime.mjs";
+import { getCurrentDamageHubOperationRef } from "../combat/damage-hub.mjs";
 
 const ABILITY_ITEM_USE_EFFECT_FLAG_KEY = "abilityItemUseEffect";
+const ABILITY_ITEM_USE_COMMITTED_COSTS_FLAG_KEY = "abilityItemUseCommittedTriggerCosts";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+const committedItemUseCosts = new Map();
 let itemUseObserverRegistered = false;
 
 export function registerAbilityItemUseHooks() {
@@ -54,7 +64,18 @@ async function observeResolvedItemUse({ event, scope } = {}) {
   }
   item ??= createUsedItemSnapshot(itemData);
   if (!item) return;
-  await applyAbilityItemUseTriggers({ actor, item }, { chainRef: scope?.chainRef ?? null });
+  const damageHubOperationRef = String(
+    event?.data?.damageHubOperationRef
+    ?? event?.data?.request?.damageHubOperationRef
+    ?? getCurrentDamageHubOperationRef()
+    ?? ""
+  ).trim();
+  await applyAbilityItemUseTriggers({ actor, item }, {
+    chainRef: scope?.chainRef ?? null,
+    rootId: scope?.rootId ?? event?.rootId ?? "",
+    eventId: event?.eventId ?? "",
+    damageHubOperationRef
+  });
 }
 
 function createUsedItemSnapshot(data = {}) {
@@ -69,13 +90,23 @@ function createUsedItemSnapshot(data = {}) {
   };
 }
 
-async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}, { chainRef = null } = {}) {
+async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}, {
+  chainRef = null,
+  rootId = "",
+  eventId = "",
+  damageHubOperationRef = ""
+} = {}) {
   if (!actor?.isOwner || !item) return [];
 
   const entries = findTriggeredItemUseEntries(actor, item);
   const results = [];
   for (const entry of entries) {
-    const result = await advanceItemUseCounter(actor, entry, { chainRef });
+    const result = await advanceItemUseCounter(actor, entry, {
+      chainRef,
+      rootId,
+      eventId,
+      damageHubOperationRef
+    });
     if (result) results.push(result);
   }
   return results;
@@ -83,10 +114,14 @@ async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}, {
 
 function findTriggeredItemUseEntries(actor, usedItem) {
   const entries = [];
-  for (const abilityItem of actor.items ?? []) {
-    if (abilityItem?.type !== "ability") continue;
+  for (const abilityItem of getActorItemsWithActiveHudModules(actor)) {
+    const sourceFunctions = abilityItem?.type === "ability"
+      ? abilityItem.system?.functions ?? []
+      : isActiveFreeSettingsGear(abilityItem)
+        ? abilityItem.system?.functions?.freeSettings?.entries ?? []
+        : [];
 
-    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+    for (const abilityFunction of normalizeAbilityFunctions(sourceFunctions)) {
       if (abilityFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
       if (hasEventReactionCondition(abilityFunction.conditions)) continue;
 
@@ -131,6 +166,7 @@ function triggerConditionsApply(actor, conditions = [], context = {}) {
 
 function triggerConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.limitedChanges) return true;
+  if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return itemUseConditionMatches(condition, context.usedItem);
   return abilityConditionApplies(actor, condition, context);
 }
@@ -142,46 +178,102 @@ function itemUseConditionMatches(condition = {}, item = null) {
   return categories.has(itemCategory);
 }
 
-async function advanceItemUseCounter(actor, entry, { chainRef = null } = {}) {
+async function advanceItemUseCounter(actor, entry, {
+  chainRef = null,
+  rootId = "",
+  eventId = "",
+  damageHubOperationRef = ""
+} = {}) {
   const key = getAbilityItemUseCounterKey(entry);
   if (!key) return null;
 
   const requiredCount = Math.max(1, toInteger(entry.condition?.requiredCount ?? entry.condition?.limit ?? 1));
   const counters = foundry.utils.deepClone(entry.abilityItem.getFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY) ?? {});
-  const nextCount = Math.max(0, toInteger(counters[key])) + 1;
+  const nextCount = Math.min(requiredCount, Math.max(0, toInteger(counters[key])) + 1);
   counters[key] = nextCount;
   const updateOptions = createItemUseTriggerDocumentOptions(chainRef);
 
-  if (nextCount < requiredCount) {
-    await entry.abilityItem.update({
-      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: counters
-    }, updateOptions);
+  // Persist the reached threshold before any awaited picker/payment. The
+  // current attempt then either commits an effect or consumes and resets it.
+  await entry.abilityItem.update({
+    [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: counters
+  }, updateOptions);
+  if (nextCount < requiredCount) return null;
+
+  const committedKey = getCommittedItemUseCostKey(entry.abilityItem, key);
+  let committedCost = getCommittedItemUseCost(entry.abilityItem, key, committedKey);
+  const committedEffect = findActorEffect(actor, committedCost?.effectId);
+  if (committedEffect) {
+    await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions, {
+      clearCommittedCost: true
+    });
+    return committedEffect;
+  }
+
+  const changes = await selectRuntimeChanges(entry.abilityItem, entry.abilityFunction);
+  if (!changes?.length) {
+    if (!committedCost) {
+      await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions);
+    }
     return null;
   }
 
-  if (Object.keys(counters).length <= 1) {
-    await entry.abilityItem.update({
-      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: globalThis._del
-    }, updateOptions);
-  } else {
-    await entry.abilityItem.update({
-      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}.${key}`]: globalThis._del
-    }, updateOptions);
+  if (!committedCost) {
+    const payment = await payAbilityFunctionTriggerCost({
+      actor,
+      sourceItem: entry.abilityItem,
+      abilityFunction: entry.abilityFunction,
+      context: {
+        rootId,
+        eventId,
+        chainRef,
+        occurrenceId: `item-use:${entry.abilityItem.uuid}:${key}`,
+        inDamageHubOperation: Boolean(damageHubOperationRef),
+        damageHubOperation: damageHubOperationRef ? "current" : null
+      }
+    });
+    if (!payment.ok) {
+      notifyAbilityTriggerCostFailure(payment);
+      await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions);
+      return null;
+    }
+    if (payment.execution) {
+      committedCost = {
+        rootId: String(rootId ?? ""),
+        eventId: String(eventId ?? ""),
+        effectId: "",
+        committedAt: Number(game.time?.worldTime) || 0
+      };
+      committedItemUseCosts.set(committedKey, committedCost);
+      await persistCommittedItemUseCost(entry.abilityItem, key, committedCost, updateOptions);
+    }
   }
-  return createTriggeredAbilityEffect(actor, entry, { chainRef });
+
+  const createdEffect = await createTriggeredAbilityEffect(actor, entry, { chainRef, changes });
+  if (!createdEffect) return null;
+  if (committedCost) {
+    committedCost = { ...committedCost, effectId: String(createdEffect.id ?? createdEffect._id ?? "") };
+    committedItemUseCosts.set(committedKey, committedCost);
+    await persistCommittedItemUseCost(entry.abilityItem, key, committedCost, updateOptions);
+  }
+  await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions, {
+    clearCommittedCost: Boolean(committedCost)
+  });
+  return createdEffect;
 }
 
-async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunction, condition, usedItem } = {}, { chainRef = null } = {}) {
-  const changes = await selectRuntimeChanges(abilityItem, abilityFunction);
+async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunction, condition, usedItem } = {}, {
+  chainRef = null,
+  changes = []
+} = {}) {
   if (!changes?.length) return null;
-
-  const durationSeconds = Math.max(0, toInteger(condition?.durationSeconds));
+  const durationSeconds = resolveItemUseEffectDurationSeconds(abilityFunction, condition);
   const startTime = Number(game.time?.worldTime) || 0;
   const effectData = {
     type: "base",
     name: abilityItem.name,
     img: abilityItem.img || "icons/svg/aura.svg",
-    origin: abilityItem.uuid,
+    origin: getAbilityEffectOriginUuid(actor, abilityItem),
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -250,4 +342,63 @@ async function selectRuntimeChanges(abilityItem, abilityFunction = {}) {
 
 function getChangeSelectionId(change = {}, index = 0) {
   return String(change?.id ?? "").trim() || `change-${index}`;
+}
+
+function isActiveFreeSettingsGear(item = null) {
+  if (item?.type !== "gear" || !item.system?.functions?.freeSettings?.enabled) return false;
+  return Boolean(item.system?.equipped)
+    || ["equipment", "weapon", "constructPart"].includes(item.system?.placement?.mode);
+}
+
+function resolveItemUseEffectDurationSeconds(abilityFunction = {}, itemUseCondition = {}) {
+  const functionDuration = getAbilityFunctionEffectDurationSeconds(abilityFunction);
+  if (functionDuration > 0) return functionDuration;
+  return Math.max(0, toInteger(
+    itemUseCondition?.durationSeconds
+    ?? itemUseCondition?.duration
+    ?? itemUseCondition?.seconds
+  ));
+}
+
+function getCommittedItemUseCostKey(item = null, counterKey = "") {
+  return `${String(item?.uuid ?? item?.id ?? "")}:${String(counterKey ?? "")}`;
+}
+
+function getCommittedItemUseCost(item = null, counterKey = "", committedKey = "") {
+  const memory = committedItemUseCosts.get(committedKey);
+  if (memory) return { ...memory };
+  const stored = item?.getFlag?.(SYSTEM_ID, ABILITY_ITEM_USE_COMMITTED_COSTS_FLAG_KEY)?.[counterKey];
+  return stored && typeof stored === "object" ? { ...stored } : null;
+}
+
+async function persistCommittedItemUseCost(item, counterKey, committedCost, updateOptions) {
+  try {
+    await item.update({
+      [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COMMITTED_COSTS_FLAG_KEY}.${counterKey}`]: committedCost
+    }, updateOptions);
+  } catch (error) {
+    // The in-memory marker still prevents a second charge during this session.
+    console.error("fallout-maw | Item Use trigger-cost marker could not be persisted.", error);
+  }
+}
+
+async function resetItemUseTriggerState(item, counters, counterKey, committedKey, updateOptions, {
+  clearCommittedCost = false
+} = {}) {
+  const update = Object.keys(counters).length <= 1
+    ? { [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: globalThis._del }
+    : { [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}.${counterKey}`]: globalThis._del };
+  if (clearCommittedCost) {
+    update[`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COMMITTED_COSTS_FLAG_KEY}.${counterKey}`] = globalThis._del;
+  }
+  await item.update(update, updateOptions);
+  committedItemUseCosts.delete(committedKey);
+}
+
+function findActorEffect(actor = null, effectId = "") {
+  const id = String(effectId ?? "").trim();
+  if (!id) return null;
+  return actor?.effects?.get?.(id)
+    ?? Array.from(actor?.effects ?? []).find(effect => String(effect?.id ?? effect?._id ?? "") === id)
+    ?? null;
 }

@@ -66,6 +66,9 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
   const groups = new Map();
   for (const condition of conditions ?? []) {
     if (!condition?.type) continue;
+    // Trigger cost describes what happens after a function is actually used;
+    // it is metadata and never participates in AND/OR condition truth.
+    if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) continue;
     const groupId = String(condition?.groupId ?? "").trim();
     if (!groupId) {
       standalone.push(condition);
@@ -81,6 +84,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 }
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
+  if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.toggleable) {
     return isAbilityToggleConditionActive(
       actor,

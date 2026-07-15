@@ -7,6 +7,7 @@ import {
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 
 export const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 /** @deprecated Prefer getAbilityOverloadReactionCostId(resourceKey); kept for energy/power rows. */
@@ -120,7 +121,7 @@ export async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunc
     type: "base",
     name,
     img: abilityItem?.img || "icons/svg/aura.svg",
-    origin: abilityItem?.uuid ?? "",
+    origin: getAbilityEffectOriginUuid(actor, abilityItem),
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -158,12 +159,10 @@ export async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunc
 }
 
 export async function applyAbilityFunctionOverloadCosts(actor, abilityItem, abilityFunction, {
-  costs = null,
+  costs = [],
   chainRef = null
 } = {}) {
-  const rows = Array.isArray(costs)
-    ? costs
-    : (abilityFunction?.reactionSettings?.costs ?? []);
+  const rows = Array.isArray(costs) ? costs : Object.values(costs ?? {});
   let applied = 0;
   for (const row of rows) {
     const resourceKey = String(row?.resourceKey ?? "").trim();

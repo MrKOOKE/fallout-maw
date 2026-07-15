@@ -157,8 +157,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addFunctionCondition: this.#onAddFunctionCondition,
       addFunctionConditionAlternative: this.#onAddFunctionConditionAlternative,
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
-      addFunctionReactionCost: this.#onAddFunctionReactionCost,
-      deleteFunctionReactionCost: this.#onDeleteFunctionReactionCost,
+      addConditionTriggerCost: this.#onAddConditionTriggerCost,
+      deleteConditionTriggerCost: this.#onDeleteConditionTriggerCost,
       addConditionTrackingTarget: this.#onAddConditionTrackingTarget,
       deleteConditionTrackingTarget: this.#onDeleteConditionTrackingTarget,
       addConditionEventSkill: this.#onAddConditionEventSkill,
@@ -593,39 +593,38 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
-  static #onAddFunctionReactionCost(event, target) {
+  static #onAddConditionTriggerCost(event, target) {
     event.preventDefault();
     this.#syncFromForm();
-    const functionRow = target.closest("[data-ability-function-row]");
-    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
-    const entry = this.ability.system.functions?.[functionIndex];
-    if (entry?.type !== ABILITY_FUNCTION_TYPES.effectChanges) return this.#persist({ render: true, sync: false });
-    const settings = normalizeEventReactionSettings(entry.reactionSettings);
-    settings.costs.push({
+    const { condition } = this.#getConditionForTarget(target);
+    if (condition?.type !== ABILITY_CONDITION_TYPES.triggerCost) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const costs = normalizeTriggerCostRows(condition.costs);
+    costs.push({
       id: foundry.utils.randomID(),
       resourceKey: REACTION_POINTS_RESOURCE_KEY,
       formula: "1",
       overloadAmount: 0,
       overloadDurationSeconds: 0
     });
-    entry.reactionSettings = settings;
+    condition.costs = costs;
     return this.#persist({ render: true, sync: false });
   }
 
-  static #onDeleteFunctionReactionCost(event, target) {
+  static #onDeleteConditionTriggerCost(event, target) {
     event.preventDefault();
     this.#syncFromForm();
-    const functionRow = target.closest("[data-ability-function-row]");
-    const costRow = target.closest("[data-event-reaction-cost-row]");
-    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
-    const costIndex = getRowIndex(functionRow, "[data-event-reaction-cost-row]", costRow);
-    const entry = this.ability.system.functions?.[functionIndex];
-    if (entry?.type !== ABILITY_FUNCTION_TYPES.effectChanges || costIndex < 0) {
+    const { condition, conditionIndex } = this.#getConditionForTarget(target);
+    const conditionRow = target.closest("[data-ability-condition-row]");
+    const costRow = target.closest("[data-trigger-cost-row]");
+    const costIndex = getRowIndex(conditionRow, "[data-trigger-cost-row]", costRow);
+    if (condition?.type !== ABILITY_CONDITION_TYPES.triggerCost || conditionIndex < 0 || costIndex < 0) {
       return this.#persist({ render: true, sync: false });
     }
-    const settings = normalizeEventReactionSettings(entry.reactionSettings);
-    settings.costs.splice(costIndex, 1);
-    entry.reactionSettings = settings;
+    const costs = normalizeTriggerCostRows(condition.costs);
+    costs.splice(costIndex, 1);
+    condition.costs = costs;
     return this.#persist({ render: true, sync: false });
   }
 
@@ -1082,7 +1081,7 @@ function readAbilityFunctions(root) {
     fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
     fixedSettings: readFixedFunctionSettings(row),
     activeSettings: readActiveApplicationSettings(row),
-    reactionSettings: readEventReactionSettings(row),
+    reactionSettings: { durationSeconds: 0, costs: [] },
     changes: readAbilityChanges(row.querySelector("[data-ability-changes]"), "[data-ability-change-row]"),
     actions: readAbilityActions(row),
     conditions: readAbilityConditions(row.querySelector("[data-ability-conditions]")),
@@ -1102,31 +1101,6 @@ function readAbilityActions(row) {
     fixedActionPointCost: actionRow.querySelector("[data-field='action.fixedActionPointCost']")?.value,
     actualActionPointCostPercent: actionRow.querySelector("[data-field='action.actualActionPointCostPercent']")?.value
   }));
-}
-
-function readEventReactionSettings(row) {
-  if (row?.dataset?.functionType !== ABILITY_FUNCTION_TYPES.effectChanges) return {};
-  return {
-    durationSeconds: 0,
-    costs: Array.from(row.querySelectorAll("[data-event-reaction-cost-row]") ?? []).map(costRow => {
-      const overloadDurationRaw = costRow.querySelector("[data-field='reaction.cost.overloadDurationAmount']")?.value;
-      const overloadDurationSeconds = overloadDurationRaw === "" || overloadDurationRaw === undefined || overloadDurationRaw === null
-        ? 0
-        : durationPartsToSeconds(
-          overloadDurationRaw,
-          costRow.querySelector("[data-field='reaction.cost.overloadDurationUnit']")?.value
-        );
-      return {
-        id: costRow.dataset.costId || foundry.utils.randomID(),
-        resourceKey: costRow.querySelector("[data-field='reaction.cost.resourceKey']")?.value ?? "",
-        formula: costRow.querySelector("[data-field='reaction.cost.formula']")?.value ?? "0",
-        overloadAmount: overloadDurationSeconds > 0
-          ? Math.max(0, toInteger(costRow.querySelector("[data-field='reaction.cost.overloadAmount']")?.value ?? 0))
-          : 0,
-        overloadDurationSeconds
-      };
-    })
-  };
 }
 
 function readActiveApplicationSettings(row) {
@@ -1579,6 +1553,7 @@ function readAbilityConditions(root) {
       })(),
       expectedResultKeys: readFieldValues(row, "[data-field='conditionEventExpectedResult']"),
       eventFilters: readEventReactionDepthFilters(row),
+      costs: readTriggerCostRows(row),
       proficiencyKeys: readFieldValues(row, "[data-field='conditionProficiency']"),
       auraMode,
       auraTargetGroups: readFieldValues(row, "[data-field='conditionAuraTargetGroup']"),
@@ -1607,6 +1582,27 @@ function readAbilityConditions(root) {
       requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
       itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
       durationSeconds: readConditionDurationSeconds(row)
+    };
+  });
+}
+
+function readTriggerCostRows(conditionRow) {
+  return Array.from(conditionRow?.querySelectorAll("[data-trigger-cost-row]") ?? []).map(costRow => {
+    const overloadDurationRaw = costRow.querySelector("[data-field='triggerCost.overloadDurationAmount']")?.value;
+    const overloadDurationSeconds = overloadDurationRaw === "" || overloadDurationRaw === undefined || overloadDurationRaw === null
+      ? 0
+      : durationPartsToSeconds(
+        overloadDurationRaw,
+        costRow.querySelector("[data-field='triggerCost.overloadDurationUnit']")?.value
+      );
+    return {
+      id: costRow.dataset.costId || foundry.utils.randomID(),
+      resourceKey: costRow.querySelector("[data-field='triggerCost.resourceKey']")?.value ?? "",
+      formula: costRow.querySelector("[data-field='triggerCost.formula']")?.value ?? "0",
+      overloadAmount: overloadDurationSeconds > 0
+        ? Math.max(0, toInteger(costRow.querySelector("[data-field='triggerCost.overloadAmount']")?.value ?? 0))
+        : 0,
+      overloadDurationSeconds
     };
   });
 }
@@ -1740,9 +1736,8 @@ function prepareFunctionForDisplay(entry) {
     ? prepareDisarmSettingsForDisplay(normalized.fixedSettings)
     : null;
   const hasEventReaction = normalized.conditions.some(condition => condition.type === ABILITY_CONDITION_TYPES.eventReaction);
-  const eventReactionSettings = isEffectChanges && hasEventReaction
-    ? prepareEventReactionSettingsForDisplay(normalized.reactionSettings)
-    : null;
+  const hasTriggerCostCondition = normalized.conditions
+    .some(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerCost);
   const hasToggleableCondition = normalized.conditions
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.toggleable);
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
@@ -1751,8 +1746,9 @@ function prepareFunctionForDisplay(entry) {
     allowEventReaction: isEffectChanges,
     allowToggleable: isEffectChanges
       && (!hasToggleableCondition || condition?.type === ABILITY_CONDITION_TYPES.toggleable),
-    eventReactionMode: hasEventReaction,
-    eventReactionSettings
+    allowTriggerCost: isEffectChanges
+      && (!hasTriggerCostCondition || condition?.type === ABILITY_CONDITION_TYPES.triggerCost),
+    eventReactionMode: hasEventReaction
   }));
   const hasRuntimeConditions = normalized.conditions.some(condition => isRuntimeCondition(condition.type));
   return {
@@ -1798,7 +1794,6 @@ function prepareFunctionForDisplay(entry) {
     fixedRageSettings,
     fixedDisarmSettings,
     hasEventReaction,
-    eventReactionSettings,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(normalized.penalties.length),
     typeLabel: getAbilityFunctionTypeLabel(normalized, fixedKey),
     changes: normalized.changes.map(prepareChangeForDisplay),
@@ -1888,22 +1883,22 @@ function syncAbilityAttackChoiceControls(select) {
   }
 }
 
-function prepareEventReactionSettingsForDisplay(settings = {}) {
-  const normalized = normalizeEventReactionSettings(settings);
-  return {
-    ...normalized,
-    costs: normalized.costs.map((cost, index) => {
-      const overloadDuration = splitDurationSeconds(cost.overloadDurationSeconds);
-      return {
-        ...cost,
-        index,
-        overloadDurationAmount: cost.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
-        overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
-        resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
-        isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey)
-      };
-    })
-  };
+function prepareTriggerCostRowsForDisplay(costs = []) {
+  return normalizeTriggerCostRows(costs).map((cost, index) => {
+    const overloadDuration = splitDurationSeconds(cost.overloadDurationSeconds);
+    return {
+      ...cost,
+      index,
+      overloadDurationAmount: cost.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
+      overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+      resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
+      isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey)
+    };
+  });
+}
+
+function normalizeTriggerCostRows(costs = []) {
+  return normalizeEventReactionSettings({ costs }).costs;
 }
 
 function prepareChangeForDisplay(change, index) {
@@ -2229,16 +2224,17 @@ function prepareConditionForDisplay(condition, {
   allowLimitedChanges = false,
   allowEventReaction = false,
   allowToggleable = false,
-  eventReactionMode = false,
-  eventReactionSettings = null
+  allowTriggerCost = false,
+  eventReactionMode = false
 } = {}) {
   const type = String(condition?.type ?? "");
   const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
+  const isTriggerCost = type === ABILITY_CONDITION_TYPES.triggerCost;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isToggleable && !isEventReaction && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -2284,13 +2280,14 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
+    isTriggerCost,
     isEventReactionFilter,
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
-    eventReactionSettings: isEventReaction ? eventReactionSettings : null,
+    triggerCosts: isTriggerCost ? prepareTriggerCostRowsForDisplay(condition?.costs) : [],
     reactionMode,
     reactionModeChoices: buildEventReactionModeChoices(reactionMode),
     showEventProgress,
@@ -2346,7 +2343,7 @@ function prepareConditionForDisplay(condition, {
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -2362,7 +2359,7 @@ function prepareConditionForDisplay(condition, {
     durationAmount: duration.amount,
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
-    typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowToggleable, eventReactionMode }),
+    typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowToggleable, allowTriggerCost, eventReactionMode }),
     eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
@@ -2498,6 +2495,7 @@ function buildConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
   allowToggleable = false,
+  allowTriggerCost = false,
   eventReactionMode = false
 } = {}) {
   const choices = [
@@ -2526,6 +2524,13 @@ function buildConditionTypeChoices(selected = "", {
       value: ABILITY_CONDITION_TYPES.eventReaction,
       label: localizeEventReactionUi("ConditionLabel", "Event reaction"),
       selected: selected === ABILITY_CONDITION_TYPES.eventReaction
+    });
+  }
+  if (allowTriggerCost || selected === ABILITY_CONDITION_TYPES.triggerCost) {
+    choices.splice(1, 0, {
+      value: ABILITY_CONDITION_TYPES.triggerCost,
+      label: game.i18n.localize("FALLOUTMAW.Ability.TriggerCost.ConditionLabel"),
+      selected: selected === ABILITY_CONDITION_TYPES.triggerCost
     });
   }
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
@@ -2561,6 +2566,7 @@ function buildConditionTypeChoices(selected = "", {
       !choice.value
       || choice.value === ABILITY_CONDITION_TYPES.toggleable
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
+      || choice.value === ABILITY_CONDITION_TYPES.triggerCost
       || choice.value === ABILITY_CONDITION_TYPES.duration
       || isEventReactionFilterType(choice.value)
       || choice.value === selected
@@ -2569,6 +2575,7 @@ function buildConditionTypeChoices(selected = "", {
       && choice.value
       && choice.value !== ABILITY_CONDITION_TYPES.toggleable
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
+      && choice.value !== ABILITY_CONDITION_TYPES.triggerCost
       && choice.value !== ABILITY_CONDITION_TYPES.duration
       && !isEventReactionFilterType(choice.value)
       ? { ...choice, label: `${choice.label} — ${localizeEventReactionUi("Unsupported", "unsupported")}` }

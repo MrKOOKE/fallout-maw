@@ -12,6 +12,7 @@ import {
 } from "../abilities/overload.mjs";
 import {
   ABILITY_EVENT_REACTION_MODES,
+  getAbilityFunctionTriggerCostRows,
   getAbilityFunctionEffectDurationSeconds,
   normalizeEventReactionMode
 } from "../settings/abilities.mjs";
@@ -105,7 +106,7 @@ export function createGenericEventReactionProvider({
       // The persistent counter still receives nested events after the function
       // has spent its single offer for this root.
       if (consumedChances.has(candidate.chanceKey)) continue;
-      const baseRows = candidate.reactionSettings?.costs ?? [];
+      const baseRows = getAbilityFunctionTriggerCostRows(abilityFunction);
       const quoteContext = {
         rootId: candidate.rootId,
         eventId: candidate.eventId,
@@ -115,12 +116,14 @@ export function createGenericEventReactionProvider({
       };
       const baseQuote = await costRegistry.quote(actor, baseRows, quoteContext);
       if (!baseQuote.valid || !baseQuote.affordable) continue;
-      const costRows = withAbilityOverloadCostRows(
-        actor,
-        sourceItem,
-        abilityFunction ?? { id: candidate.functionId },
-        baseRows
-      );
+      const costRows = baseRows.length
+        ? withAbilityOverloadCostRows(
+          actor,
+          sourceItem,
+          abilityFunction ?? { id: candidate.functionId },
+          baseRows
+        )
+        : [];
       const quote = await costRegistry.quote(actor, costRows, quoteContext);
       if (!quote.valid || !quote.affordable) continue;
       const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
@@ -212,13 +215,15 @@ export function createGenericEventReactionProvider({
       conditionIds: currentProgressConditionIds
     }))) return failedResult("progressNotReady");
 
-    const baseRows = abilityFunction.reactionSettings?.costs ?? [];
-    const costRows = withAbilityOverloadCostRows(
-      actor,
-      sourceItem,
-      abilityFunction,
-      baseRows
-    );
+    const baseRows = getAbilityFunctionTriggerCostRows(abilityFunction);
+    const costRows = baseRows.length
+      ? withAbilityOverloadCostRows(
+        actor,
+        sourceItem,
+        abilityFunction,
+        baseRows
+      )
+      : [];
     const execution = await costRegistry.execute(actor, costRows, {
       expectedFingerprint: String(offer.costFingerprint ?? offer.eventReaction?.costFingerprint ?? ""),
       rootId: envelope.rootId,
@@ -239,9 +244,16 @@ export function createGenericEventReactionProvider({
             chainRef: context?.chainRef
           })
           : null;
-        await applyAbilityFunctionOverloadCosts(actor, sourceItem, abilityFunction, {
-          chainRef: context?.chainRef
-        });
+        try {
+          await applyAbilityFunctionOverloadCosts(actor, sourceItem, abilityFunction, {
+            costs: baseRows,
+            chainRef: context?.chainRef
+          });
+        } catch (error) {
+          // The resource vector is already committed. A secondary overload
+          // effect cannot turn the paid reaction into a retryable failure.
+          logger?.error?.("fallout-maw | Trigger-cost overload application failed.", error);
+        }
         if (effect && getAbilityFunctionEffectDurationSeconds(abilityFunction) === 0) ensureRootCleanup(envelope.rootId);
         const actionUsed = actionSelection.option
           ? await actionRuntime.execute({
@@ -351,7 +363,11 @@ export function createGenericEventReactionProvider({
 
 async function collectActionVariants(actor, abilityFunction, envelope, actionRuntime) {
   const actions = abilityFunction?.actions ?? [];
-  if (!actions.length) return [{ action: null, option: null }];
+  if (!actions.length) {
+    const hasEffect = (abilityFunction?.changes ?? [])
+      .some(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "");
+    return hasEffect ? [{ action: null, option: null }] : [];
+  }
   if (!actionRuntime?.collectOptions || !actionRuntime?.selectOption || !actionRuntime?.execute) return [];
   const variants = [];
   for (const action of actions) {

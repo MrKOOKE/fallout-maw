@@ -84,6 +84,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
 export const ABILITY_CONDITION_TYPES = Object.freeze({
   toggleable: "toggleable",
   eventReaction: "eventReaction",
+  triggerCost: "triggerCost",
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
   targetFaction: "targetFaction",
@@ -469,9 +470,12 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     ? rawType
     : ABILITY_FUNCTION_TYPES.effectChanges;
   let conditions = normalizeAbilityConditions(value?.conditions ?? (value?.condition ? [value.condition] : []));
-  const reactionSettings = type === ABILITY_FUNCTION_TYPES.effectChanges
+  const legacyReactionSettings = type === ABILITY_FUNCTION_TYPES.effectChanges
     ? normalizeEventReactionSettings(value?.reactionSettings)
     : { durationSeconds: 0, costs: [] };
+  if (type === ABILITY_FUNCTION_TYPES.effectChanges) {
+    conditions = consolidateTriggerCostConditions(conditions, legacyReactionSettings.costs);
+  }
   const legacyReactionDuration = Math.max(0, toInteger(value?.reactionSettings?.durationSeconds ?? value?.reactionSettings?.duration ?? 0));
   if (
     type === ABILITY_FUNCTION_TYPES.effectChanges
@@ -496,7 +500,9 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     activeSettings: type === ABILITY_FUNCTION_TYPES.activeApplication
       ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
       : {},
-    reactionSettings,
+    // Legacy storage is intentionally cleared after its rows have been migrated
+    // into the standalone triggerCost condition above.
+    reactionSettings: { durationSeconds: 0, costs: [] },
     changes: isLegacy
       ? legacyFunctionToChanges(value)
       : normalizeAbilityChanges(value?.changes ?? value?.effects),
@@ -610,12 +616,92 @@ export function normalizeEventReactionSettings(value = {}) {
   };
 }
 
+export function getAbilityFunctionTriggerCostRows(abilityFunction = {}) {
+  const conditions = consolidateTriggerCostConditions(
+    normalizeAbilityConditions(abilityFunction?.conditions ?? []),
+    []
+  );
+  const condition = conditions.find(entry => entry?.type === ABILITY_CONDITION_TYPES.triggerCost);
+  return condition?.costs ?? [];
+}
+
+function consolidateTriggerCostConditions(conditions = [], legacyCosts = []) {
+  const source = Array.isArray(conditions) ? conditions : [];
+  const triggerConditions = source
+    .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerCost);
+  const normalizedLegacyCosts = (Array.isArray(legacyCosts) ? legacyCosts : Object.values(legacyCosts ?? {}))
+    .map(row => normalizeEventReactionCost(row));
+  if (!triggerConditions.length && !normalizedLegacyCosts.length) return source;
+
+  const costs = triggerConditions.flatMap(condition => (
+    Array.isArray(condition?.costs) ? condition.costs : Object.values(condition?.costs ?? {})
+  )).map(row => normalizeEventReactionCost(row));
+
+  // Partially migrated documents can contain the same rows in both stores.
+  // Merge them as multisets: keep intentional duplicate rows, but never bill a
+  // mirrored legacy copy for a second time.
+  const existingCounts = new Map();
+  for (const row of costs) {
+    const signature = getTriggerCostMigrationSignature(row);
+    existingCounts.set(signature, (existingCounts.get(signature) ?? 0) + 1);
+  }
+  const legacyCounts = new Map();
+  for (const row of normalizedLegacyCosts) {
+    const signature = getTriggerCostMigrationSignature(row);
+    const occurrence = (legacyCounts.get(signature) ?? 0) + 1;
+    legacyCounts.set(signature, occurrence);
+    if (occurrence > (existingCounts.get(signature) ?? 0)) costs.push(row);
+  }
+
+  const merged = {
+    id: String(triggerConditions[0]?.id ?? "").trim() || foundry.utils.randomID(),
+    groupId: "",
+    type: ABILITY_CONDITION_TYPES.triggerCost,
+    costs
+  };
+  const firstIndex = source.findIndex(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerCost);
+  if (firstIndex < 0) return [...source, merged];
+  return source.flatMap((condition, index) => {
+    if (condition?.type !== ABILITY_CONDITION_TYPES.triggerCost) return [condition];
+    return index === firstIndex ? [merged] : [];
+  });
+}
+
+function getTriggerCostMigrationSignature(row = {}) {
+  return JSON.stringify({
+    resourceKey: String(row?.resourceKey ?? "").trim(),
+    formula: String(row?.formula ?? "0").trim(),
+    overloadAmount: Math.max(0, toInteger(row?.overloadAmount)),
+    overloadDurationSeconds: Math.max(0, toInteger(row?.overloadDurationSeconds))
+  });
+}
+
 export function getAbilityFunctionEffectDurationSeconds(abilityFunction = {}) {
   const fromConditions = (abilityFunction?.conditions ?? [])
     .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.duration)
     .map(condition => Math.max(0, toInteger(condition?.durationSeconds ?? condition?.duration ?? condition?.seconds)))
     .filter(seconds => seconds > 0);
   return fromConditions.length ? fromConditions[0] : 0;
+}
+
+export function isAbilityFunctionTimedTriggerCost(abilityFunction = {}) {
+  if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.effectChanges) return false;
+  const conditions = abilityFunction?.conditions ?? [];
+  if (!conditions.some(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerCost)) return false;
+  if (getAbilityFunctionEffectDurationSeconds(abilityFunction) <= 0) return false;
+  if (conditions.some(condition => [
+    ABILITY_CONDITION_TYPES.eventReaction,
+    ABILITY_CONDITION_TYPES.itemUse,
+    ABILITY_CONDITION_TYPES.aura
+  ].includes(condition?.type))) return false;
+  return conditions.some(condition => [
+    ABILITY_CONDITION_TYPES.toggleable,
+    ABILITY_CONDITION_TYPES.healthPercent,
+    ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
+    ABILITY_CONDITION_TYPES.posture,
+    ABILITY_CONDITION_TYPES.occupiedCover,
+    ABILITY_CONDITION_TYPES.energyConsumption
+  ].includes(condition?.type));
 }
 
 export function normalizeEventReactionCost(value = {}) {
@@ -727,6 +813,17 @@ function normalizeAbilityCondition(value = {}) {
       skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey),
       expectedResultKeys: normalizeConditionKeyList(value?.expectedResultKeys, value?.expectedResultKey),
       eventFilters: normalizeEventReactionDepthFilterMap(value?.eventFilters)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.triggerCost) {
+    const rows = Array.isArray(value?.costs) ? value.costs : Object.values(value?.costs ?? {});
+    return {
+      id,
+      // Trigger cost is function metadata and never participates in an OR group.
+      groupId: "",
+      type,
+      costs: rows.map(row => normalizeEventReactionCost(row))
     };
   }
 

@@ -74,7 +74,7 @@ async function spendHealthCost(actor, amount, context = {}) {
     applyMitigation: false,
     processDamageTypeSettings: false,
     source: {
-      kind: "eventReactionCost",
+      kind: "abilityTriggerCost",
       unmitigated: true,
       rootId: String(context.rootId ?? ""),
       eventId: String(context.eventId ?? ""),

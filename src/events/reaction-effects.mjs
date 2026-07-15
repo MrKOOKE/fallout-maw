@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
+import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 
 export const EVENT_REACTION_EFFECT_FLAG_KEY = "eventReaction";
 export const EVENT_REACTION_EFFECT_KIND = "eventReaction";
@@ -52,7 +53,7 @@ export function createEventReactionEffectManager({
       reactor,
       sourceItem,
       itemUuid,
-      originUuid: getEventReactionEffectOriginUuid(reactor, sourceItem, itemUuid),
+      originUuid: getAbilityEffectOriginUuid(reactor, sourceItem, itemUuid),
       abilityFunction,
       functionId: id,
       envelope,
@@ -161,7 +162,7 @@ export function buildEventReactionEffectData({
   const seconds = Math.max(0, Math.trunc(Number(durationSeconds) || 0));
   const rootId = String(envelope?.rootId ?? envelope?.eventId ?? "").trim();
   const sourceItemUuid = String(sourceItem?.uuid ?? itemUuid ?? "").trim();
-  const effectOriginUuid = String(originUuid || getEventReactionEffectOriginUuid(reactor, sourceItem, sourceItemUuid));
+  const effectOriginUuid = String(originUuid || getAbilityEffectOriginUuid(reactor, sourceItem, sourceItemUuid));
   const id = String(abilityFunction?.id ?? functionId ?? "").trim();
   const flag = {
     rootId,
@@ -235,23 +236,6 @@ function normalizeManagedChanges(changes = []) {
   return (Array.isArray(changes) ? changes : Object.values(changes ?? {}))
     .filter(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "")
     .map(change => ({ ...change }));
-}
-
-function getEventReactionEffectOriginUuid(reactor, sourceItem, sourceItemUuid) {
-  const placementMode = String(sourceItem?.system?.placement?.mode ?? "").trim();
-  const moduleSeparator = sourceItemUuid.lastIndexOf(".Module.");
-  if (placementMode !== "module" && moduleSeparator < 0) return sourceItemUuid;
-
-  // Active HUD modules are synthetic Items. Their pseudo UUID is retained in
-  // provenance, while ActiveEffect.origin must reference a real Foundry Document.
-  const parentItemId = String(sourceItem?.system?.placement?.parentItemId ?? "").trim();
-  const parentItem = parentItemId
-    ? reactor?.items?.get?.(parentItemId)
-      ?? Array.from(reactor?.items ?? []).find(item => String(item?.id ?? "") === parentItemId)
-    : null;
-  if (parentItem?.uuid) return String(parentItem.uuid);
-
-  return moduleSeparator > 0 ? sourceItemUuid.slice(0, moduleSeparator) : sourceItemUuid;
 }
 
 function defaultResolveActor(uuid) {

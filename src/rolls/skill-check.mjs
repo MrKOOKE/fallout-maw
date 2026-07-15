@@ -7,6 +7,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { getActorCombatAttackEdgeCount, getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
 import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
+import { notifyAbilityTriggerCostFailure } from "../abilities/trigger-cost-runtime.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -106,11 +107,12 @@ export async function requestSkillCheck({
       rawData: requestData
     });
     let message;
+    const occurrenceBase = `skill:${scope.rootId}:${checkOccurrenceId}:${actor.uuid}:${resolvedSkill.key}`;
     const workflow = await runTerminalSystemEventWorkflow({
       scope,
       beforeEventKey: "fallout-maw.skill.check.beforeRoll",
       resolvedEventKey: "fallout-maw.skill.check.resolved",
-      occurrenceBase: `skill:${scope.rootId}:${checkOccurrenceId}:${actor.uuid}:${resolvedSkill.key}`,
+      occurrenceBase,
       participants: eventContext.participants,
       beforeData: buildSkillCheckBeforeEventData(resolvedSkill, normalizedData),
       resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, resolvedSkill, normalizedData, status),
@@ -133,6 +135,7 @@ export async function requestSkillCheck({
         }));
       }
     });
+    notifySkillCheckTriggerCostCancellation(workflow);
     const outcome = workflow.value;
     if (!workflow.success || !outcome) return undefined;
 
@@ -189,6 +192,7 @@ export async function requestSkillCheckBatch({
       try {
         const workflow = await pending.workflowPromise;
         if (workflow.cancelled) {
+          notifySkillCheckTriggerCostCancellation(workflow);
           cancelledCount += 1;
           return false;
         }
@@ -324,6 +328,16 @@ function createDeferredSkillCheckBarrier() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+function notifySkillCheckTriggerCostCancellation(workflow = {}) {
+  const reason = String(workflow?.reason ?? "").trim();
+  const prefix = "triggerCost:";
+  if (!workflow?.cancelled || !reason.startsWith(prefix)) return;
+  notifyAbilityTriggerCostFailure({
+    ok: false,
+    reason: reason.slice(prefix.length) || "spendFailed"
+  });
 }
 
 export function createSkillCheckBatchCollector({ requester = "", title = "" } = {}) {
@@ -606,6 +620,7 @@ function serializeSkillCheckRequest(data = {}) {
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
+    weaponData: serializeSkillCheckWeaponData(data.weaponData),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
@@ -744,6 +759,16 @@ async function performSkillCheck(actor, skill, data = {}) {
     critical,
     autoFailure,
     result
+  };
+}
+
+function serializeSkillCheckWeaponData(weaponData = null) {
+  if (!weaponData || typeof weaponData !== "object") return null;
+  return {
+    id: String(weaponData.id ?? weaponData._id ?? ""),
+    uuid: String(weaponData.uuid ?? ""),
+    skillKey: String(weaponData.skillKey ?? ""),
+    proficiencyKey: String(weaponData.proficiencyKey ?? "")
   };
 }
 

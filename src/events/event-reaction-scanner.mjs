@@ -308,7 +308,6 @@ export function buildEventReactionCandidate({
     label: String(item?.name ?? ""),
     description: String(item?.system?.description ?? ""),
     img: String(item?.img ?? "icons/svg/aura.svg"),
-    reactionSettings: abilityFunction?.reactionSettings ?? { durationSeconds: 0, costs: [] },
     changes: abilityFunction?.changes ?? []
   };
 }

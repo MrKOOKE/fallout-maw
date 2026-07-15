@@ -70,7 +70,7 @@ export function createResourceCostRegistry({
           rowId: row.id
         });
       } catch (error) {
-        logger?.warn?.(`fallout-maw | Event Reaction cost formula failed for '${row.resourceKey}'.`, error);
+        logger?.warn?.(`fallout-maw | Trigger cost formula failed for '${row.resourceKey}'.`, error);
         return invalidQuote(REACTION_COST_FAILURES.invalidFormula, {
           resourceKey: row.resourceKey,
           rowId: row.id,
@@ -106,7 +106,7 @@ export function createResourceCostRegistry({
         if (!Number.isFinite(rawAvailable)) throw new Error("Resource availability is not a finite number.");
         available = Math.max(0, Math.trunc(rawAvailable));
       } catch (error) {
-        logger?.warn?.(`fallout-maw | Event Reaction resource adapter failed for '${resourceKey}'.`, error);
+        logger?.warn?.(`fallout-maw | Trigger-cost resource adapter failed for '${resourceKey}'.`, error);
         return invalidQuote(REACTION_COST_FAILURES.missingResource, { resourceKey });
       }
       costs.push({
@@ -164,7 +164,7 @@ export function createResourceCostRegistry({
         }
         return { ok: true, reason: "", quote: current };
       } catch (error) {
-        logger?.error?.("fallout-maw | Event Reaction resource spend failed.", error);
+        logger?.error?.("fallout-maw | Trigger-cost resource spend failed.", error);
         return {
           ok: false,
           reason: REACTION_COST_FAILURES.spendFailed,
@@ -179,7 +179,7 @@ export function createResourceCostRegistry({
       const afterResult = await afterSpend(spendResult.quote, context);
       return { ...spendResult, afterResult };
     } catch (error) {
-      logger?.error?.("fallout-maw | Event Reaction post-spend execution failed.", error);
+      logger?.error?.("fallout-maw | Trigger-cost post-spend execution failed.", error);
       return {
         ok: false,
         reason: REACTION_COST_FAILURES.spendFailed,
@@ -270,7 +270,7 @@ export async function spendActorResourceCostVector(actor, costs = [], {
   updateOptions = {},
   context = {}
 } = {}) {
-  if (!actor?.update) throw new Error("Event Reaction cost actor is unavailable.");
+  if (!actor?.update) throw new Error("Trigger-cost actor is unavailable.");
   const vector = new Map((costs ?? []).map(cost => [
     String(cost?.resourceKey ?? "").trim(),
     Math.max(0, Math.trunc(Number(cost?.amount) || 0))
@@ -281,23 +281,23 @@ export async function spendActorResourceCostVector(actor, costs = [], {
   for (const [resourceKey, amount] of vector) {
     if (amount <= 0) continue;
     const resource = actor.system?.resources?.[resourceKey];
-    if (!resource) throw new Error(`Missing Event Reaction resource '${resourceKey}'.`);
+    if (!resource) throw new Error(`Missing trigger-cost resource '${resourceKey}'.`);
     const current = Math.trunc(Number(resource.value) || 0);
     const minimum = Math.trunc(Number(resource.min) || 0);
     const next = current - amount;
-    if (next < minimum) throw new Error(`Insufficient Event Reaction resource '${resourceKey}'.`);
+    if (next < minimum) throw new Error(`Insufficient trigger-cost resource '${resourceKey}'.`);
     updates[`system.resources.${resourceKey}.value`] = next;
     updates[`system.resources.${resourceKey}.spent`] = Math.max(0, Math.trunc(Number(resource.max) || 0) - next);
   }
   if (Object.keys(updates).length) {
     await actor.update(updates, {
       [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
-      falloutMawEventReactionCost: true,
+      falloutMawTriggerCost: true,
       ...updateOptions
     });
   }
   if (healthCost > 0) {
-    if (typeof spendHealth !== "function") throw new Error("Event Reaction health cost adapter is unavailable.");
+    if (typeof spendHealth !== "function") throw new Error("Trigger health-cost adapter is unavailable.");
     await spendHealth(actor, healthCost, context);
   }
 }

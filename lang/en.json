@@ -65,6 +65,27 @@
         "TimeLocked": "The toggle will be available in {seconds} sec.",
         "Enabled": "{name}: enabled.",
         "Disabled": "{name}: disabled."
+      },
+      "TriggerCost": {
+        "ConditionLabel": "Trigger cost",
+        "Costs": "Trigger cost",
+        "AddCost": "Add cost",
+        "Resource": "Resource",
+        "Formula": "Cost formula",
+        "Overload": "Overload",
+        "OverloadAmount": "Overload",
+        "OverloadDuration": "Overload duration",
+        "NoCosts": "No resource costs configured.",
+        "CostUnavailable": "The trigger cost is currently unavailable.",
+        "CostErrors": {
+          "InvalidFormula": "The trigger cost formula is invalid.",
+          "MissingResourceKey": "Select a resource for every trigger cost row.",
+          "UnknownResourceKey": "The configured trigger-cost resource is unavailable.",
+          "MissingResource": "The actor does not have the required resource.",
+          "InsufficientResource": "The actor does not have enough resources.",
+          "StaleQuote": "The trigger cost changed; try again.",
+          "SpendFailed": "The trigger cost could not be spent."
+        }
       }
     },
     "Events": {

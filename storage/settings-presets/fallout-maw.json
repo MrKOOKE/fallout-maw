@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "8a48851538bf3b8c11944eaae7085f33f2e0df83aff99770fa1b73d6b90d98ea",
-  "updatedAt": "2026-07-15T08:15:57.239Z",
+  "revision": "a7a1ead2f863edd923876da1ce2f27dee0ca0be699649054ec62d663c2ed65a1",
+  "updatedAt": "2026-07-15T11:06:44.172Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -30,6 +30,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
+                  "category": "",
                   "cost": 0,
                   "formula": "",
                   "functions": [
@@ -98,6 +99,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
+                  "category": "",
                   "cost": 0,
                   "formula": "",
                   "functions": [
@@ -166,6 +168,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -211,6 +214,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -331,6 +335,7 @@
                       "value": 80
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -412,6 +417,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -486,6 +492,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -538,6 +545,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -584,6 +592,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -630,6 +639,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -679,6 +689,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -726,6 +737,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -794,6 +806,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -839,6 +852,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -888,6 +902,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -931,6 +946,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -988,6 +1004,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1048,6 +1065,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1121,6 +1139,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1169,6 +1188,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1217,6 +1237,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1264,6 +1285,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1326,6 +1348,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1374,6 +1397,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1422,6 +1446,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1501,6 +1526,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1548,6 +1574,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1604,6 +1631,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1664,6 +1692,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1732,6 +1761,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1784,6 +1814,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1836,6 +1867,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1888,6 +1920,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1980,6 +2013,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2032,6 +2066,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2084,6 +2119,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2152,6 +2188,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -2206,6 +2243,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2252,6 +2290,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2306,6 +2345,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2359,6 +2399,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2415,6 +2456,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2467,6 +2509,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2572,6 +2615,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2637,6 +2681,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2689,6 +2734,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -2741,6 +2787,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2792,6 +2839,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2835,6 +2883,7 @@
                       "value": 200
                     }
                   ],
+                  "category": "",
                   "cost": 12000,
                   "formula": "",
                   "functions": []
@@ -2861,6 +2910,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2913,6 +2963,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3006,6 +3057,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3076,6 +3128,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3126,6 +3179,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3179,6 +3233,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3234,6 +3289,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3285,6 +3341,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -3324,10 +3381,10 @@
                 "visible": true
               },
               {
-                "description": "<p>Переключаемая способность.<br>Имеет 2 варинта переключения (можно поддерживаить оба одновременно).</p><p>1) Пока активна дает +30 к Красноречию, но уменьшает все остальные навыки на 10.<br>2) Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p>",
+                "description": "<p>Активная/Переключаемая способность.</p><p>Переключаемая. \"Усиленный голос\"<br>Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p><p>Активная. \"Усиленное влияние\"<br>Стоимость активации: 20 энергии<br>Перегрузка: 40 энергии на 2 часа.</p><p>После активации вы получаете +30 к Красноречию на 18 секунд.</p><p></p>",
                 "id": "sgY5ccFsQBPkDDLV",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Усиленный голос",
+                "name": "Опытный переговорищик",
                 "system": {
                   "acquisition": {
                     "difficulty": 150,
@@ -3343,50 +3400,10 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "bn7cAYtlweaG3P1W",
-                          "key": "system.skills.speech.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "40"
-                        },
-                        {
-                          "id": "JJZRbf7CEuVXzLIA",
-                          "key": "system.skills.all.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-10"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "cooldownSeconds": null,
-                          "groupId": "",
-                          "id": "NxbdGh2wyQcWfiQp",
-                          "name": "Усиленный голос (1)",
-                          "type": "toggleable"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "dTPvGa17o49KUkRQ",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    },
                     {
                       "actions": [],
                       "activeSettings": {},
@@ -3405,8 +3422,22 @@
                           "cooldownSeconds": null,
                           "groupId": "",
                           "id": "AkU4lqGPPXLZdK1D",
-                          "name": "Усиленный голос (2)",
+                          "name": "Усиленный голос",
                           "type": "toggleable"
+                        },
+                        {
+                          "costs": [
+                            {
+                              "formula": "10",
+                              "id": "jZ00JLppLQtn1iCP",
+                              "overloadAmount": 0,
+                              "overloadDurationSeconds": 0,
+                              "resourceKey": "power"
+                            }
+                          ],
+                          "groupId": "",
+                          "id": "QS50DFXndFlh72BZ",
+                          "type": "triggerCost"
                         }
                       ],
                       "fixedKey": "",
@@ -3417,8 +3448,36 @@
                         "costs": [],
                         "durationSeconds": 0
                       },
-                      "sort": 1,
+                      "sort": 0,
                       "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "durationSeconds": 0,
+                        "energyCost": 0,
+                        "excludeSelf": true,
+                        "name": "Усиленное влияние",
+                        "overloadDurationSeconds": 0,
+                        "overloadEnergyCost": 0,
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": 1,
+                        "targetMode": "self"
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "yZpSrh7AmL6VuP6J",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 1,
+                      "type": "activeApplication"
                     }
                   ]
                 },
@@ -3457,6 +3516,7 @@
                       "value": 60
                     }
                   ],
+                  "category": "",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3526,6 +3586,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3586,6 +3647,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -3646,6 +3708,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3698,6 +3761,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3745,6 +3809,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3795,6 +3860,7 @@
                       "value": 160
                     }
                   ],
+                  "category": "",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -3841,6 +3907,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3888,6 +3955,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3935,6 +4003,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3983,6 +4052,7 @@
                       "value": 100
                     }
                   ],
+                  "category": "",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
