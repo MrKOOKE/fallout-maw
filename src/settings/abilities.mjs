@@ -16,7 +16,32 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
 });
 
 export const ABILITY_ACTION_TYPES = Object.freeze({
-  weaponAttack: "weaponAttack"
+  weaponAttack: "weaponAttack",
+  movementRoute: "movementRoute"
+});
+
+/** Formula context used by constructor actions which operate on a route. */
+export const ABILITY_ACTION_ROUTE_EVALUATION_MODES = Object.freeze({
+  source: "source",
+  executor: "executor"
+});
+
+/** Unit constrained by a movement-route constructor action. */
+export const ABILITY_ACTION_ROUTE_BUDGET_MODES = Object.freeze({
+  movementCost: "movementCost",
+  distance: "distance"
+});
+
+/** Actor which pays an action-point cost attached to a constructor action. */
+export const ABILITY_ACTION_POINT_PAYERS = Object.freeze({
+  source: "source",
+  executor: "executor"
+});
+
+/** How confirmed movement routes are committed. */
+export const ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES = Object.freeze({
+  sequential: "sequential",
+  parallel: "parallel"
 });
 
 export const ABILITY_ATTACKING_WEAPON_ACTION_KEYS = Object.freeze([
@@ -150,6 +175,12 @@ export const ABILITY_ACTIVE_APPLICATION_TARGET_MODES = Object.freeze({
 export const ABILITY_ACTIVE_APPLICATION_SELECTION_MODES = Object.freeze({
   manual: "manual",
   all: "all"
+});
+
+/** Actor group charged by one active-application activation-cost row. */
+export const ABILITY_ACTIVE_APPLICATION_COST_PAYERS = Object.freeze({
+  source: "source",
+  targets: "targets"
 });
 
 export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
@@ -378,8 +409,16 @@ export function createAbilityAction(type = "") {
     executorMode: ABILITY_ACTION_EXECUTOR_MODES.source,
     targetMode: ABILITY_ACTION_TARGET_MODES.triggerActor,
     actionPointCostMode: ABILITY_ACTION_POINT_COST_MODES.none,
+    actionPointPayer: ABILITY_ACTION_POINT_PAYERS.executor,
     fixedActionPointCost: 0,
-    actualActionPointCostPercent: 100
+    actualActionPointCostPercent: 100,
+    routeBudgetMode: ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost,
+    routeBudgetFormula: "0",
+    routeBudgetEvaluation: ABILITY_ACTION_ROUTE_EVALUATION_MODES.executor,
+    routeExecutionMode: ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential,
+    routeMovementAction: "",
+    routeAutoRotate: false,
+    routeShowRuler: true
   });
 }
 
@@ -563,8 +602,16 @@ export function normalizeAbilityAction(value = {}) {
       executorMode: ABILITY_ACTION_EXECUTOR_MODES.source,
       targetMode: ABILITY_ACTION_TARGET_MODES.triggerActor,
       actionPointCostMode: ABILITY_ACTION_POINT_COST_MODES.none,
+      actionPointPayer: ABILITY_ACTION_POINT_PAYERS.executor,
       fixedActionPointCost: 0,
-      actualActionPointCostPercent: 100
+      actualActionPointCostPercent: 100,
+      routeBudgetMode: ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost,
+      routeBudgetFormula: "0",
+      routeBudgetEvaluation: ABILITY_ACTION_ROUTE_EVALUATION_MODES.executor,
+      routeExecutionMode: ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential,
+      routeMovementAction: "",
+      routeAutoRotate: false,
+      routeShowRuler: true
     };
   }
   const rawKeys = Array.isArray(value?.attackActionKeys)
@@ -583,18 +630,45 @@ export function normalizeAbilityAction(value = {}) {
   const executorMode = Object.values(ABILITY_ACTION_EXECUTOR_MODES).includes(value?.executorMode)
     ? value.executorMode
     : ABILITY_ACTION_EXECUTOR_MODES.source;
-  const actionPointCostMode = Object.values(ABILITY_ACTION_POINT_COST_MODES).includes(value?.actionPointCostMode)
+  const normalizedActionPointCostMode = Object.values(ABILITY_ACTION_POINT_COST_MODES).includes(value?.actionPointCostMode)
     ? value.actionPointCostMode
     : ABILITY_ACTION_POINT_COST_MODES.none;
+  const normalizedActionPointPayer = Object.values(ABILITY_ACTION_POINT_PAYERS).includes(value?.actionPointPayer)
+    ? value.actionPointPayer
+    : ABILITY_ACTION_POINT_PAYERS.executor;
+  const routeBudgetMode = Object.values(ABILITY_ACTION_ROUTE_BUDGET_MODES).includes(value?.routeBudgetMode)
+    ? value.routeBudgetMode
+    : ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost;
+  const legacyRouteEvaluation = value?.routeBudgetEvaluation ?? value?.routeDistanceEvaluation;
+  const routeBudgetEvaluation = Object.values(ABILITY_ACTION_ROUTE_EVALUATION_MODES).includes(legacyRouteEvaluation)
+    ? legacyRouteEvaluation
+    : ABILITY_ACTION_ROUTE_EVALUATION_MODES.executor;
+  const routeExecutionMode = Object.values(ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES).includes(value?.routeExecutionMode)
+    ? value.routeExecutionMode
+    : ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential;
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
     attackActionKeys: attackActionKeys.length ? attackActionKeys : [ABILITY_ATTACK_ACTION_ALL],
     executorMode,
     targetMode,
-    actionPointCostMode,
-    fixedActionPointCost: Math.max(0, toInteger(value?.fixedActionPointCost)),
-    actualActionPointCostPercent: Math.max(0, toInteger(value?.actualActionPointCostPercent ?? 100))
+    actionPointCostMode: type === ABILITY_ACTION_TYPES.movementRoute
+      ? ABILITY_ACTION_POINT_COST_MODES.none
+      : normalizedActionPointCostMode,
+    actionPointPayer: type === ABILITY_ACTION_TYPES.movementRoute
+      ? ABILITY_ACTION_POINT_PAYERS.executor
+      : normalizedActionPointPayer,
+    fixedActionPointCost: type === ABILITY_ACTION_TYPES.movementRoute
+      ? 0
+      : Math.max(0, toInteger(value?.fixedActionPointCost)),
+    actualActionPointCostPercent: Math.max(0, toInteger(value?.actualActionPointCostPercent ?? 100)),
+    routeBudgetMode,
+    routeBudgetFormula: normalizeFormulaText(value?.routeBudgetFormula ?? value?.routeDistanceFormula, "0"),
+    routeBudgetEvaluation,
+    routeExecutionMode,
+    routeMovementAction: String(value?.routeMovementAction ?? "").trim(),
+    routeAutoRotate: normalizeBoolean(value?.routeAutoRotate, false),
+    routeShowRuler: normalizeBoolean(value?.routeShowRuler, true)
   };
 }
 
@@ -634,17 +708,18 @@ export function normalizeActiveApplicationSettings(value = {}) {
   const targetGroups = normalizeStringList(value?.targetGroups)
     .filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
   const rawCosts = Array.isArray(value?.costs) ? value.costs : Object.values(value?.costs ?? {});
-  const costs = rawCosts.map(row => normalizeEventReactionCost(row));
+  const costs = rawCosts.map(row => normalizeActiveApplicationCost(row));
   if (!costs.length) {
     const legacyEnergyCost = Math.max(0, toInteger(value?.energyCost ?? 0));
     const legacyOverloadAmount = Math.max(0, toInteger(value?.overloadEnergyCost ?? 0));
     const legacyOverloadDurationSeconds = Math.max(0, toInteger(value?.overloadDurationSeconds ?? 0));
     if (legacyEnergyCost > 0 || (legacyOverloadAmount > 0 && legacyOverloadDurationSeconds > 0)) {
-      costs.push(normalizeEventReactionCost({
+      costs.push(normalizeActiveApplicationCost({
         resourceKey: "power",
         formula: String(legacyEnergyCost),
         overloadAmount: legacyOverloadAmount,
-        overloadDurationSeconds: legacyOverloadDurationSeconds
+        overloadDurationSeconds: legacyOverloadDurationSeconds,
+        payer: ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
       }));
     }
   }
@@ -669,6 +744,15 @@ export function normalizeActiveApplicationSettings(value = {}) {
       ? "source"
       : "target"
   };
+}
+
+/** Normalize an activation cost without leaking its payer field into trigger/reaction costs. */
+export function normalizeActiveApplicationCost(value = {}) {
+  const cost = normalizeEventReactionCost(value);
+  const payer = Object.values(ABILITY_ACTIVE_APPLICATION_COST_PAYERS).includes(value?.payer)
+    ? value.payer
+    : ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source;
+  return { ...cost, payer };
 }
 
 const ACTIVE_APPLICATION_TARGET_SETTING_KEYS = Object.freeze([

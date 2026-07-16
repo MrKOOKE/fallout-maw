@@ -17,6 +17,11 @@ import {
   isBlockTurnOrderEnabled,
   isTokenDocumentInActiveBlockTurn
 } from "../combat/turn-order-blocks.mjs";
+import {
+  getAbilityRoutePlanCommitter,
+  getAbilityRoutePreviewBudget,
+  isAbilityRoutePlanningInteractive
+} from "./ability-route-preview-state.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -39,6 +44,77 @@ let middleClickGuardRegistered = false;
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  /**
+   * Start Foundry's native movement-planning drag without changing the user's
+   * camera or controlled token. Permission to persist the resulting plan is
+   * checked separately by the owner/GM socket committer.
+   */
+  planAbilityMovement({
+    allowedActions = null,
+    direct = false,
+    minCost = 0,
+    maxCost = Infinity,
+    minDistance = 0,
+    maxDistance = Infinity,
+    preventDrop = false,
+    terrainOptions = {},
+    constrainOptions = {},
+    measureOptions = {},
+    pathfindingOptions = {},
+    moveOptions = {}
+  } = {}) {
+    if (allowedActions) {
+      allowedActions = Array.from(allowedActions);
+      if (!allowedActions.length) throw new Error("The allowed actions must not be empty.");
+      if (!allowedActions.every(action => action in CONFIG.Token.movement.actions)) {
+        throw new Error("Invalid movement action.");
+      }
+    }
+    if (!canvas.ready) throw new Error("The canvas is not ready.");
+    if (!getAbilityRoutePlanCommitter(this)) throw new Error("The ability route has no authority committer.");
+
+    this.layer._cancelMovementPlanning();
+    this.layer._cancelPlacement();
+    canvas.regions._cancelPlacement();
+    if (canvas.currentMouseManager) {
+      canvas.currentMouseManager.interactionData.cancelled = true;
+      canvas.currentMouseManager.cancel();
+    }
+    if (game.paused && !game.user.isGM) {
+      ui.notifications.warn("GAME.PausedWarning", { localize: true });
+      return Promise.resolve(null);
+    }
+    if (this.document.locked) {
+      ui.notifications.warn("CONTROLS.ObjectIsLocked", { localize: true });
+      return Promise.resolve(null);
+    }
+    if (this.document.hidden && !game.user.isGM) return Promise.resolve(null);
+
+    const { promise, resolve, reject } = Promise.withResolvers();
+    this.layer._movementPlanningContext = {
+      object: this,
+      allowedActions,
+      direct,
+      minCost,
+      maxCost,
+      minDistance,
+      maxDistance,
+      preventDrop,
+      terrainOptions: foundry.utils.deepClone(terrainOptions),
+      constrainOptions: foundry.utils.deepClone(constrainOptions),
+      measureOptions: foundry.utils.deepClone(measureOptions),
+      pathfindingOptions: foundry.utils.deepClone(pathfindingOptions),
+      moveOptions: foundry.utils.deepClone(moveOptions),
+      result: null,
+      resolve,
+      reject,
+      violations: []
+    };
+    this.layer.activate({ tool: "select" });
+    this.layer.setAllRenderFlags({ refreshState: true });
+    return promise;
+  }
+
   /**
    * Put the token into Foundry's native left-drag workflow after movement
    * planning was started from a DOM control instead of from the canvas.
@@ -82,14 +158,75 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     // pointermove/pointerup listeners take over from this point onward.
     const resistance = Number(manager.options?.dragResistance) || 10;
     manager.interactionData.screenOrigin.x -= resistance + 1;
-    foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
+    const controllableObjects = this.layer.options.controllableObjects;
+    try {
+      // Route planning always drags exactly its executor. Temporarily make the
+      // protected initializer use [this], so other controlled tokens are not
+      // cloned and the user's current control selection is not replaced.
+      this.layer.options.controllableObjects = false;
+      foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
+    } finally {
+      this.layer.options.controllableObjects = controllableObjects;
+    }
+    return Boolean(manager.interactionData?.clones?.length);
+  }
+
+  /** Complete the system's ability-route variant of native movement planning. */
+  completeAbilityRoutePlanning() {
+    if (!this.isDragged || !isAbilityRoutePlanningInteractive(this)) return false;
+    const preview = getAbilityRoutePreviewBudget(this);
+    const used = Number(preview?.used);
+    const total = Number(preview?.total);
+    const resourceUsed = Number(preview?.resourceUsed);
+    const resourceTotal = Number(preview?.resourceTotal);
+    if (
+      preview?.searching
+      || preview?.invalid
+      || (Number.isFinite(used) && Number.isFinite(total) && used > total + 1e-6)
+      || (Number.isFinite(resourceUsed) && Number.isFinite(resourceTotal)
+        && resourceUsed > resourceTotal + 1e-6)
+    ) {
+      ui?.notifications?.warn?.("Маршрут ещё строится, недоступен или превышает заданный бюджет.");
+      return false;
+    }
+    this._triggerDragLeftDrop();
     return true;
+  }
+
+  /** @override */
+  _shouldPreventDragLeftDrop(event) {
+    if (isAbilityRoutePlanningInteractive(this) && !event.interactionData.dropped) return true;
+    return super._shouldPreventDragLeftDrop(event);
+  }
+
+  /** @override */
+  _canDrag(user, event) {
+    if (isAbilityRoutePlanningInteractive(this)) {
+      return !canvas.regions?._placementContext && game.activeTool === "select";
+    }
+    return super._canDrag(user, event);
+  }
+
+  /** @override */
+  _onDragClickLeft(event) {
+    if (!isAbilityRoutePlanningInteractive(this)) return super._onDragClickLeft(event);
+    this._addDragWaypoint(event.interactionData.origin, { snap: !event.shiftKey });
+    canvas.mouseInteractionManager.cancel();
   }
 
   /** @override */
   _canHUD(user, event) {
     if (super._canHUD(user, event)) return true;
     return Boolean(this.layer?.active && this.actor && isTokenEquipmentHudEnabled());
+  }
+
+  /** @override */
+  _onClickLeft(event) {
+    if (isAbilityRoutePlanningInteractive(this)) {
+      event.stopPropagation();
+      return;
+    }
+    return super._onClickLeft(event);
   }
 
   /** @override */
@@ -172,6 +309,12 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   _onDragLeftDrop(event) {
+    if (!event.interactionData.dropped && this._shouldPreventDragLeftDrop(event)) {
+      event.interactionData.released = true;
+      event.preventDefault();
+      return;
+    }
+    event.interactionData.dropped = true;
     const { clones } = event.interactionData;
     if (!clones) return false;
 
@@ -180,8 +323,26 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     if (!Array.isArray(result[0])) result = [result];
     const [updates, options = {}] = result;
     const orchestrations = options[GRAPPLE_FOLLOW_ORCHESTRATION_OPTION];
+    const routePlanCommitter = getAbilityRoutePlanCommitter(this);
 
     event.interactionData.clearPreviewContainer = false;
+    if (routePlanCommitter) {
+      void Promise.resolve(routePlanCommitter({ token: this, updates, options }))
+        .then(committed => {
+          if (committed) return;
+          if (this.layer._movementPlanningContext?.object === this) {
+            this.layer._movementPlanningContext.result = null;
+          }
+        })
+        .catch(error => {
+          console.warn("fallout-maw | Ability route plan commit failed", error);
+          if (this.layer._movementPlanningContext?.object === this) {
+            this.layer._movementPlanningContext.result = null;
+          }
+        })
+        .finally(() => this.layer.clearPreviewContainer());
+      return;
+    }
     if (!game.user?.isGM && orchestrations?.length) {
       void commitGrappleFollowOrchestrations(orchestrations).finally(() => {
         this.layer.clearPreviewContainer();

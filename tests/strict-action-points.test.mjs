@@ -6,6 +6,8 @@ import {
   canSpendStrictActionPoints,
   getActorActiveCombat,
   isActorInActiveCombat,
+  refundStrictActionPointReceipt,
+  spendStrictActionPointsWithReceipt,
   spendStrictActionPoints
 } from "../src/combat/strict-action-points.mjs";
 import {
@@ -62,6 +64,55 @@ test("strict ОД are checked and spent for an active combat participant", async
   await spendStrictActionPoints(actor, 5, { suppressResourceNotification: true });
   assert.equal(actor.system.resources.actionPoints.value, 2);
   assert.equal(actor.updates.length, 1);
+});
+
+test("strict action-point receipts refund only their own delta", async () => {
+  const actor = createActor("Actor.Receipt", 10);
+  globalThis.game = { combat: { started: true, combatants: [{ actor }] } };
+  const transaction = await spendStrictActionPointsWithReceipt(actor, 3, {
+    suppressResourceNotification: true
+  });
+  assert.equal(transaction.spent, 3);
+  assert.equal(transaction.receipt.amount, 3);
+  assert.equal(actor.system.resources.actionPoints.value, 7);
+
+  // A later legitimate change must survive refunding the route's own spend.
+  actor.system.resources.actionPoints.value = 5;
+  const restored = await refundStrictActionPointReceipt(actor, transaction.receipt);
+  assert.equal(restored, 3);
+  assert.equal(actor.system.resources.actionPoints.value, 8);
+});
+
+test("cancelled strict AP update does not create a spend receipt", async () => {
+  const actor = createActor("Actor.Cancelled", 10);
+  actor.update = async changes => {
+    actor.updates.push(changes);
+  };
+  globalThis.game = { combat: { started: true, combatants: [{ actor }] } };
+
+  const transaction = await spendStrictActionPointsWithReceipt(actor, 3, {
+    suppressResourceNotification: true
+  });
+
+  assert.equal(transaction.spent, 0);
+  assert.equal(transaction.receipt, null);
+  assert.deepEqual(transaction.events, []);
+  assert.equal(actor.system.resources.actionPoints.value, 10);
+});
+
+test("cancelled strict AP refund reports that nothing was restored", async () => {
+  const actor = createActor("Actor.CancelledRefund", 10);
+  globalThis.game = { combat: { started: true, combatants: [{ actor }] } };
+  const transaction = await spendStrictActionPointsWithReceipt(actor, 3, {
+    suppressResourceNotification: true
+  });
+  assert.equal(actor.system.resources.actionPoints.value, 7);
+
+  actor.update = async changes => actor.updates.push(changes);
+  const restored = await refundStrictActionPointReceipt(actor, transaction.receipt);
+
+  assert.equal(restored, 0);
+  assert.equal(actor.system.resources.actionPoints.value, 7);
 });
 
 test("only ОД, ОР, ОП and dodge are combat-only resources", () => {
@@ -158,6 +209,32 @@ test("movement tracking follows the actor's started combat instead of the viewed
   assert.equal(isCombatMovementTracked(tokenDocument), false);
 });
 
+test("split movement preserves fractional cost and starts a new tranche when its profile changes", async () => {
+  installFoundryImportGlobals();
+  const { calculateCombatMovementCostTrancheDelta } = await import("../src/combat/movement-resources.mjs");
+  const ordinary = { postureMultiplier: 1, perUnitCost: 1 };
+  let priorRawCost = 0;
+  let priorAdjustedCost = 0;
+  const deltas = [];
+  for (const rawCost of [0.4, 0.4, 0.4]) {
+    const delta = calculateCombatMovementCostTrancheDelta(
+      ordinary,
+      priorRawCost,
+      priorAdjustedCost,
+      rawCost
+    );
+    deltas.push(delta);
+    priorRawCost += rawCost;
+    priorAdjustedCost += delta;
+  }
+  assert.deepEqual(deltas, [1, 0, 1]);
+  assert.equal(priorAdjustedCost, 2);
+
+  const doubled = { postureMultiplier: 1, perUnitCost: 2 };
+  assert.equal(calculateCombatMovementCostTrancheDelta(doubled, 0, 0, 2), 4);
+  assert.equal(calculateCombatMovementCostTrancheDelta(doubled, 2, 4, 2), 4);
+});
+
 test("dodge spending ignores unrelated combat and uses the actor's hidden started combat", async () => {
   installFoundryImportGlobals();
   const { spendActorDodgeForAreaDamage } = await import("../src/combat/dodge-resource.mjs");
@@ -235,6 +312,19 @@ test("every direct movement, posture, active-action and dodge spend path recheck
     /await waitForMovementAnimation\(movement\);\s*if \(!isCombatMovementTracked\(tokenDocument\)\) return;/u
   );
   assert.match(movement, /round: getActorActiveCombat\(actor\)\?\.round \?\? 0/u);
+  assert.match(
+    movement,
+    /function getCurrentMovementSpendingTranche[\s\S]*?costProfileKey[\s\S]*?entry\?\.costProfileKey[\s\S]*?break;/u
+  );
+  assert.match(
+    movement,
+    /createMovementResourceSpendingEntry[\s\S]*?costProfileKey:[\s\S]*?costProfile\.key/u
+  );
+  assert.doesNotMatch(movement, /const cost = getCombatMovementSpendDelta[\s\S]{0,120}if \(cost <= 0\) return;/u);
+  assert.match(
+    movement,
+    /const movementRootId = String\(lastEntry\?\.movementRootId[\s\S]*?const restoredEntries = stack\.filter[\s\S]*?restoredResources/u
+  );
   assert.match(
     movement,
     /const currentRound = Math\.max\(0, toInteger\(getActorActiveCombat\(actor\)\?\.round\)\);/u

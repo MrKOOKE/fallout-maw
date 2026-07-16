@@ -41,7 +41,7 @@ export function requestCustomTokenSelection({
       instructions
     });
 
-    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`;
+    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. Enter подтверждает, ПКМ снимает последнюю цель, Esc отменяет.`;
     ui.notifications.info(prompt);
 
     let finished = false;
@@ -79,6 +79,13 @@ export function requestCustomTokenSelection({
       if (!selection.length) return;
       finish(selection);
     };
+    const undoLastSelection = () => {
+      const selectionId = Array.from(selected).at(-1);
+      if (!selectionId) return false;
+      selected.delete(selectionId);
+      drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
+      return true;
+    };
     const onKeyDown = event => {
       if (event.key !== "Escape" && event.key !== "Enter") return;
       event.preventDefault();
@@ -112,7 +119,6 @@ export function requestCustomTokenSelection({
       if (selected.has(row.selectionId)) selected.delete(row.selectionId);
       else if (selected.size < selectionLimit) selected.add(row.selectionId);
       drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
-      if (selected.size >= selectionLimit) confirm();
     };
     const onPointerMove = event => {
       if (!rightClickCandidate || event.pointerId !== rightClickCandidate.pointerId) return;
@@ -137,6 +143,7 @@ export function requestCustomTokenSelection({
       event.stopPropagation();
       event.stopImmediatePropagation?.();
       rightClickCandidate = null;
+      if (undoLastSelection()) return;
       finish([]);
     };
     const updateRightClickDragCandidate = event => {

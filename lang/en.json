@@ -35,6 +35,7 @@
         "Title": "Actions",
         "Type": "Action",
         "WeaponAttack": "Attacking action",
+        "MovementRoute": "Movement route",
         "AllowedAttacks": "Available attack types",
         "AddAttackVariant": "Add attack variant",
         "AllAttacks": "All attacking actions",
@@ -45,6 +46,9 @@
         "TargetTrigger": "Only the triggering actor",
         "TargetFree": "Free aiming",
         "ActionPointCost": "Action point cost",
+        "ActionPointPayer": "AP payer",
+        "ActionPointPayerSource": "Ability activator",
+        "ActionPointPayerExecutor": "Action performer",
         "CostNone": "No action point cost",
         "CostFixed": "Fixed cost",
         "CostActual": "Actual attack cost",
@@ -57,7 +61,22 @@
         "SelectAction": "Select an action",
         "Weapon": "Weapon",
         "Next": "Next",
-        "Execute": "Attack"
+        "Execute": "Attack",
+        "RouteDistance": "Maximum route length",
+        "RouteBudgetMode": "Route budget type",
+        "RouteBudget": "Route budget",
+        "RouteBudgetMovementCost": "Movement cost (MP)",
+        "RouteBudgetDistance": "Distance (scene units)",
+        "RouteEvaluation": "Formula parameters",
+        "RouteEvaluationSource": "Ability activator",
+        "RouteEvaluationExecutor": "Route performer",
+        "RouteExecution": "Execution order",
+        "RouteExecutionSequential": "Sequential",
+        "RouteExecutionParallel": "Parallel",
+        "RouteMovementAction": "Movement mode (optional)",
+        "RouteMovementCurrent": "Use the performer's current mode",
+        "RouteAutoRotate": "Auto-rotate along route",
+        "RouteShowRuler": "Show ruler"
       },
       "Toggle": {
         "ConditionLabel": "Toggleable",
@@ -70,7 +89,10 @@
         "Disabled": "{name}: disabled."
       },
       "ActiveApplication": {
-        "ActivationCosts": "Activation resource costs"
+        "ActivationCosts": "Activation resource costs",
+        "CostPayer": "Who pays",
+        "CostPayerSource": "Ability activator",
+        "CostPayerTargets": "Each selected target"
       },
       "TriggerCost": {
         "ConditionLabel": "Trigger cost",

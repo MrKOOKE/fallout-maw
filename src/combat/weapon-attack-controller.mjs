@@ -125,7 +125,8 @@ const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
-const COMMANDED_ATTACK_SOCKET_TIMEOUT_MS = 120000;
+const COMMANDED_ATTACK_QUERY = "fallout-maw.weaponAttack.commandedAbility";
+const COMMANDED_ATTACK_QUERY_TIMEOUT_MS = 120000;
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
@@ -137,7 +138,6 @@ const GEOMETRY_EPSILON = 0.0001;
 const AUTO_COVER_GRID_STEPS = 4;
 const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
-const pendingCommandedAttackRequests = new Map();
 const processingDelayedVolleyRegions = new Set();
 const weaponAttackResolvedHandlers = new Map();
 let activeAttack = null;
@@ -309,6 +309,7 @@ export function getWeaponActionModifierEnergyCost({
 }
 
 export function registerWeaponAttackSocket() {
+  if (globalThis.CONFIG?.queries) CONFIG.queries[COMMANDED_ATTACK_QUERY] = handleCommandedWeaponAttackQuery;
   game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
   Hooks.on("canvasReady", clearRemoteAttackPreviews);
   if (!delayedVolleyProcessorRegistered) {
@@ -618,16 +619,17 @@ export async function startCommandedWeaponAttacksAndWait({
   chainRef = null,
   authorityContext = null
 } = {}) {
-  if (!game.user?.isGM && !getResponsibleGM()) {
-    ui.notifications.warn(`${label}: нет активного GM для выполнения атак.`);
-    return createCommandedAttackResult({ reason: "missingGM" });
-  }
   if (!authorityContext || String(authorityContext?.kind ?? "") !== "abilityAction") {
     return createCommandedAttackResult({ reason: "missingAuthorityContext" });
   }
   const entries = normalizeCommandedWeaponAttackEntries(attacks);
   if (!entries.length || !validateCommandedWeaponAttackEntries(entries)) {
     return createCommandedAttackResult({ reason: "invalidAttacks" });
+  }
+  const sceneAuthority = await getCommandedAttackSceneGM({ entries, authorityContext });
+  if (!sceneAuthority) {
+    ui.notifications.warn(`${label}: нет активного GM на сцене и уровне исполнителей.`);
+    return createCommandedAttackResult({ reason: getCommandedAttackAuthorityFailureReason() });
   }
 
   if (entries.every(canUseCommandedMultiRayCapture)) {
@@ -891,16 +893,19 @@ class CommandedWeaponAttackController {
     this.lastPreviewBroadcastAt = 0;
     this.processing = false;
     this.destroyed = false;
-    this.onCancel = typeof onCancel === "function" ? onCancel : null;
+    this.onCancelled = typeof onCancel === "function" ? onCancel : null;
     this.onBeforeExecute = typeof onBeforeExecute === "function" ? onBeforeExecute : null;
     this.onComplete = typeof onComplete === "function" ? onComplete : null;
     this.chainRef = chainRef ?? null;
     this.authorityContext = authorityContext ?? null;
     this.targetSelectionSession = null;
     this.targetSelectionOutcome = null;
+    this.rightClickCancelCandidate = null;
+    this.previousViewContextMenu = null;
     this.events = {
       move: event => this.onMove(event),
       pointerDown: event => this.onPointerDown(event),
+      cancel: event => this.onCancel(event),
       keyDown: event => this.onKeyDown(event),
       tick: () => this.onTick()
     };
@@ -945,7 +950,10 @@ class CommandedWeaponAttackController {
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.addEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app?.ticker?.add?.(this.events.tick);
-    ui.notifications.info(`${this.label}: клик фиксирует луч, Esc отменяет.`);
+    const canvasView = canvas.app?.view ?? null;
+    this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
+    if (canvasView) canvasView.oncontextmenu = this.events.cancel;
+    ui.notifications.info(`${this.label}: ЛКМ фиксирует лучи; после последнего атака начнётся автоматически. ПКМ размораживает последний, Esc отменяет.`);
   }
 
   destroy() {
@@ -956,6 +964,10 @@ class CommandedWeaponAttackController {
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.removeEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
+    const canvasView = canvas.app?.view ?? null;
+    if (canvasView?.oncontextmenu === this.events.cancel) canvasView.oncontextmenu = this.previousViewContextMenu;
+    this.rightClickCancelCandidate = null;
+    this.previousViewContextMenu = null;
     this.clearBroadcastPreviews();
     this.container.destroy({ children: true });
     if (activeCommandedAttack === this) activeCommandedAttack = null;
@@ -963,6 +975,7 @@ class CommandedWeaponAttackController {
 
   onMove(event) {
     if (this.processing) return;
+    this.updateRightClickCancelCandidate(event);
     event.stopPropagation();
     this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
     this.refresh();
@@ -978,11 +991,15 @@ class CommandedWeaponAttackController {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    this.cancel();
+    return this.cancel();
   }
 
   onPointerDown(event) {
-    if (event.button !== 0 || this.processing || !isCanvasViewEvent(event)) return;
+    if (![0, 2].includes(event.button) || this.processing || !isCanvasViewEvent(event)) return;
+    if (event.button === 2) {
+      this.startRightClickCancelCandidate(event);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
@@ -990,7 +1007,49 @@ class CommandedWeaponAttackController {
     const entry = this.entries.find(entry => !entry.locked);
     if (!entry) return;
     if (!this.lockEntry(entry)) return;
-    if (this.entries.every(entry => entry.locked)) void this.execute();
+    if (this.entries.every(candidate => candidate.locked)) void this.execute();
+  }
+
+  onCancel(event) {
+    if (this.processing || this.destroyed || !isCanvasViewEvent(event)) return false;
+    if (this.isRightClickDragCancel(event)) {
+      this.rightClickCancelCandidate = null;
+      if (typeof this.previousViewContextMenu === "function") {
+        return this.previousViewContextMenu.call(canvas.app?.view ?? null, event);
+      }
+      return false;
+    }
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+    this.rightClickCancelCandidate = null;
+    if (this.unlockLastEntry()) return false;
+    // Once simultaneous aiming has started, RMB is reserved exclusively for
+    // undoing fixed rays. Esc remains the explicit whole-cycle cancellation.
+    return false;
+  }
+
+  startRightClickCancelCandidate(event) {
+    this.rightClickCancelCandidate = {
+      pointerId: event.pointerId,
+      x: Number(event.clientX) || 0,
+      y: Number(event.clientY) || 0,
+      dragged: false
+    };
+  }
+
+  updateRightClickCancelCandidate(event) {
+    const candidate = this.rightClickCancelCandidate;
+    if (!candidate) return;
+    const pointerId = event?.pointerId ?? event?.nativeEvent?.pointerId;
+    if (pointerId !== undefined && candidate.pointerId !== undefined && pointerId !== candidate.pointerId) return;
+    if (getPointerDistanceFromEvent(event, candidate) >= getFoundryDragResistance()) candidate.dragged = true;
+  }
+
+  isRightClickDragCancel(event) {
+    this.updateRightClickCancelCandidate(event);
+    const manager = canvas.mouseInteractionManager;
+    return Boolean(this.rightClickCancelCandidate?.dragged || (manager?._dragRight && manager?.state >= 4));
   }
 
   updatePointerFromClientEvent(event) {
@@ -1017,6 +1076,32 @@ class CommandedWeaponAttackController {
     this.broadcastPreviews(true);
     const remaining = this.entries.filter(entry => !entry.locked).length;
     if (remaining > 0) ui.notifications.info(`${this.label}: осталось лучей ${remaining}.`);
+    return true;
+  }
+
+  unlockLastEntry() {
+    const entry = this.entries.findLast(candidate => candidate.locked);
+    if (!entry) return false;
+    entry.pointer = null;
+    entry.lockedGeometry = null;
+    entry.targetUuid = "";
+    entry.selectedLimbKey = "";
+    entry.directionKey = "";
+    entry.mode = "current";
+    entry.locked = false;
+    if (this.pointer) this.refreshEntry(entry, this.pointer);
+    else {
+      entry.geometry = null;
+      entry.targets = [];
+      entry.hoveredTarget = null;
+      entry.trajectoryAimTarget = null;
+      entry.burstRanges = new Map();
+      entry.shape.clear();
+      this.clearEntryTargetMarkers(entry);
+    }
+    this.drawEntry(entry, performance.now());
+    this.broadcastPreviews(true);
+    ui.notifications.info(`${this.label}: последний луч разморожен.`);
     return true;
   }
 
@@ -1185,7 +1270,7 @@ class CommandedWeaponAttackController {
     if (this.processing || this.destroyed) return false;
     this.finishTargetSelection({ cancelled: true });
     this.destroy();
-    this.onCancel?.();
+    this.onCancelled?.();
     ui.notifications.info(`${this.label}: отменено.`);
     return true;
   }
@@ -1267,20 +1352,16 @@ async function executeCommandedWeaponAttackSelections(selections = [], {
 } = {}) {
   const serialized = (Array.isArray(selections) ? selections : []).filter(selection => selection?.tokenUuid && selection?.weaponUuid);
   if (!serialized.length) return createCommandedAttackResult({ reason: "emptySelections" });
-  if (game.user?.isGM) return processCommandedWeaponAttackSelections(serialized, {
-    chainRef,
-    authorityContext,
-    senderUserId: game.user?.id ?? ""
-  });
-  const gm = getResponsibleGM();
+  const gm = await getCommandedAttackSceneGM({ selections: serialized, authorityContext });
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для выполнения командной атаки.");
-    return createCommandedAttackResult({ reason: "missingGM" });
+    ui.notifications.warn("Нет активного GM на сцене и уровне командной атаки.");
+    return createCommandedAttackResult({ reason: getCommandedAttackAuthorityFailureReason() });
   }
-  return requestCommandedWeaponAttackOperation("executeCommandedAttacks", {
+  return requestCommandedWeaponAttackOperation("execute", {
     selections: serialized,
     chainRef,
-    authorityContext
+    authorityContext,
+    gm
   });
 }
 
@@ -1290,79 +1371,74 @@ async function preflightCommandedWeaponAttackSelections(selections = [], {
 } = {}) {
   const serialized = (Array.isArray(selections) ? selections : []).filter(selection => selection?.tokenUuid && selection?.weaponUuid);
   if (!serialized.length || !authorityContext) return { ok: false, reason: "invalidPreflight" };
-  if (game.user?.isGM) return processCommandedWeaponAttackSelections(serialized, {
-    chainRef,
-    authorityContext,
-    senderUserId: game.user?.id ?? "",
-    validateOnly: true
-  });
-  if (!getResponsibleGM()) return { ok: false, reason: "missingGM" };
-  return requestCommandedWeaponAttackOperation("preflightCommandedAttacks", {
+  const gm = await getCommandedAttackSceneGM({ selections: serialized, authorityContext });
+  if (!gm) return { ok: false, reason: getCommandedAttackAuthorityFailureReason() };
+  return requestCommandedWeaponAttackOperation("preflight", {
     selections: serialized,
     chainRef,
-    authorityContext
+    authorityContext,
+    gm
   });
 }
 
-function requestCommandedWeaponAttackOperation(action, {
+async function requestCommandedWeaponAttackOperation(operation, {
   selections = [],
   chainRef = null,
-  authorityContext = null
+  authorityContext = null,
+  gm = null
 } = {}) {
-  const gm = getResponsibleGM();
-  if (!gm) return Promise.resolve({ ok: false, reason: "missingGM" });
-  const requestId = foundry.utils.randomID();
-  return new Promise(resolve => {
-    const timeout = window.setTimeout(() => {
-      pendingCommandedAttackRequests.delete(requestId);
-      resolve({ ok: false, reason: "authorityTimeout" });
-    }, COMMANDED_ATTACK_SOCKET_TIMEOUT_MS);
-    pendingCommandedAttackRequests.set(requestId, { resolve, timeout });
-    game.socket.emit(WEAPON_ATTACK_SOCKET, {
-      scope: WEAPON_ATTACK_SOCKET_SCOPE,
-      action,
-      requestId,
-      gmUserId: gm.id,
-      senderUserId: game.user?.id ?? "",
-      chainRef,
-      authorityContext,
-      selections
-    });
-  });
+  if (!gm) return { ok: false, reason: "missingGM" };
+  const data = {
+    operation: String(operation ?? ""),
+    chainRef,
+    authorityContext,
+    selections
+  };
+  try {
+    return gm.id === game.user?.id
+      ? await handleCommandedWeaponAttackQuery(data, { user: game.user })
+      : await gm.query(COMMANDED_ATTACK_QUERY, data, { timeout: COMMANDED_ATTACK_QUERY_TIMEOUT_MS });
+  } catch (error) {
+    console.warn("Fallout MaW | Commanded weapon attack authority query failed", error);
+    return { ok: false, reason: "authorityTimeout" };
+  }
 }
 
-async function processCommandedWeaponAttackSocketRequest(payload = {}) {
-  let result = { ok: false, reason: "authorityError" };
+async function handleCommandedWeaponAttackQuery(data = {}, { user: sender = null } = {}) {
+  const operation = String(data?.operation ?? "");
+  if (!sender?.active || !["execute", "preflight"].includes(operation)) {
+    return { ok: false, reason: "authorityRejected" };
+  }
   try {
-    result = await processCommandedWeaponAttackSelections(payload.selections ?? [], {
-      chainRef: payload.chainRef ?? null,
-      authorityContext: payload.authorityContext ?? null,
-      senderUserId: payload.senderUserId ?? "",
-      validateOnly: payload.action === "preflightCommandedAttacks"
+    const requiredTokenDocuments = await resolveCommandedAttackAuthorityTokenDocuments({
+      selections: data.selections ?? [],
+      authorityContext: data.authorityContext ?? null
+    });
+    if (!isCommandedAttackSceneAuthority(game.user, requiredTokenDocuments, { requirePlaceables: true })) {
+      return { ok: false, reason: "gmSceneUnavailable" };
+    }
+    return await processCommandedWeaponAttackSelections(data.selections ?? [], {
+      chainRef: data.chainRef ?? null,
+      authorityContext: data.authorityContext ?? null,
+      sender,
+      validateOnly: operation === "preflight"
     });
   } catch (error) {
     console.error("Fallout MaW | Commanded weapon attack authority operation failed", error);
+    return { ok: false, reason: "authorityError" };
   }
-  game.socket.emit(WEAPON_ATTACK_SOCKET, {
-    scope: WEAPON_ATTACK_SOCKET_SCOPE,
-    action: "commandedAttacksResult",
-    requestId: payload.requestId,
-    targetUserId: payload.senderUserId ?? "",
-    result,
-    senderUserId: game.user?.id ?? ""
-  });
 }
 
 async function processCommandedWeaponAttackSelections(selections = [], {
   chainRef = null,
   authorityContext = null,
-  senderUserId = "",
+  sender = null,
   validateOnly = false
 } = {}) {
   if (authorityContext && !(await validateCommandedAbilityAuthority({
     authorityContext,
     selections,
-    senderUserId
+    sender
   }))) return { ok: false, reason: "authorityRejected" };
   const resolved = [];
   for (const selection of selections ?? []) {
@@ -1496,13 +1572,12 @@ async function rollbackCommandedActionPointCosts(receipts = [], chainRef = null)
 async function validateCommandedAbilityAuthority({
   authorityContext = {},
   selections = [],
-  senderUserId = ""
+  sender = null
 } = {}) {
   if (String(authorityContext?.kind ?? "") !== "abilityAction") return false;
-  const sender = game.users?.get(String(senderUserId ?? "")) ?? null;
   const sourceActor = await fromUuid(String(authorityContext?.actorUuid ?? ""));
   const sourceTokenDocument = await fromUuid(String(authorityContext?.sourceTokenUuid ?? ""));
-  if (!sender || !sourceActor || !sourceTokenDocument?.actor) return false;
+  if (!sender?.active || !sourceActor || !sourceTokenDocument?.actor) return false;
   if (!sender.isGM && !sourceActor.testUserPermission?.(sender, "OWNER")) return false;
   if (sourceTokenDocument.actor.uuid !== sourceActor.uuid) return false;
 
@@ -1567,6 +1642,15 @@ async function validateCommandedAbilityAuthority({
   }
 
   const targetTokenDocuments = await Promise.all(targetTokenUuids.map(uuid => fromUuid(uuid)));
+  const attackTargetTokenUuids = Array.from(new Set((selections ?? [])
+    .map(selection => String(selection?.targetUuid ?? "").trim())
+    .filter(Boolean)));
+  const attackTargetTokenDocuments = await Promise.all(attackTargetTokenUuids.map(uuid => fromUuid(uuid)));
+  if (!isCommandedAttackSceneAuthority(
+    game.user,
+    [sourceTokenDocument, ...targetTokenDocuments, ...attackTargetTokenDocuments],
+    { requirePlaceables: true }
+  )) return false;
   const sourceSceneUuid = String(sourceTokenDocument.parent?.uuid ?? "");
   const seenActors = new Set();
   for (const targetTokenDocument of targetTokenDocuments) {
@@ -2223,6 +2307,7 @@ class WeaponAttackController {
     this.attackId = foundry.utils.randomID();
     this.targetSelectionSession = null;
     this.targetSelectionOutcome = null;
+    this.previousViewContextMenu = null;
     this.autoCoverActorUuids = new Set();
     this.lastAutoCoverSignature = "";
     this.pendingCriticalFailureResourceCosts = [];
@@ -2265,7 +2350,9 @@ class WeaponAttackController {
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app.ticker.add(this.events.tick);
-    canvas.app.view.oncontextmenu = this.events.cancel;
+    const canvasView = canvas.app?.view ?? null;
+    this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
+    if (canvasView) canvasView.oncontextmenu = this.events.cancel;
   }
 
   attachPreview() {
@@ -2788,7 +2875,9 @@ class WeaponAttackController {
     canvas.stage.off("mousemove", this.events.move);
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
-    if (canvas.app?.view?.oncontextmenu === this.events.cancel) canvas.app.view.oncontextmenu = null;
+    const canvasView = canvas.app?.view ?? null;
+    if (canvasView?.oncontextmenu === this.events.cancel) canvasView.oncontextmenu = this.previousViewContextMenu;
+    this.previousViewContextMenu = null;
     this.removeLimbMenu();
     this.removeChanceMenu();
     this.clearBurstTargetPreviewTimer();
@@ -2960,13 +3049,16 @@ class WeaponAttackController {
   }
 
   onCancel(event) {
-    event?.preventDefault?.();
     if (this.isInteractionLocked()) return false;
     if (this.processing) return false;
     if (this.isRightClickDragCancel(event)) {
       this.rightClickCancelCandidate = null;
+      if (typeof this.previousViewContextMenu === "function") {
+        return this.previousViewContextMenu.call(canvas.app?.view ?? null, event);
+      }
       return false;
     }
+    event?.preventDefault?.();
     this.rightClickCancelCandidate = null;
     if (this.attackModifier?.preventCancel) return false;
     if (this.pushStrengthMaximum > 0) {
@@ -3006,7 +3098,8 @@ class WeaponAttackController {
 
   isRightClickDragCancel(event) {
     this.updateRightClickCancelCandidate(event);
-    return Boolean(this.rightClickCancelCandidate?.dragged);
+    const manager = canvas.mouseInteractionManager;
+    return Boolean(this.rightClickCancelCandidate?.dragged || (manager?._dragRight && manager?.state >= 4));
   }
 
   onTick() {
@@ -5255,20 +5348,6 @@ function broadcastAttackPreview(payload = {}) {
 
 function handleWeaponAttackSocketMessage(payload = {}) {
   if (!payload || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
-  if (payload.action === "commandedAttacksResult") {
-    if (payload.targetUserId && payload.targetUserId !== game.user?.id) return;
-    const pending = pendingCommandedAttackRequests.get(String(payload.requestId ?? ""));
-    if (!pending) return;
-    window.clearTimeout(pending.timeout);
-    pendingCommandedAttackRequests.delete(String(payload.requestId ?? ""));
-    pending.resolve(payload.result ?? { ok: false, reason: "emptyAuthorityResult" });
-    return;
-  }
-  if (["executeCommandedAttacks", "preflightCommandedAttacks"].includes(payload.action)) {
-    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
-    void processCommandedWeaponAttackSocketRequest(payload);
-    return;
-  }
   if (payload.action === "completeAttack") {
     requestActiveWeaponAttackFinish(payload.attackId);
     removeRemoteAttackPreview(payload.attackId);
@@ -5827,6 +5906,79 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+/**
+ * Resolve the exact source, executor and explicit attack-target TokenDocuments
+ * needed by a commanded ability attack. The generic GM selector is deliberately
+ * not used here because native attack geometry requires a rendered scene/level.
+ */
+async function resolveCommandedAttackAuthorityTokenDocuments({
+  entries = [],
+  selections = [],
+  authorityContext = null
+} = {}) {
+  const sourceTokenUuid = String(authorityContext?.sourceTokenUuid ?? "").trim();
+  if (!sourceTokenUuid) return null;
+
+  const entryDocuments = (Array.isArray(entries) ? entries : [])
+    .map(entry => entry?.token?.document ?? entry?.token ?? null);
+  if (entryDocuments.some(document => !document?.uuid)) return null;
+
+  const selectionTokenUuids = [];
+  for (const selection of Array.isArray(selections) ? selections : []) {
+    const executorTokenUuid = String(selection?.tokenUuid ?? "").trim();
+    if (!executorTokenUuid) return null;
+    selectionTokenUuids.push(executorTokenUuid);
+    const attackTargetTokenUuid = String(selection?.targetUuid ?? "").trim();
+    if (attackTargetTokenUuid) selectionTokenUuids.push(attackTargetTokenUuid);
+  }
+
+  const resolvedDocuments = await Promise.all([
+    fromUuid(sourceTokenUuid),
+    ...selectionTokenUuids.map(uuid => fromUuid(uuid))
+  ]);
+  const tokenDocuments = [...resolvedDocuments, ...entryDocuments];
+  if (tokenDocuments.some(document => !document?.uuid || !document?.actor || !document?.parent?.id)) return null;
+
+  return Array.from(new Map(tokenDocuments.map(document => [String(document.uuid), document])).values());
+}
+
+async function getCommandedAttackSceneGM(options = {}) {
+  const tokenDocuments = await resolveCommandedAttackAuthorityTokenDocuments(options);
+  if (!tokenDocuments?.length) return null;
+  const eligible = Array.from(game.users?.contents ?? game.users ?? [])
+    .filter(user => isCommandedAttackSceneAuthority(user, tokenDocuments));
+  const activeGM = game.users?.activeGM ?? null;
+  if (activeGM && eligible.some(user => user.id === activeGM.id)) return activeGM;
+  return eligible
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)))
+    .at(0) ?? null;
+}
+
+function getCommandedAttackAuthorityFailureReason() {
+  const hasActiveGM = Array.from(game.users?.contents ?? game.users ?? [])
+    .some(user => user?.active && user.isGM);
+  return hasActiveGM ? "gmSceneUnavailable" : "missingGM";
+}
+
+function isCommandedAttackSceneAuthority(user, tokenDocuments, { requirePlaceables = false } = {}) {
+  if (!user?.active || !user.isGM || !Array.isArray(tokenDocuments) || !tokenDocuments.length) return false;
+  const sceneId = String(tokenDocuments[0]?.parent?.id ?? "");
+  if (!sceneId || String(user.viewedScene ?? "") !== sceneId) return false;
+  for (const tokenDocument of tokenDocuments) {
+    if (String(tokenDocument?.parent?.id ?? "") !== sceneId) return false;
+    try {
+      if (!tokenDocument.includedInLevel(user.viewedLevel ?? null)) return false;
+    } catch (_error) {
+      return false;
+    }
+    if (requirePlaceables) {
+      const token = tokenDocument.object ?? null;
+      if (!token?.actor || String(token.document?.uuid ?? "") !== String(tokenDocument.uuid ?? "")) return false;
+    }
+  }
+  return true;
 }
 
 function serializeGeometry(geometry) {

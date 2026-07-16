@@ -34,6 +34,7 @@
         "Title": "Действия",
         "Type": "Действие",
         "WeaponAttack": "Атакующее действие",
+        "MovementRoute": "Маршрут перемещения",
         "AllowedAttacks": "Доступные виды атак",
         "AddAttackVariant": "Добавить вариант атаки",
         "AllAttacks": "Все атакующие действия",
@@ -44,6 +45,9 @@
         "TargetTrigger": "Только инициатор срабатывания",
         "TargetFree": "Свободное наведение",
         "ActionPointCost": "Трата ОД",
+        "ActionPointPayer": "Кто платит ОД",
+        "ActionPointPayerSource": "Активатор способности",
+        "ActionPointPayerExecutor": "Исполнитель действия",
         "CostNone": "Без траты ОД",
         "CostFixed": "Фиксированная стоимость",
         "CostActual": "Фактическая стоимость атаки",
@@ -56,7 +60,22 @@
         "SelectAction": "Выбор действия",
         "Weapon": "Оружие",
         "Next": "Далее",
-        "Execute": "Атаковать"
+        "Execute": "Атаковать",
+        "RouteDistance": "Максимальная длина маршрута",
+        "RouteBudgetMode": "Тип бюджета маршрута",
+        "RouteBudget": "Бюджет маршрута",
+        "RouteBudgetMovementCost": "Стоимость перемещения (ОП)",
+        "RouteBudgetDistance": "Расстояние (единицы сцены)",
+        "RouteEvaluation": "Параметры формулы",
+        "RouteEvaluationSource": "Активатор способности",
+        "RouteEvaluationExecutor": "Исполнитель маршрута",
+        "RouteExecution": "Порядок выполнения",
+        "RouteExecutionSequential": "Последовательно",
+        "RouteExecutionParallel": "Одновременно",
+        "RouteMovementAction": "Режим перемещения (необязательно)",
+        "RouteMovementCurrent": "Текущий режим исполнителя",
+        "RouteAutoRotate": "Автоповорот по маршруту",
+        "RouteShowRuler": "Показывать линейку"
       },
       "Toggle": {
         "ConditionLabel": "Переключаемость активности",
@@ -69,7 +88,10 @@
         "Disabled": "{name}: выключено."
       },
       "ActiveApplication": {
-        "ActivationCosts": "Расход ресурсов на активацию"
+        "ActivationCosts": "Расход ресурсов на активацию",
+        "CostPayer": "Кто платит",
+        "CostPayerSource": "Активатор способности",
+        "CostPayerTargets": "Каждая выбранная цель"
       },
       "TriggerCost": {
         "ConditionLabel": "Стоимость срабатывания",

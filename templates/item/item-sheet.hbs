@@ -1479,6 +1479,9 @@
               <select name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.resourceKey" data-ability-trigger-cost-resource-key aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Resource'}}">
                 {{#each resourceChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
               </select>
+              <select name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.payer" data-ability-active-cost-payer aria-label="{{localize 'FALLOUTMAW.Ability.ActiveApplication.CostPayer'}}">
+                {{#each payerChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+              </select>
               <input type="text" name="{{../../functionPath}}.{{../../functionIndex}}.activeSettings.costs.{{index}}.formula" value="{{formula}}" data-ability-trigger-cost-formula data-formula-autocomplete="all" aria-label="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}" placeholder="{{localize 'FALLOUTMAW.Ability.TriggerCost.Formula'}}">
               <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-active-application-cost title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
               <div class="fallout-maw-event-reaction-cost-overload">
@@ -1654,6 +1657,28 @@
           <div class="fallout-maw-ability-action-cost-detail" data-ability-action-actual-cost {{#unless usesActualActionPointCost}}hidden{{/unless}}>
             <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActualPercent"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actualActionPointCostPercent" value="{{actualActionPointCostPercent}}"></label>
             <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.CostHint"}}</p>
+          </div>
+        </div>
+        {{/if}}
+        {{#if isMovementRoute}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{localize "FALLOUTMAW.Ability.Actions.MovementRoute"}}</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ExecutorMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.executorMode">{{#each executorModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteBudgetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeBudgetMode">{{#each routeBudgetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteBudget"}}</span><input type="text" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeBudgetFormula" value="{{routeBudgetFormula}}" data-formula-autocomplete="all"></label>
+          </div>
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteEvaluation"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeBudgetEvaluation">{{#each routeEvaluationChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteExecution"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeExecutionMode">{{#each routeExecutionChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteMovementAction"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeMovementAction">{{#each routeMovementActionChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          </div>
+          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+            <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeAutoRotate" {{#if routeAutoRotate}}checked{{/if}}><span>{{localize "FALLOUTMAW.Ability.Actions.RouteAutoRotate"}}</span></label>
+            <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeShowRuler" {{#if routeShowRuler}}checked{{/if}}><span>{{localize "FALLOUTMAW.Ability.Actions.RouteShowRuler"}}</span></label>
           </div>
         </div>
         {{/if}}
@@ -2491,6 +2516,28 @@
           <div class="fallout-maw-ability-action-cost-detail" data-ability-action-actual-cost {{#unless usesActualActionPointCost}}hidden{{/unless}}>
             <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActualPercent"}}</span><input type="number" min="0" step="1" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actualActionPointCostPercent" value="{{actualActionPointCostPercent}}"></label>
             <p class="hint">{{localize "FALLOUTMAW.Ability.Actions.CostHint"}}</p>
+          </div>
+        </div>
+        {{/if}}
+        {{#if isMovementRoute}}
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{localize "FALLOUTMAW.Ability.Actions.MovementRoute"}}</h4>
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-action title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ExecutorMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.executorMode">{{#each executorModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteBudgetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeBudgetMode">{{#each routeBudgetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteBudget"}}</span><input type="text" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeBudgetFormula" value="{{routeBudgetFormula}}" data-formula-autocomplete="all"></label>
+          </div>
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteEvaluation"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeBudgetEvaluation">{{#each routeEvaluationChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteExecution"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeExecutionMode">{{#each routeExecutionChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.RouteMovementAction"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeMovementAction">{{#each routeMovementActionChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          </div>
+          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+            <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeAutoRotate" {{#if routeAutoRotate}}checked{{/if}}><span>{{localize "FALLOUTMAW.Ability.Actions.RouteAutoRotate"}}</span></label>
+            <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.routeShowRuler" {{#if routeShowRuler}}checked{{/if}}><span>{{localize "FALLOUTMAW.Ability.Actions.RouteShowRuler"}}</span></label>
           </div>
         </div>
         {{/if}}

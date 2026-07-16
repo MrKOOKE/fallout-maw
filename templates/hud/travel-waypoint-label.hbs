@@ -12,7 +12,16 @@
     {{else if action.label}}
     <label class="action-label">{{localize action.label}}</label>
     {{/if}}
-    {{#if cost}}
+    {{#if abilityRouteBudget}}
+    <span class="fallout-maw-ability-route-budget {{#if abilityRouteBudget.over}}over-budget{{/if}}">
+      {{abilityRouteBudget.used}} / {{abilityRouteBudget.total}} {{abilityRouteBudget.unit}}
+    </span>
+    {{#if abilityRouteResourceBudget}}
+    <span class="fallout-maw-ability-route-budget {{#if abilityRouteResourceBudget.over}}over-budget{{/if}}">
+      {{abilityRouteResourceBudget.used}} / {{abilityRouteResourceBudget.total}} ОП
+    </span>
+    {{/if}}
+    {{else if cost}}
     <span class="total-measurement">{{cost.total}} {{cost.units}}</span>
     {{#if cost.delta}}<span class="delta-measurement">({{cost.delta}})</span>{{/if}}
     {{else}}

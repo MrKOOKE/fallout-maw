@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { trackSystemMovementOperation } from "./movement-settlement.mjs";
 
 export const CONTROLLED_MOVEMENT_INTERRUPTION_OPTION = "falloutMawControlledMovementInterruption";
 
@@ -100,7 +101,10 @@ function onPreMoveToken(tokenDocument, movement, options = {}) {
     || (left.priority - right.priority)
     || left.providerId.localeCompare(right.providerId)
   ));
-  void runMovementInterruption(tokenDocument, movement, candidates[0], options);
+  trackSystemMovementOperation(
+    tokenDocument,
+    runMovementInterruption(tokenDocument, movement, candidates[0], options)
+  );
   return false;
 }
 

@@ -3,12 +3,19 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 globalThis.foundry = {
+  utils: { randomID: () => "test-id" },
   applications: {
     api: { DialogV2: {} },
     ux: { FormDataExtended: class FormDataExtended {} },
     handlebars: { renderTemplate: async () => "" }
   }
 };
+
+const {
+  ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
+  normalizeActiveApplicationSettings
+} = await import("../src/settings/abilities.mjs");
+const { buildActiveApplicationCostPlanEntries } = await import("../src/abilities/active-application-costs.mjs");
 
 const {
   configureAbilityTriggerCostRuntime,
@@ -306,7 +313,15 @@ test("interactive ability paths quote costs before opening target or change pick
   const activeFlow = fixedSource.slice(activeStart, activeEnd);
   assert.ok(activeFlow.indexOf("quoteAbilityFunctionResourceCosts") >= 0);
   assert.ok(activeFlow.indexOf("quoteAbilityFunctionResourceCosts") < activeFlow.indexOf("resolveActiveApplicationTargets"));
-  assert.match(activeFlow, /costFingerprint:\s*costPreflight\.fingerprint/);
+  assert.match(activeFlow, /costRows:\s*sourceActivationCosts/);
+  const executionStart = fixedSource.indexOf("async function executeActiveApplicationUse");
+  const executionEnd = fixedSource.indexOf("async function gateActiveApplicationTargets", executionStart);
+  const executionFlow = fixedSource.slice(executionStart, executionEnd);
+  assert.ok(executionFlow.indexOf("quoteActiveApplicationCostPlan") >= 0);
+  assert.ok(executionFlow.indexOf("quoteActiveApplicationCostPlan") < executionFlow.indexOf("resolveLimitedChangeSet"));
+  assert.ok(executionFlow.indexOf("quoteActiveApplicationCostPlan") < executionFlow.indexOf("prepareAbilityFunctionActions"));
+  assert.match(executionFlow, /resourceReservations:\s*costPlanQuote\.resourceReservations/);
+  assert.match(executionFlow, /costFingerprints:\s*costPlanQuote\.fingerprints/);
   assert.match(fixedSource, /restoreActorHealthCost\(actor, healthRefund, \{ chainRef \}\)/);
 
   const itemUseSource = await readFile(new URL("../src/abilities/item-use-triggers.mjs", import.meta.url), "utf8");
@@ -316,6 +331,64 @@ test("interactive ability paths quote costs before opening target or change pick
   assert.ok(itemUseFlow.indexOf("quoteAbilityFunctionTriggerCost") >= 0);
   assert.ok(itemUseFlow.indexOf("quoteAbilityFunctionTriggerCost") < itemUseFlow.indexOf("selectRuntimeChanges"));
   assert.match(itemUseFlow, /expectedFingerprint:\s*costPreflight\?\.fingerprint/);
+});
+
+test("active-application cost payers normalize independently from trigger costs", () => {
+  const settings = normalizeActiveApplicationSettings({
+    costs: [
+      { id: "legacy", resourceKey: "power", formula: "3" },
+      { id: "target", resourceKey: "customResource", formula: "4", payer: "targets" },
+      { id: "invalid", resourceKey: "health", formula: "2", payer: "executor" }
+    ]
+  });
+  assert.deepEqual(settings.costs.map(cost => cost.payer), [
+    ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source,
+    ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets,
+    ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
+  ]);
+});
+
+test("target-payer rows expand once per unique final target and merge self with source", () => {
+  const source = { uuid: "Actor.A", name: "A" };
+  const targetB = { uuid: "Actor.B", name: "B" };
+  const targetC = { uuid: "Actor.C", name: "C" };
+  const entries = buildActiveApplicationCostPlanEntries(source, [
+    { id: "power", resourceKey: "power", formula: "30", payer: "source" },
+    { id: "ap", resourceKey: "actionPoints", formula: "5", payer: "targets" },
+    { id: "custom", resourceKey: "customResource", formula: "spe/10", payer: "targets" }
+  ], [
+    { actor: targetB },
+    { actor: source },
+    { actor: targetB },
+    { actor: targetC }
+  ]);
+  assert.deepEqual(entries.map(entry => entry.actor.uuid), ["Actor.A", "Actor.B", "Actor.C"]);
+  assert.deepEqual(entries.map(entry => entry.costRows.map(row => row.id)), [
+    ["power", "ap", "custom"],
+    ["ap", "custom"],
+    ["ap", "custom"]
+  ]);
+  assert.equal(entries[1].costRows[1].formula, "spe/10");
+});
+
+test("active-application payer UI and GM authority preserve and reconstruct cost ownership", async () => {
+  const [catalogTemplate, itemTemplate, catalogSource, itemSheetSource, fixedSource] = await Promise.all([
+    readFile(new URL("../templates/settings/ability-catalog-item-editor.hbs", import.meta.url), "utf8"),
+    readFile(new URL("../templates/item/item-sheet.hbs", import.meta.url), "utf8"),
+    readFile(new URL("../src/apps/ability-catalog-item-editor.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/sheets/item-sheet.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/abilities/fixed-functions.mjs", import.meta.url), "utf8")
+  ]);
+  assert.match(catalogTemplate, /data-field="active\.costPayer"/);
+  assert.match(itemTemplate, /data-ability-active-cost-payer/);
+  assert.match(catalogSource, /querySelector\("\[data-field='active\.costPayer'\]"\)/);
+  assert.match(itemSheetSource, /querySelector\("\[data-ability-active-cost-payer\]"\)/);
+  const planSource = await readFile(new URL("../src/abilities/active-application-costs.mjs", import.meta.url), "utf8");
+  assert.match(planSource, /cost\?\.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS\.targets/);
+  assert.match(fixedSource, /buildActiveApplicationCostPlanEntries\(sourceActor, settings\.costs, resolvedTargets\)/);
+  assert.match(fixedSource, /JSON\.stringify\(expectedActorUuids\) !== JSON\.stringify\(suppliedActorUuids\)/);
+  assert.match(fixedSource, /payActiveApplicationCostPlan/);
+  assert.match(fixedSource, /rollbackActiveApplicationPaymentPlan/);
 });
 
 test("the shared Foundry registry spends health, power and custom resources outside combat but not combat resources", async () => {
@@ -550,4 +623,32 @@ test("a partial health cost is reversed and does not trust a conflicting healthD
   assert.equal(payment.reason, "spendFailed");
   assert.equal(actor.system.resources.health.value, 10);
   assert.equal(actor.system.resources.power.value, 10);
+});
+
+test("active-application authority prefers a GM rendering every required scene level", async () => {
+  const source = await readFile(new URL("../src/abilities/fixed-functions.mjs", import.meta.url), "utf8");
+  const requestStart = source.indexOf("async function requestActiveApplicationEffectOperation");
+  const requestEnd = source.indexOf("function clearActiveApplicationAuthorityRequest", requestStart);
+  const selectorStart = source.indexOf("function getActiveApplicationAuthorityGM");
+  const selectorEnd = source.indexOf("function isTokenDocumentIncludedForUserLevel", selectorStart);
+  const gmStart = source.indexOf("function getResponsibleGM");
+  const gmEnd = source.indexOf("function getActiveApplicationAuthorityGM", gmStart);
+  assert.ok(requestStart >= 0 && requestEnd > requestStart);
+  assert.ok(gmStart >= 0 && gmEnd > gmStart && selectorEnd > selectorStart);
+
+  const request = source.slice(requestStart, requestEnd);
+  const gmSelector = source.slice(gmStart, gmEnd);
+  const applicationSelector = source.slice(selectorStart, selectorEnd);
+  assert.match(request, /const gm = getActiveApplicationAuthorityGM\(payload\)/);
+  assert.match(request, /if \(gm\.id === game\.user\?\.id\)/);
+  assert.ok(request.indexOf("getActiveApplicationAuthorityGM") < request.indexOf("handleActiveApplicationEffectQuery"));
+  assert.match(source, /CONFIG\.queries\[ACTIVE_APPLICATION_QUERY_NAME\] = handleActiveApplicationEffectQuery/);
+  assert.match(request, /gm\.query\(ACTIVE_APPLICATION_QUERY_NAME, payload/);
+  assert.match(source, /handleActiveApplicationEffectQuery\(payload = \{\}, \{ user: sender = null \} = \{\}\)[\s\S]*?senderUserId: sender\.id/);
+  assert.doesNotMatch(source, /performActiveApplicationEffects|activeApplicationEffectsResult/);
+  assert.match(gmSelector, /user\.viewedScene/);
+  assert.match(gmSelector, /isTokenDocumentIncludedForUserLevel/);
+  assert.match(applicationSelector, /sourceTokenDocument[\s\S]*?targetTokenDocuments/);
+  assert.match(applicationSelector, /requireScene:\s*Boolean\(settings\.wallsBlock\)/);
+  assert.match(source, /settings\.wallsBlock[\s\S]*?isTokenDocumentIncludedForUserLevel\(tokenDocument, game\.user\)/);
 });

@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "918008ccef1b191012b1c4868392373736938bf1a076c3fdcfe8975362427429",
-  "updatedAt": "2026-07-16T08:30:47.079Z",
+  "revision": "cd19d6e3390dd8f75cf26fc9b209651a109a1af3e48999069f15330ba763be23",
+  "updatedAt": "2026-07-16T17:00:58.932Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3248,6 +3248,7 @@
                             "id": "IX7mmDDG5hF6ODxR",
                             "overloadAmount": 40,
                             "overloadDurationSeconds": 3600,
+                            "payer": "source",
                             "resourceKey": "power"
                           }
                         ],
@@ -3472,6 +3473,7 @@
                             "id": "uiUKO3iMFkBugcGM",
                             "overloadAmount": 40,
                             "overloadDurationSeconds": 7200,
+                            "payer": "source",
                             "resourceKey": "power"
                           }
                         ],
@@ -3560,6 +3562,7 @@
                             "id": "Ybn2bEToS8PK96oC",
                             "overloadAmount": 60,
                             "overloadDurationSeconds": 14400,
+                            "payer": "source",
                             "resourceKey": "power"
                           },
                           {
@@ -3567,6 +3570,7 @@
                             "id": "fNUeKtYjrdDmIuY7-cost-actionPoints",
                             "overloadAmount": 0,
                             "overloadDurationSeconds": 0,
+                            "payer": "source",
                             "resourceKey": "actionPoints"
                           }
                         ],
@@ -3804,6 +3808,7 @@
                             "id": "mjOOQcGltZ4eByUJ",
                             "overloadAmount": 20,
                             "overloadDurationSeconds": 24,
+                            "payer": "source",
                             "resourceKey": "power"
                           }
                         ],
@@ -3892,6 +3897,7 @@
                             "id": "2C7Rywb1gGay78Mw",
                             "overloadAmount": 60,
                             "overloadDurationSeconds": 7200,
+                            "payer": "source",
                             "resourceKey": "power"
                           },
                           {
@@ -3899,6 +3905,7 @@
                             "id": "wrtCsLCBtds11OAh",
                             "overloadAmount": 0,
                             "overloadDurationSeconds": 0,
+                            "payer": "source",
                             "resourceKey": "actionPoints"
                           }
                         ],
@@ -4020,22 +4027,98 @@
                 "visible": true
               },
               {
-                "description": "",
+                "description": "<p>Стоимость активации: 30 энергии; каждая выбранная цель тратит 5 ОД (только в бою).<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+spe/50]]-х союзников. Они последовательно переместятся по построенным вами маршрутам.<br>Бюджет каждого маршрута: [[2+spe/25]] ОП.</p>",
                 "id": "u6NqPLJYeinNzWNF",
-                "img": "icons/svg/aura.svg",
-                "name": "Новая способность",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Приказ: Сменить позицию!",
                 "system": {
                   "acquisition": {
-                    "difficulty": 60,
+                    "difficulty": 150,
                     "onlyFree": false,
                     "onlyManual": false,
-                    "skillKey": "meleeCombat"
+                    "skillKey": "speech"
                   },
-                  "acquisitionRequirements": [],
+                  "acquisitionRequirements": [
+                    {
+                      "id": "u6NqPLJYeinNzWNF-speech-requirement",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
                   "category": "Красноречие",
-                  "cost": 0,
+                  "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [
+                        {
+                          "actionPointCostMode": "none",
+                          "actionPointPayer": "executor",
+                          "actualActionPointCostPercent": 100,
+                          "attackActionKeys": [
+                            "all"
+                          ],
+                          "executorMode": "targets",
+                          "fixedActionPointCost": 0,
+                          "id": "u6NqPLJYeinNzWNF-movement-route-route-action",
+                          "routeAutoRotate": false,
+                          "routeBudgetEvaluation": "source",
+                          "routeBudgetFormula": "2+spe/25",
+                          "routeBudgetMode": "movementCost",
+                          "routeExecutionMode": "sequential",
+                          "routeMovementAction": "",
+                          "routeShowRuler": true,
+                          "targetMode": "triggerActor",
+                          "type": "movementRoute"
+                        }
+                      ],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "u6NqPLJYeinNzWNF-movement-route-cost-power",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 12,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          },
+                          {
+                            "formula": "5",
+                            "id": "u6NqPLJYeinNzWNF-movement-route-cost-action-points",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "payer": "source",
+                            "resourceKey": "actionPoints"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "2+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "u6NqPLJYeinNzWNF-movement-route",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               }

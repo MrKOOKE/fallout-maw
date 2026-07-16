@@ -181,6 +181,7 @@ import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
 import { actorHasAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
+  ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
   ABILITY_CATALOG_DRAG_TYPE,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -4755,9 +4756,14 @@ function buildAbilityResourceCostRows(item, actor = null) {
       game.i18n.localize("FALLOUTMAW.Events.Reaction.Resources.ReactionPoints")
     );
     return settings.costs.flatMap(cost => {
-      const rows = [[resourceLabels.get(cost.resourceKey) ?? cost.resourceKey, String(cost.formula)]];
+      const payerKey = cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets
+        ? "FALLOUTMAW.Ability.ActiveApplication.CostPayerTargets"
+        : "FALLOUTMAW.Ability.ActiveApplication.CostPayerSource";
+      const payerLabel = game.i18n.localize(payerKey);
+      const resourceLabel = resourceLabels.get(cost.resourceKey) ?? cost.resourceKey;
+      const rows = [[`${resourceLabel} — ${payerLabel}`, String(cost.formula)]];
       if (cost.overloadAmount > 0 && cost.overloadDurationSeconds > 0) {
-        rows.push(["Перегрузка", `${cost.overloadAmount} на ${formatDurationShort(cost.overloadDurationSeconds)}`]);
+        rows.push([`Перегрузка — ${payerLabel}`, `${cost.overloadAmount} на ${formatDurationShort(cost.overloadDurationSeconds)}`]);
       }
       return rows;
     });

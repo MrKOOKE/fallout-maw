@@ -138,3 +138,17 @@ test("both ability editors preserve target controls hidden by self mode", () => 
     /readActiveApplicationSettings\(row, previousFunction\?\.activeSettings\)[\s\S]*?preserveMissingActiveApplicationTargetSettings\(settings, previousValue\)/
   );
 });
+
+test("movement-route checkboxes are read from their checked state in both ability editors", () => {
+  const itemSheetSource = fs.readFileSync(path.join(ROOT, "src/sheets/item-sheet.mjs"), "utf8");
+  const catalogSource = fs.readFileSync(path.join(ROOT, "src/apps/ability-catalog-item-editor.mjs"), "utf8");
+
+  const itemReader = itemSheetSource.match(/function normalizeSubmittedAbilityActionCheckboxes[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(itemReader, /routeAutoRotate/);
+  assert.match(itemReader, /routeShowRuler/);
+  assert.match(itemReader, /Boolean\(input\.checked\)/);
+  assert.equal(itemSheetSource.split("normalizeSubmittedAbilityActionCheckboxes(form, submitData);").length - 1, 2);
+
+  assert.match(catalogSource, /routeAutoRotate:\s*actionRow\.querySelector\([^\n]+\)\?\.checked/);
+  assert.match(catalogSource, /routeShowRuler:\s*actionRow\.querySelector\([^\n]+\)\?\.checked/);
+});

@@ -1,4 +1,11 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { trackSystemMovementOperation } from "../canvas/movement-settlement.mjs";
+import {
+  ABILITY_ROUTE_PREVIEW_MOVEMENT_OPTION,
+  clearAbilityRoutePreviewStop,
+  consumeAbilityRoutePreviewStop,
+  markAbilityRoutePreviewStop
+} from "../canvas/ability-route-preview-state.mjs";
 import { dispatchSystemEvent, withSystemEventRoot } from "./dispatcher.mjs";
 import {
   eventReactionIndexHasAny,
@@ -24,6 +31,7 @@ export function registerFoundryMovementSystemEventHooks() {
   Hooks.on("preMoveToken", onPreMoveToken);
   Hooks.on("moveToken", onMoveToken);
   Hooks.on("stopToken", onStopToken);
+  Hooks.on("updateToken", onAbilityRoutePreviewPlanUpdate);
 }
 
 export function createMovementOccurrenceKey(tokenDocument, movement = {}, phase = "", subpath = "") {
@@ -70,7 +78,11 @@ function onPreMoveToken(tokenDocument, movement, operation = {}) {
   const key = createMovementOccurrenceKey(tokenDocument, movement, "gate");
   if (!pendingMovementGates.has(key)) {
     pendingMovementGates.add(key);
-    void gateAndResumeMovement(tokenDocument, movement, operation, key);
+    trackSystemMovementOperation(
+      tokenDocument,
+      gateAndResumeMovement(tokenDocument, movement, operation, key),
+      { contributesToCompletion: true }
+    );
   }
   return false;
 }
@@ -85,12 +97,17 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
   const movementData = serializeMovementOperation(movement);
   const participant = tokenParticipant(tokenDocument);
   const operationId = `movement:${createMovementOccurrenceKey(tokenDocument, movement, "root")}`;
+  const inheritedChainRef = operation?.[SYSTEM_EVENT_CHAIN_OPTION]
+    ?? operation?.falloutMawSystemEventChainRef
+    ?? operation?.chainRef
+    ?? null;
   try {
-    await withSystemEventRoot({
+    return await withSystemEventRoot({
       kind: "tokenMovement",
       operationId,
       sceneUuid: String(tokenDocument?.parent?.uuid ?? ""),
-      combatUuid: String(game.combat?.uuid ?? "")
+      combatUuid: String(game.combat?.uuid ?? ""),
+      chainRef: inheritedChainRef
     }, async scope => {
       await scope.emit("fallout-maw.movement.token.before", { data: movementData }, {
         occurrenceKey: createMovementOccurrenceKey(tokenDocument, movement, "before"),
@@ -109,12 +126,12 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
           occurrenceKey: createMovementOccurrenceKey(tokenDocument, movement, "stopped"),
           participants: { source: participant, target: null, related: [] }
         });
-        return;
+        return false;
       }
 
       const waypoints = getMovementResumeWaypoints(movement);
-      if (!waypoints.length) return;
-      await tokenDocument.move(waypoints, {
+      if (!waypoints.length) return false;
+      const completed = await tokenDocument.move(waypoints, {
         [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true,
         [SYSTEM_EVENT_CHAIN_OPTION]: scope.chainRef,
         chainRef: scope.chainRef,
@@ -126,25 +143,44 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
         constrainOptions: movement?.constrainOptions,
         measureOptions: movement?.measureOptions
       });
+      await waitForTokenMovementAnimation(tokenDocument);
+      return completed !== false;
     });
   } catch (error) {
     console.error(`${SYSTEM_ID} | Token movement system-event gate failed`, error);
     try {
       const waypoints = getMovementResumeWaypoints(movement);
-      if (waypoints.length) await tokenDocument.move(waypoints, { [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true });
+      if (!waypoints.length) return false;
+      const completed = await tokenDocument.move(waypoints, {
+        [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true,
+        ...(inheritedChainRef ? {
+          [SYSTEM_EVENT_CHAIN_OPTION]: inheritedChainRef,
+          falloutMawSystemEventChainRef: inheritedChainRef,
+          chainRef: inheritedChainRef
+        } : {})
+      });
+      await waitForTokenMovementAnimation(tokenDocument);
+      return completed !== false;
     } catch (resumeError) {
       console.error(`${SYSTEM_ID} | Token movement fail-open resume failed`, resumeError);
+      return false;
     }
   } finally {
     pendingMovementGates.delete(pendingKey);
   }
 }
 
+async function waitForTokenMovementAnimation(tokenDocument) {
+  const animation = tokenDocument?.movement?.animation?.ended;
+  if (animation?.then) await animation.catch(() => undefined);
+}
+
 function onMoveToken(tokenDocument, movement, operation = {}, user = null) {
+  clearAbilityRoutePreviewStop(tokenDocument, movement?.id);
   if (!user?.isSelf || !tokenDocument?.actor || !movement) return;
   const participant = tokenParticipant(tokenDocument);
   const chainRef = operation?.[SYSTEM_EVENT_CHAIN_OPTION] ?? operation?.chainRef ?? null;
-  void dispatchSystemEvent("fallout-maw.movement.token.completed", {
+  const dispatched = dispatchSystemEvent("fallout-maw.movement.token.completed", {
     data: serializeMovementOperation(movement),
     outcome: { completed: !movement.constrained, constrained: Boolean(movement.constrained) }
   }, {
@@ -155,13 +191,24 @@ function onMoveToken(tokenDocument, movement, operation = {}, user = null) {
     combatUuid: String(game.combat?.uuid ?? ""),
     occurrenceKey: createMovementOccurrenceKey(tokenDocument, movement, "completed"),
     participants: { source: participant, target: null, related: [] }
+  }).catch(error => {
+    console.error(`${SYSTEM_ID} | Token movement completion event failed`, error);
   });
+  trackSystemMovementOperation(tokenDocument, dispatched);
+}
+
+function onAbilityRoutePreviewPlanUpdate(tokenDocument, _changes = {}, operation = {}) {
+  if (!operation?.[ABILITY_ROUTE_PREVIEW_MOVEMENT_OPTION]) return;
+  const movement = operation?._movement?.[tokenDocument?.id];
+  if (!movement?.id || movement?.passed?.waypoints?.length) return;
+  markAbilityRoutePreviewStop(tokenDocument, movement.id);
 }
 
 function onStopToken(tokenDocument) {
+  if (consumeAbilityRoutePreviewStop(tokenDocument, tokenDocument?.movement?.id)) return;
   if (!isCurrentActiveGM() || !tokenDocument?.actor) return;
   const movement = tokenDocument?.movement ?? {};
-  void dispatchSystemEvent("fallout-maw.movement.token.stopped", {
+  const dispatched = dispatchSystemEvent("fallout-maw.movement.token.stopped", {
     data: serializeMovementOperation(movement),
     outcome: { completed: false, constrained: true }
   }, {
@@ -171,7 +218,10 @@ function onStopToken(tokenDocument) {
     combatUuid: String(game.combat?.uuid ?? ""),
     occurrenceKey: createMovementOccurrenceKey(tokenDocument, movement, "stopped"),
     participants: { source: tokenParticipant(tokenDocument), target: null, related: [] }
+  }).catch(error => {
+    console.error(`${SYSTEM_ID} | Token movement stopped event failed`, error);
   });
+  trackSystemMovementOperation(tokenDocument, dispatched);
 }
 
 function getMovementResumeWaypoints(movement = {}) {
@@ -180,14 +230,11 @@ function getMovementResumeWaypoints(movement = {}) {
     ...(movement?.pending?.waypoints ?? [])
   ];
   if (!values.length && movement?.destination) values.push(movement.destination);
-  const seen = new Set();
-  return values.map(serializeWaypoint).filter(waypoint => {
-    if (!Number.isFinite(waypoint.x) || !Number.isFinite(waypoint.y)) return false;
-    const key = `${waypoint.x}:${waypoint.y}:${waypoint.elevation ?? ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  // Foundry supports routes which deliberately revisit a position. Keep the
+  // original order and repetitions (A -> B -> A) when an asynchronously gated
+  // movement is resumed.
+  return values.map(serializeWaypoint)
+    .filter(waypoint => Number.isFinite(waypoint.x) && Number.isFinite(waypoint.y));
 }
 
 function serializeWaypoint(waypoint = null) {
@@ -228,4 +275,3 @@ function lastControlReason(control = {}) {
 function isCurrentActiveGM() {
   return Boolean(game.users?.activeGM?.id && game.users.activeGM.id === game.user?.id);
 }
-

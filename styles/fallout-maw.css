@@ -3510,6 +3510,10 @@ body #prosemirror-dropdown {
   grid-template-columns: minmax(120px, 0.9fr) minmax(90px, 0.7fr) auto;
 }
 
+.fallout-maw-active-application-costs .fallout-maw-event-reaction-cost-row {
+  grid-template-columns: minmax(110px, 0.85fr) minmax(125px, 0.9fr) minmax(90px, 0.7fr) auto;
+}
+
 .fallout-maw-event-reaction-cost-overload {
   align-items: center;
   display: grid;
@@ -3580,6 +3584,7 @@ body #prosemirror-dropdown {
 @media (max-width: 720px) {
   .fallout-maw-event-reaction-event-field,
   .fallout-maw-event-reaction-cost-row,
+  .fallout-maw-active-application-costs .fallout-maw-event-reaction-cost-row,
   .fallout-maw-event-reaction-settings > label,
   .fallout-maw-event-reaction-combat-only,
   .fallout-maw-event-reaction-auto-apply {
@@ -14437,6 +14442,18 @@ label.checkbox.fallout-maw-ability-change-choice {
 .fallout-maw-travel-ruler-table.blocked {
   border-color: rgba(220, 74, 61, 0.9);
   color: #ffb0a7;
+}
+
+.waypoint-label .fallout-maw-ability-route-budget {
+  display: inline-block;
+  min-width: 5.5em;
+  text-align: center;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.waypoint-label .fallout-maw-ability-route-budget.over-budget {
+  color: #ff8b82;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-travel-group-sheet {

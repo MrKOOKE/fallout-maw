@@ -13,6 +13,7 @@ export const MOVEMENT_RESOURCE_PREVIEW_HOOK = "falloutMawMovementResourcePreview
 export const ABILITY_FREE_MOVEMENT_OPTION = "falloutMawAbilityFreeMovement";
 const MOVEMENT_RESOURCE_SPENDING_FLAG = "movementResourceSpending";
 const MOVEMENT_RESOURCE_SPENDING_LIMIT = 50;
+const movementResourceSpendingQueues = new Map();
 const MOVEMENT_RESOURCE_LABEL = "ОП";
 const ACTION_RESOURCE_LABEL = "ОД";
 
@@ -112,7 +113,48 @@ export function getCombatMovementAffordabilityCost(movement, actor = null) {
 }
 
 export function applyCombatMovementCostModifier(actor, cost = 0) {
-  const postureCost = Math.ceil(Math.max(0, cost) * getActorPostureMovementCostMultiplier(actor));
+  return applyCombatMovementCostProfile(getCombatMovementCostProfile(actor), cost);
+}
+
+/**
+ * Convert an adjusted OP budget back into Foundry's raw movement-cost limit.
+ *
+ * Token#planMovement constrains raw grid/terrain cost, while Fallout MaW
+ * applies posture and damage multipliers afterwards. The conversion is
+ * monotonic and keeps the native planner's hard limit aligned with the OP
+ * counter (for example, 8 OP at 2 OP per cell becomes maxCost 4).
+ */
+export function getRawMovementCostLimit(actor, adjustedBudget = Infinity) {
+  const budget = Number(adjustedBudget);
+  if (!Number.isFinite(budget)) return Infinity;
+  if (budget < 0) return 0;
+
+  const profile = getCombatMovementCostProfile(actor);
+  const adjusted = rawCost => applyCombatMovementCostProfile(profile, Math.ceil(Math.max(0, rawCost)));
+  if (adjusted(1) === 0) return Infinity;
+
+  let lower = 0;
+  let upper = Math.max(1, Math.floor(budget) + 1);
+  const maximumSearchCost = Number.MAX_SAFE_INTEGER;
+  while ((upper < maximumSearchCost) && (adjusted(upper) <= budget)) {
+    lower = upper;
+    upper = Math.min(maximumSearchCost, upper * 2);
+  }
+  if (adjusted(upper) <= budget) return Infinity;
+
+  while ((lower + 1) < upper) {
+    const middle = lower + Math.floor((upper - lower) / 2);
+    if (adjusted(middle) <= budget) lower = middle;
+    else upper = middle;
+  }
+  return lower;
+}
+
+function getCombatMovementCostProfile(actor) {
+  const postureMultiplierValue = Number(getActorPostureMovementCostMultiplier(actor));
+  const postureMultiplier = Number.isFinite(postureMultiplierValue)
+    ? Math.max(0, postureMultiplierValue)
+    : 1;
   const modifier = getDamageCostModifierState(actor).movement;
   const hasOverride = modifier?.override !== null && modifier?.override !== undefined && modifier?.override !== "";
   const override = hasOverride ? Number(modifier.override) : NaN;
@@ -120,7 +162,34 @@ export function applyCombatMovementCostModifier(actor, cost = 0) {
   const perUnitCost = Number.isFinite(override)
     ? override
     : (Number.isFinite(multiplier) ? multiplier : 1) + (Number(modifier?.add) || 0);
-  return Math.max(0, Math.ceil(postureCost * Math.max(0, perUnitCost)));
+  const normalizedPerUnitCost = Math.max(0, perUnitCost);
+  return {
+    key: JSON.stringify([postureMultiplier, normalizedPerUnitCost]),
+    postureMultiplier,
+    perUnitCost: normalizedPerUnitCost
+  };
+}
+
+function applyCombatMovementCostProfile(profile = {}, cost = 0) {
+  const postureMultiplier = Number.isFinite(Number(profile?.postureMultiplier))
+    ? Math.max(0, Number(profile.postureMultiplier))
+    : 1;
+  const perUnitCost = Number.isFinite(Number(profile?.perUnitCost))
+    ? Math.max(0, Number(profile.perUnitCost))
+    : 1;
+  const postureCost = Math.ceil(Math.max(0, cost) * postureMultiplier);
+  return Math.max(0, Math.ceil(postureCost * perUnitCost));
+}
+
+export function calculateCombatMovementCostTrancheDelta(
+  profile = {},
+  priorRawCost = 0,
+  priorAdjustedCost = 0,
+  rawCost = 0
+) {
+  const totalRawCost = Math.max(0, Number(priorRawCost) || 0) + Math.max(0, Number(rawCost) || 0);
+  const totalAdjustedCost = applyCombatMovementCostProfile(profile, Math.ceil(totalRawCost));
+  return Math.max(0, totalAdjustedCost - Math.max(0, Number(priorAdjustedCost) || 0));
 }
 
 /**
@@ -128,11 +197,12 @@ export function applyCombatMovementCostModifier(actor, cost = 0) {
  * actor-specific modifiers as combat movement spending.
  */
 export function measureTheoreticalMovementPathCost(tokenDocument, waypoints = [], options = {}) {
-  return measureTheoreticalMovementSegmentsCost(tokenDocument, [{
-    from: waypoints[0],
-    to: waypoints.at(-1),
-    waypoints
-  }], options);
+  if (!tokenDocument?.actor) return 0;
+  const normalized = Array.isArray(waypoints) ? waypoints.filter(Boolean) : [];
+  if (normalized.length < 2) return 0;
+  const rawCost = measureRawMovementPathIncrementCost(tokenDocument, normalized, options);
+  if (rawCost <= 0) return 0;
+  return applyCombatMovementCostModifier(tokenDocument.actor, Math.ceil(rawCost));
 }
 
 /** Measure and combine a set of route segments before applying actor movement modifiers once. */
@@ -159,15 +229,70 @@ export function measureTheoreticalMovementSegmentsCost(tokenDocument, segments =
 }
 
 function measureRawMovementPathCost(tokenDocument, waypoints = [], options = {}) {
-  const measurement = tokenDocument.rendered
-    ? tokenDocument.object.measureMovementPath(waypoints, {
-      ...(options?.measureOptions ?? options),
-      preview: false
-    })
-    : tokenDocument.measureMovementPath(waypoints, options?.measureOptions ?? options);
+  const measurement = measureRawMovementPath(tokenDocument, waypoints, options);
   const cost = Number(measurement.cost);
   if (!Number.isFinite(cost) || cost < 0) throw new Error("Foundry returned an invalid movement cost.");
   return cost;
+}
+
+function measureRawMovementPath(tokenDocument, waypoints = [], options = {}) {
+  const preview = Boolean(options?.preview);
+  const measureOptions = options?.measureOptions ?? options;
+  return tokenDocument.rendered
+    ? tokenDocument.object.measureMovementPath(waypoints, {
+      ...measureOptions,
+      preview
+    })
+    : tokenDocument.measureMovementPath(waypoints, measureOptions);
+}
+
+/**
+ * Measure only the new route while preserving Foundry's accumulated movement
+ * history. This matters for alternating diagonals and any custom cumulative
+ * movement-cost aggregator.
+ */
+function measureRawMovementPathIncrementCost(tokenDocument, waypoints = [], options = {}) {
+  const history = Array.from(
+    Array.isArray(options?.history) ? options.history : (tokenDocument?.movementHistory ?? [])
+  );
+  if (!history.length) return measureRawMovementPathCost(tokenDocument, waypoints, options);
+
+  const prefix = [...history];
+  const previous = prefix.at(-1);
+  const origin = waypoints[0];
+  if (!areMovementPositionsEqual(tokenDocument, previous, origin)) {
+    prefix.push({
+      x: origin.x,
+      y: origin.y,
+      elevation: origin.elevation,
+      width: origin.width,
+      height: origin.height,
+      depth: origin.depth,
+      shape: origin.shape,
+      level: origin.level,
+      action: "displace",
+      cost: 0,
+      snapped: false,
+      explicit: false,
+      checkpoint: true
+    });
+  }
+
+  const measurement = measureRawMovementPath(tokenDocument, [...prefix, ...waypoints], options);
+  const total = Number(measurement?.cost);
+  const prefixCost = Number(measurement?.waypoints?.[prefix.length - 1]?.cost ?? 0);
+  if (!Number.isFinite(total) || !Number.isFinite(prefixCost) || total < prefixCost) {
+    throw new Error("Foundry returned an invalid cumulative movement cost.");
+  }
+  return total - prefixCost;
+}
+
+function areMovementPositionsEqual(tokenDocument, left = {}, right = {}) {
+  const compare = tokenDocument?.constructor?.arePositionsEqual;
+  if (typeof compare === "function") return Boolean(compare.call(tokenDocument.constructor, left, right));
+  return Number(left?.x) === Number(right?.x)
+    && Number(left?.y) === Number(right?.y)
+    && Number(left?.elevation ?? 0) === Number(right?.elevation ?? 0);
 }
 
 export function isCombatMovementTracked(tokenDocument) {
@@ -185,7 +310,7 @@ function preventUnaffordableCombatMovement(tokenDocument, movement, operation) {
   if (movement?.method === "undo") return true;
   if (isGMDebugMovementBypassActive()) return true;
 
-  const cost = getCombatMovementAffordabilityCost(movement, tokenDocument.actor);
+  const cost = getCombatMovementAffordabilityDelta(tokenDocument.actor, tokenDocument, movement);
   if (cost <= 0) return true;
 
   const state = getCombatMovementResourceState(tokenDocument.actor);
@@ -203,42 +328,125 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
   if (isGrappleFollowMovement(tokenDocument, operation)) return;
   if (isAbilityFreeMovement(tokenDocument, operation)) return;
   if (!isCombatMovementTracked(tokenDocument)) return;
-  if (movement?.method === "undo") return restoreLastMovementResourceSpending(tokenDocument);
+  if (movement?.method === "undo") {
+    return runMovementResourceSpendingSerially(
+      tokenDocument.actor,
+      () => restoreLastMovementResourceSpending(tokenDocument)
+    );
+  }
   if (isGMDebugMovementBypassActive()) return;
 
-  const cost = getCombatMovementCost(movement, tokenDocument.actor);
-  if (cost <= 0) return;
   const actor = tokenDocument.actor;
   const finishSpending = beginCombatResourceSpending(actor);
   try {
-    await waitForMovementAnimation(movement);
-    if (!isCombatMovementTracked(tokenDocument)) return;
+    await runMovementResourceSpendingSerially(actor, async () => {
+      await waitForMovementAnimation(movement);
+      if (!isCombatMovementTracked(tokenDocument)) return;
 
-    const state = getCombatMovementResourceState(actor);
-    if (!state || cost > state.total) return;
+      const costProfile = getCombatMovementCostProfile(actor);
+      const cost = getCombatMovementSpendDelta(actor, tokenDocument, movement, costProfile);
+      const rawCost = getMovementSectionCost(movement?.passed);
+      if (!(rawCost > 0)) return;
+      const state = getCombatMovementResourceState(actor);
+      if (!state || cost > state.total) return;
 
-    const movementSpend = Math.min(cost, state.movement.value);
-    const actionSpend = cost - movementSpend;
-    if (!movementSpend && !actionSpend) return;
+      const movementSpend = Math.min(cost, state.movement.value);
+      const actionSpend = cost - movementSpend;
 
-    const updates = {};
-    if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-    updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
-      ...getMovementResourceSpendingStack(actor),
-      createMovementResourceSpendingEntry(tokenDocument, movement, {
-        [MOVEMENT_RESOURCE_KEY]: movementSpend,
-        [state.action.key]: actionSpend
-      })
-    ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
-    await actor.update(updates);
-    if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
-    await notifyCombatResourcesSpent(actor, {
-      [MOVEMENT_RESOURCE_KEY]: movementSpend,
-      [state.action.key]: actionSpend
-    }, { type: "movement", tokenDocument, movement, operation });
+      const updates = {};
+      if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
+      updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
+        ...getMovementResourceSpendingStack(actor),
+        createMovementResourceSpendingEntry(tokenDocument, movement, {
+          [MOVEMENT_RESOURCE_KEY]: movementSpend,
+          [state.action.key]: actionSpend
+        }, { adjustedCost: cost, costProfileKey: costProfile.key })
+      ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
+      await actor.update(updates);
+      if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
+      if (movementSpend || actionSpend) {
+        await notifyCombatResourcesSpent(actor, {
+          [MOVEMENT_RESOURCE_KEY]: movementSpend,
+          [state.action.key]: actionSpend
+        }, { type: "movement", tokenDocument, movement, operation });
+      }
+    });
   } finally {
     finishSpending();
   }
+}
+
+async function runMovementResourceSpendingSerially(actor, operation) {
+  const actorKey = String(actor?.uuid ?? actor?.id ?? "");
+  if (!actorKey) return operation();
+  const previous = movementResourceSpendingQueues.get(actorKey) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  movementResourceSpendingQueues.set(actorKey, current);
+  try {
+    return await current;
+  } finally {
+    if (movementResourceSpendingQueues.get(actorKey) === current) movementResourceSpendingQueues.delete(actorKey);
+  }
+}
+
+function getCombatMovementSpendDelta(
+  actor,
+  tokenDocument,
+  movement = {},
+  costProfile = getCombatMovementCostProfile(actor)
+) {
+  const rawCost = getMovementSectionCost(movement?.passed);
+  if (!(rawCost > 0)) return 0;
+  const { rawCost: priorRawCost, adjustedCost: priorAdjustedCost } = getCurrentMovementSpendingTranche(
+    actor,
+    tokenDocument,
+    movement,
+    costProfile.key
+  );
+  return calculateCombatMovementCostTrancheDelta(costProfile, priorRawCost, priorAdjustedCost, rawCost);
+}
+
+function getCombatMovementAffordabilityDelta(actor, tokenDocument, movement = {}) {
+  const remainingRawCost = getMovementSectionCost(movement?.passed) + getMovementSectionCost(movement?.pending);
+  if (!(remainingRawCost > 0)) return 0;
+  const costProfile = getCombatMovementCostProfile(actor);
+  const { rawCost: priorRawCost, adjustedCost: priorAdjustedCost } = getCurrentMovementSpendingTranche(
+    actor,
+    tokenDocument,
+    movement,
+    costProfile.key
+  );
+  return calculateCombatMovementCostTrancheDelta(
+    costProfile,
+    priorRawCost,
+    priorAdjustedCost,
+    remainingRawCost
+  );
+}
+
+function getCurrentMovementSpendingTranche(actor, tokenDocument, movement = {}, costProfileKey = "") {
+  const rootId = getMovementRootId(movement);
+  const sceneId = tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "";
+  const tokenId = tokenDocument?.id ?? "";
+  const entries = getMovementResourceSpendingStack(actor).filter(entry => (
+    entry?.sceneId === sceneId
+    && entry?.tokenId === tokenId
+    && String(entry?.movementRootId ?? entry?.movementId ?? "") === rootId
+  ));
+  let rawCost = 0;
+  let adjustedCost = 0;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (String(entry?.costProfileKey ?? "") !== String(costProfileKey ?? "")) break;
+    rawCost += Math.max(0, Number(entry?.rawCost) || 0);
+    adjustedCost += Math.max(0, Number(entry?.adjustedCost)
+      || Object.values(entry?.resources ?? {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0));
+  }
+  return { rawCost, adjustedCost };
+}
+
+function getMovementRootId(movement = {}) {
+  return String(movement?.chain?.at?.(0) ?? movement?.id ?? "");
 }
 
 async function restoreLastMovementResourceSpending(tokenDocument) {
@@ -247,9 +455,25 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
   const index = findLastMovementResourceSpendingIndex(stack, tokenDocument);
   if (index < 0) return;
 
-  const entry = stack[index];
-  const nextStack = stack.slice();
-  nextStack.splice(index, 1);
+  const lastEntry = stack[index];
+  const movementRootId = String(lastEntry?.movementRootId ?? lastEntry?.movementId ?? "");
+  const restoredEntries = stack.filter(entry => (
+    movementResourceSpendingEntryMatchesToken(entry, tokenDocument)
+    && String(entry?.movementRootId ?? entry?.movementId ?? "") === movementRootId
+  ));
+  const restoredResources = restoredEntries.reduce((totals, entry) => {
+    for (const [key, value] of Object.entries(entry?.resources ?? {})) {
+      totals[key] = (totals[key] ?? 0) + Math.max(0, toInteger(value));
+    }
+    return totals;
+  }, {});
+  const restoredIds = new Set(restoredEntries.map(entry => entry?.id).filter(Boolean));
+  const nextStack = stack.filter(entry => (
+    entry?.id
+      ? !restoredIds.has(entry.id)
+      : !(movementResourceSpendingEntryMatchesToken(entry, tokenDocument)
+        && String(entry?.movementRootId ?? entry?.movementId ?? "") === movementRootId)
+  ));
   const updates = {
     [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: nextStack
   };
@@ -261,7 +485,7 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
     const current = toInteger(resource.value);
     const min = Math.max(0, toInteger(resource.min));
     const max = Math.max(min, toInteger(resource.max));
-    const restored = Math.min(max, Math.max(min, current + Math.max(0, toInteger(entry?.resources?.[key]))));
+    const restored = Math.min(max, Math.max(min, current + Math.max(0, toInteger(restoredResources[key]))));
     updates[`system.resources.${key}.value`] = restored;
     updates[`system.resources.${key}.spent`] = Math.max(0, max - restored);
   }
@@ -327,11 +551,19 @@ export async function restoreActorMovementResources(actor) {
   if (Object.keys(updates).length) await actor.update(updates);
 }
 
-function createMovementResourceSpendingEntry(tokenDocument, movement, resources) {
+function createMovementResourceSpendingEntry(tokenDocument, movement, resources, {
+  adjustedCost = null,
+  costProfileKey = ""
+} = {}) {
   const actor = tokenDocument?.actor;
+  const rawCost = Math.max(0, getMovementSectionCost(movement?.passed));
   return {
     id: foundry.utils.randomID(),
     movementId: movement?.id ?? "",
+    movementRootId: getMovementRootId(movement),
+    rawCost,
+    adjustedCost: Math.max(0, Number(adjustedCost) || 0),
+    costProfileKey: String(costProfileKey ?? ""),
     actorUuid: actor?.uuid ?? "",
     sceneId: tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "",
     tokenId: tokenDocument?.id ?? "",
@@ -358,14 +590,16 @@ export function hasActorCombatMovementInCurrentTurn(actor) {
 }
 
 function findLastMovementResourceSpendingIndex(stack, tokenDocument) {
+  return stack.findLastIndex(entry => movementResourceSpendingEntryMatchesToken(entry, tokenDocument));
+}
+
+function movementResourceSpendingEntryMatchesToken(entry, tokenDocument) {
   const actorUuid = tokenDocument?.actor?.uuid ?? "";
   const sceneId = tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "";
   const tokenId = tokenDocument?.id ?? "";
-  return stack.findLastIndex(entry => (
-    entry?.actorUuid === actorUuid
+  return entry?.actorUuid === actorUuid
     && entry?.tokenId === tokenId
-    && (!entry?.sceneId || !sceneId || entry.sceneId === sceneId)
-  ));
+    && (!entry?.sceneId || !sceneId || entry.sceneId === sceneId);
 }
 
 async function waitForMovementAnimation(movement) {

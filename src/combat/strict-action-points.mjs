@@ -30,18 +30,81 @@ export function canSpendStrictActionPoints(actor, amount = 0, { label = "" } = {
 }
 
 export async function spendStrictActionPoints(actor, amount = 0, context = {}) {
-  if (!isActorInActiveCombat(actor)) return [];
+  const transaction = await spendStrictActionPointsWithReceipt(actor, amount, context);
+  return transaction.events;
+}
+
+/** Spend strict action points and return a delta receipt which can be safely refunded. */
+export async function spendStrictActionPointsWithReceipt(actor, amount = 0, context = {}) {
+  if (!isActorInActiveCombat(actor)) return { spent: 0, receipt: null, events: [] };
   const cost = Math.max(0, toInteger(amount));
   const state = getStrictActionPointState(actor);
-  if (!actor?.isOwner || cost <= 0 || !state || cost > state.current) return [];
+  if (!actor?.isOwner || cost <= 0 || !state || cost > state.current) {
+    return { spent: 0, receipt: null, events: [] };
+  }
   const next = state.current - cost;
   await actor.update({
     [`system.resources.${ACTION_RESOURCE_KEY}.value`]: next,
     [`system.resources.${ACTION_RESOURCE_KEY}.spent`]: Math.max(0, state.max - next)
-  }, context?.chainRef ? {
-    chainRef: context.chainRef,
-    falloutMawSystemEventChainRef: context.chainRef
-  } : {});
-  if (context?.suppressResourceNotification) return [];
-  return notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
+  }, createStrictActionPointUpdateOptions(context));
+  const applied = getStrictActionPointState(actor);
+  if (!applied || applied.current !== next) {
+    // A preUpdate hook may cancel or alter the document update.  Never issue a
+    // receipt (and therefore never permit the protected operation) unless the
+    // exact requested delta reached the document.  If part of our delta did
+    // land, undo no more than that delta while preserving later changes.
+    const observedSpend = applied
+      ? Math.min(cost, Math.max(0, state.current - applied.current))
+      : 0;
+    if (observedSpend > 0) {
+      await refundStrictActionPointReceipt(actor, {
+        actorUuid: String(actor.uuid ?? ""),
+        resourceKey: ACTION_RESOURCE_KEY,
+        amount: observedSpend
+      }, context);
+    }
+    return { spent: 0, receipt: null, events: [] };
+  }
+  const receipt = Object.freeze({
+    actorUuid: String(actor.uuid ?? ""),
+    resourceKey: ACTION_RESOURCE_KEY,
+    amount: cost
+  });
+  const events = context?.suppressResourceNotification
+    ? []
+    : await notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
+  return { spent: cost, receipt, events };
+}
+
+/** Refund only the delta represented by a receipt, preserving later resource changes. */
+export async function refundStrictActionPointReceipt(actor, receipt = null, context = {}) {
+  const amount = Math.max(0, toInteger(receipt?.amount));
+  if (
+    !actor?.isOwner
+    || !amount
+    || receipt?.resourceKey !== ACTION_RESOURCE_KEY
+    || String(receipt?.actorUuid ?? "") !== String(actor?.uuid ?? "")
+  ) return 0;
+  const state = getStrictActionPointState(actor);
+  if (!state) return 0;
+  const next = Math.min(state.max, state.current + amount);
+  const restored = next - state.current;
+  if (restored <= 0) return 0;
+  await actor.update({
+    [`system.resources.${ACTION_RESOURCE_KEY}.value`]: next,
+    [`system.resources.${ACTION_RESOURCE_KEY}.spent`]: Math.max(0, state.max - next)
+  }, createStrictActionPointUpdateOptions(context, { falloutMawStrictActionPointRefund: true }));
+  const applied = getStrictActionPointState(actor);
+  if (!applied) return 0;
+  return Math.min(restored, Math.max(0, applied.current - state.current));
+}
+
+function createStrictActionPointUpdateOptions(context = {}, extra = {}) {
+  return {
+    ...extra,
+    ...(context?.chainRef ? {
+      chainRef: context.chainRef,
+      falloutMawSystemEventChainRef: context.chainRef
+    } : {})
+  };
 }

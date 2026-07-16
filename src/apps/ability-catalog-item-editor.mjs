@@ -4,10 +4,16 @@ import { getFactionNamesWithDefault, getFactionSettings } from "../settings/fact
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_ACTION_EXECUTOR_MODES,
+  ABILITY_ACTION_ROUTE_BUDGET_MODES,
+  ABILITY_ACTION_ROUTE_EVALUATION_MODES,
+  ABILITY_ACTION_POINT_PAYERS,
   ABILITY_ACTION_POINT_COST_MODES,
   ABILITY_ACTION_TARGET_MODES,
+  ABILITY_ACTION_TYPES,
   ABILITY_ATTACK_ACTION_ALL,
   ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
+  ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES,
+  ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
   ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
   ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_AURA_MODES,
@@ -42,6 +48,7 @@ import {
   normalizeAtRandomSettings,
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
+  normalizeActiveApplicationCost,
   preserveMissingActiveApplicationTargetSettings,
   normalizeEventReactionSettings,
   normalizeEventReactionMode,
@@ -632,7 +639,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       resourceKey: REACTION_POINTS_RESOURCE_KEY,
       formula: "1",
       overloadAmount: 0,
-      overloadDurationSeconds: 0
+      overloadDurationSeconds: 0,
+      payer: ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
     });
     abilityFunction.activeSettings = settings;
     return this.#persist({ render: true, sync: false });
@@ -1151,8 +1159,16 @@ function readAbilityActions(row) {
     executorMode: actionRow.querySelector("[data-field='action.executorMode']")?.value,
     targetMode: actionRow.querySelector("[data-field='action.targetMode']")?.value,
     actionPointCostMode: actionRow.querySelector("[data-field='action.actionPointCostMode']")?.value,
+    actionPointPayer: actionRow.querySelector("[data-field='action.actionPointPayer']")?.value,
     fixedActionPointCost: actionRow.querySelector("[data-field='action.fixedActionPointCost']")?.value,
-    actualActionPointCostPercent: actionRow.querySelector("[data-field='action.actualActionPointCostPercent']")?.value
+    actualActionPointCostPercent: actionRow.querySelector("[data-field='action.actualActionPointCostPercent']")?.value,
+    routeBudgetMode: actionRow.querySelector("[data-field='action.routeBudgetMode']")?.value,
+    routeBudgetFormula: actionRow.querySelector("[data-field='action.routeBudgetFormula']")?.value,
+    routeBudgetEvaluation: actionRow.querySelector("[data-field='action.routeBudgetEvaluation']")?.value,
+    routeExecutionMode: actionRow.querySelector("[data-field='action.routeExecutionMode']")?.value,
+    routeMovementAction: actionRow.querySelector("[data-field='action.routeMovementAction']")?.value,
+    routeAutoRotate: actionRow.querySelector("[data-field='action.routeAutoRotate']")?.checked,
+    routeShowRuler: actionRow.querySelector("[data-field='action.routeShowRuler']")?.checked
   }));
 }
 
@@ -1187,7 +1203,11 @@ function readActiveApplicationSettings(row, previousValue = {}) {
 
 function readActiveApplicationCostRows(row) {
   return Array.from(row?.querySelectorAll("[data-active-application-cost-row]") ?? [])
-    .map(costRow => readTriggerCostRow(costRow));
+    .map(costRow => ({
+      ...readTriggerCostRow(costRow),
+      payer: costRow.querySelector("[data-field='active.costPayer']")?.value
+        ?? ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
+    }));
 }
 
 function syncFixedRescueCountVisibility(select) {
@@ -1883,22 +1903,73 @@ function prepareFunctionForDisplay(entry) {
 function prepareAbilityActionForDisplay(action, index) {
   const type = String(action?.type ?? "");
   const isPending = !type;
-  const isWeaponAttack = type === "weaponAttack";
+  const isWeaponAttack = type === ABILITY_ACTION_TYPES.weaponAttack;
+  const isMovementRoute = type === ABILITY_ACTION_TYPES.movementRoute;
   const typeChoices = [
     { value: "", label: "", selected: isPending },
     {
-      value: "weaponAttack",
+      value: ABILITY_ACTION_TYPES.weaponAttack,
       label: game.i18n.localize("FALLOUTMAW.Ability.Actions.WeaponAttack"),
       selected: isWeaponAttack
+    },
+    {
+      value: ABILITY_ACTION_TYPES.movementRoute,
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.MovementRoute"),
+      selected: isMovementRoute
     }
   ];
-  if (isPending || !isWeaponAttack) {
+  const common = {
+    ...action,
+    index,
+    typeChoices,
+    executorModeChoices: [
+      { value: ABILITY_ACTION_EXECUTOR_MODES.source, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ExecutorSource"), selected: action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.source },
+      { value: ABILITY_ACTION_EXECUTOR_MODES.targets, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ExecutorTargets"), selected: action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets }
+    ],
+    targetModeChoices: [
+      { value: ABILITY_ACTION_TARGET_MODES.triggerActor, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetTrigger"), selected: action.targetMode === ABILITY_ACTION_TARGET_MODES.triggerActor },
+      { value: ABILITY_ACTION_TARGET_MODES.free, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetFree"), selected: action.targetMode === ABILITY_ACTION_TARGET_MODES.free }
+    ],
+    costModeChoices: [
+      { value: ABILITY_ACTION_POINT_COST_MODES.none, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostNone"), selected: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.none },
+      { value: ABILITY_ACTION_POINT_COST_MODES.fixed, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostFixed"), selected: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed },
+      { value: ABILITY_ACTION_POINT_COST_MODES.actual, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostActual"), selected: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual }
+    ],
+    actionPointPayerChoices: [
+      { value: ABILITY_ACTION_POINT_PAYERS.source, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ActionPointPayerSource"), selected: action.actionPointPayer === ABILITY_ACTION_POINT_PAYERS.source },
+      { value: ABILITY_ACTION_POINT_PAYERS.executor, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ActionPointPayerExecutor"), selected: action.actionPointPayer === ABILITY_ACTION_POINT_PAYERS.executor }
+    ],
+    usesFixedActionPointCost: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed,
+    usesActualActionPointCost: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual
+  };
+  if (isPending || (!isWeaponAttack && !isMovementRoute)) {
     return {
-      ...action,
-      index,
+      ...common,
       isPending,
       isWeaponAttack: false,
+      isMovementRoute: false,
       typeChoices
+    };
+  }
+  if (isMovementRoute) {
+    return {
+      ...common,
+      isPending: false,
+      isWeaponAttack: false,
+      isMovementRoute: true,
+      routeBudgetModeChoices: [
+        { value: ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteBudgetMovementCost"), selected: action.routeBudgetMode === ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost },
+        { value: ABILITY_ACTION_ROUTE_BUDGET_MODES.distance, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteBudgetDistance"), selected: action.routeBudgetMode === ABILITY_ACTION_ROUTE_BUDGET_MODES.distance }
+      ],
+      routeEvaluationChoices: [
+        { value: ABILITY_ACTION_ROUTE_EVALUATION_MODES.source, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteEvaluationSource"), selected: action.routeBudgetEvaluation === ABILITY_ACTION_ROUTE_EVALUATION_MODES.source },
+        { value: ABILITY_ACTION_ROUTE_EVALUATION_MODES.executor, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteEvaluationExecutor"), selected: action.routeBudgetEvaluation === ABILITY_ACTION_ROUTE_EVALUATION_MODES.executor }
+      ],
+      routeExecutionChoices: [
+        { value: ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteExecutionSequential"), selected: action.routeExecutionMode === ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.sequential },
+        { value: ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.parallel, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteExecutionParallel"), selected: action.routeExecutionMode === ABILITY_MOVEMENT_ROUTE_EXECUTION_MODES.parallel }
+      ],
+      routeMovementActionChoices: buildAbilityMovementActionChoices(action.routeMovementAction)
     };
   }
   const selected = new Set(action.attackActionKeys ?? []);
@@ -1908,8 +1979,7 @@ function prepareAbilityActionForDisplay(action, index) {
     ...buildWeaponActionEntries()
   ];
   return {
-    ...action,
-    index,
+    ...common,
     isPending: false,
     isWeaponAttack: true,
     typeChoices,
@@ -1935,6 +2005,27 @@ function prepareAbilityActionForDisplay(action, index) {
       { value: ABILITY_ACTION_POINT_COST_MODES.actual, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.CostActual"), selected: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual }
     ]
   };
+}
+
+function buildAbilityMovementActionChoices(selectedValue = "") {
+  const selected = String(selectedValue ?? "").trim();
+  const actions = Object.entries(globalThis.CONFIG?.Token?.movement?.actions ?? {})
+    .sort(([leftKey, left], [rightKey, right]) => (
+      (Number(left?.order) || 0) - (Number(right?.order) || 0)
+      || leftKey.localeCompare(rightKey)
+    ));
+  return [
+    {
+      value: "",
+      label: game.i18n.localize("FALLOUTMAW.Ability.Actions.RouteMovementCurrent"),
+      selected: !selected
+    },
+    ...actions.map(([value, config]) => ({
+      value,
+      label: game.i18n.localize(String(config?.label ?? value)),
+      selected: selected === value
+    }))
+  ];
 }
 
 function syncAbilityActionCostVisibility(select) {
@@ -1969,6 +2060,33 @@ function prepareTriggerCostRowsForDisplay(costs = []) {
       overloadDurationAmount: cost.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
       overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
       resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
+      isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey)
+    };
+  });
+}
+
+function prepareActiveApplicationCostRowsForDisplay(costs = []) {
+  return (Array.isArray(costs) ? costs : Object.values(costs ?? {})).map((source, index) => {
+    const cost = normalizeActiveApplicationCost(source);
+    const overloadDuration = splitDurationSeconds(cost.overloadDurationSeconds);
+    return {
+      ...cost,
+      index,
+      overloadDurationAmount: cost.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
+      overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+      resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
+      payerChoices: [
+        {
+          value: ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source,
+          label: game.i18n.localize("FALLOUTMAW.Ability.ActiveApplication.CostPayerSource"),
+          selected: cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
+        },
+        {
+          value: ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets,
+          label: game.i18n.localize("FALLOUTMAW.Ability.ActiveApplication.CostPayerTargets"),
+          selected: cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets
+        }
+      ],
       isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey)
     };
   });
@@ -2161,7 +2279,7 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
   const normalized = normalizeActiveApplicationSettings(settings);
   return {
     ...normalized,
-    activationCosts: prepareTriggerCostRowsForDisplay(normalized.costs),
+    activationCosts: prepareActiveApplicationCostRowsForDisplay(normalized.costs),
     targetModeChoices: [
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self, label: "Себе", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self },
       { value: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others, label: "Другим", selected: normalized.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others }

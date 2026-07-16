@@ -171,7 +171,7 @@ function abilityFunctionField() {
 function abilityActionField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
-    type: new StringField({ required: true, blank: true, choices: ["", "weaponAttack"], initial: "weaponAttack" }),
+    type: new StringField({ required: true, blank: true, choices: ["", "weaponAttack", "movementRoute"], initial: "weaponAttack" }),
     attackActionKeys: new ArrayField(new StringField({ required: true, blank: false }), { required: true, initial: ["all"] }),
     executorMode: new StringField({
       required: true,
@@ -191,8 +191,45 @@ function abilityActionField() {
       choices: ["none", "fixed", "actual"],
       initial: "none"
     }),
+    actionPointPayer: new StringField({
+      required: true,
+      blank: false,
+      choices: ["source", "executor"],
+      initial: "executor"
+    }),
     fixedActionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    actualActionPointCostPercent: new NumberField({ required: true, integer: true, min: 0, initial: 100 })
+    actualActionPointCostPercent: new NumberField({ required: true, integer: true, min: 0, initial: 100 }),
+    routeBudgetMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["movementCost", "distance"],
+      initial: "movementCost"
+    }),
+    routeBudgetFormula: new StringField({ required: true, blank: true, initial: "0" }),
+    routeBudgetEvaluation: new StringField({
+      required: true,
+      blank: false,
+      choices: ["source", "executor"],
+      initial: "executor"
+    }),
+    // Retained only so old documents are readable without a migration. The
+    // runtime normalizer maps these values into the generic route budget.
+    routeDistanceFormula: new StringField({ required: true, blank: true, initial: "0" }),
+    routeDistanceEvaluation: new StringField({
+      required: true,
+      blank: false,
+      choices: ["source", "executor"],
+      initial: "executor"
+    }),
+    routeExecutionMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["sequential", "parallel"],
+      initial: "sequential"
+    }),
+    routeMovementAction: new StringField({ required: true, blank: true, initial: "" }),
+    routeAutoRotate: new BooleanField({ required: true, initial: false }),
+    routeShowRuler: new BooleanField({ required: true, initial: true })
   });
 }
 

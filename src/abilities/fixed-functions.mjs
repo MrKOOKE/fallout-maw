@@ -2,6 +2,7 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
+  ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
@@ -45,6 +46,7 @@ import {
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
+import { buildActiveApplicationCostPlanEntries } from "./active-application-costs.mjs";
 import {
   executePreparedAbilityFunctionActions,
   getAbilityTargetExecutorAvailability,
@@ -223,6 +225,7 @@ const WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID = "whereAreYouGoingMovement";
 const WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME = "falloutMawWhereAreYouGoingWeapon";
 const WHERE_ARE_YOU_GOING_RESUME_OPTION = "falloutMawWhereAreYouGoingResume";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
+const ACTIVE_APPLICATION_QUERY_NAME = "falloutMawActiveApplication";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS = 60000;
 const ACTIVE_APPLICATION_AUTHORITY_CACHE_MS = 5 * 60 * 1000;
@@ -554,6 +557,7 @@ export function registerFixedAbilityFunctionHooks() {
   registerWhereAreYouGoingMovementProvider();
   registerOversightMovementProvider();
   CONFIG.queries[OVERSIGHT_QUERY_NAME] = handleOversightAttackQuery;
+  CONFIG.queries[ACTIVE_APPLICATION_QUERY_NAME] = handleActiveApplicationEffectQuery;
   Hooks.on("sightRefresh", () => scheduleOversightVisibilityRefresh());
   Hooks.on("canvasReady", () => scheduleOversightVisibilityRefresh());
   Hooks.on("deleteToken", token => {
@@ -1123,7 +1127,7 @@ function selectCommandBasicsTargets({ commander = null, command = "", limit = 1,
     limit,
     title: abilityName,
     noneWarning: `${abilityName}: нет подходящих исполнителей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
+    instructions: `${abilityName}: выберите до ${limit} целей. Enter подтверждает, ПКМ снимает последнюю цель, Esc отменяет.`
   });
 }
 
@@ -1207,6 +1211,9 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
 } = {}) {
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
   const activationCosts = settings.costs;
+  const sourceActivationCosts = activationCosts.filter(cost => (
+    cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
+  ));
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const occurrenceBase = `ability-use:${scope.rootId}:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`;
   const sourceEventParticipant = sourceParticipant
@@ -1222,7 +1229,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       actor,
       sourceItem: abilityItem,
       abilityFunction,
-      costRows: activationCosts,
+      costRows: sourceActivationCosts,
       context: paymentContext
     });
   } catch (error) {
@@ -1321,8 +1328,7 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       durationSeconds,
       targets,
       sourceToken,
-      occurrenceId,
-      costFingerprint: costPreflight.fingerprint
+      occurrenceId
     }),
     isSuccess: value => Boolean(value?.used),
     getResultStatus: value => value?.cancelled ? "cancelled" : (value?.used ? "success" : "failed"),
@@ -1358,8 +1364,7 @@ async function executeActiveApplicationUse(scope, {
   durationSeconds = 0,
   targets = [],
   sourceToken = null,
-  occurrenceId = "activation",
-  costFingerprint = ""
+  occurrenceId = "activation"
 } = {}) {
   const { allowed, terminalTargets } = await gateActiveApplicationTargets(scope, {
     actor,
@@ -1373,6 +1378,42 @@ async function executeActiveApplicationUse(scope, {
     occurrenceId
   });
   if (!allowed.length) return { used: false, appliedCount: 0, cancelled: true, reason: "applicationCancelled" };
+
+  let costPlanQuote;
+  try {
+    costPlanQuote = await quoteActiveApplicationCostPlan({
+      sourceActor: actor,
+      abilityItem,
+      abilityFunction,
+      activationCosts,
+      targets: allowed.map(entry => entry.target),
+      context: {
+        rootId: scope.rootId,
+        chainRef: scope.chainRef,
+        occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
+      }
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Active application payer preflight failed", error);
+    costPlanQuote = { ok: false, reason: "spendFailed", error };
+  }
+  if (!costPlanQuote.ok) {
+    notifyActiveApplicationCostPlanFailure(costPlanQuote, abilityItem);
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "failed",
+        reason: "resourcePreflightFailed",
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, cancelled: false, reason: "resourcePreflightFailed" };
+  }
 
   const hasLimitedChanges = (abilityFunction?.conditions ?? [])
     .some(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedChanges);
@@ -1449,12 +1490,26 @@ async function executeActiveApplicationUse(scope, {
     }
     return { used: false, appliedCount: 0, cancelled: true, reason: "changeSelectionCancelled" };
   }
-  const requiresRemoteAuthority = durationSeconds > 0
-    && !game.user?.isGM
+  const requiresRemoteEffectAuthority = durationSeconds > 0
     && allowed.some(entry => !entry.target?.actor?.isOwner);
+  const requiresRemoteCostAuthority = costPlanQuote.entries
+    .some(entry => !entry.actor?.isOwner);
+  const requiresRemoteAuthority = !game.user?.isGM
+    && (requiresRemoteEffectAuthority || requiresRemoteCostAuthority);
+  const remoteAuthority = requiresRemoteAuthority
+    ? getActiveApplicationAuthorityGM({
+      actorUuid: actor?.uuid ?? "",
+      sourceTokenUuid: String((sourceToken?.document ?? sourceToken)?.uuid ?? ""),
+      abilityItemId: abilityItem?.id ?? "",
+      abilityFunctionId: abilityFunction?.id ?? "",
+      targetTokenUuids: allowed
+        .map(entry => String((entry.target?.token?.document ?? entry.target?.token)?.uuid ?? ""))
+        .filter(Boolean)
+    })
+    : null;
   if (
     requiresRemoteAuthority
-    && !getResponsibleGM()
+    && !remoteAuthority
   ) {
     ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: нет активного GM для применения эффекта к чужим актёрам.`);
     for (const entry of allowed) {
@@ -1475,10 +1530,12 @@ async function executeActiveApplicationUse(scope, {
 
   const preparedActions = await prepareAbilityFunctionActions({
     actor,
+    abilityItem,
     abilityFunction,
     triggerTargets: allowed.map(entry => entry.target),
     title: getAbilityDisplayName(abilityItem),
-    sourceToken
+    sourceToken,
+    resourceReservations: costPlanQuote.resourceReservations
   });
   if (preparedActions.failed) {
     const reason = preparedActions.reason || "actionPreparationFailed";
@@ -1523,7 +1580,6 @@ async function executeActiveApplicationUse(scope, {
   let commitFailureReason = "";
   let commitError = null;
   let committedPayment = null;
-  let committedPaymentEffectIds = null;
   const commitApplication = async () => {
     commitPromise ??= (async () => {
       try {
@@ -1534,7 +1590,7 @@ async function executeActiveApplicationUse(scope, {
             selectedChanges: changeSelection.changes,
             payCostsRemotely: true,
             costContext: paymentContext,
-            costFingerprint
+            costFingerprints: costPlanQuote.fingerprints
           });
           if (!effectsApplied) {
             commitFailureReason = "authorityOperationFailed";
@@ -1544,22 +1600,19 @@ async function executeActiveApplicationUse(scope, {
           return true;
         }
 
-        const paymentEffectIds = getActorEffectIdSet(actor);
-        const payment = await payAbilityFunctionResourceCosts({
-          actor,
-          sourceItem: abilityItem,
+        const payment = await payActiveApplicationCostPlan({
+          entries: costPlanQuote.entries,
+          abilityItem,
           abilityFunction,
-          costRows: activationCosts,
-          expectedFingerprint: costFingerprint,
+          expectedFingerprints: costPlanQuote.fingerprints,
           context: paymentContext
         });
         if (!payment.ok) {
           commitFailureReason = "resourceSpendFailed";
-          notifyAbilityTriggerCostFailure(payment);
+          notifyActiveApplicationCostPlanFailure(payment, abilityItem);
           return false;
         }
         committedPayment = payment;
-        committedPaymentEffectIds = paymentEffectIds;
         if (durationSeconds > 0) {
           try {
             const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
@@ -1569,12 +1622,10 @@ async function executeActiveApplicationUse(scope, {
             });
             if (!effectsApplied) throw new Error("Active application effects could not be created.");
           } catch (error) {
-            await rollbackActiveApplicationPayment({
-              actor,
+            await rollbackActiveApplicationPaymentPlan({
               abilityItem,
               abilityFunction,
-              payment,
-              previousEffectIds: paymentEffectIds,
+              paymentPlan: payment,
               chainRef: scope.chainRef
             });
             throw error;
@@ -1639,12 +1690,10 @@ async function executeActiveApplicationUse(scope, {
         && durationSeconds <= 0
         && committedPayment?.ok
       ) {
-        await rollbackActiveApplicationPayment({
-          actor,
+        await rollbackActiveApplicationPaymentPlan({
           abilityItem,
           abilityFunction,
-          payment: committedPayment,
-          previousEffectIds: committedPaymentEffectIds ?? new Set(),
+          paymentPlan: committedPayment,
           chainRef: scope.chainRef
         });
       }
@@ -1841,6 +1890,9 @@ function buildActiveApplicationEventData({
       id: String(row?.id ?? ""),
       resourceKey: String(row?.resourceKey ?? ""),
       formula: String(row?.formula ?? "0"),
+      payer: row?.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets
+        ? ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets
+        : ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source,
       overloadAmount: Math.max(0, toInteger(row?.overloadAmount)),
       overloadDurationSeconds: Math.max(0, toInteger(row?.overloadDurationSeconds))
     })),
@@ -1919,7 +1971,7 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     limit: targetLimit,
     title: getAbilityDisplayName(abilityItem),
     noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
-    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`,
+    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. Enter подтверждает, ПКМ снимает последнюю цель, Esc отменяет.`,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? row?.actorUuid ?? "")
   });
   const seen = new Set();
@@ -2022,7 +2074,8 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
       occurrenceId: String(options?.costContext?.occurrenceId ?? "").trim(),
       chainRef: options?.costContext?.chainRef ?? options?.chainRef ?? null
     },
-    costFingerprint: String(options?.costFingerprint ?? ""),
+    costFingerprints: Object.fromEntries(Object.entries(options?.costFingerprints ?? {})
+      .map(([actorUuid, fingerprint]) => [String(actorUuid), String(fingerprint)])),
     targetTokenUuids,
     selectedChangeIds: (options?.selectedChanges ?? [])
       .map(change => String(change?.id ?? "").trim())
@@ -2133,6 +2186,123 @@ function getActorEffectIdSet(actor = null) {
     .filter(Boolean));
 }
 
+async function quoteActiveApplicationCostPlan({
+  sourceActor = null,
+  abilityItem = null,
+  abilityFunction = null,
+  activationCosts = [],
+  targets = [],
+  context = {}
+} = {}) {
+  const entries = buildActiveApplicationCostPlanEntries(sourceActor, activationCosts, targets);
+  const fingerprints = {};
+  const resourceReservations = new Map();
+  for (const entry of entries) {
+    const result = await quoteAbilityFunctionResourceCosts({
+      actor: entry.actor,
+      sourceItem: abilityItem,
+      abilityFunction,
+      costRows: entry.costRows,
+      context
+    });
+    if (!result.ok) return { ...result, actor: entry.actor, entries, fingerprints, resourceReservations };
+    const actorUuid = String(entry.actor?.uuid ?? "").trim();
+    fingerprints[actorUuid] = String(result.fingerprint ?? "");
+    resourceReservations.set(actorUuid, Object.fromEntries((result.quote?.costs ?? [])
+      .map(cost => [
+        String(cost?.resourceKey ?? "").trim(),
+        Math.max(0, toInteger(cost?.amount))
+      ])
+      .filter(([resourceKey, amount]) => resourceKey && amount > 0)));
+  }
+  return { ok: true, entries, fingerprints, resourceReservations };
+}
+
+async function payActiveApplicationCostPlan({
+  entries = [],
+  abilityItem = null,
+  abilityFunction = null,
+  expectedFingerprints = {},
+  context = {}
+} = {}) {
+  const payments = [];
+  for (const entry of entries ?? []) {
+    const actor = entry?.actor ?? null;
+    const actorUuid = String(actor?.uuid ?? "").trim();
+    if (!actorUuid || !Object.hasOwn(expectedFingerprints ?? {}, actorUuid)) {
+      await rollbackActiveApplicationPaymentPlan({
+        abilityItem,
+        abilityFunction,
+        paymentPlan: { ok: true, payments },
+        chainRef: context?.chainRef ?? null
+      });
+      return { ok: false, reason: "staleQuote", actor, payments: [] };
+    }
+    const previousEffectIds = getActorEffectIdSet(actor);
+    const payment = await payAbilityFunctionResourceCosts({
+      actor,
+      sourceItem: abilityItem,
+      abilityFunction,
+      costRows: entry?.costRows ?? [],
+      expectedFingerprint: String(expectedFingerprints?.[actorUuid] ?? ""),
+      context
+    });
+    if (!payment.ok) {
+      await rollbackActiveApplicationPaymentPlan({
+        abilityItem,
+        abilityFunction,
+        paymentPlan: { ok: true, payments },
+        chainRef: context?.chainRef ?? null
+      });
+      return { ...payment, actor, payments: [] };
+    }
+    payments.push({ actor, payment, previousEffectIds });
+  }
+  return { ok: true, payments };
+}
+
+async function rollbackActiveApplicationPaymentPlan({
+  abilityItem = null,
+  abilityFunction = null,
+  paymentPlan = null,
+  chainRef = null
+} = {}) {
+  if (!paymentPlan?.ok) return false;
+  let complete = true;
+  for (const entry of [...(paymentPlan.payments ?? [])].reverse()) {
+    const rolledBack = await rollbackActiveApplicationPayment({
+      actor: entry?.actor,
+      abilityItem,
+      abilityFunction,
+      payment: entry?.payment,
+      previousEffectIds: entry?.previousEffectIds ?? new Set(),
+      chainRef
+    });
+    if (!rolledBack) complete = false;
+  }
+  return complete;
+}
+
+function notifyActiveApplicationCostPlanFailure(result = {}, abilityItem = null) {
+  const shortages = (result?.quote?.costs ?? result?.execution?.quote?.costs ?? [])
+    .filter(cost => Number(cost?.amount) > Number(cost?.available));
+  if (result?.actor && shortages.length) {
+    const details = shortages.map(cost => (
+      `${String(cost?.label ?? cost?.resourceKey ?? "").trim()}: ${cost.amount} > ${cost.available}`
+    )).join("; ");
+    ui?.notifications?.warn?.(
+      `${getAbilityDisplayName(abilityItem)}: ${result.actor.name ?? result.actor.uuid} — недостаточно ресурсов. ${details}`
+    );
+  } else {
+    notifyAbilityTriggerCostFailure(result);
+  }
+  if (!result?.actor) return;
+  console.warn(
+    `Fallout MaW | ${getAbilityDisplayName(abilityItem)} activation cost failed for ${result.actor.name ?? result.actor.uuid}.`,
+    result
+  );
+}
+
 async function rollbackActiveApplicationPayment({
   actor = null,
   abilityItem = null,
@@ -2230,14 +2400,11 @@ async function rollbackActiveApplicationPayment({
 }
 
 async function requestActiveApplicationEffectOperation(payload = {}) {
-  if (game.user?.isGM) {
-    return processActiveApplicationEffectOperationOnce({
-      ...payload,
-      senderUserId: game.user.id
-    });
-  }
-  const gm = getResponsibleGM();
+  const gm = getActiveApplicationAuthorityGM(payload);
   if (!gm) return false;
+  if (gm.id === game.user?.id) {
+    return handleActiveApplicationEffectQuery(payload, { user: game.user });
+  }
   const useKey = [payload?.actorUuid, payload?.abilityItemId, payload?.abilityFunctionId]
     .map(value => String(value ?? "").trim())
     .join(":");
@@ -2246,30 +2413,25 @@ async function requestActiveApplicationEffectOperation(payload = {}) {
     return false;
   }
   const requestId = foundry.utils.randomID();
-  return new Promise(resolve => {
-    const tracking = { requestId, useKey, state: "pending", cleanupTimeout: null };
-    activeApplicationAuthorityRequestsByUse.set(useKey, tracking);
-    activeApplicationAuthorityRequestsById.set(requestId, tracking);
-    const timeout = window.setTimeout(() => {
-      pendingFixedAbilitySocketRequests.delete(requestId);
-      tracking.state = "uncertain";
-      ui.notifications.warn("Ответ GM на применение способности задерживается. Не повторяйте применение до позднего ответа или снятия ожидания.");
-      tracking.cleanupTimeout = window.setTimeout(
-        () => clearActiveApplicationAuthorityRequest(requestId),
-        ACTIVE_APPLICATION_AUTHORITY_CACHE_MS
-      );
-      resolve(false);
-    }, DISARM_SOCKET_TIMEOUT_MS);
-    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout, activeApplicationUseKey: useKey });
-    game.socket.emit(FIXED_ABILITY_SOCKET, {
-      scope: FIXED_ABILITY_SOCKET_SCOPE,
-      action: "performActiveApplicationEffects",
-      requestId,
-      gmUserId: gm.id,
-      senderUserId: game.user?.id ?? "",
-      payload
+  const tracking = { requestId, useKey, state: "pending", cleanupTimeout: null };
+  activeApplicationAuthorityRequestsByUse.set(useKey, tracking);
+  activeApplicationAuthorityRequestsById.set(requestId, tracking);
+  try {
+    const applied = await gm.query(ACTIVE_APPLICATION_QUERY_NAME, payload, {
+      timeout: DISARM_SOCKET_TIMEOUT_MS
     });
-  });
+    clearActiveApplicationAuthorityRequest(requestId);
+    return Boolean(applied);
+  } catch (error) {
+    tracking.state = "uncertain";
+    ui.notifications.warn("Ответ GM на применение способности задерживается. Не повторяйте применение до снятия ожидания.");
+    tracking.cleanupTimeout = window.setTimeout(
+      () => clearActiveApplicationAuthorityRequest(requestId),
+      ACTIVE_APPLICATION_AUTHORITY_CACHE_MS
+    );
+    console.warn("Fallout MaW | Active application authority query failed", error);
+    return false;
+  }
 }
 
 function clearActiveApplicationAuthorityRequest(requestId = "") {
@@ -2283,23 +2445,19 @@ function clearActiveApplicationAuthorityRequest(requestId = "") {
   return tracking;
 }
 
-async function processActiveApplicationEffectSocketRequest(message = {}) {
-  let applied = false;
+async function handleActiveApplicationEffectQuery(payload = {}, { user: sender = null } = {}) {
+  if (!game.user?.isGM || !sender?.active) return false;
+  const authority = getActiveApplicationAuthorityGM(payload);
+  if (authority?.id !== game.user.id) return false;
   try {
-    applied = await processActiveApplicationEffectOperationOnce({
-      ...(message.payload ?? {}),
-      senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
-    });
+    return Boolean(await processActiveApplicationEffectOperationOnce({
+      ...payload,
+      senderUserId: sender.id
+    }));
   } catch (error) {
     console.error("Fallout MaW | Active application authority operation failed", error);
+    return false;
   }
-  game.socket.emit(FIXED_ABILITY_SOCKET, {
-    scope: FIXED_ABILITY_SOCKET_SCOPE,
-    action: "activeApplicationEffectsResult",
-    requestId: message.requestId,
-    targetUserId: message.senderUserId ?? "",
-    result: { applied: Boolean(applied) }
-  });
 }
 
 function processActiveApplicationEffectOperationOnce(payload = {}) {
@@ -2360,6 +2518,11 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     || tokenDocument.documentName !== "Token"
     || String(tokenDocument.parent?.uuid ?? "") !== sourceSceneUuid
   ))) return false;
+  if (
+    settings.wallsBlock
+    && [sourceTokenDocument, ...targetTokenDocuments]
+      .some(tokenDocument => !isTokenDocumentIncludedForUserLevel(tokenDocument, game.user))
+  ) return false;
   if (targetTokenDocuments.some(targetTokenDocument => !isActiveApplicationTokenDocumentAllowed({
     sourceActor,
     sourceTokenDocument,
@@ -2390,16 +2553,26 @@ async function processActiveApplicationEffectOperation(payload = {}) {
   if (selectedChanges.length !== expectedCount) return false;
 
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
-  if (durationSeconds <= 0) return false;
+  const resolvedTargets = targetTokenDocuments.map(tokenDocument => ({
+    token: tokenDocument.object ?? tokenDocument,
+    actor: tokenDocument.actor
+  }));
   let payment = null;
-  const paymentEffectIds = getActorEffectIdSet(sourceActor);
   if (payload?.payCostsRemotely === true || !sender.isGM) {
-    payment = await payAbilityFunctionResourceCosts({
-      actor: sourceActor,
-      sourceItem: abilityItem,
+    const planEntries = buildActiveApplicationCostPlanEntries(sourceActor, settings.costs, resolvedTargets);
+    const expectedActorUuids = planEntries
+      .map(entry => String(entry.actor?.uuid ?? "").trim())
+      .filter(Boolean)
+      .sort();
+    const suppliedFingerprints = Object.fromEntries(Object.entries(payload?.costFingerprints ?? {})
+      .map(([actorUuid, fingerprint]) => [String(actorUuid).trim(), String(fingerprint)]));
+    const suppliedActorUuids = Object.keys(suppliedFingerprints).filter(Boolean).sort();
+    if (JSON.stringify(expectedActorUuids) !== JSON.stringify(suppliedActorUuids)) return false;
+    payment = await payActiveApplicationCostPlan({
+      entries: planEntries,
+      abilityItem,
       abilityFunction,
-      costRows: settings.costs,
-      expectedFingerprint: String(payload?.costFingerprint ?? ""),
+      expectedFingerprints: suppliedFingerprints,
       context: {
         rootId: String(payload?.costContext?.rootId ?? "").trim(),
         occurrenceId: String(payload?.costContext?.occurrenceId ?? "").trim(),
@@ -2409,6 +2582,8 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     if (!payment.ok) return false;
   }
 
+  if (durationSeconds <= 0) return true;
+
   const sourceToken = sourceTokenDocument.object ?? sourceTokenDocument;
   try {
     return await applyActiveApplicationEffectsDirect(
@@ -2416,20 +2591,15 @@ async function processActiveApplicationEffectOperation(payload = {}) {
       abilityItem,
       abilityFunction,
       durationSeconds,
-      targetTokenDocuments.map(tokenDocument => ({
-        token: tokenDocument.object ?? tokenDocument,
-        actor: tokenDocument.actor
-      })),
+      resolvedTargets,
       { chainRef: payload?.chainRef ?? null, sourceToken, selectedChanges }
     );
   } catch (error) {
     if (payment?.ok) {
-      await rollbackActiveApplicationPayment({
-        actor: sourceActor,
+      await rollbackActiveApplicationPaymentPlan({
         abilityItem,
         abilityFunction,
-        payment,
-        previousEffectIds: paymentEffectIds,
+        paymentPlan: payment,
         chainRef: payload?.chainRef ?? null
       });
     }
@@ -7041,11 +7211,6 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processToTheEndSocketRequest(message);
     return;
   }
-  if (message.action === "performActiveApplicationEffects") {
-    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
-    void processActiveApplicationEffectSocketRequest(message);
-    return;
-  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -7093,25 +7258,6 @@ function handleFixedAbilitySocketMessage(message = {}) {
     window.clearTimeout(pending.timeout);
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.applied));
-  }
-  if (message.action === "activeApplicationEffectsResult") {
-    if (message.targetUserId !== game.user?.id) return;
-    const applied = Boolean(message.result?.applied);
-    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
-    if (!pending) {
-      const late = clearActiveApplicationAuthorityRequest(message.requestId);
-      if (late) {
-        const notify = applied ? ui.notifications.info : ui.notifications.warn;
-        notify.call(ui.notifications, applied
-          ? "GM завершил задержавшееся применение способности. Повторный запуск не требуется."
-          : "GM отклонил задержавшееся применение способности; теперь его можно повторить.");
-      }
-      return;
-    }
-    window.clearTimeout(pending.timeout);
-    pendingFixedAbilitySocketRequests.delete(message.requestId);
-    clearActiveApplicationAuthorityRequest(message.requestId);
-    pending.resolve(applied);
   }
 }
 
@@ -8050,11 +8196,79 @@ function buildReactionEnergyCostLines(baseReactionEnergyCost = 0, reactionEnergy
   ];
 }
 
-function getResponsibleGM() {
-  return game.users?.activeGM ?? (game.users?.contents ?? [])
-    .filter(user => user.active && user.isGM)
-    .sort((left, right) => left.id.localeCompare(right.id))
+function getResponsibleGM({
+  sceneId = "",
+  tokenDocuments = [],
+  requireScene = false,
+  preferredUser = null
+} = {}) {
+  const activeGMs = (game.users?.contents ?? [])
+    .filter(user => user.active && user.isGM);
+  const normalizedSceneId = String(sceneId ?? "").trim();
+  const requiredDocuments = Array.from(tokenDocuments ?? []).filter(Boolean);
+  const contextualGMs = normalizedSceneId
+    ? activeGMs.filter(user => (
+      String(user.viewedScene ?? "") === normalizedSceneId
+      && requiredDocuments.every(document => (
+        String(document?.parent?.id ?? "") === normalizedSceneId
+        && isTokenDocumentIncludedForUserLevel(document, user)
+      ))
+    ))
+    : [];
+  const candidates = contextualGMs.length
+    ? contextualGMs
+    : requireScene
+      ? []
+      : activeGMs;
+  const preferred = candidates.find(user => user.id === preferredUser?.id) ?? null;
+  if (preferred) return preferred;
+  const activeGM = game.users?.activeGM ?? null;
+  if (activeGM && candidates.some(user => user.id === activeGM.id)) return activeGM;
+  return candidates
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)))
     .at(0) ?? null;
+}
+
+function getActiveApplicationAuthorityGM(payload = {}) {
+  const sourceActor = globalThis.fromUuidSync?.(String(payload?.actorUuid ?? "")) ?? null;
+  const sourceTokenDocument = globalThis.fromUuidSync?.(String(payload?.sourceTokenUuid ?? "")) ?? null;
+  const requestedTargetTokenUuids = Array.from(new Set((Array.isArray(payload?.targetTokenUuids)
+    ? payload.targetTokenUuids
+    : [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  const targetTokenDocuments = requestedTargetTokenUuids
+    .map(uuid => globalThis.fromUuidSync?.(String(uuid ?? "")) ?? null);
+  const abilityItem = sourceActor?.items?.get?.(String(payload?.abilityItemId ?? "")) ?? null;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === String(payload?.abilityFunctionId ?? "") && isActiveApplicationAbilityFunction(entry));
+  const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
+  const tokenDocuments = [sourceTokenDocument, ...targetTokenDocuments].filter(Boolean);
+  const sceneId = String(sourceTokenDocument?.parent?.id ?? "").trim();
+  const completeSceneContext = Boolean(
+    sceneId
+    && sourceTokenDocument?.documentName === "Token"
+    && targetTokenDocuments.length === requestedTargetTokenUuids.length
+    && targetTokenDocuments.every(document => (
+      document?.documentName === "Token"
+      && String(document.parent?.id ?? "") === sceneId
+    ))
+  );
+  return getResponsibleGM({
+    sceneId: completeSceneContext ? sceneId : "",
+    tokenDocuments,
+    requireScene: Boolean(settings.wallsBlock),
+    preferredUser: game.user
+  });
+}
+
+function isTokenDocumentIncludedForUserLevel(tokenDocument = null, user = null) {
+  if (typeof tokenDocument?.includedInLevel !== "function") return true;
+  try {
+    return Boolean(tokenDocument.includedInLevel(user?.viewedLevel ?? null));
+  } catch (_error) {
+    return false;
+  }
 }
 
 async function advanceDeusExMachinaProgressFromDamage(results = []) {

@@ -8,6 +8,8 @@ import {
   getActorActiveCombat,
   getStrictActionPointState,
   isActorInActiveCombat,
+  refundStrictActionPointReceipt,
+  spendStrictActionPointsWithReceipt,
   spendStrictActionPoints
 } from "./strict-action-points.mjs";
 import { actorHasIncapacitatingStatus } from "./reaction-hub.mjs";
@@ -37,6 +39,8 @@ export {
   getActorActiveCombat,
   getStrictActionPointState,
   isActorInActiveCombat,
+  refundStrictActionPointReceipt,
+  spendStrictActionPointsWithReceipt,
   spendStrictActionPoints
 };
 
