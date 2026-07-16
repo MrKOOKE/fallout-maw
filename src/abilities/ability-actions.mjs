@@ -207,7 +207,15 @@ export async function executeAbilityFunctionActions({
   ignoreReactionLock = false
 } = {}) {
   const prepared = await prepareAbilityFunctionActions({ actor, abilityFunction, triggerTargets, title });
-  if (prepared.cancelled) return { attempted: 0, executed: 0, cancelled: true };
+  if (prepared.cancelled || prepared.failed) {
+    return {
+      attempted: 0,
+      executed: 0,
+      cancelled: Boolean(prepared.cancelled),
+      failed: Boolean(prepared.failed),
+      reason: String(prepared.reason ?? "")
+    };
+  }
   return executePreparedAbilityFunctionActions({ actor, executions: prepared.executions, chainRef, ignoreReactionLock });
 }
 
@@ -227,20 +235,25 @@ export async function prepareAbilityFunctionActions({
       ? normalizedTargets
       : [{ actor, token: resolvedSourceToken }];
     if (!executorTargets.length || executorTargets.some(entry => !entry.actor || !entry.token?.actor)) {
-      return { executions: [], cancelled: true };
+      return { executions: [], cancelled: false, failed: true, reason: "executorUnavailable" };
     }
     for (const executor of executorTargets) {
       const options = collectAbilityWeaponAttackOptions(executor.actor, action);
+      if (!options.length) {
+        return { executions: [], cancelled: false, failed: true, reason: "attackOptionsUnavailable" };
+      }
       const option = await requestAbilityWeaponAttackOption(options, {
         title: buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)
       });
-      if (!option) return { executions: [], cancelled: true };
+      if (!option) return { executions: [], cancelled: true, failed: false, reason: "actionSelectionCancelled" };
       const targets = action.targetMode === ABILITY_ACTION_TARGET_MODES.free
         ? [null]
         : action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets
           ? [executor.token]
           : normalizedTargets.map(target => target.token);
-      if (!targets.length) return { executions: [], cancelled: true };
+      if (!targets.length) {
+        return { executions: [], cancelled: false, failed: true, reason: "actionTargetsUnavailable" };
+      }
       for (const targetToken of targets) {
         executions.push({
           actor: executor.actor,
@@ -255,7 +268,7 @@ export async function prepareAbilityFunctionActions({
       }
     }
   }
-  return { executions, cancelled: false };
+  return { executions, cancelled: false, failed: false, reason: "" };
 }
 
 export async function executePreparedAbilityFunctionActions({

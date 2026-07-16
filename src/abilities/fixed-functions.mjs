@@ -160,6 +160,7 @@ import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../u
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
+import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import {
   getSystemEventCancellationReason,
@@ -802,7 +803,13 @@ export async function spendActorTwoHandsEnergy(actor, entry = getActorTwoHandsEn
   return spendEnergy(actor, cost);
 }
 
-export async function useFixedAbilityFunctionItem({ actor = null, item = null, application = null, functionId = "" } = {}) {
+export async function useFixedAbilityFunctionItem({
+  actor = null,
+  item = null,
+  application = null,
+  functionId = "",
+  onInteractionCancelled = null
+} = {}) {
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
     return false;
@@ -921,7 +928,7 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
   }
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.knockOffBalance) {
-    const used = await useKnockOffBalance(actor, item, abilityFunction);
+    const used = await useKnockOffBalance(actor, item, abilityFunction, { onInteractionCancelled });
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -1128,7 +1135,8 @@ export async function useAbilityFunctionItem({
   functionId = "",
   chainRef = null,
   options = {},
-  source = {}
+  source = {},
+  onInteractionCancelled = null
 } = {}) {
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
@@ -1163,7 +1171,8 @@ export async function useAbilityFunctionItem({
         application,
         sourceParticipant,
         sourceToken,
-        occurrenceId: activationOccurrenceId
+        occurrenceId: activationOccurrenceId,
+        onInteractionCancelled
       });
     }
     const workflow = await runTerminalSystemEventWorkflow({
@@ -1177,7 +1186,13 @@ export async function useAbilityFunctionItem({
         ...buildAbilityUseEventData(actor, item, abilityFunction),
         status
       }),
-      operation: () => useFixedAbilityFunctionItem({ actor, item, application, functionId: abilityFunction.id })
+      operation: () => useFixedAbilityFunctionItem({
+        actor,
+        item,
+        application,
+        functionId: abilityFunction.id,
+        onInteractionCancelled
+      })
     });
     return workflow.success && Boolean(workflow.value);
   });
@@ -1187,7 +1202,8 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
   application = null,
   sourceParticipant = null,
   sourceToken = null,
-  occurrenceId = "activation"
+  occurrenceId = "activation",
+  onInteractionCancelled = null
 } = {}) {
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
   const activationCosts = settings.costs;
@@ -1270,6 +1286,9 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
       }),
       forcedResult: { status: "cancelled", reason: "targetSelectionCancelled", value: false }
     });
+    notifyAbilityInteractionCancelled(onInteractionCancelled, {
+      reason: "targetSelectionCancelled"
+    });
     return false;
   }
 
@@ -1310,8 +1329,24 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     getResultReason: value => String(value?.reason ?? "")
   });
   const used = workflow.success && Boolean(workflow.value?.used);
+  if (workflow.cancelled || workflow.value?.cancelled) {
+    notifyAbilityInteractionCancelled(onInteractionCancelled, {
+      reason: workflow.reason || workflow.value?.reason || "cancelled"
+    });
+  }
   if (used) await application?.render?.({ force: true });
   return used;
+}
+
+function notifyAbilityInteractionCancelled(callback, context = {}) {
+  if (typeof callback !== "function") return false;
+  try {
+    callback(context);
+    return true;
+  } catch (error) {
+    console.error("Fallout MaW | Ability interaction cancellation callback failed", error);
+    return false;
+  }
 }
 
 async function executeActiveApplicationUse(scope, {
@@ -1364,9 +1399,41 @@ async function executeActiveApplicationUse(scope, {
     });
   } catch (error) {
     console.warn("Fallout MaW | Active application change selection failed", error);
-    changeSelection = { changes: [], ids: [], cancelled: true };
+    changeSelection = { changes: [], ids: [], cancelled: false, failed: true };
   }
-  if (changeSelection.cancelled || (hasLimitedChanges && !changeSelection.changes.length)) {
+  if (changeSelection.failed) {
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "failed",
+        reason: "changeSelectionFailed",
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, cancelled: false, reason: "changeSelectionFailed" };
+  }
+  if (hasLimitedChanges && !changeSelection.cancelled && !changeSelection.changes.length) {
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "failed",
+        reason: "noSelectableChanges",
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, cancelled: false, reason: "noSelectableChanges" };
+  }
+  if (changeSelection.cancelled) {
     for (const entry of allowed) {
       await emitActiveApplicationResolved(scope, entry, {
         actor,
@@ -1413,6 +1480,23 @@ async function executeActiveApplicationUse(scope, {
     title: getAbilityDisplayName(abilityItem),
     sourceToken
   });
+  if (preparedActions.failed) {
+    const reason = preparedActions.reason || "actionPreparationFailed";
+    for (const entry of allowed) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "failed",
+        reason,
+        terminalTargets
+      });
+    }
+    return { used: false, appliedCount: 0, cancelled: false, reason };
+  }
   if (preparedActions.cancelled) {
     for (const entry of allowed) {
       await emitActiveApplicationResolved(scope, entry, {
@@ -2594,7 +2678,7 @@ function getCommandBasicsCommandLabel(command = "") {
   return "Команда";
 }
 
-async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
+async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInteractionCancelled = null } = {}) {
   const abilityName = getAbilityDisplayName(abilityItem);
   if (!canvas?.ready || !canvas.scene) {
     ui.notifications.warn(`${abilityName}: сцена не готова.`);
@@ -2630,7 +2714,12 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction) {
     context: "knock off balance skill limit"
   })));
   const selectedSkills = await selectKnockOffBalanceSkills({ limit: skillLimit, abilityName });
-  if (!selectedSkills?.length) return false;
+  if (!selectedSkills?.length) {
+    notifyAbilityInteractionCancelled(onInteractionCancelled, {
+      reason: "skillSelectionCancelled"
+    });
+    return false;
+  }
 
   if (!(await spendEnergy(actor, energyCost))) return false;
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
@@ -4666,6 +4755,11 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
     }
     layer.addChild(graphics);
     drawLungeDestinationCandidates(graphics, candidates);
+    const targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "destination",
+      token,
+      abilityName
+    });
     ui.notifications.info(`${abilityName}: выберите клетку перемещения. Правая кнопка отменяет выбор.`);
 
     const refreshCandidates = () => {
@@ -4682,6 +4776,7 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
     };
     const finish = value => {
       cleanup();
+      targetSelectionSession.finish({ cancelled: !value });
       resolve(value);
     };
     const onPointerDown = event => {

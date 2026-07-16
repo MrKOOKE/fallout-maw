@@ -49,6 +49,10 @@ import {
   setActorTokensPosture
 } from "../canvas/posture-movement.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
+import {
+  CANVAS_TARGET_SELECTION_FINISHED_HOOK,
+  CANVAS_TARGET_SELECTION_STARTED_HOOK
+} from "../canvas/target-selection-lifecycle.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
@@ -249,6 +253,12 @@ export function registerTokenActionHudHooks() {
   Hooks.on("updateSetting", scheduleTokenActionHudRefreshForSetting);
   Hooks.on("updateWorldTime", updateArmedExplosionTooltipCountdowns);
   Hooks.on(MOVEMENT_RESOURCE_PREVIEW_HOOK, applyTokenActionHudMovementPreview);
+  Hooks.on(CANVAS_TARGET_SELECTION_STARTED_HOOK, context => {
+    tokenActionHud?.handleCanvasTargetSelectionStarted(context);
+  });
+  Hooks.on(CANVAS_TARGET_SELECTION_FINISHED_HOOK, context => {
+    tokenActionHud?.handleCanvasTargetSelectionFinished(context);
+  });
   window.addEventListener("resize", scheduleTokenActionHudRefresh);
   tokenActionHudRefresh = foundry.utils.debounce(syncTokenActionHud, 60);
   tokenActionHudLayoutRefresh = foundry.utils.debounce(layoutCurrentTokenActionHud, 60);
@@ -471,6 +481,15 @@ function canUserAdvanceCombatTurn(combat) {
   return Boolean(combat.canUserModify?.(game.user, "update", updateData));
 }
 
+function createHudTargetInteraction({ restoreAbilities = false, abilityUse = false } = {}) {
+  return {
+    restoreAbilities: Boolean(restoreAbilities),
+    sessionIds: new Set(),
+    settled: !abilityUse,
+    released: false
+  };
+}
+
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
@@ -493,6 +512,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #actionPointCostTooltipTimer = null;
   #actionPointCostTooltipElement = null;
   #collapsedAbilityCategoryKeys = new Set();
+  #abilityTargetInteraction = null;
+  #targetSelectionInteractions = new Map();
   #editableMeterSections = {
     resources: false,
     needs: false
@@ -565,6 +586,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   setToken(token) {
     if (this.#token?.id !== token?.id) {
+      this.#clearTargetInteractions();
       cancelWeaponAttack();
       this.#activeTray = "";
       this.#weaponEquipTarget = null;
@@ -574,6 +596,110 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#editableMeterSections.needs = false;
     }
     this.#token = token;
+  }
+
+  collapseTray(expectedTray = "") {
+    const expected = String(expectedTray ?? "");
+    if (!this.#activeTray || (expected && this.#activeTray !== expected)) return false;
+    const popup = this.element?.querySelector("[data-token-action-hud-popup]");
+    if (popup) popup.hidden = true;
+    this.#activeTray = "";
+    this.#weaponEquipTarget = null;
+    this.#dualWeaponActionSelection = null;
+    void this.render({ force: true });
+    return true;
+  }
+
+  handleCanvasTargetSelectionStarted(context = {}) {
+    const sessionId = String(context?.sessionId ?? "").trim();
+    if (!sessionId) return false;
+
+    const abilityInteraction = this.#abilityTargetInteraction;
+    const closedAbilities = this.collapseTray("abilities");
+    if (abilityInteraction && closedAbilities) abilityInteraction.restoreAbilities = true;
+    const interaction = abilityInteraction?.restoreAbilities
+      ? abilityInteraction
+      : closedAbilities
+        ? createHudTargetInteraction({ restoreAbilities: true })
+        : null;
+    if (!interaction) return false;
+
+    interaction.sessionIds.add(sessionId);
+    this.#targetSelectionInteractions.set(sessionId, interaction);
+    return true;
+  }
+
+  handleCanvasTargetSelectionFinished(context = {}) {
+    const sessionId = String(context?.sessionId ?? "").trim();
+    const interaction = this.#targetSelectionInteractions.get(sessionId);
+    if (!sessionId || !interaction) return false;
+
+    this.#targetSelectionInteractions.delete(sessionId);
+    interaction.sessionIds.delete(sessionId);
+    if (context?.cancelled) {
+      this.#cancelAbilityTargetInteraction(interaction);
+      return true;
+    }
+    this.#scheduleAbilityTargetInteractionRelease(interaction);
+    return true;
+  }
+
+  #beginAbilityTargetInteraction() {
+    if (this.#abilityTargetInteraction && !this.#abilityTargetInteraction.released) return null;
+    const interaction = createHudTargetInteraction({
+      abilityUse: true
+    });
+    this.#abilityTargetInteraction = interaction;
+    return interaction;
+  }
+
+  #finishAbilityTargetInteraction(interaction) {
+    if (interaction.released) return;
+    interaction.settled = true;
+    this.#scheduleAbilityTargetInteractionRelease(interaction);
+  }
+
+  #cancelAbilityTargetInteraction(interaction) {
+    if (!interaction || interaction.released) return false;
+    const restored = this.#restoreAbilitiesTray(interaction);
+    this.#releaseAbilityTargetInteraction(interaction);
+    return restored;
+  }
+
+  #scheduleAbilityTargetInteractionRelease(interaction) {
+    if (!interaction?.settled || interaction.released || interaction.sessionIds.size) return;
+    queueMicrotask(() => {
+      if (interaction.released || interaction.sessionIds.size) return;
+      this.#releaseAbilityTargetInteraction(interaction);
+    });
+  }
+
+  #releaseAbilityTargetInteraction(interaction) {
+    if (interaction.released) return;
+    interaction.released = true;
+    for (const [sessionId, owner] of this.#targetSelectionInteractions) {
+      if (owner === interaction) this.#targetSelectionInteractions.delete(sessionId);
+    }
+    interaction.sessionIds.clear();
+    if (this.#abilityTargetInteraction === interaction) this.#abilityTargetInteraction = null;
+  }
+
+  #clearTargetInteractions() {
+    const interactions = new Set(this.#targetSelectionInteractions.values());
+    if (this.#abilityTargetInteraction) interactions.add(this.#abilityTargetInteraction);
+    for (const interaction of interactions) {
+      interaction.released = true;
+      interaction.sessionIds.clear();
+    }
+    this.#targetSelectionInteractions.clear();
+    this.#abilityTargetInteraction = null;
+  }
+
+  #restoreAbilitiesTray(interaction) {
+    if (!interaction?.restoreAbilities || this.#activeTray) return false;
+    this.#activeTray = "abilities";
+    void this.render({ force: true });
+    return true;
   }
 
   async _prepareContext(options) {
@@ -697,6 +823,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onClose(options) {
     await super._onClose(options);
     setTokenActionHudInterfaceOpen(false);
+    this.#clearTargetInteractions();
     cancelWeaponAttack();
     if (this.#layoutFrame) cancelAnimationFrame(this.#layoutFrame);
     this.#layoutFrame = null;
@@ -1241,13 +1368,26 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return toggled;
     }
     if (!hasActiveAbilityFunction(item)) return undefined;
-    return useAbilityFunctionItem({
-      actor: this.actor,
-      token: this.token,
-      item,
-      functionId,
-      application: this
-    });
+    const interaction = this.#beginAbilityTargetInteraction();
+    if (!interaction) {
+      ui.notifications.warn("Сначала завершите или отмените текущее применение способности.");
+      return false;
+    }
+    try {
+      const result = await useAbilityFunctionItem({
+        actor: this.actor,
+        token: this.token,
+        item,
+        functionId,
+        application: this,
+        onInteractionCancelled: () => this.#cancelAbilityTargetInteraction(interaction)
+      });
+      this.#finishAbilityTargetInteraction(interaction);
+      return result;
+    } catch (error) {
+      this.#finishAbilityTargetInteraction(interaction);
+      throw error;
+    }
   }
 
   static async #onUseActiveAction(event, target) {

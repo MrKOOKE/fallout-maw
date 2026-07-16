@@ -89,6 +89,7 @@ import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
+import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -324,6 +325,7 @@ export function cancelWeaponAttack({ ignoreReactionLock = false } = {}) {
   if (activeAttack?.processing || activeCommandedAttack?.processing) return false;
   const attack = activeAttack;
   activeAttack = null;
+  attack?.finishTargetSelection({ cancelled: true });
   attack?.destroy();
   activeDualWeaponAttack?.destroy();
   activeDualWeaponAttack = null;
@@ -725,17 +727,18 @@ async function captureCommandedWeaponAttacksSequentially(entries = [], {
 
   const selections = [];
   for (let index = 0; index < entries.length; index += 1) {
-    const selection = await captureCommandedWeaponAttackSelection(entries[index], {
+    const capture = await captureCommandedWeaponAttackSelection(entries[index], {
       label,
       index,
       count: entries.length
     });
+    const selection = capture?.selection ?? null;
     if (!selection) {
-      onCancel?.();
+      if (capture?.cancelled) onCancel?.();
       return createCommandedAttackResult({
         started: true,
-        cancelled: true,
-        reason: "captureCancelled"
+        cancelled: Boolean(capture?.cancelled),
+        reason: capture?.cancelled ? "captureCancelled" : "captureFailed"
       });
     }
     selections.push(serializeCommandedAttackSelection({
@@ -806,14 +809,16 @@ function captureCommandedWeaponAttackSelection(entry = {}, {
   index = 0,
   count = 1
 } = {}) {
-  if (activeAttack && !cancelWeaponAttack()) return Promise.resolve(null);
+  if (activeAttack && !cancelWeaponAttack()) {
+    return Promise.resolve({ selection: null, cancelled: false });
+  }
   return new Promise(resolve => {
     let settled = false;
     let captured = false;
-    const finish = value => {
+    const finish = ({ selection = null, cancelled = false } = {}) => {
       if (settled) return;
       settled = true;
-      resolve(value ?? null);
+      resolve({ selection, cancelled: Boolean(cancelled) });
     };
     const controller = new WeaponAttackController(
       entry.token,
@@ -827,17 +832,19 @@ function captureCommandedWeaponAttackSelection(entry = {}, {
         ignoreReactionLock: true,
         onCapture: selection => {
           captured = true;
-          finish(selection);
+          finish({ selection });
         },
-        onDestroy: () => queueMicrotask(() => {
-          if (!captured) finish(null);
+        onDestroy: ({ controller: destroyed }) => queueMicrotask(() => {
+          if (!captured) finish({
+            cancelled: Boolean(destroyed?.targetSelectionOutcome?.cancelled)
+          });
         })
       }
     );
     const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
     if (!controller.hasRequiredWeaponResources(attackCount)) {
       controller.destroy();
-      finish(null);
+      finish();
       return;
     }
     activeAttack = controller;
@@ -889,6 +896,8 @@ class CommandedWeaponAttackController {
     this.onComplete = typeof onComplete === "function" ? onComplete : null;
     this.chainRef = chainRef ?? null;
     this.authorityContext = authorityContext ?? null;
+    this.targetSelectionSession = null;
+    this.targetSelectionOutcome = null;
     this.events = {
       move: event => this.onMove(event),
       pointerDown: event => this.onPointerDown(event),
@@ -928,6 +937,10 @@ class CommandedWeaponAttackController {
 
   activate() {
     getAttackPreviewLayer().addChild(this.container);
+    this.targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "commandedWeaponAttacks",
+      controller: this
+    });
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.addEventListener("keydown", this.events.keyDown, { capture: true });
@@ -937,6 +950,7 @@ class CommandedWeaponAttackController {
 
   destroy() {
     if (this.destroyed) return;
+    this.finishTargetSelection();
     this.destroyed = true;
     canvas.stage.off("mousemove", this.events.move);
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
@@ -1169,6 +1183,7 @@ class CommandedWeaponAttackController {
 
   cancel() {
     if (this.processing || this.destroyed) return false;
+    this.finishTargetSelection({ cancelled: true });
     this.destroy();
     this.onCancel?.();
     ui.notifications.info(`${this.label}: отменено.`);
@@ -1177,6 +1192,7 @@ class CommandedWeaponAttackController {
 
   async execute() {
     if (this.processing) return false;
+    this.finishTargetSelection();
     this.processing = true;
     try {
       const selections = this.entries.map(entry => serializeCommandedAttackSelection({
@@ -1216,6 +1232,14 @@ class CommandedWeaponAttackController {
       this.onComplete?.(createCommandedAttackResult({ started: true, reason: "executionError" }));
       return false;
     }
+  }
+
+  finishTargetSelection({ cancelled = false } = {}) {
+    const session = this.targetSelectionSession;
+    if (!session) return false;
+    this.targetSelectionSession = null;
+    this.targetSelectionOutcome = { cancelled: Boolean(cancelled) };
+    return session.finish(this.targetSelectionOutcome);
   }
 }
 
@@ -2197,6 +2221,8 @@ class WeaponAttackController {
     this.chanceMenu = null;
     this.rightClickCancelCandidate = null;
     this.attackId = foundry.utils.randomID();
+    this.targetSelectionSession = null;
+    this.targetSelectionOutcome = null;
     this.autoCoverActorUuids = new Set();
     this.lastAutoCoverSignature = "";
     this.pendingCriticalFailureResourceCosts = [];
@@ -2229,6 +2255,13 @@ class WeaponAttackController {
   activate() {
     this.attachPreview();
     if (isWhirlwindAttackModifier(this.attackModifier)) this.pointer = getTokenAimPoint(this.token);
+    this.targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "weaponAttack",
+      controller: this,
+      token: this.token,
+      weapon: this.weapon,
+      actionKey: this.actionKey
+    });
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app.ticker.add(this.events.tick);
@@ -2588,6 +2621,7 @@ class WeaponAttackController {
 
   beginProcessingCycle() {
     if (this.processing) return false;
+    this.finishTargetSelection();
     this.processing = true;
     this.releaseInteractiveControl();
     if (this.onProcessingStarted) {
@@ -2717,6 +2751,7 @@ class WeaponAttackController {
 
   destroy() {
     if (this.destroyed) return;
+    this.finishTargetSelection();
     this.destroyed = true;
     void this.abortSkillCheckCollectors();
     if (typeof this.attackModifier?.onDestroy === "function") {
@@ -2941,6 +2976,7 @@ class WeaponAttackController {
     if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
       if (this.constrainedTarget) {
         if (activeAttack === this) activeAttack = null;
+        this.finishTargetSelection({ cancelled: true });
         this.destroy();
         return false;
       }
@@ -3016,9 +3052,18 @@ class WeaponAttackController {
       ...data
     };
     if (activeAttack === this) activeAttack = null;
+    this.finishTargetSelection();
     this.destroy();
     await this.onCapture?.(selection);
     return true;
+  }
+
+  finishTargetSelection({ cancelled = false } = {}) {
+    const session = this.targetSelectionSession;
+    if (!session) return false;
+    this.targetSelectionSession = null;
+    this.targetSelectionOutcome = { cancelled: Boolean(cancelled) };
+    return session.finish(this.targetSelectionOutcome);
   }
 
   async performCurrentAttack() {

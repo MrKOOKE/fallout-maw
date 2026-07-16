@@ -1,4 +1,5 @@
 import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+import { startCanvasTargetSelectionSession } from "./target-selection-lifecycle.mjs";
 
 const RIGHT_CLICK_CANCEL_DISTANCE_PX = 10;
 
@@ -31,6 +32,15 @@ export function requestCustomTokenSelection({
     layer.addChild(graphics);
     drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
 
+    const targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "tokens",
+      rows: normalizedRows,
+      selectable,
+      limit: selectionLimit,
+      title,
+      instructions
+    });
+
     const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`;
     ui.notifications.info(prompt);
 
@@ -51,6 +61,9 @@ export function requestCustomTokenSelection({
       if (finished) return;
       finished = true;
       cleanup();
+      targetSelectionSession.finish({
+        cancelled: !Array.isArray(value) || !value.length
+      });
       resolve(value);
     };
     const getSelection = () => {
