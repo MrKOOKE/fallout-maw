@@ -1374,9 +1374,9 @@
           <label>
             <span>Число целей</span>
             {{#if activeApplicationSettings.isManualTargetSelection}}
-            <input type="number" data-field="active.targetLimit" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1">
+            <input type="text" data-field="active.targetLimit" value="{{activeApplicationSettings.targetLimit}}" data-formula-autocomplete="all">
             {{else}}
-            <input type="number" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1" disabled>
+            <input type="text" value="{{activeApplicationSettings.targetLimit}}" disabled>
             <input type="hidden" data-field="active.targetLimit" value="{{activeApplicationSettings.targetLimit}}">
             {{/if}}
           </label>

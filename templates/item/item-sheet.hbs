@@ -1517,7 +1517,7 @@
             </select>
           </label>
           <label>
-            <span>Радиус, м (пусто — без ограничения)</span>
+            <span>Радиус, м</span>
             <input type="text" name="{{functionPath}}.{{functionIndex}}.activeSettings.radiusFormula" value="{{activeApplicationSettings.radiusFormula}}" data-formula-autocomplete="all">
           </label>
           <label class="fallout-maw-inline-checkbox">
@@ -1535,9 +1535,9 @@
           <label>
             <span>Число целей</span>
             {{#if activeApplicationSettings.isManualTargetSelection}}
-            <input type="number" name="{{functionPath}}.{{functionIndex}}.activeSettings.targetLimit" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1">
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.activeSettings.targetLimit" value="{{activeApplicationSettings.targetLimit}}" data-formula-autocomplete="all">
             {{else}}
-            <input type="number" value="{{activeApplicationSettings.targetLimit}}" min="1" step="1" disabled>
+            <input type="text" value="{{activeApplicationSettings.targetLimit}}" disabled>
             <input type="hidden" name="{{functionPath}}.{{functionIndex}}.activeSettings.targetLimit" value="{{activeApplicationSettings.targetLimit}}">
             {{/if}}
           </label>

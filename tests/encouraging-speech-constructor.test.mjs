@@ -99,6 +99,12 @@ test("active application preserves an explicit empty target relation selection",
   assert.deepEqual(second.activeSettings.targetGroups, []);
 });
 
+test("active application targetLimit preserves formulas and legacy numbers", () => {
+  assert.equal(normalizeActiveApplicationSettings({ targetLimit: "2+spe/50" }).targetLimit, "2+spe/50");
+  assert.equal(normalizeActiveApplicationSettings({ targetLimit: 5 }).targetLimit, "5");
+  assert.equal(normalizeActiveApplicationSettings({}).targetLimit, "1");
+});
+
 test("active application defensively normalizes legacy duplicate checkbox values", () => {
   const unchecked = normalizeActiveApplicationSettings({
     wallsBlock: ["false", null],
@@ -118,7 +124,7 @@ test("active application defensively normalizes legacy duplicate checkbox values
 test("hidden active-application target controls retain their previous configuration", () => {
   const previous = {
     targetSelectionMode: "all",
-    targetLimit: 5,
+    targetLimit: "2+spe/50",
     targetGroups: [],
     excludeSelf: false,
     radiusFormula: "10+spe/10",
@@ -132,7 +138,7 @@ test("hidden active-application target controls retain their previous configurat
   }, previous);
 
   assert.equal(selfModeSubmit.targetSelectionMode, "all");
-  assert.equal(selfModeSubmit.targetLimit, 5);
+  assert.equal(selfModeSubmit.targetLimit, "2+spe/50");
   assert.deepEqual(selfModeSubmit.targetGroups, []);
   assert.equal(selfModeSubmit.excludeSelf, false);
   assert.equal(selfModeSubmit.radiusFormula, "10+spe/10");

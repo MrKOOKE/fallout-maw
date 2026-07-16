@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "f4b338e60b0232783878006d59bd9db2036feead37fd59b487be41520c3dadb8",
-  "updatedAt": "2026-07-15T15:29:53.671Z",
+  "revision": "0a222908283903b4b240bfdc95088ed278882e8d56aa6da01c41c865951c1e5c",
+  "updatedAt": "2026-07-16T03:47:06.111Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3258,7 +3258,7 @@
                         "targetGroups": [
                           "ally"
                         ],
-                        "targetLimit": 1,
+                        "targetLimit": "1",
                         "targetMode": "self",
                         "targetSelectionMode": "manual",
                         "wallsBlock": false
@@ -3482,7 +3482,7 @@
                         "targetGroups": [
                           "ally"
                         ],
-                        "targetLimit": 1,
+                        "targetLimit": "1",
                         "targetMode": "self",
                         "targetSelectionMode": "manual",
                         "wallsBlock": false
@@ -3577,7 +3577,7 @@
                         "targetGroups": [
                           "ally"
                         ],
-                        "targetLimit": 1,
+                        "targetLimit": "1",
                         "targetMode": "others",
                         "targetSelectionMode": "all",
                         "wallsBlock": false
@@ -3758,6 +3758,72 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "fNUeKtYjrdDmIuY7",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 24 секунды.</p><p>После активации можно выбрать до [[1+speech/50]] союзников и те получат +[[2+speech/50]] ОП на 12 секуд.</p>",
+                "id": "CXW7GLA9KEAIhRmM",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Шевелитесь!",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "sgEMsZxEnLLmMoPJ",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [
+                          {
+                            "formula": "20",
+                            "id": "mjOOQcGltZ4eByUJ",
+                            "overloadAmount": 20,
+                            "overloadDurationSeconds": 24,
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1+speech/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": true
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "2badYt8ARL4SDcHo",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],

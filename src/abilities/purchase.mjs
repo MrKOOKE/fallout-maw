@@ -192,7 +192,7 @@ export async function requestLimitedChangeSelection({
         <header class="fallout-maw-ability-change-picker-summary">
           <div>
             <h3>Выберите ${normalizedLimit} из ${changes.length}</h3>
-            <p class="hint">Нужно выбрать ровно ${normalizedLimit}. Значения формул уже рассчитаны для текущего применения.</p>
+            <p class="hint">Нужно выбрать ровно ${normalizedLimit}.</p>
           </div>
           <output class="fallout-maw-ability-change-picker-counter" data-limited-change-counter aria-live="polite">
             <strong data-limited-change-selected>0</strong><span aria-hidden="true"> / </span><strong>${normalizedLimit}</strong>

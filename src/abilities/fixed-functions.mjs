@@ -1774,12 +1774,13 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     }
     return targets;
   }
+  const targetLimit = evaluateActiveApplicationTargetLimit(settings, actor);
   const selection = await requestCustomTokenSelection({
     rows,
-    limit: settings.targetLimit,
+    limit: targetLimit,
     title: getAbilityDisplayName(abilityItem),
     noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
-    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${settings.targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
+    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
   });
   const seen = new Set();
   return selection
@@ -1790,6 +1791,14 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
       seen.add(actorUuid);
       return true;
     });
+}
+
+function evaluateActiveApplicationTargetLimit(settings = {}, actor = null) {
+  return Math.max(1, Math.floor(evaluateActorFormula(settings?.targetLimit, actor, {
+    fallback: 1,
+    minimum: 1,
+    context: "active application target limit"
+  })));
 }
 
 function collectActiveApplicationTargetRows(sourceActor, settings, sourceToken = null) {
@@ -2193,7 +2202,10 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   if (!requestedTokenUuids.length) return false;
-  if (settings.targetSelectionMode !== "all" && requestedTokenUuids.length > settings.targetLimit) return false;
+  if (
+    settings.targetSelectionMode !== "all"
+    && requestedTokenUuids.length > evaluateActiveApplicationTargetLimit(settings, sourceActor)
+  ) return false;
 
   const targetTokenDocuments = await Promise.all(requestedTokenUuids.map(uuid => fromUuid(uuid)));
   const sourceSceneUuid = String(sourceTokenDocument.parent?.uuid ?? "").trim();
