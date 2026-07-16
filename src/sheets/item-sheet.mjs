@@ -37,6 +37,7 @@ import {
   hasPersistedContainerSpecialGridBaseAnchor
 } from "../utils/inventory-containers.mjs";
 import {
+  ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_POINT_COST_MODES,
   ABILITY_ACTION_TARGET_MODES,
   ABILITY_ATTACK_ACTION_ALL,
@@ -6332,6 +6333,10 @@ function prepareItemAbilityActionForDisplay(action, index, functionIndex, functi
     canDeleteAttackAction: !allSelected && selected.size > 1,
     usesFixedActionPointCost: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed,
     usesActualActionPointCost: action?.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual,
+    executorModeChoices: [
+      { value: ABILITY_ACTION_EXECUTOR_MODES.source, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ExecutorSource"), selected: action?.executorMode === ABILITY_ACTION_EXECUTOR_MODES.source },
+      { value: ABILITY_ACTION_EXECUTOR_MODES.targets, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ExecutorTargets"), selected: action?.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets }
+    ],
     targetModeChoices: [
       { value: ABILITY_ACTION_TARGET_MODES.triggerActor, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetTrigger"), selected: action?.targetMode === ABILITY_ACTION_TARGET_MODES.triggerActor },
       { value: ABILITY_ACTION_TARGET_MODES.free, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetFree"), selected: action?.targetMode === ABILITY_ACTION_TARGET_MODES.free }

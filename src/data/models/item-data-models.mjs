@@ -173,6 +173,12 @@ function abilityActionField() {
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
     type: new StringField({ required: true, blank: true, choices: ["", "weaponAttack"], initial: "weaponAttack" }),
     attackActionKeys: new ArrayField(new StringField({ required: true, blank: false }), { required: true, initial: ["all"] }),
+    executorMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["source", "targets"],
+      initial: "source"
+    }),
     targetMode: new StringField({
       required: true,
       blank: false,

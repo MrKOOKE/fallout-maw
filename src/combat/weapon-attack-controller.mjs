@@ -27,9 +27,27 @@ import {
   parseModuleWeaponFunctionId
 } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
-import { ABILITY_FIXED_FUNCTION_KEYS } from "../settings/abilities.mjs";
+import {
+  ABILITY_ACTION_EXECUTOR_MODES,
+  ABILITY_ACTION_POINT_COST_MODES,
+  ABILITY_ACTION_TARGET_MODES,
+  ABILITY_ACTION_TYPES,
+  ABILITY_ATTACK_ACTION_ALL,
+  ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
+  ABILITY_FIXED_FUNCTION_KEYS,
+  ABILITY_FUNCTION_TYPES,
+  normalizeAbilityFunctions,
+  normalizeActiveApplicationSettings
+} from "../settings/abilities.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
+import {
+  canSpendCombatActionPoints,
+  canSpendStrictActionPoints,
+  getCombatActionPointState,
+  getStrictActionPointState,
+  spendCombatActionPoints,
+  spendStrictActionPoints
+} from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
@@ -43,6 +61,11 @@ import {
   hasActorFixedAbilityFunction
 } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import {
+  getAuraRelation,
+  hasAuraLineOfSight,
+  measureTokenDistanceMeters
+} from "../abilities/aura-conditions.mjs";
 import { getKnockbackMaximumStrength, resolveKnockback } from "./active-actions.mjs";
 import { getWeaponSkillDamageBonuses } from "./weapon-skill-damage.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
@@ -298,13 +321,13 @@ export function registerWeaponAttackSocket() {
 
 export function cancelWeaponAttack({ ignoreReactionLock = false } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked() && !activeAttack?.attackModifier?.preventCancel) return false;
-  if (activeAttack?.processing) return false;
+  if (activeAttack?.processing || activeCommandedAttack?.processing) return false;
   const attack = activeAttack;
   activeAttack = null;
   attack?.destroy();
   activeDualWeaponAttack?.destroy();
   activeDualWeaponAttack = null;
-  activeCommandedAttack?.destroy();
+  activeCommandedAttack?.cancel();
   activeCommandedAttack = null;
   return true;
 }
@@ -438,7 +461,9 @@ export function startWeaponAttackAndWait(options = {}) {
       ...options,
       finishAfterAttack: true,
       onProcessingStarted,
-      onDestroy: ({ controller: destroyed }) => finish(destroyed?.attackCheckCount > 0)
+      onDestroy: ({ controller: destroyed }) => finish(
+        Boolean(destroyed?.lastResolvedAttackOutcome) || destroyed?.attackCheckCount > 0
+      )
     });
     if (!controller) {
       restoreSuspendedAttack();
@@ -540,7 +565,10 @@ export function startCommandedWeaponAttacks({
   attacks = [],
   label = "Команда",
   onCancel = null,
-  onBeforeExecute = null
+  onBeforeExecute = null,
+  onComplete = null,
+  chainRef = null,
+  authorityContext = null
 } = {}) {
   if (isReactionSystemLocked()) return undefined;
   const entries = (Array.isArray(attacks) ? attacks : [])
@@ -548,7 +576,8 @@ export function startCommandedWeaponAttacks({
       token: entry?.token?.object ?? entry?.token ?? null,
       weapon: entry?.weapon ?? null,
       actionKey: String(entry?.actionKey ?? ""),
-      weaponFunctionId: String(entry?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
+      weaponFunctionId: String(entry?.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+      actionPointCost: Math.max(0, toInteger(entry?.actionPointCost))
     }))
     .filter(entry => entry.token?.actor && entry.weapon && entry.actionKey);
   if (!entries.length) return undefined;
@@ -565,18 +594,192 @@ export function startCommandedWeaponAttacks({
   }
 
   if (activeAttack && !cancelWeaponAttack()) return undefined;
-  activeCommandedAttack?.destroy();
+  if (activeCommandedAttack?.processing) return undefined;
+  activeCommandedAttack?.cancel();
   activeCommandedAttack = new CommandedWeaponAttackController(entries, {
     label,
     onCancel,
-    onBeforeExecute
+    onBeforeExecute,
+    onComplete,
+    chainRef,
+    authorityContext
   });
   activeCommandedAttack.activate();
   return activeCommandedAttack;
 }
 
+export async function startCommandedWeaponAttacksAndWait({
+  attacks = [],
+  label = "Команда",
+  onCancel = null,
+  onBeforeExecute = null,
+  chainRef = null,
+  authorityContext = null
+} = {}) {
+  if (!game.user?.isGM && !getResponsibleGM()) {
+    ui.notifications.warn(`${label}: нет активного GM для выполнения атак.`);
+    return createCommandedAttackResult({ reason: "missingGM" });
+  }
+  if (!authorityContext || String(authorityContext?.kind ?? "") !== "abilityAction") {
+    return createCommandedAttackResult({ reason: "missingAuthorityContext" });
+  }
+  const entries = normalizeCommandedWeaponAttackEntries(attacks);
+  if (!entries.length || !validateCommandedWeaponAttackEntries(entries)) {
+    return createCommandedAttackResult({ reason: "invalidAttacks" });
+  }
+
+  const selections = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const selection = await captureCommandedWeaponAttackSelection(entries[index], {
+      label,
+      index,
+      count: entries.length
+    });
+    if (!selection) {
+      onCancel?.();
+      return createCommandedAttackResult({
+        started: true,
+        cancelled: true,
+        reason: "captureCancelled"
+      });
+    }
+    selections.push(serializeCommandedAttackSelection({
+      ...selection,
+      actionPointCost: entries[index].actionPointCost
+    }));
+  }
+
+  const preflight = await preflightCommandedWeaponAttackSelections(selections, {
+    chainRef,
+    authorityContext
+  });
+  if (!preflight.ok) {
+    if (preflight.reason) ui.notifications.warn(`${label}: атаки больше недоступны (${preflight.reason}).`);
+    return createCommandedAttackResult({
+      started: true,
+      attemptedCount: selections.length,
+      reason: preflight.reason || "preflightFailed"
+    });
+  }
+  if (typeof onBeforeExecute === "function" && (await onBeforeExecute()) === false) {
+    return createCommandedAttackResult({
+      started: true,
+      attemptedCount: selections.length,
+      reason: "commitFailed"
+    });
+  }
+  const result = await executeCommandedWeaponAttackSelections(selections, {
+    chainRef,
+    authorityContext
+  });
+  return createCommandedAttackResult({
+    ...result,
+    started: true,
+    committed: true,
+    attemptedCount: Math.max(selections.length, toInteger(result?.attemptedCount))
+  });
+}
+
+function normalizeCommandedWeaponAttackEntries(attacks = []) {
+  return (Array.isArray(attacks) ? attacks : [])
+    .map(entry => ({
+      token: entry?.token?.object ?? entry?.token ?? null,
+      weapon: entry?.weapon ?? null,
+      actionKey: String(entry?.actionKey ?? ""),
+      weaponFunctionId: String(entry?.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+      actionPointCost: Math.max(0, toInteger(entry?.actionPointCost))
+    }))
+    .filter(entry => entry.token?.actor && entry.weapon && entry.actionKey);
+}
+
+function validateCommandedWeaponAttackEntries(entries = []) {
+  for (const entry of entries) {
+    if (!entry.weapon || !hasItemFunction(entry.weapon, ITEM_FUNCTIONS.weapon)) return false;
+    if (isActorUnableToAct(entry.token.actor)) return false;
+    if (!getWeaponAttackData(entry.weapon, entry.weaponFunctionId)?.enabled) return false;
+    if (!hasWeaponAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)) return false;
+    if (getWeaponActionBlockState(entry.token.actor, entry.actionKey).blocked) return false;
+    if (isWeaponPlacementDisabled(entry.token.actor, entry.weapon)) return false;
+    const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
+    if (!hasRequiredWeaponResources(entry.weapon, attackCount, entry.weaponFunctionId)) return false;
+  }
+  return true;
+}
+
+function captureCommandedWeaponAttackSelection(entry = {}, {
+  label = "Команда",
+  index = 0,
+  count = 1
+} = {}) {
+  if (activeAttack && !cancelWeaponAttack()) return Promise.resolve(null);
+  return new Promise(resolve => {
+    let settled = false;
+    let captured = false;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      resolve(value ?? null);
+    };
+    const controller = new WeaponAttackController(
+      entry.token,
+      entry.weapon,
+      entry.actionKey,
+      entry.weaponFunctionId,
+      null,
+      {
+        skipActionPointCost: true,
+        captureOnly: true,
+        ignoreReactionLock: true,
+        onCapture: selection => {
+          captured = true;
+          finish(selection);
+        },
+        onDestroy: () => queueMicrotask(() => {
+          if (!captured) finish(null);
+        })
+      }
+    );
+    const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
+    if (!controller.hasRequiredWeaponResources(attackCount)) {
+      controller.destroy();
+      finish(null);
+      return;
+    }
+    activeAttack = controller;
+    controller.activate();
+    ui.notifications.info(`${label}: наведение ${index + 1} / ${count} — ${entry.token?.name ?? entry.token?.actor?.name ?? "исполнитель"}.`);
+  });
+}
+
+function createCommandedAttackResult({
+  started = false,
+  committed = false,
+  cancelled = false,
+  attemptedCount = 0,
+  executedCount = 0,
+  outcomes = [],
+  reason = ""
+} = {}) {
+  return {
+    started: Boolean(started),
+    committed: Boolean(committed),
+    cancelled: Boolean(cancelled),
+    attemptedCount: Math.max(0, toInteger(attemptedCount)),
+    executedCount: Math.max(0, toInteger(executedCount)),
+    outcomes: Array.isArray(outcomes) ? outcomes : [],
+    reason: String(reason ?? "")
+  };
+}
+
 class CommandedWeaponAttackController {
-  constructor(entries = [], { label = "Команда", onCancel = null, onBeforeExecute = null } = {}) {
+  constructor(entries = [], {
+    label = "Команда",
+    onCancel = null,
+    onBeforeExecute = null,
+    onComplete = null,
+    chainRef = null,
+    authorityContext = null
+  } = {}) {
     this.id = foundry.utils.randomID();
     this.label = String(label ?? "") || "Команда";
     this.container = new PIXI.Container();
@@ -587,6 +790,9 @@ class CommandedWeaponAttackController {
     this.destroyed = false;
     this.onCancel = typeof onCancel === "function" ? onCancel : null;
     this.onBeforeExecute = typeof onBeforeExecute === "function" ? onBeforeExecute : null;
+    this.onComplete = typeof onComplete === "function" ? onComplete : null;
+    this.chainRef = chainRef ?? null;
+    this.authorityContext = authorityContext ?? null;
     this.events = {
       move: event => this.onMove(event),
       pointerDown: event => this.onPointerDown(event),
@@ -654,7 +860,7 @@ class CommandedWeaponAttackController {
   }
 
   onKeyDown(event) {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || this.processing) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
@@ -818,9 +1024,11 @@ class CommandedWeaponAttackController {
   }
 
   cancel() {
+    if (this.processing || this.destroyed) return false;
     this.destroy();
     this.onCancel?.();
     ui.notifications.info(`${this.label}: отменено.`);
+    return true;
   }
 
   async execute() {
@@ -829,6 +1037,7 @@ class CommandedWeaponAttackController {
     try {
       if (typeof this.onBeforeExecute === "function" && (await this.onBeforeExecute()) === false) {
         this.destroy();
+        this.onComplete?.(false);
         return false;
       }
       const selections = this.entries.map(entry => serializeCommandedAttackSelection({
@@ -836,6 +1045,7 @@ class CommandedWeaponAttackController {
         weapon: entry.weapon,
         actionKey: entry.actionKey,
         weaponFunctionId: entry.weaponFunctionId,
+        actionPointCost: entry.actionPointCost,
         pointer: entry.pointer,
         geometry: entry.lockedGeometry,
         lockedGeometry: entry.lockedGeometry,
@@ -845,11 +1055,18 @@ class CommandedWeaponAttackController {
         mode: entry.mode
       }));
       this.destroy();
-      return executeCommandedWeaponAttackSelections(selections);
+      const executed = await executeCommandedWeaponAttackSelections(selections, {
+        chainRef: this.chainRef,
+        authorityContext: this.authorityContext
+      });
+      const complete = Number(executed?.executedCount) === selections.length;
+      this.onComplete?.(complete);
+      return executed;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Commanded weapon attacks failed`, error);
       ui.notifications.error(`${this.label}: атака не выполнена.`);
       this.destroy();
+      this.onComplete?.(false);
       return false;
     }
   }
@@ -861,88 +1078,461 @@ function serializeCommandedAttackSelection(selection = {}) {
     weaponUuid: selection.weapon?.uuid ?? "",
     actionKey: String(selection.actionKey ?? ""),
     weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+    actionPointCost: Math.max(0, toInteger(selection.actionPointCost)),
     pointer: selection.pointer,
     geometry: selection.geometry,
     lockedGeometry: selection.lockedGeometry ?? selection.geometry,
     targetUuid: String(selection.targetUuid ?? ""),
     selectedLimbKey: String(selection.selectedLimbKey ?? ""),
     directionKey: String(selection.directionKey ?? ""),
+    selectedStrength: Math.max(1, toInteger(selection.selectedStrength) || 1),
     mode: String(selection.mode ?? "current")
   };
 }
 
-async function executeCommandedWeaponAttackSelections(selections = []) {
+async function executeCommandedWeaponAttackSelections(selections = [], {
+  chainRef = null,
+  authorityContext = null
+} = {}) {
   const serialized = (Array.isArray(selections) ? selections : []).filter(selection => selection?.tokenUuid && selection?.weaponUuid);
-  if (!serialized.length) return false;
-  if (game.user?.isGM) return processCommandedWeaponAttackSelections(serialized);
+  if (!serialized.length) return createCommandedAttackResult({ reason: "emptySelections" });
+  if (game.user?.isGM) return processCommandedWeaponAttackSelections(serialized, {
+    chainRef,
+    authorityContext,
+    senderUserId: game.user?.id ?? ""
+  });
   const gm = getResponsibleGM();
   if (!gm) {
     ui.notifications.warn("Нет активного GM для выполнения командной атаки.");
-    return false;
+    return createCommandedAttackResult({ reason: "missingGM" });
   }
+  return requestCommandedWeaponAttackOperation("executeCommandedAttacks", {
+    selections: serialized,
+    chainRef,
+    authorityContext
+  });
+}
+
+async function preflightCommandedWeaponAttackSelections(selections = [], {
+  chainRef = null,
+  authorityContext = null
+} = {}) {
+  const serialized = (Array.isArray(selections) ? selections : []).filter(selection => selection?.tokenUuid && selection?.weaponUuid);
+  if (!serialized.length || !authorityContext) return { ok: false, reason: "invalidPreflight" };
+  if (game.user?.isGM) return processCommandedWeaponAttackSelections(serialized, {
+    chainRef,
+    authorityContext,
+    senderUserId: game.user?.id ?? "",
+    validateOnly: true
+  });
+  if (!getResponsibleGM()) return { ok: false, reason: "missingGM" };
+  return requestCommandedWeaponAttackOperation("preflightCommandedAttacks", {
+    selections: serialized,
+    chainRef,
+    authorityContext
+  });
+}
+
+function requestCommandedWeaponAttackOperation(action, {
+  selections = [],
+  chainRef = null,
+  authorityContext = null
+} = {}) {
+  const gm = getResponsibleGM();
+  if (!gm) return Promise.resolve({ ok: false, reason: "missingGM" });
   const requestId = foundry.utils.randomID();
   return new Promise(resolve => {
     const timeout = window.setTimeout(() => {
       pendingCommandedAttackRequests.delete(requestId);
-      resolve(false);
+      resolve({ ok: false, reason: "authorityTimeout" });
     }, COMMANDED_ATTACK_SOCKET_TIMEOUT_MS);
     pendingCommandedAttackRequests.set(requestId, { resolve, timeout });
     game.socket.emit(WEAPON_ATTACK_SOCKET, {
       scope: WEAPON_ATTACK_SOCKET_SCOPE,
-      action: "executeCommandedAttacks",
+      action,
       requestId,
       gmUserId: gm.id,
       senderUserId: game.user?.id ?? "",
-      selections: serialized
+      chainRef,
+      authorityContext,
+      selections
     });
   });
 }
 
 async function processCommandedWeaponAttackSocketRequest(payload = {}) {
-  const applied = await processCommandedWeaponAttackSelections(payload.selections ?? []);
+  let result = { ok: false, reason: "authorityError" };
+  try {
+    result = await processCommandedWeaponAttackSelections(payload.selections ?? [], {
+      chainRef: payload.chainRef ?? null,
+      authorityContext: payload.authorityContext ?? null,
+      senderUserId: payload.senderUserId ?? "",
+      validateOnly: payload.action === "preflightCommandedAttacks"
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Commanded weapon attack authority operation failed", error);
+  }
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
     action: "commandedAttacksResult",
     requestId: payload.requestId,
     targetUserId: payload.senderUserId ?? "",
-    result: { applied: Boolean(applied) },
+    result,
     senderUserId: game.user?.id ?? ""
   });
 }
 
-async function processCommandedWeaponAttackSelections(selections = []) {
+async function processCommandedWeaponAttackSelections(selections = [], {
+  chainRef = null,
+  authorityContext = null,
+  senderUserId = "",
+  validateOnly = false
+} = {}) {
+  if (authorityContext && !(await validateCommandedAbilityAuthority({
+    authorityContext,
+    selections,
+    senderUserId
+  }))) return { ok: false, reason: "authorityRejected" };
   const resolved = [];
   for (const selection of selections ?? []) {
     const tokenDocument = await fromUuid(String(selection.tokenUuid ?? ""));
-    const token = tokenDocument?.object ?? tokenDocument ?? null;
+    const token = tokenDocument?.object ?? (authorityContext ? null : tokenDocument) ?? null;
     const weapon = await fromUuid(String(selection.weaponUuid ?? ""));
-    if (!token?.actor || !weapon) continue;
+    if (!token?.actor || !weapon) {
+      return { ok: false, reason: authorityContext ? "gmSceneUnavailable" : "missingDocument" };
+    }
+    if (selection.targetUuid) {
+      const targetDocument = await fromUuid(String(selection.targetUuid));
+      if (!targetDocument?.object && authorityContext) return { ok: false, reason: "gmSceneUnavailable" };
+    }
     resolved.push({
       token,
       weapon,
       actionKey: String(selection.actionKey ?? ""),
       weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+      actionPointCost: Math.max(0, toInteger(selection.actionPointCost)),
       pointer: selection.pointer,
       geometry: selection.geometry,
       lockedGeometry: selection.lockedGeometry ?? selection.geometry,
       targetUuid: String(selection.targetUuid ?? ""),
       selectedLimbKey: String(selection.selectedLimbKey ?? ""),
       directionKey: String(selection.directionKey ?? ""),
+      selectedStrength: Math.max(1, toInteger(selection.selectedStrength) || 1),
       mode: String(selection.mode ?? "current")
     });
   }
-  if (!resolved.length) return false;
+  if (!resolved.length || resolved.length !== selections.length) return { ok: false, reason: "missingSelection" };
+
+  const actionPointCosts = new Map();
+  for (const selection of resolved) {
+    if (selection.weapon?.parent?.uuid !== selection.token.actor.uuid) return { ok: false, reason: "wrongWeaponOwner" };
+    if (!hasItemFunction(selection.weapon, ITEM_FUNCTIONS.weapon)) return { ok: false, reason: "invalidWeapon" };
+    if (isActorUnableToAct(selection.token.actor)) return { ok: false, reason: "unableToAct" };
+    if (!getWeaponAttackData(selection.weapon, selection.weaponFunctionId)?.enabled) return { ok: false, reason: "disabledWeapon" };
+    if (!hasWeaponAction(selection.weapon, selection.actionKey, selection.weaponFunctionId)) return { ok: false, reason: "missingAction" };
+    if (getWeaponActionBlockState(selection.token.actor, selection.actionKey).blocked) return { ok: false, reason: "blockedAction" };
+    if (isWeaponPlacementDisabled(selection.token.actor, selection.weapon)) return { ok: false, reason: "disabledPlacement" };
+    const attackCount = getActionAttackCount(selection.weapon, selection.actionKey, selection.weaponFunctionId);
+    if (!hasRequiredWeaponResources(selection.weapon, attackCount, selection.weaponFunctionId)) return { ok: false, reason: "weaponResources" };
+    const current = actionPointCosts.get(selection.token.actor.uuid) ?? { actor: selection.token.actor, amount: 0 };
+    current.amount += selection.actionPointCost;
+    actionPointCosts.set(selection.token.actor.uuid, current);
+  }
+  for (const { actor, amount } of actionPointCosts.values()) {
+    if (!canSpendStrictActionPoints(actor, amount, { label: "командная атака" })) return { ok: false, reason: "actionPoints" };
+  }
+  if (validateOnly) return { ok: true, reason: "" };
+
+  const actionPointReceipts = await spendCommandedActionPointCosts(actionPointCosts, chainRef);
+  if (!actionPointReceipts.ok) return { ok: false, reason: "actionPointSpendFailed" };
 
   const reactionCoordinator = createWeaponReactionCoordinator();
   const results = await Promise.allSettled(resolved.map(selection => executeCapturedWeaponAttack(selection, {
     skipActionPointCost: true,
-    reactionCoordinator
+    reactionCoordinator,
+    chainRef
   })));
   for (const result of results) {
     if (result.status === "rejected") console.error("Fallout MaW | Commanded weapon attack execution failed", result.reason);
   }
   await reactionCoordinator.drain();
-  return results.some(result => result.status === "fulfilled" && result.value);
+  const outcomes = results.map((result, index) => ({
+    tokenUuid: String(selections[index]?.tokenUuid ?? ""),
+    actorUuid: String(resolved[index]?.token?.actor?.uuid ?? ""),
+    executed: result.status === "fulfilled" && Boolean(result.value),
+    error: result.status === "rejected" ? String(result.reason?.message ?? result.reason ?? "") : ""
+  }));
+  const executedCount = outcomes.filter(outcome => outcome.executed).length;
+  if (!executedCount) await rollbackCommandedActionPointCosts(actionPointReceipts.receipts, chainRef);
+  return createCommandedAttackResult({
+    started: true,
+    committed: true,
+    attemptedCount: resolved.length,
+    executedCount,
+    outcomes,
+    reason: executedCount === resolved.length ? "" : "partialExecution"
+  });
+}
+
+async function spendCommandedActionPointCosts(actionPointCosts = new Map(), chainRef = null) {
+  const receipts = [];
+  try {
+    for (const { actor, amount } of actionPointCosts.values()) {
+      const cost = Math.max(0, toInteger(amount));
+      if (cost <= 0 || !isActorInActiveCombat(actor)) continue;
+      const before = getStrictActionPointState(actor);
+      if (!before || before.current < cost) throw new Error("Action point state changed before spend.");
+      await spendStrictActionPoints(actor, cost, {
+        source: "abilityAction",
+        actionKey: "commandedAttack",
+        chainRef
+      });
+      const after = getStrictActionPointState(actor);
+      if (!after || after.current !== before.current - cost) {
+        throw new Error("Action point spend was not applied exactly.");
+      }
+      receipts.push({ actor, before });
+    }
+    return { ok: true, receipts };
+  } catch (error) {
+    console.error("Fallout MaW | Commanded attack action point spend failed", error);
+    await rollbackCommandedActionPointCosts(receipts, chainRef);
+    return { ok: false, receipts: [] };
+  }
+}
+
+async function rollbackCommandedActionPointCosts(receipts = [], chainRef = null) {
+  for (const receipt of [...receipts].reverse()) {
+    const actor = receipt?.actor;
+    const before = receipt?.before;
+    if (!actor || !before) continue;
+    try {
+      await actor.update({
+        [`system.resources.actionPoints.value`]: before.current,
+        [`system.resources.actionPoints.spent`]: Math.max(0, before.max - before.current)
+      }, chainRef ? {
+        chainRef,
+        falloutMawSystemEventChainRef: chainRef,
+        falloutMawCommandedAttackRollback: true
+      } : { falloutMawCommandedAttackRollback: true });
+    } catch (error) {
+      console.error("Fallout MaW | Failed to roll back commanded attack action points", error);
+    }
+  }
+}
+
+async function validateCommandedAbilityAuthority({
+  authorityContext = {},
+  selections = [],
+  senderUserId = ""
+} = {}) {
+  if (String(authorityContext?.kind ?? "") !== "abilityAction") return false;
+  const sender = game.users?.get(String(senderUserId ?? "")) ?? null;
+  const sourceActor = await fromUuid(String(authorityContext?.actorUuid ?? ""));
+  const sourceTokenDocument = await fromUuid(String(authorityContext?.sourceTokenUuid ?? ""));
+  if (!sender || !sourceActor || !sourceTokenDocument?.actor) return false;
+  if (!sender.isGM && !sourceActor.testUserPermission?.(sender, "OWNER")) return false;
+  if (sourceTokenDocument.actor.uuid !== sourceActor.uuid) return false;
+
+  const abilityItem = sourceActor.items?.get(String(authorityContext?.abilityItemId ?? ""));
+  if (!abilityItem || abilityItem.type !== "ability") return false;
+  const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+    .find(entry => entry.id === String(authorityContext?.abilityFunctionId ?? "")
+      && entry.type === ABILITY_FUNCTION_TYPES.activeApplication);
+  if (!abilityFunction) return false;
+  if (
+    !authorityContext?.abilityFunctionSignature
+    || String(authorityContext.abilityFunctionSignature) !== JSON.stringify(abilityFunction)
+  ) return false;
+  const requestedActionIds = Array.isArray(authorityContext?.actionIds)
+    ? authorityContext.actionIds.map(id => String(id ?? "").trim())
+    : [];
+  const legacyActionId = String(authorityContext?.actionId ?? "").trim();
+  const actionIds = requestedActionIds.length
+    ? requestedActionIds
+    : Array(selections.length).fill(legacyActionId);
+  if (actionIds.length !== selections.length || actionIds.some(id => !id)) return false;
+  const actionsById = new Map((abilityFunction.actions ?? [])
+    .map(action => [String(action?.id ?? "").trim(), action]));
+  const actions = actionIds.map(id => actionsById.get(id) ?? null);
+  if (actions.some(action => (
+    !action
+    || action.type !== ABILITY_ACTION_TYPES.weaponAttack
+    || action.executorMode !== ABILITY_ACTION_EXECUTOR_MODES.targets
+    || action.targetMode !== ABILITY_ACTION_TARGET_MODES.free
+  ))) return false;
+
+  const targetTokenUuids = Array.from(new Set((authorityContext?.targetTokenUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  const selectionTokenUuids = Array.from(new Set((selections ?? [])
+    .map(selection => String(selection?.tokenUuid ?? "").trim())
+    .filter(Boolean)));
+  if (!targetTokenUuids.length || (selections ?? []).some(selection => !String(selection?.tokenUuid ?? "").trim())) {
+    return false;
+  }
+  if (selectionTokenUuids.length !== targetTokenUuids.length) return false;
+  if (targetTokenUuids.some(uuid => !selectionTokenUuids.includes(uuid))) return false;
+
+  const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
+  if (settings.targetMode !== "others") return false;
+  if (settings.targetSelectionMode !== "all") {
+    const limit = Math.max(1, Math.floor(evaluateActorFormula(settings.targetLimit, sourceActor, {
+      fallback: 1,
+      minimum: 1,
+      context: "commanded ability target limit"
+    })));
+    if (targetTokenUuids.length > limit) return false;
+  }
+
+  const targetTokenDocuments = await Promise.all(targetTokenUuids.map(uuid => fromUuid(uuid)));
+  const sourceSceneUuid = String(sourceTokenDocument.parent?.uuid ?? "");
+  const seenActors = new Set();
+  for (const targetTokenDocument of targetTokenDocuments) {
+    const targetActor = targetTokenDocument?.actor;
+    if (!targetActor || String(targetTokenDocument.parent?.uuid ?? "") !== sourceSceneUuid) return false;
+    if (!sender.isGM && targetTokenDocument.hidden) return false;
+    if (settings.excludeSelf && targetActor.uuid === sourceActor.uuid) return false;
+    if (seenActors.has(targetActor.uuid)) return false;
+    seenActors.add(targetActor.uuid);
+    const relation = targetActor.uuid === sourceActor.uuid ? "ally" : getAuraRelation(sourceActor, targetActor);
+    if (!new Set(settings.targetGroups ?? []).has(relation)) return false;
+
+    const sourceToken = sourceTokenDocument.object ?? null;
+    const targetToken = targetTokenDocument.object ?? null;
+    const radiusFormula = String(settings.radiusFormula ?? "").trim();
+    if (radiusFormula) {
+      if (!sourceToken || !targetToken) return false;
+      const radius = Math.max(0, evaluateActorFormula(radiusFormula, sourceActor, {
+        fallback: 0,
+        minimum: 0,
+        context: "commanded ability radius"
+      }));
+      if (measureTokenDistanceMeters(sourceToken, targetToken) > radius) return false;
+    }
+    if (settings.wallsBlock && (!sourceToken || !targetToken || !hasAuraLineOfSight(sourceToken, targetToken))) {
+      return false;
+    }
+  }
+
+  for (const [selectionIndex, selection] of (selections ?? []).entries()) {
+    const action = actions[selectionIndex];
+    const allowedActionKeys = new Set(action.attackActionKeys?.includes(ABILITY_ATTACK_ACTION_ALL)
+      ? ABILITY_ATTACKING_WEAPON_ACTION_KEYS
+      : action.attackActionKeys ?? []);
+    const actionKey = String(selection?.actionKey ?? "");
+    if (!allowedActionKeys.has(actionKey)) return false;
+    const tokenDocument = targetTokenDocuments.find(document => document?.uuid === String(selection?.tokenUuid ?? ""));
+    const weapon = await fromUuid(String(selection?.weaponUuid ?? ""));
+    if (!tokenDocument?.actor || weapon?.parent?.uuid !== tokenDocument.actor.uuid) return false;
+    if (!validateCommandedAttackSelectionMode(selection, weapon)) return false;
+    if (!(await validateCommandedAttackSelectionGeometry(selection, tokenDocument.object, weapon))) return false;
+    let expectedActionPointCost = 0;
+    if (isActorInActiveCombat(tokenDocument.actor)) {
+      if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed) {
+        expectedActionPointCost = Math.max(0, toInteger(action.fixedActionPointCost));
+      } else if (action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual) {
+        const actual = getWeaponActionPointCost(
+          tokenDocument.actor,
+          weapon,
+          actionKey,
+          String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
+        );
+        expectedActionPointCost = Math.max(0, Math.ceil(
+          actual * Math.max(0, Number(action.actualActionPointCostPercent) || 0) / 100
+        ));
+      }
+    }
+    if (Math.max(0, toInteger(selection?.actionPointCost)) !== expectedActionPointCost) return false;
+  }
+  return true;
+}
+
+function validateCommandedAttackSelectionMode(selection = {}, weapon = null) {
+  const actionKey = String(selection?.actionKey ?? "");
+  const mode = String(selection?.mode ?? "current");
+  const targetUuid = String(selection?.targetUuid ?? "");
+  if (actionKey === "aimedShot") {
+    return mode === "aimed" && Boolean(targetUuid) && Boolean(String(selection?.selectedLimbKey ?? ""));
+  }
+  if (MELEE_ACTION_KEYS.has(actionKey)) {
+    const directions = getEnabledMeleeDirections(
+      weapon,
+      actionKey,
+      String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
+    );
+    return mode === "directed"
+      && Boolean(targetUuid)
+      && directions.some(direction => direction.key === String(selection?.directionKey ?? ""))
+      && (actionKey !== "aimedMeleeAttack" || Boolean(String(selection?.selectedLimbKey ?? "")));
+  }
+  if (actionKey === PUSH_ACTION_KEY) {
+    return mode === "push" && Math.max(1, toInteger(selection?.selectedStrength) || 1) > 0;
+  }
+  return mode === "current" && !targetUuid;
+}
+
+async function validateCommandedAttackSelectionGeometry(selection = {}, token = null, weapon = null) {
+  if (!token?.actor || !weapon) return false;
+  if (!isFiniteCommandedPoint(selection?.pointer)) return false;
+  const submittedGeometry = deserializeGeometry(selection?.lockedGeometry ?? selection?.geometry);
+  if (!submittedGeometry || !isFiniteCommandedPoint(submittedGeometry.origin) || !isFiniteCommandedPoint(submittedGeometry.end)) {
+    return false;
+  }
+
+  const actionKey = String(selection?.actionKey ?? "");
+  const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
+  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
+    skipActionPointCost: true,
+    ignoreReactionLock: true
+  });
+  try {
+    controller.pointer = deserializePoint(selection.pointer);
+    if (!controller.rebuildGeometryAndTargets()) return false;
+    if (!isSameGeometry(controller.geometry, submittedGeometry)) return false;
+    if (
+      Math.abs(
+        (Number(controller.geometry?.rangeBonusMeters) || 0)
+        - (Number(submittedGeometry.rangeBonusMeters) || 0)
+      ) > PREVIEW_POSITION_EPSILON
+    ) return false;
+
+    const targetDocument = selection?.targetUuid
+      ? await fromUuid(String(selection.targetUuid))
+      : null;
+    const selectedTarget = targetDocument?.object ?? null;
+    if (selection?.targetUuid) {
+      if (!selectedTarget?.actor || targetDocument.parent?.uuid !== token.document?.parent?.uuid) return false;
+      if (!controller.targets.includes(selectedTarget)) return false;
+    }
+
+    if (actionKey === "aimedShot") {
+      return Boolean(resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? "")));
+    }
+    if (MELEE_ACTION_KEYS.has(actionKey)) {
+      if (
+        actionKey === "aimedMeleeAttack"
+        && !resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? ""))
+      ) return false;
+      return true;
+    }
+    if (actionKey === PUSH_ACTION_KEY) {
+      const maximumStrength = getKnockbackMaximumStrength(controller.getPushDifficulty());
+      const selectedStrength = Math.max(1, toInteger(selection?.selectedStrength) || 1);
+      return controller.targets.length > 0 && selectedStrength <= maximumStrength;
+    }
+    return true;
+  } finally {
+    controller.clearBurstTargetPreviewTimer();
+    controller.container.destroy({ children: true });
+  }
+}
+
+function isFiniteCommandedPoint(point = null) {
+  return Boolean(point)
+    && Number.isFinite(Number(point.x))
+    && Number.isFinite(Number(point.y))
+    && (point.elevation === undefined || Number.isFinite(Number(point.elevation)));
 }
 
 function validateDualWeaponAttackResources(actor, selections = [], label = "С двух рук") {
@@ -965,7 +1555,11 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
   return true;
 }
 
-async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost = true, reactionCoordinator = null } = {}) {
+async function executeCapturedWeaponAttack(selection = {}, {
+  skipActionPointCost = true,
+  reactionCoordinator = null,
+  chainRef = null
+} = {}) {
   const token = selection?.token ?? null;
   const weapon = selection?.weapon ?? null;
   const actionKey = String(selection?.actionKey ?? "");
@@ -974,7 +1568,8 @@ async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost
 
   const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
     skipActionPointCost,
-    reactionCoordinator
+    reactionCoordinator,
+    chainRef
   });
   controller.pointer = deserializePoint(selection.pointer);
   controller.geometry = deserializeGeometry(selection.geometry);
@@ -989,26 +1584,30 @@ async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost
       controller.aimedMode = "limb";
       controller.refresh(true);
       await controller.performAimedAttack(selection.selectedLimbKey);
-      return true;
+      return didCapturedWeaponAttackExecute(controller);
     }
     if (selection.mode === "directed") {
       controller.selectedTarget = selectedTarget;
       controller.aimedMode = "direction";
       controller.refresh(true);
       await controller.performDirectedAttack(selection.directionKey);
-      return true;
+      return didCapturedWeaponAttackExecute(controller);
     }
     if (selection.mode === "push") {
       controller.refresh(true);
       await controller.performPushAttack(selection.selectedStrength);
-      return true;
+      return didCapturedWeaponAttackExecute(controller);
     }
     controller.refresh(true);
     await controller.performCurrentAttack();
-    return true;
+    return didCapturedWeaponAttackExecute(controller);
   } finally {
     controller.destroy();
   }
+}
+
+function didCapturedWeaponAttackExecute(controller = null) {
+  return Boolean(controller?.lastResolvedAttackOutcome) || Number(controller?.attackCheckCount) > 0;
 }
 
 export async function executeWeaponAttackAgainstToken({
@@ -1180,7 +1779,9 @@ export async function startConstrainedAimedAttackSelection({
         timeoutId = null;
         onProcessingStarted?.(payload);
       },
-      onDestroy: ({ controller: destroyed }) => finish(destroyed?.attackCheckCount > 0),
+      onDestroy: ({ controller: destroyed }) => finish(
+        Boolean(destroyed?.lastResolvedAttackOutcome) || destroyed?.attackCheckCount > 0
+      ),
       finishAfterAttack: true,
       constrainedTarget: true,
       skipActionPointCost: true,
@@ -1442,6 +2043,7 @@ class WeaponAttackController {
     this.lastTargetMarkerRenderState = null;
     this.attackCanceledByReaction = false;
     this.attackCommitted = false;
+    this.lastResolvedAttackOutcome = null;
     this.attackCheckCount = 0;
     this.attackCheckEventSequence = 0;
     this.skillCheckCollectors = new Set();
@@ -1481,7 +2083,7 @@ class WeaponAttackController {
     const actionPointCost = isCombatActionPointSpendingActive(this.token?.actor)
       ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
       : 0;
-    await publishWeaponAttackResolved({
+    const outcome = {
       attackerUuid: this.token?.actor?.uuid ?? "",
       actorUuid: this.token?.actor?.uuid ?? "",
       tokenUuid: this.token?.document?.uuid ?? "",
@@ -1503,7 +2105,10 @@ class WeaponAttackController {
       chainRef: this.chainRef,
       damageHubOperationRef: this.damageHubOperationRef,
       senderUserId: game.user?.id ?? ""
-    });
+    };
+    this.lastResolvedAttackOutcome = outcome;
+    await publishWeaponAttackResolved(outcome);
+    return outcome;
   }
 
   async notifyAttackCheckResolved(outcome = null, completionCollector = null) {
@@ -4446,10 +5051,10 @@ function handleWeaponAttackSocketMessage(payload = {}) {
     if (!pending) return;
     window.clearTimeout(pending.timeout);
     pendingCommandedAttackRequests.delete(String(payload.requestId ?? ""));
-    pending.resolve(Boolean(payload.result?.applied));
+    pending.resolve(payload.result ?? { ok: false, reason: "emptyAuthorityResult" });
     return;
   }
-  if (payload.action === "executeCommandedAttacks") {
+  if (["executeCommandedAttacks", "preflightCommandedAttacks"].includes(payload.action)) {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     void processCommandedWeaponAttackSocketRequest(payload);
     return;

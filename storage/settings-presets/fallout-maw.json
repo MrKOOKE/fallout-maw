@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "12ed705595690c620e1cbb43083b1386f892ef21f38d4ffd359465c3dab426b6",
-  "updatedAt": "2026-07-16T03:49:10.336Z",
+  "revision": "84335cfe66ae3f12bd0b47de986441480ebe2987ba3c7f13941fb16593674774",
+  "updatedAt": "2026-07-16T08:30:47.079Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3855,6 +3855,291 @@
                       "type": "activeApplication"
                     }
                   ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 40 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 2 часа.</p><p>После активации вы можете выбрать до [[1+speech/50]] союзников и те на следующие 12 секунд тратят на 1 ОД меньше на Все атакующие действия.</p>",
+                "id": "sqhL8OlmEiivDw0f",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Пламенный клич",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "xVwQGrDVWRrqt0ZC",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "40",
+                            "id": "2C7Rywb1gGay78Mw",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 7200,
+                            "resourceKey": "power"
+                          },
+                          {
+                            "formula": "5",
+                            "id": "wrtCsLCBtds11OAh",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "resourceKey": "actionPoints"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": true
+                      },
+                      "changes": [
+                        {
+                          "id": "PbGVDX52DemN3KgI",
+                          "key": "system.costs.actions.aimedMeleeAttack",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "Z979U3NSi0nC2pwt",
+                          "key": "system.costs.actions.meleeAttack",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "w3V1IwvriJzU9ncq",
+                          "key": "system.costs.actions.aimedShot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "GIOTs6nF5DCOeV6D",
+                          "key": "system.costs.actions.snapshot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "EIIH4wYafdqt0Fig",
+                          "key": "system.costs.actions.volley",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "mUlSTXyvnZPmOYoG",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 30 энергии<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они ударят в указанных вами направлениях.</p>",
+                "id": "o0eHtaXDOfkfOP4M",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Приказ: Коли!",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "GYTOhsTgDylfTDfg",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [
+                        {
+                          "actionPointCostMode": "none",
+                          "actualActionPointCostPercent": 100,
+                          "attackActionKeys": [
+                            "meleeAttack"
+                          ],
+                          "executorMode": "targets",
+                          "fixedActionPointCost": 0,
+                          "id": "o0eHtaXDOfkfOP4M-application-weapon-attack",
+                          "targetMode": "free",
+                          "type": "weaponAttack"
+                        }
+                      ],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "o0eHtaXDOfkfOP4M-application-cost-power",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 12,
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "2+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "o0eHtaXDOfkfOP4M-application",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 30 энергии<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они выстрелят в указанных вами направлениях.</p>",
+                "id": "hXDOkMGJjkPB7WBb",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Приказ: Цельсь, пли!",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Красноречие",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [
+                        {
+                          "actionPointCostMode": "none",
+                          "actualActionPointCostPercent": 100,
+                          "attackActionKeys": [
+                            "snapshot"
+                          ],
+                          "executorMode": "targets",
+                          "fixedActionPointCost": 0,
+                          "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
+                          "targetMode": "free",
+                          "type": "weaponAttack"
+                        }
+                      ],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "hXDOkMGJjkPB7WBb-application-cost-power",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 12,
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "2+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "hXDOkMGJjkPB7WBb-application",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "",
+                "id": "u6NqPLJYeinNzWNF",
+                "img": "icons/svg/aura.svg",
+                "name": "Новая способность",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Красноречие",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
                 },
                 "visible": true
               }

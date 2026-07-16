@@ -1,4 +1,5 @@
 import {
+  ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_POINT_COST_MODES,
   ABILITY_ACTION_TARGET_MODES,
   ABILITY_ACTION_TYPES,
@@ -16,6 +17,7 @@ import {
   getWeaponAttackData,
   hasWeaponAction,
   isWeaponPlacementDisabled,
+  startCommandedWeaponAttacksAndWait,
   startConstrainedAimedAttackSelection,
   startWeaponAttackAndWait
 } from "../combat/weapon-attack-controller.mjs";
@@ -27,7 +29,7 @@ import {
   isActorInActiveCombat,
   spendStrictActionPoints
 } from "../combat/reaction-resources.mjs";
-import { getReactionTimeoutMs, getResponsibleOwner } from "../combat/reaction-hub.mjs";
+import { getReactionTimeoutMs, getResponsibleOwner, isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { getWeaponActionBlockState } from "./runtime-state.mjs";
 import {
   ITEM_FUNCTIONS,
@@ -56,7 +58,7 @@ export function collectAbilityWeaponAttackOptions(actor, actionSource = {}, {
   requireReachableTarget = false
 } = {}) {
   const action = normalizeAbilityAction(actionSource);
-  if (action.type !== ABILITY_ACTION_TYPES.weaponAttack) return [];
+  if (action.type !== ABILITY_ACTION_TYPES.weaponAttack || isActorUnableToAct(actor)) return [];
   const allowedKeys = action.attackActionKeys.includes(ABILITY_ATTACK_ACTION_ALL)
     ? ABILITY_ATTACKING_WEAPON_ACTION_KEYS
     : action.attackActionKeys;
@@ -149,6 +151,7 @@ export async function resolveAbilityActionTriggerTarget(envelope = {}) {
 
 export async function executeAbilityWeaponAttackOption({
   actor = null,
+  attackerToken = null,
   option = null,
   targetToken = null,
   chainRef = null,
@@ -163,13 +166,13 @@ export async function executeAbilityWeaponAttackOption({
   if (!freshOption || (!freeTarget && !targetToken?.actor)) return false;
   if (freeTarget && useAutoApply && !targetToken?.actor) return false;
   const owner = getResponsibleOwner(actor) ?? game.users?.activeGM ?? null;
-  const attackerToken = getPrimaryActorToken(actor);
-  if (!owner || !attackerToken?.actor) return false;
+  const resolvedAttackerToken = attackerToken?.object ?? attackerToken ?? getPrimaryActorToken(actor);
+  if (!owner || resolvedAttackerToken?.actor?.uuid !== actor?.uuid) return false;
   const timeoutMs = getReactionTimeoutMs();
   const data = {
     executionId: foundry.utils.randomID(),
     actorUuid: String(actor.uuid ?? ""),
-    attackerTokenUuid: String(attackerToken.document?.uuid ?? attackerToken.uuid ?? ""),
+    attackerTokenUuid: String(resolvedAttackerToken.document?.uuid ?? resolvedAttackerToken.uuid ?? ""),
     targetTokenUuid: (freeTarget && !useAutoApply)
       ? ""
       : String(targetToken?.document?.uuid ?? targetToken?.uuid ?? ""),
@@ -212,35 +215,212 @@ export async function prepareAbilityFunctionActions({
   actor = null,
   abilityFunction = {},
   triggerTargets = [],
-  title = ""
+  title = "",
+  sourceToken = null
 } = {}) {
   const executions = [];
-  for (const action of abilityFunction?.actions ?? []) {
-    const options = collectAbilityWeaponAttackOptions(actor, action);
-    const option = await requestAbilityWeaponAttackOption(options, { title });
-    if (!option) return { executions: [], cancelled: true };
-    const targets = action.targetMode === ABILITY_ACTION_TARGET_MODES.free
-      ? [null]
-      : triggerTargets.map(target => target?.token ?? target).filter(Boolean);
-    if (!targets.length) return { executions: [], cancelled: true };
-    for (const targetToken of targets) executions.push({ option, targetToken });
+  const normalizedTargets = uniqueAbilityActionTargets(triggerTargets);
+  for (const actionSource of abilityFunction?.actions ?? []) {
+    const action = normalizeAbilityAction(actionSource);
+    const resolvedSourceToken = sourceToken?.object ?? sourceToken ?? getPrimaryActorToken(actor);
+    const executorTargets = action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets
+      ? normalizedTargets
+      : [{ actor, token: resolvedSourceToken }];
+    if (!executorTargets.length || executorTargets.some(entry => !entry.actor || !entry.token?.actor)) {
+      return { executions: [], cancelled: true };
+    }
+    for (const executor of executorTargets) {
+      const options = collectAbilityWeaponAttackOptions(executor.actor, action);
+      const option = await requestAbilityWeaponAttackOption(options, {
+        title: buildAbilityActionExecutorTitle(title, executor.actor, action.executorMode)
+      });
+      if (!option) return { executions: [], cancelled: true };
+      const targets = action.targetMode === ABILITY_ACTION_TARGET_MODES.free
+        ? [null]
+        : action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets
+          ? [executor.token]
+          : normalizedTargets.map(target => target.token);
+      if (!targets.length) return { executions: [], cancelled: true };
+      for (const targetToken of targets) {
+        executions.push({
+          actor: executor.actor,
+          attackerToken: executor.token,
+          option,
+          targetToken,
+          coordinated: action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets
+            && action.targetMode === ABILITY_ACTION_TARGET_MODES.free,
+          batchId: action.id,
+          title
+        });
+      }
+    }
   }
   return { executions, cancelled: false };
 }
 
 export async function executePreparedAbilityFunctionActions({
   actor = null,
+  abilityItem = null,
+  abilityFunction = null,
+  sourceToken = null,
   executions = [],
   chainRef = null,
-  ignoreReactionLock = false
+  ignoreReactionLock = false,
+  onBeforeFirstExecute = null
 } = {}) {
   let attempted = 0;
   let executed = 0;
-  for (const execution of executions) {
+  let committed = false;
+  const commit = async () => {
+    if (committed) return true;
+    if (typeof onBeforeFirstExecute === "function" && (await onBeforeFirstExecute()) === false) return false;
+    committed = true;
+    return true;
+  };
+  for (let index = 0; index < executions.length;) {
+    const execution = executions[index];
+    if (execution?.coordinated) {
+      const batch = [];
+      while (index < executions.length) {
+        const candidate = executions[index];
+        if (!candidate?.coordinated) break;
+        batch.push(candidate);
+        index += 1;
+      }
+      attempted += batch.length;
+      const result = await executeCoordinatedAbilityWeaponAttacks(batch, {
+        title: execution.title,
+        chainRef,
+        onBeforeExecute: commit,
+        authorityContext: buildCoordinatedAbilityAuthorityContext({
+          actor,
+          abilityItem,
+          abilityFunction,
+          sourceToken,
+          executions: batch
+        })
+      });
+      if (result.cancelled) return { attempted, executed, cancelled: true, committed };
+      executed += Math.min(batch.length, Math.max(0, Math.trunc(Number(result.executedCount) || 0)));
+      continue;
+    }
+    index += 1;
     attempted += 1;
-    if (await executeAbilityWeaponAttackOption({ actor, ...execution, chainRef, ignoreReactionLock })) executed += 1;
+    if (!(await commit())) return { attempted, executed, cancelled: false, committed: false, commitFailed: true };
+    const executionActor = execution?.actor ?? actor;
+    if (await executeAbilityWeaponAttackOption({ actor: executionActor, ...execution, chainRef, ignoreReactionLock })) executed += 1;
   }
-  return { attempted, executed, cancelled: false };
+  if (!executions.length && !(await commit())) {
+    return { attempted: 0, executed: 0, cancelled: false, committed: false, commitFailed: true };
+  }
+  return { attempted, executed, cancelled: false, committed };
+}
+
+export function getAbilityTargetExecutorAvailability(actor = null, abilityFunction = {}, token = null) {
+  const targetExecutorActions = (abilityFunction?.actions ?? [])
+    .map(action => normalizeAbilityAction(action))
+    .filter(action => action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets);
+  if (!targetExecutorActions.length) return { available: true, reason: "" };
+  if (!actor || !token?.actor || token.actor.uuid !== actor.uuid) {
+    return { available: false, reason: "нет токена исполнителя" };
+  }
+  if (isActorUnableToAct(actor)) return { available: false, reason: "актёр не может действовать" };
+  for (const action of targetExecutorActions) {
+    if (!collectAbilityWeaponAttackOptions(actor, action).length) {
+      return { available: false, reason: "нет доступного атакующего действия или ресурсов" };
+    }
+  }
+  return { available: true, reason: "" };
+}
+
+async function executeCoordinatedAbilityWeaponAttacks(executions = [], {
+  title = "",
+  chainRef = null,
+  onBeforeExecute = null,
+  authorityContext = null
+} = {}) {
+  const attacks = [];
+  for (const execution of executions) {
+    const executionActor = execution?.actor ?? null;
+    const attackerToken = execution?.attackerToken?.object ?? execution?.attackerToken ?? null;
+    const freshOption = findFreshOption(executionActor, execution?.option);
+    if (!executionActor || attackerToken?.actor?.uuid !== executionActor.uuid || !freshOption) {
+      return { started: false, executed: false, cancelled: false };
+    }
+    attacks.push({
+      token: attackerToken,
+      weapon: freshOption.weapon,
+      actionKey: freshOption.actionKey,
+      weaponFunctionId: freshOption.weaponFunctionId,
+      actionPointCost: freshOption.actionPointCost
+    });
+  }
+  return startCommandedWeaponAttacksAndWait({
+    attacks,
+    label: String(title ?? "") || game.i18n.localize("FALLOUTMAW.Ability.Actions.Execute"),
+    chainRef,
+    onBeforeExecute: async () => {
+      if (!preflightCoordinatedActionPointCosts(attacks)) return false;
+      return typeof onBeforeExecute !== "function" || (await onBeforeExecute()) !== false;
+    },
+    authorityContext
+  });
+}
+
+function preflightCoordinatedActionPointCosts(attacks = []) {
+  const costsByActor = new Map();
+  for (const attack of attacks ?? []) {
+    const actor = attack?.token?.actor ?? null;
+    const actorUuid = String(actor?.uuid ?? "").trim();
+    if (!actorUuid) return false;
+    const current = costsByActor.get(actorUuid) ?? { actor, amount: 0 };
+    current.amount += Math.max(0, Math.trunc(Number(attack?.actionPointCost) || 0));
+    costsByActor.set(actorUuid, current);
+  }
+  return Array.from(costsByActor.values())
+    .every(({ actor, amount }) => canSpendStrictActionPoints(actor, amount, { label: "командная атака" }));
+}
+
+function buildCoordinatedAbilityAuthorityContext({
+  actor = null,
+  abilityItem = null,
+  abilityFunction = null,
+  sourceToken = null,
+  executions = []
+} = {}) {
+  const sourceTokenPlaceable = sourceToken?.object ?? sourceToken ?? getPrimaryActorToken(actor);
+  if (!actor?.uuid || !abilityItem?.id || !abilityFunction?.id || !sourceTokenPlaceable?.actor) return null;
+  return {
+    kind: "abilityAction",
+    actorUuid: String(actor.uuid),
+    sourceTokenUuid: String(sourceTokenPlaceable.document?.uuid ?? sourceTokenPlaceable.uuid ?? ""),
+    abilityItemId: String(abilityItem.id),
+    abilityFunctionId: String(abilityFunction.id),
+    abilityFunctionSignature: JSON.stringify(abilityFunction),
+    actionIds: executions.map(execution => String(execution?.batchId ?? "")),
+    targetTokenUuids: Array.from(new Set(executions
+      .map(execution => String(execution?.attackerToken?.document?.uuid ?? execution?.attackerToken?.uuid ?? ""))
+      .filter(Boolean)))
+  };
+}
+
+function uniqueAbilityActionTargets(targets = []) {
+  const seen = new Set();
+  const result = [];
+  for (const target of targets ?? []) {
+    const token = target?.token?.object ?? target?.token ?? target?.object ?? target ?? null;
+    const actor = target?.actor ?? token?.actor ?? null;
+    const actorUuid = String(actor?.uuid ?? "").trim();
+    if (!actorUuid || !token?.actor || seen.has(actorUuid)) continue;
+    seen.add(actorUuid);
+    result.push({ actor, token });
+  }
+  return result;
+}
+
+function buildAbilityActionExecutorTitle(title = "", actor = null, executorMode = "") {
+  if (executorMode !== ABILITY_ACTION_EXECUTOR_MODES.targets) return String(title ?? "");
+  return [String(title ?? "").trim(), String(actor?.name ?? "").trim()].filter(Boolean).join(": ");
 }
 
 export async function requestAbilityWeaponAttackOption(options = [], { title = "", autoApply = false } = {}) {

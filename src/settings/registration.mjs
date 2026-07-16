@@ -60,7 +60,6 @@ import {
   FACTION_SETTINGS_SETTING,
   ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
-  MIGRATION_STATE_SETTING,
   SETTINGS_PRESET_STATE_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
@@ -101,21 +100,10 @@ import {
   normalizeSkillCheckControl,
   normalizeTokenActionHudIcons
 } from "./accessors.mjs";
-import { migrateSystemSettings } from "../migrations/settings.mjs";
 import { syncLoadedActorNaturalRaceItems } from "../races/natural-items.mjs";
 
 export function registerSystemSettings() {
   registerPersonalGeneratorSettings();
-
-  game.settings.register(FALLOUT_MAW.id, MIGRATION_STATE_SETTING, {
-    name: "Migration State",
-    scope: "world",
-    config: false,
-    type: Object,
-    default: {
-      completed: []
-    }
-  });
 
   game.settings.register(FALLOUT_MAW.id, SETTINGS_PRESET_STATE_SETTING, {
     name: "Settings Preset State",
@@ -667,7 +655,6 @@ export function registerSystemSettings() {
 }
 
 export async function finalizeSystemSettings() {
-  await migrateSystemSettings();
   syncSettingsIntoSystemConfig();
   registerFactionApi();
   // Startup only needs world actors; token actors re-prepare when used.

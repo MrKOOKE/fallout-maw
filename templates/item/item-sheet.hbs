@@ -1643,7 +1643,8 @@
               {{/each}}
             </div>
           </div>
-          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ExecutorMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.executorMode">{{#each executorModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
             <label><span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
             <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActionPointCost"}}</span><select data-ability-action-cost-mode name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actionPointCostMode">{{#each costModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
           </div>
@@ -2479,7 +2480,8 @@
               {{/each}}
             </div>
           </div>
-          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label><span>{{localize "FALLOUTMAW.Ability.Actions.ExecutorMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.executorMode">{{#each executorModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
             <label><span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span><select name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
             <label><span>{{localize "FALLOUTMAW.Ability.Actions.ActionPointCost"}}</span><select data-ability-action-cost-mode name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.actionPointCostMode">{{#each costModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
           </div>

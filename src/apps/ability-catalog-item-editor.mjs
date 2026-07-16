@@ -3,6 +3,7 @@ import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getIte
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
+  ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_POINT_COST_MODES,
   ABILITY_ACTION_TARGET_MODES,
   ABILITY_ATTACK_ACTION_ALL,
@@ -1147,6 +1148,7 @@ function readAbilityActions(row) {
     attackActionKeys: Array.from(actionRow.querySelectorAll("[data-field='action.attackActionKey']") ?? [])
       .map(input => String(input.value ?? "").trim())
       .filter(Boolean),
+    executorMode: actionRow.querySelector("[data-field='action.executorMode']")?.value,
     targetMode: actionRow.querySelector("[data-field='action.targetMode']")?.value,
     actionPointCostMode: actionRow.querySelector("[data-field='action.actionPointCostMode']")?.value,
     fixedActionPointCost: actionRow.querySelector("[data-field='action.fixedActionPointCost']")?.value,
@@ -1919,6 +1921,10 @@ function prepareAbilityActionForDisplay(action, index) {
     canDeleteAttackAction: !allSelected && selected.size > 1,
     usesFixedActionPointCost: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.fixed,
     usesActualActionPointCost: action.actionPointCostMode === ABILITY_ACTION_POINT_COST_MODES.actual,
+    executorModeChoices: [
+      { value: ABILITY_ACTION_EXECUTOR_MODES.source, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ExecutorSource"), selected: action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.source },
+      { value: ABILITY_ACTION_EXECUTOR_MODES.targets, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.ExecutorTargets"), selected: action.executorMode === ABILITY_ACTION_EXECUTOR_MODES.targets }
+    ],
     targetModeChoices: [
       { value: ABILITY_ACTION_TARGET_MODES.triggerActor, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetTrigger"), selected: action.targetMode === ABILITY_ACTION_TARGET_MODES.triggerActor },
       { value: ABILITY_ACTION_TARGET_MODES.free, label: game.i18n.localize("FALLOUTMAW.Ability.Actions.TargetFree"), selected: action.targetMode === ABILITY_ACTION_TARGET_MODES.free }

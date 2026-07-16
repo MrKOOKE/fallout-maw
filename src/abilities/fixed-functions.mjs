@@ -47,6 +47,7 @@ import {
 import { abilityConditionsApply } from "./evaluation.mjs";
 import {
   executePreparedAbilityFunctionActions,
+  getAbilityTargetExecutorAvailability,
   prepareAbilityFunctionActions
 } from "./ability-actions.mjs";
 import {
@@ -1409,7 +1410,8 @@ async function executeActiveApplicationUse(scope, {
     actor,
     abilityFunction,
     triggerTargets: allowed.map(entry => entry.target),
-    title: getAbilityDisplayName(abilityItem)
+    title: getAbilityDisplayName(abilityItem),
+    sourceToken
   });
   if (preparedActions.cancelled) {
     for (const entry of allowed) {
@@ -1433,87 +1435,135 @@ async function executeActiveApplicationUse(scope, {
     chainRef: scope.chainRef,
     occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
   };
-  try {
-    if (requiresRemoteAuthority) {
-      const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
-        chainRef: scope.chainRef,
-        sourceToken,
-        selectedChanges: changeSelection.changes,
-        payCostsRemotely: true,
-        costContext: paymentContext,
-        costFingerprint
-      });
-      if (!effectsApplied) {
-        ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: операция GM не подтверждена; при задержке ответа не запускайте её повторно.`);
-        for (const entry of allowed) {
-          await emitActiveApplicationResolved(scope, entry, {
-            actor,
-            abilityItem,
-            abilityFunction,
-            settings,
-            activationCosts,
-            durationSeconds,
-            status: "failed",
-            reason: "authorityOperationFailed",
-            terminalTargets
-          });
-        }
-        return { used: false, appliedCount: 0, reason: "authorityOperationFailed" };
-      }
-    } else {
-      const paymentEffectIds = getActorEffectIdSet(actor);
-      const payment = await payAbilityFunctionResourceCosts({
-        actor,
-        sourceItem: abilityItem,
-        abilityFunction,
-        costRows: activationCosts,
-        expectedFingerprint: costFingerprint,
-        context: paymentContext
-      });
-      if (!payment.ok) {
-        notifyAbilityTriggerCostFailure(payment);
-        for (const entry of allowed) {
-          await emitActiveApplicationResolved(scope, entry, {
-            actor,
-            abilityItem,
-            abilityFunction,
-            settings,
-            activationCosts,
-            durationSeconds,
-            status: "failed",
-            reason: "resourceSpendFailed",
-            terminalTargets
-          });
-        }
-        return { used: false, appliedCount: 0, reason: "resourceSpendFailed" };
-      }
-      if (durationSeconds > 0) {
-        try {
+  let commitPromise = null;
+  let commitFailureReason = "";
+  let commitError = null;
+  let committedPayment = null;
+  let committedPaymentEffectIds = null;
+  const commitApplication = async () => {
+    commitPromise ??= (async () => {
+      try {
+        if (requiresRemoteAuthority) {
           const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
             chainRef: scope.chainRef,
             sourceToken,
-            selectedChanges: changeSelection.changes
+            selectedChanges: changeSelection.changes,
+            payCostsRemotely: true,
+            costContext: paymentContext,
+            costFingerprint
           });
-          if (!effectsApplied) throw new Error("Active application effects could not be created.");
-        } catch (error) {
-          await rollbackActiveApplicationPayment({
-            actor,
-            abilityItem,
-            abilityFunction,
-            payment,
-            previousEffectIds: paymentEffectIds,
-            chainRef: scope.chainRef
-          });
-          throw error;
+          if (!effectsApplied) {
+            commitFailureReason = "authorityOperationFailed";
+            ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: операция GM не подтверждена; при задержке ответа не запускайте её повторно.`);
+            return false;
+          }
+          return true;
         }
+
+        const paymentEffectIds = getActorEffectIdSet(actor);
+        const payment = await payAbilityFunctionResourceCosts({
+          actor,
+          sourceItem: abilityItem,
+          abilityFunction,
+          costRows: activationCosts,
+          expectedFingerprint: costFingerprint,
+          context: paymentContext
+        });
+        if (!payment.ok) {
+          commitFailureReason = "resourceSpendFailed";
+          notifyAbilityTriggerCostFailure(payment);
+          return false;
+        }
+        committedPayment = payment;
+        committedPaymentEffectIds = paymentEffectIds;
+        if (durationSeconds > 0) {
+          try {
+            const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
+              chainRef: scope.chainRef,
+              sourceToken,
+              selectedChanges: changeSelection.changes
+            });
+            if (!effectsApplied) throw new Error("Active application effects could not be created.");
+          } catch (error) {
+            await rollbackActiveApplicationPayment({
+              actor,
+              abilityItem,
+              abilityFunction,
+              payment,
+              previousEffectIds: paymentEffectIds,
+              chainRef: scope.chainRef
+            });
+            throw error;
+          }
+        }
+        return true;
+      } catch (error) {
+        commitError = error;
+        return false;
       }
-    }
+    })();
+    return commitPromise;
+  };
+  try {
     const actionResult = await executePreparedAbilityFunctionActions({
       actor,
+      abilityItem,
+      abilityFunction,
+      sourceToken,
       executions: preparedActions.executions,
-      chainRef: scope.chainRef
+      chainRef: scope.chainRef,
+      onBeforeFirstExecute: commitApplication
     });
+    if (commitError) throw commitError;
+    if (actionResult.cancelled && !actionResult.committed) {
+      for (const entry of allowed) {
+        await emitActiveApplicationResolved(scope, entry, {
+          actor,
+          abilityItem,
+          abilityFunction,
+          settings,
+          activationCosts,
+          durationSeconds,
+          status: "cancelled",
+          reason: "actionExecutionCancelled",
+          terminalTargets
+        });
+      }
+      return { used: false, appliedCount: 0, cancelled: true, reason: "actionExecutionCancelled" };
+    }
+    if (commitFailureReason) {
+      for (const entry of allowed) {
+        await emitActiveApplicationResolved(scope, entry, {
+          actor,
+          abilityItem,
+          abilityFunction,
+          settings,
+          activationCosts,
+          durationSeconds,
+          status: "failed",
+          reason: commitFailureReason,
+          terminalTargets
+        });
+      }
+      return { used: false, appliedCount: 0, reason: commitFailureReason };
+    }
     if (actionResult.executed !== actionResult.attempted) {
+      if (
+        actionResult.committed
+        && actionResult.attempted > 0
+        && actionResult.executed === 0
+        && durationSeconds <= 0
+        && committedPayment?.ok
+      ) {
+        await rollbackActiveApplicationPayment({
+          actor,
+          abilityItem,
+          abilityFunction,
+          payment: committedPayment,
+          previousEffectIds: committedPaymentEffectIds ?? new Set(),
+          chainRef: scope.chainRef
+        });
+      }
       for (const entry of allowed) {
         await emitActiveApplicationResolved(scope, entry, {
           actor,
@@ -1755,9 +1805,14 @@ function createAbilitySystemEventOptions(chainRef = null) {
 async function resolveActiveApplicationTargets(actor, abilityItem, abilityFunction, settings, sourceToken = null) {
   const sourcePlaceable = sourceToken?.object ?? sourceToken ?? getPrimaryActorToken(actor);
   if (settings.targetMode !== "others") {
+    const availability = getAbilityTargetExecutorAvailability(actor, abilityFunction, sourcePlaceable);
+    if (!availability.available) {
+      ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: ${availability.reason}.`);
+      return [];
+    }
     return [{ actor, token: sourcePlaceable, selected: true }];
   }
-  const rows = collectActiveApplicationTargetRows(actor, settings, sourcePlaceable);
+  const rows = collectActiveApplicationTargetRows(actor, abilityFunction, settings, sourcePlaceable);
   if (settings.targetSelectionMode === "all") {
     const seen = new Set();
     const targets = rows
@@ -1780,7 +1835,8 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     limit: targetLimit,
     title: getAbilityDisplayName(abilityItem),
     noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
-    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`
+    instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. Enter подтверждает, Esc/ПКМ отменяет.`,
+    getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? row?.actorUuid ?? "")
   });
   const seen = new Set();
   return selection
@@ -1801,7 +1857,7 @@ function evaluateActiveApplicationTargetLimit(settings = {}, actor = null) {
   })));
 }
 
-function collectActiveApplicationTargetRows(sourceActor, settings, sourceToken = null) {
+function collectActiveApplicationTargetRows(sourceActor, abilityFunction, settings, sourceToken = null) {
   const accepted = new Set(settings.targetGroups ?? []);
   const radiusFormula = String(settings?.radiusFormula ?? "").trim();
   const radiusMeters = radiusFormula
@@ -1825,12 +1881,18 @@ function collectActiveApplicationTargetRows(sourceActor, settings, sourceToken =
       const lineOfSightAllowed = !settings.wallsBlock
         || isSelf
         || (Boolean(sourcePlaceable) && hasActiveApplicationLineOfSight(sourcePlaceable, token));
-      const selectable = relationAllowed && selfAllowed && distanceAllowed && lineOfSightAllowed;
+      const executorAvailability = getAbilityTargetExecutorAvailability(token.actor, abilityFunction, token);
+      const selectable = relationAllowed
+        && selfAllowed
+        && distanceAllowed
+        && lineOfSightAllowed
+        && executorAvailability.available;
       let reason = "";
       if (!selfAllowed) reason = "активатор исключён";
       else if (!relationAllowed) reason = "тип цели не подходит";
       else if (!distanceAllowed) reason = sourcePlaceable ? "вне радиуса" : "нет токена активатора";
       else if (!lineOfSightAllowed) reason = "цель закрыта стеной";
+      else if (!executorAvailability.available) reason = executorAvailability.reason;
       return {
         token,
         actorUuid: token.actor.uuid,

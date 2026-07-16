@@ -36,6 +36,11 @@ export const ABILITY_ACTION_TARGET_MODES = Object.freeze({
   free: "free"
 });
 
+export const ABILITY_ACTION_EXECUTOR_MODES = Object.freeze({
+  source: "source",
+  targets: "targets"
+});
+
 export const ABILITY_ACTION_POINT_COST_MODES = Object.freeze({
   none: "none",
   fixed: "fixed",
@@ -147,9 +152,7 @@ export const ABILITY_ACTIVE_APPLICATION_SELECTION_MODES = Object.freeze({
   all: "all"
 });
 
-// Stable source id of the catalog entry supplied with the current world
-// preset.  Keeping the constructor keyed by source id means user-renamed
-// entries and localized names remain migratable without fuzzy matching.
+// Stable source id used by the one-off constructor helper below.
 export const ENCOURAGING_SPEECH_ABILITY_ID = "8RIZvth6Ul0Pjl0n";
 
 export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
@@ -375,6 +378,7 @@ export function createAbilityAction(type = "") {
     id: foundry.utils.randomID(),
     type,
     attackActionKeys: [ABILITY_ATTACK_ACTION_ALL],
+    executorMode: ABILITY_ACTION_EXECUTOR_MODES.source,
     targetMode: ABILITY_ACTION_TARGET_MODES.triggerActor,
     actionPointCostMode: ABILITY_ACTION_POINT_COST_MODES.none,
     fixedActionPointCost: 0,
@@ -549,51 +553,6 @@ export function buildEncouragingSpeechAbilityFunction(
   }])[0];
 }
 
-/**
- * Targeted and idempotent catalog migration.  It deliberately leaves every
- * field outside this one function (description, acquisition, category,
- * images and user metadata) untouched.
- */
-export function migrateEncouragingSpeechCatalog(
-  catalog = {},
-  skillSettings = createDefaultSkillSettings()
-) {
-  const migrated = cloneAbilityData(catalog);
-  const matches = [];
-  for (const category of migrated?.categories ?? []) {
-    for (const ability of category?.abilities ?? []) {
-      if (String(ability?.id ?? "").trim() === ENCOURAGING_SPEECH_ABILITY_ID) {
-        matches.push(ability);
-      }
-    }
-  }
-  if (matches.length !== 1) return { catalog, changed: false, matchCount: matches.length };
-
-  const ability = matches[0];
-  const functions = Array.isArray(ability?.system?.functions)
-    ? ability.system.functions
-    : Object.values(ability?.system?.functions ?? {});
-  const activeIndex = functions.findIndex(entry => entry?.type === ABILITY_FUNCTION_TYPES.activeApplication);
-  const current = activeIndex >= 0 ? functions[activeIndex] : {};
-  const nextFunction = buildEncouragingSpeechAbilityFunction(current, skillSettings);
-  const nextFunctions = activeIndex >= 0
-    ? functions.map((entry, index) => index === activeIndex ? nextFunction : entry)
-    : [...functions, nextFunction];
-  ability.system = {
-    ...(ability.system ?? {}),
-    functions: nextFunctions
-  };
-
-  const changed = JSON.stringify(catalog) !== JSON.stringify(migrated);
-  return { catalog: changed ? migrated : catalog, changed, matchCount: 1 };
-}
-
-function cloneAbilityData(value) {
-  if (globalThis.foundry?.utils?.deepClone) return foundry.utils.deepClone(value);
-  if (typeof globalThis.structuredClone === "function") return globalThis.structuredClone(value);
-  return JSON.parse(JSON.stringify(value));
-}
-
 export function getAbilitySourceId(item) {
   return String(item?.getFlag?.("fallout-maw", ABILITY_SOURCE_FLAG)?.id ?? item?.flags?.["fallout-maw"]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
 }
@@ -717,6 +676,7 @@ export function normalizeAbilityAction(value = {}) {
       id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
       type: "",
       attackActionKeys: [ABILITY_ATTACK_ACTION_ALL],
+      executorMode: ABILITY_ACTION_EXECUTOR_MODES.source,
       targetMode: ABILITY_ACTION_TARGET_MODES.triggerActor,
       actionPointCostMode: ABILITY_ACTION_POINT_COST_MODES.none,
       fixedActionPointCost: 0,
@@ -736,6 +696,9 @@ export function normalizeAbilityAction(value = {}) {
     : Object.values(ABILITY_ACTION_TARGET_MODES).includes(rawTargetMode)
       ? rawTargetMode
       : ABILITY_ACTION_TARGET_MODES.triggerActor;
+  const executorMode = Object.values(ABILITY_ACTION_EXECUTOR_MODES).includes(value?.executorMode)
+    ? value.executorMode
+    : ABILITY_ACTION_EXECUTOR_MODES.source;
   const actionPointCostMode = Object.values(ABILITY_ACTION_POINT_COST_MODES).includes(value?.actionPointCostMode)
     ? value.actionPointCostMode
     : ABILITY_ACTION_POINT_COST_MODES.none;
@@ -743,6 +706,7 @@ export function normalizeAbilityAction(value = {}) {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
     attackActionKeys: attackActionKeys.length ? attackActionKeys : [ABILITY_ATTACK_ACTION_ALL],
+    executorMode,
     targetMode,
     actionPointCostMode,
     fixedActionPointCost: Math.max(0, toInteger(value?.fixedActionPointCost)),

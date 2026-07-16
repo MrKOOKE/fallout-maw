@@ -1356,7 +1356,7 @@
             </select>
           </label>
           <label>
-            <span>Радиус, м (пусто — без ограничения)</span>
+            <span>Радиус, м</span>
             <input type="text" data-field="active.radiusFormula" value="{{activeApplicationSettings.radiusFormula}}" data-formula-autocomplete="all">
           </label>
           <div class="fallout-maw-inline-checkbox">
@@ -1480,7 +1480,11 @@
               {{/each}}
             </div>
           </div>
-          <div class="fallout-maw-list-grid two-columns fallout-maw-ability-action-main-settings">
+          <div class="fallout-maw-list-grid three-columns fallout-maw-ability-action-main-settings">
+            <label>
+              <span>{{localize "FALLOUTMAW.Ability.Actions.ExecutorMode"}}</span>
+              <select data-field="action.executorMode">{{#each executorModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+            </label>
             <label>
               <span>{{localize "FALLOUTMAW.Ability.Actions.TargetMode"}}</span>
               <select data-field="action.targetMode">{{#each targetModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
