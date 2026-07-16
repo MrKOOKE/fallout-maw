@@ -152,9 +152,6 @@ export const ABILITY_ACTIVE_APPLICATION_SELECTION_MODES = Object.freeze({
   all: "all"
 });
 
-// Stable source id used by the one-off constructor helper below.
-export const ENCOURAGING_SPEECH_ABILITY_ID = "8RIZvth6Ul0Pjl0n";
-
 export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
   self: "self",
   target: "target"
@@ -438,119 +435,6 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
       }
     }
   };
-}
-
-/**
- * Build the catalog function for "Encouraging Speech" entirely from the
- * configured skill list.  Existing ids are retained by semantic key so the
- * migration is stable and does not churn otherwise unchanged catalog data.
- */
-export function buildEncouragingSpeechAbilityFunction(
-  existingFunction = {},
-  skillSettings = createDefaultSkillSettings()
-) {
-  const skills = normalizeSkillSettings(skillSettings);
-  const functionId = String(existingFunction?.id ?? "").trim() || `${ENCOURAGING_SPEECH_ABILITY_ID}-application`;
-  const speechSkill = skills.find(skill => skill.key === "speech");
-  const speechVariable = String(speechSkill?.abbr ?? speechSkill?.key ?? "spe").trim() || "spe";
-  const bonusFormula = `10+${speechVariable}/10`;
-  const limitFormula = `1+${speechVariable}/50`;
-  const radiusFormula = `10+${speechVariable}/10`;
-
-  const existingChanges = Array.isArray(existingFunction?.changes)
-    ? existingFunction.changes
-    : Object.values(existingFunction?.changes ?? {});
-  const changesByKey = new Map(existingChanges
-    .map(change => [String(change?.key ?? "").trim(), change])
-    .filter(([key]) => key));
-  const changes = skills.map(skill => {
-    const key = `system.skills.${skill.key}.bonus`;
-    const current = changesByKey.get(key) ?? {};
-    return {
-      ...current,
-      id: String(current?.id ?? "").trim() || `${functionId}-${skill.key}-bonus`,
-      key,
-      type: ABILITY_CHANGE_TYPES.add,
-      value: bonusFormula,
-      phase: "initial",
-      priority: null
-    };
-  });
-
-  const existingSettings = existingFunction?.activeSettings ?? {};
-  const existingExcludeSelf = existingSettings?.excludeSelf === undefined
-    ? existingSettings?.includeSelf === undefined ? false : !normalizeBoolean(existingSettings.includeSelf, true)
-    : normalizeBoolean(existingSettings.excludeSelf, false);
-  const existingCosts = Array.isArray(existingSettings?.costs)
-    ? existingSettings.costs
-    : Object.values(existingSettings?.costs ?? {});
-  const costsByResource = new Map(existingCosts
-    .map(cost => [String(cost?.resourceKey ?? "").trim(), cost])
-    .filter(([key]) => key));
-  const buildCost = (resourceKey, formula, overloadAmount = 0, overloadDurationSeconds = 0) => {
-    const current = costsByResource.get(resourceKey) ?? {};
-    return {
-      ...current,
-      id: String(current?.id ?? "").trim() || `${functionId}-cost-${resourceKey}`,
-      resourceKey,
-      formula,
-      overloadAmount,
-      overloadDurationSeconds
-    };
-  };
-
-  const existingConditions = Array.isArray(existingFunction?.conditions)
-    ? existingFunction.conditions
-    : Object.values(existingFunction?.conditions ?? {});
-  const limited = existingConditions.find(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedChanges) ?? {};
-  const duration = existingConditions.find(condition => condition?.type === ABILITY_CONDITION_TYPES.duration) ?? {};
-  const preservedConditions = existingConditions.filter(condition => ![
-    ABILITY_CONDITION_TYPES.limitedChanges,
-    ABILITY_CONDITION_TYPES.duration
-  ].includes(condition?.type));
-
-  return normalizeAbilityFunctions([{
-    ...existingFunction,
-    id: functionId,
-    type: ABILITY_FUNCTION_TYPES.activeApplication,
-    fixedKey: "",
-    fixedSettings: {},
-    activeSettings: {
-      ...existingSettings,
-      costs: [
-        buildCost("power", "30", 60, 4 * 60 * 60),
-        buildCost("actionPoints", "5")
-      ],
-      targetMode: ABILITY_ACTIVE_APPLICATION_TARGET_MODES.others,
-      targetSelectionMode: ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.all,
-      targetGroups: ["ally"],
-      targetLimit: normalizeFormulaText(existingSettings?.targetLimit, "1"),
-      includeSelf: !existingExcludeSelf,
-      excludeSelf: existingExcludeSelf,
-      radiusFormula,
-      wallsBlock: false,
-      changeEvaluation: "source"
-    },
-    changes,
-    conditions: [
-      ...preservedConditions,
-      {
-        ...limited,
-        id: String(limited?.id ?? "").trim() || `${functionId}-limited-changes`,
-        groupId: "",
-        type: ABILITY_CONDITION_TYPES.limitedChanges,
-        limit: 1,
-        limitFormula
-      },
-      {
-        ...duration,
-        id: String(duration?.id ?? "").trim() || `${functionId}-duration`,
-        groupId: "",
-        type: ABILITY_CONDITION_TYPES.duration,
-        durationSeconds: 60 * 60
-      }
-    ]
-  }])[0];
 }
 
 export function getAbilitySourceId(item) {

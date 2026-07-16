@@ -4,7 +4,7 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "84335cfe66ae3f12bd0b47de986441480ebe2987ba3c7f13941fb16593674774",
+  "revision": "918008ccef1b191012b1c4868392373736938bf1a076c3fdcfe8975362427429",
   "updatedAt": "2026-07-16T08:30:47.079Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
@@ -3995,59 +3995,7 @@
                   "category": "Красноречие",
                   "cost": 3000,
                   "formula": "",
-                  "functions": [
-                    {
-                      "actions": [
-                        {
-                          "actionPointCostMode": "none",
-                          "actualActionPointCostPercent": 100,
-                          "attackActionKeys": [
-                            "meleeAttack"
-                          ],
-                          "executorMode": "targets",
-                          "fixedActionPointCost": 0,
-                          "id": "o0eHtaXDOfkfOP4M-application-weapon-attack",
-                          "targetMode": "free",
-                          "type": "weaponAttack"
-                        }
-                      ],
-                      "activeSettings": {
-                        "changeEvaluation": "target",
-                        "costs": [
-                          {
-                            "formula": "30",
-                            "id": "o0eHtaXDOfkfOP4M-application-cost-power",
-                            "overloadAmount": 60,
-                            "overloadDurationSeconds": 12,
-                            "resourceKey": "power"
-                          }
-                        ],
-                        "excludeSelf": true,
-                        "includeSelf": false,
-                        "name": "",
-                        "radiusFormula": "",
-                        "targetGroups": [
-                          "ally"
-                        ],
-                        "targetLimit": "2+spe/50",
-                        "targetMode": "others",
-                        "targetSelectionMode": "manual",
-                        "wallsBlock": false
-                      },
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "o0eHtaXDOfkfOP4M-application",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "activeApplication"
-                    }
-                  ]
+                  "functions": []
                 },
                 "visible": true
               },
@@ -4067,59 +4015,7 @@
                   "category": "Красноречие",
                   "cost": 0,
                   "formula": "",
-                  "functions": [
-                    {
-                      "actions": [
-                        {
-                          "actionPointCostMode": "none",
-                          "actualActionPointCostPercent": 100,
-                          "attackActionKeys": [
-                            "snapshot"
-                          ],
-                          "executorMode": "targets",
-                          "fixedActionPointCost": 0,
-                          "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
-                          "targetMode": "free",
-                          "type": "weaponAttack"
-                        }
-                      ],
-                      "activeSettings": {
-                        "changeEvaluation": "target",
-                        "costs": [
-                          {
-                            "formula": "30",
-                            "id": "hXDOkMGJjkPB7WBb-application-cost-power",
-                            "overloadAmount": 60,
-                            "overloadDurationSeconds": 12,
-                            "resourceKey": "power"
-                          }
-                        ],
-                        "excludeSelf": true,
-                        "includeSelf": false,
-                        "name": "",
-                        "radiusFormula": "",
-                        "targetGroups": [
-                          "ally"
-                        ],
-                        "targetLimit": "2+spe/50",
-                        "targetMode": "others",
-                        "targetSelectionMode": "manual",
-                        "wallsBlock": false
-                      },
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "hXDOkMGJjkPB7WBb-application",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "activeApplication"
-                    }
-                  ]
+                  "functions": []
                 },
                 "visible": true
               },

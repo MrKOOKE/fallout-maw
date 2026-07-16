@@ -628,6 +628,101 @@ export async function startCommandedWeaponAttacksAndWait({
     return createCommandedAttackResult({ reason: "invalidAttacks" });
   }
 
+  if (entries.every(canUseCommandedMultiRayCapture)) {
+    return startCommandedMultiRayAttacksAndWait(entries, {
+      label,
+      onCancel,
+      onBeforeExecute,
+      chainRef,
+      authorityContext
+    });
+  }
+
+  return captureCommandedWeaponAttacksSequentially(entries, {
+    label,
+    onCancel,
+    onBeforeExecute,
+    chainRef,
+    authorityContext
+  });
+}
+
+function canUseCommandedMultiRayCapture(entry = {}) {
+  const actionKey = String(entry?.actionKey ?? "");
+  if (MELEE_ACTION_KEYS.has(actionKey)) return actionKey === "meleeAttack";
+  return actionKey !== "aimedShot" && actionKey !== PUSH_ACTION_KEY;
+}
+
+function startCommandedMultiRayAttacksAndWait(entries = [], {
+  label = "Команда",
+  onCancel = null,
+  onBeforeExecute = null,
+  chainRef = null,
+  authorityContext = null
+} = {}) {
+  return new Promise(resolve => {
+    let settled = false;
+    let failureResult = null;
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      resolve(createCommandedAttackResult(result ?? {}));
+    };
+    const controller = startCommandedWeaponAttacks({
+      attacks: entries,
+      label,
+      chainRef,
+      authorityContext,
+      onCancel: () => {
+        onCancel?.();
+        finish({ started: true, cancelled: true, reason: "captureCancelled" });
+      },
+      onBeforeExecute: async selections => {
+        const preflight = await preflightCommandedWeaponAttackSelections(selections, {
+          chainRef,
+          authorityContext
+        });
+        if (!preflight.ok) {
+          if (preflight.reason) ui.notifications.warn(`${label}: атаки больше недоступны (${preflight.reason}).`);
+          failureResult = {
+            started: true,
+            attemptedCount: selections.length,
+            reason: preflight.reason || "preflightFailed"
+          };
+          return false;
+        }
+        if (typeof onBeforeExecute === "function" && (await onBeforeExecute()) === false) {
+          failureResult = {
+            started: true,
+            attemptedCount: selections.length,
+            reason: "commitFailed"
+          };
+          return false;
+        }
+        return true;
+      },
+      onComplete: result => {
+        if (failureResult) return finish(failureResult);
+        finish({
+          ...(result ?? {}),
+          started: true,
+          committed: true,
+          attemptedCount: Math.max(entries.length, toInteger(result?.attemptedCount))
+        });
+      }
+    });
+    if (!controller) finish({ reason: "invalidAttacks" });
+  });
+}
+
+async function captureCommandedWeaponAttacksSequentially(entries = [], {
+  label = "Команда",
+  onCancel = null,
+  onBeforeExecute = null,
+  chainRef = null,
+  authorityContext = null
+} = {}) {
+
   const selections = [];
   for (let index = 0; index < entries.length; index += 1) {
     const selection = await captureCommandedWeaponAttackSelection(entries[index], {
@@ -786,6 +881,7 @@ class CommandedWeaponAttackController {
     this.container.eventMode = "none";
     this.entries = entries.map((entry, index) => this.createEntry(entry, index));
     this.pointer = null;
+    this.lastPreviewBroadcastAt = 0;
     this.processing = false;
     this.destroyed = false;
     this.onCancel = typeof onCancel === "function" ? onCancel : null;
@@ -809,6 +905,9 @@ class CommandedWeaponAttackController {
     return {
       ...entry,
       index,
+      previewId: `${this.id}:${index}`,
+      previewBroadcasted: false,
+      lastBroadcastPreviewState: null,
       pointer: null,
       geometry: null,
       lockedGeometry: null,
@@ -843,6 +942,7 @@ class CommandedWeaponAttackController {
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.removeEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
+    this.clearBroadcastPreviews();
     this.container.destroy({ children: true });
     if (activeCommandedAttack === this) activeCommandedAttack = null;
   }
@@ -900,6 +1000,7 @@ class CommandedWeaponAttackController {
     entry.directionKey = selection.directionKey;
     entry.locked = true;
     this.drawEntry(entry, performance.now());
+    this.broadcastPreviews(true);
     const remaining = this.entries.filter(entry => !entry.locked).length;
     if (remaining > 0) ui.notifications.info(`${this.label}: осталось лучей ${remaining}.`);
     return true;
@@ -913,6 +1014,7 @@ class CommandedWeaponAttackController {
       }
       this.refreshEntry(entry, this.pointer);
     }
+    this.broadcastPreviews();
   }
 
   refreshEntry(entry, pointer) {
@@ -1023,6 +1125,48 @@ class CommandedWeaponAttackController {
     if (marker) drawFocusedTargetMarker(entry.focusedTargetMarker, marker, time);
   }
 
+  broadcastPreviews(force = false) {
+    if (this.destroyed) return;
+    for (const entry of this.entries) {
+      if (!entry.geometry && entry.previewBroadcasted) this.clearBroadcastPreview(entry);
+    }
+    const now = performance.now();
+    if (!force && now - this.lastPreviewBroadcastAt < PREVIEW_BROADCAST_INTERVAL_MS) return;
+    this.lastPreviewBroadcastAt = now;
+    for (const entry of this.entries) {
+      if (!entry.geometry) continue;
+      const focusedTarget = this.getEntryFocusedTarget(entry);
+      const previewState = {
+        geometry: serializeGeometry(entry.geometry),
+        targetMarkers: entry.targets
+          .map(target => getTargetMarkerPreviewData(target, entry.burstRanges))
+          .filter(Boolean),
+        focusedTargetMarker: focusedTarget ? getTargetCenterMarkerPosition(focusedTarget) : null,
+        processing: entry.locked
+      };
+      if (!force && isSamePreviewState(previewState, entry.lastBroadcastPreviewState)) continue;
+      entry.lastBroadcastPreviewState = previewState;
+      entry.previewBroadcasted = true;
+      broadcastAttackPreview({
+        action: "updatePreview",
+        attackId: entry.previewId,
+        sceneId: canvas.scene?.id ?? "",
+        ...previewState
+      });
+    }
+  }
+
+  clearBroadcastPreview(entry = null) {
+    if (!entry?.previewBroadcasted) return;
+    broadcastAttackPreview({ action: "clearPreview", attackId: entry.previewId });
+    entry.previewBroadcasted = false;
+    entry.lastBroadcastPreviewState = null;
+  }
+
+  clearBroadcastPreviews() {
+    for (const entry of this.entries) this.clearBroadcastPreview(entry);
+  }
+
   cancel() {
     if (this.processing || this.destroyed) return false;
     this.destroy();
@@ -1035,11 +1179,6 @@ class CommandedWeaponAttackController {
     if (this.processing) return false;
     this.processing = true;
     try {
-      if (typeof this.onBeforeExecute === "function" && (await this.onBeforeExecute()) === false) {
-        this.destroy();
-        this.onComplete?.(false);
-        return false;
-      }
       const selections = this.entries.map(entry => serializeCommandedAttackSelection({
         token: entry.token,
         weapon: entry.weapon,
@@ -1054,19 +1193,27 @@ class CommandedWeaponAttackController {
         directionKey: entry.directionKey,
         mode: entry.mode
       }));
+      if (typeof this.onBeforeExecute === "function" && (await this.onBeforeExecute(selections)) === false) {
+        this.destroy();
+        this.onComplete?.(createCommandedAttackResult({
+          started: true,
+          attemptedCount: selections.length,
+          reason: "beforeExecuteRejected"
+        }));
+        return false;
+      }
       this.destroy();
       const executed = await executeCommandedWeaponAttackSelections(selections, {
         chainRef: this.chainRef,
         authorityContext: this.authorityContext
       });
-      const complete = Number(executed?.executedCount) === selections.length;
-      this.onComplete?.(complete);
+      this.onComplete?.(executed);
       return executed;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Commanded weapon attacks failed`, error);
       ui.notifications.error(`${this.label}: атака не выполнена.`);
       this.destroy();
-      this.onComplete?.(false);
+      this.onComplete?.(createCommandedAttackResult({ started: true, reason: "executionError" }));
       return false;
     }
   }
@@ -1249,6 +1396,7 @@ async function processCommandedWeaponAttackSelections(selections = [], {
   const reactionCoordinator = createWeaponReactionCoordinator();
   const results = await Promise.allSettled(resolved.map(selection => executeCapturedWeaponAttack(selection, {
     skipActionPointCost: true,
+    reportedActionPointCost: authorityContext ? selection.actionPointCost : null,
     reactionCoordinator,
     chainRef
   })));
@@ -1373,6 +1521,15 @@ async function validateCommandedAbilityAuthority({
   }
   if (selectionTokenUuids.length !== targetTokenUuids.length) return false;
   if (targetTokenUuids.some(uuid => !selectionTokenUuids.includes(uuid))) return false;
+  const requestedPairs = new Set((selections ?? []).map((selection, index) => (
+    `${actionIds[index]}\u0000${String(selection?.tokenUuid ?? "").trim()}`
+  )));
+  if (requestedPairs.size !== selections.length) return false;
+  for (const actionId of new Set(actionIds)) {
+    for (const targetTokenUuid of targetTokenUuids) {
+      if (!requestedPairs.has(`${actionId}\u0000${targetTokenUuid}`)) return false;
+    }
+  }
 
   const settings = normalizeActiveApplicationSettings(abilityFunction.activeSettings);
   if (settings.targetMode !== "others") return false;
@@ -1557,6 +1714,7 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
 
 async function executeCapturedWeaponAttack(selection = {}, {
   skipActionPointCost = true,
+  reportedActionPointCost = null,
   reactionCoordinator = null,
   chainRef = null
 } = {}) {
@@ -1568,6 +1726,7 @@ async function executeCapturedWeaponAttack(selection = {}, {
 
   const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
     skipActionPointCost,
+    reportedActionPointCost,
     reactionCoordinator,
     chainRef
   });
@@ -1993,6 +2152,10 @@ class WeaponAttackController {
     this.chainRef = options.chainRef ?? null;
     this.damageHubOperationRef = String(options.damageHubOperationRef ?? "").trim();
     this.skipActionPointCost = Boolean(options.skipActionPointCost);
+    this.reportedActionPointCost = options.reportedActionPointCost === null
+      || options.reportedActionPointCost === undefined
+      ? null
+      : Math.max(0, toInteger(options.reportedActionPointCost));
     this.ignoreReactionLock = Boolean(options.ignoreReactionLock);
     this.suppressGenericEventReactions = Boolean(options.suppressGenericEventReactions);
     this.captureOnly = Boolean(options.captureOnly);
@@ -2080,9 +2243,11 @@ class WeaponAttackController {
 
   async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
     if (!attempted) return;
-    const actionPointCost = isCombatActionPointSpendingActive(this.token?.actor)
-      ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
-      : 0;
+    const actionPointCost = this.reportedActionPointCost ?? (
+      isCombatActionPointSpendingActive(this.token?.actor)
+        ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
+        : 0
+    );
     const outcome = {
       attackerUuid: this.token?.actor?.uuid ?? "",
       actorUuid: this.token?.actor?.uuid ?? "",
