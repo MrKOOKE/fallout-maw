@@ -9,18 +9,18 @@
       {{/each}}
     </select>
     <input type="text" value="{{search}}" placeholder="{{localize 'FALLOUTMAW.AnimationLibrary.Search'}}" data-animation-library-search>
-    <label>
-      <input type="checkbox" data-animation-library-toggle-option="allRanges" {{#if showAllRanges}}checked{{/if}}>
+    <div>
+      <input aria-label="{{localize 'FALLOUTMAW.AnimationLibrary.ShowAllRanges'}}" type="checkbox" data-animation-library-toggle-option="allRanges" {{#if showAllRanges}}checked{{/if}}>
       <span>{{localize "FALLOUTMAW.AnimationLibrary.ShowAllRanges"}}</span>
-    </label>
-    <label>
-      <input type="checkbox" data-animation-library-toggle-option="subLists" {{#if showSubLists}}checked{{/if}}>
+    </div>
+    <div>
+      <input aria-label="{{localize 'FALLOUTMAW.AnimationLibrary.ShowSubLists'}}" type="checkbox" data-animation-library-toggle-option="subLists" {{#if showSubLists}}checked{{/if}}>
       <span>{{localize "FALLOUTMAW.AnimationLibrary.ShowSubLists"}}</span>
-    </label>
-    <label>
-      <input type="checkbox" data-animation-library-toggle-option="listView" {{#if listView}}checked{{/if}}>
+    </div>
+    <div>
+      <input aria-label="{{localize 'FALLOUTMAW.AnimationLibrary.ListView'}}" type="checkbox" data-animation-library-toggle-option="listView" {{#if listView}}checked{{/if}}>
       <span>{{localize "FALLOUTMAW.AnimationLibrary.ListView"}}</span>
-    </label>
+    </div>
     <button type="button" data-action="refresh" title="{{localize 'FALLOUTMAW.AnimationLibrary.Refresh'}}"><i class="fa-solid fa-rotate"></i></button>
   </div>
 

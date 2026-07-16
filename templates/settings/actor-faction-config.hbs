@@ -23,10 +23,10 @@
       {{#each rows}}
       <div class="fallout-maw-settings-row {{#if isPrimary}}is-primary{{/if}}" data-faction-relation-row data-faction-name="{{name}}">
         <strong>{{name}}</strong>
-        <label class="fallout-maw-faction-belongs-field">
-          <input type="checkbox" data-field="belongs" {{#if belongs}}checked{{/if}}>
+        <div class="fallout-maw-faction-belongs-field">
+          <input type="checkbox" data-field="belongs" aria-label="{{localize 'FALLOUTMAW.Factions.Belongs'}}" {{#if belongs}}checked{{/if}}>
           <span>{{localize "FALLOUTMAW.Factions.Belongs"}}</span>
-        </label>
+        </div>
         <div class="fallout-maw-faction-relation-controls">
           <label><input type="radio" data-field="relation" name="relation-{{@index}}" value="ally" {{#if ally}}checked{{/if}} {{#if isPrimary}}disabled{{/if}}> {{localize "FALLOUTMAW.Factions.Ally"}}</label>
           <label><input type="radio" data-field="relation" name="relation-{{@index}}" value="neutral" {{#if neutral}}checked{{/if}} {{#if isPrimary}}disabled{{/if}}> {{localize "FALLOUTMAW.Factions.Neutral"}}</label>

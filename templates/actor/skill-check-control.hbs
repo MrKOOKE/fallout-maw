@@ -24,10 +24,10 @@
         <input type="number" name="criticalFailureBonus" value="{{control.criticalFailureBonus}}" step="1">
       </label>
     </div>
-    <label class="fallout-maw-skill-check-control-check">
+    <div class="fallout-maw-skill-check-control-check">
       <span>{{localize "FALLOUTMAW.SkillCheckControl.ResetModifiersAfterUse"}}</span>
-      <input type="checkbox" name="resetModifiersAfterUse" {{checked control.resetModifiersAfterUse}}>
-    </label>
+      <input aria-label="{{localize 'FALLOUTMAW.SkillCheckControl.ResetModifiersAfterUse'}}" type="checkbox" name="resetModifiersAfterUse" {{checked control.resetModifiersAfterUse}}>
+    </div>
   </div>
 
   <div class="fallout-maw-skill-check-control-section">
@@ -40,10 +40,10 @@
       </label>
       {{/each}}
     </div>
-    <label class="fallout-maw-skill-check-control-check">
+    <div class="fallout-maw-skill-check-control-check">
       <span>{{localize "FALLOUTMAW.SkillCheckControl.ResetResultAfterUse"}}</span>
-      <input type="checkbox" name="resetResultAfterUse" {{checked control.resetResultAfterUse}}>
-    </label>
+      <input aria-label="{{localize 'FALLOUTMAW.SkillCheckControl.ResetResultAfterUse'}}" type="checkbox" name="resetResultAfterUse" {{checked control.resetResultAfterUse}}>
+    </div>
   </div>
 
   <div class="fallout-maw-skill-check-control-section">
@@ -56,10 +56,10 @@
       </label>
       {{/each}}
     </div>
-    <label class="fallout-maw-skill-check-control-check">
+    <div class="fallout-maw-skill-check-control-check">
       <span>{{localize "FALLOUTMAW.SkillCheckControl.ResetEdgeModeAfterUse"}}</span>
-      <input type="checkbox" name="resetEdgeModeAfterUse" {{checked control.resetEdgeModeAfterUse}}>
-    </label>
+      <input aria-label="{{localize 'FALLOUTMAW.SkillCheckControl.ResetEdgeModeAfterUse'}}" type="checkbox" name="resetEdgeModeAfterUse" {{checked control.resetEdgeModeAfterUse}}>
+    </div>
   </div>
 
   <footer>

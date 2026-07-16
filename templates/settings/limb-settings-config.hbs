@@ -22,10 +22,10 @@
         <span>Доп. сложность поражения, % от уклонения</span>
         <input type="number" name="limb.aimedDifficultyPercent" value="{{limb.aimedDifficultyPercent}}" step="1">
       </label>
-      <label>
+      <div>
         <span>Критическая часть тела</span>
-        <input type="checkbox" name="limb.critical" {{#if limb.critical}}checked{{/if}}>
-      </label>
+        <input aria-label="Критическая часть тела" type="checkbox" name="limb.critical" {{#if limb.critical}}checked{{/if}}>
+      </div>
     </div>
   </section>
 

@@ -4,10 +4,10 @@
     <div class="fallout-maw-header-fields">
       <input class="fallout-maw-title-input" name="name" type="text" value="{{source.name}}" placeholder="{{localize 'FALLOUTMAW.Effects.Name'}}">
       <div class="fallout-maw-active-effect-summary">
-        <label class="checkbox">
-          <input type="checkbox" name="disabled" {{checked source.disabled}}>
+        <div class="checkbox">
+          <input type="checkbox" name="disabled" aria-label="{{localize 'FALLOUTMAW.Effects.Disabled'}}" {{checked source.disabled}}>
           <span>{{localize "FALLOUTMAW.Effects.Disabled"}}</span>
-        </label>
+        </div>
         <label>
           <span>{{localize "FALLOUTMAW.Effects.Kind"}}</span>
           <select name="flags.fallout-maw.kind">

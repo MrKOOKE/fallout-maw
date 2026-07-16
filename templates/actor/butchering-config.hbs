@@ -8,10 +8,10 @@
         {{/each}}
       </select>
     </label>
-    <label class="fallout-maw-checkbox-cell">
-      <input type="checkbox" name="completed" {{#if config.completed}}checked{{/if}}>
+    <div class="fallout-maw-checkbox-cell">
+      <input aria-label="Цель разделана" type="checkbox" name="completed" {{#if config.completed}}checked{{/if}}>
       <span>Цель разделана</span>
-    </label>
+    </div>
     <p class="notes">Снятие отметки разрешает повторную разделку. Созданный ранее контейнер и его содержимое сохраняются.</p>
   </section>
 

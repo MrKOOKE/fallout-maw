@@ -102,14 +102,14 @@
         <span>Стоимость ОИ</span>
         <input type="number" data-field="cost" value="{{system.cost}}" min="0" step="1">
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox">
         <span>Только свободные ОИ</span>
-        <input type="checkbox" data-field="onlyFree" {{checked onlyFree}}>
-      </label>
-      <label class="fallout-maw-inline-checkbox">
+        <input aria-label="Только свободные ОИ" type="checkbox" data-field="onlyFree" {{checked onlyFree}}>
+      </div>
+      <div class="fallout-maw-inline-checkbox">
         <span>Только ручное исследование</span>
-        <input type="checkbox" data-field="onlyManual" {{checked onlyManual}}>
-      </label>
+        <input aria-label="Только ручное исследование" type="checkbox" data-field="onlyManual" {{checked onlyManual}}>
+      </div>
       <label>
         <span>Навык ручного исследования</span>
         <select data-field="researchSkillKey">
@@ -919,10 +919,10 @@
             <span>Бонус характеристик</span>
             <input type="text" data-field="fixed.toTheEnd.characteristicBonusFormula" value="{{fixedToTheEndSettings.characteristicBonusFormula}}" data-formula-autocomplete="all">
           </label>
-          <label>
+          <div>
             <span>Подавлять травмы</span>
-            <input type="checkbox" data-field="fixed.toTheEnd.suppressTraumas" {{#if fixedToTheEndSettings.suppressTraumas}}checked{{/if}}>
-          </label>
+            <input type="checkbox" data-field="fixed.toTheEnd.suppressTraumas" aria-label="Подавлять травмы" {{#if fixedToTheEndSettings.suppressTraumas}}checked{{/if}}>
+          </div>
         </div>
         <div class="fallout-maw-fixed-settings-row">
           <strong>Навыки получающие преимущество</strong>
@@ -1359,10 +1359,10 @@
             <span>Радиус, м (пусто — без ограничения)</span>
             <input type="text" data-field="active.radiusFormula" value="{{activeApplicationSettings.radiusFormula}}" data-formula-autocomplete="all">
           </label>
-          <label class="fallout-maw-inline-checkbox">
+          <div class="fallout-maw-inline-checkbox">
             <span>Блокировать стенами</span>
-            <input type="checkbox" data-field="active.wallsBlock" {{checked activeApplicationSettings.wallsBlock}}>
-          </label>
+            <input aria-label="Блокировать стенами" type="checkbox" data-field="active.wallsBlock" {{checked activeApplicationSettings.wallsBlock}}>
+          </div>
           <label>
             <span>Формулы изменений</span>
             <select data-field="active.changeEvaluation">
@@ -1380,20 +1380,20 @@
             <input type="hidden" data-field="active.targetLimit" value="{{activeApplicationSettings.targetLimit}}">
             {{/if}}
           </label>
-          <label class="fallout-maw-inline-checkbox">
+          <div class="fallout-maw-inline-checkbox">
             <span>Исключить себя</span>
-            <input type="checkbox" data-field="active.excludeSelf" {{checked activeApplicationSettings.excludeSelf}}>
-          </label>
+            <input aria-label="Исключить себя" type="checkbox" data-field="active.excludeSelf" {{checked activeApplicationSettings.excludeSelf}}>
+          </div>
           <div class="fallout-maw-item-use-category-field">
             <div class="fallout-maw-item-use-category-header">
               <span>Типы целей</span>
             </div>
             <div class="fallout-maw-item-use-category-list">
               {{#each activeApplicationSettings.targetGroupChoices}}
-              <label class="fallout-maw-checkbox-row">
+              <div class="fallout-maw-checkbox-row">
                 <span>{{label}}</span>
-                <input type="checkbox" data-field="active.targetGroup" value="{{value}}" {{checked selected}}>
-              </label>
+                <input aria-label="{{label}}" type="checkbox" data-field="active.targetGroup" value="{{value}}" {{checked selected}}>
+              </div>
               {{/each}}
             </div>
           </div>
@@ -1556,10 +1556,10 @@
             <div class="fallout-maw-ability-condition-fields">
 
               {{#if isEventReaction}}
-              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
+              <div class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
-                <input type="checkbox" data-field="conditionCombatOnly" {{checked combatOnly}}>
-              </label>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.CombatOnly'}}" type="checkbox" data-field="conditionCombatOnly" {{checked combatOnly}}>
+              </div>
               <label class="fallout-maw-event-reaction-mode">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
                 <select data-field="conditionReactionMode">

@@ -14,10 +14,10 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <label class="fallout-maw-section-toggle">
-        <input type="checkbox" name="settings.bleeding.enabled" {{checked settings.bleeding.enabled}}>
+      <div class="fallout-maw-section-toggle">
+        <input aria-label="Кровотечение" type="checkbox" name="settings.bleeding.enabled" {{checked settings.bleeding.enabled}}>
         <span>Кровотечение</span>
-      </label>
+      </div>
     </header>
     <div class="fallout-maw-list-grid two-columns">
       <label>
@@ -41,10 +41,10 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <label class="fallout-maw-section-toggle">
-        <input type="checkbox" name="settings.equipmentConditionDamage.enabled" {{checked settings.equipmentConditionDamage.enabled}}>
+      <div class="fallout-maw-section-toggle">
+        <input aria-label="Повреждение защитного снаряжения" type="checkbox" name="settings.equipmentConditionDamage.enabled" {{checked settings.equipmentConditionDamage.enabled}}>
         <span>Повреждение защитного снаряжения</span>
-      </label>
+      </div>
     </header>
     <label>
       <span>Формула износа</span>
@@ -55,10 +55,10 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <label class="fallout-maw-section-toggle">
-        <input type="checkbox" name="settings.needIncrease.enabled" {{checked settings.needIncrease.enabled}}>
+      <div class="fallout-maw-section-toggle">
+        <input aria-label="Увеличение потребности" type="checkbox" name="settings.needIncrease.enabled" {{checked settings.needIncrease.enabled}}>
         <span>Увеличение потребности</span>
-      </label>
+      </div>
     </header>
     <div class="fallout-maw-list-grid two-columns">
       <label>
@@ -73,19 +73,19 @@
         <span>% конвертации</span>
         <input type="number" name="settings.needIncrease.percent" value="{{settings.needIncrease.percent}}" min="0" step="1">
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox">
         <span>Не наносить урон по ОЗ</span>
-        <input type="checkbox" name="settings.needIncrease.preventHealthDamage" {{checked settings.needIncrease.preventHealthDamage}}>
-      </label>
+        <input aria-label="Не наносить урон по ОЗ" type="checkbox" name="settings.needIncrease.preventHealthDamage" {{checked settings.needIncrease.preventHealthDamage}}>
+      </div>
     </div>
   </section>
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <label class="fallout-maw-section-toggle">
-        <input type="checkbox" name="settings.periodic.enabled" {{checked settings.periodic.enabled}}>
+      <div class="fallout-maw-section-toggle">
+        <input aria-label="Периодический урон" type="checkbox" name="settings.periodic.enabled" {{checked settings.periodic.enabled}}>
         <span>Периодический урон</span>
-      </label>
+      </div>
     </header>
     <div class="fallout-maw-list-grid two-columns">
       <label>
@@ -117,10 +117,10 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <label class="fallout-maw-section-toggle">
-        <input type="checkbox" name="settings.resourceLimit.enabled" {{checked settings.resourceLimit.enabled}}>
+      <div class="fallout-maw-section-toggle">
+        <input aria-label="Ограничение ресурсов" type="checkbox" name="settings.resourceLimit.enabled" {{checked settings.resourceLimit.enabled}}>
         <span>Ограничение ресурсов</span>
-      </label>
+      </div>
       <button type="button" data-action="addResourceLimit"><i class="fa-solid fa-plus"></i> Добавить ресурс</button>
     </header>
     <div class="fallout-maw-list-grid two-columns">

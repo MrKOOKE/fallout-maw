@@ -209,14 +209,14 @@
         <span>Стоимость ОИ</span>
         <input type="number" name="system.cost" value="{{system.cost}}" min="0" step="1">
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox">
         <span>Только свободные ОИ</span>
-        <input type="checkbox" name="system.acquisition.onlyFree" data-ability-only-free {{checked isAbilityOnlyFree}}>
-      </label>
-      <label class="fallout-maw-inline-checkbox">
+        <input aria-label="Только свободные ОИ" type="checkbox" name="system.acquisition.onlyFree" data-ability-only-free {{checked isAbilityOnlyFree}}>
+      </div>
+      <div class="fallout-maw-inline-checkbox">
         <span>Только ручное исследование</span>
-        <input type="checkbox" name="system.acquisition.onlyManual" data-ability-only-manual {{checked isAbilityOnlyManual}}>
-      </label>
+        <input aria-label="Только ручное исследование" type="checkbox" name="system.acquisition.onlyManual" data-ability-only-manual {{checked isAbilityOnlyManual}}>
+      </div>
       <label>
         <span>Навык ручного исследования</span>
         <select name="system.acquisition.skillKey">
@@ -1074,10 +1074,10 @@
             <span>Бонус характеристик</span>
             <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.characteristicBonusFormula" value="{{fixedToTheEndSettings.characteristicBonusFormula}}" data-formula-autocomplete="all">
           </label>
-          <label>
+          <div>
             <span>Подавлять травмы</span>
-            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.fixedSettings.suppressTraumas" data-fixed-to-the-end-suppress-traumas {{checked fixedToTheEndSettings.suppressTraumas}}>
-          </label>
+            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.fixedSettings.suppressTraumas" data-fixed-to-the-end-suppress-traumas aria-label="Подавлять травмы" {{checked fixedToTheEndSettings.suppressTraumas}}>
+          </div>
         </div>
         <div class="fallout-maw-fixed-settings-row">
           <strong>Навыки получающие преимущество</strong>
@@ -1520,10 +1520,10 @@
             <span>Радиус, м</span>
             <input type="text" name="{{functionPath}}.{{functionIndex}}.activeSettings.radiusFormula" value="{{activeApplicationSettings.radiusFormula}}" data-formula-autocomplete="all">
           </label>
-          <label class="fallout-maw-inline-checkbox">
+          <div class="fallout-maw-inline-checkbox">
             <span>Блокировать стенами</span>
-            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.wallsBlock" data-active-application-walls-block {{checked activeApplicationSettings.wallsBlock}}>
-          </label>
+            <input aria-label="Блокировать стенами" type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.wallsBlock" data-active-application-walls-block {{checked activeApplicationSettings.wallsBlock}}>
+          </div>
           <label>
             <span>Формулы изменений</span>
             <select name="{{functionPath}}.{{functionIndex}}.activeSettings.changeEvaluation">
@@ -1541,20 +1541,20 @@
             <input type="hidden" name="{{functionPath}}.{{functionIndex}}.activeSettings.targetLimit" value="{{activeApplicationSettings.targetLimit}}">
             {{/if}}
           </label>
-          <label class="fallout-maw-inline-checkbox">
+          <div class="fallout-maw-inline-checkbox">
             <span>Исключить себя</span>
-            <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" data-active-application-exclude-self {{checked activeApplicationSettings.excludeSelf}}>
-          </label>
+            <input aria-label="Исключить себя" type="checkbox" name="{{functionPath}}.{{functionIndex}}.activeSettings.excludeSelf" data-active-application-exclude-self {{checked activeApplicationSettings.excludeSelf}}>
+          </div>
           <div class="fallout-maw-item-use-category-field">
             <div class="fallout-maw-item-use-category-header">
               <span>Типы целей</span>
             </div>
             <div class="fallout-maw-item-use-category-list">
               {{#each activeApplicationSettings.targetGroupChoices}}
-              <label class="fallout-maw-checkbox-row">
+              <div class="fallout-maw-checkbox-row">
                 <span>{{label}}</span>
-                <input type="checkbox" name="{{../functionPath}}.{{../functionIndex}}.activeSettings.targetGroups.{{@index}}" value="{{value}}" data-active-application-target-group {{checked selected}}>
-              </label>
+                <input aria-label="{{label}}" type="checkbox" name="{{../functionPath}}.{{../functionIndex}}.activeSettings.targetGroups.{{@index}}" value="{{value}}" data-active-application-target-group {{checked selected}}>
+              </div>
               {{/each}}
             </div>
           </div>
@@ -1707,10 +1707,10 @@
             {{/if}}
             <div class="fallout-maw-ability-condition-fields" data-ability-trigger-cost-ui>
               {{#if isEventReaction}}
-              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
+              <div class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
-                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
-              </label>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.CombatOnly'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
+              </div>
               <label class="fallout-maw-event-reaction-mode">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
                 <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.reactionMode" data-ability-event-reaction-mode>
@@ -2390,10 +2390,10 @@
       </div>
     </div>
     {{#if hasConditionFunction}}
-    <label class="fallout-maw-checkbox-row">
+    <div class="fallout-maw-checkbox-row">
       <span>Использовать порог ослабления?</span>
-      <input type="checkbox" name="system.functions.freeSettings.useConditionWeakening" data-free-settings-condition-weakening {{checked system.functions.freeSettings.useConditionWeakening}}>
-    </label>
+      <input aria-label="Использовать порог ослабления?" type="checkbox" name="system.functions.freeSettings.useConditionWeakening" data-free-settings-condition-weakening {{checked system.functions.freeSettings.useConditionWeakening}}>
+    </div>
     {{/if}}
   </section>
 
@@ -2580,10 +2580,10 @@
               {{/if}}
 
               {{#if isEventReaction}}
-              <label class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
+              <div class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
-                <input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
-              </label>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.CombatOnly'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
+              </div>
               <label class="fallout-maw-event-reaction-mode">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
                 <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.reactionMode" data-ability-event-reaction-mode>
@@ -3265,10 +3265,10 @@
         <span>Безусловный бонус к сложности</span>
         <input type="number" name="system.functions.constructPart.aimedDifficultyBonus" value="{{system.functions.constructPart.aimedDifficultyBonus}}" step="1">
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox">
         <span>Критическая деталь</span>
-        <input type="checkbox" name="system.functions.constructPart.critical" data-construct-part-critical {{checked system.functions.constructPart.critical}}>
-      </label>
+        <input aria-label="Критическая деталь" type="checkbox" name="system.functions.constructPart.critical" data-construct-part-critical {{checked system.functions.constructPart.critical}}>
+      </div>
     </div>
     <div class="fallout-maw-panel-header subsection">
       <h3>{{localize "FALLOUTMAW.Item.ProsthesisBlockedEffects"}}</h3>
@@ -3384,10 +3384,10 @@
         <span>{{localize "FALLOUTMAW.Item.FirstAidHealing"}}</span>
         <input type="number" name="system.functions.firstAid.healing" value="{{system.functions.firstAid.healing}}" min="0" step="1">
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox">
         <span>{{localize "FALLOUTMAW.Item.FirstAidHealingPercent"}}</span>
-        <input type="checkbox" name="system.functions.firstAid.healingIsPercentage" {{checked system.functions.firstAid.healingIsPercentage}}>
-      </label>
+        <input aria-label="{{localize 'FALLOUTMAW.Item.FirstAidHealingPercent'}}" type="checkbox" name="system.functions.firstAid.healingIsPercentage" {{checked system.functions.firstAid.healingIsPercentage}}>
+      </div>
       <label>
         <span>{{localize "FALLOUTMAW.Item.FirstAidActionPointCost"}}</span>
         <input type="number" name="system.functions.firstAid.actionPointCost" value="{{system.functions.firstAid.actionPointCost}}" min="0" step="1">
@@ -3726,10 +3726,10 @@
       <h2>{{localize "FALLOUTMAW.Item.FunctionOneTimeUse"}}</h2>
       <button type="button" data-remove-item-function="oneTimeUse" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
     </div>
-    <label class="fallout-maw-checkbox-row">
+    <div class="fallout-maw-checkbox-row">
       <span>{{localize "FALLOUTMAW.Item.OneTimeUseRepeatBlocked"}}</span>
-      <input type="checkbox" name="system.functions.oneTimeUse.repeatApplicationBlocked" {{checked system.functions.oneTimeUse.repeatApplicationBlocked}}>
-    </label>
+      <input aria-label="{{localize 'FALLOUTMAW.Item.OneTimeUseRepeatBlocked'}}" type="checkbox" name="system.functions.oneTimeUse.repeatApplicationBlocked" {{checked system.functions.oneTimeUse.repeatApplicationBlocked}}>
+    </div>
     <section class="fallout-maw-magazine-source-section">
       <div class="fallout-maw-panel-header">
         <h3>{{localize "FALLOUTMAW.Item.OneTimeUseRecipeKnowledge"}}</h3>
@@ -4044,10 +4044,10 @@
           {{/each}}
         </select>
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox">
         <span>{{localize "FALLOUTMAW.Item.ProsthesisBreakShockResistant"}}</span>
-        <input type="checkbox" name="system.functions.prosthesis.breakShockResistant" {{checked system.functions.prosthesis.breakShockResistant}}>
-      </label>
+        <input aria-label="{{localize 'FALLOUTMAW.Item.ProsthesisBreakShockResistant'}}" type="checkbox" name="system.functions.prosthesis.breakShockResistant" {{checked system.functions.prosthesis.breakShockResistant}}>
+      </div>
     </div>
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.ProsthesisLimbs"}}</h3>
@@ -5034,10 +5034,10 @@
           <section class="fallout-maw-weapon-action-mode">
             <div class="fallout-maw-weapon-action-mode-header">
               <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeThrust"}}</h4>
-              <label>
-                <input type="checkbox" name="{{../path}}.{{key}}.thrust.enabled" data-weapon-attack-mode-enabled="thrust" {{checked thrust.enabled}}>
+              <div>
+                <input aria-label="{{localize 'FALLOUTMAW.Effects.Enable'}}" type="checkbox" name="{{../path}}.{{key}}.thrust.enabled" data-weapon-attack-mode-enabled="thrust" {{checked thrust.enabled}}>
                 <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
-              </label>
+              </div>
             </div>
             <div class="fallout-maw-list-grid three-columns">
               <label>
@@ -5057,10 +5057,10 @@
           <section class="fallout-maw-weapon-action-mode">
             <div class="fallout-maw-weapon-action-mode-header">
               <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeSwing"}}</h4>
-              <label>
-                <input type="checkbox" name="{{../path}}.{{key}}.swing.enabled" data-weapon-attack-mode-enabled="swing" {{checked swing.enabled}}>
+              <div>
+                <input aria-label="{{localize 'FALLOUTMAW.Effects.Enable'}}" type="checkbox" name="{{../path}}.{{key}}.swing.enabled" data-weapon-attack-mode-enabled="swing" {{checked swing.enabled}}>
                 <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
-              </label>
+              </div>
             </div>
             <div class="fallout-maw-list-grid three-columns">
               <label>
@@ -5269,10 +5269,10 @@
           <input type="number" value="{{craft.selectedNode.quantity}}" min="1" step="1" data-craft-node-quantity="{{craft.selectedNode.id}}">
         </label>
         {{#if craft.selectedNode.hasToolFunction}}
-        <label class="fallout-maw-inline-checkbox">
+        <div class="fallout-maw-inline-checkbox">
           <span>Использовать как предмет</span>
-          <input type="checkbox" data-craft-node-tool-use-as-item="{{craft.selectedNode.id}}" {{checked craft.selectedNode.toolUseAsItem}}>
-        </label>
+          <input aria-label="Использовать как предмет" type="checkbox" data-craft-node-tool-use-as-item="{{craft.selectedNode.id}}" {{checked craft.selectedNode.toolUseAsItem}}>
+        </div>
         {{/if}}
         {{#if craft.selectedNode.isToolRequirement}}
         <p>{{craft.selectedNode.toolRequirementLabel}}</p>
@@ -5311,10 +5311,10 @@
         <h3>Связь</h3>
         <p>{{craft.selectedLink.title}}</p>
         {{#if craft.selectedLink.canSetFailureResult}}
-        <label class="fallout-maw-inline-checkbox">
+        <div class="fallout-maw-inline-checkbox">
           <span>Результат при провале</span>
-          <input type="checkbox" data-craft-link-failure-result="{{craft.selectedLink.id}}" {{checked craft.selectedLink.failureResult}}>
-        </label>
+          <input aria-label="Результат при провале" type="checkbox" data-craft-link-failure-result="{{craft.selectedLink.id}}" {{checked craft.selectedLink.failureResult}}>
+        </div>
         {{/if}}
         {{#unless craft.selectedLink.failureResult}}
         <label>
@@ -5329,10 +5329,10 @@
           <span>Сложность</span>
           <input type="number" value="{{craft.selectedLink.difficulty}}" min="0" step="1" data-craft-link-difficulty="{{craft.selectedLink.id}}">
         </label>
-        <label class="fallout-maw-inline-checkbox">
+        <div class="fallout-maw-inline-checkbox">
           <span>Без проверок</span>
-          <input type="checkbox" data-craft-link-no-check="{{craft.selectedLink.id}}" {{checked craft.selectedLink.noCheck}}>
-        </label>
+          <input aria-label="Без проверок" type="checkbox" data-craft-link-no-check="{{craft.selectedLink.id}}" {{checked craft.selectedLink.noCheck}}>
+        </div>
         {{/unless}}
         <button type="button" data-craft-delete-link="{{craft.selectedLink.id}}">
           <i class="fa-solid fa-trash"></i> Удалить

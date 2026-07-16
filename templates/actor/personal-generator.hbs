@@ -2,10 +2,10 @@
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>Персональный генератор</h2>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="enabled" {{#if config.enabled}}checked{{/if}}>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Включить" type="checkbox" name="enabled" {{#if config.enabled}}checked{{/if}}>
         <span>Включить</span>
-      </label>
+      </div>
     </header>
     <div class="fallout-maw-pg-token-link-row">
       <span>Статус прототипа токена: <strong>{{prototypeTokenLink.status}}</strong></span>
@@ -21,18 +21,18 @@
       <button type="button" data-action="previewNames"><i class="fa-solid fa-dice"></i> Предпросмотр</button>
     </header>
     <div class="fallout-maw-pg-grid">
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="name.enabled" {{#if config.name.enabled}}checked{{/if}}>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Генерировать имя" type="checkbox" name="name.enabled" {{#if config.name.enabled}}checked{{/if}}>
         <span>Генерировать имя</span>
-      </label>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="name.appendToTokenName" {{#if config.name.appendToTokenName}}checked{{/if}}>
+      </div>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Применять к имени токена" type="checkbox" name="name.appendToTokenName" {{#if config.name.appendToTokenName}}checked{{/if}}>
         <span>Применять к имени токена</span>
-      </label>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="name.overwriteBaseName" {{#if config.name.overwriteBaseName}}checked{{/if}}>
+      </div>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Заменять базовое имя" type="checkbox" name="name.overwriteBaseName" {{#if config.name.overwriteBaseName}}checked{{/if}}>
         <span>Заменять базовое имя</span>
-      </label>
+      </div>
       <label>
         <span>Имен в предпросмотре</span>
         <input type="number" name="name.countPreview" value="{{config.name.countPreview}}" min="1" max="30" step="1">
@@ -70,10 +70,10 @@
         <option value="add" {{#unless (eq config.currency.mode "set")}}selected{{/unless}}>Добавить к базовой</option>
         <option value="set" {{#if (eq config.currency.mode "set")}}selected{{/if}}>Заменить значением</option>
       </select>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Включить" type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
         <span>Включить</span>
-      </label>
+      </div>
     </header>
     <div class="fallout-maw-settings-table fallout-maw-pg-currency-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
@@ -97,17 +97,17 @@
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>Изображения</h2>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="images.enabled" {{#if config.images.enabled}}checked{{/if}}>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Включить" type="checkbox" name="images.enabled" {{#if config.images.enabled}}checked{{/if}}>
         <span>Включить</span>
-      </label>
+      </div>
     </header>
 
     <div class="fallout-maw-pg-image-options">
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="images.includeCurrent" {{#if config.images.includeCurrent}}checked{{/if}}>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Исходное изображение участвует в случайной выдаче" type="checkbox" name="images.includeCurrent" {{#if config.images.includeCurrent}}checked{{/if}}>
         <span>Исходное изображение участвует в случайной выдаче</span>
-      </label>
+      </div>
     </div>
 
     <div class="fallout-maw-pg-image-list">
@@ -130,10 +130,10 @@
   <section class="fallout-maw-panel fallout-maw-pg-items-section">
     <header class="fallout-maw-panel-header">
       <h2>Предметы</h2>
-      <label class="fallout-maw-inline-check">
-        <input type="checkbox" name="items.enabled" {{#if config.items.enabled}}checked{{/if}}>
+      <div class="fallout-maw-inline-check">
+        <input aria-label="Включить" type="checkbox" name="items.enabled" {{#if config.items.enabled}}checked{{/if}}>
         <span>Включить</span>
-      </label>
+      </div>
     </header>
 
     <div class="fallout-maw-pg-block-list">

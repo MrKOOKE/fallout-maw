@@ -992,12 +992,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           actor: escapeHTML(this.actor.name),
           count: inventoryItemIds.length
         })}</p>
-        <label class="checkbox fallout-maw-inventory-clear-equipped-option">
+        <div class="checkbox fallout-maw-inventory-clear-equipped-option">
           <span>${game.i18n.format("FALLOUTMAW.Actor.ClearInventoryEquipped", {
             count: equippedItemIds.length
           })}</span>
-          <input type="checkbox" name="deleteEquipped" ${equippedItemIds.length ? "" : "disabled"}>
-        </label>
+          <input type="checkbox" name="deleteEquipped" aria-label="${escapeAttribute(game.i18n.format("FALLOUTMAW.Actor.ClearInventoryEquipped", {
+            count: equippedItemIds.length
+          }))}" ${equippedItemIds.length ? "" : "disabled"}>
+        </div>
       `,
       yes: {
         icon: "fa-solid fa-trash",

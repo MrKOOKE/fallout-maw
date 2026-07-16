@@ -9,10 +9,10 @@
 
   <fieldset>
     <legend>{{localize "BEHAVIOR.SECTIONS.status"}}</legend>
-    <label>
+    <div>
       <span>{{localize "DOCUMENT.FIELDS.disabled.label"}}</span>
-      <input type="checkbox" name="disabled" {{checked source.disabled}}>
-    </label>
+      <input aria-label="{{localize 'DOCUMENT.FIELDS.disabled.label'}}" type="checkbox" name="disabled" {{checked source.disabled}}>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -64,10 +64,10 @@
         <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.RadiusDeltaMeters"}}</span>
         <input type="number" name="system.radiusDeltaMeters" value="{{system.radiusDeltaMeters}}" step="1">
       </label>
-      <label>
+      <div>
         <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DeleteRegionWhenExpired"}}</span>
-        <input type="checkbox" name="system.deleteRegionWhenExpired" {{checked system.deleteRegionWhenExpired}}>
-      </label>
+        <input aria-label="{{localize 'FALLOUTMAW.RegionBehavior.PeriodicDamage.DeleteRegionWhenExpired'}}" type="checkbox" name="system.deleteRegionWhenExpired" {{checked system.deleteRegionWhenExpired}}>
+      </div>
     </div>
   </fieldset>
 </div>

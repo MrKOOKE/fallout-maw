@@ -16,10 +16,10 @@
           {{/each}}
         </select>
       </label>
-      <label>
+      <div>
         <span>Автоматическое обнаружение скрытности</span>
-        <input type="checkbox" name="autoDetection.enabled" {{#if settings.autoDetection.enabled}}checked{{/if}}>
-      </label>
+        <input aria-label="Автоматическое обнаружение скрытности" type="checkbox" name="autoDetection.enabled" {{#if settings.autoDetection.enabled}}checked{{/if}}>
+      </div>
       <label>
         <span>Повторная проверка внутри зоны</span>
         <input type="text" name="autoDetection.movementThresholdFormula" value="{{settings.autoDetection.movementThresholdFormula}}" data-formula-autocomplete="all">

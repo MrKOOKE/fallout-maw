@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "0a222908283903b4b240bfdc95088ed278882e8d56aa6da01c41c865951c1e5c",
-  "updatedAt": "2026-07-16T03:47:06.111Z",
+  "revision": "12ed705595690c620e1cbb43083b1386f892ef21f38d4ffd359465c3dab426b6",
+  "updatedAt": "2026-07-16T03:49:10.336Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3819,8 +3819,30 @@
                         "targetSelectionMode": "manual",
                         "wallsBlock": true
                       },
-                      "changes": [],
-                      "conditions": [],
+                      "changes": [
+                        {
+                          "id": "CVAtLs8FrfZhAqJN",
+                          "key": "system.resources.movementPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2+spe/50"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 12,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "FjC2DU1pNPIwnXwR",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "2badYt8ARL4SDcHo",
