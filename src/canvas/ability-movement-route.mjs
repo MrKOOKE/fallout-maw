@@ -5,6 +5,8 @@ import {
   clearAbilityRoutePlanCommitter,
   clearAbilityRoutePreviewBudget,
   clearAbilityRoutePreviewStop,
+  getAbilityRoutePreviewBudget,
+  isAbilityRoutePlanningInteractive,
   markAbilityRoutePreviewStop,
   setAbilityRoutePlanCommitter,
   setAbilityRoutePreviewBudget,
@@ -13,6 +15,8 @@ import {
 import { startCanvasTargetSelectionSession } from "./target-selection-lifecycle.mjs";
 
 const ROUTE_EPSILON = 1e-6;
+const ABILITY_ROUTE_PATH_READY_POLL_MS = 5;
+const ABILITY_ROUTE_PATH_READY_TIMEOUT_MS = 750;
 const ACTIVE_MOVEMENT_STATES = new Set(["planned", "pending", "paused"]);
 const MOVEMENT_POSITION_FIELDS = Object.freeze([
   "x", "y", "elevation", "width", "height", "depth", "shape", "level"
@@ -111,20 +115,38 @@ export async function requestAbilityMovementRoute({
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    tokenObject.completeAbilityRoutePlanning?.();
+    void tokenObject.completeAbilityRoutePlanning?.();
+  };
+  const onPointerDown = event => {
+    if (event.button !== 0) return;
+    if (!isAbilityRouteCanvasPointerEvent(event)) return;
+    if (!tokenObject.isDragged || !isAbilityRoutePlanningInteractive(tokenObject)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+    tokenObject._addDragWaypoint(point, { snap: !event.shiftKey });
+    canvas.mouseInteractionManager?.cancel?.();
+    // A click that spends the exact remaining budget is the final destination:
+    // confirm immediately instead of requiring a separate Enter.
+    void maybeAutoCompleteAbilityRouteAtExactBudget(tokenObject);
   };
   window.addEventListener("keydown", onKeyDown, { capture: true });
+  document.addEventListener("pointerdown", onPointerDown, { capture: true });
 
   const commitPlan = ({ options = {} } = {}) => {
     if (commitPromise) return commitPromise;
     commitPromise = (async () => {
       const movement = options?.movement?.[tokenDocument.id];
-      const nativePlanId = String(movement?.id ?? "").trim();
-      const nativeWaypoints = Array.isArray(movement?.waypoints) ? movement.waypoints : [];
-      const explicitWaypoints = nativeWaypoints
-        .filter(waypoint => waypoint?.explicit === true && waypoint?.checkpoint === true)
-        .map(copyWaypoint);
-      if (!nativePlanId || !explicitWaypoints.length) return false;
+      const plannedResult = tokenObject.layer?._movementPlanningContext?.result;
+      const nativePlanId = String(movement?.id ?? plannedResult?.id ?? "").trim();
+      const nativeWaypoints = Array.isArray(movement?.waypoints) && movement.waypoints.length
+        ? movement.waypoints
+        : (Array.isArray(plannedResult?.waypoints) ? plannedResult.waypoints : []);
+      const explicitWaypoints = extractExplicitRouteCheckpoints(nativeWaypoints);
+      if (!nativePlanId || !explicitWaypoints.length) {
+        return false;
+      }
       const retainedPlan = await planAuthority.retain({
         token: tokenObject,
         tokenDocument,
@@ -147,7 +169,7 @@ export async function requestAbilityMovementRoute({
 
   try {
     ui?.notifications?.info?.(
-      `${title}: маршрут уже привязан к курсору; ЛКМ добавляет точку, Enter завершает, ПКМ снимает последнюю точку.`
+      `${title}: маршрут уже привязан к курсору; ЛКМ добавляет точку (на точном максимуме бюджета сразу подтверждает), Enter завершает, ПКМ снимает последнюю точку.`
     );
     const planning = tokenObject.planAbilityMovement({
       allowedActions: [action],
@@ -194,9 +216,7 @@ export async function requestAbilityMovementRoute({
       return outcome;
     }
     const nativeWaypoints = nativePlan.waypoints.map(copyResolvedWaypoint);
-    const explicitWaypoints = nativeWaypoints
-      .filter(waypoint => waypoint?.explicit === true && waypoint?.checkpoint === true)
-      .map(copyWaypoint);
+    const explicitWaypoints = extractExplicitRouteCheckpoints(nativeWaypoints);
     if (
       !explicitWaypoints.length
       || !sameTokenPosition(nativePlan.destination, nativeWaypoints.at(-1), tokenDocument)
@@ -274,6 +294,7 @@ export async function requestAbilityMovementRoute({
     return outcome;
   } finally {
     window.removeEventListener("keydown", onKeyDown, { capture: true });
+    document.removeEventListener("pointerdown", onPointerDown, { capture: true });
     clearAbilityRoutePlanCommitter(tokenObject, commitPlan);
     updateAbilityRoutePreviewBudget(tokenObject, { interactive: false }, userId);
     if (!retained) {
@@ -580,4 +601,64 @@ function pathReachesExplicitWaypoints(explicit = [], path = [], tokenDocument = 
     if (requestedIndex >= explicit.length) return true;
   }
   return requestedIndex >= explicit.length;
+}
+
+function isAbilityRouteCanvasPointerEvent(event) {
+  const view = canvas?.app?.view;
+  if (!view || !event) return false;
+  return event.target === view || Array.from(event.composedPath?.() ?? []).includes(view);
+}
+
+/** True only when the live preview spends the entire configured budget (not under, not over). */
+function isAbilityRoutePreviewAtExactBudget(preview) {
+  if (!preview || preview.invalid || preview.searching) return false;
+  const used = Number(preview.used);
+  const total = Number(preview.total);
+  if (!Number.isFinite(used) || !Number.isFinite(total) || !(total > 0)) return false;
+  if (Math.abs(used - total) > ROUTE_EPSILON) return false;
+  const resourceUsed = Number(preview.resourceUsed);
+  const resourceTotal = Number(preview.resourceTotal);
+  if (
+    Number.isFinite(resourceUsed)
+    && Number.isFinite(resourceTotal)
+    && resourceUsed > resourceTotal + ROUTE_EPSILON
+  ) return false;
+  return true;
+}
+
+/**
+ * After an LKM checkpoint, wait for pathfinding and auto-confirm when the click
+ * spends exactly the remaining ability-route budget.
+ */
+async function maybeAutoCompleteAbilityRouteAtExactBudget(tokenObject) {
+  if (!tokenObject?.isDragged || !isAbilityRoutePlanningInteractive(tokenObject)) return false;
+  const startedAt = Date.now();
+  while ((Date.now() - startedAt) < ABILITY_ROUTE_PATH_READY_TIMEOUT_MS) {
+    const preview = getAbilityRoutePreviewBudget(tokenObject);
+    if (preview && !preview.searching) {
+      const exact = isAbilityRoutePreviewAtExactBudget(preview);
+      if (!exact) return false;
+      const completed = Boolean(await tokenObject.completeAbilityRoutePlanning?.());
+      return completed;
+    }
+    await new Promise(resolve => globalThis.setTimeout(resolve, ABILITY_ROUTE_PATH_READY_POLL_MS));
+  }
+  return false;
+}
+
+/**
+ * Keep user-planted checkpoints and always treat the terminal destination as one.
+ * Foundry pathfinding can strip explicit/checkpoint flags from intermediate cells.
+ */
+function extractExplicitRouteCheckpoints(waypoints = []) {
+  const normalized = Array.isArray(waypoints) ? waypoints.filter(Boolean) : [];
+  if (!normalized.length) return [];
+  const explicit = normalized
+    .filter(waypoint => waypoint?.explicit === true && waypoint?.checkpoint === true)
+    .map(copyWaypoint);
+  if (explicit.length) return explicit;
+  const destination = copyWaypoint(normalized.at(-1));
+  destination.explicit = true;
+  destination.checkpoint = true;
+  return [destination];
 }

@@ -522,7 +522,10 @@ test("right click unwinds canvas selections before cancelling their workflow", (
   assert.match(tokenSelection, /else if \(selected\.size < selectionLimit\) selected\.add\(row\.selectionId\);/);
   assert.doesNotMatch(tokenSelection, /selected\.size >= selectionLimit\) confirm\(\)/);
   assert.match(movementRoutes, /tokenObject\.planAbilityMovement\(\{/);
-  assert.doesNotMatch(movementRoutes, /pendingWaypoints|onContextMenu|document\.addEventListener\("pointerdown"/);
+  assert.match(movementRoutes, /document\.addEventListener\("pointerdown", onPointerDown, \{ capture: true \}/);
+  assert.match(movementRoutes, /tokenObject\._addDragWaypoint\(point/);
+  assert.match(movementRoutes, /extractExplicitRouteCheckpoints\(/);
+  assert.doesNotMatch(movementRoutes, /pendingWaypoints|onContextMenu/);
 
   const commandedStart = weaponAttacks.indexOf("class CommandedWeaponAttackController");
   const ordinaryStart = weaponAttacks.indexOf("class WeaponAttackController", commandedStart + 1);
@@ -623,7 +626,10 @@ test("movement route previews use native Token drag visuals, socket-retained pla
     tokenSource.indexOf("  startMovementPlanningDrag(")
   ), /panCanvas\(|\.control\(/);
   assert.match(tokenSource, /this\.layer\.options\.controllableObjects = false/);
-  assert.match(tokenSource, /_onClickLeft\(event\)[\s\S]*?isAbilityRoutePlanningInteractive\(this\)[\s\S]*?event\.stopPropagation\(\)/);
+  assert.match(tokenSource, /softReleaseAbilityRouteDrag\(this\)/);
+  assert.match(tokenSource, /syncAbilityRouteDragDestination\(this\)/);
+  assert.match(tokenSource, /waitForAbilityRoutePathReady\(context\)/);
+  assert.match(tokenSource, /_onClickLeft\(event\)[\s\S]*?isAbilityRoutePlanningInteractive\(this\)[\s\S]*?_addDragWaypoint[\s\S]*?event\.stopPropagation\(\)/);
   assert.match(movementEvents, /Hooks\.on\("updateToken", onAbilityRoutePreviewPlanUpdate\)/);
   assert.match(movementEvents, /function onStopToken\(tokenDocument\) \{\s*if \(consumeAbilityRoutePreviewStop/);
   assert.doesNotMatch(routeSource, /new PIXI\.Graphics|drawRouteGraphics/);

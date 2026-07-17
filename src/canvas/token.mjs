@@ -57,6 +57,91 @@ function waitForMovementPlanningDrag(manager) {
 }
 
 /**
+ * Enter Foundry's multi-click waypoint mode after a synthetic drag start.
+ * Mirrors a prevented pointerup: stay in DRAG with interactionData.released.
+ */
+function softReleaseAbilityRouteDrag(token) {
+  const manager = token?.mouseInteractionManager;
+  if (!manager || manager.state !== manager.states.DRAG) return false;
+
+  const eventSystem = canvas?.app?.renderer?.events;
+  const boundary = eventSystem?.rootBoundary;
+  if (boundary && eventSystem?.pointer) {
+    const upEvent = boundary.createPointerEvent(eventSystem.pointer, "pointerup", token);
+    upEvent.path = null;
+    upEvent.nativeEvent = null;
+    upEvent.button = 0;
+    upEvent.buttons = 0;
+    upEvent.defaultPrevented = false;
+    try {
+      manager.handleEvent(upEvent);
+    } finally {
+      boundary.freeEvent(upEvent);
+    }
+  }
+
+  // Foundry restores DRAG after a prevented drop. If the callback chain did not
+  // run (tests or an incomplete manager), still mark released so LKM waypoints
+  // use the same multi-click mode as a native Ctrl-release.
+  if (manager.state !== manager.states.DRAG) return false;
+  if (manager.interactionData?.cancelled || manager.interactionData?.dropped) return false;
+  manager.interactionData.released = true;
+  return true;
+}
+
+/** Current native drag context for an ability-route executor, if any. */
+function getAbilityRouteDragContext(token) {
+  return token?.layer?._draggedToken?.mouseInteractionManager
+    ?.interactionData?.contexts?.[token.document?.id] ?? null;
+}
+
+/** Push the live cursor into Foundry's drag destination/foundPath before confirm. */
+function syncAbilityRouteDragDestination(token) {
+  const pointer = canvas?.app?.renderer?.events?.pointer;
+  if (!token || !pointer || !Number.isFinite(pointer.clientX) || !Number.isFinite(pointer.clientY)) return false;
+  if (typeof token._updateDragDestination !== "function") return false;
+  const point = canvas.canvasCoordinatesFromClient({ x: pointer.clientX, y: pointer.clientY });
+  const shift = Boolean(game?.keyboard?.isModifierActive?.("SHIFT"));
+  token._updateDragDestination(point, { snap: !shift });
+  return true;
+}
+
+/** Preview budget still allows confirmation at the exact configured maximum. */
+function isAbilityRoutePreviewWithinBudget(preview) {
+  if (!preview) return false;
+  const used = Number(preview.used);
+  const total = Number(preview.total);
+  const resourceUsed = Number(preview.resourceUsed);
+  const resourceTotal = Number(preview.resourceTotal);
+  if (Number.isFinite(used) && Number.isFinite(total) && used > total + 1e-6) return false;
+  if (
+    Number.isFinite(resourceUsed)
+    && Number.isFinite(resourceTotal)
+    && resourceUsed > resourceTotal + 1e-6
+  ) return false;
+  return true;
+}
+
+/** Wait for Foundry pathfinding kicked off by destination sync before Enter confirms. */
+function waitForAbilityRoutePathReady(context, timeoutMs = 750) {
+  if (!context) return Promise.resolve(false);
+  if (!context.searching && Array.isArray(context.foundPath) && context.foundPath.length > 1) {
+    return Promise.resolve(true);
+  }
+  const startedAt = Date.now();
+  return new Promise(resolve => {
+    const check = () => {
+      if (!context.searching && Array.isArray(context.foundPath) && context.foundPath.length > 1) {
+        return resolve(true);
+      }
+      if ((Date.now() - startedAt) >= timeoutMs) return resolve(false);
+      globalThis.setTimeout(check, NATIVE_DRAG_START_POLL_MS);
+    };
+    check();
+  });
+}
+
+/**
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
@@ -190,7 +275,17 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
         && manager.interactionData?.contexts?.[this.document.id]?.token === this
       )
     );
-    if (valid) return true;
+    if (valid) {
+      // Foundry's TokenLayer waypoint clicks expect the "released but still
+      // DRAG" state that normally follows a prevented pointerup. Synthetic
+      // starts never get that release, so LKM never reaches _onDragClickLeft.
+      if (abilityRoute && !softReleaseAbilityRouteDrag(this)) {
+        manager.interactionData.cancelled = true;
+        manager.cancel();
+        return false;
+      }
+      return true;
+    }
 
     // A failed synthetic start must not remain GRABBED and begin a delayed
     // drag after the movement-planning context has already been cancelled.
@@ -217,23 +312,33 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
   }
 
   /** Complete the system's ability-route variant of native movement planning. */
-  completeAbilityRoutePlanning() {
+  async completeAbilityRoutePlanning() {
     if (!this.isDragged || !isAbilityRoutePlanningInteractive(this)) return false;
-    const preview = getAbilityRoutePreviewBudget(this);
-    const used = Number(preview?.used);
-    const total = Number(preview?.total);
-    const resourceUsed = Number(preview?.resourceUsed);
-    const resourceTotal = Number(preview?.resourceTotal);
-    if (
-      preview?.searching
-      || preview?.invalid
-      || (Number.isFinite(used) && Number.isFinite(total) && used > total + 1e-6)
-      || (Number.isFinite(resourceUsed) && Number.isFinite(resourceTotal)
-        && resourceUsed > resourceTotal + 1e-6)
-    ) {
-      ui?.notifications?.warn?.("Маршрут ещё строится, недоступен или превышает заданный бюджет.");
+
+    // Confirm uses the live cursor square as destination even when the user never
+    // LKM-planted that final cell as an intermediate waypoint.
+    syncAbilityRouteDragDestination(this);
+
+    const context = getAbilityRouteDragContext(this);
+    if (!(await waitForAbilityRoutePathReady(context))) {
+      ui?.notifications?.warn?.("Маршрут ещё строится. Дождитесь завершения поиска пути.");
       return false;
     }
+
+    const preview = getAbilityRoutePreviewBudget(this);
+    if (!Array.isArray(context?.foundPath) || context.foundPath.length <= 1) {
+      ui?.notifications?.warn?.("Укажите точку назначения маршрута.");
+      return false;
+    }
+    if (preview?.invalid || context?.unreachableWaypoints?.length) {
+      ui?.notifications?.warn?.("Маршрут недоступен по правилам перемещения.");
+      return false;
+    }
+    if (!isAbilityRoutePreviewWithinBudget(preview)) {
+      ui?.notifications?.warn?.("Маршрут превышает заданный бюджет.");
+      return false;
+    }
+
     this._triggerDragLeftDrop();
     return true;
   }
@@ -267,11 +372,14 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
   /** @override */
   _onClickLeft(event) {
-    if (isAbilityRoutePlanningInteractive(this)) {
-      event.stopPropagation();
-      return;
+    if (!isAbilityRoutePlanningInteractive(this)) return super._onClickLeft(event);
+    // While the executor is already in native drag, a click on the token itself
+    // must plant a waypoint instead of being swallowed before TokenLayer sees it.
+    if (this.isDragged) {
+      this._addDragWaypoint(event.interactionData.origin, { snap: !event.shiftKey });
+      canvas.mouseInteractionManager.cancel();
     }
-    return super._onClickLeft(event);
+    event.stopPropagation();
   }
 
   /** @override */
@@ -359,6 +467,17 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
       event.preventDefault();
       return;
     }
+    if (isAbilityRoutePlanningInteractive(this) && event.interactionData.dropped) {
+      const context = event.interactionData.contexts?.[this.document.id];
+      if (context?.searching || !Array.isArray(context?.foundPath) || context.foundPath.length <= 1) {
+        // Keep waypoint mode alive instead of silently cancelling the draft.
+        event.interactionData.dropped = false;
+        event.interactionData.released = true;
+        event.preventDefault();
+        ui?.notifications?.warn?.("Укажите точку назначения маршрута.");
+        return;
+      }
+    }
     event.interactionData.dropped = true;
     const { clones } = event.interactionData;
     if (!clones) return false;
@@ -375,12 +494,14 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
       void Promise.resolve(routePlanCommitter({ token: this, updates, options }))
         .then(committed => {
           if (committed) return;
+          ui?.notifications?.warn?.("Не удалось сохранить маршрут. Попробуйте построить его снова.");
           if (this.layer._movementPlanningContext?.object === this) {
             this.layer._movementPlanningContext.result = null;
           }
         })
         .catch(error => {
           console.warn("fallout-maw | Ability route plan commit failed", error);
+          ui?.notifications?.warn?.("Не удалось сохранить маршрут. Попробуйте построить его снова.");
           if (this.layer._movementPlanningContext?.object === this) {
             this.layer._movementPlanningContext.result = null;
           }

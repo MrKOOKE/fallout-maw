@@ -191,6 +191,8 @@ test("startMovementPlanningDrag waits for throttled native DRAG and accepts only
   assert.equal(manager.interactionData.clones[0]._original, token);
   assert.notEqual(manager.interactionData.clones[0]._original, controlled);
   assert.equal(manager.interactionData.contexts[token.document.id].token, token);
+  assert.equal(manager.interactionData.released, true);
+  assert.equal(manager.state, dragStates.DRAG);
   assert.equal(token.layer.options.controllableObjects, true);
   assert.equal(manager.cancelCalls, 0);
   clearAbilityRoutePreviewBudget(token);

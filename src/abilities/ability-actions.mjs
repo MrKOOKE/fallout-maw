@@ -298,11 +298,18 @@ export async function executeAbilityFunctionActions({
 
 export async function prepareAbilityFunctionActions(options = {}) {
   const retainedMovementRoutePreviews = [];
+  let result;
   try {
-    return await prepareAbilityFunctionActionsInternal(options, retainedMovementRoutePreviews);
-  } finally {
+    result = await prepareAbilityFunctionActionsInternal(options, retainedMovementRoutePreviews);
+  } catch (error) {
     await stopAbilityMovementRoutePreviews(retainedMovementRoutePreviews);
+    throw error;
   }
+  const keepPreviews = Boolean(result) && !result.cancelled && !result.failed;
+  // Successful preparation transfers ownership of retained native plans to the
+  // returned executions so prior routes stay visible until execute/cancel.
+  if (!keepPreviews) await stopAbilityMovementRoutePreviews(retainedMovementRoutePreviews);
+  return result;
 }
 
 async function prepareAbilityFunctionActionsInternal({
@@ -1060,9 +1067,9 @@ function createAbilityMovementRoutePlanAuthority({
     tokenUuid: String(tokenDocument?.uuid ?? ""),
     nativePlanId: String(route?.nativePlanId ?? route?.nativePlan?.id ?? retainedPlan?.planId ?? ""),
     explicitWaypoints: serializeMovementWaypoints(route?.explicitWaypoints),
-    plannedOrigin: serializeMovementWaypoints([
+    plannedOrigin: serializeMovementPosition(
       route?.origin ?? route?.plannedOrigin ?? retainedPlan?.origin ?? getTokenDocumentPosition(tokenDocument)
-    ])[0] ?? null,
+    ),
     maxBudget: Number.isFinite(Number(configuredMaxBudget)) ? Number(configuredMaxBudget) : null,
     effectiveMaxBudget: Number.isFinite(Number(effectiveMaxBudget)) ? Number(effectiveMaxBudget) : null,
     routeBudgetMode: String(action?.routeBudgetMode ?? ""),
@@ -1077,13 +1084,16 @@ function createAbilityMovementRoutePlanAuthority({
       ? game.users?.get?.(retainedPlan.authorityUserId)
       : null;
     authority ??= getMovementRouteAuthority(actor, tokenDocument);
-    if (!authority?.active) return false;
+    if (!authority?.active) {
+      return false;
+    }
     const data = buildData(operation, route);
     const timeout = Math.max(getReactionTimeoutMs() * 4, 30000);
     try {
-      return authority.isSelf || authority.id === game.user?.id
+      const result = authority.isSelf || authority.id === game.user?.id
         ? await handleAbilityActionMovementQuery(data, { user: game.user })
         : await authority.query(MOVEMENT_QUERY, data, { timeout });
+      return result;
     } catch (error) {
       console.warn(`fallout-maw | Ability movement ${operation} query failed`, error);
       return false;
@@ -1479,8 +1489,9 @@ async function executeAbilityMovementRouteExecution(execution = {}, {
     executionId: foundry.utils.randomID(),
     actorUuid: String(actor.uuid),
     tokenUuid: String(tokenDocument.uuid),
+    nativePlanId: String(execution?.route?.nativePlanId ?? execution?.route?.nativePlan?.id ?? ""),
     explicitWaypoints: serializeMovementWaypoints(execution.route.explicitWaypoints),
-    plannedOrigin: serializeMovementWaypoints([execution.route.origin])[0] ?? null,
+    plannedOrigin: serializeMovementPosition(execution.route.origin),
     maxBudget: Number.isFinite(Number(execution.route.configuredMaxBudget ?? execution.route.maxBudget))
       ? Number(execution.route.configuredMaxBudget ?? execution.route.maxBudget)
       : null,
@@ -1787,37 +1798,62 @@ async function handleAbilityActionMovementQuery(data = {}, { user: sender = null
       return { executed: false, settled: true, reason: "movementAuthorityUnavailable" };
     }
     const origin = getTokenDocumentPosition(tokenDocument);
-    const nativeOptions = getNativeMovementRouteOptions(tokenObject, { preview: false });
-    const movementId = foundry.utils.randomID();
-    const movementOptions = {
-      id: movementId,
-      method: "api",
-      planned: true,
-      autoRotate: Boolean(data.autoRotate),
-      showRuler: Boolean(data.showRuler),
-      constrainOptions: nativeOptions.constrainOptions,
-      terrainOptions: nativeOptions.terrainOptions,
-      measureOptions: nativeOptions.measureOptions
-    };
-    if (scope.chainRef) {
-      movementOptions.chainRef = scope.chainRef;
-      movementOptions.falloutMawSystemEventChainRef = scope.chainRef;
+    const suppliedPlanId = String(data.nativePlanId ?? "").trim();
+    const existingMovement = tokenDocument.movement;
+    const adoptsExistingPlan = Boolean(
+      suppliedPlanId
+      && String(existingMovement?.id ?? "") === suppliedPlanId
+      && existingMovement?.state === "planned"
+      && existingMovement?.user?.isSelf
+    );
+    let movementId = suppliedPlanId;
+    let movementPromise = null;
+    if (adoptsExistingPlan) {
+      const binding = retainedMovementRoutePlans.get(suppliedPlanId);
+      movementPromise = binding?.movementPromise
+        ?? Promise.resolve(tokenDocument.movement?.promise ?? true);
+      retainedMovementRoutePlans.delete(suppliedPlanId);
+    } else {
+      if (["planned", "pending", "paused"].includes(String(existingMovement?.state ?? ""))) {
+        return { executed: false, settled: true, reason: "movementAlreadyActive" };
+      }
+      const nativeOptions = getNativeMovementRouteOptions(tokenObject, { preview: false });
+      movementId = foundry.utils.randomID();
+      const movementOptions = {
+        id: movementId,
+        method: "api",
+        planned: true,
+        autoRotate: Boolean(data.autoRotate),
+        showRuler: Boolean(data.showRuler),
+        constrainOptions: nativeOptions.constrainOptions,
+        terrainOptions: nativeOptions.terrainOptions,
+        measureOptions: nativeOptions.measureOptions
+      };
+      if (scope.chainRef) {
+        movementOptions.chainRef = scope.chainRef;
+        movementOptions.falloutMawSystemEventChainRef = scope.chainRef;
+      }
+      try {
+        const planWaiter = createTokenMovementPlanWaiter(tokenDocument, movementId, {
+          timeoutMs: Math.min(30000, Math.max(3000, Number(data.timeoutMs) || 30000))
+        });
+        movementPromise = tokenDocument.move(finalWaypoints, movementOptions);
+        const planned = await Promise.race([
+          planWaiter.promise,
+          movementPromise.then(() => false, () => false)
+        ]);
+        planWaiter.cancel();
+        if (!planned) {
+          if (String(tokenDocument?.movement?.id ?? "") === movementId) tokenDocument.stopMovement?.();
+          await movementPromise.catch(() => false);
+          return { executed: false, settled: true, reason: "movementPlanningFailed" };
+        }
+      } catch (error) {
+        console.warn("fallout-maw | Ability movement execution failed", error);
+        return { executed: false, settled: true };
+      }
     }
     try {
-      const planWaiter = createTokenMovementPlanWaiter(tokenDocument, movementId, {
-        timeoutMs: Math.min(30000, Math.max(3000, Number(data.timeoutMs) || 30000))
-      });
-      const movementPromise = tokenDocument.move(finalWaypoints, movementOptions);
-      const planned = await Promise.race([
-        planWaiter.promise,
-        movementPromise.then(() => false, () => false)
-      ]);
-      planWaiter.cancel();
-      if (!planned) {
-        if (String(tokenDocument?.movement?.id ?? "") === movementId) tokenDocument.stopMovement?.();
-        await movementPromise.catch(() => false);
-        return { executed: false, settled: true, reason: "movementPlanningFailed" };
-      }
       // startMovement may return false when a synchronous preMoveToken hook
       // defers the move into the system's asynchronous movement gate. The
       // settlement tracker below is authoritative for that case.
@@ -1848,7 +1884,9 @@ async function retainAbilityMovementRoutePlan(data, sender, { actor, tokenDocume
     return { retained: false, reason: "emptyRoute" };
   }
   return movementRouteActorLock.run(actor, null, async () => {
-    if (isActorUnableToAct(actor)) return { retained: false, reason: "executorUnableToAct" };
+    if (isActorUnableToAct(actor)) {
+      return { retained: false, reason: "executorUnableToAct" };
+    }
     if (hasTokenDocumentPositionChanged(tokenDocument, plannedOrigin)) {
       return { retained: false, reason: "routeOriginChanged" };
     }
@@ -1876,11 +1914,12 @@ async function retainAbilityMovementRoutePlan(data, sender, { actor, tokenDocume
     const budgetMode = String(data.routeBudgetMode ?? "") === ABILITY_ACTION_ROUTE_BUDGET_MODES.distance
       ? ABILITY_ACTION_ROUTE_BUDGET_MODES.distance
       : ABILITY_ACTION_ROUTE_BUDGET_MODES.movementCost;
+    const withinBudget = isResolvedRouteWithinBudget(resolved, budgetMode, effectiveMaxBudget);
     if (
       !(configuredMaxBudget > 0)
       || !(effectiveMaxBudget > 0)
       || suppliedEffectiveBudget > configuredMaxBudget + 1e-6
-      || !isResolvedRouteWithinBudget(resolved, budgetMode, effectiveMaxBudget)
+      || !withinBudget
     ) {
       return { retained: false, reason: getRouteBudgetFailureReason(budgetMode) };
     }
@@ -1903,7 +1942,9 @@ async function retainAbilityMovementRoutePlan(data, sender, { actor, tokenDocume
     if (
       !adoptsExistingPlan
       && ["planned", "pending", "paused"].includes(String(movement?.state ?? ""))
-    ) return { retained: false, reason: "movementAlreadyActive" };
+    ) {
+      return { retained: false, reason: "movementAlreadyActive" };
+    }
 
     const movementId = adoptsExistingPlan ? suppliedPlanId : foundry.utils.randomID();
     const existingBinding = retainedMovementRoutePlans.get(movementId);
@@ -2119,6 +2160,15 @@ function hasTokenDocumentPositionChanged(tokenDocument, origin) {
   if (typeof compare === "function") return !compare.call(tokenDocument.constructor, current, origin);
   return ["x", "y", "elevation", "width", "height", "depth", "shape", "level"]
     .some(field => current[field] !== origin?.[field]);
+}
+
+function serializeMovementPosition(source = null) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const result = {};
+  for (const key of ["x", "y", "elevation", "width", "height", "depth", "shape", "level"]) {
+    if (source[key] !== undefined) result[key] = source[key];
+  }
+  return Object.keys(result).length ? result : null;
 }
 
 function serializeMovementWaypoints(waypoints = []) {
