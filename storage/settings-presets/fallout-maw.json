@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "cd19d6e3390dd8f75cf26fc9b209651a109a1af3e48999069f15330ba763be23",
-  "updatedAt": "2026-07-16T17:00:58.932Z",
+  "revision": "1eb72dc21e3aa0b58f7c0e7acd116102c5e918c4914b8d39dbc20f7747c5b0fd",
+  "updatedAt": "2026-07-17T14:34:41.306Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3110,57 +3110,6 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии</p><p>Перегрузка: 100 энергии на 12 секунд.</p><p></p><p>Активация позволяет выбрать одну из 3-х команд.</p><ul><li><p>Цельсь, пли: Выберете до [[2+speech/50]]-х союзников. Они выстрелят в указанном вами направлении.</p></li><li><p>Коли: Выберете до [[2+speech/50]]-х союзников. Они ударят в указанном направлении.</p></li><li><p>Ложись: Выберете до [[2+speech/50]]-х союзников. Они получат +[[10+speech/10]] к уклонению на 12 секунд.</p></li></ul>",
-                "id": "soa2FC28N8rLBtb1",
-                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Приказ",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "speech"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "88jCXdCjL0p8atWR",
-                      "skillKey": "speech",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "commandBasics",
-                      "fixedSettings": {
-                        "dodgeBonusFormula": "10+speech/10",
-                        "dodgeDurationSeconds": 12,
-                        "energyCost": 30,
-                        "overloadDurationSeconds": 12,
-                        "overloadEnergyCost": 100,
-                        "targetLimitFormula": "2+speech/50"
-                      },
-                      "id": "KMf6p2I6V0iXmar1",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "fixed"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
                 "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.</p><p>Вы мастерски овладели искусством выбивать из колеи кого угодно. После активации можно выбрать до [[2+speech/50]] целей и те проходят проверку Науки со сложностью [[50+speech]]. В случае провала они получают двойную помеху на [[1+speech/100]] выбранных навыка.<br>Длительность: 12 секуд.<br><br>Нельзя выбрать тех, чей интеллект &lt;=0</p>",
                 "id": "raDMFuF8gocU7zxc",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
@@ -3980,7 +3929,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они ударят в указанных вами направлениях.</p>",
+                "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они ударят в указанных вами направлениях.</p>",
                 "id": "o0eHtaXDOfkfOP4M",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Приказ: Коли!",
@@ -4002,32 +3951,177 @@
                   "category": "Красноречие",
                   "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [
+                        {
+                          "actionPointCostMode": "none",
+                          "actionPointPayer": "executor",
+                          "actualActionPointCostPercent": 100,
+                          "attackActionKeys": [
+                            "meleeAttack"
+                          ],
+                          "executorMode": "targets",
+                          "fixedActionPointCost": 0,
+                          "id": "o0eHtaXDOfkfOP4M-application-weapon-attack",
+                          "routeAutoRotate": false,
+                          "routeBudgetEvaluation": "executor",
+                          "routeBudgetFormula": "0",
+                          "routeBudgetMode": "movementCost",
+                          "routeExecutionMode": "sequential",
+                          "routeMovementAction": "",
+                          "routeShowRuler": true,
+                          "targetMode": "free",
+                          "type": "weaponAttack"
+                        }
+                      ],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "o0eHtaXDOfkfOP4M-application-cost-power",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 12,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          },
+                          {
+                            "formula": "5",
+                            "id": "ertn7y8f8gWm4RdG",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "payer": "source",
+                            "resourceKey": "actionPoints"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "2+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "o0eHtaXDOfkfOP4M-application",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они выстрелят в указанных вами направлениях.</p>",
+                "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они выстрелят в указанных вами направлениях.</p>",
                 "id": "hXDOkMGJjkPB7WBb",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Приказ: Цельсь, пли!",
                 "system": {
                   "acquisition": {
-                    "difficulty": 60,
+                    "difficulty": 150,
                     "onlyFree": false,
                     "onlyManual": false,
-                    "skillKey": "meleeCombat"
+                    "skillKey": "speech"
                   },
-                  "acquisitionRequirements": [],
+                  "acquisitionRequirements": [
+                    {
+                      "id": "OUvbpRYewdgfT6MH",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
                   "category": "Красноречие",
-                  "cost": 0,
+                  "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [
+                        {
+                          "actionPointCostMode": "none",
+                          "actionPointPayer": "executor",
+                          "actualActionPointCostPercent": 100,
+                          "attackActionKeys": [
+                            "snapshot"
+                          ],
+                          "executorMode": "targets",
+                          "fixedActionPointCost": 0,
+                          "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
+                          "routeAutoRotate": false,
+                          "routeBudgetEvaluation": "executor",
+                          "routeBudgetFormula": "0",
+                          "routeBudgetMode": "movementCost",
+                          "routeExecutionMode": "sequential",
+                          "routeMovementAction": "",
+                          "routeShowRuler": true,
+                          "targetMode": "free",
+                          "type": "weaponAttack"
+                        }
+                      ],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "hXDOkMGJjkPB7WBb-application-cost-power",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 12,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          },
+                          {
+                            "formula": "5",
+                            "id": "dxlGC8g29ybSEWiA",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "payer": "source",
+                            "resourceKey": "actionPoints"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "2+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "hXDOkMGJjkPB7WBb-application",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии; каждая выбранная цель тратит 5 ОД (только в бою).<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+spe/50]]-х союзников. Они последовательно переместятся по построенным вами маршрутам.<br>Бюджет каждого маршрута: [[2+spe/25]] ОП.</p>",
+                "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+spe/50]]-х союзников. Они последовательно переместятся по построенным вами маршрутам.<br>Бюджет каждого маршрута: [[3+spe/25]] ОП.</p>",
                 "id": "u6NqPLJYeinNzWNF",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Приказ: Сменить позицию!",

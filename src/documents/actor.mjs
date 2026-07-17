@@ -105,6 +105,12 @@ export class FalloutMaWActor extends Actor {
   async _preUpdate(changes, options, user) {
     if ((await super._preUpdate(changes, options, user)) === false) return false;
     if (!["character", "construct"].includes(this.type)) return undefined;
+    // Sidebar rename does not go through the actor sheet, so keep prototype token name aligned
+    // for future unlinked placements (Foundry initializes delta.name from token/prototype name).
+    if (Object.hasOwn(changes, "name") && !foundry.utils.hasProperty(changes, "prototypeToken.name")) {
+      const nextName = String(changes.name ?? "").trim();
+      if (nextName) foundry.utils.setProperty(changes, "prototypeToken.name", nextName);
+    }
     await prepareActorDamageUpdate(this, changes, options);
     syncTrackedResourceValueUpdates(this, changes);
     return undefined;

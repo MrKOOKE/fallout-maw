@@ -41,7 +41,7 @@ export function requestCustomTokenSelection({
       instructions
     });
 
-    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. Enter подтверждает, ПКМ снимает последнюю цель, Esc отменяет.`;
+    const prompt = instructions || `${title}: выберите до ${selectionLimit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`;
     ui.notifications.info(prompt);
 
     let finished = false;
@@ -119,6 +119,8 @@ export function requestCustomTokenSelection({
       if (selected.has(row.selectionId)) selected.delete(row.selectionId);
       else if (selected.size < selectionLimit) selected.add(row.selectionId);
       drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
+      // Filling the last slot is the commit click — same as commanded attacks.
+      if (selected.size >= selectionLimit) confirm();
     };
     const onPointerMove = event => {
       if (!rightClickCandidate || event.pointerId !== rightClickCandidate.pointerId) return;

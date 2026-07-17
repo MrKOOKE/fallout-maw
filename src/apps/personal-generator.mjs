@@ -316,6 +316,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     const missingEntryIds = personalGeneratorConfigMissingEntryIds(raw);
     this.#config = getPersonalGeneratorConfig(actor);
     if (missingEntryIds && actor) void actor.setFlag(SYSTEM_ID, "personalGenerator", this.#config);
+    if (actor) void healStalePrototypeTokenName(actor);
   }
 
   get _dragDrop() {
@@ -1155,7 +1156,9 @@ async function preparePersonalGeneratorToken(document, data = {}) {
   if (actorLink) return undefined;
 
   const actorId = data?.actorId ?? document.actorId;
-  const actor = document.actor ?? game.actors?.get(actorId);
+  // Always use the world Actor. During preCreateToken, document.actor is already the synthetic
+  // token actor whose name may mirror stale prototypeToken.name via delta.name.
+  const actor = game.actors?.get(actorId) ?? null;
   if (!actor) return undefined;
 
   const config = getPersonalGeneratorConfig(actor);
@@ -1164,20 +1167,34 @@ async function preparePersonalGeneratorToken(document, data = {}) {
   const updates = {};
   const mergeDelta = patch => {
     if (!patch || !Object.keys(patch).length) return;
-    const baseDelta = foundry.utils.deepClone(updates.delta ?? data?.delta ?? document._source?.delta ?? document.delta ?? {});
+    const rawBase = updates.delta ?? data?.delta ?? document._source?.delta ?? {};
+    // Only plain objects are valid ActorDelta source data. Never clone the live ActorDelta Document
+    // (it carries _id:null / name:null and wipes generator patches on token create).
+    const baseDelta = foundry.utils.isPlainObject(rawBase) ? foundry.utils.deepClone(rawBase) : {};
+    delete baseDelta._id;
+    delete baseDelta.id;
     updates.delta = foundry.utils.mergeObject(baseDelta, patch, { inplace: false, overwrite: true });
   };
 
   const currentActorName = String(actor.name ?? "").trim();
   const cleanedActorName = currentActorName.replace(/\s*\([^)]*\)/g, "").trim();
-  if (cleanedActorName && cleanedActorName !== currentActorName) {
-    const deltaPatch = {};
-    foundry.utils.setProperty(deltaPatch, "name", cleanedActorName);
-    mergeDelta(deltaPatch);
+  const placedName = cleanedActorName || currentActorName;
+  const prototypeTokenName = String(actor.prototypeToken?.name ?? "").trim();
+  const currentTokenName = String(data?.name ?? document.name ?? "").trim();
+
+  // Unlinked tokens take their initial name from prototypeToken.name. After duplicate+rename that
+  // field is often stale, and Foundry mirrors it into delta.name so the sheet shows the old name.
+  // Also strip parenthetical suffixes from the placed token/sheet name (template tags stay on the world actor).
+  if (placedName && (currentTokenName !== placedName || placedName !== currentActorName)) {
+    updates.name = placedName;
+    mergeDelta({ name: placedName });
+  }
+  if (currentActorName && prototypeTokenName && prototypeTokenName !== currentActorName) {
+    void healStalePrototypeTokenName(actor);
   }
 
   if (config.name.enabled && config.name.appendToTokenName) {
-    const baseName = String(data?.name ?? document.name ?? actor.name ?? "").trim();
+    const baseName = String(updates.name ?? placedName ?? currentTokenName).trim();
     const generated = generatePersonalName(config.name);
     const nextName = config.name.overwriteBaseName
       ? applyNameOverwrite(baseName, generated)
@@ -1962,6 +1979,14 @@ function normalizeChainsInBlock(block) {
   for (const entry of entries) {
     if (entry.chain && (counts.get(entry.chain) ?? 0) < 2) entry.chain = "";
   }
+}
+
+function healStalePrototypeTokenName(actor) {
+  if (!actor || actor.isToken) return Promise.resolve(null);
+  const actorName = String(actor.name ?? "").trim();
+  const prototypeName = String(actor.prototypeToken?.name ?? "").trim();
+  if (!actorName || !prototypeName || actorName === prototypeName) return Promise.resolve(null);
+  return actor.update({ "prototypeToken.name": actorName });
 }
 
 function getPrototypeTokenLinkContext(actor) {

@@ -520,7 +520,7 @@ test("right click unwinds canvas selections before cancelling their workflow", (
   assert.match(tokenSelection, /const undoLastSelection = \(\) => \{[\s\S]*?Array\.from\(selected\)\.at\(-1\)[\s\S]*?selected\.delete\(selectionId\)[\s\S]*?drawCustomTokenSelectionRows/);
   assert.match(tokenSelection, /rightClickCandidate = null;\s*if \(undoLastSelection\(\)\) return;\s*finish\(\[\]\)/);
   assert.match(tokenSelection, /else if \(selected\.size < selectionLimit\) selected\.add\(row\.selectionId\);/);
-  assert.doesNotMatch(tokenSelection, /selected\.size >= selectionLimit\) confirm\(\)/);
+  assert.match(tokenSelection, /if \(selected\.size >= selectionLimit\) confirm\(\)/);
   assert.match(movementRoutes, /tokenObject\.planAbilityMovement\(\{/);
   assert.match(movementRoutes, /document\.addEventListener\("pointerdown", onPointerDown, \{ capture: true \}/);
   assert.match(movementRoutes, /tokenObject\._addDragWaypoint\(point/);
