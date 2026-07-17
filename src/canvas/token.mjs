@@ -33,12 +33,28 @@ const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
 const POSTURE_WEAPON_ACTION_COST_SUFFIX = ".weaponActionCost";
 const BLEEDING_DAMAGE_TYPE_KEY = "bleeding";
 const HEALTH_BAR_ATTRIBUTES = new Set(["resources.health", "system.resources.health"]);
+const NATIVE_DRAG_START_TIMEOUT_MS = 250;
+const NATIVE_DRAG_START_POLL_MS = 5;
 
 let activeEffectTooltipAnchor = null;
 let activeEffectTooltipToken = null;
 let activateTooltipTimeout = null;
 let deactivateTooltipTimeout = null;
 let middleClickGuardRegistered = false;
+
+/** Wait for Foundry's throttled synthetic pointermove to initialize native drag. */
+function waitForMovementPlanningDrag(manager) {
+  const startedAt = Date.now();
+  return new Promise(resolve => {
+    const check = () => {
+      if (manager?.state === manager?.states?.DRAG) return resolve(true);
+      if (manager?.state !== manager?.states?.GRABBED) return resolve(false);
+      if ((Date.now() - startedAt) >= NATIVE_DRAG_START_TIMEOUT_MS) return resolve(false);
+      globalThis.setTimeout(check, NATIVE_DRAG_START_POLL_MS);
+    };
+    check();
+  });
+}
 
 /**
  * System token implementation with readable Active Effect icon tooltips.
@@ -119,7 +135,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
    * Put the token into Foundry's native left-drag workflow after movement
    * planning was started from a DOM control instead of from the canvas.
    */
-  startMovementPlanningDrag() {
+  async startMovementPlanningDrag() {
     const manager = this.mouseInteractionManager;
     const eventSystem = canvas?.app?.renderer?.events;
     const boundary = eventSystem?.rootBoundary;
@@ -158,17 +174,46 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     // pointermove/pointerup listeners take over from this point onward.
     const resistance = Number(manager.options?.dragResistance) || 10;
     manager.interactionData.screenOrigin.x -= resistance + 1;
+    foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
+
+    // Foundry throttles emulateMoveEvent, so drag initialization happens on a
+    // later task. Do not inspect clones or let the caller cancel movement
+    // planning until the native manager has actually entered DRAG.
+    const started = await waitForMovementPlanningDrag(manager);
+    const clones = manager.interactionData?.clones ?? [];
+    const abilityRoute = isAbilityRoutePlanningInteractive(this);
+    const valid = started && (
+      !abilityRoute
+      || (
+        clones.length === 1
+        && clones[0]?._original === this
+        && manager.interactionData?.contexts?.[this.document.id]?.token === this
+      )
+    );
+    if (valid) return true;
+
+    // A failed synthetic start must not remain GRABBED and begin a delayed
+    // drag after the movement-planning context has already been cancelled.
+    manager.interactionData.cancelled = true;
+    manager.cancel();
+    return false;
+  }
+
+  /** @override */
+  _initializeDragLeft(event) {
+    if (!isAbilityRoutePlanningInteractive(this)) return super._initializeDragLeft(event);
+
+    // PlaceableObject normally clones layer.controlled. Ability routes always
+    // belong to the selected executor, which may be non-owned and deliberately
+    // remains uncontrolled. Hold this override exactly while Foundry performs
+    // its synchronous native initialization so the clone/context are [this].
     const controllableObjects = this.layer.options.controllableObjects;
     try {
-      // Route planning always drags exactly its executor. Temporarily make the
-      // protected initializer use [this], so other controlled tokens are not
-      // cloned and the user's current control selection is not replaced.
       this.layer.options.controllableObjects = false;
-      foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
+      return super._initializeDragLeft(event);
     } finally {
       this.layer.options.controllableObjects = controllableObjects;
     }
-    return Boolean(manager.interactionData?.clones?.length);
   }
 
   /** Complete the system's ability-route variant of native movement planning. */

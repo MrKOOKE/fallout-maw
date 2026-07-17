@@ -162,7 +162,7 @@ export async function requestAbilityMovementRoute({
         showRuler: Boolean(showRuler)
       }
     });
-    if (!tokenObject.startMovementPlanningDrag?.()) {
+    if (!(await tokenObject.startMovementPlanningDrag?.())) {
       tokenObject.layer?._cancelMovementPlanning?.();
       await planning;
       outcome = { cancelled: false, failed: true, reason: "movementPlanningStartFailed" };

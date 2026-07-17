@@ -204,7 +204,7 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isTravelMovementArmed(this.#token)) return undefined;
     const planning = this.#token.planMovement();
-    if (!this.#token.startMovementPlanningDrag()) {
+    if (!(await this.#token.startMovementPlanningDrag())) {
       this.#token.layer?._cancelMovementPlanning?.();
       return undefined;
     }
