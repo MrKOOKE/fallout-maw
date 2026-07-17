@@ -518,14 +518,23 @@ test("right click unwinds canvas selections before cancelling their workflow", (
   ), "utf8");
 
   assert.match(tokenSelection, /const undoLastSelection = \(\) => \{[\s\S]*?Array\.from\(selected\)\.at\(-1\)[\s\S]*?selected\.delete\(selectionId\)[\s\S]*?drawCustomTokenSelectionRows/);
-  assert.match(tokenSelection, /rightClickCandidate = null;\s*if \(undoLastSelection\(\)\) return;\s*finish\(\[\]\)/);
+  assert.match(tokenSelection, /createRightClickPanGuard\(/);
+  assert.match(tokenSelection, /if \(undoLastSelection\(\)\) return;\s*finish\(\[\]\)/);
   assert.match(tokenSelection, /else if \(selected\.size < selectionLimit\) selected\.add\(row\.selectionId\);/);
   assert.match(tokenSelection, /if \(selected\.size >= selectionLimit\) confirm\(\)/);
   assert.match(movementRoutes, /tokenObject\.planAbilityMovement\(\{/);
   assert.match(movementRoutes, /document\.addEventListener\("pointerdown", onPointerDown, \{ capture: true \}/);
   assert.match(movementRoutes, /tokenObject\._addDragWaypoint\(point/);
+  assert.match(movementRoutes, /createRightClickPanGuard\(/);
+  assert.match(movementRoutes, /_removeDragWaypoint/);
   assert.match(movementRoutes, /extractExplicitRouteCheckpoints\(/);
-  assert.doesNotMatch(movementRoutes, /pendingWaypoints|onContextMenu/);
+  assert.doesNotMatch(movementRoutes, /pendingWaypoints/);
+
+  const tokenSourceForRightClick = fs.readFileSync(new URL(
+    "../src/canvas/token.mjs",
+    import.meta.url
+  ), "utf8");
+  assert.match(tokenSourceForRightClick, /_onDragClickRight\(event\)[\s\S]*?isAbilityRoutePlanningInteractive\(this\)[\s\S]*?return;/);
 
   const commandedStart = weaponAttacks.indexOf("class CommandedWeaponAttackController");
   const ordinaryStart = weaponAttacks.indexOf("class WeaponAttackController", commandedStart + 1);

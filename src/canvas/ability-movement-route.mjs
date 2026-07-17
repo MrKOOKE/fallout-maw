@@ -12,6 +12,7 @@ import {
   setAbilityRoutePreviewBudget,
   updateAbilityRoutePreviewBudget
 } from "./ability-route-preview-state.mjs";
+import { createRightClickPanGuard } from "./right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "./target-selection-lifecycle.mjs";
 
 const ROUTE_EPSILON = 1e-6;
@@ -117,10 +118,23 @@ export async function requestAbilityMovementRoute({
     event.stopImmediatePropagation?.();
     void tokenObject.completeAbilityRoutePlanning?.();
   };
+  const rightClickGuard = createRightClickPanGuard({
+    isCanvasEvent: isAbilityRouteCanvasPointerEvent,
+    onClick: () => {
+      if (!tokenObject.isDragged || !isAbilityRoutePlanningInteractive(tokenObject)) return;
+      tokenObject._removeDragWaypoint?.();
+    }
+  });
   const onPointerDown = event => {
-    if (event.button !== 0) return;
     if (!isAbilityRouteCanvasPointerEvent(event)) return;
     if (!tokenObject.isDragged || !isAbilityRoutePlanningInteractive(tokenObject)) return;
+    if (event.button === 2) {
+      // Track only; Foundry's ability-route _onDragClickRight is a no-op so the
+      // canvas can pan. Short clicks confirm undo via the pan guard.
+      rightClickGuard.onPointerDown(event);
+      return;
+    }
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
@@ -133,6 +147,7 @@ export async function requestAbilityMovementRoute({
   };
   window.addEventListener("keydown", onKeyDown, { capture: true });
   document.addEventListener("pointerdown", onPointerDown, { capture: true });
+  rightClickGuard.activate();
 
   const commitPlan = ({ options = {} } = {}) => {
     if (commitPromise) return commitPromise;
@@ -295,6 +310,7 @@ export async function requestAbilityMovementRoute({
   } finally {
     window.removeEventListener("keydown", onKeyDown, { capture: true });
     document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+    rightClickGuard.deactivate();
     clearAbilityRoutePlanCommitter(tokenObject, commitPlan);
     updateAbilityRoutePreviewBudget(tokenObject, { interactive: false }, userId);
     if (!retained) {

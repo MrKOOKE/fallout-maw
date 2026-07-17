@@ -162,6 +162,7 @@ import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../u
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
+import { createRightClickPanGuard } from "../canvas/right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import {
@@ -4930,7 +4931,7 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
       token,
       abilityName
     });
-    ui.notifications.info(`${abilityName}: выберите клетку перемещения. Правая кнопка отменяет выбор.`);
+    ui.notifications.info(`${abilityName}: выберите клетку перемещения. ПКМ отменяет, зажатие ПКМ двигает камеру.`);
 
     const refreshCandidates = () => {
       const nextSignature = getLungeTokenPositionSignature(token);
@@ -4942,6 +4943,7 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
     const cleanup = () => {
       canvas.app?.ticker?.remove?.(refreshCandidates);
       document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      rightClickGuard.deactivate();
       graphics.destroy();
     };
     const finish = value => {
@@ -4949,13 +4951,18 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
       targetSelectionSession.finish({ cancelled: !value });
       resolve(value);
     };
+    const rightClickGuard = createRightClickPanGuard({
+      isCanvasEvent: event => {
+        const view = canvas.app?.view;
+        if (!view || !event) return false;
+        return event.target === view || Array.from(event.composedPath?.() ?? []).includes(view);
+      },
+      onClick: () => finish(null)
+    });
     const onPointerDown = event => {
       if (![0, 2].includes(event.button)) return;
       if (event.button === 2) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation?.();
-        finish(null);
+        rightClickGuard.onPointerDown(event);
         return;
       }
       const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
@@ -4971,6 +4978,7 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
     };
     canvas.app?.ticker?.add?.(refreshCandidates);
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
+    rightClickGuard.activate();
   });
 }
 

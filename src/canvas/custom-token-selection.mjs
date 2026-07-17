@@ -1,7 +1,6 @@
 import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+import { createRightClickPanGuard } from "./right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "./target-selection-lifecycle.mjs";
-
-const RIGHT_CLICK_CANCEL_DISTANCE_PX = 10;
 
 export function requestCustomTokenSelection({
   rows = [],
@@ -27,8 +26,6 @@ export function requestCustomTokenSelection({
     const layer = getCustomTokenSelectionLayer();
     const graphics = new PIXI.Graphics();
     const selected = new Set();
-    const canvasView = canvas.app?.view ?? null;
-    const previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     layer.addChild(graphics);
     drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
 
@@ -45,16 +42,10 @@ export function requestCustomTokenSelection({
     ui.notifications.info(prompt);
 
     let finished = false;
-    let rightClickCandidate = null;
     const cleanup = () => {
       window.removeEventListener("keydown", onKeyDown, { capture: true });
-      window.removeEventListener("mousemove", onMouseMove, { capture: true });
       document.removeEventListener("pointerdown", onPointerDown, { capture: true });
-      document.removeEventListener("pointermove", onPointerMove, { capture: true });
-      canvas.stage?.off?.("mousemove", onCanvasMouseMove);
-      if (canvasView && canvasView.oncontextmenu === onContextMenu) {
-        canvasView.oncontextmenu = previousViewContextMenu;
-      }
+      rightClickGuard.deactivate();
       graphics.destroy();
     };
     const finish = value => {
@@ -94,15 +85,17 @@ export function requestCustomTokenSelection({
       if (event.key === "Escape") finish([]);
       else confirm();
     };
+    const rightClickGuard = createRightClickPanGuard({
+      isCanvasEvent: isCanvasViewEvent,
+      onClick: () => {
+        if (undoLastSelection()) return;
+        finish([]);
+      }
+    });
     const onPointerDown = event => {
       if (!isCanvasViewEvent(event)) return;
       if (event.button === 2) {
-        rightClickCandidate = {
-          pointerId: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
-          dragged: false
-        };
+        rightClickGuard.onPointerDown(event);
         return;
       }
       if (event.button !== 0) return;
@@ -122,69 +115,11 @@ export function requestCustomTokenSelection({
       // Filling the last slot is the commit click — same as commanded attacks.
       if (selected.size >= selectionLimit) confirm();
     };
-    const onPointerMove = event => {
-      if (!rightClickCandidate || event.pointerId !== rightClickCandidate.pointerId) return;
-      updateRightClickDragCandidate(event);
-    };
-    const onMouseMove = event => {
-      if (!rightClickCandidate || !(event.buttons & 2)) return;
-      updateRightClickDragCandidate(event);
-    };
-    const onCanvasMouseMove = event => {
-      if (!rightClickCandidate) return;
-      updateRightClickDragCandidate(getClientPointFromCanvasEvent(event));
-    };
-    const onContextMenu = event => {
-      if (!isCanvasViewEvent(event)) return;
-      if (isRightClickDragRelease(event)) {
-        rightClickCandidate = null;
-        if (typeof previousViewContextMenu === "function") return previousViewContextMenu.call(canvasView, event);
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      rightClickCandidate = null;
-      if (undoLastSelection()) return;
-      finish([]);
-    };
-    const updateRightClickDragCandidate = event => {
-      if (!rightClickCandidate) return;
-      if (getPointerDistance(event, rightClickCandidate) >= getFoundryDragResistance()) {
-        rightClickCandidate.dragged = true;
-      }
-    };
-    const isRightClickDragRelease = event => {
-      if (canvas.mouseInteractionManager?._dragRight && canvas.mouseInteractionManager?.state >= 4) return true;
-      if (!rightClickCandidate) return false;
-      return rightClickCandidate.dragged || getPointerDistance(event, rightClickCandidate) >= getFoundryDragResistance();
-    };
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
-    window.addEventListener("mousemove", onMouseMove, { capture: true });
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
-    document.addEventListener("pointermove", onPointerMove, { capture: true });
-    canvas.stage?.on?.("mousemove", onCanvasMouseMove);
-    if (canvasView) canvasView.oncontextmenu = onContextMenu;
+    rightClickGuard.activate();
   });
-}
-
-function getPointerDistance(event, origin = {}) {
-  return Math.hypot(
-    (Number(event?.clientX) || 0) - (Number(origin.x) || 0),
-    (Number(event?.clientY) || 0) - (Number(origin.y) || 0)
-  );
-}
-
-function getFoundryDragResistance() {
-  return Math.max(1, Number(foundry.canvas?.interaction?.MouseInteractionManager?.DEFAULT_DRAG_RESISTANCE_PX) || RIGHT_CLICK_CANCEL_DISTANCE_PX);
-}
-
-function getClientPointFromCanvasEvent(event) {
-  return {
-    clientX: Number(event?.clientX ?? event?.client?.x ?? event?.nativeEvent?.clientX) || 0,
-    clientY: Number(event?.clientY ?? event?.client?.y ?? event?.nativeEvent?.clientY) || 0
-  };
 }
 
 export async function requestCustomActorTokenSelection({

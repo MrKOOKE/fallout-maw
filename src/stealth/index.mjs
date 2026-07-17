@@ -18,6 +18,7 @@ import {
   registerMovementInterruptionProvider
 } from "../canvas/movement-interruptions.mjs";
 import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+import { actorHasIncapacitatingStatus } from "../combat/reaction-hub.mjs";
 import {
   deferStealthActorRefresh,
   deferStealthedTokenVisibilityRefresh,
@@ -1561,7 +1562,19 @@ function isValidStealthObserver(hiddenToken, observerToken) {
   if (!hiddenToken?.actor || !observerToken?.actor) return false;
   if (hiddenToken.id === observerToken.id) return false;
   if (hiddenToken.actor.uuid === observerToken.actor.uuid) return false;
+  if (isStealthObserverIncapacitated(observerToken)) return false;
   return !areActorsStealthAlliesCached(hiddenToken.actor, observerToken.actor);
+}
+
+function isStealthObserverIncapacitated(observerToken) {
+  const actor = observerToken?.actor ?? null;
+  if (actorHasIncapacitatingStatus(actor)) return true;
+  return Boolean(
+    observerToken?.document?.hasStatusEffect?.("dead")
+    || observerToken?.document?.hasStatusEffect?.("unconscious")
+    || observerToken?.hasStatusEffect?.("dead")
+    || observerToken?.hasStatusEffect?.("unconscious")
+  );
 }
 
 function areActorsStealthAlliesCached(hiddenActor, observerActor) {

@@ -383,6 +383,14 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
   }
 
   /** @override */
+  _onDragClickRight(event) {
+    // Ability routes distinguish short RMB (undo waypoint) from RMB pan via
+    // createRightClickPanGuard. Foundry's default cancels canvas pan here.
+    if (isAbilityRoutePlanningInteractive(this)) return;
+    return super._onDragClickRight(event);
+  }
+
+  /** @override */
   _onClickRight(event) {
     if (!this.isOwner && isTokenEquipmentHudEnabled()) {
       event.stopPropagation();
