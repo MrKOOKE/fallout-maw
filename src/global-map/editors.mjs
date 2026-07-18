@@ -3,9 +3,17 @@ import {
   DEFAULT_LOCATION,
   DEFAULT_LOCATION_EXIT,
   DEFAULT_TERRAIN,
-  DEFAULT_TRANSITION
+  DEFAULT_TRANSITION,
+  LOCATION_ENTRY_MODES
 } from "./constants.mjs";
-import { deleteCollectionEntry, getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState } from "./storage.mjs";
+import {
+  deleteCollectionEntry,
+  getGlobalMapFlag,
+  getSceneState,
+  normalizeLocationEntryMode,
+  saveCollectionEntry,
+  updateSceneState
+} from "./storage.mjs";
 import { getConnectedCellKeyGroups } from "./geometry.mjs";
 import {
   deleteLocationTree,
@@ -120,8 +128,21 @@ export class LocationEditor extends GlobalMapEditorBase {
 
   async _prepareContext() {
     const linkedScene = this.data.linkedSceneId ? game.scenes?.get(this.data.linkedSceneId) : null;
+    const entryMode = normalizeLocationEntryMode(this.data.entryMode);
     return {
       location: this.data,
+      entryModeChoices: [
+        {
+          value: LOCATION_ENTRY_MODES.CARRIER,
+          label: "Подкарта путешествия",
+          selected: entryMode === LOCATION_ENTRY_MODES.CARRIER
+        },
+        {
+          value: LOCATION_ENTRY_MODES.DEPLOY,
+          label: "Конечная локация",
+          selected: entryMode === LOCATION_ENTRY_MODES.DEPLOY
+        }
+      ],
       isNew: this.isNew,
       canDelete: !this.isNew,
       canConnectExistingScene: !linkedScene,
@@ -149,6 +170,7 @@ export class LocationEditor extends GlobalMapEditorBase {
       strokeWidth: Math.max(1, Number(values.strokeWidth) || 3),
       fontSize: Math.max(8, Number(values.fontSize) || 28),
       alwaysDiscovered: readCheckboxValue(values.alwaysDiscovered),
+      entryMode: normalizeLocationEntryMode(values.entryMode),
       mapImage: "",
       image: String(values.image ?? "").trim()
     };
@@ -215,7 +237,8 @@ export class LocationEditor extends GlobalMapEditorBase {
       strokeWidth: Math.max(1, Number(location.strokeWidth) || 3),
       textColor: String(location.textColor || "#ffffff"),
       fontSize: Math.max(8, Number(location.fontSize) || 28),
-      alwaysDiscovered: readCheckboxValue(location.alwaysDiscovered)
+      alwaysDiscovered: readCheckboxValue(location.alwaysDiscovered),
+      entryMode: normalizeLocationEntryMode(location.entryMode)
     });
   }
 

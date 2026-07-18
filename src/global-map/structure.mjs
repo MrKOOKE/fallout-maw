@@ -5,7 +5,8 @@ import {
   GLOBAL_MAP_FLAG,
   GLOBAL_MAP_ROOT_SCENE_SETTING,
   GLOBAL_MAP_ROLES,
-  GLOBAL_MAP_TRANSITIONS_FOLDER_NAME
+  GLOBAL_MAP_TRANSITIONS_FOLDER_NAME,
+  LOCATION_ENTRY_MODES
 } from "./constants.mjs";
 import {
   findLocation,
@@ -327,7 +328,77 @@ export function validateGlobalMapStructure() {
     const expected = getGlobalMapParentFolder(parentScene);
     if (!expected || documentFolderId(folder) !== expected.id) issues.push(`Нарушено положение папки ${folder.name}.`);
   }
+  for (const scene of game.scenes ?? []) {
+    const sceneFlag = getGlobalMapFlag(scene);
+    if (!rootFlag?.mapId || sceneFlag?.mapId !== rootFlag.mapId) continue;
+    for (const location of getSceneState(scene).locations) {
+      validateLocationLink(scene, location, issues);
+    }
+  }
   return { valid: issues.length === 0, issues };
+}
+
+export function canCreateChildLocations(scene) {
+  const flag = getGlobalMapFlag(scene);
+  if (!flag?.mapId || ![GLOBAL_MAP_ROLES.ROOT_SCENE, GLOBAL_MAP_ROLES.LOCATION_SCENE].includes(flag.role)) {
+    return false;
+  }
+  const parentFolder = flag.role === GLOBAL_MAP_ROLES.ROOT_SCENE
+    ? getRootFolder(flag.mapId)
+    : getLocationFolder(flag.nodeId);
+  if (!parentFolder) return false;
+  const maxDepth = Number(CONST.FOLDER_MAX_DEPTH) || 4;
+  return (parentFolder.ancestors?.length ?? countFolderAncestors(parentFolder)) + 1 < maxDepth;
+}
+
+function validateLocationLink(parentScene, location, issues) {
+  const locationName = String(location?.name || location?.id || "без названия");
+  const linkedSceneId = String(location?.linkedSceneId ?? "").trim();
+  if (!linkedSceneId) {
+    issues.push(`У локации «${locationName}» не указана связанная сцена.`);
+    return;
+  }
+  const targetScene = game.scenes?.get(linkedSceneId);
+  if (!targetScene) {
+    issues.push(`Связанная сцена локации «${locationName}» не найдена.`);
+    return;
+  }
+  const parentFlag = getGlobalMapFlag(parentScene);
+  const targetFlag = getGlobalMapFlag(targetScene);
+  const validManagedLink = targetFlag?.mapId === parentFlag?.mapId
+    && targetFlag.role === GLOBAL_MAP_ROLES.LOCATION_SCENE
+    && targetFlag.nodeId === location.id
+    && targetFlag.parentSceneId === parentScene.id;
+  if (!validManagedLink) issues.push(`Связь локации «${locationName}» со сценой ${targetScene.name} повреждена.`);
+
+  const targetState = getSceneState(targetScene);
+  if (!hasPassableExitZone(targetState)) {
+    issues.push(`На связанной сцене локации «${locationName}» отсутствуют зоны входа и выхода.`);
+  }
+  if (location.entryMode !== LOCATION_ENTRY_MODES.DEPLOY) return;
+  const passableChildren = targetState.locations.filter(child => {
+    const childTarget = child.linkedSceneId ? game.scenes?.get(child.linkedSceneId) : null;
+    return childTarget && hasPassableExitZone(getSceneState(childTarget));
+  });
+  if (!passableChildren.length) return;
+  const childNames = passableChildren.map(child => `«${child.name || child.id}»`).join(", ");
+  issues.push(`Конечная локация «${locationName}» содержит проходимые вложенные локации: ${childNames}.`);
+}
+
+function hasPassableExitZone(state) {
+  return state.locationExitZones.some(zone => Array.isArray(zone.cells) && zone.cells.length > 0);
+}
+
+function countFolderAncestors(folder) {
+  let count = 0;
+  let current = folder?.folder ?? null;
+  const visited = new Set();
+  while (current && !visited.has(current.id ?? current)) {
+    visited.add(current.id ?? current);
+    count += 1;
+    current = current.folder ?? null;
+  }
+  return count;
 }
 
 async function detachManagedScene(scene) {

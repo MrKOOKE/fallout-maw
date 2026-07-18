@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { GLOBAL_MAP_SOCKET } from "./constants.mjs";
+import { GLOBAL_MAP_SOCKET, LOCATION_ENTRY_MODES, TRAVEL_GROUP_TOKEN_FLAG } from "./constants.mjs";
 import { cellKey, getLocationCells, pointToCell, tokenCenter, tokenTopLeftAtCell } from "./geometry.mjs";
 import { getSceneState } from "./storage.mjs";
 import {
@@ -12,10 +12,29 @@ import {
   promptLocationExit,
   travelToLocation as travelGroupToLocation
 } from "./travel-groups.mjs";
+import {
+  getTravelGroupViewerUserIds,
+  isTravelGroupCarrierActor,
+  resolveTravelGroupParticipants
+} from "./travel-group-data.mjs";
+import { buildTravelGroupRouteUpdate } from "./travel-group-routing.mjs";
+import { transferTokensBetweenScenes } from "./token-transfer.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const runtimeMembership = new Map();
 const activeTriggerPrompts = new Set();
+const pendingTravelViewWaiters = new Map();
+
+function runAfterCanvasSettles(callback) {
+  const attempt = () => {
+    if (canvas.loading) {
+      setTimeout(attempt, 16);
+      return;
+    }
+    void callback();
+  };
+  setTimeout(attempt, 0);
+}
 
 export function registerGlobalMapTravelHooks() {
   Hooks.on("moveToken", onTokenMoved);
@@ -247,11 +266,7 @@ async function handleTravelSocket(payload) {
     if (game.user?.isGM && isResponsibleGM()) await performDirectTravel(payload);
   } else if (payload.action === "globalMap.travel.complete") {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
-    const scene = game.scenes?.get(payload.targetSceneId);
-    if (scene && canvas.scene?.id !== scene.id) await scene.view();
-    if (payload.activateTokenControls && canvas.scene?.id === scene?.id) {
-      canvas.tokens?.activate?.({ tool: "select" });
-    }
+    await completeTravelForCurrentViewer(payload);
   } else if (payload.action === "globalMap.travel.error" && payload.requestingUserId === game.user?.id) {
     ui.notifications.error(payload.message || "Не удалось выполнить переход.");
   }
@@ -283,6 +298,7 @@ async function performDirectTravel(payload) {
 }
 
 async function performTravel(args) {
+  args = { ...args, requestId: String(args.requestId ?? foundry.utils.randomID()) };
   const {
     originScene,
     targetScene,
@@ -295,20 +311,29 @@ async function performTravel(args) {
     .map(id => originScene?.tokens?.get(id))
     .filter(token => token && canUserMoveToken(requestingUser, token));
   if (!originScene || !targetScene || !tokenDocuments.length) return performTravelNow(args);
+  if (tokenDocuments.some(hasPendingCarrierArrival)) {
+    return emitTravelError(args, "Сначала завершите уже начатый переход группы.");
+  }
 
   return withSystemEventRoot({
     kind: "directTravel",
-    operationId: `direct-travel:${requestId || foundry.utils.randomID()}`,
+    operationId: `direct-travel:${requestId}`,
     sceneUuid: String(originScene.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? "")
   }, async scope => {
-    const participants = tokenDocuments.map(token => systemEventParticipant({ actor: token.actor, token })).filter(Boolean);
-    for (const [index, target] of participants.entries()) {
+    const participantRecords = await collectTravelEventParticipants(tokenDocuments);
+    const participants = participantRecords.map(record => record.target);
+    for (const [index, record] of participantRecords.entries()) {
+      const { target, entryMode, groupPreserved } = record;
       const common = {
         originSceneUuid: String(originScene.uuid ?? ""),
         targetSceneUuid: String(targetScene.uuid ?? ""),
         requestingUserId: String(requestingUserId ?? ""),
         requestId: String(requestId ?? ""),
+        transferId: String(requestId ?? ""),
+        entryMode,
+        groupPreserved,
+        direction: "transition",
         actorUuid: target.actorUuid,
         tokenUuid: target.tokenUuid
       };
@@ -326,12 +351,17 @@ async function performTravel(args) {
 
     const completed = await performTravelNow({ ...args, chainRef: scope.chainRef });
     if (!completed) return false;
-    for (const [index, target] of participants.entries()) {
+    for (const [index, record] of participantRecords.entries()) {
+      const { target, entryMode, groupPreserved } = record;
       const data = {
         originSceneUuid: String(originScene.uuid ?? ""),
         targetSceneUuid: String(targetScene.uuid ?? ""),
         requestingUserId: String(requestingUserId ?? ""),
         requestId: String(requestId ?? ""),
+        transferId: String(requestId ?? ""),
+        entryMode,
+        groupPreserved,
+        direction: "transition",
         actorUuid: target.actorUuid,
         tokenUuid: target.tokenUuid
       };
@@ -365,49 +395,162 @@ async function performTravelNow({ originScene, targetScene, tokenIds, requesting
     .map(id => originScene.tokens?.get(id))
     .filter(token => token && canUserMoveToken(requestingUser, token));
   if (!tokenDocuments.length) return emitTravelError({ requestingUserId, requestId }, "Нет доступных токенов для перехода.");
-
-  const createData = tokenDocuments.map((token, index) => {
-    const data = token.toObject();
-    delete data._id;
-    delete data.id;
-    const cell = selectAnchorCell(anchorCells, index, targetScene);
-    const position = tokenTopLeftAtCell(targetScene, data, cell, index);
-    data.x = position.x;
-    data.y = position.y;
-    return data;
-  });
-
-  let created = [];
-  try {
-    created = await targetScene.createEmbeddedDocuments("Token", createData, {
-      falloutMawSystemEventChainRef: chainRef,
-      chainRef
-    });
-    if (created.length !== createData.length) throw new Error("Not all target tokens were created.");
-    await originScene.deleteEmbeddedDocuments("Token", tokenDocuments.map(token => token.id), {
-      falloutMawSystemEventChainRef: chainRef,
-      chainRef
-    });
-  } catch (error) {
-    if (created.length) {
-      await targetScene.deleteEmbeddedDocuments("Token", created.map(token => token.id), {
-        falloutMawSystemEventChainRef: chainRef,
-        chainRef
-      }).catch(() => {});
-    }
-    console.error(`${FALLOUT_MAW.id} | Global-map travel failed`, error);
-    return emitTravelError({ requestingUserId, requestId }, "Перенос токенов не завершён; исходные токены сохранены.");
+  if (tokenDocuments.some(hasPendingCarrierArrival)) {
+    return emitTravelError({ requestingUserId, requestId }, "Сначала завершите уже начатый переход группы.");
   }
 
-  const viewerUserIds = [requestingUserId].filter(Boolean);
-  game.socket.emit(GLOBAL_MAP_SOCKET, {
+  const destinationUpdates = tokenDocuments.map((token, index) => {
+    const data = token.toObject();
+    const cell = selectAnchorCell(anchorCells, index, targetScene);
+    const position = tokenTopLeftAtCell(targetScene, data, cell, index);
+    return { x: position.x, y: position.y };
+  });
+  const carrierTokens = tokenDocuments.filter(token => isTravelGroupCarrierActor(token.actor));
+  const actorUpdates = Array.from(new Map(carrierTokens.map(token => [token.actor?.id, token.actor])).values())
+    .filter(Boolean)
+    .map(actor => buildTravelGroupRouteUpdate(actor, targetScene, requestId));
+
+  let transfer;
+  try {
+    transfer = await transferTokensBetweenScenes({
+      originScene,
+      targetScene,
+      tokenDocuments,
+      destinationUpdates,
+      actorUpdates,
+      operationOptions: {
+        falloutMawSystemEventChainRef: chainRef,
+        chainRef
+      }
+    });
+  } catch (error) {
+    console.error(`${FALLOUT_MAW.id} | Global-map travel failed`, error);
+    return emitTravelError(
+      { requestingUserId, requestId },
+      "Перенос токенов не подтверждён. Обновите сцену перед повторной попыткой."
+    );
+  }
+
+  const viewerUserIds = Array.from(new Set([
+    requestingUserId,
+    ...carrierTokens.flatMap(token => getTravelGroupViewerUserIds(token.actor, { requestingUserId }))
+  ].filter(Boolean)));
+  const controlTokenIds = carrierTokens
+    .map(token => transfer.tokenMap.get(token)?.id)
+    .filter(Boolean);
+  const completePayload = {
     action: "globalMap.travel.complete",
     requestId,
     targetSceneId: targetScene.id,
-    viewerUserIds
+    viewerUserIds,
+    activateTokenControls: Boolean(controlTokenIds.length),
+    controlTokenIds
+  };
+  if (carrierTokens.length && !targetScene.active) await targetScene.activate().catch(error => {
+    console.warn(`${FALLOUT_MAW.id} | Could not activate carrier destination Scene`, error);
   });
-  if (viewerUserIds.includes(game.user?.id) && canvas.scene?.id !== targetScene.id) await targetScene.view();
+  game.socket.emit(GLOBAL_MAP_SOCKET, completePayload);
+  if (viewerUserIds.includes(game.user?.id)) {
+    await completeTravelForCurrentViewer(completePayload);
+  }
   return true;
+}
+
+async function completeTravelForCurrentViewer(payload = {}) {
+  const scene = game.scenes?.get(payload.targetSceneId);
+  if (!scene) return false;
+  const waiterKey = String(payload.requestId || payload.targetSceneId);
+  if (canvas.loading) {
+    queueTravelViewRetry(waiterKey, payload);
+    return true;
+  }
+  if (canvas.scene?.id !== scene.id) await scene.view();
+  if (canvas.loading || canvas.scene?.id !== scene.id || !canvas.ready) {
+    queueTravelViewRetry(waiterKey, payload);
+    return true;
+  }
+  clearTravelViewRetry(waiterKey);
+  if (payload.activateTokenControls) restoreTransferredTokenControls(payload);
+  return true;
+}
+
+function queueTravelViewRetry(key, payload) {
+  clearTravelViewRetry(key);
+  const waiter = { hookId: null };
+  pendingTravelViewWaiters.set(key, waiter);
+  if (canvas.loading) {
+    runAfterCanvasSettles(() => {
+      if (pendingTravelViewWaiters.get(key) !== waiter) return;
+      pendingTravelViewWaiters.delete(key);
+      void completeTravelForCurrentViewer(payload);
+    });
+    return;
+  }
+  const hookId = Hooks.on("canvasReady", () => {
+    clearTravelViewRetry(key);
+    runAfterCanvasSettles(() => completeTravelForCurrentViewer(payload));
+  });
+  waiter.hookId = hookId;
+}
+
+function clearTravelViewRetry(key) {
+  const waiter = pendingTravelViewWaiters.get(key);
+  if (waiter?.hookId !== null && waiter?.hookId !== undefined) Hooks.off("canvasReady", waiter.hookId);
+  pendingTravelViewWaiters.delete(key);
+}
+
+function restoreTransferredTokenControls({ targetSceneId, controlTokenIds = [] } = {}) {
+  const restore = () => {
+    if (!canvas?.ready || canvas.loading || canvas.scene?.id !== targetSceneId) return false;
+    canvas.tokens?.activate?.({ tool: "select" });
+    const tokens = controlTokenIds.map(id => canvas.tokens?.get?.(id)).filter(Boolean);
+    for (const [index, token] of tokens.entries()) token.control?.({ releaseOthers: index === 0 });
+    return true;
+  };
+  if (restore()) return;
+  const hookId = Hooks.on("canvasReady", () => {
+    runAfterCanvasSettles(() => {
+      if (!restore()) return;
+      Hooks.off("canvasReady", hookId);
+    });
+  });
+}
+
+async function collectTravelEventParticipants(tokenDocuments = []) {
+  const records = [];
+  const seen = new Set();
+  const add = (target, key = "", groupPreserved = false) => {
+    if (!target) return;
+    const identity = key || target.tokenUuid || target.actorUuid;
+    if (!identity || seen.has(identity)) return;
+    seen.add(identity);
+    records.push({
+      target,
+      groupPreserved,
+      entryMode: groupPreserved ? LOCATION_ENTRY_MODES.CARRIER : LOCATION_ENTRY_MODES.DEPLOY
+    });
+  };
+  for (const token of tokenDocuments) {
+    if (!isTravelGroupCarrierActor(token.actor)) {
+      add(systemEventParticipant({ actor: token.actor, token }), `token:${token.uuid}`, false);
+      continue;
+    }
+    for (const { actor, actorUuid } of await resolveTravelGroupParticipants(token.actor)) {
+      add(
+        actor ? systemEventParticipant({ actor }) : { actorUuid, tokenUuid: "", itemUuid: "" },
+        `actor:${actorUuid}`,
+        true
+      );
+    }
+  }
+  return records;
+}
+
+function hasPendingCarrierArrival(token) {
+  return Boolean(
+    isTravelGroupCarrierActor(token?.actor)
+    && token.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival
+  );
 }
 
 function getTriggeredTravelTokenIds(triggerToken) {

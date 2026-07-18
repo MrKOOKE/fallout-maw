@@ -1,7 +1,7 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 
 export const GLOBAL_MAP_FLAG = "globalMap";
-export const GLOBAL_MAP_VERSION = 2;
+export const GLOBAL_MAP_VERSION = 3;
 export const GLOBAL_MAP_ROOT_SCENE_SETTING = "globalMapRootSceneId";
 export const GLOBAL_MAP_TRAVEL_IMAGE_SETTING = "globalMapTravelImage";
 export const GLOBAL_MAP_TRAVEL_SPEED_FORMULA_SETTING = "globalMapTravelSpeedFormula";
@@ -24,6 +24,11 @@ export const GLOBAL_MAP_ROLES = Object.freeze({
   ZONE_SCENE: "zoneScene"
 });
 
+export const LOCATION_ENTRY_MODES = Object.freeze({
+  CARRIER: "carrier",
+  DEPLOY: "deploy"
+});
+
 export const DEFAULT_LOCATION = Object.freeze({
   name: "Новая локация",
   size: 1,
@@ -34,6 +39,7 @@ export const DEFAULT_LOCATION = Object.freeze({
   image: "",
   mapImage: "",
   alwaysDiscovered: false,
+  entryMode: LOCATION_ENTRY_MODES.DEPLOY,
   linkedSceneId: null,
   linkedSceneOwned: false
 });

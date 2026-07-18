@@ -1,10 +1,12 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
+  DEFAULT_LOCATION,
   DEFAULT_SCENE_STATE,
   GLOBAL_MAP_FLAG,
   GLOBAL_MAP_ROOT_SCENE_SETTING,
   GLOBAL_MAP_VERSION,
-  GLOBAL_MAP_ROLES
+  GLOBAL_MAP_ROLES,
+  LOCATION_ENTRY_MODES
 } from "./constants.mjs";
 
 export function getGlobalMapFlag(document) {
@@ -50,7 +52,7 @@ export function normalizeSceneState(value) {
     inplace: false,
     recursive: true
   });
-  state.locations = Array.isArray(state.locations) ? state.locations : [];
+  state.locations = Array.isArray(state.locations) ? state.locations.map(normalizeLocation) : [];
   state.terrains = Array.isArray(state.terrains) ? state.terrains : [];
   state.transitions = Array.isArray(state.transitions) ? state.transitions : [];
   state.locationExitZones = Array.isArray(state.locationExitZones) ? state.locationExitZones : [];
@@ -64,6 +66,24 @@ export function normalizeSceneState(value) {
   state.fog.nativeMode = Number.isInteger(state.fog?.nativeMode) ? state.fog.nativeMode : null;
   state.fog.exploredCellKeys = uniqueStrings(state.fog?.exploredCellKeys);
   return state;
+}
+
+export function normalizeLocation(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? foundry.utils.deepClone(value)
+    : {};
+  const location = foundry.utils.mergeObject(foundry.utils.deepClone(DEFAULT_LOCATION), source, {
+    inplace: false,
+    recursive: true
+  });
+  location.entryMode = normalizeLocationEntryMode(source.entryMode);
+  return location;
+}
+
+export function normalizeLocationEntryMode(value) {
+  return value === LOCATION_ENTRY_MODES.CARRIER
+    ? LOCATION_ENTRY_MODES.CARRIER
+    : LOCATION_ENTRY_MODES.DEPLOY;
 }
 
 export function getRootScene() {

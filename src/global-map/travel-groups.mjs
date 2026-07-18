@@ -14,6 +14,7 @@ import {
   GLOBAL_MAP_LAYER,
   GLOBAL_MAP_SOCKET,
   GLOBAL_MAP_VERSION,
+  LOCATION_ENTRY_MODES,
   TRAVEL_GROUP_FLAG,
   TRAVEL_GROUP_FOLDER_FLAG,
   TRAVEL_GROUP_TOKEN_FLAG
@@ -26,9 +27,26 @@ import {
   pointToCell,
   tokenCenter
 } from "./geometry.mjs";
-import { findLocation, getGlobalMapFlag, getSceneState, setDiscovered, updateSceneState } from "./storage.mjs";
+import {
+  findLocation,
+  getGlobalMapFlag,
+  getSceneState,
+  normalizeLocationEntryMode,
+  setDiscovered,
+  updateSceneState
+} from "./storage.mjs";
+import {
+  getTravelGroupData,
+  getTravelGroupViewerUserIds,
+  getTravelPassengerChildren,
+  isTravelGroupCarrierActor,
+  resolveTravelPassengerActor,
+  resolveTravelGroupParticipants
+} from "./travel-group-data.mjs";
+import { buildTravelGroupRouteUpdate, createPendingArrival } from "./travel-group-routing.mjs";
 import { getTravelGroupImage, getTravelGroupPrototypeToken } from "./travel-settings.mjs";
 import { createTravelFormulaSnapshot, evaluateTravelSpeed } from "./travel-speed.mjs";
+import { transferTokensBetweenScenes } from "./token-transfer.mjs";
 import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
 import {
   isSystemEventCancelled,
@@ -44,8 +62,20 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const assemblyApps = new Map();
 const pendingExitPrompts = new Map();
 const arrivalTimers = new Map();
+const arrivalSelectionWaiters = new Map();
 const pendingRequests = new Map();
 let responsibleRequestQueue = Promise.resolve();
+
+function runAfterCanvasSettles(callback) {
+  const attempt = () => {
+    if (canvas.loading) {
+      setTimeout(attempt, 16);
+      return;
+    }
+    void callback();
+  };
+  setTimeout(attempt, 0);
+}
 
 export function registerTravelGroupHooks() {
   Hooks.on("preUpdateActor", protectTravelActorUpdate);
@@ -87,18 +117,18 @@ export function registerTravelGroupHooks() {
   });
   Hooks.on("updateUser", () => {
     if (isResponsibleGM()) void maintainAssemblyLeaders();
-    if (isResponsibleGM()) resumeArrivalTimers();
+    if (isResponsibleGM()) queueResumeArrivalTimers();
   });
   Hooks.on("ready", () => {
-    if (isResponsibleGM()) resumeArrivalTimers();
+    if (isResponsibleGM()) queueResumeArrivalTimers();
     void restoreAssemblyWindowsForCurrentUser();
   });
-  Hooks.on("canvasReady", () => restoreArrivalSelectionForCurrentUser());
+  Hooks.on("canvasReady", () => runAfterCanvasSettles(restoreArrivalSelectionForCurrentUser));
 }
 
 export function registerTravelGroupSocket() {
   game.socket.on(GLOBAL_MAP_SOCKET, handleTravelGroupSocket);
-  if (isResponsibleGM()) resumeArrivalTimers();
+  if (isResponsibleGM()) queueResumeArrivalTimers();
 }
 
 export async function promptLocationExit({ sceneId, exitZoneId, tokenId, userId = game.user?.id } = {}) {
@@ -109,14 +139,28 @@ export async function promptLocationExit({ sceneId, exitZoneId, tokenId, userId 
   const promptKey = `${sceneId}:${tokenId}`;
   if (pendingExitPrompts.has(promptKey)) return false;
   pendingExitPrompts.set(promptKey, { dialog: null, sceneId, exitZoneId, tokenId, userId });
+  const preservesCarrier = isTravelGroupCarrierActor(token.actor);
+  const parentScene = game.scenes?.get(getGlobalMapFlag(scene)?.parentSceneId);
+  const parentSceneName = String(parentScene?.name ?? "").trim();
+  const returnDestination = parentSceneName ? `на «${parentSceneName}»` : "назад";
+  const returnDestinationHtml = parentSceneName
+    ? `на «${foundry.utils.escapeHTML(parentSceneName)}»`
+    : "назад";
   const result = await DialogV2.wait({
-    window: { title: zone.name || "Покинуть локацию?" },
-    content: `<p>Покинуть локацию через <strong>${foundry.utils.escapeHTML(zone.name || "зону выхода")}</strong>?</p>`,
-    buttons: [
-      { action: "solo", label: "Покинуть самому", icon: "fa-solid fa-person-walking-arrow-right" },
-      { action: "group", label: "В составе группы", icon: "fa-solid fa-people-group", default: true },
-      { action: "stay", label: "Остаться", icon: "fa-solid fa-xmark" }
-    ],
+    window: { title: preservesCarrier ? `Вернуться ${returnDestination}?` : (zone.name || "Покинуть локацию?") },
+    content: preservesCarrier
+      ? `<p>Вернуться ${returnDestinationHtml} всей путешествующей группой?</p>`
+      : `<p>Покинуть локацию через <strong>${foundry.utils.escapeHTML(zone.name || "зону выхода")}</strong>?</p>`,
+    buttons: preservesCarrier
+      ? [
+        { action: "carrier", label: `Вернуться ${returnDestination}`, icon: "fa-solid fa-arrow-left", default: true },
+        { action: "stay", label: "Остаться", icon: "fa-solid fa-xmark" }
+      ]
+      : [
+        { action: "solo", label: "Покинуть самому", icon: "fa-solid fa-person-walking-arrow-right" },
+        { action: "group", label: "В составе группы", icon: "fa-solid fa-people-group", default: true },
+        { action: "stay", label: "Остаться", icon: "fa-solid fa-xmark" }
+      ],
     rejectClose: false,
     render: (_event, dialog) => {
       if (!pendingExitPrompts.has(promptKey)) {
@@ -127,7 +171,7 @@ export async function promptLocationExit({ sceneId, exitZoneId, tokenId, userId 
     }
   });
   pendingExitPrompts.delete(promptKey);
-  if (result !== "solo" && result !== "group") return false;
+  if (!["solo", "group", "carrier"].includes(result)) return false;
   return requestLocationExit({ sceneId, exitZoneId, tokenId, mode: result, requestingUserId: userId });
 }
 
@@ -410,12 +454,12 @@ async function handleTravelGroupSocket(payload, senderUserId = null) {
     if (senderUserId && payload.requestingUserId !== senderUserId) return;
     if (game.user?.isGM && isResponsibleGM()) {
       const result = await queueResponsibleGMRequest(payload);
-      if (result !== false) emitGroupRequestComplete(payload);
+      emitGroupRequestComplete(payload, result !== false);
     }
     return;
   }
   if (payload.action === "travelGroup.request.complete" && payload.requestingUserId === game.user?.id) {
-    resolvePendingRequest(payload.requestId, true);
+    resolvePendingRequest(payload.requestId, payload.success !== false);
   } else if (payload.action === "travelGroup.assembly.changed") {
     await handleAssemblyChanged(payload);
   } else if (payload.action === "travelGroup.assembly.closed") {
@@ -423,9 +467,7 @@ async function handleTravelGroupSocket(payload, senderUserId = null) {
     await app?.close?.({ falloutMaWAssemblyClosed: true });
   } else if (payload.action === "travelGroup.arrival.open") {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
-    runWhenCanvasSceneReady(payload.targetSceneId, () => (
-      canvas.falloutMaWGlobalMap?.startArrivalSelection?.(payload)
-    ));
+    await openArrivalSelection(payload);
   } else if (payload.action === "travelGroup.arrival.closed") {
     await restoreTokenControlsAfterArrival(payload);
   } else if (payload.action === "travelGroup.error" && payload.requestingUserId === game.user?.id) {
@@ -442,18 +484,29 @@ function resolvePendingRequest(requestId, result) {
   pending.resolve(result);
 }
 
-function emitGroupRequestComplete(payload) {
+function emitGroupRequestComplete(payload, success = true) {
   game.socket.emit(GLOBAL_MAP_SOCKET, {
     action: "travelGroup.request.complete",
     requestId: payload.requestId,
-    requestingUserId: payload.requestingUserId
+    requestingUserId: payload.requestingUserId,
+    success
   }, { recipients: [payload.requestingUserId] });
 }
 
 function queueResponsibleGMRequest(payload) {
-  const task = responsibleRequestQueue.then(() => handleResponsibleGMRequest(payload));
+  return queueResponsibleGMTask(() => handleResponsibleGMRequest(payload));
+}
+
+function queueResponsibleGMTask(callback) {
+  const task = responsibleRequestQueue.then(callback);
   responsibleRequestQueue = task.catch(() => {});
   return task;
+}
+
+function queueResumeArrivalTimers() {
+  void queueResponsibleGMTask(resumeArrivalTimers).catch(error => {
+    console.warn(`${FALLOUT_MAW.id} | Could not resume pending travel-group arrivals`, error);
+  });
 }
 
 async function handleResponsibleGMRequest(payload) {
@@ -482,6 +535,12 @@ async function handleExitRequest(payload) {
   const zone = getSceneState(scene).locationExitZones.find(entry => entry.id === payload.exitZoneId);
   const user = game.users?.get(payload.requestingUserId);
   validateExitParticipant(scene, zone, token, user);
+  if (isTravelGroupCarrierActor(token.actor)) {
+    if (token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival) {
+      throw new Error("Сначала завершите уже начатый переход группы.");
+    }
+    return performCarrierDeparture({ scene, zone, carrierToken: token, requestingUserId: user.id });
+  }
   if (!["solo", "group"].includes(payload.mode)) throw new Error("Не выбран режим выхода.");
   if (payload.mode === "solo") {
     const result = await performDeparture({ scene, zone, tokenDocuments: [token], requestingUserId: user.id });
@@ -701,23 +760,37 @@ async function handleArrivalRequest(payload) {
   const found = findLocation(payload.locationId);
   if (!originScene || !token?.actor || !user || !found || found.scene.id !== originScene.id) throw new Error("Локация или группа не найдена.");
   if (!token.actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId) throw new Error("На глобальную карту может входить только носитель группы.");
+  if (!getTravelCarrierUnits(token.actor).length) throw new Error("В группе нет участников для переноса.");
   if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на группу.");
   const currentKey = cellKey(pointToCell(originScene, tokenCenter(token, originScene)));
   if (!getLocationCells(originScene, found.location).some(cell => cellKey(cell) === currentKey)) throw new Error("Группа больше не находится на локации.");
+  if (token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival) {
+    throw new Error("Для группы уже выполняется переход.");
+  }
   const targetScene = found.location.linkedSceneId ? game.scenes?.get(found.location.linkedSceneId) : null;
-  const zones = getSceneState(targetScene).locationExitZones.filter(zone => zone.cells?.length);
-  if (!targetScene || !zones.length) throw new Error("На сцене локации не установлены зоны входа и выхода.");
+  if (!targetScene) throw new Error("Сцена локации не найдена.");
   const group = token.actor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
-  const pending = {
+  const entryMode = normalizeLocationEntryMode(found.location.entryMode);
+  const transferId = foundry.utils.randomID();
+  const originCellKeys = getLocationCells(originScene, found.location).map(cellKey);
+  const pending = createPendingArrival({
+    transferId,
     groupId: group.groupId,
     locationId: found.location.id,
+    entryMode,
+    originSceneId: originScene.id,
     targetSceneId: targetScene.id,
     requestedByUserId: user.id,
-    deadline: Date.now() + ARRIVAL_TIMEOUT_MS
-  };
-  return withSystemEventRoot({
+    deadline: Date.now() + ARRIVAL_TIMEOUT_MS,
+    originCellKeys
+  });
+  const zones = getValidArrivalZones(targetScene, token, pending);
+  if (!zones.length) throw new Error("На сцене локации нет допустимой зоны входа и выхода.");
+  pending.validExitZoneIds = zones.map(zone => zone.id);
+  const eventParticipants = await collectTravelGroupEventParticipants(token.actor);
+  await withSystemEventRoot({
     kind: "travelArrivalPending",
-    operationId: `travel-arrival-pending:${pending.groupId}:${foundry.utils.randomID()}`,
+    operationId: `travel-arrival-pending:${transferId}`,
     sceneUuid: String(originScene.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? "")
   }, async scope => {
@@ -736,29 +809,29 @@ async function handleArrivalRequest(payload) {
       },
       outcome: { success: true, pending: true }
     }, {
-      occurrenceKey: `travel-arrival-pending:${pending.groupId}:${token.id}`,
-      participants: { source: target, target, related: [] }
+      occurrenceKey: `travel-arrival-pending:${transferId}`,
+      participants: { source: target, target, related: eventParticipants }
     });
-    const viewerUserIds = getTravelGroupViewerUserIds(token.actor);
-    if (!targetScene.active) await targetScene.activate();
-    game.socket.emit(GLOBAL_MAP_SOCKET, {
-      action: "travelGroup.arrival.open",
-      originSceneId: originScene.id,
-      tokenId: token.id,
-      ...pending,
-      viewerUserIds
-    });
-    if (viewerUserIds.includes(game.user.id)) {
-      runWhenCanvasSceneReady(targetScene.id, () => canvas.falloutMaWGlobalMap?.startArrivalSelection?.({
-        originSceneId: originScene.id,
-        tokenId: token.id,
-        ...pending,
-        viewerUserIds
-      }));
-    }
-    scheduleArrivalTimer(originScene.id, token.id, pending.deadline);
     return true;
   });
+  if (zones.length === 1) {
+    scheduleArrivalTimer(originScene.id, token.id, pending.deadline);
+    return performArrival(originScene, token, targetScene, zones[0], pending);
+  }
+
+  const viewerUserIds = getTravelGroupViewerUserIds(token.actor, { requestingUserId: user.id });
+  scheduleArrivalTimer(originScene.id, token.id, pending.deadline);
+  if (!targetScene.active) await targetScene.activate();
+  const selection = {
+    action: "travelGroup.arrival.open",
+    originSceneId: originScene.id,
+    tokenId: token.id,
+    ...pending,
+    viewerUserIds
+  };
+  game.socket.emit(GLOBAL_MAP_SOCKET, selection);
+  if (viewerUserIds.includes(game.user.id)) await openArrivalSelection(selection);
+  return true;
 }
 
 async function handleArrivalSelectRequest(payload) {
@@ -768,30 +841,165 @@ async function handleArrivalSelectRequest(payload) {
   const user = game.users?.get(payload.requestingUserId);
   if (!originScene || !token?.actor || !pending || !user) throw new Error("Ожидающий вход не найден.");
   if (!user.isGM && !token.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) throw new Error("Нет прав на выбор зоны.");
+  if (!payload.transferId || payload.transferId !== pending.transferId) throw new Error("Этот выбор зоны уже устарел.");
   validatePendingCarrierPosition(originScene, token, pending);
   const targetScene = game.scenes?.get(pending.targetSceneId);
   const zone = getSceneState(targetScene).locationExitZones.find(entry => entry.id === payload.exitZoneId && entry.cells?.length);
   if (!targetScene || !zone) throw new Error("Зона прибытия не найдена.");
+  if (!getValidArrivalZones(targetScene, token, pending).some(entry => entry.id === zone.id)) {
+    throw new Error("В выбранной зоне недостаточно свободного места.");
+  }
   return performArrival(originScene, token, targetScene, zone, pending);
 }
 
-async function performDeparture(args) {
+async function performCarrierDeparture({ scene, zone, carrierToken, requestingUserId }) {
+  const transferId = foundry.utils.randomID();
   return withSystemEventRoot({
     kind: "travelDeparture",
-    operationId: `travel-departure:${args.assemblyId || args.tokenDocuments?.[0]?.id || "group"}:${foundry.utils.randomID()}`,
-    sceneUuid: String(args.scene?.uuid ?? ""),
+    operationId: `travel-carrier-departure:${transferId}`,
+    sceneUuid: String(scene?.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? "")
-  }, scope => performDepartureInRoot(args, scope));
+  }, scope => performCarrierDepartureInRoot({
+    scene,
+    zone,
+    carrierToken,
+    requestingUserId,
+    transferId
+  }, scope));
 }
 
-async function performDepartureInRoot({ scene, zone, tokenDocuments, model = null, requestingUserId, assemblyId = null }, scope) {
+async function performCarrierDepartureInRoot({
+  scene,
+  zone,
+  carrierToken,
+  requestingUserId,
+  transferId
+}, scope) {
+  const sceneFlag = getGlobalMapFlag(scene);
+  const parentScene = sceneFlag?.parentSceneId ? game.scenes?.get(sceneFlag.parentSceneId) : null;
+  const location = parentScene
+    ? getSceneState(parentScene).locations.find(entry => entry.id === sceneFlag.nodeId)
+    : null;
+  const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
+  const group = getTravelGroupData(carrierActor);
+  if (!parentScene || !location) throw new Error("Родительская карта локации не найдена.");
+  if (!group?.groupId) throw new Error("Носитель путешествующей группы не найден.");
+  if (!getTravelCarrierUnits(carrierActor).length) throw new Error("В группе нет участников для переноса.");
+
+  const eventParticipants = await collectTravelGroupEventParticipants(carrierActor);
+  const commonData = {
+    groupId: String(group.groupId),
+    transferId,
+    entryMode: LOCATION_ENTRY_MODES.CARRIER,
+    groupPreserved: true,
+    direction: "ascend",
+    originSceneUuid: String(scene.uuid ?? ""),
+    targetSceneUuid: String(parentScene.uuid ?? ""),
+    locationId: String(location.id ?? ""),
+    exitZoneId: String(zone.id ?? ""),
+    requestingUserId: String(requestingUserId ?? ""),
+    carrierActorUuid: String(carrierActor.uuid ?? ""),
+    carrierTokenUuid: String(carrierToken.uuid ?? "")
+  };
+  for (const [index, target] of eventParticipants.entries()) {
+    const gate = await scope.emit("fallout-maw.travel.departure.before", {
+      data: { ...commonData, actorUuid: target.actorUuid, tokenUuid: target.tokenUuid }
+    }, {
+      occurrenceKey: `travel-carrier:${transferId}:departure-before:${target.actorUuid || index}`,
+      participants: { source: target, target, related: eventParticipants.filter(entry => entry !== target) }
+    });
+    if (isSystemEventCancelled(gate)) return false;
+  }
+
+  const destinationUpdate = {};
+  const position = findFreePlacement(
+    parentScene,
+    carrierToken.toObject(),
+    getLocationCells(parentScene, location),
+    [],
+    { strictPreferredCells: true }
+  );
+  destinationUpdate.x = position.x;
+  destinationUpdate.y = position.y;
+  foundry.utils.setProperty(
+    destinationUpdate,
+    `flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`,
+    null
+  );
+  const transfer = await transferTokensBetweenScenes({
+    originScene: scene,
+    targetScene: parentScene,
+    tokenDocuments: [carrierToken],
+    destinationUpdates: [destinationUpdate],
+    actorUpdates: [buildTravelGroupRouteUpdate(carrierActor, parentScene, transferId)],
+    operationOptions: travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
+  });
+  const destinationToken = transfer.tokenMap.get(carrierToken) ?? transfer.transfers[0]?.destinationToken;
+  if (!destinationToken) throw new Error("Носитель группы не был создан на родительской карте.");
+
+  const viewerUserIds = getTravelGroupViewerUserIds(carrierActor, { requestingUserId });
+  if (!parentScene.active) await parentScene.activate().catch(error => {
+    console.warn(`${FALLOUT_MAW.id} | Could not activate parent Scene`, error);
+  });
+  notifyTravelComplete(parentScene.id, viewerUserIds, {
+    activateTokenControls: true,
+    controlTokenIds: [destinationToken.id]
+  });
+  for (const [index, target] of eventParticipants.entries()) {
+    const related = eventParticipants.filter(entry => entry !== target);
+    const data = {
+      ...commonData,
+      carrierTokenUuid: String(destinationToken.uuid ?? ""),
+      actorUuid: target.actorUuid,
+      tokenUuid: target.tokenUuid
+    };
+    await scope.emit("fallout-maw.travel.location.left", { data, outcome: { success: true } }, {
+      occurrenceKey: `travel-carrier:${transferId}:location-left:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+    await scope.emit("fallout-maw.travel.departure.completed", {
+      data,
+      outcome: { success: true, completed: true }
+    }, {
+      occurrenceKey: `travel-carrier:${transferId}:departure-completed:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+  }
+  return true;
+}
+
+async function performDeparture(args) {
+  const transferId = String(args.transferId ?? foundry.utils.randomID());
+  const request = { ...args, transferId };
+  return withSystemEventRoot({
+    kind: "travelDeparture",
+    operationId: `travel-departure:${transferId}`,
+    sceneUuid: String(args.scene?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? "")
+  }, scope => performDepartureInRoot(request, scope));
+}
+
+async function performDepartureInRoot({
+  scene,
+  zone,
+  tokenDocuments,
+  model = null,
+  requestingUserId,
+  assemblyId = null,
+  transferId
+}, scope) {
   const sceneFlag = getGlobalMapFlag(scene);
   const parentScene = sceneFlag?.parentSceneId ? game.scenes?.get(sceneFlag.parentSceneId) : null;
   const location = parentScene ? getSceneState(parentScene).locations.find(entry => entry.id === sceneFlag.nodeId) : null;
   if (!parentScene || !location) throw new Error("Родительская карта локации не найдена.");
   const activeModel = model ?? await buildSoloAssemblyModel(scene, tokenDocuments[0]);
-  const eventParticipants = uniqueActorParticipants(activeModel.members.map(member => (
+  const directParticipants = new Map(activeModel.members.map(member => [
+    member.actorUuid,
     systemEventParticipant({ actor: member.actor, token: member.token ?? scene.tokens?.get(member.tokenId) })
+  ]));
+  const travelActors = await collectTravelActors(activeModel.members);
+  const eventParticipants = uniqueActorParticipants(travelActors.map(actor => (
+    directParticipants.get(actor.uuid) ?? systemEventParticipant({ actor })
   )));
   for (const [index, target] of eventParticipants.entries()) {
     const gate = await scope.emit("fallout-maw.travel.departure.before", {
@@ -802,6 +1010,10 @@ async function performDepartureInRoot({ scene, zone, tokenDocuments, model = nul
         exitZoneId: String(zone.id ?? ""),
         assemblyId: String(assemblyId ?? ""),
         requestingUserId: String(requestingUserId ?? ""),
+        transferId,
+        entryMode: normalizeLocationEntryMode(location.entryMode),
+        groupPreserved: false,
+        direction: "ascend",
         actorUuid: target.actorUuid,
         tokenUuid: target.tokenUuid
       }
@@ -838,15 +1050,22 @@ async function performDepartureInRoot({ scene, zone, tokenDocuments, model = nul
       originScene: scene,
       targetScene: parentScene,
       topUnits,
-      allActors: activeModel.members.map(member => member.actor).filter(Boolean),
+      allActors: travelActors,
       requestingUserId,
       assemblyId,
+      transferId,
       chainRef: scope.chainRef
     });
     const prototype = await carrierActor.getTokenDocument({}, { parent: parentScene });
     const carrierData = prototype.toObject();
     delete carrierData._id;
-    const position = findFreePlacement(parentScene, carrierData, getLocationCells(parentScene, location));
+    const position = findFreePlacement(
+      parentScene,
+      carrierData,
+      getLocationCells(parentScene, location),
+      [],
+      { strictPreferredCells: true }
+    );
     carrierData.x = position.x;
     carrierData.y = position.y;
     const group = carrierActor.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
@@ -894,7 +1113,11 @@ async function performDepartureInRoot({ scene, zone, tokenDocuments, model = nul
     targetSceneUuid: String(parentScene.uuid ?? ""),
     locationId: String(location.id ?? ""),
     exitZoneId: String(zone.id ?? ""),
-    requestingUserId: String(requestingUserId ?? "")
+    requestingUserId: String(requestingUserId ?? ""),
+    transferId,
+    entryMode: normalizeLocationEntryMode(location.entryMode),
+    groupPreserved: false,
+    direction: "ascend"
   };
   await scope.emit("fallout-maw.travel.group.formed", {
     data: {
@@ -927,7 +1150,16 @@ async function performDepartureInRoot({ scene, zone, tokenDocuments, model = nul
   return true;
 }
 
-async function createTravelCarrier({ originScene, targetScene, topUnits, allActors, requestingUserId, assemblyId, chainRef = null }) {
+async function createTravelCarrier({
+  originScene,
+  targetScene,
+  topUnits,
+  allActors,
+  requestingUserId,
+  assemblyId,
+  transferId,
+  chainRef = null
+}) {
   const folder = await ensureTravelGroupFolder();
   const configuredPrototype = foundry.utils.deepClone(getTravelGroupPrototypeToken());
   const image = getTravelGroupImage();
@@ -940,7 +1172,8 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
   }, configuredPrototype, { inplace: false });
   prototypeToken.actorLink = true;
   prototypeToken.name = "Путешествие";
-  const ownerUserIds = await collectTravelOwnerUserIds(allActors);
+  const memberActors = await collectTravelActors(allActors);
+  const ownerUserIds = collectOwnerUserIds(memberActors);
   const ownership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE };
   for (const userId of ownerUserIds) ownership[userId] = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
   const groupId = foundry.utils.randomID();
@@ -964,8 +1197,11 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
           requestingUserId,
           ownerUserIds,
           effectiveSpeedKmh: Number.isFinite(speedKmh) ? speedKmh : 0,
-          memberActorUuids: allActors.map(actor => actor?.uuid).filter(Boolean),
+          memberActorUuids: memberActors.map(actor => actor?.uuid).filter(Boolean),
           units: storedUnits,
+          currentSceneId: targetScene.id,
+          currentNodeId: String(getGlobalMapFlag(targetScene)?.nodeId ?? ""),
+          lastTransferId: String(transferId ?? ""),
           createdAt: Date.now()
         }
       }
@@ -1023,24 +1259,38 @@ async function handleCarrierMovePassengerRequest(payload) {
 }
 
 async function performArrival(originScene, carrierToken, targetScene, zone, pending) {
+  const attemptId = foundry.utils.randomID();
+  const request = {
+    ...pending,
+    transferId: String(pending?.transferId ?? foundry.utils.randomID()),
+    entryMode: normalizeLocationEntryMode(pending?.entryMode),
+    direction: "descend"
+  };
+  request.groupPreserved = request.entryMode === LOCATION_ENTRY_MODES.CARRIER;
   return withSystemEventRoot({
     kind: "travelArrival",
-    operationId: `travel-arrival:${pending?.groupId || carrierToken?.id || "group"}:${foundry.utils.randomID()}`,
+    operationId: `travel-arrival:${request.transferId}:${attemptId}`,
     sceneUuid: String(originScene?.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? "")
-  }, scope => performArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope));
+  }, scope => request.entryMode === LOCATION_ENTRY_MODES.CARRIER
+    ? performCarrierArrivalInRoot(originScene, carrierToken, targetScene, zone, request, scope)
+    : performDeployArrivalInRoot(originScene, carrierToken, targetScene, zone, request, scope));
 }
 
-async function performArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope) {
+async function performDeployArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope) {
   const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
-  const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
+  const viewerUserIds = getTravelGroupViewerUserIds(carrierActor, { requestingUserId: pending?.requestedByUserId });
   const units = getTravelCarrierUnits(carrierActor);
   if (!units.length) throw new Error("В группе нет участников для размещения.");
-  const eventParticipants = uniqueActorParticipants(units.map(unit => ({ actorUuid: String(unit.actorUuid ?? "") })));
+  const eventParticipants = await collectTravelGroupEventParticipants(carrierActor);
   for (const [index, target] of eventParticipants.entries()) {
     const gate = await scope.emit("fallout-maw.travel.arrival.before", {
       data: {
         groupId: String(pending?.groupId ?? ""),
+        transferId: String(pending?.transferId ?? ""),
+        entryMode: LOCATION_ENTRY_MODES.DEPLOY,
+        groupPreserved: false,
+        direction: "descend",
         locationId: String(pending?.locationId ?? ""),
         originSceneUuid: String(originScene.uuid ?? ""),
         targetSceneUuid: String(targetScene.uuid ?? ""),
@@ -1049,7 +1299,7 @@ async function performArrivalInRoot(originScene, carrierToken, targetScene, zone
         requestedByUserId: String(pending?.requestedByUserId ?? "")
       }
     }, {
-      occurrenceKey: `travel-arrival:${pending?.groupId}:before:${target.actorUuid || index}`,
+      occurrenceKey: `travel-arrival:${pending?.transferId}:before:${target.actorUuid || index}`,
       participants: { source: target, target, related: eventParticipants.filter(entry => entry !== target) }
     });
     if (isSystemEventCancelled(gate)) return false;
@@ -1089,27 +1339,46 @@ async function performArrivalInRoot(originScene, carrierToken, targetScene, zone
     console.warn(`${FALLOUT_MAW.id} | Travel-group carrier actor cleanup failed`, error);
   });
   const exitWasDiscovered = getSceneState(targetScene).discoveredExitZoneIds.includes(zone.id);
-  await setDiscovered(targetScene, "exit", zone.id, true);
   clearArrivalTimer(originScene.id, carrierToken.id);
-  if (!targetScene.active) await targetScene.activate();
   const closedPayload = {
     action: "travelGroup.arrival.closed",
     groupId: pending.groupId,
+    transferId: pending.transferId,
     targetSceneId: targetScene.id,
-    viewerUserIds
+    viewerUserIds,
+    controlTokenIds: created.map(token => token.id)
   };
   game.socket.emit(GLOBAL_MAP_SOCKET, closedPayload);
+  if (!targetScene.active) await targetScene.activate().catch(error => {
+    console.warn(`${FALLOUT_MAW.id} | Could not activate arrival Scene`, error);
+  });
   await restoreTokenControlsAfterArrival(closedPayload);
-  notifyTravelComplete(targetScene.id, viewerUserIds, { activateTokenControls: true });
+  notifyTravelComplete(targetScene.id, viewerUserIds, {
+    activateTokenControls: true,
+    controlTokenIds: created.map(token => token.id)
+  });
+  let exitDiscoveryStored = exitWasDiscovered;
+  if (!exitWasDiscovered) {
+    exitDiscoveryStored = await setDiscovered(targetScene, "exit", zone.id, true)
+      .then(() => true)
+      .catch(error => {
+        console.warn(`${FALLOUT_MAW.id} | Could not store arrival-zone discovery`, error);
+        return false;
+      });
+  }
   const commonData = {
     groupId: String(pending?.groupId ?? ""),
+    transferId: String(pending?.transferId ?? ""),
+    entryMode: LOCATION_ENTRY_MODES.DEPLOY,
+    groupPreserved: false,
+    direction: "descend",
     locationId: String(pending?.locationId ?? ""),
     originSceneUuid: String(originScene.uuid ?? ""),
     targetSceneUuid: String(targetScene.uuid ?? ""),
     exitZoneId: String(zone.id ?? ""),
     requestedByUserId: String(pending?.requestedByUserId ?? "")
   };
-  if (!exitWasDiscovered) {
+  if (!exitWasDiscovered && exitDiscoveryStored) {
     await scope.emit("fallout-maw.globalMap.exit.discovered", {
       data: {
         sceneUuid: String(targetScene.uuid ?? ""),
@@ -1127,15 +1396,15 @@ async function performArrivalInRoot(originScene, carrierToken, targetScene, zone
     const related = eventParticipants.filter(entry => entry !== target);
     const data = { ...commonData, actorUuid: target.actorUuid };
     await scope.emit("fallout-maw.travel.group.memberLeft", { data, outcome: { success: true, left: true } }, {
-      occurrenceKey: `travel-group:${commonData.groupId}:member-left:${target.actorUuid || index}`,
+      occurrenceKey: `travel-group:${commonData.groupId}:${commonData.transferId}:member-left:${target.actorUuid || index}`,
       participants: { source: target, target, related }
     });
     await scope.emit("fallout-maw.travel.location.entered", { data, outcome: { success: true } }, {
-      occurrenceKey: `travel-group:${commonData.groupId}:location-entered:${target.actorUuid || index}`,
+      occurrenceKey: `travel-group:${commonData.groupId}:${commonData.transferId}:location-entered:${target.actorUuid || index}`,
       participants: { source: target, target, related }
     });
     await scope.emit("fallout-maw.travel.arrival.completed", { data, outcome: { success: true, completed: true } }, {
-      occurrenceKey: `travel-group:${commonData.groupId}:arrival-completed:${target.actorUuid || index}`,
+      occurrenceKey: `travel-group:${commonData.groupId}:${commonData.transferId}:arrival-completed:${target.actorUuid || index}`,
       participants: { source: target, target, related }
     });
   }
@@ -1143,9 +1412,135 @@ async function performArrivalInRoot(originScene, carrierToken, targetScene, zone
     data: { ...commonData, memberActorUuids: eventParticipants.map(entry => entry.actorUuid) },
     outcome: { success: true, disbanded: true }
   }, {
-    occurrenceKey: `travel-group:${commonData.groupId}:disbanded`,
+    occurrenceKey: `travel-group:${commonData.groupId}:${commonData.transferId}:disbanded`,
     participants: { source: null, target: null, related: eventParticipants }
   });
+  return true;
+}
+
+async function performCarrierArrivalInRoot(originScene, carrierToken, targetScene, zone, pending, scope) {
+  const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
+  const group = getTravelGroupData(carrierActor);
+  if (!group?.groupId) throw new Error("Носитель путешествующей группы не найден.");
+  if (!getTravelCarrierUnits(carrierActor).length) throw new Error("В группе нет участников для переноса.");
+  const viewerUserIds = getTravelGroupViewerUserIds(carrierActor, {
+    requestingUserId: pending?.requestedByUserId
+  });
+  const eventParticipants = await collectTravelGroupEventParticipants(carrierActor);
+  const commonData = {
+    groupId: String(pending?.groupId ?? group.groupId),
+    transferId: String(pending?.transferId ?? ""),
+    entryMode: LOCATION_ENTRY_MODES.CARRIER,
+    groupPreserved: true,
+    direction: "descend",
+    locationId: String(pending?.locationId ?? ""),
+    originSceneUuid: String(originScene.uuid ?? ""),
+    targetSceneUuid: String(targetScene.uuid ?? ""),
+    exitZoneId: String(zone.id ?? ""),
+    requestedByUserId: String(pending?.requestedByUserId ?? ""),
+    carrierActorUuid: String(carrierActor.uuid ?? ""),
+    carrierTokenUuid: String(carrierToken.uuid ?? "")
+  };
+  for (const [index, target] of eventParticipants.entries()) {
+    const gate = await scope.emit("fallout-maw.travel.arrival.before", {
+      data: { ...commonData, actorUuid: target.actorUuid, tokenUuid: target.tokenUuid }
+    }, {
+      occurrenceKey: `travel-carrier:${pending.transferId}:arrival-before:${target.actorUuid || index}`,
+      participants: { source: target, target, related: eventParticipants.filter(entry => entry !== target) }
+    });
+    if (isSystemEventCancelled(gate)) return false;
+  }
+
+  const destinationUpdate = {};
+  const position = findFreePlacement(
+    targetScene,
+    carrierToken.toObject(),
+    zone.cells,
+    [],
+    { strictPreferredCells: true }
+  );
+  destinationUpdate.x = position.x;
+  destinationUpdate.y = position.y;
+  foundry.utils.setProperty(
+    destinationUpdate,
+    `flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`,
+    null
+  );
+  const transfer = await transferTokensBetweenScenes({
+    originScene,
+    targetScene,
+    tokenDocuments: [carrierToken],
+    destinationUpdates: [destinationUpdate],
+    actorUpdates: [buildTravelGroupRouteUpdate(carrierActor, targetScene, pending.transferId)],
+    operationOptions: travelDocumentOptions(scope, { [TRAVEL_BYPASS_OPTION]: true })
+  });
+  const destinationToken = transfer.tokenMap.get(carrierToken) ?? transfer.transfers[0]?.destinationToken;
+  if (!destinationToken) throw new Error("Носитель группы не был создан на подкарте.");
+
+  const exitWasDiscovered = getSceneState(targetScene).discoveredExitZoneIds.includes(zone.id);
+  clearArrivalTimer(originScene.id, carrierToken.id);
+  const closedPayload = {
+    action: "travelGroup.arrival.closed",
+    groupId: pending.groupId,
+    transferId: pending.transferId,
+    targetSceneId: targetScene.id,
+    viewerUserIds,
+    carrierTokenId: destinationToken.id,
+    controlTokenIds: [destinationToken.id]
+  };
+  game.socket.emit(GLOBAL_MAP_SOCKET, closedPayload);
+  if (!targetScene.active) await targetScene.activate().catch(error => {
+    console.warn(`${FALLOUT_MAW.id} | Could not activate arrival Scene`, error);
+  });
+  await restoreTokenControlsAfterArrival(closedPayload);
+  notifyTravelComplete(targetScene.id, viewerUserIds, {
+    activateTokenControls: true,
+    controlTokenIds: [destinationToken.id]
+  });
+  let exitDiscoveryStored = exitWasDiscovered;
+  if (!exitWasDiscovered) {
+    exitDiscoveryStored = await setDiscovered(targetScene, "exit", zone.id, true)
+      .then(() => true)
+      .catch(error => {
+        console.warn(`${FALLOUT_MAW.id} | Could not store arrival-zone discovery`, error);
+        return false;
+      });
+  }
+
+  if (!exitWasDiscovered && exitDiscoveryStored) {
+    await scope.emit("fallout-maw.globalMap.exit.discovered", {
+      data: {
+        sceneUuid: String(targetScene.uuid ?? ""),
+        sceneId: String(targetScene.id ?? ""),
+        discoveryType: "exit",
+        entryId: String(zone.id ?? ""),
+        entryName: String(zone.name ?? "")
+      }
+    }, {
+      occurrenceKey: `global-map-discovery:${targetScene.id}:exit:${zone.id}`,
+      participants: { source: null, target: null, related: eventParticipants }
+    });
+  }
+  for (const [index, target] of eventParticipants.entries()) {
+    const related = eventParticipants.filter(entry => entry !== target);
+    const data = {
+      ...commonData,
+      carrierTokenUuid: String(destinationToken.uuid ?? ""),
+      actorUuid: target.actorUuid,
+      tokenUuid: target.tokenUuid
+    };
+    await scope.emit("fallout-maw.travel.location.entered", { data, outcome: { success: true } }, {
+      occurrenceKey: `travel-carrier:${pending.transferId}:location-entered:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+    await scope.emit("fallout-maw.travel.arrival.completed", {
+      data,
+      outcome: { success: true, completed: true }
+    }, {
+      occurrenceKey: `travel-carrier:${pending.transferId}:arrival-completed:${target.actorUuid || index}`,
+      participants: { source: target, target, related }
+    });
+  }
   return true;
 }
 
@@ -1181,6 +1576,28 @@ function getTravelCarrierUnits(actor = null) {
   const units = normalizeTravelCarrierUnits(group.units);
   if (units.length) return units;
   return normalizeTravelCarrierUnits(getActorContainerFlag(actor).passengers);
+}
+
+function getValidArrivalZones(targetScene, carrierToken, pending = {}) {
+  if (!targetScene || !carrierToken) return [];
+  const entryMode = normalizeLocationEntryMode(pending.entryMode);
+  const units = carrierToken.actor ? getTravelCarrierUnits(carrierToken.actor) : [];
+  const allowedZoneIds = Array.isArray(pending.validExitZoneIds) && pending.validExitZoneIds.length
+    ? new Set(pending.validExitZoneIds.map(String))
+    : null;
+  return getSceneState(targetScene).locationExitZones
+    .filter(zone => zone.cells?.length)
+    .filter(zone => !allowedZoneIds || allowedZoneIds.has(String(zone.id)))
+    .filter(zone => entryMode === LOCATION_ENTRY_MODES.CARRIER
+      ? canPlaceTravelCarrier(targetScene, zone, carrierToken)
+      : canPlaceTravelPassengers(targetScene, zone, units));
+}
+
+async function collectTravelGroupEventParticipants(carrierActor) {
+  const references = await resolveTravelGroupParticipants(carrierActor);
+  return uniqueActorParticipants(references.map(({ actor, actorUuid }) => (
+    actor ? systemEventParticipant({ actor }) : { actorUuid }
+  )));
 }
 
 function normalizeTravelCarrierUnits(units = []) {
@@ -1344,17 +1761,19 @@ function buildTopTravelUnits(model) {
   return units;
 }
 
-function findFreePlacement(scene, tokenData, preferredCells = [], reserved = []) {
+function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [], { strictPreferredCells = false } = {}) {
   const bounds = getPlacementBounds(scene);
   const source = preferredCells
     .map(cell => typeof cell === "string" ? parseCellKey(cell) : cell)
     .filter(cell => Number.isFinite(cell?.i) && Number.isFinite(cell?.j));
   if (!source.length) {
+    if (strictPreferredCells) throw new Error("В выбранной области нет клеток для размещения группы.");
     source.push(scene.grid.getOffset({
       x: Number(scene.width) / 2,
       y: Number(scene.height) / 2
     }));
   }
+  const allowedCellKeys = strictPreferredCells ? new Set(source.map(cellKey)) : null;
 
   const occupied = [
     ...(scene.tokens?.contents ?? []).map(token => tokenRect(scene, token)),
@@ -1399,8 +1818,17 @@ function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [])
       width: size.width,
       height: size.height
     };
-    if (!occupied.some(other => rectanglesOverlap(rect, other)) && rectInsidePlacementBounds(rect, bounds)) return position;
-    for (const adjacent of scene.grid.getAdjacentOffsets(cell)) enqueue(adjacent);
+    const footprintInsidePreferred = !allowedCellKeys || token.getOccupiedGridSpaceOffsets({
+      x: position.x,
+      y: position.y,
+      ...dimensions
+    }).every(offset => allowedCellKeys.has(cellKey(offset)));
+    if (footprintInsidePreferred
+      && !occupied.some(other => rectanglesOverlap(rect, other))
+      && rectInsidePlacementBounds(rect, bounds)) return position;
+    if (!strictPreferredCells) {
+      for (const adjacent of scene.grid.getAdjacentOffsets(cell)) enqueue(adjacent);
+    }
   }
   throw new Error("На сцене нет свободного места для размещения группы.");
 }
@@ -1867,73 +2295,185 @@ function collectOwnerUserIds(actors) {
     .map(user => user.id);
 }
 
-async function collectTravelOwnerUserIds(actors) {
-  const resolved = new Map(actors.filter(Boolean).map(actor => [actor.uuid, actor]));
-  const queue = [...resolved.values()];
-  while (queue.length) {
-    const actor = queue.shift();
-    for (const passenger of getActorContainerFlag(actor).passengers) {
-      if (resolved.has(passenger.actorUuid)) continue;
-      const passengerActor = await globalThis.fromUuid?.(passenger.actorUuid);
-      if (!passengerActor) continue;
-      resolved.set(passenger.actorUuid, passengerActor);
-      queue.push(passengerActor);
+async function collectTravelActors(sources) {
+  const resolved = new Map();
+  const visitedContexts = new Set();
+  const visit = async (actor, passenger = null) => {
+    const actorUuid = String(actor?.uuid ?? passenger?.actorUuid ?? "");
+    const contextKey = passenger
+      ? `passenger:${actorUuid}:${String(passenger.id ?? passenger.actorUuid ?? actorUuid)}`
+      : `actor:${actorUuid}`;
+    if (!actorUuid || visitedContexts.has(contextKey)) return;
+    visitedContexts.add(contextKey);
+    if (actor) resolved.set(actorUuid, actor);
+    for (const child of getTravelPassengerChildren(passenger, actor)) {
+      const childActor = await resolveTravelPassengerActor(child).catch(() => null);
+      await visit(childActor, child);
     }
+  };
+  for (const source of Array.from(sources ?? []).filter(Boolean)) {
+    const actor = source?.actor ?? source;
+    const passenger = source?.sourcePassenger ?? null;
+    await visit(actor, passenger);
   }
-  return collectOwnerUserIds(Array.from(resolved.values()));
+  return Array.from(resolved.values());
 }
 
-function getTravelGroupViewerUserIds(actor) {
-  const group = actor?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
-  return Array.from(new Set([group?.requestingUserId, ...(group?.ownerUserIds ?? [])].filter(Boolean)));
-}
-
-async function restoreTokenControlsAfterArrival({ groupId, targetSceneId, viewerUserIds = [] } = {}) {
+async function restoreTokenControlsAfterArrival({
+  groupId,
+  transferId,
+  targetSceneId,
+  viewerUserIds = [],
+  carrierTokenId = null,
+  controlTokenIds = []
+} = {}) {
   if (!viewerUserIds.includes(game.user?.id)) return false;
+  cancelQueuedArrivalSelections(groupId, transferId);
   runWhenCanvasSceneReady(targetSceneId, async () => {
-    await canvas.falloutMaWGlobalMap?.clearArrivalSelection?.(groupId);
-    canvas.tokens?.activate?.({ tool: "select" });
+    const layer = canvas.falloutMaWGlobalMap;
+    if (layer?.completeArrivalSelection) await layer.completeArrivalSelection(groupId, transferId);
+    else await layer?.clearArrivalSelection?.(groupId, transferId);
+    restoreControlledTokens([carrierTokenId, ...controlTokenIds].filter(Boolean));
   });
   return true;
 }
 
-function notifyTravelComplete(targetSceneId, viewerUserIds, { activateTokenControls = false } = {}) {
-  game.socket.emit(GLOBAL_MAP_SOCKET, {
+function notifyTravelComplete(targetSceneId, viewerUserIds, {
+  activateTokenControls = false,
+  controlTokenIds = []
+} = {}) {
+  const payload = {
     action: "globalMap.travel.complete",
     requestId: foundry.utils.randomID(),
     targetSceneId,
     viewerUserIds,
-    activateTokenControls
-  });
+    activateTokenControls,
+    controlTokenIds
+  };
+  game.socket.emit(GLOBAL_MAP_SOCKET, payload);
   if (!viewerUserIds.includes(game.user.id)) return;
-  if (activateTokenControls) {
-    runWhenCanvasSceneReady(targetSceneId, () => canvas.tokens?.activate?.({ tool: "select" }));
+  void completeTravelNotificationForCurrentViewer(payload);
+}
+
+async function completeTravelNotificationForCurrentViewer(payload) {
+  const targetScene = game.scenes?.get(payload.targetSceneId);
+  if (!targetScene) return false;
+  if (canvas.loading) {
+    runAfterCanvasSettles(() => completeTravelNotificationForCurrentViewer(payload));
+    return true;
+  }
+  if (canvas.scene?.id !== targetScene.id) await targetScene.view();
+  if (canvas.loading || canvas.scene?.id !== targetScene.id || !canvas.ready) {
+    runAfterCanvasSettles(() => completeTravelNotificationForCurrentViewer(payload));
+    return true;
+  }
+  if (payload.activateTokenControls) restoreControlledTokens(payload.controlTokenIds);
+  return true;
+}
+
+function restoreControlledTokens(tokenIds = []) {
+  canvas.tokens?.activate?.({ tool: "select" });
+  const tokens = Array.from(new Set(tokenIds)).map(id => canvas.tokens?.get?.(id)).filter(Boolean);
+  for (const [index, token] of tokens.entries()) token.control?.({ releaseOthers: index === 0 });
+}
+
+async function openArrivalSelection(payload = {}) {
+  const targetScene = game.scenes?.get(payload.targetSceneId);
+  if (!targetScene) return false;
+  if (canvas.loading) return queueArrivalView(payload);
+  if (canvas.scene?.id !== targetScene.id) await targetScene.view();
+  if (canvas.loading || canvas.scene?.id !== targetScene.id) return queueArrivalView(payload);
+  return queueArrivalSelection(payload);
+}
+
+function queueArrivalView(payload = {}) {
+  if (!payload.groupId || !payload.targetSceneId) return false;
+  cancelQueuedArrivalSelections(payload.groupId);
+  const key = `view:${String(payload.transferId || `${payload.groupId}:${payload.targetSceneId}`)}`;
+  const waiter = {
+    groupId: payload.groupId,
+    transferId: payload.transferId,
+    hookId: null
+  };
+  arrivalSelectionWaiters.set(key, waiter);
+  runAfterCanvasSettles(() => {
+    if (arrivalSelectionWaiters.get(key) !== waiter) return;
+    arrivalSelectionWaiters.delete(key);
+    void openArrivalSelection(payload);
+  });
+  return true;
+}
+
+function queueArrivalSelection(payload = {}) {
+  if (!payload.groupId || !payload.targetSceneId) return false;
+  cancelQueuedArrivalSelections(payload.groupId);
+  const start = () => canvas.falloutMaWGlobalMap?.startArrivalSelection?.(payload);
+  if (isCanvasSceneReady(payload.targetSceneId)) {
+    void start();
+    return true;
+  }
+  const key = String(payload.transferId || `${payload.groupId}:${payload.targetSceneId}`);
+  const hookId = Hooks.on("canvasReady", () => {
+    runAfterCanvasSettles(() => {
+      if (!isCanvasSceneReady(payload.targetSceneId)) {
+        if (canvas.scene?.id === payload.targetSceneId) return;
+        Hooks.off("canvasReady", hookId);
+        arrivalSelectionWaiters.delete(key);
+        void openArrivalSelection(payload);
+        return;
+      }
+      Hooks.off("canvasReady", hookId);
+      arrivalSelectionWaiters.delete(key);
+      void start();
+    });
+  });
+  arrivalSelectionWaiters.set(key, { groupId: payload.groupId, transferId: payload.transferId, hookId });
+  return true;
+}
+
+function cancelQueuedArrivalSelections(groupId = null, transferId = null) {
+  for (const [key, waiter] of arrivalSelectionWaiters) {
+    if (groupId && waiter.groupId !== groupId) continue;
+    if (transferId && waiter.transferId && waiter.transferId !== transferId) continue;
+    if (waiter.hookId !== null && waiter.hookId !== undefined) Hooks.off("canvasReady", waiter.hookId);
+    arrivalSelectionWaiters.delete(key);
   }
 }
 
 function runWhenCanvasSceneReady(sceneId, callback) {
-  const isReady = () => Boolean(
+  if (isCanvasSceneReady(sceneId)) {
+    void callback();
+    return;
+  }
+  if (canvas.loading) {
+    runAfterCanvasSettles(() => runWhenCanvasSceneReady(sceneId, callback));
+    return;
+  }
+  const hookId = Hooks.on("canvasReady", () => {
+    runAfterCanvasSettles(() => {
+      if (!isCanvasSceneReady(sceneId)) return;
+      Hooks.off("canvasReady", hookId);
+      void callback();
+    });
+  });
+}
+
+function isCanvasSceneReady(sceneId) {
+  return Boolean(
     canvas?.ready
     && !canvas.loading
     && canvas.scene?.id === sceneId
     && canvas[GLOBAL_MAP_LAYER]
   );
-  if (isReady()) {
-    void callback();
-    return;
-  }
-  const hookId = Hooks.on("canvasReady", () => {
-    if (!isReady()) return;
-    Hooks.off("canvasReady", hookId);
-    void callback();
-  });
 }
 
 function scheduleArrivalTimer(sceneId, tokenId, deadline) {
   clearArrivalTimer(sceneId, tokenId);
   const delay = Math.max(0, Number(deadline) - Date.now());
   const key = `${sceneId}:${tokenId}`;
-  arrivalTimers.set(key, setTimeout(() => void chooseRandomArrival(sceneId, tokenId), delay));
+  arrivalTimers.set(key, setTimeout(() => {
+    void queueResponsibleGMTask(() => chooseRandomArrival(sceneId, tokenId));
+  }, delay));
 }
 
 function clearArrivalTimer(sceneId, tokenId) {
@@ -1943,14 +2483,68 @@ function clearArrivalTimer(sceneId, tokenId) {
   arrivalTimers.delete(key);
 }
 
-function resumeArrivalTimers() {
+async function resumeArrivalTimers() {
   if (!isResponsibleGM()) return;
   for (const scene of game.scenes?.contents ?? []) {
     for (const token of scene.tokens?.contents ?? []) {
-      const pending = token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
+      let pending = token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
+      if (!pending) continue;
+      const needsUpgrade = !pending.transferId
+        || !pending.originSceneId
+        || normalizeLocationEntryMode(pending.entryMode) !== pending.entryMode
+        || !Number(pending.deadline)
+        || !Array.isArray(pending.originCellKeys)
+        || !pending.originCellKeys.length
+        || !Array.isArray(pending.validExitZoneIds)
+        || !pending.validExitZoneIds.length;
+      if (needsUpgrade) {
+        const currentCell = pointToCell(scene, tokenCenter(token, scene));
+        const targetScene = pending.targetSceneId ? game.scenes?.get(pending.targetSceneId) : null;
+        const validExitZoneIds = Array.isArray(pending.validExitZoneIds) && pending.validExitZoneIds.length
+          ? pending.validExitZoneIds
+          : getSceneState(targetScene).locationExitZones
+            .filter(zone => zone.cells?.length)
+            .map(zone => zone.id);
+        pending = createPendingArrival({
+          ...pending,
+          transferId: pending.transferId || foundry.utils.randomID(),
+          originSceneId: pending.originSceneId || scene.id,
+          entryMode: pending.entryMode,
+          deadline: pending.deadline || (Date.now() + ARRIVAL_TIMEOUT_MS),
+          originCellKeys: pending.originCellKeys?.length
+            ? pending.originCellKeys
+            : (currentCell ? [cellKey(currentCell)] : []),
+          validExitZoneIds
+        });
+        const upgraded = await token.update({
+          [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: pending
+        }, { [TRAVEL_BYPASS_OPTION]: true }).then(() => true).catch(error => {
+          console.warn(`${FALLOUT_MAW.id} | Could not upgrade pending travel-group arrival`, error);
+          return false;
+        });
+        if (upgraded) await reopenPendingArrivalSelection(scene, token, pending);
+      }
       if (pending?.deadline) scheduleArrivalTimer(scene.id, token.id, pending.deadline);
     }
   }
+}
+
+async function reopenPendingArrivalSelection(originScene, token, pending) {
+  const targetScene = game.scenes?.get(pending.targetSceneId);
+  if (!targetScene || getValidArrivalZones(targetScene, token, pending).length <= 1) return false;
+  const viewerUserIds = getTravelGroupViewerUserIds(token.actor, {
+    requestingUserId: pending.requestedByUserId
+  });
+  const selection = {
+    action: "travelGroup.arrival.open",
+    originSceneId: originScene.id,
+    tokenId: token.id,
+    ...pending,
+    viewerUserIds
+  };
+  game.socket.emit(GLOBAL_MAP_SOCKET, selection);
+  if (viewerUserIds.includes(game.user?.id)) await openArrivalSelection(selection);
+  return true;
 }
 
 async function chooseRandomArrival(sceneId, tokenId) {
@@ -1959,37 +2553,51 @@ async function chooseRandomArrival(sceneId, tokenId) {
   const token = originScene?.tokens?.get(tokenId);
   const pending = token?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
   const targetScene = pending ? game.scenes?.get(pending.targetSceneId) : null;
-  const units = token?.actor ? getTravelCarrierUnits(token.actor) : [];
-  const zones = getSceneState(targetScene).locationExitZones
-    .filter(zone => zone.cells?.length)
-    .filter(zone => canPlaceTravelPassengers(targetScene, zone, units));
-  if (!originScene || !token || !pending || !targetScene) return;
+  if (!originScene || !token || !pending) return;
+  if (!targetScene) {
+    console.warn(`${FALLOUT_MAW.id} | Arrival remains pending because its target Scene is unavailable`, {
+      transferId: pending.transferId,
+      targetSceneId: pending.targetSceneId
+    });
+    await postponePendingArrival(originScene, token, pending);
+    return;
+  }
+  const zones = getValidArrivalZones(targetScene, token, pending);
   if (!zones.length) {
-    await token.update({ [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: null });
-    clearArrivalTimer(sceneId, tokenId);
-    const closedPayload = {
-      action: "travelGroup.arrival.closed",
-      groupId: pending.groupId,
-      targetSceneId: targetScene.id,
-      viewerUserIds: getTravelGroupViewerUserIds(token.actor)
-    };
-    game.socket.emit(GLOBAL_MAP_SOCKET, closedPayload);
-    await restoreTokenControlsAfterArrival(closedPayload);
+    console.warn(`${FALLOUT_MAW.id} | Arrival remains pending because no valid entry zone is available`, {
+      transferId: pending.transferId,
+      targetSceneId: targetScene.id
+    });
+    await postponePendingArrival(originScene, token, pending);
     return;
   }
   try {
     validatePendingCarrierPosition(originScene, token, pending);
-  } catch (_error) {
-    await token.update({ [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: null });
-    clearArrivalTimer(sceneId, tokenId);
+  } catch (error) {
+    console.warn(`${FALLOUT_MAW.id} | Arrival remains pending because the carrier left its origin`, error);
+    await postponePendingArrival(originScene, token, pending);
     return;
   }
   const zone = zones[Math.floor(Math.random() * zones.length)];
   try {
-    await performArrival(originScene, token, targetScene, zone, pending);
+    const completed = await performArrival(originScene, token, targetScene, zone, pending);
+    if (completed === false) await postponePendingArrival(originScene, token, pending);
   } catch (error) {
     console.error(`${FALLOUT_MAW.id} | Automatic arrival failed`, error);
+    await postponePendingArrival(originScene, token, pending);
   }
+}
+
+async function postponePendingArrival(originScene, token, pending) {
+  const currentToken = originScene?.tokens?.get(token?.id);
+  const current = currentToken?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
+  if (!current || current.transferId !== pending.transferId) return false;
+  const next = { ...current, deadline: Date.now() + ARRIVAL_TIMEOUT_MS };
+  await currentToken.update({
+    [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: next
+  }, { [TRAVEL_BYPASS_OPTION]: true });
+  scheduleArrivalTimer(originScene.id, currentToken.id, next.deadline);
+  return true;
 }
 
 function canPlaceTravelPassengers(scene, zone, passengers) {
@@ -2013,8 +2621,10 @@ async function restoreArrivalSelectionForCurrentUser() {
     for (const token of originScene.tokens?.contents ?? []) {
       const pending = token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
       if (!pending || pending.targetSceneId !== scene.id) continue;
+      if (!pending.transferId || !pending.originSceneId || !pending.entryMode) continue;
       if (!game.user?.isGM && !token.actor?.testUserPermission(game.user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) continue;
-      canvas.falloutMaWGlobalMap?.startArrivalSelection?.({ originSceneId: originScene.id, tokenId: token.id, ...pending });
+      if (getValidArrivalZones(scene, token, pending).length <= 1) continue;
+      queueArrivalSelection({ originSceneId: originScene.id, tokenId: token.id, ...pending });
       return;
     }
   }
@@ -2049,12 +2659,18 @@ function protectTravelEmbeddedItem(item, options, userId) {
 }
 
 function validatePendingCarrierPosition(originScene, token, pending) {
+  const key = cellKey(pointToCell(originScene, tokenCenter(token, originScene)));
+  const snapshotCellKeys = Array.isArray(pending.originCellKeys) ? pending.originCellKeys.map(String) : [];
+  if (snapshotCellKeys.length && !snapshotCellKeys.includes(key)) {
+    throw new Error("Группа покинула область локации.");
+  }
+  if (snapshotCellKeys.length) return true;
   const found = findLocation(pending.locationId);
   if (!found || found.scene.id !== originScene.id) throw new Error("Локация ожидающего входа не найдена.");
-  const key = cellKey(pointToCell(originScene, tokenCenter(token, originScene)));
   if (!getLocationCells(originScene, found.location).some(cell => cellKey(cell) === key)) {
     throw new Error("Группа покинула область локации.");
   }
+  return true;
 }
 
 function isTravelGroupRequestAction(action) {
@@ -2080,6 +2696,15 @@ function emitGroupError(payload, message) {
   }, { recipients: [payload.requestingUserId] });
   if (payload.requestingUserId === game.user?.id) ui.notifications.error(message);
   return false;
+}
+
+function canPlaceTravelCarrier(scene, zone, carrierToken) {
+  try {
+    findFreePlacement(scene, carrierToken.toObject(), zone.cells, [], { strictPreferredCells: true });
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function uniqueActorParticipants(entries = []) {

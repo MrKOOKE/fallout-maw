@@ -1,10 +1,12 @@
+import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   DEFAULT_LOCATION,
   DEFAULT_LOCATION_EXIT,
   DEFAULT_TERRAIN,
   DEFAULT_TRANSITION,
   GLOBAL_MAP_LAYER,
-  GLOBAL_MAP_ROLES
+  GLOBAL_MAP_ROLES,
+  TRAVEL_GROUP_TOKEN_FLAG
 } from "./constants.mjs";
 import {
   assertSupportedGrid,
@@ -28,7 +30,13 @@ import {
   TerrainEditor,
   TransitionEditor
 } from "./editors.mjs";
-import { getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState } from "./storage.mjs";
+import {
+  getGlobalMapFlag,
+  getSceneState,
+  saveCollectionEntry,
+  updateSceneState
+} from "./storage.mjs";
+import { canCreateChildLocations } from "./structure.mjs";
 
 const InteractionLayer = foundry.canvas.layers.InteractionLayer;
 
@@ -41,6 +49,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   brushStroke = null;
   brushPreviewCells = [];
   arrivalSelection = null;
+  completedArrivalTransferIds = new Set();
   locationDiscoveryOverlay = null;
   hoverLocationId = null;
   locationHoverOverlay = null;
@@ -60,6 +69,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   static prepareSceneControls() {
     if (!game.user?.isGM || !getGlobalMapFlag(canvas?.scene)) return null;
     const isLocationScene = getGlobalMapFlag(canvas.scene)?.role === GLOBAL_MAP_ROLES.LOCATION_SCENE;
+    const canManageLocations = canCreateChildLocations(canvas.scene);
     return {
       name: "falloutMaWGlobalMap",
       order: 9,
@@ -75,7 +85,9 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       },
       tools: {
         select: tool("select", 1, "Просмотр", "fa-solid fa-arrow-pointer"),
-        locationPlace: tool("locationPlace", 2, "Создать локацию", "fa-solid fa-location-dot"),
+        ...(canManageLocations ? {
+          locationPlace: tool("locationPlace", 2, "Создать локацию", "fa-solid fa-location-dot")
+        } : {}),
         locationEdit: tool("locationEdit", 3, "Редактировать локацию", "fa-solid fa-pen-to-square"),
         terrainDraw: tool("terrainDraw", 4, "Новая местность", "fa-solid fa-mountain"),
         terrainEdit: tool("terrainEdit", 5, "Редактировать местность", "fa-solid fa-paintbrush"),
@@ -200,6 +212,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
 
   async startArrivalSelection(payload) {
     if (!payload?.groupId || payload.targetSceneId !== canvas.scene?.id) return false;
+    if (payload.transferId && this.completedArrivalTransferIds.has(payload.transferId)) return false;
     this.arrivalSelection = foundry.utils.deepClone(payload);
     this.mode = "arrivalSelect";
     this.activate();
@@ -207,11 +220,22 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     return true;
   }
 
-  async clearArrivalSelection(groupId = null) {
+  async clearArrivalSelection(groupId = null, transferId = null) {
     if (groupId && this.arrivalSelection?.groupId !== groupId) return;
+    if (transferId && this.arrivalSelection?.transferId && this.arrivalSelection.transferId !== transferId) return;
     this.arrivalSelection = null;
     if (this.mode === "arrivalSelect") this.mode = "select";
     await this.refresh();
+  }
+
+  async completeArrivalSelection(groupId = null, transferId = null) {
+    if (transferId) {
+      this.completedArrivalTransferIds.add(transferId);
+      if (this.completedArrivalTransferIds.size > 100) {
+        this.completedArrivalTransferIds.delete(this.completedArrivalTransferIds.values().next().value);
+      }
+    }
+    return this.clearArrivalSelection(groupId, transferId);
   }
 
   async startEntryDrawingFor(sourceSceneId, transitionId) {
@@ -415,13 +439,20 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       .find(entry => entry.cells?.includes(key));
     if (!zone) return false;
     const selection = foundry.utils.deepClone(this.arrivalSelection);
+    const validExitZoneIds = Array.isArray(selection.validExitZoneIds) ? selection.validExitZoneIds : [];
+    if (validExitZoneIds.length && !validExitZoneIds.includes(zone.id)) return false;
     await this.clearArrivalSelection(selection.groupId);
     const submitted = await game.falloutMaW?.globalMap?.selectArrivalZone?.({
       originSceneId: selection.originSceneId,
       tokenId: selection.tokenId,
-      exitZoneId: zone.id
+      exitZoneId: zone.id,
+      transferId: selection.transferId
     });
-    if (submitted === false) await this.startArrivalSelection(selection);
+    if (submitted === false && !this.completedArrivalTransferIds.has(selection.transferId)) {
+      const originToken = game.scenes?.get(selection.originSceneId)?.tokens?.get(selection.tokenId);
+      const pending = originToken?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
+      if (pending?.transferId === selection.transferId) await this.startArrivalSelection(selection);
+    }
     return submitted;
   }
 
@@ -596,7 +627,10 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     overlay.eventMode = editLocations ? "passive" : "none";
     overlay.interactiveChildren = editLocations;
     overlay.sortableChildren = true;
-    overlay.zIndex = (CONFIG.Canvas.groups.interface.zIndexDrawings ?? 500) + 1;
+    const tokenLayerZ = canvas.tokens?.getZIndex?.()
+      ?? CONFIG.Canvas.layers.tokens?.layerClass?.layerOptions?.zIndex
+      ?? 200;
+    overlay.zIndex = tokenLayerZ - 1;
     canvas.interface.addChild(overlay);
     this.locationDiscoveryOverlay = overlay;
     for (const location of visible) this.#drawLocationOverlayEntry(overlay, location, refreshCycle);
@@ -754,9 +788,11 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const activeIds = this.editor instanceof LocationExitEditor
       ? normalizeActiveIds(this.editor.replaceIds?.length ? this.editor.replaceIds : this.editor.data?.id)
       : new Set();
+    const validArrivalExitIds = new Set(this.arrivalSelection?.validExitZoneIds ?? []);
     const pending = this.pendingAreaOverwrites.locationExitZones;
     for (const exit of exits) {
       if (activeIds.has(exit.id)) continue;
+      if (validArrivalExitIds.size && !validArrivalExitIds.has(exit.id)) continue;
       if (!this.arrivalSelection && !game.user.isGM && !exit.alwaysDiscovered && !discovered.has(exit.id)) continue;
       const graphic = new PIXI.LegacyGraphics();
       graphic.zIndex = this.arrivalSelection ? 120 : 24;
