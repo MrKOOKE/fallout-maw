@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "1eb72dc21e3aa0b58f7c0e7acd116102c5e918c4914b8d39dbc20f7747c5b0fd",
-  "updatedAt": "2026-07-17T14:34:41.306Z",
+  "revision": "f10cbd7afd6af44c5a8df08232a669912f52c6a33311420e8d0aa5ba0dec55ea",
+  "updatedAt": "2026-07-17T15:58:12.606Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3813,7 +3813,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 40 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 2 часа.</p><p>После активации вы можете выбрать до [[1+speech/50]] союзников и те на следующие 12 секунд тратят на 1 ОД меньше на Все атакующие действия.</p>",
+                "description": "<p>Стоимость активации: 40 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 2 часа.</p><p>После активации вы можете выбрать до [[1+speech/50]] союзников и те в течеие следующих 12 секунд тратят на 1 ОД меньше совершая атакующие действия.</p>",
                 "id": "sqhL8OlmEiivDw0f",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Пламенный клич",
@@ -3912,7 +3912,20 @@
                           "value": "-1"
                         }
                       ],
-                      "conditions": [],
+                      "conditions": [
+                        {
+                          "durationSeconds": 12,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "PVocJaBAphLzejCp",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "mUlSTXyvnZPmOYoG",
@@ -53472,7 +53485,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "success",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },

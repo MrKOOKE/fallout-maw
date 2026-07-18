@@ -170,6 +170,7 @@ const BUTCHERING_CONTAINER_FLAG = "butcheringContainer";
 let searchInventoryWindow = null;
 const pendingSearchInventorySocketRequests = new Map();
 const pendingSearchInventoryTradeInvites = new Map();
+const pendingSearchInventoryPersonalTradeApprovals = new Map();
 const searchInventoryOperationQueues = new Map();
 const activeSearchInventoryTradeSessions = new Map();
 
@@ -1800,23 +1801,23 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   async #completePersonalTradeOffers() {
     if (this.#tradeCompletionInProgress) return;
-    const tradeContext = this.#prepareTradeContext();
-    const searcherTotal = Math.max(0, toInteger(tradeContext?.offers?.searcher?.total));
-    const searchedTotal = Math.max(0, toInteger(tradeContext?.offers?.searched?.total));
-    const difference = Math.abs(searcherTotal - searchedTotal);
-    if (difference > 0) {
-      const approved = await requestPersonalTradeApproval({
-        searcherActor: this.#searcherActor,
-        searchedActor: this.#searchedActor,
-        searcherTotal,
-        searchedTotal,
-        tradeCurrencyKey: this.#tradeCurrencyKey
-      });
-      if (!approved) return;
-    }
-
     this.beginTradeCompletionLock();
     try {
+      const tradeContext = this.#prepareTradeContext();
+      const searcherTotal = Math.max(0, toInteger(tradeContext?.offers?.searcher?.total));
+      const searchedTotal = Math.max(0, toInteger(tradeContext?.offers?.searched?.total));
+      const difference = Math.abs(searcherTotal - searchedTotal);
+      if (difference > 0) {
+        const approved = await requestPersonalTradeApproval({
+          searcherActor: this.#searcherActor,
+          searchedActor: this.#searchedActor,
+          searcherTotal,
+          searchedTotal,
+          tradeCurrencyKey: this.#tradeCurrencyKey
+        });
+        if (!approved) return;
+      }
+
       const payload = {
         searcherActorUuid: this.#searcherActorUuid,
         searchedActorUuid: this.#searchedActorUuid,
@@ -9000,8 +9001,22 @@ async function handleTradeInviteSocketMessage(message = {}) {
 }
 
 async function handlePersonalTradeApprovalSocketMessage(message = {}) {
+  const payload = message.payload ?? {};
+  const approvalKey = getPersonalTradeApprovalKey(payload);
+  if (pendingSearchInventoryPersonalTradeApprovals.has(approvalKey)) {
+    game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+      scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+      type: "personalTradeApprovalResponse",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: false,
+      error: "Запрос подтверждения личной торговли уже открыт."
+    });
+    return;
+  }
+
   try {
-    const accepted = await confirmPersonalTradeApproval(message.payload ?? {});
+    const accepted = await confirmPersonalTradeApproval(payload);
     game.socket.emit(SEARCH_INVENTORY_SOCKET, {
       scope: SEARCH_INVENTORY_SOCKET_SCOPE,
       type: "personalTradeApprovalResponse",
@@ -9596,6 +9611,10 @@ function getTradeInviteKey(payload = {}) {
   ].join("|");
 }
 
+function getPersonalTradeApprovalKey(payload = {}) {
+  return getTradeInviteKey(payload);
+}
+
 async function confirmTradeInvite(payload = {}) {
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
@@ -9616,30 +9635,40 @@ async function confirmTradeInvite(payload = {}) {
 }
 
 async function confirmPersonalTradeApproval(payload = {}) {
+  const approvalKey = getPersonalTradeApprovalKey(payload);
+  if (pendingSearchInventoryPersonalTradeApprovals.has(approvalKey)) {
+    throw new Error("Запрос подтверждения личной торговли уже открыт.");
+  }
+
   const currency = getCurrencySettings().find(entry => entry.key === normalizeTradeCurrencyKey(payload.tradeCurrencyKey));
   const currencyLabel = currency?.label ?? payload.tradeCurrencyKey ?? "";
-  return DialogV2.confirm({
-    window: { title: "Личная торговля" },
-    content: `
-      <p>Подтвердить личную сделку?</p>
-      <dl class="fallout-maw-trade-approval-summary">
-        <dt>${escapeHTML(payload.searcherActorName ?? "Сторона 1")}</dt>
-        <dd>${Math.max(0, toInteger(payload.searcherTotal))} ${escapeHTML(currencyLabel)}</dd>
-        <dt>${escapeHTML(payload.searchedActorName ?? "Сторона 2")}</dt>
-        <dd>${Math.max(0, toInteger(payload.searchedTotal))} ${escapeHTML(currencyLabel)}</dd>
-      </dl>
-    `,
-    yes: {
-      label: "Подтвердить",
-      icon: "fa-solid fa-check"
-    },
-    no: {
-      label: "Отклонить"
-    },
-    position: { width: 420 },
-    rejectClose: false,
-    modal: false
-  });
+  pendingSearchInventoryPersonalTradeApprovals.set(approvalKey, true);
+  try {
+    return await DialogV2.confirm({
+      window: { title: "Личная торговля" },
+      content: `
+        <p>Подтвердить личную сделку?</p>
+        <dl class="fallout-maw-trade-approval-summary">
+          <dt>${escapeHTML(payload.searcherActorName ?? "Сторона 1")}</dt>
+          <dd>${Math.max(0, toInteger(payload.searcherTotal))} ${escapeHTML(currencyLabel)}</dd>
+          <dt>${escapeHTML(payload.searchedActorName ?? "Сторона 2")}</dt>
+          <dd>${Math.max(0, toInteger(payload.searchedTotal))} ${escapeHTML(currencyLabel)}</dd>
+        </dl>
+      `,
+      yes: {
+        label: "Подтвердить",
+        icon: "fa-solid fa-check"
+      },
+      no: {
+        label: "Отклонить"
+      },
+      position: { width: 420 },
+      rejectClose: false,
+      modal: false
+    });
+  } finally {
+    pendingSearchInventoryPersonalTradeApprovals.delete(approvalKey);
+  }
 }
 
 async function resolveActor(uuid) {
