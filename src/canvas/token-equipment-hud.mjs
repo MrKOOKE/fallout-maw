@@ -313,12 +313,14 @@ function createSlotPickerTooltipController(overlay) {
   let pinned = false;
   let renderSequence = 0;
   let documentPointerDownHandler = null;
+  let closeTimer = null;
 
   const onPointerOver = event => {
     if (pinned) return;
     const nextAnchor = getSlotPickerTooltipAnchor(event.target, root);
     if (!nextAnchor) return;
     if (nextAnchor.contains(event.relatedTarget)) return;
+    cancelTooltipClose();
     anchor = nextAnchor;
     itemId = String(nextAnchor.dataset.itemId ?? "");
     void showTooltip(nextAnchor, itemId);
@@ -329,9 +331,13 @@ function createSlotPickerTooltipController(overlay) {
     const currentAnchor = getSlotPickerTooltipAnchor(event.target, root);
     if (!currentAnchor) return;
     if (currentAnchor.contains(event.relatedTarget)) return;
+    if (element?.contains(event.relatedTarget)) {
+      cancelTooltipClose();
+      return;
+    }
     const nextAnchor = getSlotPickerTooltipAnchor(event.relatedTarget, root);
     if (nextAnchor) return;
-    clearTooltip();
+    scheduleTooltipClose();
   };
 
   const onPointerDown = event => {
@@ -392,12 +398,14 @@ function createSlotPickerTooltipController(overlay) {
       element.addEventListener("click", onTooltipClick);
       element.addEventListener("auxclick", onTooltipAuxClick);
       element.addEventListener("mousedown", onPointerDown);
+      element.addEventListener("pointerenter", cancelTooltipClose);
+      element.addEventListener("pointerleave", onTooltipPointerLeave);
       document.body.append(element);
     }
 
     pinned = Boolean(pinTooltip);
-    syncPinnedState();
     element.innerHTML = html;
+    syncPinnedState();
     if (sequence !== renderSequence || anchor !== nextAnchor || itemId !== nextItemId) return;
     positionSlotPickerTooltip(element, nextAnchor);
     requestAnimationFrame(() => {
@@ -411,6 +419,10 @@ function createSlotPickerTooltipController(overlay) {
     if (event.button !== 1) return;
     event.preventDefault();
     event.stopPropagation();
+    const nestedAnchor = event.target?.closest?.("[data-tooltip-html]");
+    if (nestedAnchor && element?.contains(nestedAnchor)) {
+      return;
+    }
     clearTooltip({ force: true });
   };
 
@@ -422,6 +434,30 @@ function createSlotPickerTooltipController(overlay) {
     const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
     activateInventoryTooltipTab(element, index);
     if (anchor) positionSlotPickerTooltip(element, anchor);
+  };
+
+  const onTooltipPointerLeave = event => {
+    if (pinned || element?.contains(event.relatedTarget)) return;
+    if (getSlotPickerTooltipAnchor(event.relatedTarget, root)) {
+      cancelTooltipClose();
+      return;
+    }
+    scheduleTooltipClose();
+  };
+
+  const scheduleTooltipClose = () => {
+    if (pinned || closeTimer) return;
+    closeTimer = window.setTimeout(() => {
+      closeTimer = null;
+      if (pinned || element?.matches?.(":hover") || anchor?.matches?.(":hover")) return;
+      clearTooltip();
+    }, 160);
+  };
+
+  const cancelTooltipClose = () => {
+    if (!closeTimer) return;
+    window.clearTimeout(closeTimer);
+    closeTimer = null;
   };
 
   const syncPinnedState = () => {
@@ -451,6 +487,7 @@ function createSlotPickerTooltipController(overlay) {
   const clearTooltip = ({ force = false } = {}) => {
     if (pinned && !force) return;
     renderSequence += 1;
+    cancelTooltipClose();
     unbindDocumentPointerDown();
     element?.remove();
     element = null;

@@ -13,7 +13,7 @@ import { escapeHtml } from "../utils/dom.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import { evaluateActorFormula, formatActorFormulaForDisplay } from "../utils/actor-formulas.mjs";
 import { getAbilityAcquisitionChanges } from "./evaluation.mjs";
 import { formatLimitedChangeDisplayValue, resolveLimitedChangeSet } from "./limited-changes.mjs";
 import { getResearchById } from "../research/storage.mjs";
@@ -273,10 +273,13 @@ function getChangeSelectionId(change = {}, index = 0) {
 function getAbilityChangeDisplayData(change = {}, evaluationActors = []) {
   const values = resolveAbilityChangePreviewValues(change, evaluationActors);
   const rawValue = String(change?.value ?? "").trim();
+  const actor = (Array.isArray(evaluationActors) ? evaluationActors : [evaluationActors]).find(Boolean) ?? null;
   return {
     label: getEffectKeyLabel(change.key),
     value: formatLimitedChangeDisplayValue(change, values),
-    formula: values.length && rawValue && !Number.isFinite(Number(rawValue)) ? rawValue : ""
+    formula: values.length && rawValue && !Number.isFinite(Number(rawValue))
+      ? formatActorFormulaForDisplay(rawValue, actor, { includeValues: Boolean(actor) })
+      : ""
   };
 }
 

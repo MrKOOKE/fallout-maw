@@ -313,7 +313,12 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
         ...change,
         contextualOrder: orderStart + index,
         contextualTargetContext: hasTargetContext,
-        contextualIdentity: [item.id ?? "", entry.id ?? functionIndex, selectedBranch, index].join(":")
+        contextualIdentity: [item.id ?? "", entry.id ?? functionIndex, selectedBranch, index].join(":"),
+        contextualSourceItemId: String(item.id ?? ""),
+        contextualSourceItemUuid: String(item.uuid ?? ""),
+        contextualSourceName: String(item.name ?? ""),
+        contextualSourceImg: String(item.img ?? ""),
+        contextualSourceFunctionId: String(entry.id ?? functionIndex)
       })));
     }
   }
@@ -361,7 +366,12 @@ export function getPreparedSourceContextualAbilityChanges(actor, key, {
       priority: toInteger(change?.priority),
       order: Number.isFinite(Number(change?.contextualOrder)) ? Number(change.contextualOrder) : index,
       targetContext: Boolean(change?.contextualTargetContext),
-      identity: String(change?.contextualIdentity ?? "")
+      identity: String(change?.contextualIdentity ?? ""),
+      sourceItemId: String(change?.contextualSourceItemId ?? ""),
+      sourceItemUuid: String(change?.contextualSourceItemUuid ?? ""),
+      sourceName: String(change?.contextualSourceName ?? ""),
+      sourceImg: String(change?.contextualSourceImg ?? ""),
+      sourceFunctionId: String(change?.contextualSourceFunctionId ?? "")
     }))
     .filter(change => Number.isFinite(change.value))
     .sort(comparePreparedContextualAbilityChanges);

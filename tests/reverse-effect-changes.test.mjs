@@ -53,6 +53,7 @@ globalThis.game = {
 
 const {
   collectActorReverseEffectChanges,
+  expandActorEffectChangeKeys,
   getActorReverseEffectChangeValue,
   getOriginalEffectKeyFromReverse,
   getReverseEffectKey,
@@ -92,6 +93,28 @@ function createActor(effects = []) {
     }
   };
 }
+
+test("all-skills bonus changes expand to the concrete prepared bonus paths", () => {
+  const actor = {
+    system: {
+      skills: {
+        gambling: {},
+        medicine: {}
+      }
+    }
+  };
+  const changes = expandActorEffectChangeKeys(actor, {
+    key: "system.skills.all.bonus",
+    type: "add",
+    value: "5"
+  });
+  const keys = new Set(changes.map(change => change.key));
+
+  assert.equal(keys.has("system.skills.gambling.bonus"), true);
+  assert.equal(keys.has("system.skills.medicine.bonus"), true);
+  assert.equal(keys.has("system.skills.all.bonus"), false);
+  assert.equal(changes.every(change => change.type === "add" && change.value === "5"), true);
+});
 
 function createItemCollection(items = []) {
   return {

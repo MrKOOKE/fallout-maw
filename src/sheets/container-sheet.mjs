@@ -40,6 +40,7 @@ import {
 } from "../utils/inventory-rotation.mjs";
 import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
@@ -71,9 +72,20 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #dragDrop = null;
+  #itemTooltipAnchor = null;
+  #itemTooltipCloseTimer = null;
+  #itemTooltipDocumentKeyHandler = null;
+  #itemTooltipDocumentPointerDownHandler = null;
+  #itemTooltipElement = null;
+  #itemTooltipGeneration = 0;
+  #itemTooltipItemId = "";
+  #itemTooltipListenerDocument = null;
+  #itemTooltipOpenTimer = null;
+  #itemTooltipPinned = false;
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-container-sheet", "sheet", "item"],
+    evaluatingActorUuid: "",
     position: {
       width: 620,
       height: "auto"
@@ -163,8 +175,15 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#hoverPreviewKey = "";
+    this.#clearItemTooltip({ force: true });
     this.element?.querySelectorAll("[data-item-id]").forEach(element => {
       element.addEventListener("contextmenu", event => this.#onItemContextMenu(event));
+    });
+    this.element?.querySelectorAll("[data-tooltip-item]").forEach(element => {
+      element.addEventListener("pointerenter", event => this.#onItemTooltipPointerEnter(event));
+      element.addEventListener("pointerleave", event => this.#onItemTooltipPointerLeave(event));
+      element.addEventListener("pointerdown", event => this.#onItemTooltipPointerDown(event));
+      element.addEventListener("auxclick", event => this.#onItemTooltipAuxClick(event));
     });
   }
 
@@ -178,7 +197,253 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (this.actor) delete this.actor.apps[this.id];
     this.#draggedItemData = null;
     this.#draggedItemId = "";
+    this.#clearItemTooltip({ force: true });
     this.#clearInventoryDropPreview();
+  }
+
+  #onItemTooltipPointerEnter(event) {
+    if (this.#itemTooltipPinned) return;
+    const anchor = event.currentTarget?.closest?.("[data-tooltip-item]");
+    if (!anchor) return;
+    const itemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
+    const item = this.actor?.items?.get(itemId);
+    if (!item) return;
+
+    this.#cancelItemTooltipClose();
+    if (this.#itemTooltipElement && this.#itemTooltipItemId === item.id) {
+      this.#itemTooltipAnchor = anchor;
+      this.#positionItemTooltip();
+      return;
+    }
+
+    this.#clearItemTooltip();
+    this.#itemTooltipAnchor = anchor;
+    this.#itemTooltipItemId = item.id;
+    const generation = ++this.#itemTooltipGeneration;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipOpenTimer = view.setTimeout(() => {
+      this.#itemTooltipOpenTimer = null;
+      void this.#showItemTooltip(item, generation);
+    }, 500);
+  }
+
+  #onItemTooltipPointerLeave(event) {
+    if (this.#itemTooltipPinned) return;
+    const anchor = event.currentTarget?.closest?.("[data-tooltip-item]");
+    if (!anchor) return;
+    if (anchor.contains(event.relatedTarget)) return;
+    if (this.#itemTooltipElement?.contains(event.relatedTarget)) return;
+    this.#scheduleItemTooltipClose();
+  }
+
+  #onItemTooltipPointerDown(event) {
+    if (event.button !== 1) return;
+    event.preventDefault();
+  }
+
+  #onItemTooltipAuxClick(event) {
+    if (event.button !== 1) return;
+    const anchor = event.currentTarget?.closest?.("[data-tooltip-item]");
+    if (!anchor) return;
+    const itemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
+    const item = this.actor?.items?.get(itemId);
+    if (!item) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.#itemTooltipPinned && this.#itemTooltipItemId === item.id) {
+      this.#clearItemTooltip({ force: true });
+      return;
+    }
+
+    if (this.#itemTooltipElement && this.#itemTooltipItemId === item.id) {
+      this.#pinItemTooltip();
+      return;
+    }
+
+    this.#clearItemTooltip({ force: true });
+    this.#itemTooltipPinned = true;
+    this.#itemTooltipAnchor = anchor;
+    this.#itemTooltipItemId = item.id;
+    const generation = ++this.#itemTooltipGeneration;
+    void this.#showItemTooltip(item, generation);
+  }
+
+  async #showItemTooltip(item, generation) {
+    try {
+      // Lazy import avoids a static cycle: actor-sheet imports this sheet to open containers.
+      const { getInventoryTooltipPerspectiveActor, renderInventoryItemTooltipHTML } = await import("./actor-sheet.mjs");
+      const sourceActor = getTooltipSourceActor(item, this.actor);
+      const perspectiveActor = getInventoryTooltipPerspectiveActor(sourceActor);
+      const evaluatingActor = await this.#resolveItemTooltipEvaluatingActor(sourceActor, perspectiveActor);
+      const tooltipHTML = await renderInventoryItemTooltipHTML(item, sourceActor, { evaluatingActor });
+      if (generation !== this.#itemTooltipGeneration) return;
+      if (!this.element?.isConnected || !this.#itemTooltipAnchor?.isConnected) return;
+      if (this.#itemTooltipItemId !== item.id) return;
+
+      this.#itemTooltipElement?.remove();
+      const ownerDocument = this.element.ownerDocument ?? document;
+      const tooltip = ownerDocument.createElement("aside");
+      tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-container-item-tooltip";
+      tooltip.classList.toggle("pinned", this.#itemTooltipPinned);
+      tooltip.setAttribute("role", "tooltip");
+      tooltip.innerHTML = tooltipHTML;
+      tooltip.style.pointerEvents = this.#itemTooltipPinned ? "auto" : "none";
+      tooltip.addEventListener("pointerenter", () => this.#cancelItemTooltipClose());
+      tooltip.addEventListener("pointerleave", event => {
+        if (this.#itemTooltipPinned) return;
+        if (this.element?.contains(event.relatedTarget)) return;
+        this.#scheduleItemTooltipClose();
+      });
+      tooltip.addEventListener("click", event => {
+        const tab = event.target?.closest?.("[data-tooltip-weapon-tab]");
+        if (!tab || !tooltip.contains(tab)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        activateInventoryTooltipTab(tooltip, toInteger(tab.dataset.tooltipWeaponTab));
+        this.#positionItemTooltip();
+      });
+      ownerDocument.body.append(tooltip);
+      this.#itemTooltipElement = tooltip;
+      if (this.#itemTooltipPinned) this.#bindItemTooltipDocumentClose();
+      this.#positionItemTooltip();
+
+      const view = ownerDocument.defaultView ?? window;
+      view.requestAnimationFrame(() => {
+        if (generation !== this.#itemTooltipGeneration || this.#itemTooltipElement !== tooltip) return;
+        this.#positionItemTooltip();
+      });
+    } catch (error) {
+      if (generation !== this.#itemTooltipGeneration) return;
+      console.error("Fallout MAW | Failed to render container item tooltip", error);
+      this.#clearItemTooltip({ force: true });
+    }
+  }
+
+  async #resolveItemTooltipEvaluatingActor(sourceActor, fallbackActor = sourceActor) {
+    const actorUuid = String(this.options?.evaluatingActorUuid ?? "").trim();
+    if (!actorUuid) return fallbackActor;
+    if (actorUuid === sourceActor?.uuid) return sourceActor;
+
+    try {
+      const resolveUuid = globalThis.fromUuid ?? foundry.utils.fromUuid;
+      const document = await resolveUuid?.(actorUuid);
+      if (document?.documentName === "Actor") return document;
+      if (document?.actor?.documentName === "Actor") return document.actor;
+      if (document?.parent?.documentName === "Actor") return document.parent;
+    } catch (error) {
+      console.warn(`Fallout MAW | Unable to resolve tooltip evaluating actor ${actorUuid}`, error);
+    }
+    return fallbackActor;
+  }
+
+  #positionItemTooltip() {
+    const tooltip = this.#itemTooltipElement;
+    const anchor = this.#itemTooltipAnchor;
+    if (!tooltip || !anchor?.isConnected) return;
+
+    const ownerDocument = tooltip.ownerDocument;
+    const view = ownerDocument.defaultView ?? window;
+    const viewportWidth = ownerDocument.documentElement?.clientWidth ?? view.innerWidth;
+    const viewportHeight = ownerDocument.documentElement?.clientHeight ?? view.innerHeight;
+    const margin = 8;
+    const gap = 12;
+    tooltip.style.setProperty("--fallout-maw-tooltip-max-height", `${Math.max(160, viewportHeight - (margin * 2))}px`);
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    let left = anchorRect.right + gap;
+    if ((left + tooltipRect.width) > (viewportWidth - margin)) left = anchorRect.left - tooltipRect.width - gap;
+    left = Math.max(margin, Math.min(left, viewportWidth - tooltipRect.width - margin));
+    const top = Math.max(margin, Math.min(anchorRect.top, viewportHeight - tooltipRect.height - margin));
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+  }
+
+  #scheduleItemTooltipClose() {
+    if (this.#itemTooltipPinned || this.#itemTooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipCloseTimer = view.setTimeout(() => {
+      this.#itemTooltipCloseTimer = null;
+      this.#clearItemTooltip();
+    }, 160);
+  }
+
+  #cancelItemTooltipClose() {
+    if (!this.#itemTooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.clearTimeout(this.#itemTooltipCloseTimer);
+    this.#itemTooltipCloseTimer = null;
+  }
+
+  #pinItemTooltip() {
+    this.#itemTooltipPinned = true;
+    this.#cancelItemTooltipClose();
+    this.#itemTooltipElement?.classList.add("pinned");
+    if (this.#itemTooltipElement) this.#itemTooltipElement.style.pointerEvents = "auto";
+    this.#bindItemTooltipDocumentClose();
+    this.#positionItemTooltip();
+  }
+
+  #bindItemTooltipDocumentClose() {
+    const ownerDocument = this.#itemTooltipElement?.ownerDocument ?? this.element?.ownerDocument ?? document;
+    this.#itemTooltipListenerDocument = ownerDocument;
+    if (!this.#itemTooltipDocumentPointerDownHandler) {
+      this.#itemTooltipDocumentPointerDownHandler = event => {
+        const insideTooltip = this.#itemTooltipElement?.contains(event.target);
+        const itemAnchor = event.target?.closest?.("[data-tooltip-item]");
+        const insideItemAnchor = Boolean(itemAnchor && this.element?.contains(itemAnchor));
+        if (event.button === 1 && (insideTooltip || insideItemAnchor)) {
+          event.preventDefault();
+          return;
+        }
+        if (insideTooltip) {
+          const nestedAnchor = game.tooltip?.element;
+          if (nestedAnchor && this.#itemTooltipElement?.contains(nestedAnchor)) game.tooltip.deactivate();
+          return;
+        }
+        this.#clearItemTooltip({ force: true });
+      };
+      ownerDocument.addEventListener("pointerdown", this.#itemTooltipDocumentPointerDownHandler, { capture: true });
+    }
+    if (!this.#itemTooltipDocumentKeyHandler) {
+      this.#itemTooltipDocumentKeyHandler = event => {
+        if (event.key === "Escape") this.#clearItemTooltip({ force: true });
+      };
+      ownerDocument.addEventListener("keydown", this.#itemTooltipDocumentKeyHandler, { capture: true });
+    }
+  }
+
+  #unbindItemTooltipDocumentClose() {
+    const ownerDocument = this.#itemTooltipListenerDocument ?? this.element?.ownerDocument ?? document;
+    if (this.#itemTooltipDocumentPointerDownHandler) {
+      ownerDocument.removeEventListener("pointerdown", this.#itemTooltipDocumentPointerDownHandler, { capture: true });
+      this.#itemTooltipDocumentPointerDownHandler = null;
+    }
+    if (this.#itemTooltipDocumentKeyHandler) {
+      ownerDocument.removeEventListener("keydown", this.#itemTooltipDocumentKeyHandler, { capture: true });
+      this.#itemTooltipDocumentKeyHandler = null;
+    }
+    this.#itemTooltipListenerDocument = null;
+  }
+
+  #clearItemTooltip({ force = false } = {}) {
+    if (this.#itemTooltipPinned && !force) return;
+    this.#itemTooltipGeneration += 1;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#itemTooltipOpenTimer) view.clearTimeout(this.#itemTooltipOpenTimer);
+    if (this.#itemTooltipCloseTimer) view.clearTimeout(this.#itemTooltipCloseTimer);
+    this.#itemTooltipOpenTimer = null;
+    this.#itemTooltipCloseTimer = null;
+    this.#unbindItemTooltipDocumentClose();
+
+    const tooltipAnchor = game.tooltip?.element;
+    if (tooltipAnchor && this.#itemTooltipElement?.contains(tooltipAnchor)) game.tooltip.deactivate();
+    this.#itemTooltipElement?.remove();
+    this.#itemTooltipElement = null;
+    this.#itemTooltipAnchor = null;
+    this.#itemTooltipItemId = "";
+    this.#itemTooltipPinned = false;
   }
 
   async _onDragStart(event) {
@@ -965,7 +1230,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") {
-        const app = new FalloutMaWContainerSheet({ document: item });
+        const app = new FalloutMaWContainerSheet({
+          document: item,
+          evaluatingActorUuid: this.options?.evaluatingActorUuid ?? ""
+        });
         app.render({ force: true });
         app.bringToFront();
         return app;
@@ -1105,6 +1373,12 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
     );
   }
+}
+
+function getTooltipSourceActor(item, fallbackActor = null) {
+  if (item?.parent?.documentName === "Actor") return item.parent;
+  if (item?.actor?.documentName === "Actor") return item.actor;
+  return fallbackActor?.documentName === "Actor" ? fallbackActor : null;
 }
 
 function serializeItemFunctions(functions = {}) {

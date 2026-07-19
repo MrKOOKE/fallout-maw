@@ -85,7 +85,7 @@ import {
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
-import { getInventoryTooltipCompareActor, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import {
@@ -2990,6 +2990,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #getLocalTradeActorUuid() {
+    if (this.#tradeSide === "searcher") return this.#searcherActor?.uuid ?? "";
+    if (this.#tradeSide === "searched") return this.#searchedActor?.uuid ?? "";
     if (this.#searcherActor?.testUserPermission?.(game.user, "OWNER")) return this.#searcherActor.uuid;
     if (this.#searchedActor?.testUserPermission?.(game.user, "OWNER")) return this.#searchedActor.uuid;
     return game.user?.isGM ? (this.#searcherActor?.uuid ?? this.#searchedActor?.uuid ?? "") : "";
@@ -2997,7 +2999,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #openSearchContainerSheet(item) {
     if (!isContainerItem(item)) return null;
-    const app = new FalloutMaWContainerSheet({ document: item });
+    const evaluatingActorUuid = this.#isTradeMode()
+      ? this.#getLocalTradeActorUuid()
+      : (this.#searcherActor?.uuid ?? "");
+    const app = new FalloutMaWContainerSheet({ document: item, evaluatingActorUuid });
     app.render({ force: true });
     app.bringToFront();
     return app;
@@ -3496,14 +3501,25 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false, refresh = false } = {}) {
     const actor = this.#getActorByUuid(String(anchor?.dataset?.searchActorUuid ?? this.#tooltipActorUuid));
     const itemId = String(anchor?.dataset?.tooltipItem ?? anchor?.dataset?.itemId ?? this.#tooltipItemId);
-    const item = actor?.items?.get(itemId);
+    const completedOfferAnchor = Boolean(
+      this.#isTradeMode()
+      && this.#tradeOffers?.completed
+      && anchor?.closest?.('[data-trade-offer-entry][data-trade-offer-kind="item"]')
+    );
+    const completedSnapshot = this.#getCompletedTradeTooltipSnapshot(anchor, actor);
+    const item = completedOfferAnchor ? completedSnapshot?.item : actor?.items?.get(itemId);
+    const sourceActor = completedSnapshot?.sourceActor ?? actor;
     if (!actor || !item) return;
+    const evaluatingActor = this.#isTradeMode()
+      ? this.#getActorByUuid(this.#getLocalTradeActorUuid())
+      : this.#searcherActor;
 
-    const tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, sourceActor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: false,
-      compareActor: getInventoryTooltipCompareActor(),
-      compareMode: this.#tooltipCompareMode
+      compareActor: evaluatingActor,
+      compareMode: this.#tooltipCompareMode,
+      evaluatingActor
     });
     if (refresh && ((this.#tooltipActorUuid !== actor.uuid) || (this.#tooltipItemId !== item.id))) return;
 
@@ -3532,8 +3548,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
-    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = tooltipHTML;
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.addEventListener("pointerdown", () => this.#syncInventoryTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("pointerleave", event => {
@@ -3546,6 +3562,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (event.button !== 1) return;
       event.preventDefault();
       event.stopPropagation();
+      const nestedAnchor = event.target?.closest?.("[data-tooltip-html]");
+      if (nestedAnchor && tooltip.contains(nestedAnchor)) {
+        return;
+      }
       this.#tooltipPinned = true;
       tooltip.classList.add("pinned");
       tooltip.style.pointerEvents = "auto";
@@ -3618,6 +3638,18 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
     activateInventoryTooltipTab(this.#tooltipElement, index);
     this.#positionInventoryTooltip();
+  }
+
+  #getCompletedTradeTooltipSnapshot(anchor, sourceActor) {
+    if (!sourceActor || !this.#isTradeMode() || !this.#tradeOffers?.completed) return null;
+    const offerElement = anchor?.closest?.("[data-trade-offer-entry]");
+    if (!offerElement || String(offerElement.dataset.tradeOfferKind ?? "") !== "item") return null;
+    const side = String(offerElement.dataset.tradeOfferSide ?? "");
+    if (!TRADE_OFFER_SIDES.includes(side)) return null;
+    const key = String(offerElement.dataset.tradeOfferKey ?? "");
+    const entry = findTradeOfferEntry(this.#tradeOffers?.[side], "item", key);
+    if (!entry || String(entry.sourceActorUuid ?? "") !== String(sourceActor.uuid ?? "")) return null;
+    return createCompletedTradeTooltipSnapshot(entry, sourceActor);
   }
 
   #positionInventoryTooltip() {
@@ -6082,6 +6114,69 @@ function getTradeOfferEntryItemData(entry = null, sourceActor = null) {
   if (!itemData) return null;
   foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(entry.quantity)));
   return itemData;
+}
+
+function createCompletedTradeTooltipSnapshot(entry = null, sourceActor = null) {
+  if (!entry || !sourceActor) return null;
+  const itemData = normalizeTradeOfferItemData(entry.itemData);
+  if (!itemData) return null;
+  foundry.utils.setProperty(itemData, "system.quantity", Math.max(1, toInteger(entry.quantity)));
+
+  const item = createTradeOfferTooltipItem(itemData, sourceActor);
+  if (!item) return null;
+  const containedItems = (entry.containedItems ?? [])
+    .map(contained => createTradeOfferTooltipItem(normalizeTradeOfferItemData(contained), sourceActor))
+    .filter(Boolean);
+  const items = createTradeOfferTooltipItemCollection([item, ...containedItems]);
+  return {
+    item,
+    sourceActor: createTradeOfferTooltipSourceActor(sourceActor, items)
+  };
+}
+
+function createTradeOfferTooltipItemCollection(contents = []) {
+  const entries = (Array.isArray(contents) ? contents : []).filter(Boolean);
+  const byId = new Map(entries.map(item => [String(item.id ?? item._id ?? ""), item]));
+  return {
+    contents: entries,
+    get: id => byId.get(String(id ?? "")),
+    filter: callback => entries.filter(callback),
+    values: () => entries.values(),
+    [Symbol.iterator]: () => entries[Symbol.iterator]()
+  };
+}
+
+function createTradeOfferTooltipSourceActor(sourceActor, items) {
+  return {
+    documentName: "Actor",
+    id: sourceActor.id,
+    uuid: sourceActor.uuid,
+    name: sourceActor.name,
+    img: sourceActor.img,
+    system: sourceActor.system,
+    isOwner: sourceActor.isOwner,
+    items
+  };
+}
+
+function createTradeOfferTooltipItem(itemData = null, sourceActor = null) {
+  if (!itemData) return null;
+  const source = foundry.utils.deepClone(itemData);
+  const ItemClass = globalThis.Item?.implementation ?? globalThis.CONFIG?.Item?.documentClass;
+  if (typeof ItemClass === "function") {
+    try {
+      return new ItemClass(source, { keepId: true, parent: sourceActor });
+    } catch (error) {
+      console.warn(`${SYSTEM_ID} | Unable to construct completed trade tooltip Item`, error);
+    }
+  }
+  return {
+    ...source,
+    id: String(source._id ?? source.id ?? ""),
+    actor: sourceActor,
+    parent: sourceActor,
+    isOwner: Boolean(sourceActor?.isOwner)
+  };
 }
 
 function normalizeTradeOfferPlacement(placement = null, fallback = null) {

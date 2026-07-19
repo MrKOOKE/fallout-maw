@@ -1,5 +1,6 @@
 import { evaluateFormula, getSkillValues } from "./index.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { formatFormulaForDisplay } from "../utils/formula-display.mjs";
 
 const DESCRIPTION_FORMULA_PATTERN = /\[\[(?!\/)(?<formula>[^\]\r\n]+)]]/g;
 const DESCRIPTION_FORMULA_TOOLTIP_CLASS = "fallout-maw-description-formula-tooltip";
@@ -76,10 +77,13 @@ function evaluateDescriptionFormula(formula, data) {
   }
 }
 
-function buildDescriptionFormulaData(options = {}) {
+export function buildDescriptionFormulaData(options = {}) {
   const actor = getFormulaActor(options?.relativeTo);
-  const rollData = getRollData(options?.rollData);
-  const source = actor?.system ?? rollData?.system ?? rollData ?? {};
+  const hasExplicitRollData = Object.prototype.hasOwnProperty.call(options ?? {}, "rollData");
+  const rollData = hasExplicitRollData ? getRollData(options?.rollData) : null;
+  const source = hasExplicitRollData
+    ? (rollData?.system ?? rollData ?? {})
+    : (actor?.system ?? {});
   return {
     characteristicSettings: getCharacteristicSettings(),
     skillSettings: getSkillSettings(),
@@ -103,40 +107,14 @@ function getRollData(rollData) {
 }
 
 function describeDescriptionFormula(formula, data, total) {
-  const resolved = String(formula ?? "").replace(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, identifier => {
-    const entry = resolveFormulaIdentifier(identifier, data);
-    if (!entry) return identifier;
-    return entry.label;
+  const resolved = formatFormulaForDisplay(formula, {
+    characteristics: data.characteristicSettings,
+    skills: data.skillSettings,
+    characteristicValues: data.characteristics,
+    skillValues: data.skills,
+    includeValues: true
   });
   return `${resolved} = ${total}`;
-}
-
-function resolveFormulaIdentifier(identifier, data) {
-  const normalized = String(identifier ?? "").trim().toLowerCase();
-  if (!normalized) return null;
-
-  for (const characteristic of data.characteristicSettings ?? []) {
-    if (!matchesFormulaEntry(normalized, characteristic)) continue;
-    return {
-      label: characteristic.label || characteristic.key,
-      value: Number(data.characteristics?.[characteristic.key]) || 0
-    };
-  }
-
-  for (const skill of data.skillSettings ?? []) {
-    if (!matchesFormulaEntry(normalized, skill)) continue;
-    return {
-      label: skill.label || skill.key,
-      value: Number(data.skills?.[skill.key]) || 0
-    };
-  }
-
-  return null;
-}
-
-function matchesFormulaEntry(normalized, entry = {}) {
-  return normalized === String(entry.key ?? "").toLowerCase()
-    || normalized === String(entry.abbr ?? "").toLowerCase();
 }
 
 function onDescriptionFormulaPointerOver(event) {

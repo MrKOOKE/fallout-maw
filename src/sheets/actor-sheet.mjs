@@ -47,13 +47,15 @@ import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  evaluateActorEffectChangeNumber,
+  expandActorEffectChangeKeys,
   getAbilityOverloadCostEffectKey,
   getResourceKeyFromOverloadEffectKey,
   getActorSuppressedTraumaDiseaseIds,
+  isActorTraumaDiseaseEffectSuppressed,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
-import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { buildReverseInteractionEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
@@ -67,7 +69,15 @@ import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
 } from "../research/index.mjs";
 import { prepareOrganismDevelopmentForDisplay } from "../races/organism-development.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { applyDamageCostModifier, applyDestroyedLimbConsequences, clearLimbLossState, getActorTraumas, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import {
+  applyDestroyedLimbConsequences,
+  clearLimbLossState,
+  getActorHealingModifierPercent,
+  getActorTraumas,
+  getDestroyedLimbStateLabel,
+  getLimbHealingCap,
+  isLimbDestroyed
+} from "../combat/damage-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
@@ -85,7 +95,12 @@ import {
   prepareActorContainerInventoryContext,
   resolveActorContainerPassengerActor
 } from "../utils/actor-containers.mjs";
-import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import {
+  evaluateActorFormula,
+  formatActorFormulaForDisplay,
+  isFormulaTextConfigured
+} from "../utils/actor-formulas.mjs";
+import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
 import { openButcheringConfig } from "../apps/butchering-config.mjs";
@@ -175,14 +190,30 @@ import {
 } from "../utils/application-focus-state.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
-import { getAbilityItemUseProgressEntries, getActorAtRandomActionPointCostReduction } from "../abilities/runtime-state.mjs";
+import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
 import { getEventReactionProgressEntries } from "../events/event-reaction-progress.mjs";
-import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import {
+  getContextualAbilityChangeValue,
+  getPreparedSourceContextualAbilityChanges
+} from "../abilities/evaluation.mjs";
 import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
+import {
+  buildParallelPercentAttribution,
+  createItemValueAttributionStep
+} from "../utils/item-value-attribution.mjs";
+import { decomposePreparedSkillValue } from "../utils/skill-value-attribution.mjs";
+import { buildAbilityTooltipCostGroups } from "../utils/ability-tooltip-costs.mjs";
 import { actorHasAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
+  getAbilityOverloadResourceCostSources,
+  isAbilityOverloadReactionCostId,
+  withAbilityOverloadCostRows
+} from "../abilities/overload.mjs";
+import { isAbilityResourceCostActive } from "../abilities/resource-cost-policy.mjs";
+import {
   ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
+  ABILITY_ACTIVE_APPLICATION_TARGET_MODES,
   ABILITY_CATALOG_DRAG_TYPE,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -240,6 +271,7 @@ import {
   getWeaponModuleTechnicalName,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
+import { getWeaponActionPointCostAttribution } from "../utils/weapon-tooltip-attribution.mjs";
 import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
 import {
   clearInventoryPlacementPreviews,
@@ -3314,7 +3346,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #openContainerSheet(item) {
     if (!isContainerItem(item)) return null;
-    const app = new FalloutMaWContainerSheet({ document: item });
+    const app = new FalloutMaWContainerSheet({
+      document: item,
+      evaluatingActorUuid: getInventoryTooltipPerspectiveActor(this.actor)?.uuid ?? ""
+    });
     app.render({ force: true });
     app.bringToFront();
     return app;
@@ -3658,11 +3693,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #showInventoryTooltip(item, { pinned = false, refresh = false } = {}) {
+    const evaluatingActor = getInventoryTooltipPerspectiveActor(this.actor);
     const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: this.#tooltipBaseMode,
-      compareActor: getInventoryTooltipCompareActor(),
-      compareMode: this.#tooltipCompareMode
+      compareActor: evaluatingActor === this.actor ? getInventoryTooltipCompareActor() : evaluatingActor,
+      compareMode: this.#tooltipCompareMode,
+      evaluatingActor
     });
     if (refresh && this.#tooltipItemId !== item.id) return;
     if (!this.#tooltipTimer && !pinned && !refresh) return;
@@ -3782,7 +3819,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const nestedAnchor = event.target?.closest?.("[data-tooltip-html]");
     if (nestedAnchor && this.#tooltipElement?.contains(nestedAnchor)) {
-      game.tooltip?.lockTooltip?.();
       return;
     }
     this.#clearNestedInventoryTooltip({ force: true });
@@ -3798,11 +3834,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const item = this.actor.items.get(this.#tooltipItemId);
     if (!item) return;
     this.#clearNestedInventoryTooltip({ force: true });
+    const evaluatingActor = getInventoryTooltipPerspectiveActor(this.actor);
     const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: this.#tooltipBaseMode,
-      compareActor: getInventoryTooltipCompareActor(),
-      compareMode: this.#tooltipCompareMode
+      compareActor: evaluatingActor === this.actor ? getInventoryTooltipCompareActor() : evaluatingActor,
+      compareMode: this.#tooltipCompareMode,
+      evaluatingActor
     });
     if (!this.#tooltipElement || this.#tooltipItemId !== item.id) return;
     this.#tooltipElement.innerHTML = tooltipHTML;
@@ -3927,8 +3965,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #syncInventoryTooltipPointerEvents(tooltip = this.#tooltipElement, { pinned = this.#tooltipPinned } = {}) {
     if (!tooltip) return;
-    const hasDescriptionFormula = Boolean(tooltip.querySelector(".fallout-maw-description-formula-result"));
-    tooltip.style.pointerEvents = (pinned || hasDescriptionFormula) ? "auto" : "none";
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
   }
 
   #clearNestedInventoryTooltip() {
@@ -4332,15 +4369,33 @@ export function getInventoryTooltipCompareActor() {
   return token?.actor ?? null;
 }
 
-export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, compareActor = null, compareMode = false } = {}) {
+export function getInventoryTooltipPerspectiveActor(sourceActor = null) {
+  const controlledActor = getInventoryTooltipCompareActor();
+  if (controlledActor && controlledActor !== sourceActor) {
+    const ownsSource = sourceActor?.testUserPermission?.(game.user, "OWNER") ?? false;
+    if (game.user?.isGM || !ownsSource) return controlledActor;
+  }
+  const ownsSource = sourceActor?.testUserPermission?.(game.user, "OWNER") ?? false;
+  if (!ownsSource && game.user?.character) return game.user.character;
+  return sourceActor;
+}
+
+export async function renderInventoryItemTooltipHTML(item, sourceActor, {
+  activeWeaponIndex = 0,
+  baseMode = false,
+  compareActor = null,
+  compareMode = false,
+  evaluatingActor = sourceActor
+} = {}) {
   ensureRecipeKnowledgeTooltipListeners();
-  const descriptionHTML = await renderInventoryItemDescriptionHTML(item);
-  const recipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(item, actor);
-  if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, actor, { descriptionHTML });
-  const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, {
+  const descriptionHTML = await renderInventoryItemDescriptionHTML(item, evaluatingActor);
+  const recipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(item, evaluatingActor);
+  if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, evaluatingActor, { descriptionHTML });
+  const itemHTML = renderInventoryItemTooltipContentHTML(item, sourceActor, {
     activeWeaponIndex,
     baseMode,
     descriptionHTML,
+    evaluatingActor,
     recipeKnowledgePreviews
   });
   if (!compareMode) return itemHTML;
@@ -4351,25 +4406,27 @@ export async function renderInventoryItemTooltipHTML(item, actor, { activeWeapon
 
   const equippedHTMLs = [];
   for (const equippedItem of equippedItems) {
-    const equippedDescriptionHTML = await renderInventoryItemDescriptionHTML(equippedItem);
+    const equippedDescriptionHTML = await renderInventoryItemDescriptionHTML(equippedItem, compareActor);
     const equippedRecipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(equippedItem, compareActor);
     equippedHTMLs.push(renderInventoryItemTooltipContentHTML(equippedItem, compareActor, {
       activeWeaponIndex: 0,
       baseMode,
       descriptionHTML: equippedDescriptionHTML,
+      evaluatingActor: compareActor,
       recipeKnowledgePreviews: equippedRecipeKnowledgePreviews
     }));
   }
   return renderInventoryTooltipComparisonHTML(itemHTML, equippedHTMLs);
 }
 
-async function renderInventoryItemDescriptionHTML(item) {
+async function renderInventoryItemDescriptionHTML(item, evaluatingActor = null) {
   const descriptionSource = String(item?.system?.description ?? "").trim();
   if (!descriptionSource) return "";
   return TextEditor.enrichHTML(descriptionSource, {
     async: true,
     secrets: item?.isOwner,
-    relativeTo: item
+    relativeTo: item,
+    rollData: evaluatingActor?.getRollData?.() ?? {}
   });
 }
 
@@ -4751,23 +4808,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
   const activeApplicationEntry = functions.find(abilityFunction => abilityFunction.type === ABILITY_FUNCTION_TYPES.activeApplication);
   if (activeApplicationEntry) {
     const settings = normalizeActiveApplicationSettings(activeApplicationEntry.activeSettings);
-    const resourceLabels = new Map(getResourceSettings().map(resource => [resource.key, resource.label]));
-    resourceLabels.set(
-      "reactionPoints",
-      game.i18n.localize("FALLOUTMAW.Events.Reaction.Resources.ReactionPoints")
-    );
-    return settings.costs.flatMap(cost => {
-      const payerKey = cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets
-        ? "FALLOUTMAW.Ability.ActiveApplication.CostPayerTargets"
-        : "FALLOUTMAW.Ability.ActiveApplication.CostPayerSource";
-      const payerLabel = game.i18n.localize(payerKey);
-      const resourceLabel = resourceLabels.get(cost.resourceKey) ?? cost.resourceKey;
-      const rows = [[`${resourceLabel} — ${payerLabel}`, String(cost.formula)]];
-      if (cost.overloadAmount > 0 && cost.overloadDurationSeconds > 0) {
-        rows.push([`Перегрузка — ${payerLabel}`, `${cost.overloadAmount} на ${formatDurationShort(cost.overloadDurationSeconds)}`]);
-      }
-      return rows;
-    });
+    return buildActiveApplicationResourceCostRows(item, actor, activeApplicationEntry, settings);
   }
   const entry = functions
     .find(abilityFunction => (
@@ -4796,9 +4837,9 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
       ["Активация: базовый расход", String(activeBase)],
-      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activeBase))],
+      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activeBase)],
       ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
@@ -4806,7 +4847,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
       ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
@@ -4814,7 +4855,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
       ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
@@ -4822,7 +4863,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
       ["Реакция: базовый расход", String(reactionBase)],
-      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+      ["Реакция: итог", renderAbilityEnergyCostTotal(item, actor, entry, reactionBase)]
     ];
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
@@ -4830,7 +4871,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
       ["Активация: базовый расход", String(activationBase)],
-      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activationBase))],
+      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
       ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`]
     ];
   }
@@ -4839,7 +4880,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
       ["Активация: базовый расход", String(activationBase)],
-      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activationBase))],
+      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
       ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`]
     ];
   }
@@ -4848,7 +4889,7 @@ function buildAbilityResourceCostRows(item, actor = null) {
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
       ["Активация: базовый расход", String(activationBase)],
-      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activationBase))],
+      ["Активация: итог", renderAbilityEnergyCostTotal(item, actor, entry, activationBase)],
       ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`],
       ["Бонус урона", `+${Math.max(0, toInteger(settings.damagePercentBonus))}%`],
       ["Ожидание атаки", `${Math.max(0, toInteger(settings.attackWaitDurationSeconds))} сек.`]
@@ -4875,27 +4916,198 @@ function buildAbilityResourceCostRows(item, actor = null) {
     ? Math.max(1, toInteger(settings.duplicateCount))
     : 1;
   const base = Math.max(0, toInteger(settings.energyCost)) * multiplier;
-  const total = getFixedAbilityEnergyCost(actor, item, entry, Math.max(0, toInteger(settings.energyCost))) * multiplier;
   return [
     ["Базовый расход", String(base)],
-    ["Итог", String(total)]
+    ["Итог", renderAbilityEnergyCostTotal(item, actor, entry, Math.max(0, toInteger(settings.energyCost)), { multiplier })]
   ];
 }
 
-function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "", includeRecipeKnowledge = true, recipeKnowledgePreviews = new Map() } = {}) {
+function buildActiveApplicationResourceCostRows(item, actor, abilityFunction, settings = {}) {
+  const costs = Array.isArray(settings.costs) ? settings.costs : Object.values(settings.costs ?? {});
+  if (!costs.length) return [];
+
+  const resourceLabels = getAbilityTooltipResourceLabels();
+  const sourceLabel = game.i18n.localize("FALLOUTMAW.Ability.ActiveApplication.CostPayerSource");
+  const targetsLabel = game.i18n.localize("FALLOUTMAW.Ability.ActiveApplication.CostPayerTargets");
+  const sourceCosts = costs.filter(cost => cost.payer !== ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets);
+  const targetCosts = costs.filter(cost => cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets);
+  const plans = [];
+
+  if (settings.targetMode === ABILITY_ACTIVE_APPLICATION_TARGET_MODES.self) {
+    const payerLabel = sourceCosts.length && targetCosts.length
+      ? `${sourceLabel} / ${targetsLabel}`
+      : (targetCosts.length ? targetsLabel : sourceLabel);
+    plans.push({ costs, payerLabel, evaluateForActor: true });
+  } else {
+    if (sourceCosts.length) plans.push({ costs: sourceCosts, payerLabel: sourceLabel, evaluateForActor: true });
+    if (targetCosts.length) plans.push({ costs: targetCosts, payerLabel: targetsLabel, evaluateForActor: false });
+  }
+
+  const rows = plans.flatMap(plan => buildActiveApplicationPayerCostRows(
+    item,
+    actor,
+    abilityFunction,
+    plan,
+    resourceLabels
+  ));
+  rows.push(...buildActiveApplicationConfiguredOverloadRows(costs, resourceLabels));
+  return rows;
+}
+
+function getAbilityTooltipResourceLabels() {
+  const labels = new Map(getResourceSettings().map(resource => [resource.key, resource.label]));
+  labels.set(
+    "reactionPoints",
+    game.i18n.localize("FALLOUTMAW.Events.Reaction.Resources.ReactionPoints")
+  );
+  return labels;
+}
+
+function buildActiveApplicationPayerCostRows(item, actor, abilityFunction, plan = {}, resourceLabels = new Map()) {
+  const baseRows = Array.isArray(plan.costs) ? plan.costs : Object.values(plan.costs ?? {});
+  if (!baseRows.length) return [];
+  if (plan.evaluateForActor === false) {
+    return baseRows.map(row => {
+      const resourceKey = String(row?.resourceKey ?? "").trim();
+      const resourceLabel = resourceLabels.get(resourceKey) ?? resourceKey;
+      return [
+        `${resourceLabel} — ${plan.payerLabel}`,
+        formatActorFormulaForDisplay(row?.formula ?? "0", null, { includeValues: false })
+      ];
+    });
+  }
+
+  // Runtime prepares the same payer-owned vector before the registry evaluates
+  // each formula. In particular, accumulated overload is appended once per
+  // resource rather than once per configured cost row.
+  const effectiveBaseRows = baseRows.filter(row => !isAbilityOverloadReactionCostId(row?.id));
+  const preparedRows = withAbilityOverloadCostRows(actor, item, abilityFunction, effectiveBaseRows);
+  const groups = buildAbilityTooltipCostGroups(effectiveBaseRows, preparedRows, {
+    evaluateRow: row => evaluateAbilityTooltipResourceCostRow(actor, item, row)
+  });
+
+  return groups.map(group => {
+    const resourceLabel = resourceLabels.get(group.resourceKey) ?? group.resourceKey;
+    const { base, total } = group;
+    const label = `${resourceLabel} — ${plan.payerLabel}`;
+    if (total === base) return [label, String(total)];
+    const breakdown = buildActiveApplicationResourceCostBreakdown(item, actor, {
+      title: label,
+      resourceKey: group.resourceKey,
+      base,
+      total,
+      baseRows: group.baseRows
+    });
+    return [label, renderChangedNumber(total, base, { higherIsBetter: false, breakdown })];
+  });
+}
+
+function evaluateAbilityTooltipResourceCostRow(actor, item, row = {}) {
+  const resourceKey = String(row?.resourceKey ?? "").trim();
+  if (!resourceKey || !isAbilityResourceCostActive(actor, resourceKey)) return 0;
+  return Math.max(0, Math.trunc(evaluateActorFormula(row.formula, actor, {
+    fallback: 0,
+    minimum: 0,
+    context: `${item?.name ?? "ability"} tooltip resource cost (${resourceKey})`
+  })));
+}
+
+function buildActiveApplicationResourceCostBreakdown(item, actor, {
+  title = "",
+  resourceKey = "",
+  base = 0,
+  total = 0,
+  baseRows = []
+} = {}) {
+  const formulas = baseRows
+    .map(row => String(row?.formula ?? "0").trim() || "0")
+    .map(formula => `(${formatActorFormulaForDisplay(formula, actor, { includeValues: true })})`)
+    .join(" + ");
+  const breakdown = {
+    title,
+    actorName: actor?.name,
+    img: item?.img,
+    base: {
+      name: item?.name,
+      img: item?.img,
+      value: base,
+      ...(formulas ? { valueLabel: `${formulas} = ${formatNumber(base)}` } : {})
+    },
+    sources: [],
+    total: base,
+    formatValue: formatNumber
+  };
+  for (const source of getAbilityOverloadResourceCostSources(actor, item, resourceKey)) {
+    appendBreakdownStep(breakdown, source, { minimum: 0 });
+  }
+  reconcileBreakdownTotal(breakdown, total, item);
+  return breakdown;
+}
+
+function buildActiveApplicationConfiguredOverloadRows(costs = [], resourceLabels = new Map()) {
+  return costs.flatMap(cost => {
+    const amount = Math.max(0, toInteger(cost?.overloadAmount));
+    const durationSeconds = Math.max(0, toInteger(cost?.overloadDurationSeconds));
+    if (!amount || !durationSeconds) return [];
+    const payerKey = cost.payer === ABILITY_ACTIVE_APPLICATION_COST_PAYERS.targets
+      ? "FALLOUTMAW.Ability.ActiveApplication.CostPayerTargets"
+      : "FALLOUTMAW.Ability.ActiveApplication.CostPayerSource";
+    const payerLabel = game.i18n.localize(payerKey);
+    const resourceKey = String(cost?.resourceKey ?? "").trim();
+    const resourceLabel = resourceLabels.get(resourceKey) ?? resourceKey;
+    return [[
+      `Перегрузка — ${payerLabel}`,
+      `${resourceLabel}: ${amount} на ${formatDurationShort(durationSeconds)}`
+    ]];
+  });
+}
+
+function renderAbilityEnergyCostTotal(item, actor, entry, baseCost = 0, { multiplier = 1 } = {}) {
+  const safeMultiplier = Math.max(1, toInteger(multiplier));
+  const base = Math.max(0, toInteger(baseCost)) * safeMultiplier;
+  const total = getFixedAbilityEnergyCost(actor, item, entry, Math.max(0, toInteger(baseCost))) * safeMultiplier;
+  if (total === base) return String(total);
+  const breakdown = {
+    title: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownAbilityCost", "Расход энергии способности"),
+    actorName: actor?.name,
+    img: item?.img,
+    base: { name: item?.name, img: item?.img, value: base },
+    sources: [],
+    total: base,
+    formatValue: formatNumber
+  };
+  for (const source of getAbilityOverloadResourceCostSources(actor, item)) {
+    appendBreakdownStep(breakdown, {
+      ...source,
+      value: Math.max(0, Number(source.value) || 0) * safeMultiplier
+    }, { minimum: 0 });
+  }
+  reconcileBreakdownTotal(breakdown, total, item);
+  return renderChangedNumber(total, base, { higherIsBetter: false, breakdown });
+}
+
+function renderInventoryItemTooltipContentHTML(item, sourceActor, {
+  activeWeaponIndex = 0,
+  baseMode = false,
+  descriptionHTML = "",
+  evaluatingActor = sourceActor,
+  includeRecipeKnowledge = true,
+  recipeKnowledgePreviews = new Map()
+} = {}) {
   const currencySettings = getCurrencySettings();
   const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
   const quantity = Math.max(1, toInteger(item.system?.quantity));
   const unitWeight = Number(item.system?.weight) || 0;
   const unitPrice = Number(item.system?.price) || 0;
-  const totalWeight = Number(getItemTotalWeight(item, actor?.items).toFixed(1));
+  const totalWeight = Number(getItemTotalWeight(item, sourceActor?.items).toFixed(1));
   const totalPrice = unitPrice * quantity;
   const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
   const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
   const armedStatus = renderArmedDelayedExplosionStatus(item);
-  const functionSections = buildInventoryTooltipFunctionSections(item, actor, {
+  const functionSections = buildInventoryTooltipFunctionSections(item, sourceActor, {
     activeWeaponIndex,
     baseMode,
+    evaluatingActor,
     includeRecipeKnowledge,
     recipeKnowledgePreviews
   });
@@ -4984,22 +5196,28 @@ function renderTooltipMeterValue(value, max = 0) {
   };
 }
 
-function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0, baseMode = false, includeRecipeKnowledge = true, recipeKnowledgePreviews = new Map() } = {}) {
+function buildInventoryTooltipFunctionSections(item, sourceActor, {
+  activeWeaponIndex = 0,
+  baseMode = false,
+  evaluatingActor = sourceActor,
+  includeRecipeKnowledge = true,
+  recipeKnowledgePreviews = new Map()
+} = {}) {
   const sections = [
-    buildContainerTooltipSection(item, actor),
+    buildContainerTooltipSection(item, sourceActor),
     buildConditionTooltipSection(item),
-    buildFirstAidTooltipSection(item, actor),
-    buildNeedChangeTooltipSection(item, actor),
-    buildOneTimeUseTooltipSection(item, actor, { includeRecipeKnowledge, recipeKnowledgePreviews }),
-    buildDamageMitigationTooltipSection(item, actor),
-    buildDamageSourceTooltipSection(item, actor),
+    buildFirstAidTooltipSection(item, evaluatingActor),
+    buildNeedChangeTooltipSection(item, evaluatingActor),
+    buildOneTimeUseTooltipSection(item, evaluatingActor, { includeRecipeKnowledge, recipeKnowledgePreviews }),
+    buildDamageMitigationTooltipSection(item, evaluatingActor),
+    buildDamageSourceTooltipSection(item, evaluatingActor),
     buildEnergySourceTooltipSection(item),
     buildEnergyConsumerTooltipSection(item),
     buildLightSourceTooltipSection(item),
-    buildModuleTooltipSection(item),
+    buildModuleTooltipSection(item, evaluatingActor),
     buildConstructPartTooltipSection(item),
-    buildProsthesisTooltipSection(item, actor),
-    ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
+    buildProsthesisTooltipSection(item, evaluatingActor),
+    ...buildWeaponTooltipSections(item, activeWeaponIndex, { sourceActor, evaluatingActor, baseMode }),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
   if (!sections.length) return "";
@@ -5040,24 +5258,42 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.FirstAidCharges"), renderTooltipMeterValue(charges.value, charges.max)]
   ];
+  const outgoingPercent = getActorHealingModifierPercent(actor, "outgoing");
+  const outgoingMultiplier = Math.max(0, 1 + (outgoingPercent / 100));
   const actionPointCost = Math.max(0, toInteger(firstAid.actionPointCost));
   if (actionPointCost) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidActionPointCost"), actionPointCost]);
   const healing = Math.max(0, toInteger(firstAid.healing));
   if (healing) {
+    const effectiveHealing = firstAid.healingIsPercentage
+      ? healing * outgoingMultiplier
+      : scaleFirstAidTooltipHealing(healing, outgoingMultiplier);
+    const breakdown = buildFirstAidHealingAttribution(item, actor, healing, effectiveHealing, {
+      isPercentage: firstAid.healingIsPercentage
+    });
     rows.push([
       game.i18n.localize("FALLOUTMAW.Item.FirstAidHealing"),
-      firstAid.healingIsPercentage ? `${healing}%` : healing
+      firstAid.healingIsPercentage
+        ? renderChangedPercentValue(effectiveHealing, healing, { breakdown })
+        : renderChangedNumber(effectiveHealing, healing, { breakdown })
     ]);
   }
   const limbCount = Math.max(0, Math.min(charges.value, charges.max, toInteger(firstAid.limbSelection?.count)));
   const limbValue = toInteger(firstAid.limbSelection?.value);
   if (limbCount && limbValue) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidLimbHealingPerCharge"), formatSignedNumber(limbValue)]);
+    const limbLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidLimbHealingPerCharge");
+    const effectiveLimbValue = limbValue > 0
+      ? scaleFirstAidTooltipHealing(limbValue, outgoingMultiplier, { zeroWhenDisabled: true })
+      : limbValue;
+    rows.push([limbLabel, limbValue > 0
+      ? renderChangedSignedNumber(effectiveLimbValue, limbValue, {
+        breakdown: buildFirstAidHealingAttribution(item, actor, limbValue, effectiveLimbValue, { title: limbLabel })
+      })
+      : formatSignedNumber(limbValue)]);
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidChargeLimitPerUse"), limbCount]);
   }
   rows.push(...getFirstAidRemoveEffectTooltipRows(firstAid));
   rows.push(...getFirstAidNeedTooltipRows(firstAid));
-  const changeRows = getFirstAidChangeTooltipRows(firstAid, actor);
+  const changeRows = getFirstAidChangeTooltipRows(firstAid, actor, item);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
   if (durationSeconds && changeRows.length) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDuration"), formatDurationShort(durationSeconds)]);
@@ -5072,13 +5308,55 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const criticalMin = Math.max(0, toInteger(firstAid.criticalFailureDamageMin));
   const criticalMax = Math.max(criticalMin, toInteger(firstAid.criticalFailureDamageMax));
   if (criticalMin || criticalMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidCriticalFailureDamageMax"), `${criticalMin}-${criticalMax}`]);
-  const withdrawalChangeRows = getFirstAidWithdrawalChangeTooltipRows(firstAid, actor);
+  const withdrawalChangeRows = getFirstAidWithdrawalChangeTooltipRows(firstAid, actor, item);
   const withdrawalDurationSeconds = Math.max(0, toInteger(firstAid.withdrawalDurationSeconds));
   if (withdrawalDurationSeconds) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidWithdrawalDuration"), formatDurationShort(withdrawalDurationSeconds)]);
   }
   rows.push(...withdrawalChangeRows);
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"), rows);
+}
+
+function scaleFirstAidTooltipHealing(value = 0, multiplier = 1, { zeroWhenDisabled = false } = {}) {
+  const base = Number(value) || 0;
+  if (!base) return 0;
+  const safeMultiplier = Math.max(0, Number(multiplier) || 0);
+  if (zeroWhenDisabled && safeMultiplier <= 0) return 0;
+  return scaleFirstAidSignedValue(base, safeMultiplier);
+}
+
+function scaleFirstAidTooltipHealingChange(value = 0, multiplier = 1) {
+  const safeMultiplier = Math.max(0, Number(multiplier) || 0);
+  if (safeMultiplier <= 0) return 0;
+  if (safeMultiplier === 1) return toInteger(value);
+  return toInteger(scaleFirstAidTooltipHealing(value, safeMultiplier, { zeroWhenDisabled: true }));
+}
+
+function buildFirstAidHealingAttribution(item, actor, base = 0, total = 0, { isPercentage = false, title = "" } = {}) {
+  const formatValue = isPercentage
+    ? value => `${formatNumber(value)}%`
+    : formatNumber;
+  const breakdown = {
+    title: title || game.i18n.localize("FALLOUTMAW.Item.FirstAidHealing"),
+    actorName: actor?.name,
+    img: item?.img,
+    base: { name: item?.name, img: item?.img, value: base },
+    sources: [],
+    total: base,
+    formatValue
+  };
+  const modifier = collectActorPreparedPathAttribution(actor, "system.healing.outgoingPercent", {
+    preparedValue: getActorHealingModifierPercent(actor, "outgoing"),
+    suffix: "%"
+  });
+  appendParallelPercentSources(breakdown, modifier.sources, {
+    expectedPercent: modifier.value,
+    total,
+    contributionUnit: isPercentage
+      ? "%"
+      : localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownHealingUnit", "лечения")
+  });
+  return breakdown;
 }
 
 function buildNeedChangeTooltipSection(item, actor = null) {
@@ -5210,15 +5488,33 @@ function getFirstAidRemoveEffectTooltipRows(firstAid = {}) {
   return values.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidRemoveEffects"), values.join(", ")]] : [];
 }
 
-function getFirstAidChangeTooltipRows(firstAid = {}, actor = null) {
-  return getFirstAidEffectChangeTooltipRows(firstAid.changes, actor, "FALLOUTMAW.Item.FirstAidEffectChanges");
+function getFirstAidChangeTooltipRows(firstAid = {}, actor = null, item = null) {
+  return getFirstAidEffectChangeTooltipRows(firstAid.changes, actor, "FALLOUTMAW.Item.FirstAidEffectChanges", {
+    applyOutgoingHealing: true,
+    item
+  });
 }
 
-function getFirstAidWithdrawalChangeTooltipRows(firstAid = {}, actor = null) {
-  return getFirstAidEffectChangeTooltipRows(firstAid.withdrawal, actor, "FALLOUTMAW.Item.FirstAidWithdrawalChanges");
+function getFirstAidWithdrawalChangeTooltipRows(firstAid = {}, actor = null, item = null) {
+  return getFirstAidEffectChangeTooltipRows(firstAid.withdrawal, actor, "FALLOUTMAW.Item.FirstAidWithdrawalChanges", {
+    applyOutgoingHealing: true,
+    item,
+    prefixHealingLabel: true
+  });
 }
 
-function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey = "FALLOUTMAW.Item.FirstAidEffectChanges") {
+function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey = "FALLOUTMAW.Item.FirstAidEffectChanges", {
+  applyOutgoingHealing = false,
+  item = null,
+  prefixHealingLabel = false
+} = {}) {
+  const sourceChanges = Array.isArray(changes) ? changes : Object.values(changes ?? {});
+  const healingChanges = applyOutgoingHealing
+    ? sourceChanges.filter(change => isFirstAidTooltipHealingChange(change))
+    : [];
+  const effectChanges = healingChanges.length
+    ? sourceChanges.filter(change => !isFirstAidTooltipHealingChange(change))
+    : sourceChanges;
   const pathLabels = buildEffectPathLabelMap({
     characteristicSettings: getCharacteristicSettings(),
     resourceSettings: getResourceSettings(),
@@ -5231,10 +5527,35 @@ function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey
       label: limb?.label ?? key
     }))
   });
-  const rows = prepareTraumaEffectEntries(changes, pathLabels)
+  const summaries = prepareTraumaEffectEntries(effectChanges, pathLabels)
     .map(entry => entry.summary)
     .filter(Boolean);
-  return rows.length ? [[game.i18n.localize(labelKey), rows.join(", ")]] : [];
+  const rows = summaries.length ? [[game.i18n.localize(labelKey), summaries.join(", ")]] : [];
+  if (!healingChanges.length) return rows;
+
+  const outgoingPercent = getActorHealingModifierPercent(actor, "outgoing");
+  const outgoingMultiplier = Math.max(0, 1 + (outgoingPercent / 100));
+  const baseHealing = Math.max(0, healingChanges.reduce((total, change) => total + toInteger(change?.value), 0));
+  const effectiveHealing = outgoingMultiplier <= 0
+    ? 0
+    : Math.max(0, healingChanges.reduce((total, change) => (
+      total + scaleFirstAidTooltipHealingChange(change?.value, outgoingMultiplier)
+    ), 0));
+  if (!baseHealing && !effectiveHealing) return rows;
+
+  const healingName = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
+  const healingLabel = prefixHealingLabel
+    ? `${game.i18n.localize(labelKey)} — ${healingName}`
+    : healingName;
+  rows.push([healingLabel, renderChangedNumber(effectiveHealing, baseHealing, {
+    breakdown: buildFirstAidHealingAttribution(item, actor, baseHealing, effectiveHealing, { title: healingLabel })
+  })]);
+  return rows;
+}
+
+function isFirstAidTooltipHealingChange(change = {}) {
+  const key = String(change?.key ?? "").trim().toLocaleLowerCase();
+  return key === "fallout-maw.healing" || key === "healing";
 }
 
 function buildDamageMitigationTooltipSection(item, actor) {
@@ -5309,11 +5630,19 @@ function buildDamageSourceTooltipSection(item, actor = null) {
   const pellets = Math.max(1, evaluateTooltipFormula(source?.pellets, actor, { fallback: 1, minimum: 1 }) || 1);
   if (pellets > 1) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPellets"), pellets]);
   const accuracyBonus = evaluateTooltipFormula(source?.accuracyBonus, actor, { minimum: -Infinity });
-  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderSignedTooltipModifier(accuracyBonus)]);
+  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderSignedTooltipModifier(accuracyBonus, {
+    breakdown: buildDamageSourceFormulaAttribution(item, actor, game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), source?.accuracyBonus, accuracyBonus)
+  })]);
   const criticalChanceModifier = evaluateTooltipFormula(source?.criticalChanceModifier, actor, { minimum: -Infinity });
-  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderSignedTooltipModifier(criticalChanceModifier, { suffix: "%" })]);
+  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderSignedTooltipModifier(criticalChanceModifier, {
+    suffix: "%",
+    breakdown: buildDamageSourceFormulaAttribution(item, actor, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), source?.criticalChanceModifier, criticalChanceModifier, { suffix: "%" })
+  })]);
   const criticalDamagePercent = evaluateTooltipFormula(source?.criticalDamagePercent, actor);
-  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), renderSignedTooltipModifier(criticalDamagePercent, { suffix: "%" })]);
+  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), renderSignedTooltipModifier(criticalDamagePercent, {
+    suffix: "%",
+    breakdown: buildDamageSourceFormulaAttribution(item, actor, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), source?.criticalDamagePercent, criticalDamagePercent, { suffix: "%" })
+  })]);
   const maxRangeMeters = evaluateTooltipFormula(source?.maxRangeMeters, actor);
   if (maxRangeMeters) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(maxRangeMeters)} м`]);
   const effectiveValue = evaluateTooltipFormula(source?.effectiveRange?.value, actor);
@@ -5323,6 +5652,26 @@ function buildDamageSourceTooltipSection(item, actor = null) {
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
   rows.push(...getWeaponVolleyRows(source, { actor }));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
+}
+
+function buildDamageSourceFormulaAttribution(item, actor, title = "", formula = 0, total = 0, { suffix = "" } = {}) {
+  const formulaText = String(formula ?? "").trim() || "0";
+  const formulaLabel = formatActorFormulaForDisplay(formulaText, actor, { includeValues: Boolean(actor) });
+  const formattedTotal = `${formatNumber(total)}${suffix}`;
+  return {
+    title,
+    actorName: actor?.name,
+    img: item?.img,
+    base: {
+      name: item?.name,
+      img: item?.img,
+      value: total,
+      valueLabel: formulaText === String(total) ? formattedTotal : `${formulaLabel} = ${formattedTotal}`
+    },
+    sources: [],
+    total,
+    formatValue: value => `${formatNumber(value)}${suffix}`
+  };
 }
 
 function buildEnergySourceTooltipSection(item) {
@@ -5417,10 +5766,10 @@ function getLightSourceCostTooltipLabel(costs = []) {
   return entries.length ? entries.join(", ") : game.i18n.localize("FALLOUTMAW.Item.LightSourceNoResourceCosts");
 }
 
-function buildModuleTooltipSection(item) {
+function buildModuleTooltipSection(item, evaluatingActor = null) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })) return "";
   if (String(getModuleFunction(item).targetFunction ?? "weapon") !== "weapon") return "";
-  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item));
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item, evaluatingActor));
 }
 
 function buildConstructPartTooltipSection(item) {
@@ -5494,7 +5843,7 @@ function getConfiguredLimbLabel(limbKey = "") {
   return key;
 }
 
-function getModuleTooltipRows(item) {
+function getModuleTooltipRows(item, evaluatingActor = null) {
   const moduleData = getModuleFunction(item);
   const weapon = moduleData.weapon ?? {};
   const rows = [
@@ -5510,11 +5859,11 @@ function getModuleTooltipRows(item) {
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), weapon.penetration);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), weapon.magazineMax);
   rows.push(...getModuleActionPointRows(weapon.actionPointCosts));
-  rows.push(...getModuleAddedWeaponFunctionRows(item, moduleData.additionalWeapons));
+  rows.push(...getModuleAddedWeaponFunctionRows(item, moduleData.additionalWeapons, evaluatingActor));
   return rows;
 }
 
-function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}) {
+function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}, evaluatingActor = null) {
   return normalizeTooltipWeaponFunctionEntries(additionalWeapons)
     .filter(({ data }) => data?.enabled)
     .map(({ id, data }, index) => {
@@ -5526,7 +5875,10 @@ function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}) {
         name: title,
         data
       };
-      const tooltipHTML = renderAddedWeaponFunctionTooltipHTML(title, buildWeaponTooltipRows(item, entry, { actor: null, baseMode: true }));
+      const tooltipHTML = renderAddedWeaponFunctionTooltipHTML(title, buildWeaponTooltipRows(item, entry, {
+        actor: evaluatingActor,
+        baseMode: false
+      }));
       return ["Добавляет функцию", {
         html: `
           <span class="weapon-tab-list tooltip-added-weapon-function-list">
@@ -5593,12 +5945,16 @@ function summarizeMitigationCoverage(entries = {}) {
   return `${limbCount} частей / ${damageTypeCount} типов`;
 }
 
-function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null, baseMode = false } = {}) {
+function buildWeaponTooltipSections(item, activeWeaponIndex = 0, {
+  sourceActor = null,
+  evaluatingActor = sourceActor,
+  baseMode = false
+} = {}) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) return [];
   const entries = getEnabledWeaponFunctions(item, { ignoreBroken: true });
   if (!entries.length) return [];
 
-  const installedModuleTabs = getWeaponInstalledModuleTooltipTabs(item, actor);
+  const installedModuleTabs = getWeaponInstalledModuleTooltipTabs(item, sourceActor, evaluatingActor);
   const moduleTabIndex = entries.length + installedModuleTabs.length;
   const hasModuleSlots = entries.some((entry) => entry?.canHaveModuleSlots && getWeaponModuleSlots(entry.data ?? {}).length);
   const maxTabIndex = hasModuleSlots ? moduleTabIndex : Math.max(entries.length - 1, moduleTabIndex - 1);
@@ -5633,7 +5989,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
   const panels = [
     ...entries.map((entry, index) => `
       <div class="weapon-tab-panel ${index === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${index}">
-        ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry, { actor, baseMode }))}
+        ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry, { actor: evaluatingActor, baseMode }))}
       </div>
     `),
     ...installedModuleTabs.map((entry, index) => {
@@ -5646,7 +6002,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
     }),
     hasModuleSlots ? `
       <div class="weapon-tab-panel ${moduleTabIndex === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${moduleTabIndex}">
-        ${renderWeaponTooltipModuleSlots(item, entries, actor)}
+        ${renderWeaponTooltipModuleSlots(item, entries, sourceActor, evaluatingActor)}
       </div>
     ` : ""
   ].join("");
@@ -5663,38 +6019,38 @@ export function getWeaponTooltipModuleSlotsTabIndex(item, actor = null) {
   return getEnabledWeaponFunctions(item, { ignoreBroken: true }).length + getWeaponInstalledModuleTooltipTabs(item, actor).length;
 }
 
-function getWeaponInstalledModuleTooltipTabs(item, actor = null) {
-  if (!actor || !item?.id) return [];
-  return getActorInstalledModuleItems(actor)
+function getWeaponInstalledModuleTooltipTabs(item, sourceActor = null, evaluatingActor = sourceActor) {
+  if (!sourceActor || !item?.id) return [];
+  return getActorInstalledModuleItems(sourceActor)
     .filter(moduleItem => String(moduleItem.system?.placement?.parentItemId ?? "") === item.id)
     .map(moduleItem => ({
       item: moduleItem,
       title: getWeaponModuleDisplayName(moduleItem),
-      sections: buildInstalledWeaponModuleTooltipSections(moduleItem, actor)
+      sections: buildInstalledWeaponModuleTooltipSections(moduleItem, sourceActor, evaluatingActor)
     }))
     .filter(entry => entry.sections.length);
 }
 
-function buildInstalledWeaponModuleTooltipSections(item, actor = null) {
+function buildInstalledWeaponModuleTooltipSections(item, sourceActor = null, evaluatingActor = sourceActor) {
   return [
-    buildContainerTooltipSection(item, actor),
+    buildContainerTooltipSection(item, sourceActor),
     buildConditionTooltipSection(item),
-    buildFirstAidTooltipSection(item, actor),
-    buildNeedChangeTooltipSection(item, actor),
-    buildOneTimeUseTooltipSection(item, actor),
-    buildDamageMitigationTooltipSection(item, actor),
-    buildDamageSourceTooltipSection(item, actor),
+    buildFirstAidTooltipSection(item, evaluatingActor),
+    buildNeedChangeTooltipSection(item, evaluatingActor),
+    buildOneTimeUseTooltipSection(item, evaluatingActor),
+    buildDamageMitigationTooltipSection(item, evaluatingActor),
+    buildDamageSourceTooltipSection(item, evaluatingActor),
     buildEnergySourceTooltipSection(item),
     buildEnergyConsumerTooltipSection(item),
     buildLightSourceTooltipSection(item),
-    buildModuleTooltipSection(item),
+    buildModuleTooltipSection(item, evaluatingActor),
     buildConstructPartTooltipSection(item),
-    buildProsthesisTooltipSection(item, actor),
+    buildProsthesisTooltipSection(item, evaluatingActor),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
 }
 
-function renderWeaponTooltipModuleSlots(item, entries = [], actor = null) {
+function renderWeaponTooltipModuleSlots(item, entries = [], sourceActor = null, evaluatingActor = sourceActor) {
   const slots = entries.flatMap((entry, weaponIndex) => !entry?.canHaveModuleSlots ? [] : getWeaponModuleSlots(entry.data ?? {}).map((slot, slotIndex) => ({
     entry,
     weaponIndex,
@@ -5716,7 +6072,7 @@ function renderWeaponTooltipModuleSlots(item, entries = [], actor = null) {
             data-tooltip-module-slot
             data-tooltip-weapon-index="${weaponIndex}"
             data-tooltip-module-slot-index="${slotIndex}"
-            ${itemData ? renderInstalledModuleTooltipAttributes(itemData, actor) : ""}>
+            ${itemData ? renderInstalledModuleTooltipAttributes(itemData, sourceActor, evaluatingActor) : ""}>
             ${itemData ? `<img src="${escapeAttribute(itemData.img || "icons/svg/item-bag.svg")}" alt="">` : `<i class="fa-solid fa-plus"></i>`}
           </button>
           <span>${escapeHTML(slot.moduleKey || getWeaponTooltipSectionTitle(null, entry, weaponIndex))}</span>
@@ -5724,13 +6080,13 @@ function renderWeaponTooltipModuleSlots(item, entries = [], actor = null) {
       `).join("")}
     </div>
     <div class="tooltip-module-picker-panels">
-      ${slots.map(({ weaponIndex, slotIndex, slot }) => renderWeaponTooltipModulePickerPanel(item, actor, slot, weaponIndex, slotIndex)).join("")}
+      ${slots.map(({ weaponIndex, slotIndex, slot }) => renderWeaponTooltipModulePickerPanel(item, sourceActor, evaluatingActor, slot, weaponIndex, slotIndex)).join("")}
     </div>
   `;
 }
 
-function renderInstalledModuleTooltipAttributes(item, actor = null) {
-  const html = renderInventoryItemTooltipContentHTML(item, actor);
+function renderInstalledModuleTooltipAttributes(item, sourceActor = null, evaluatingActor = sourceActor) {
+  const html = renderInventoryItemTooltipContentHTML(item, sourceActor, { evaluatingActor });
   return [
     `data-tooltip-html="${escapeAttribute(html)}"`,
     `data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`,
@@ -5738,11 +6094,11 @@ function renderInstalledModuleTooltipAttributes(item, actor = null) {
   ].join(" ");
 }
 
-function renderWeaponTooltipModulePickerPanel(item, actor, slot, weaponIndex, slotIndex) {
+function renderWeaponTooltipModulePickerPanel(item, sourceActor, evaluatingActor, slot, weaponIndex, slotIndex) {
   const panelKey = `${weaponIndex}:${slotIndex}`;
-  const candidates = getTooltipWeaponModuleCandidates(actor, item, slot);
+  const candidates = getTooltipWeaponModuleCandidates(sourceActor, item, slot);
   const content = candidates.length
-    ? `<div class="tooltip-module-choice-list">${candidates.map(candidate => renderWeaponTooltipModuleChoice(candidate, weaponIndex, slotIndex, actor)).join("")}</div>`
+    ? `<div class="tooltip-module-choice-list">${candidates.map(candidate => renderWeaponTooltipModuleChoice(candidate, weaponIndex, slotIndex, sourceActor, evaluatingActor)).join("")}</div>`
     : `<p class="fallout-maw-empty-list">Нет подходящих модулей.</p>`;
   return `
     <div class="tooltip-module-picker-panel" data-tooltip-module-picker-panel="${escapeAttribute(panelKey)}">
@@ -5759,24 +6115,24 @@ function getTooltipWeaponModuleCandidates(actor, item, slot) {
     .sort((left, right) => getWeaponModuleDisplayName(left).localeCompare(getWeaponModuleDisplayName(right), game.i18n.lang));
 }
 
-function renderWeaponTooltipModuleChoice(item, weaponIndex, slotIndex, actor = null) {
+function renderWeaponTooltipModuleChoice(item, weaponIndex, slotIndex, sourceActor = null, evaluatingActor = sourceActor) {
   return `
     <div class="tooltip-module-choice" role="button" tabindex="0"
       data-tooltip-module-choice="${escapeAttribute(item.id)}"
       data-tooltip-weapon-index="${weaponIndex}"
       data-tooltip-module-slot-index="${slotIndex}"
-      ${renderInstalledModuleTooltipAttributes(item, actor)}>
+      ${renderInstalledModuleTooltipAttributes(item, sourceActor, evaluatingActor)}>
       <img src="${escapeAttribute(item.img || "icons/svg/item-bag.svg")}" alt="">
       <span class="tooltip-module-choice-body">
         <strong>${escapeHTML(getWeaponModuleDisplayName(item))}</strong>
-        ${renderModuleChangePreview(item)}
+        ${renderModuleChangePreview(item, evaluatingActor)}
       </span>
     </div>
   `;
 }
 
-function renderModuleChangePreview(item) {
-  const rows = getModuleTooltipRows(item).slice(2).filter(row => hasTooltipRowValue(row?.[1]));
+function renderModuleChangePreview(item, evaluatingActor = null) {
+  const rows = getModuleTooltipRows(item, evaluatingActor).slice(2).filter(row => hasTooltipRowValue(row?.[1]));
   if (!rows.length) return `<span class="tooltip-module-choice-empty">Нет изменений</span>`;
   return `
     <span class="tooltip-module-choice-effects">
@@ -5791,16 +6147,27 @@ function renderModuleChangePreview(item) {
 }
 
 function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = false } = {}) {
-  const data = getEffectiveWeaponTooltipData(entry.data ?? {}, {
+  const rawData = entry.data ?? {};
+  const moduleSlots = getWeaponFunctionModuleSlots(item, entry.id);
+  const data = getEffectiveWeaponTooltipData(rawData, {
     applyModules: !baseMode,
-    moduleSlots: getWeaponFunctionModuleSlots(item, entry.id)
+    moduleSlots
   });
-  const baseData = getEffectiveWeaponTooltipData(entry.data ?? {}, { applyModules: false });
-  const stats = getWeaponTooltipCalculatedStats(item, data, { actor, baseMode });
+  const baseData = getEffectiveWeaponTooltipData(rawData, { applyModules: false });
+  const stats = getWeaponTooltipCalculatedStats(item, data, {
+    actor,
+    baseMode,
+    baseData,
+    moduleSlots,
+    rawData
+  });
   const baseStats = baseMode ? stats : getWeaponTooltipCalculatedStats(item, baseData, { actor, baseMode: true });
   data._evaluatedPellets = Math.max(1, evaluateTooltipFormula(data.pellets, actor, { fallback: 1, minimum: 1 }));
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), renderChangedWeaponDamageValue(data, stats.damage, baseStats.damage, { baseMode })],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), renderChangedWeaponDamageValue(data, stats.damage, baseStats.damage, {
+      baseMode,
+      breakdown: stats.breakdowns?.damage
+    })],
     ["Распределение урона", getWeaponDamageDistributionLabel(item, data)]
   ];
   if (isSourceDamageMode(data)) {
@@ -5811,39 +6178,63 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
   }
   rows.push(
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(evaluateTooltipFormula(data.maxRangeMeters, actor), evaluateTooltipFormula(baseData.maxRangeMeters, actor), { baseMode })],
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, baseData.effectiveRange, { actor, baseMode })]
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(evaluateTooltipFormula(data.maxRangeMeters, actor), evaluateTooltipFormula(baseData.maxRangeMeters, actor), {
+      baseMode,
+      breakdown: stats.breakdowns?.maxRangeMeters
+    })],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, baseData.effectiveRange, {
+      actor,
+      baseMode,
+      breakdowns: stats.breakdowns?.effectiveRange
+    })]
   );
   rows.push(...getWeaponActionDetailRows(data, { actor }));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
   if (isWeaponActionEnabled(data, "burst")) {
     const baseRecoil = getWeaponBurstDifficultyPerShot(baseData);
     const recoil = baseMode ? baseRecoil : getEffectiveWeaponBurstDifficultyPerShot(data, actor);
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponRecoil"), renderChangedSignedNumber(recoil, baseRecoil, { baseMode, higherIsBetter: false })]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponRecoil"), renderChangedSignedNumber(recoil, baseRecoil, {
+      baseMode,
+      higherIsBetter: false,
+      breakdown: stats.breakdowns?.recoil
+    })]);
   }
   const accuracyBonus = stats.accuracyBonus;
   if (accuracyBonus || (!baseMode && accuracyBonus !== baseStats.accuracyBonus)) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderChangedSignedNumber(accuracyBonus, baseStats.accuracyBonus, { baseMode })]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderChangedSignedNumber(accuracyBonus, baseStats.accuracyBonus, {
+      baseMode,
+      breakdown: stats.breakdowns?.accuracyBonus
+    })]);
   }
   const criticalChanceModifier = stats.criticalChanceModifier;
   if (criticalChanceModifier || (!baseMode && criticalChanceModifier !== baseStats.criticalChanceModifier)) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderChangedSignedPercentValue(criticalChanceModifier, baseStats.criticalChanceModifier, { baseMode })]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderChangedSignedPercentValue(criticalChanceModifier, baseStats.criticalChanceModifier, {
+      baseMode,
+      breakdown: stats.breakdowns?.criticalChanceModifier
+    })]);
   }
   const criticalDamagePercent = stats.criticalDamagePercent;
   if (criticalDamagePercent || (!baseMode && criticalDamagePercent !== baseStats.criticalDamagePercent)) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), renderChangedPercentValue(criticalDamagePercent, baseStats.criticalDamagePercent, { baseMode })]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), renderChangedPercentValue(criticalDamagePercent, baseStats.criticalDamagePercent, {
+      baseMode,
+      breakdown: stats.breakdowns?.criticalDamagePercent
+    })]);
   }
   const penetration = stats.penetration;
-  if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), renderChangedNumber(penetration, baseStats.penetration, { baseMode })]);
+  if (penetration || (!baseMode && penetration !== baseStats.penetration)) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), renderChangedNumber(penetration, baseStats.penetration, {
+    baseMode,
+    breakdown: stats.breakdowns?.penetration
+  })]);
   rows.push(...getWeaponResourceCostRows(data, baseData, {
     baseMode,
-    resourceCostMultipliers: stats.resourceCostMultipliers
+    resourceCostMultipliers: stats.resourceCostMultipliers,
+    breakdowns: stats.breakdowns?.resourceCosts
   }));
-  const requirements = getWeaponRequirementLabels(data, actor);
+  const requirements = getWeaponRequirementLabels(data, actor, item);
   if (requirements.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponUseRequirements"), {
     html: renderTooltipValueTokens(requirements)
   }]);
-  const actions = getWeaponActionLabels(data, baseData, { actor, baseMode });
+  const actions = getWeaponActionLabels(data, baseData, { actor, baseMode, item, moduleSlots });
   if (actions.length) rows.push(["Действия", {
     html: renderTooltipValueTokens(actions)
   }]);
@@ -5864,57 +6255,61 @@ function getWeaponFunctionUpdatePath(entry = {}) {
   return id ? `system.functions.additionalWeapons.${id}` : "";
 }
 
-function renderChangedWeaponDamageValue(data = {}, value = 0, baseValue = 0, { baseMode = false } = {}) {
+function renderChangedWeaponDamageValue(data = {}, value = 0, baseValue = 0, { baseMode = false, breakdown = null } = {}) {
   const text = formatWeaponDamageValue(data, value);
   if (baseMode || toInteger(value) === toInteger(baseValue)) return text;
-  return renderChangedTooltipText(text, value > baseValue);
+  return renderChangedTooltipText(text, value > baseValue, breakdown);
 }
 
-function renderChangedNumber(value = 0, baseValue = 0, { baseMode = false, higherIsBetter = true } = {}) {
+function renderChangedNumber(value = 0, baseValue = 0, { baseMode = false, higherIsBetter = true, breakdown = null } = {}) {
   const text = formatNumber(value);
   if (baseMode || Number(value) === Number(baseValue)) return text;
-  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === higherIsBetter);
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === higherIsBetter, breakdown);
 }
 
 function renderChangedSignedNumber(value = 0, baseValue = 0, options = {}) {
   const text = formatSignedNumber(value);
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
-  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false), options.breakdown);
 }
 
 function renderChangedSignedPercentValue(value = 0, baseValue = 0, options = {}) {
   const text = `${formatSignedNumber(value)}%`;
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
-  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false), options.breakdown);
 }
 
-function renderSignedTooltipModifier(value = 0, { suffix = "", higherIsBetter = true } = {}) {
+function renderSignedTooltipModifier(value = 0, { suffix = "", higherIsBetter = true, breakdown = null } = {}) {
   const numeric = Number(value) || 0;
   const text = `${formatSignedNumber(numeric)}${suffix}`;
   if (!numeric) return text;
-  return renderChangedTooltipText(text, (numeric > 0) === higherIsBetter);
+  return renderChangedTooltipText(text, (numeric > 0) === higherIsBetter, breakdown);
 }
 
 function renderChangedPercentValue(value = 0, baseValue = 0, options = {}) {
   const text = `${formatNumber(value)}%`;
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
-  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false), options.breakdown);
 }
 
 function renderChangedDistanceValue(value = 0, baseValue = 0, options = {}) {
   const text = `${formatNumber(value)} м`;
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
-  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false), options.breakdown);
 }
 
-function renderChangedEffectiveRangeValue(range = {}, baseRange = {}, { actor = null, baseMode = false } = {}) {
+function renderChangedEffectiveRangeValue(range = {}, baseRange = {}, { actor = null, baseMode = false, breakdowns = {} } = {}) {
   const value = evaluateTooltipFormula(range?.value, actor);
   const max = evaluateTooltipFormula(range?.max, actor);
   const baseValue = evaluateTooltipFormula(baseRange?.value, actor);
   const baseMax = evaluateTooltipFormula(baseRange?.max, actor);
   if (baseMode || (value === baseValue && max === baseMax)) return `${formatNumber(value)} / ${formatNumber(max)} м`;
-  const valueHtml = value === baseValue ? escapeHTML(formatNumber(value)) : renderChangedTooltipSpan(formatNumber(value), value < baseValue);
-  const maxHtml = max === baseMax ? escapeHTML(formatNumber(max)) : renderChangedTooltipSpan(formatNumber(max), max > baseMax);
+  const valueHtml = value === baseValue
+    ? escapeHTML(formatNumber(value))
+    : renderChangedTooltipSpan(formatNumber(value), value < baseValue, breakdowns?.value);
+  const maxHtml = max === baseMax
+    ? escapeHTML(formatNumber(max))
+    : renderChangedTooltipSpan(formatNumber(max), max > baseMax, breakdowns?.max);
   return { html: `${valueHtml} / ${maxHtml} м` };
 }
 
@@ -5956,26 +6351,130 @@ function renderModuleChangeValue(value = 0, { suffix = "", higherIsBetter = true
   return renderChangedTooltipText(text, (numeric > 0) === higherIsBetter);
 }
 
-function renderChangedTooltipText(text, positive) {
-  return { html: renderChangedTooltipSpan(text, positive) };
+function renderChangedTooltipText(text, positive, breakdown = null) {
+  return { html: renderChangedTooltipSpan(text, positive, breakdown) };
 }
 
-function renderChangedTooltipSpan(text, positive) {
-  const className = `function-value-change ${positive ? "positive" : "negative"}`;
-  return `<span class="${className}">${escapeHTML(text)}</span>`;
+function renderChangedTooltipSpan(text, positive, breakdown = null) {
+  const hasBreakdown = Boolean(breakdown?.sources?.length || breakdown?.base);
+  const className = [
+    "function-value-change",
+    positive ? "positive" : "negative",
+    hasBreakdown ? "fallout-maw-item-value-attribution" : ""
+  ].filter(Boolean).join(" ");
+  const attributes = hasBreakdown
+    ? [
+      "data-item-value-breakdown",
+      `data-tooltip-html="${escapeAttribute(renderItemValueBreakdownTooltipHTML(breakdown))}"`,
+      `data-tooltip-class="fallout-maw-effect-tooltip fallout-maw-item-value-breakdown-tooltip"`,
+      `data-tooltip-direction="RIGHT"`
+    ].join(" ")
+    : "";
+  return `<span class="${className}" ${attributes}>${escapeHTML(text)}</span>`;
 }
 
-function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMode = false } = {}) {
+function renderItemValueBreakdownTooltipHTML(breakdown = {}) {
+  const formatter = typeof breakdown.formatValue === "function" ? breakdown.formatValue : formatNumber;
+  const base = breakdown.base ?? null;
+  const sources = (breakdown.sources ?? []).filter(source => source && source.hidden !== true);
+  const rows = [...(base ? [{ ...base, isBase: true }] : []), ...sources];
+  const title = String(breakdown.title ?? localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownTitle", "Расчёт значения"));
+  const actorName = String(breakdown.actorName ?? "").trim();
+  const headerImg = String(breakdown.img ?? base?.img ?? "").trim() || "icons/svg/item-bag.svg";
+  return `
+    <article class="fallout-maw-effect-tooltip-content fallout-maw-item-value-breakdown-content">
+      <header>
+        <img src="${escapeAttribute(headerImg)}" alt="">
+        <div>
+          <strong>${escapeHTML(title)}</strong>
+          ${actorName ? `<span>${escapeHTML(localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPerspective", "Расчёт для"))}: ${escapeHTML(actorName)}</span>` : ""}
+        </div>
+      </header>
+      <section class="changes">
+        <h4>${escapeHTML(localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownSources", "Источники"))}</h4>
+        <ol>${rows.map(source => renderItemValueBreakdownSource(source, formatter)).join("")}</ol>
+      </section>
+      <footer class="fallout-maw-item-value-breakdown-total">
+        <strong>${escapeHTML(localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownTotal", "Итого"))}</strong>
+        <span>${escapeHTML(formatter(Number(breakdown.total) || 0))}</span>
+      </footer>
+    </article>
+  `;
+}
+
+function renderItemValueBreakdownSource(source = {}, formatter = formatNumber) {
+  const fallbackKey = source.isBase ? "FALLOUTMAW.Item.TooltipBreakdownBase" : "FALLOUTMAW.Item.TooltipBreakdownOther";
+  const fallbackName = source.isBase ? "Базовое значение" : "Другой источник";
+  const name = localizeTooltipSourceName(source.name || localizeOrFallback(fallbackKey, fallbackName));
+  const img = String(source.img ?? "").trim() || "icons/svg/item-bag.svg";
+  const operation = source.valueLabel || formatItemValueBreakdownOperation(source, formatter);
+  const hasTransition = Number.isFinite(Number(source.before)) && Number.isFinite(Number(source.after));
+  const transition = hasTransition
+    ? `${formatSignedBreakdownValue(Number(source.after) - Number(source.before), formatter)} · ${formatter(Number(source.before))} → ${formatter(Number(source.after))}`
+    : "";
+  const details = [
+    ...(Array.isArray(source.detailLabels) ? source.detailLabels : []),
+    source.detailLabel,
+    source.contributionLabel,
+    transition
+  ].map(value => String(value ?? "").trim()).filter(Boolean);
+  return `
+    <li class="fallout-maw-item-value-breakdown-source">
+      <span class="fallout-maw-item-value-breakdown-source-name">
+        <img src="${escapeAttribute(img)}" alt="">
+        <strong>${escapeHTML(name)}</strong>
+      </span>
+      <span class="fallout-maw-item-value-breakdown-source-value">
+        <b>${escapeHTML(operation)}</b>
+        ${details.map(detail => `<small>${escapeHTML(detail)}</small>`).join("")}
+      </span>
+    </li>
+  `;
+}
+
+function formatSignedBreakdownValue(value = 0, formatter = formatNumber) {
+  const numeric = Number(value) || 0;
+  if (!numeric) return formatter(0);
+  const absolute = String(formatter(Math.abs(numeric))).replace(/^[+−-]/, "");
+  return `${numeric > 0 ? "+" : "−"}${absolute}`;
+}
+
+function formatItemValueBreakdownOperation(source = {}, formatter = formatNumber) {
+  if (source.isBase) return `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBase", "База")}: ${formatter(Number(source.value) || 0)}`;
+  const value = Number(source.value) || 0;
+  const operation = String(source.operation ?? source.type ?? "add");
+  if (operation === "multiply") return `×${formatter(value)}`;
+  if (operation === "subtract") return `−${formatter(value)}`;
+  if (operation === "override") return `→ ${formatter(value)}`;
+  if (operation === "upgrade") return `min ${formatter(value)}`;
+  if (operation === "downgrade") return `max ${formatter(value)}`;
+  return formatSignedNumber(value);
+}
+
+function localizeTooltipSourceName(value = "") {
+  const text = String(value ?? "");
+  return game.i18n.has(text) ? game.i18n.localize(text) : text;
+}
+
+function getWeaponTooltipCalculatedStats(item, data = {}, {
+  actor = null,
+  baseMode = false,
+  baseData = data,
+  moduleSlots = [],
+  rawData = baseData
+} = {}) {
   const contextual = baseMode ? null : getWeaponTooltipAbilityContext(item, data);
   const fixedModifiers = baseMode
-    ? { combatValues: {}, resourceCostMultipliers: {} }
+    ? { combatValues: {}, resourceCostMultipliers: {}, sources: [] }
     : getFixedWeaponPreviewModifiers(actor, item, data);
-  const contextualDamageFlat = contextual ? getTooltipContextualCombatValue(actor, "damageFlat", contextual) : 0;
-  const contextualDamagePercent = (contextual ? getTooltipContextualCombatValue(actor, "damagePercent", contextual) : 0)
-    + toInteger(fixedModifiers.combatValues?.damagePercent);
-  const contextualAccuracy = (contextual ? getTooltipContextualCombatValue(actor, "accuracy", contextual) : 0)
-    + toInteger(fixedModifiers.combatValues?.accuracy);
-  const contextualCriticalChance = contextual ? getTooltipContextualCombatValue(actor, "criticalChance", contextual) : 0;
+  const damageFlatAttribution = contextual ? collectActorCombatValueAttribution(actor, "damageFlat", contextual) : emptyCombatAttribution();
+  const damagePercentAttribution = contextual ? collectActorCombatValueAttribution(actor, "damagePercent", contextual) : emptyCombatAttribution();
+  const accuracyAttribution = contextual ? collectActorCombatValueAttribution(actor, "accuracy", contextual) : emptyCombatAttribution();
+  const criticalChanceAttribution = contextual ? collectActorCombatValueAttribution(actor, "criticalChance", contextual) : emptyCombatAttribution();
+  const contextualDamageFlat = damageFlatAttribution.value;
+  const contextualDamagePercent = damagePercentAttribution.value + toInteger(fixedModifiers.combatValues?.damagePercent);
+  const contextualAccuracy = accuracyAttribution.value + toInteger(fixedModifiers.combatValues?.accuracy);
+  const contextualCriticalChance = criticalChanceAttribution.value;
   const proficiencyDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "damage");
   const skillDamageBonuses = baseMode ? { flat: 0, percent: 0 } : getWeaponSkillDamageBonuses(actor, data.skillKey);
   const baseDamageFormula = getEffectiveWeaponDamageData(item, data).damage;
@@ -5993,22 +6492,705 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
-
-  return {
+  const proficiencyAccuracy = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy");
+  const proficiencyCriticalChance = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance");
+  const proficiencyCriticalDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage");
+  const result = {
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
     accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor, { minimum: -Infinity })
-      + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy"))
+      + proficiencyAccuracy
       + contextualAccuracy
       - conditionAccuracyPenalty,
     criticalChanceModifier: evaluateTooltipFormula(data.criticalChanceModifier, actor, { minimum: -Infinity })
-      + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance"))
+      + proficiencyCriticalChance
       + contextualCriticalChance
       - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
-      + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage"))),
+      + proficiencyCriticalDamage),
     penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor)),
     resourceCostMultipliers: fixedModifiers.resourceCostMultipliers ?? {}
   };
+  if (!baseMode) {
+    result.breakdowns = buildWeaponTooltipValueBreakdowns({
+      item,
+      actor,
+      rawData,
+      baseData,
+      data,
+      moduleSlots,
+      result,
+      formulaDamage,
+      damagePercent,
+      contextualDamageFlat,
+      proficiencyDamage,
+      proficiencyAccuracy,
+      proficiencyCriticalChance,
+      proficiencyCriticalDamage,
+      skillDamageBonuses,
+      weakening,
+      conditionAccuracyPenalty,
+      conditionCritPenalty,
+      fixedModifiers,
+      damageFlatAttribution,
+      damagePercentAttribution,
+      accuracyAttribution,
+      criticalChanceAttribution
+    });
+  }
+  return result;
+}
+
+function emptyCombatAttribution() {
+  return { value: 0, sources: [] };
+}
+
+function buildWeaponTooltipValueBreakdowns({
+  item,
+  actor,
+  rawData,
+  baseData,
+  data,
+  moduleSlots,
+  result,
+  formulaDamage,
+  damagePercent,
+  proficiencyDamage,
+  proficiencyAccuracy,
+  proficiencyCriticalChance,
+  proficiencyCriticalDamage,
+  skillDamageBonuses,
+  weakening,
+  conditionAccuracyPenalty,
+  conditionCritPenalty,
+  fixedModifiers,
+  damageFlatAttribution,
+  damagePercentAttribution,
+  accuracyAttribution,
+  criticalChanceAttribution
+} = {}) {
+  const common = { item, actor, rawData, baseData, data, moduleSlots };
+  const damage = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "damage",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"),
+    total: formulaDamage,
+    minimum: 0,
+    integer: true
+  });
+  const damagePercentSources = [];
+  appendWeaponDamagePercentSources({ sources: damagePercentSources }, {
+    item,
+    actor,
+    data,
+    proficiencyDamage,
+    skillDamageBonuses,
+    fixedModifiers,
+    damagePercentAttribution
+  });
+  appendParallelPercentSources(damage, damagePercentSources, {
+    expectedPercent: damagePercent,
+    round: Math.round,
+    contributionUnit: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownDamageUnit", "урона")
+  });
+  appendAttributionDeltaSources(damage, damageFlatAttribution.sources);
+  if (skillDamageBonuses.flat) {
+    const formulaLabel = skillDamageBonuses.flatFormula
+      ? formatActorFormulaForDisplay(skillDamageBonuses.flatFormula, actor, { includeValues: Boolean(actor) })
+      : "";
+    appendBreakdownStep(damage, {
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBaseBonus", "Базовый бонус"),
+      img: actor?.img,
+      operation: "add",
+      value: skillDamageBonuses.flat,
+      valueLabel: formatSignedNumber(skillDamageBonuses.flat),
+      ...(formulaLabel ? { detailLabel: `${formulaLabel} = ${formatSignedNumber(skillDamageBonuses.flat)}` } : {})
+    });
+  }
+  if (weakening?.active && Math.abs((Number(weakening.ratio) || 0) - 1) > 0.000001) {
+    appendBreakdownStep(damage, {
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownCondition", "Состояние предмета"),
+      img: item?.img,
+      operation: "multiply",
+      value: weakening.ratio,
+      valueLabel: `×${formatNumber(weakening.ratio)}`
+    }, { minimum: 0, round: Math.floor });
+  }
+  reconcileBreakdownTotal(damage, result.damage, item);
+
+  const accuracyBonus = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "accuracyBonus",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"),
+    total: evaluateTooltipFormula(data?.accuracyBonus, actor, { minimum: -Infinity }),
+    minimum: Number.NEGATIVE_INFINITY,
+    formatValue: formatSignedNumber
+  });
+  appendProficiencyAttribution(accuracyBonus, actor, data, proficiencyAccuracy);
+  appendAttributionDeltaSources(accuracyBonus, accuracyAttribution.sources);
+  appendFixedCombatAttribution(accuracyBonus, fixedModifiers, "accuracy");
+  if (conditionAccuracyPenalty) appendBreakdownStep(accuracyBonus, {
+    name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownCondition", "Состояние предмета"),
+    img: item?.img,
+    operation: "subtract",
+    value: conditionAccuracyPenalty
+  });
+  reconcileBreakdownTotal(accuracyBonus, result.accuracyBonus, item);
+
+  const criticalChanceModifier = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "criticalChanceModifier",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"),
+    total: evaluateTooltipFormula(data?.criticalChanceModifier, actor, { minimum: -Infinity }),
+    minimum: Number.NEGATIVE_INFINITY,
+    formatValue: value => `${formatSignedNumber(value)}%`
+  });
+  appendProficiencyAttribution(criticalChanceModifier, actor, data, proficiencyCriticalChance, { suffix: "%" });
+  appendAttributionDeltaSources(criticalChanceModifier, criticalChanceAttribution.sources, { suffix: "%" });
+  if (conditionCritPenalty) appendBreakdownStep(criticalChanceModifier, {
+    name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownCondition", "Состояние предмета"),
+    img: item?.img,
+    operation: "subtract",
+    value: conditionCritPenalty,
+    valueLabel: `−${formatNumber(conditionCritPenalty)}%`
+  });
+  reconcileBreakdownTotal(criticalChanceModifier, result.criticalChanceModifier, item);
+
+  const criticalDamagePercent = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "criticalDamagePercent",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"),
+    total: evaluateTooltipFormula(data?.criticalDamagePercent, actor, { fallback: 150 }),
+    fallback: 150,
+    minimum: 0,
+    formatValue: value => `${formatNumber(value)}%`
+  });
+  appendProficiencyAttribution(criticalDamagePercent, actor, data, proficiencyCriticalDamage, { suffix: "%", minimum: 0 });
+  reconcileBreakdownTotal(criticalDamagePercent, result.criticalDamagePercent, item);
+
+  const penetration = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "penetration",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"),
+    total: result.penetration,
+    minimum: 0,
+    integer: true
+  });
+  reconcileBreakdownTotal(penetration, result.penetration, item);
+
+  const maxRangeMeters = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "maxRangeMeters",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"),
+    total: evaluateTooltipFormula(data?.maxRangeMeters, actor),
+    minimum: 0,
+    formatValue: value => `${formatNumber(value)} м`
+  });
+  const effectiveRange = {
+    value: buildWeaponDataFieldAttribution({
+      ...common,
+      path: "effectiveRange.value",
+      title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange")} — min`,
+      total: evaluateTooltipFormula(data?.effectiveRange?.value, actor),
+      minimum: 0,
+      formatValue: value => `${formatNumber(value)} м`
+    }),
+    max: buildWeaponDataFieldAttribution({
+      ...common,
+      path: "effectiveRange.max",
+      title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange")} — max`,
+      total: evaluateTooltipFormula(data?.effectiveRange?.max, actor),
+      minimum: 0,
+      formatValue: value => `${formatNumber(value)} м`
+    })
+  };
+  const recoil = buildWeaponRecoilAttribution(item, actor, baseData, data);
+  const resourceCosts = buildWeaponResourceCostAttributions(item, actor, baseData, data, fixedModifiers);
+
+  return {
+    damage,
+    accuracyBonus,
+    criticalChanceModifier,
+    criticalDamagePercent,
+    penetration,
+    maxRangeMeters,
+    effectiveRange,
+    recoil,
+    resourceCosts
+  };
+}
+
+function buildWeaponResourceCostAttributions(item, actor, baseData = {}, data = {}, fixedModifiers = {}) {
+  const breakdowns = new Map();
+  for (const cost of data?.resourceCosts ?? []) {
+    const type = String(cost?.type ?? "").trim();
+    if (!type || breakdowns.has(type)) continue;
+    const rawAmount = Math.max(0, toInteger(cost?.amount));
+    const baseAmount = Math.max(0, toInteger(
+      (baseData?.resourceCosts ?? []).find(entry => String(entry?.type ?? "") === type)?.amount
+    ));
+    const breakdown = {
+      title: getWeaponResourceTypeLabel(type),
+      actorName: actor?.name,
+      img: item?.img,
+      base: { name: item?.name, img: item?.img, value: baseAmount },
+      sources: [],
+      total: baseAmount,
+      formatValue: formatNumber
+    };
+    if (rawAmount !== baseAmount) appendBreakdownStep(breakdown, {
+      name: localizeOrFallback("FALLOUTMAW.Item.WeaponSpecialAttackPower", "Атакующая мощность"),
+      img: item?.img,
+      operation: "add",
+      value: rawAmount - baseAmount
+    }, { minimum: 0 });
+
+    for (const source of fixedModifiers?.sources ?? []) {
+      const multiplier = Number(source?.resourceCostMultipliers?.[type]);
+      if (!Number.isFinite(multiplier) || multiplier === 1) continue;
+      appendBreakdownStep(breakdown, {
+        name: source.name,
+        img: source.img,
+        operation: "multiply",
+        value: multiplier
+      }, { minimum: 0 });
+    }
+    const aggregateMultiplier = Math.max(0, Number(fixedModifiers?.resourceCostMultipliers?.[type]) || 1);
+    const expected = Math.max(0, Math.ceil(rawAmount * aggregateMultiplier));
+    if (Math.ceil(breakdown.total) !== expected) reconcileBreakdownTotal(breakdown, expected, item);
+    else breakdown.total = expected;
+    breakdowns.set(type, breakdown);
+  }
+  return breakdowns;
+}
+
+function buildWeaponDataFieldAttribution({
+  item,
+  actor,
+  rawData = {},
+  baseData = {},
+  data = {},
+  moduleSlots = [],
+  path = "",
+  title = "",
+  total = 0,
+  fallback = 0,
+  minimum = Number.NEGATIVE_INFINITY,
+  integer = false,
+  formatValue = formatNumber
+} = {}) {
+  const sourceItem = isSourceDamageMode(rawData) ? getWeaponDamageSourceItem(rawData) : null;
+  const sourceFunction = sourceItem && hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)
+    ? getDamageSourceFunction(sourceItem)
+    : null;
+  const usesSourceAsBase = path === "damage" && Boolean(sourceFunction);
+  const rawFormula = usesSourceAsBase
+    ? foundry.utils.getProperty(sourceFunction, path)
+    : foundry.utils.getProperty(rawData, path);
+  const rawValue = evaluateTooltipFormula(rawFormula, actor, { fallback, minimum });
+  const rawFormulaText = String(rawFormula ?? "").trim();
+  const rawFormulaLabel = rawFormulaText && rawFormulaText !== String(rawValue)
+    ? formatActorFormulaForDisplay(rawFormulaText, actor, { includeValues: Boolean(actor) })
+    : "";
+  const breakdown = {
+    title,
+    actorName: actor?.name,
+    img: item?.img,
+    base: {
+      name: usesSourceAsBase ? sourceItem?.name : item?.name,
+      img: usesSourceAsBase ? sourceItem?.img : item?.img,
+      value: rawValue,
+      ...(rawFormulaLabel ? { detailLabel: `${rawFormulaLabel} = ${formatValue(rawValue)}` } : {})
+    },
+    sources: [],
+    total: rawValue,
+    formatValue
+  };
+
+  if (sourceFunction && !usesSourceAsBase) {
+    const sourceFormula = foundry.utils.getProperty(sourceFunction, path);
+    const sourceValue = evaluateTooltipFormula(sourceFormula, actor, {
+      fallback: 0,
+      minimum: Number.NEGATIVE_INFINITY
+    });
+    if (sourceValue) appendBreakdownStep(breakdown, {
+      name: sourceItem?.name,
+      img: sourceItem?.img,
+      operation: "add",
+      value: sourceValue,
+      detailLabel: `${formatActorFormulaForDisplay(sourceFormula, actor, { includeValues: Boolean(actor) })} = ${formatValue(sourceValue)}`
+    }, { minimum });
+  }
+
+  const baseTarget = evaluateWeaponTooltipField(item, baseData, path, actor, { fallback, minimum });
+  reconcileBreakdownTotal(breakdown, baseTarget, item, {
+    name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBaseFormula", "Базовая формула")
+  });
+
+  for (const slot of getWeaponModuleSlots({ moduleSlots })) {
+    const itemData = getWeaponModuleSlotItemData(slot);
+    const modifier = foundry.utils.getProperty(getModuleFunction(itemData)?.weapon ?? {}, path);
+    const amount = integer ? toInteger(modifier) : Number(modifier);
+    if (!Number.isFinite(amount) || !amount) continue;
+    appendBreakdownStep(breakdown, {
+      name: getWeaponModuleDisplayName(itemData),
+      img: itemData?.img,
+      operation: "add",
+      value: amount
+    }, { minimum });
+  }
+
+  const attackPower = getWeaponAttackPowerState(rawData);
+  const perLevel = foundry.utils.getProperty(attackPower?.perLevel ?? {}, path);
+  const attackPowerAmount = (integer ? toInteger(perLevel) : Number(perLevel)) * Math.max(0, toInteger(attackPower?.increments));
+  if (attackPower?.active && Number.isFinite(attackPowerAmount) && attackPowerAmount) {
+    appendBreakdownStep(breakdown, {
+      name: `${localizeOrFallback("FALLOUTMAW.Item.WeaponSpecialAttackPower", "Атакующая мощность")} (${attackPower.increments})`,
+      img: item?.img,
+      operation: "add",
+      value: attackPowerAmount
+    }, { minimum });
+  }
+
+  reconcileBreakdownTotal(breakdown, total, item);
+  return breakdown;
+}
+
+function evaluateWeaponTooltipField(item, data = {}, path = "", actor = null, options = {}) {
+  const source = path === "damage" ? getEffectiveWeaponDamageData(item, data) : data;
+  return evaluateTooltipFormula(foundry.utils.getProperty(source, path), actor, options);
+}
+
+function appendWeaponDamagePercentSources(breakdown, {
+  item,
+  actor,
+  data,
+  proficiencyDamage,
+  skillDamageBonuses,
+  fixedModifiers,
+  damagePercentAttribution
+} = {}) {
+  const attackPowerDamagePercent = toInteger(data?.attackPowerDamagePercent);
+  if (attackPowerDamagePercent) appendInformationalPercentSource(breakdown, {
+    name: localizeOrFallback("FALLOUTMAW.Item.WeaponSpecialAttackPower", "Атакующая мощность"),
+    img: item?.img,
+    value: attackPowerDamagePercent
+  });
+  if (proficiencyDamage) appendInformationalPercentSource(breakdown, buildProficiencySource(actor, data, proficiencyDamage));
+  for (const source of damagePercentAttribution?.sources ?? []) appendInformationalPercentSource(breakdown, source);
+  for (const source of fixedModifiers?.sources ?? []) {
+    const value = toInteger(source?.combatValues?.damagePercent);
+    if (value) appendInformationalPercentSource(breakdown, {
+      name: source.name,
+      img: source.img,
+      value
+    });
+  }
+  if (skillDamageBonuses?.percent) appendInformationalPercentSource(breakdown, {
+    name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBaseBonus", "Базовый бонус"),
+    img: actor?.img,
+    value: skillDamageBonuses.percent,
+    valueLabel: `${formatSignedNumber(skillDamageBonuses.percent)}%`,
+    ...(skillDamageBonuses.percentFormula ? {
+      detailLabel: `${formatActorFormulaForDisplay(skillDamageBonuses.percentFormula, actor, { includeValues: Boolean(actor) })} = ${formatSignedNumber(skillDamageBonuses.percent)}%`
+    } : {})
+  });
+}
+
+function appendInformationalPercentSource(breakdown, source = {}) {
+  const value = Number(source.value) || 0;
+  if (!value) return;
+  breakdown.sources.push({
+    ...source,
+    operation: source.operation ?? "add",
+    value,
+    valueLabel: source.valueLabel ?? `${formatSignedNumber(value)}%`
+  });
+}
+
+function appendParallelPercentSources(breakdown, sources = [], {
+  expectedPercent = null,
+  direction = 1,
+  round = null,
+  total = null,
+  contributionUnit = ""
+} = {}) {
+  if (!breakdown) return null;
+  const normalized = (sources ?? []).filter(source => Number(source?.value));
+  const expected = Number(expectedPercent);
+  if (expectedPercent !== null && expectedPercent !== undefined && Number.isFinite(expected)) {
+    const attributed = normalized.reduce((sum, source) => sum + (Number(source?.value) || 0), 0);
+    const residual = expected - attributed;
+    if (Math.abs(residual) > 0.000001) normalized.push({
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedActor", "Подготовленные данные персонажа"),
+      img: breakdown.img,
+      value: residual
+    });
+  }
+  const result = buildParallelPercentAttribution(breakdown.total, normalized, {
+    direction,
+    minimumFactor: 0,
+    round
+  });
+  const unit = String(contributionUnit ?? "").trim();
+  const separator = unit && !/^[%°]/.test(unit) ? " " : "";
+  breakdown.sources.push(...result.sources.map(source => ({
+    ...source,
+    valueLabel: source.valueLabel ?? `${formatSignedNumber(source.percent)}%`,
+    contributionLabel: `${formatSignedBreakdownValue(source.contribution, formatNumber)}${separator}${unit}`
+  })));
+  breakdown.total = total !== null && total !== undefined && Number.isFinite(Number(total))
+    ? Number(total)
+    : result.total;
+  return result;
+}
+
+function appendProficiencyAttribution(breakdown, actor, data, value = 0, { suffix = "", minimum = Number.NEGATIVE_INFINITY } = {}) {
+  if (!value) return;
+  const source = buildProficiencySource(actor, data, value);
+  appendBreakdownStep(breakdown, {
+    ...source,
+    valueLabel: `${formatSignedNumber(value)}${suffix}`
+  }, { minimum });
+}
+
+function buildProficiencySource(actor, data = {}, value = 0) {
+  const proficiency = getWeaponProficiencySetting(data);
+  return {
+    name: `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownProficiency", "Владение")}: ${proficiency?.label ?? proficiency?.key ?? "—"}`,
+    img: actor?.img,
+    operation: "add",
+    value
+  };
+}
+
+function appendFixedCombatAttribution(breakdown, fixedModifiers = {}, key = "") {
+  for (const source of fixedModifiers?.sources ?? []) {
+    const value = Number(source?.combatValues?.[key]) || 0;
+    if (!value) continue;
+    appendBreakdownStep(breakdown, {
+      name: source.name,
+      img: source.img,
+      operation: "add",
+      value
+    });
+  }
+}
+
+function appendAttributionDeltaSources(breakdown, sources = [], { suffix = "" } = {}) {
+  for (const source of sources ?? []) {
+    const value = Number(source?.value) || 0;
+    if (!value) continue;
+    appendBreakdownStep(breakdown, {
+      ...source,
+      operation: "add",
+      value,
+      valueLabel: source.valueLabel ?? `${formatSignedNumber(value)}${suffix}`
+    });
+  }
+}
+
+function appendBreakdownStep(breakdown, source = {}, options = {}) {
+  if (!breakdown) return null;
+  const step = createItemValueAttributionStep(breakdown.total, source, options);
+  breakdown.sources.push(step);
+  breakdown.total = step.after;
+  return step;
+}
+
+function reconcileBreakdownTotal(breakdown, target = 0, item = null, { name = "" } = {}) {
+  if (!breakdown) return;
+  const expected = Number(target) || 0;
+  const current = Number(breakdown.total) || 0;
+  if (Math.abs(expected - current) < 0.000001) {
+    breakdown.total = expected;
+    return;
+  }
+  appendBreakdownStep(breakdown, {
+    name: name || localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedValue", "Итоговый расчёт"),
+    img: item?.img,
+    operation: "add",
+    value: expected - current
+  });
+}
+
+function collectActorCombatValueAttribution(actor, key = "", context = null) {
+  if (!actor) return emptyCombatAttribution();
+  const path = `system.combat.${String(key ?? "").trim()}`;
+  const suffix = ["damagePercent", "criticalChance", "burstStability"].includes(key) ? "%" : "";
+  const prepared = collectActorPreparedPathAttribution(actor, path, {
+    preparedValue: actor?.system?.combat?.[key],
+    suffix
+  });
+  let running = prepared.value;
+  const sources = [...prepared.sources];
+
+  if (context) {
+    for (const change of getPreparedSourceContextualAbilityChanges(actor, path, context)) {
+      const operationStep = createItemValueAttributionStep(running, {
+        operation: change.type,
+        value: change.value
+      });
+      const delta = operationStep.after - running;
+      running = operationStep.after;
+      if (!delta) continue;
+      sources.push({
+        name: change.sourceName || localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownContextAbility", "Контекстная способность"),
+        img: change.sourceImg || actor.img,
+        operation: "add",
+        value: delta,
+        valueLabel: formatConfiguredAttributionOperation(change.type, change.value, delta, suffix)
+      });
+    }
+    const contextualValue = getTooltipContextualCombatValue(actor, key, context);
+    if (contextualValue !== running) {
+      sources.push({
+        name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownContext", "Контекстный расчёт"),
+        img: actor.img,
+        operation: "add",
+        value: contextualValue - running,
+        valueLabel: `${formatSignedNumber(contextualValue - running)}${suffix}`
+      });
+      running = contextualValue;
+    }
+  }
+  return { value: running, sources };
+}
+
+function collectActorPreparedPathAttribution(actor, path = "", {
+  preparedValue = 0,
+  suffix = "",
+  expandEffectKeys = false
+} = {}) {
+  if (!actor || !path) return emptyCombatAttribution();
+  let running = toInteger(foundry.utils.getProperty(actor?._source ?? {}, path));
+  const sources = [];
+  if (running) sources.push({
+    name: `${actor.name}: ${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBase", "База")}`,
+    img: actor.img,
+    operation: "add",
+    value: running,
+    valueLabel: `${formatSignedNumber(running)}${suffix}`
+  });
+
+  for (const { effect, change } of collectActorEffectAttributionChanges(actor, path, { expandEffectKeys })) {
+    const stage = String(change?.phase ?? "initial") === "initial" ? "initial-active-effect" : "prepared";
+    const amount = evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: Number.NaN, stage });
+    if (!Number.isFinite(amount)) continue;
+    const operationStep = createItemValueAttributionStep(running, { operation: change.type, value: amount });
+    const delta = operationStep.after - running;
+    running = operationStep.after;
+    if (!delta) continue;
+    const document = getTooltipEffectSourceDocument(effect);
+    sources.push({
+      name: document?.name ?? effect?.name,
+      img: document?.img ?? effect?.img,
+      operation: "add",
+      value: delta,
+      valueLabel: formatConfiguredAttributionOperation(change.type, amount, delta, suffix)
+    });
+  }
+
+  const expected = toInteger(preparedValue);
+  if (expected !== running) {
+    sources.push({
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedActor", "Подготовленные данные персонажа"),
+      img: actor.img,
+      operation: "add",
+      value: expected - running,
+      valueLabel: `${formatSignedNumber(expected - running)}${suffix}`
+    });
+    running = expected;
+  }
+  return { value: running, sources };
+}
+
+function collectActorEffectAttributionChanges(actor, path = "", { expandEffectKeys = false } = {}) {
+  const entries = [];
+  const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor);
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedIds)) continue;
+    for (const originalChange of effect?.system?.changes ?? effect?.changes ?? []) {
+      const changes = expandEffectKeys
+        ? expandActorEffectChangeKeys(actor, originalChange)
+        : [originalChange];
+      for (const change of changes) {
+        if (String(change?.key ?? "").trim() !== path) continue;
+        entries.push({ effect, change });
+      }
+    }
+  }
+  return entries.sort((left, right) => (
+    getTooltipEffectChangePhaseOrder(left.change) - getTooltipEffectChangePhaseOrder(right.change)
+    || getTooltipEffectChangePriority(left.change) - getTooltipEffectChangePriority(right.change)
+  ));
+}
+
+function getTooltipEffectChangePhaseOrder(change = {}) {
+  const phase = String(change?.phase ?? "initial");
+  if (phase === "initial") return 0;
+  if (phase === "final") return 2;
+  return 1;
+}
+
+function getTooltipEffectChangePriority(change = {}) {
+  const configured = Number(change?.priority);
+  if (change?.priority !== null && change?.priority !== undefined && change?.priority !== "" && Number.isFinite(configured)) {
+    return Math.trunc(configured);
+  }
+  const ActiveEffect = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
+  return toInteger(ActiveEffect?.CHANGE_TYPES?.[change?.type]?.defaultPriority);
+}
+
+function getTooltipEffectSourceDocument(effect = null) {
+  const parent = effect?.parent;
+  if (parent?.documentName === "Item") return parent;
+  const originUuid = String(effect?.origin ?? "").trim();
+  if (originUuid) {
+    try {
+      const origin = globalThis.fromUuidSync?.(originUuid) ?? foundry.utils.fromUuidSync?.(originUuid);
+      if (origin?.documentName === "Item") return origin;
+      if (origin?.parent?.documentName === "Item") return origin.parent;
+    } catch (_error) {
+      // Compendium and unloaded embedded origins are allowed to fall back to the effect itself.
+    }
+  }
+  return effect;
+}
+
+function formatConfiguredAttributionOperation(operation = "add", amount = 0, delta = 0, suffix = "") {
+  const configured = String(operation ?? "add");
+  const value = Number(amount) || 0;
+  const deltaText = `${formatSignedNumber(delta)}${suffix}`;
+  if (configured === "multiply") return `×${formatNumber(value)} (${deltaText})`;
+  if (configured === "subtract") return `−${formatNumber(value)}${suffix} (${deltaText})`;
+  if (configured === "override") return `→ ${formatNumber(value)}${suffix} (${deltaText})`;
+  if (configured === "upgrade") return `min ${formatNumber(value)}${suffix} (${deltaText})`;
+  if (configured === "downgrade") return `max ${formatNumber(value)}${suffix} (${deltaText})`;
+  return `${formatSignedNumber(value)}${suffix}`;
+}
+
+function buildWeaponRecoilAttribution(item, actor, baseData = {}, data = {}) {
+  const base = getWeaponBurstDifficultyPerShot(baseData);
+  const total = getEffectiveWeaponBurstDifficultyPerShot(data, actor);
+  const breakdown = {
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponRecoil"),
+    actorName: actor?.name,
+    img: item?.img,
+    base: { name: item?.name, img: item?.img, value: base },
+    sources: [],
+    total: base,
+    formatValue: formatNumber
+  };
+  const stability = collectActorCombatValueAttribution(actor, "burstStability");
+  appendParallelPercentSources(breakdown, stability.sources, {
+    expectedPercent: stability.value,
+    direction: -1,
+    round: Math.round,
+    total,
+    contributionUnit: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownRecoilUnit", "сложности")
+  });
+  return breakdown;
 }
 
 function getWeaponTooltipAbilityContext(item, data = {}) {
@@ -6054,12 +7236,13 @@ function formatWeaponDamageValue(data = {}, damage = 0) {
 
 function formatFormulaDamageValue(formula, actor = null) {
   const text = String(formula ?? "0").trim() || "0";
-  if (!actor) return text;
+  const displayFormula = formatActorFormulaForDisplay(text, actor, { includeValues: Boolean(actor) });
+  if (!actor) return displayFormula;
   const value = evaluateActorFormula(text, actor, {
     minimum: 0,
     context: "damage source tooltip"
   });
-  return text === String(value) ? String(value) : `${value} (${text})`;
+  return text === String(value) ? String(value) : `${value} (${displayFormula})`;
 }
 
 function evaluateTooltipFormula(formula, actor = null, options = {}) {
@@ -6125,7 +7308,9 @@ function getWeaponDamageEntryLabels(entries = [], actor = null) {
         })
         : 0;
       if (!key || (actor ? amount <= 0 : !isFormulaTextConfigured(formula))) return "";
-      return `${labels.get(key) ?? key}: ${actor ? amount : formula}`;
+      const displayFormula = formatActorFormulaForDisplay(formula, actor, { includeValues: Boolean(actor) });
+      const amountLabel = formula === String(amount) ? String(amount) : `${amount} (${displayFormula})`;
+      return `${labels.get(key) ?? key}: ${actor ? amountLabel : displayFormula}`;
     })
     .filter(Boolean)
     .join(", ");
@@ -6334,7 +7519,11 @@ function getConditionRecoveryMethodRows(condition = {}) {
     });
 }
 
-function getWeaponResourceCostRows(data = {}, baseData = {}, { baseMode = false, resourceCostMultipliers = {} } = {}) {
+function getWeaponResourceCostRows(data = {}, baseData = {}, {
+  baseMode = false,
+  resourceCostMultipliers = {},
+  breakdowns = new Map()
+} = {}) {
   return (data.resourceCosts ?? [])
     .filter(cost => !(String(cost?.type ?? "") === "magazine" && Math.max(0, toInteger(cost?.amount)) <= 1))
     .map((cost, index) => {
@@ -6342,9 +7531,15 @@ function getWeaponResourceCostRows(data = {}, baseData = {}, { baseMode = false,
       const rawAmount = Math.max(0, toInteger(cost?.amount));
       const multiplier = baseMode ? 1 : Math.max(0, Number(resourceCostMultipliers?.[costType]) || 1);
       const amount = Math.max(0, Math.ceil(rawAmount * multiplier));
-      const baseAmount = Math.max(0, toInteger(baseData.resourceCosts?.[index]?.amount ?? rawAmount));
+      const baseAmount = Math.max(0, toInteger(
+        (baseData.resourceCosts ?? []).find(entry => String(entry?.type ?? "") === costType)?.amount ?? 0
+      ));
       const type = getWeaponResourceTypeLabel(costType);
-      return [type, renderChangedNumber(amount, baseAmount, { baseMode, higherIsBetter: false })];
+      return [type, renderChangedNumber(amount, baseAmount, {
+        baseMode,
+        higherIsBetter: false,
+        breakdown: breakdowns?.get?.(costType)
+      })];
     })
     .filter(([type]) => Boolean(type));
 }
@@ -6357,13 +7552,13 @@ function getWeaponResourceTypeLabel(type = "") {
   return String(type || "—");
 }
 
-function getWeaponRequirementLabels(data = {}, actor = null) {
+function getWeaponRequirementLabels(data = {}, actor = null, item = null) {
   return (data.requirements ?? [])
-    .map(requirement => getWeaponRequirementLabel(requirement, actor))
+    .map(requirement => getWeaponRequirementLabel(requirement, actor, item))
     .filter(label => hasTooltipRowValue(label));
 }
 
-function getWeaponRequirementLabel(requirement = {}, actor = null) {
+function getWeaponRequirementLabel(requirement = {}, actor = null, item = null) {
   const type = String(requirement?.type ?? "") === "skill" ? "skill" : "characteristic";
   const key = String(requirement?.key ?? "").trim();
   const required = Math.max(0, toInteger(requirement?.value));
@@ -6372,7 +7567,98 @@ function getWeaponRequirementLabel(requirement = {}, actor = null) {
   if (!actor) return `${label} ${required}`;
   const current = getActorWeaponRequirementValue(actor, { type, key });
   const text = `${label} ${current}/${required}`;
-  return { html: renderChangedTooltipSpan(text, current >= required) };
+  return {
+    html: renderChangedTooltipSpan(text, current >= required, buildWeaponRequirementAttribution(item, actor, {
+      type,
+      key,
+      label,
+      current
+    }))
+  };
+}
+
+function buildWeaponRequirementAttribution(item, actor, { type = "characteristic", key = "", label = "", current = 0 } = {}) {
+  if (type === "skill") {
+    return buildWeaponSkillRequirementAttribution(item, actor, { key, label, current });
+  }
+
+  const path = `system.characteristics.${key}`;
+  const rawBase = toInteger(foundry.utils.getProperty(actor?._source ?? {}, path));
+  const attribution = collectActorPreparedPathAttribution(actor, path, { preparedValue: current });
+  const breakdown = {
+    title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponUseRequirements")}: ${label}`,
+    actorName: actor?.name,
+    img: item?.img ?? actor?.img,
+    base: {
+      name: `${actor?.name ?? ""}: ${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBase", "База")}`,
+      img: actor?.img,
+      value: rawBase
+    },
+    sources: [],
+    total: rawBase,
+    formatValue: formatNumber
+  };
+  const sources = rawBase ? attribution.sources.slice(1) : attribution.sources;
+  appendAttributionDeltaSources(breakdown, sources);
+  reconcileBreakdownTotal(breakdown, current, item);
+  return breakdown;
+}
+
+function buildWeaponSkillRequirementAttribution(item, actor, { key = "", label = "", current = 0 } = {}) {
+  const skill = actor?.system?.skills?.[key] ?? {};
+  const prepared = decomposePreparedSkillValue(skill);
+  const bonusPath = `system.skills.${key}.bonus`;
+  const rawBonus = toInteger(foundry.utils.getProperty(actor?._source ?? {}, bonusPath));
+  const bonusAttribution = collectActorPreparedPathAttribution(actor, bonusPath, {
+    preparedValue: skill.bonus,
+    expandEffectKeys: true
+  });
+  const breakdown = {
+    title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponUseRequirements")}: ${label}`,
+    actorName: actor?.name,
+    img: item?.img ?? actor?.img,
+    base: {
+      name: `${actor?.name ?? ""}: ${localizeOrFallback("FALLOUTMAW.Advancement.BaseSkill", "База навыка")}`,
+      img: actor?.img,
+      value: prepared.base
+    },
+    sources: [],
+    total: prepared.base,
+    formatValue: formatNumber
+  };
+
+  if (rawBonus) appendBreakdownStep(breakdown, {
+    name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownSkillBonus", "Бонус навыка"),
+    img: actor?.img,
+    operation: "add",
+    value: rawBonus
+  });
+
+  const effectSources = rawBonus ? bonusAttribution.sources.slice(1) : bonusAttribution.sources;
+  appendAttributionDeltaSources(breakdown, effectSources);
+  if (prepared.developmentBonus) appendBreakdownStep(breakdown, {
+    name: localizeOrFallback("FALLOUTMAW.Advancement.DevelopmentBonus", "Бонус развития"),
+    img: actor?.img,
+    operation: "add",
+    value: prepared.developmentBonus
+  });
+  if (prepared.abilityBonus) appendBreakdownStep(breakdown, {
+    name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownAbilityBonus", "Бонус способностей"),
+    img: actor?.img,
+    operation: "add",
+    value: prepared.abilityBonus
+  });
+
+  const clamped = Math.min(Math.max(breakdown.total, prepared.min), prepared.max);
+  if (clamped !== breakdown.total) appendBreakdownStep(breakdown, {
+    name: `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownSkillLimit", "Предел навыка")} (${formatNumber(prepared.min)}–${formatNumber(prepared.max)})`,
+    img: actor?.img,
+    operation: "override",
+    value: clamped
+  });
+
+  reconcileBreakdownTotal(breakdown, current, item);
+  return breakdown;
 }
 
 function getActorWeaponRequirementValue(actor, requirement = {}) {
@@ -6382,7 +7668,12 @@ function getActorWeaponRequirementValue(actor, requirement = {}) {
   return toInteger(actor?.system?.characteristics?.[key]);
 }
 
-function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMode = false } = {}) {
+function getWeaponActionLabels(data = {}, baseData = {}, {
+  actor = null,
+  baseMode = false,
+  item = null,
+  moduleSlots = []
+} = {}) {
   const definitions = [
     ["aimedShot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")],
     ["snapshot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot")],
@@ -6397,27 +7688,57 @@ function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMod
     .filter(([key]) => isWeaponActionEnabled(data, key))
     .map(([key, label]) => {
       const name = String(data[key]?.name ?? "").trim() || label;
-      const configuredCost = getWeaponActionPointCost(data, key);
-      const cost = baseMode
-        ? configuredCost
-        : Math.max(0, Math.ceil(
-          applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey: key }).action)
-          + getActorPostureWeaponActionPointCostBonus(actor)
-          - getActorAtRandomActionPointCostReduction(actor, key)
-        ));
-      const baseCost = getWeaponActionPointCost(baseData, key);
+      const attribution = getWeaponActionPointCostAttribution(actor, data, key, baseData, { moduleSlots });
+      const cost = baseMode ? attribution.configuredCost : attribution.cost;
+      const baseCost = attribution.baseCost;
       const costText = `${cost} ОД`;
       const costHtml = baseMode || cost === baseCost
         ? escapeHTML(costText)
-        : renderChangedTooltipSpan(costText, cost < baseCost);
+        : renderChangedTooltipSpan(costText, cost < baseCost, buildWeaponActionCostBreakdown(item, actor, name, attribution));
       return { html: `${escapeHTML(name)} (${costHtml})` };
     });
 }
 
-function getWeaponActionPointCost(weaponData = {}, actionKey = "") {
-  const value = Number(weaponData?.[actionKey]?.actionPointCost);
-  const fallback = actionKey === "reload" ? 2 : 5;
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+function buildWeaponActionCostBreakdown(item, actor, actionName = "", attribution = {}) {
+  const breakdown = {
+    title: `${actionName} — ${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownActionCost", "стоимость действия")}`,
+    actorName: actor?.name,
+    img: item?.img,
+    base: { name: item?.name, img: item?.img, value: attribution.baseCost },
+    sources: [],
+    total: attribution.baseCost,
+    formatValue: value => `${formatNumber(value)} ОД`
+  };
+  for (const source of attribution.sources ?? []) {
+    const steps = source.steps?.length ? source.steps : [source];
+    for (const step of steps) {
+      if (Number.isFinite(Number(step.before)) && Number(step.before) !== breakdown.total) {
+        reconcileBreakdownTotal(breakdown, Number(step.before), item, {
+          name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownConfiguredCost", "Настройки оружия")
+        });
+      }
+      const before = Number.isFinite(Number(step.before)) ? Number(step.before) : breakdown.total;
+      const after = Number.isFinite(Number(step.after)) ? Number(step.after) : before + (Number(source.delta) || 0);
+      breakdown.sources.push({
+        name: source.name,
+        img: source.img,
+        operation: step.operation ?? source.operation ?? "add",
+        value: Number(step.value) || 0,
+        valueLabel: formatConfiguredAttributionOperation(
+          step.operation ?? source.operation,
+          step.value,
+          after - before,
+          " ОД"
+        ),
+        before,
+        after,
+        delta: after - before
+      });
+      breakdown.total = after;
+    }
+  }
+  reconcileBreakdownTotal(breakdown, attribution.cost, item);
+  return breakdown;
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {

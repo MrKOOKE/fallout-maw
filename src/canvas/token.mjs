@@ -13,6 +13,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
+import { formatActorFormulaForDisplay } from "../utils/actor-formulas.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { isTokenEquipmentHudEnabled, openTokenHudForInteraction } from "./token-equipment-hud.mjs";
 import { appendGrappleFollowMovement, commitGrappleFollowOrchestrations, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION } from "../combat/active-actions.mjs";
@@ -716,7 +717,7 @@ export function buildEffectTooltipHTML(effect, actor = null) {
   const name = localizeDocumentName(effect.name);
   const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
   const triggerCosts = getEffectTriggerCostRows(effect, actor);
-  const triggerCostLines = formatEffectTriggerCostRows(triggerCosts);
+  const triggerCostLines = formatEffectTriggerCostRows(triggerCosts, actor);
   const duration = getEffectDurationLabel(effect);
   const description = String(effect.description ?? "").trim();
 
@@ -846,7 +847,7 @@ function normalizeTooltipTriggerCostRows(value = []) {
   })).filter(row => row.resourceKey);
 }
 
-function formatEffectTriggerCostRows(costs = []) {
+function formatEffectTriggerCostRows(costs = [], actor = null) {
   const resourceLabels = new Map(getResourceSettings().map(resource => [
     String(resource?.key ?? ""),
     String(resource?.label ?? resource?.key ?? "")
@@ -856,7 +857,8 @@ function formatEffectTriggerCostRows(costs = []) {
   const lines = [];
   for (const cost of normalizeTooltipTriggerCostRows(costs)) {
     const resourceLabel = resourceLabels.get(cost.resourceKey) ?? cost.resourceKey;
-    lines.push(`<strong>${escapeHTML(resourceLabel)}:</strong><span>${escapeHTML(cost.formula)}</span>`);
+    const formulaLabel = formatActorFormulaForDisplay(cost.formula, actor, { includeValues: Boolean(actor) });
+    lines.push(`<strong>${escapeHTML(resourceLabel)}:</strong><span>${escapeHTML(formulaLabel)}</span>`);
     if (cost.overloadAmount > 0 && cost.overloadDurationSeconds > 0) {
       lines.push(`<strong>${escapeHTML(`${overloadLabel}: ${resourceLabel}`)}:</strong><span>${escapeHTML(`+${cost.overloadAmount}, ${formatDurationShort(cost.overloadDurationSeconds)}`)}</span>`);
     }

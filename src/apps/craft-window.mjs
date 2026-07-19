@@ -31,7 +31,7 @@ import {
   getActorRootInventoryGridOptions,
   normalizeImagePath
 } from "../utils/actor-display-data.mjs";
-import { getInventoryTooltipCompareActor, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import {
@@ -2146,8 +2146,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
         activeWeaponIndex: this.#tooltipWeaponTabIndex,
         baseMode: false,
-        compareActor: getInventoryTooltipCompareActor(),
-        compareMode: this.#tooltipCompareMode
+        compareActor: this.#actor,
+        compareMode: this.#tooltipCompareMode,
+        evaluatingActor: this.#actor
       });
       documentUuid = String(item.uuid ?? "");
       tooltipActorUuid = String(actor?.uuid ?? "");
@@ -2183,8 +2184,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.className = craftLinkTooltipData ? "fallout-maw-inventory-tooltip fallout-maw-craft-link-tooltip" : "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
-    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = tooltipHTML;
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.addEventListener("pointerdown", () => this.#syncInventoryTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("pointerleave", event => {
@@ -2199,7 +2200,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       event.stopPropagation();
       const nestedAnchor = event.target?.closest?.("[data-tooltip-html]");
       if (nestedAnchor && tooltip.contains(nestedAnchor)) {
-        game.tooltip?.lockTooltip?.();
         return;
       }
       this.#tooltipPinned = true;
@@ -2555,7 +2555,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #openCraftContainerSheet(item) {
     if (!isContainerItem(item)) return null;
-    const app = new FalloutMaWContainerSheet({ document: item });
+    const app = new FalloutMaWContainerSheet({
+      document: item,
+      evaluatingActorUuid: this.#actor?.uuid ?? ""
+    });
     app.render({ force: true });
     app.bringToFront();
     return app;
@@ -4107,7 +4110,7 @@ export function renderCraftKnowledgeVariantsHTML(recipe, actor = null) {
   if (!views.length) return "";
   const groupId = `craft-knowledge-${foundry.utils.randomID()}`;
   return `
-    <section class="fallout-maw-recipe-knowledge-craft">
+    <section class="fallout-maw-recipe-knowledge-craft" data-craft-evaluating-actor-uuid="${escapeAttribute(actor?.uuid ?? "")}">
       <div class="fallout-maw-recipe-knowledge-variant-tabs">
         ${views.map((view, index) => {
           const inputId = `${groupId}-${index}`;
@@ -4261,7 +4264,10 @@ function activateCraftKnowledgeNodeTooltips(root) {
       timer = null;
       const item = resolveWorldItemSync(node.dataset.tooltipUuid);
       if (!item || anchor !== node || !node.isConnected) return;
-      const html = await renderInventoryItemTooltipHTML(item, item.parent?.documentName === "Actor" ? item.parent : null);
+      const sourceActor = item.parent?.documentName === "Actor" ? item.parent : null;
+      const evaluatingActorUuid = String(root.querySelector("[data-craft-evaluating-actor-uuid]")?.dataset?.craftEvaluatingActorUuid ?? "");
+      const evaluatingActor = await resolveActor(evaluatingActorUuid);
+      const html = await renderInventoryItemTooltipHTML(item, sourceActor, { evaluatingActor });
       if (anchor !== node || !node.isConnected) return;
       const content = document.createElement("div");
       content.innerHTML = html;

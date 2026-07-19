@@ -43,6 +43,37 @@ export function getAbilityOverloadResourceCost(actor, abilityItem, resourceKey =
   return getAbilityOverloadCostsByResource(actor, abilityItem, abilityFunction).get(key) ?? 0;
 }
 
+export function getAbilityOverloadResourceCostSources(actor, abilityItem, resourceKey = ENERGY_RESOURCE_KEY) {
+  const key = String(resourceKey ?? "").trim() || ENERGY_RESOURCE_KEY;
+  const sources = [];
+  if (!actor || !abilityItem) return sources;
+  const abilityItemId = String(abilityItem.id ?? "").trim();
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  for (const effect of actor.allApplicableEffects?.() ?? actor.effects ?? []) {
+    if (effect?.disabled) continue;
+    const overload = effect.getFlag?.(SYSTEM_ID, ABILITY_OVERLOAD_EFFECT_FLAG_KEY)
+      ?? effect?.flags?.[SYSTEM_ID]?.[ABILITY_OVERLOAD_EFFECT_FLAG_KEY];
+    if (!abilityOverloadApplies(overload, { abilityItemId, abilitySourceId })) continue;
+    const flagResourceKey = String(overload?.resourceKey ?? "").trim();
+    for (const change of effect.system?.changes ?? []) {
+      const changeResourceKey = getResourceKeyFromOverloadEffectKey(change?.key);
+      if (!changeResourceKey || changeResourceKey !== key) continue;
+      if (flagResourceKey && flagResourceKey !== key) continue;
+      const amount = Math.max(0, evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 }));
+      if (amount <= 0) continue;
+      const parent = effect?.parent?.documentName === "Item" ? effect.parent : effect;
+      sources.push({
+        name: String(parent?.name ?? effect?.name ?? getAbilityOverloadName(abilityItem)),
+        img: String(parent?.img ?? effect?.img ?? abilityItem.img ?? ""),
+        effectUuid: String(effect?.uuid ?? ""),
+        operation: "add",
+        value: amount
+      });
+    }
+  }
+  return sources;
+}
+
 /** Map of resourceKey → overload surcharge amount for the given ability. */
 export function getAbilityOverloadCostsByResource(actor, abilityItem, _abilityFunction = null) {
   const totals = new Map();

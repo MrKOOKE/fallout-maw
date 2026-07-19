@@ -14,6 +14,7 @@ import {
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
+import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
 import { getFirstAidChargesData, getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import {
   createItemStackPartRemovalUpdate,
@@ -205,7 +206,7 @@ function calculateHealingAmount(actor, firstAid = {}, multiplier = 1, targetCont
     const max = Math.max(0, toInteger(targetContext?.healthMax ?? actor?.system?.resources?.health?.max));
     return Math.max(0, Math.floor((max * base * multiplier) / 100));
   }
-  return Math.max(0, scaleSignedValue(base, multiplier));
+  return Math.max(0, scaleFirstAidSignedValue(base, multiplier));
 }
 
 function normalizeFirstAidChanges(changes = [], multiplier = 1, healingMultiplier = multiplier) {
@@ -269,7 +270,7 @@ function normalizeFirstAidNeeds(needs = [], multiplier = 1) {
   return source
     .map(entry => ({
       key: String(entry?.needKey ?? "").trim(),
-      value: scaleSignedValue(toInteger(entry?.value), multiplier)
+      value: scaleFirstAidSignedValue(toInteger(entry?.value), multiplier)
     }))
     .filter(entry => entry.key && entry.value);
 }
@@ -294,7 +295,7 @@ function normalizeFirstAidLimbs(limbs = [], firstAid = {}, multiplier = 1, heali
   const baseValue = toInteger(firstAid.limbSelection?.value);
   const value = baseValue > 0 && Number(healingMultiplier) <= 0
     ? 0
-    : scaleSignedValue(baseValue, baseValue > 0 ? healingMultiplier : multiplier);
+    : scaleFirstAidSignedValue(baseValue, baseValue > 0 ? healingMultiplier : multiplier);
   if (!value) return [];
   const source = Array.isArray(limbs) ? limbs : [];
   return source
@@ -326,20 +327,12 @@ function getFirstAidChargeCost(selectedLimbs = []) {
 function scaleChangeValue(value, multiplier = 1) {
   const number = Number(value);
   if (!Number.isFinite(number) || !Number.isFinite(Number(multiplier)) || Number(multiplier) === 1) return value;
-  return scaleSignedValue(number, multiplier);
+  return scaleFirstAidSignedValue(number, multiplier);
 }
 
 function scaleHealingChangeValue(value, multiplier = 1) {
   if (Number(multiplier) <= 0) return 0;
   return scaleChangeValue(value, multiplier);
-}
-
-function scaleSignedValue(value, multiplier = 1) {
-  const number = Number(value) || 0;
-  if (!number) return 0;
-  const scaled = Math.floor(Math.abs(number) * Math.max(0, Number(multiplier) || 0));
-  const finalValue = scaled < 1 ? 1 : scaled;
-  return number < 0 ? -finalValue : finalValue;
 }
 
 async function rollFirstAidCheck({

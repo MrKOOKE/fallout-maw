@@ -3,7 +3,7 @@ import { getCombatSettings } from "../settings/accessors.mjs";
 
 export function getWeaponSkillDamageBonuses(actor, skillKey = "") {
   const key = String(skillKey ?? "").trim();
-  if (!key || !actor) return { flat: 0, percent: 0 };
+  if (!key || !actor) return { flat: 0, percent: 0, flatFormula: "", percentFormula: "", skillKey: key };
 
   const entry = getCombatSettings()?.weaponSkillDamage?.[key];
   const flatFormula = typeof entry === "string" ? entry : entry?.flat;
@@ -11,7 +11,10 @@ export function getWeaponSkillDamageBonuses(actor, skillKey = "") {
 
   return {
     flat: evaluateWeaponSkillDamageFormula(flatFormula, actor, key, "flat"),
-    percent: evaluateWeaponSkillDamageFormula(percentFormula, actor, key, "percent")
+    percent: evaluateWeaponSkillDamageFormula(percentFormula, actor, key, "percent"),
+    flatFormula: String(flatFormula ?? "").trim(),
+    percentFormula: String(percentFormula ?? "").trim(),
+    skillKey: key
   };
 }
 

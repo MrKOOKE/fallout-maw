@@ -2,6 +2,7 @@ import { calculateSkillDevelopmentBonuses } from "../advancement/calculations.mj
 import { evaluateFormula, evaluateSkillFormulas, getSkillValues } from "../formulas/evaluation.mjs";
 import { getCharacteristicSettings, getSkillAdvancementSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { toInteger } from "./numbers.mjs";
+import { formatFormulaForDisplay } from "./formula-display.mjs";
 
 export function evaluateActorFormula(formula, actor = null, { fallback = 0, minimum = 0, context = "" } = {}) {
   const text = String(formula ?? "").trim();
@@ -37,6 +38,17 @@ export function buildActorFormulaData(actor = null, { stage = "prepared" } = {})
 export function isFormulaTextConfigured(value) {
   const text = String(value ?? "").trim();
   return Boolean(text) && text !== "0";
+}
+
+export function formatActorFormulaForDisplay(formula = "0", actor = null, { includeValues = Boolean(actor) } = {}) {
+  const data = buildActorFormulaData(actor);
+  return formatFormulaForDisplay(formula, {
+    characteristics: data.characteristicSettings,
+    skills: data.skillSettings,
+    characteristicValues: data.characteristics,
+    skillValues: data.skills,
+    includeValues
+  });
 }
 
 function buildActorFormulaCharacteristics(actor = null, characteristicSettings = [], { includeDevelopment = false } = {}) {

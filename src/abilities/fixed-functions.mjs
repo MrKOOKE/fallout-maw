@@ -739,9 +739,10 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
 export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
   const combatValues = { accuracy: 0, damagePercent: 0 };
   const resourceCostMultipliers = { condition: 1 };
+  const sources = [];
   const weaponName = String(weapon?.name ?? "").trim();
   const weaponSkillKey = String(weaponData?.skillKey ?? "").trim();
-  if (!actor || !weaponName) return { combatValues, resourceCostMultipliers };
+  if (!actor || !weaponName) return { combatValues, resourceCostMultipliers, sources };
 
   for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
     const state = getFixedAbilityState(abilityItem);
@@ -753,6 +754,19 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
         const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
         combatValues.accuracy += settings.accuracyBonus;
         combatValues.damagePercent += settings.damagePercentBonus;
+        sources.push({
+          kind: "fixedAbility",
+          itemId: String(abilityItem.id ?? ""),
+          itemUuid: String(abilityItem.uuid ?? ""),
+          name: String(abilityItem.name ?? ""),
+          img: String(abilityItem.img ?? ""),
+          functionId: String(abilityFunction.id ?? ""),
+          combatValues: {
+            accuracy: settings.accuracyBonus,
+            damagePercent: settings.damagePercentBonus
+          },
+          resourceCostMultipliers: {}
+        });
         continue;
       }
       if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.fullForce) continue;
@@ -761,10 +775,20 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
       if (!weaponSkillKey || weaponSkillKey !== settings.requiredSkillKey) continue;
       combatValues.damagePercent += settings.damagePercentBonus;
       resourceCostMultipliers.condition *= settings.conditionCostMultiplier;
+      sources.push({
+        kind: "fixedAbility",
+        itemId: String(abilityItem.id ?? ""),
+        itemUuid: String(abilityItem.uuid ?? ""),
+        name: String(abilityItem.name ?? ""),
+        img: String(abilityItem.img ?? ""),
+        functionId: String(abilityFunction.id ?? ""),
+        combatValues: { damagePercent: settings.damagePercentBonus },
+        resourceCostMultipliers: { condition: settings.conditionCostMultiplier }
+      });
     }
   }
 
-  return { combatValues, resourceCostMultipliers };
+  return { combatValues, resourceCostMultipliers, sources };
 }
 
 export function getActorTwoHandsEntry(actor) {

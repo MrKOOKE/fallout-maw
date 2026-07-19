@@ -5654,7 +5654,7 @@ label.fallout-maw-mitigation-cell {
   width: 1px;
 }
 
-#tooltip.fallout-maw-effect-tooltip,
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip,
 .fallout-maw-inventory-tooltip,
 .fallout-maw-inventory-context-menu {
   --fallout-maw-ui-scale: 1;
@@ -5687,7 +5687,7 @@ label.fallout-maw-mitigation-cell {
   z-index: 100000;
 }
 
-#tooltip.fallout-maw-effect-tooltip {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip {
   max-width: min(460px, calc(100vw - 24px));
   min-width: min(360px, calc(100vw - 24px));
   padding: 0.72rem;
@@ -5695,17 +5695,18 @@ label.fallout-maw-mitigation-cell {
   text-align: left;
 }
 
-#tooltip.fallout-maw-effect-tooltip .fallout-maw-effect-tooltip-content {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .fallout-maw-effect-tooltip-content {
   display: grid;
   gap: 0.55rem;
-  max-height: min(560px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
   overflow: hidden auto;
+  padding-bottom: 1px;
   position: relative;
   scrollbar-width: thin;
   z-index: 2;
 }
 
-#tooltip.fallout-maw-effect-tooltip header {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip header {
   align-items: center;
   display: grid;
   gap: 0.55rem;
@@ -5713,7 +5714,7 @@ label.fallout-maw-mitigation-cell {
   min-width: 0;
 }
 
-#tooltip.fallout-maw-effect-tooltip header img {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip header img {
   background: rgba(0, 0, 0, 0.42);
   border: 1px solid var(--fallout-maw-tooltip-edge-mid);
   height: 42px;
@@ -5721,84 +5722,84 @@ label.fallout-maw-mitigation-cell {
   width: 42px;
 }
 
-#tooltip.fallout-maw-effect-tooltip header div {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip header div {
   display: grid;
   gap: 0.12rem;
   min-width: 0;
 }
 
-#tooltip.fallout-maw-effect-tooltip strong,
-#tooltip.fallout-maw-effect-tooltip h4,
-#tooltip.fallout-maw-effect-tooltip dt {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip strong,
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip h4,
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip dt {
   color: var(--fallout-maw-tooltip-text-strong);
 }
 
-#tooltip.fallout-maw-effect-tooltip header strong {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip header strong {
   font-size: 1rem;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
-#tooltip.fallout-maw-effect-tooltip header span {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip header span {
   color: var(--fallout-maw-tooltip-text-soft);
   font-size: 0.78rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip .description {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .description {
   border-top: 1px solid rgba(220, 197, 110, 0.24);
   line-height: 1.35;
   padding-top: 0.5rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip .description > :first-child {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .description > :first-child {
   margin-top: 0;
 }
 
-#tooltip.fallout-maw-effect-tooltip .description > :last-child {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .description > :last-child {
   margin-bottom: 0;
 }
 
-#tooltip.fallout-maw-effect-tooltip dl {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip dl {
   display: grid;
   gap: 0.28rem;
   margin: 0;
 }
 
-#tooltip.fallout-maw-effect-tooltip dl div {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip dl div {
   display: grid;
   gap: 0.85rem;
   grid-template-columns: max-content 1fr;
 }
 
-#tooltip.fallout-maw-effect-tooltip dt,
-#tooltip.fallout-maw-effect-tooltip dd {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip dt,
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip dd {
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-#tooltip.fallout-maw-effect-tooltip .chips,
-#tooltip.fallout-maw-effect-tooltip .changes {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .chips,
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .changes {
   border-top: 1px solid rgba(220, 197, 110, 0.24);
   display: grid;
   gap: 0.35rem;
   padding-top: 0.5rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip h4 {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip h4 {
   font-size: 0.78rem;
   letter-spacing: 0;
   margin: 0;
   text-transform: none;
 }
 
-#tooltip.fallout-maw-effect-tooltip .chips div {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .chips div {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip .chips span {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip .chips span {
   background: rgba(0, 0, 0, 0.34);
   border: 1px solid rgba(220, 197, 110, 0.3);
   color: var(--fallout-maw-tooltip-text-soft);
@@ -5806,7 +5807,7 @@ label.fallout-maw-mitigation-cell {
   padding: 0.1rem 0.35rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip ol {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip ol {
   display: grid;
   gap: 0.28rem;
   list-style: none;
@@ -5814,7 +5815,7 @@ label.fallout-maw-mitigation-cell {
   padding: 0;
 }
 
-#tooltip.fallout-maw-effect-tooltip li {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip li {
   align-items: center;
   background: rgba(0, 0, 0, 0.22);
   display: grid;
@@ -5823,19 +5824,19 @@ label.fallout-maw-mitigation-cell {
   padding: 0.36rem 0.45rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip li strong {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip li strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-#tooltip.fallout-maw-effect-tooltip li span {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip li span {
   color: var(--fallout-maw-tooltip-text-strong);
   min-width: 0;
   overflow-wrap: anywhere;
   white-space: nowrap;
 }
 
-#tooltip.fallout-maw-effect-tooltip code {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip code {
   background: rgba(0, 0, 0, 0.36);
   border: 1px solid rgba(220, 197, 110, 0.22);
   color: var(--fallout-maw-tooltip-text-strong);
@@ -5845,28 +5846,29 @@ label.fallout-maw-mitigation-cell {
   padding: 0.04rem 0.25rem;
 }
 
-#tooltip.fallout-maw-effect-tooltip small {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip small {
   color: var(--fallout-maw-tooltip-text-soft);
 }
 
-#tooltip.fallout-maw-effect-tooltip p {
+:is(#tooltip, .locked-tooltip).fallout-maw-effect-tooltip p {
   margin: 0;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip {
   max-width: min(430px, calc(100vw - 24px));
   min-width: min(360px, calc(100vw - 24px));
   padding: 0.68rem;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-content {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-content {
   display: grid;
   gap: 0.45rem;
-  max-height: min(560px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
   overflow: hidden auto;
+  padding-bottom: 1px;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source {
   align-items: center;
   background: rgba(0, 0, 0, 0.16);
   display: grid;
@@ -5877,7 +5879,7 @@ label.fallout-maw-mitigation-cell {
   padding: 0.32rem;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source img {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source img {
   background: rgba(0, 0, 0, 0.42);
   border: 1px solid var(--fallout-maw-tooltip-edge-mid);
   height: 64px;
@@ -5885,14 +5887,14 @@ label.fallout-maw-mitigation-cell {
   width: 64px;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source div {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source div {
   align-content: center;
   display: grid;
   gap: 0.3rem;
   min-width: 0;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source strong {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source strong {
   color: var(--fallout-maw-tooltip-text-strong);
   font-size: 1.18rem;
   line-height: 1.15;
@@ -5900,7 +5902,7 @@ label.fallout-maw-mitigation-cell {
   overflow-wrap: anywhere;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source span {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source span {
   align-items: baseline;
   color: var(--fallout-maw-tooltip-text-soft);
   display: flex;
@@ -5909,17 +5911,17 @@ label.fallout-maw-mitigation-cell {
   gap: 0.35rem;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source b {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source b {
   color: var(--fallout-maw-tooltip-text-strong);
   font-weight: 800;
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source b.negative {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source b.negative {
   color: #7dff8d;
   text-shadow: 0 0 5px rgba(78, 214, 96, 0.45);
 }
 
-#tooltip.fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source b.positive {
+:is(#tooltip, .locked-tooltip).fallout-maw-action-cost-tooltip .fallout-maw-action-cost-tooltip-source b.positive {
   color: #ff6f66;
   text-shadow: 0 0 5px rgba(225, 73, 66, 0.45);
 }
@@ -6644,6 +6646,73 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-inventory-tooltip .function-value-change.negative {
   color: #e07464;
   text-shadow: 0 0 6px rgba(224, 116, 100, 0.16);
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-item-value-attribution {
+  cursor: help;
+  pointer-events: none;
+  text-decoration: underline dotted currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+.fallout-maw-inventory-tooltip.pinned .fallout-maw-item-value-attribution,
+.locked-tooltip.fallout-maw-inventory-tooltip .fallout-maw-item-value-attribution {
+  pointer-events: auto;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip {
+  max-width: min(520px, calc(100vw - 24px));
+  min-width: min(410px, calc(100vw - 24px));
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-source {
+  gap: 0.75rem;
+  grid-template-columns: minmax(13rem, 1fr) auto;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-source-name {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 30px minmax(0, 1fr);
+  white-space: normal;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-source-name img {
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(220, 197, 110, 0.26);
+  height: 30px;
+  object-fit: cover;
+  width: 30px;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-source-value {
+  display: grid;
+  gap: 0.08rem;
+  justify-items: end;
+  text-align: right;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-source-value small {
+  font-size: 0.68rem;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-total {
+  align-items: center;
+  border-top: 1px solid rgba(220, 197, 110, 0.35);
+  display: flex;
+  font-size: 0.95rem;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+}
+
+:is(#tooltip, .locked-tooltip).fallout-maw-item-value-breakdown-tooltip .fallout-maw-item-value-breakdown-total span {
+  color: var(--fallout-maw-tooltip-text-strong);
+  font-weight: 800;
 }
 
 .fallout-maw-inventory-tooltip .function-meter-value {
