@@ -43,7 +43,7 @@ Target-bound attacking actions:
 - `fallout-maw.reverse.system.penetration.actions.all`
 - `fallout-maw.reverse.system.penetration.actions.<action>`
 
-All supported paths are available in the Active Effect and ability/free-settings key autocomplete.
+All supported paths are available in the Active Effect and ability/free-settings key autocomplete. Their labels preserve the ordinary key label and append only `(в мою сторону)` in Russian or `(against me)` in English.
 
 ## Evaluation rules
 

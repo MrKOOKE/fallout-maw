@@ -187,7 +187,7 @@ export function buildAllSkillsEffectKeyToken() {
   return createEffectKeyToken({
     code: "allSkills",
     key: "allSkills",
-    label: "Все навыки",
+    label: game.i18n.localize("FALLOUTMAW.Effects.AllSkills"),
     path: ALL_SKILLS_BONUS_EFFECT_KEY,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   });
@@ -197,7 +197,7 @@ export function buildAllSkillsAdvantageEffectKeyToken() {
   return createEffectKeyToken({
     code: "allSkillsAdvantage",
     key: "allSkillsAdvantage",
-    label: "Преимущество: все навыки",
+    label: game.i18n.localize("FALLOUTMAW.Effects.AllSkillsAdvantage"),
     path: ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   });
@@ -207,7 +207,7 @@ export function buildAllSkillsDisadvantageEffectKeyToken() {
   return createEffectKeyToken({
     code: "allSkillsDisadvantage",
     key: "allSkillsDisadvantage",
-    label: "Помеха: все навыки",
+    label: game.i18n.localize("FALLOUTMAW.Effects.AllSkillsDisadvantage"),
     path: ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   });
@@ -217,7 +217,7 @@ export function buildSkillAdvantageEffectKeyTokens() {
   return getSkillSettings().map(entry => createEffectKeyToken({
     code: `${entry.abbr || entry.key}:adv`,
     key: `${entry.key}.advantage`,
-    label: `Преимущество: ${entry.label || entry.key}`,
+    label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatAdvantage")}: ${entry.label || entry.key}`,
     path: `system.skills.${entry.key}.advantage`,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   })).filter(Boolean);
@@ -227,7 +227,7 @@ export function buildSkillDisadvantageEffectKeyTokens() {
   return getSkillSettings().map(entry => createEffectKeyToken({
     code: `${entry.abbr || entry.key}:dis`,
     key: `${entry.key}.disadvantage`,
-    label: `Помеха: ${entry.label || entry.key}`,
+    label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatDisadvantage")}: ${entry.label || entry.key}`,
     path: `system.skills.${entry.key}.disadvantage`,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   })).filter(Boolean);
@@ -301,24 +301,30 @@ export function buildAllCombatDisadvantageEffectKeyToken() {
 
 export function buildCombatAttackAdvantageEffectKeyTokens() {
   const group = game.i18n.localize("FALLOUTMAW.Effects.CombatGroup");
-  return getAttackingWeaponActionEntries().map(entry => createEffectKeyToken({
-    code: `${entry.key}:adv`,
-    key: `${entry.key}.advantage`,
-    label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatAdvantage")}: ${entry.label}`,
-    path: `system.combat.actions.${entry.key}.advantage`,
-    group
-  })).filter(Boolean);
+  return getAttackingWeaponActionEntries().map(entry => {
+    const actionLabel = entry.actionLabel ?? String(entry.label || entry.key).replace(/:\s*[^:]+$/, "");
+    return createEffectKeyToken({
+      code: `${entry.key}:adv`,
+      key: `${entry.key}.advantage`,
+      label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatAdvantage")}: ${actionLabel}`,
+      path: `system.combat.actions.${entry.key}.advantage`,
+      group
+    });
+  }).filter(Boolean);
 }
 
 export function buildCombatAttackDisadvantageEffectKeyTokens() {
   const group = game.i18n.localize("FALLOUTMAW.Effects.CombatGroup");
-  return getAttackingWeaponActionEntries().map(entry => createEffectKeyToken({
-    code: `${entry.key}:dis`,
-    key: `${entry.key}.disadvantage`,
-    label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatDisadvantage")}: ${entry.label}`,
-    path: `system.combat.actions.${entry.key}.disadvantage`,
-    group
-  })).filter(Boolean);
+  return getAttackingWeaponActionEntries().map(entry => {
+    const actionLabel = entry.actionLabel ?? String(entry.label || entry.key).replace(/:\s*[^:]+$/, "");
+    return createEffectKeyToken({
+      code: `${entry.key}:dis`,
+      key: `${entry.key}.disadvantage`,
+      label: `${game.i18n.localize("FALLOUTMAW.Effects.CombatDisadvantage")}: ${actionLabel}`,
+      path: `system.combat.actions.${entry.key}.disadvantage`,
+      group
+    });
+  }).filter(Boolean);
 }
 
 export function buildActionCostEffectKeyTokens() {
@@ -375,14 +381,15 @@ export function buildActionBlockEffectKeyTokens() {
 }
 
 export function buildActionPenetrationEffectKeyTokens() {
+  const penetrationLabel = game.i18n.localize("FALLOUTMAW.Effects.CombatPenetration");
   return getWeaponActionCostEntries().map(entry => {
     const actionLabel = entry.actionLabel ?? String(entry.label || entry.key).replace(/:\s*[^:]+$/, "");
     return createEffectKeyToken({
       code: `${entry.key}Penetration`,
       key: entry.key,
-      label: `${actionLabel}: пробивная сила`,
+      label: `${actionLabel}: ${penetrationLabel.toLocaleLowerCase()}`,
       path: `system.penetration.actions.${entry.key}`,
-      group: "Пробивная сила"
+      group: penetrationLabel
     });
   }).filter(Boolean);
 }
@@ -497,51 +504,51 @@ export function buildCombatEffectKeyTokens() {
     createEffectKeyToken({
       code: "accuracy",
       key: "accuracy",
-      label: "Точность",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatAccuracy"),
       path: "system.combat.accuracy",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "criticalChance",
       key: "criticalChance",
-      label: "Шанс на крит",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatCriticalChance"),
       path: "system.combat.criticalChance",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "damageFlat",
       key: "damageFlat",
-      label: "Урон, плоский",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatDamageFlat"),
       path: "system.combat.damageFlat",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "damagePercent",
       key: "damagePercent",
-      label: "Урон, %",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatDamagePercent"),
       path: "system.combat.damagePercent",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "burstStability",
       key: "burstStability",
-      label: "Стабильность стрельбы очередью",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatBurstStability"),
       path: "system.combat.burstStability",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "finishingBlow",
       key: "finishingBlow",
-      label: "Добивание",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatFinishingBlow"),
       path: "system.combat.finishingBlow",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "finishingBlowChance",
       key: "finishingBlowChance",
-      label: "Шанс добивания",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatFinishingBlowChance"),
       path: "system.combat.finishingBlowChance",
-      group: "Бой"
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
       code: "unconsciousnessResistance",
@@ -598,7 +605,7 @@ export function buildReverseInteractionEffectKeyTokens() {
     createEffectKeyToken({
       code: "allAttackPenetration",
       key: "allAttackPenetration",
-      label: game.i18n.localize("FALLOUTMAW.Effects.ReverseAllPenetration"),
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatAllPenetration"),
       path: "system.penetration.actions.all",
       group: game.i18n.localize("FALLOUTMAW.Effects.ReverseGroup")
     }),
@@ -617,74 +624,12 @@ export function buildReverseInteractionEffectKeyTokens() {
   return sourceTokens.map(token => createEffectKeyToken({
     code: `${token.code}:reverse`,
     key: `reverse.${token.key}`,
-    label: getReverseInteractionEffectLabel(token),
+    label: game.i18n.format("FALLOUTMAW.Effects.ReverseLabel", {
+      label: String(token.label ?? token.path)
+    }),
     path: getReverseEffectKey(token.path),
     group
   })).filter(Boolean);
-}
-
-function getReverseInteractionEffectLabel(token = {}) {
-  const path = String(token?.path ?? "");
-  const skillMatch = path.match(/^system\.skills\.([^.]+)\.(bonus|advantage|disadvantage)$/);
-  if (skillMatch) {
-    const [, skillKey, field] = skillMatch;
-    const fieldLabel = localizeReverseModifierField(field);
-    if (skillKey === "all") {
-      return game.i18n.format("FALLOUTMAW.Effects.ReverseAllSkillChecks", { modifier: fieldLabel });
-    }
-    const skill = getSkillSettings().find(entry => entry.key === skillKey);
-    return game.i18n.format("FALLOUTMAW.Effects.ReverseSkillCheck", {
-      skill: String(skill?.label ?? skillKey),
-      modifier: fieldLabel
-    });
-  }
-
-  if (path === ALL_COMBAT_ADVANTAGE_EFFECT_KEY || path === ALL_COMBAT_DISADVANTAGE_EFFECT_KEY) {
-    return game.i18n.format("FALLOUTMAW.Effects.ReverseAllCombat", {
-      modifier: localizeReverseModifierField(path.endsWith(".advantage") ? "advantage" : "disadvantage")
-    });
-  }
-
-  const actionMatch = path.match(/^system\.combat\.actions\.([^.]+)\.(advantage|disadvantage)$/);
-  if (actionMatch) {
-    const [, actionKey, field] = actionMatch;
-    const action = getAttackingWeaponActionEntries().find(entry => entry.key === actionKey);
-    return game.i18n.format("FALLOUTMAW.Effects.ReverseCombatAction", {
-      action: String(action?.actionLabel ?? action?.label ?? actionKey),
-      modifier: localizeReverseModifierField(field)
-    });
-  }
-
-  const penetrationMatch = path.match(/^system\.penetration\.actions\.([^.]+)$/);
-  if (penetrationMatch) {
-    const actionKey = penetrationMatch[1];
-    if (actionKey === "all") return game.i18n.localize("FALLOUTMAW.Effects.ReverseAllPenetration");
-    const action = getAttackingWeaponActionEntries().find(entry => entry.key === actionKey);
-    return game.i18n.format("FALLOUTMAW.Effects.ReversePenetration", {
-      action: String(action?.actionLabel ?? action?.label ?? actionKey)
-    });
-  }
-
-  const combatLabels = {
-    "system.combat.accuracy": "FALLOUTMAW.Effects.ReverseAccuracy",
-    "system.combat.criticalChance": "FALLOUTMAW.Effects.ReverseCriticalChance",
-    "system.combat.damageFlat": "FALLOUTMAW.Effects.ReverseDamageFlat",
-    "system.combat.damagePercent": "FALLOUTMAW.Effects.ReverseDamagePercent",
-    "system.combat.burstStability": "FALLOUTMAW.Effects.ReverseBurstStability",
-    "system.combat.finishingBlow": "FALLOUTMAW.Effects.ReverseFinishingBlow",
-    "system.combat.finishingBlowChance": "FALLOUTMAW.Effects.ReverseFinishingBlowChance"
-  };
-  const localizationKey = combatLabels[path];
-  return localizationKey ? game.i18n.localize(localizationKey) : String(token?.label ?? path);
-}
-
-function localizeReverseModifierField(field = "") {
-  const localizationKey = {
-    bonus: "FALLOUTMAW.Actor.Bonus",
-    advantage: "FALLOUTMAW.Effects.CombatAdvantage",
-    disadvantage: "FALLOUTMAW.Effects.CombatDisadvantage"
-  }[field];
-  return localizationKey ? game.i18n.localize(localizationKey).toLocaleLowerCase() : field;
 }
 
 export function buildSuppressionEffectKeyTokens() {

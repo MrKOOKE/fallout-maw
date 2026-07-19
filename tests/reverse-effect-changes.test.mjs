@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+
+const RU_MESSAGES = JSON.parse(readFileSync(new URL("../lang/ru.json", import.meta.url), "utf8"));
+
+function getRuMessage(key) {
+  return String(key ?? "").split(".").reduce((value, part) => value?.[part], RU_MESSAGES);
+}
 
 globalThis.foundry = {
   applications: {
@@ -29,6 +36,14 @@ globalThis.foundry = {
   }
 };
 globalThis.game = {
+  i18n: {
+    localize(key) {
+      return String(getRuMessage(key) ?? key);
+    },
+    format(key, data = {}) {
+      return String(getRuMessage(key) ?? key).replace(/\{([^}]+)\}/g, (_match, name) => String(data[name] ?? ""));
+    }
+  },
   settings: {
     get() {
       throw new Error("settings are unavailable in this unit test");
@@ -52,6 +67,10 @@ const {
   getTargetReverseAbilityChangeValue,
   mergePreparedSourceContextualAbilityChanges
 } = await import("../src/abilities/evaluation.mjs");
+const {
+  buildEffectKeyTokens,
+  buildReverseInteractionEffectKeyTokens
+} = await import("../src/utils/effect-key-tokens.mjs");
 
 function createEffect(uuid, changes, { disabled = false, active = true } = {}) {
   return {
@@ -82,6 +101,40 @@ function createItemCollection(items = []) {
     [Symbol.iterator]: () => items.values()
   };
 }
+
+test("reverse autocomplete labels preserve the ordinary label and append only the direction suffix", () => {
+  const reversePrefix = "fallout-maw.reverse.";
+  const allPenetrationPath = `${reversePrefix}system.penetration.actions.all`;
+  const ordinaryByPath = new Map(buildEffectKeyTokens()
+    .filter(token => !token.path.startsWith(reversePrefix))
+    .map(token => [token.path, token]));
+  const reverseTokens = buildReverseInteractionEffectKeyTokens();
+
+  assert.ok(reverseTokens.length > 0);
+  for (const token of reverseTokens) {
+    const ordinaryPath = token.path.slice(reversePrefix.length);
+    const baseLabel = token.path === allPenetrationPath
+      ? game.i18n.localize("FALLOUTMAW.Effects.CombatAllPenetration")
+      : ordinaryByPath.get(ordinaryPath)?.label;
+    assert.ok(baseLabel, `Missing ordinary autocomplete label for ${ordinaryPath}`);
+    assert.equal(
+      token.label,
+      game.i18n.format("FALLOUTMAW.Effects.ReverseLabel", { label: baseLabel }),
+      token.path
+    );
+  }
+
+  const labelsByPath = new Map(reverseTokens.map(token => [token.path, token.label]));
+  assert.equal(
+    labelsByPath.get(`${reversePrefix}system.combat.all.disadvantage`),
+    "Помеха: все атакующие действия (в мою сторону)"
+  );
+  assert.equal(
+    labelsByPath.get(`${reversePrefix}system.combat.actions.aimedShot.disadvantage`),
+    "Помеха: Прицельный выстрел (в мою сторону)"
+  );
+  assert.equal(reverseTokens.some(token => token.label.includes(": стоимость")), false);
+});
 
 test("reverse keys round-trip without becoming ordinary actor overrides", () => {
   const original = "system.combat.actions.aimedShot.disadvantage";
