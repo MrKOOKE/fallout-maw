@@ -19,6 +19,7 @@ export async function playWeaponAttackAnimations({ weapon = null, weaponFunction
   weaponData ??= getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
   const animationKey = String(weaponData?.attackAnimationKey ?? "").trim();
   const soundPath = String(weaponData?.attackSoundPath ?? "").trim();
+  const soundVolume = normalizeAttackSoundVolume(weaponData?.attackSoundVolume);
   if (!animationKey && !soundPath) return;
 
   const entries = [];
@@ -59,6 +60,7 @@ export async function playWeaponAttackAnimations({ weapon = null, weaponFunction
     sceneId: canvas.scene?.id ?? "",
     entries,
     soundPath,
+    soundVolume,
     soundGroups,
     delayMs: Math.max(0, Math.trunc(Number(delayMs) || 0)),
     senderUserId: game.user?.id ?? ""
@@ -122,7 +124,7 @@ async function playAttackAnimationGroup(payload = {}) {
 
   for (let index = 0; index < soundGroups.length; index += 1) {
     if (index > 0 && delayMs > 0) await sleep(delayMs);
-    promises.push(playAttackSound(payload.soundPath));
+    promises.push(playAttackSound(payload.soundPath, payload.soundVolume));
     const groupEntries = entriesByGroup.get(soundGroups[index]) ?? [];
     const chains = new Map();
     for (const entry of groupEntries) {
@@ -144,14 +146,23 @@ async function playAttackAnimationChain(entries = []) {
   for (const entry of ordered) await playSingleAttackAnimation(entry);
 }
 
-async function playAttackSound(path) {
+async function playAttackSound(path, volume = 1) {
   const src = String(path ?? "").trim();
   if (!src) return;
   try {
-    await game.audio.play(src, { context: game.audio.interface });
+    await game.audio.play(src, {
+      context: game.audio.interface,
+      volume: normalizeAttackSoundVolume(volume)
+    });
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Attack sound failed to play: ${src}`, error);
   }
+}
+
+function normalizeAttackSoundVolume(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.min(1, Math.max(0, number));
 }
 
 async function playExplosionAnimation(payload = {}) {

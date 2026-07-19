@@ -1660,6 +1660,7 @@
       "WeaponAddDamageType": "Add Damage Type",
       "WeaponAttackAnimation": "Attack Animation",
       "WeaponAttackSound": "Attack Sound",
+      "WeaponAttackSoundVolume": "Volume",
       "WeaponExplosionAnimation": "Explosion Animation",
       "WeaponExplosionSound": "Explosion Sound",
       "WeaponAttackPresentation": "Attack Presentation",

@@ -1720,6 +1720,7 @@
       "WeaponAddDamageType": "Добавить тип урона",
       "WeaponAttackAnimation": "Анимация атаки",
       "WeaponAttackSound": "Звук атаки",
+      "WeaponAttackSoundVolume": "Громкость",
       "WeaponExplosionAnimation": "Анимация взрыва",
       "WeaponExplosionSound": "Звук взрыва",
       "WeaponAttackPresentation": "Оформление атаки",

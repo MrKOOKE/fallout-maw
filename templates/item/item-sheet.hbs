@@ -5182,6 +5182,19 @@
           <input type="text" name="{{path}}.attackSoundPath" value="{{weaponData.attackSoundPath}}" data-weapon-attack-sound-input>
           <button type="button" data-browse-weapon-attack-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
         </div>
+        <div class="fallout-maw-sound-volume-field">
+          <span>{{localize "FALLOUTMAW.Item.WeaponAttackSoundVolume"}}</span>
+          <input
+            type="range"
+            name="{{path}}.attackSoundVolume"
+            value="{{weaponData.attackSoundVolume}}"
+            min="0"
+            max="1"
+            step="0.05"
+            data-weapon-attack-sound-volume
+          >
+          <strong data-weapon-attack-sound-volume-label>{{weaponData.attackSoundVolumePercent}}</strong>
+        </div>
       </label>
       {{#if hasVolleyAction}}
       <label>

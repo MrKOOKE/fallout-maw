@@ -890,6 +890,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-browse-weapon-attack-sound]").forEach(button => {
       button.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
     });
+    this.element?.querySelectorAll("[data-weapon-attack-sound-volume]").forEach(slider => {
+      activateWeaponAttackSoundVolumePreview(slider);
+    });
     this.element?.querySelectorAll("[data-browse-weapon-explosion-sound]").forEach(button => {
       button.addEventListener("click", event => this.#onBrowseWeaponExplosionSound(event));
     });
@@ -5672,7 +5675,43 @@ function activateWeaponSoundPickerPreview(picker) {
   picker.addEventListener?.("close", stopActiveWeaponSoundPickerPreview, { once: true });
 }
 
-async function previewWeaponSoundPickerPath(path = "") {
+function activateWeaponAttackSoundVolumePreview(slider) {
+  if (!slider || slider.dataset.falloutMawAttackSoundVolumeBound) return;
+  slider.dataset.falloutMawAttackSoundVolumeBound = "1";
+  let skipPreviewFromWheel = false;
+
+  const updateLabel = () => {
+    const label = slider.closest(".fallout-maw-sound-volume-field")
+      ?.querySelector("[data-weapon-attack-sound-volume-label]");
+    if (label) label.textContent = formatAttackSoundVolumePercent(slider.value);
+  };
+
+  const previewCurrentVolume = () => {
+    const section = getWeaponFunctionSection(slider);
+    const path = String(section?.querySelector("[data-weapon-attack-sound-input]")?.value ?? "").trim();
+    if (!path) return;
+    void previewWeaponSoundPickerPath(path, normalizeAttackSoundVolume(slider.value));
+  };
+
+  slider.addEventListener("wheel", () => {
+    skipPreviewFromWheel = true;
+  }, { passive: true });
+
+  slider.addEventListener("input", updateLabel);
+
+  // Play only after the thumb is released. Wheel has no release and also fires
+  // `change`, so skip preview when the last adjustment came from the wheel.
+  slider.addEventListener("change", () => {
+    updateLabel();
+    if (skipPreviewFromWheel) {
+      skipPreviewFromWheel = false;
+      return;
+    }
+    previewCurrentVolume();
+  });
+}
+
+async function previewWeaponSoundPickerPath(path = "", volume = 0.8) {
   const src = String(path ?? "").trim();
   if (!src) return;
   await stopActiveWeaponSoundPickerPreview();
@@ -5680,11 +5719,21 @@ async function previewWeaponSoundPickerPath(path = "") {
     activeWeaponSoundPickerPreview = await game.audio?.play?.(src, {
       context: game.audio?.interface,
       loop: false,
-      volume: 0.8
+      volume: normalizeAttackSoundVolume(volume)
     }) ?? null;
   } catch (error) {
     console.warn(`Fallout MaW | Failed to preview weapon sound "${src}".`, error);
   }
+}
+
+function normalizeAttackSoundVolume(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.min(1, Math.max(0, number));
+}
+
+function formatAttackSoundVolumePercent(volume = 1) {
+  return `${Math.round(normalizeAttackSoundVolume(volume) * 100)}%`;
 }
 
 async function stopActiveWeaponSoundPickerPreview() {
@@ -8471,6 +8520,8 @@ function buildWeaponFunctionSection({
   index = -1
 } = {}) {
   const formWeaponData = getWeaponFormData(weaponData, sourceWeaponData);
+  formWeaponData.attackSoundVolume = normalizeAttackSoundVolume(formWeaponData.attackSoundVolume);
+  formWeaponData.attackSoundVolumePercent = formatAttackSoundVolumePercent(formWeaponData.attackSoundVolume);
   const effectiveWeaponData = getWeaponDisplayData(formWeaponData);
   return {
     title,
@@ -9329,6 +9380,7 @@ function createDefaultDamageSourceFunctionData(source = {}) {
     damageTypes: [{ key: "firearm", percent: 100 }],
     attackAnimationKey: "",
     attackSoundPath: "",
+    attackSoundVolume: 1,
     attackAnimationDelayMs: DEFAULT_ATTACK_ANIMATION_DELAY_MS,
     accuracyBonus: 0,
     criticalChanceModifier: 0,
@@ -9456,6 +9508,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     damageTypes: [{ key: "firearm", percent: 100 }],
     attackAnimationKey: "",
     attackSoundPath: "",
+    attackSoundVolume: 1,
     attackAnimationDelayMs: DEFAULT_ATTACK_ANIMATION_DELAY_MS,
     proficiencyKey: "pistol",
     skillKey: "rangedCombat",

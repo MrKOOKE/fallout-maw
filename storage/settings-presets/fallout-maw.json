@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "e187fe72b898515609c6be079ea6d6228ff060d07c123c137bc89bbdf0cb9ae8",
-  "updatedAt": "2026-07-19T09:08:01.971Z",
+  "revision": "d608a7fe56d2fad75f695d30a7c1d0cb91064e0c59d971f89d1cccaea1e057ef",
+  "updatedAt": "2026-07-19T12:28:11.458Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3974,22 +3974,9 @@
                           "attackActionKeys": [
                             "meleeAttack"
                           ],
-                          "eventKey": "",
-                          "executionTiming": "activation",
                           "executorMode": "targets",
                           "fixedActionPointCost": 0,
                           "id": "o0eHtaXDOfkfOP4M-application-weapon-attack",
-                          "mutationBounds": "resource",
-                          "mutationFormula": "0",
-                          "mutationFormulaBinding": "carrier",
-                          "mutationInputs": [],
-                          "mutationMaximumFormula": "",
-                          "mutationMinimumFormula": "",
-                          "mutationOperation": "add",
-                          "mutationRounding": "none",
-                          "mutationTargetBinding": "carrier",
-                          "mutationTargetPath": "",
-                          "relationFilters": [],
                           "routeAutoRotate": false,
                           "routeBudgetEvaluation": "executor",
                           "routeBudgetFormula": "0",
@@ -4083,22 +4070,9 @@
                           "attackActionKeys": [
                             "snapshot"
                           ],
-                          "eventKey": "",
-                          "executionTiming": "activation",
                           "executorMode": "targets",
                           "fixedActionPointCost": 0,
                           "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
-                          "mutationBounds": "resource",
-                          "mutationFormula": "0",
-                          "mutationFormulaBinding": "carrier",
-                          "mutationInputs": [],
-                          "mutationMaximumFormula": "",
-                          "mutationMinimumFormula": "",
-                          "mutationOperation": "add",
-                          "mutationRounding": "none",
-                          "mutationTargetBinding": "carrier",
-                          "mutationTargetPath": "",
-                          "relationFilters": [],
                           "routeAutoRotate": false,
                           "routeBudgetEvaluation": "executor",
                           "routeBudgetFormula": "0",
@@ -4192,22 +4166,9 @@
                           "attackActionKeys": [
                             "all"
                           ],
-                          "eventKey": "",
-                          "executionTiming": "activation",
                           "executorMode": "targets",
                           "fixedActionPointCost": 0,
                           "id": "u6NqPLJYeinNzWNF-movement-route-route-action",
-                          "mutationBounds": "resource",
-                          "mutationFormula": "0",
-                          "mutationFormulaBinding": "carrier",
-                          "mutationInputs": [],
-                          "mutationMaximumFormula": "",
-                          "mutationMinimumFormula": "",
-                          "mutationOperation": "add",
-                          "mutationRounding": "none",
-                          "mutationTargetBinding": "carrier",
-                          "mutationTargetPath": "",
-                          "relationFilters": [],
                           "routeAutoRotate": false,
                           "routeBudgetEvaluation": "source",
                           "routeBudgetFormula": "2+spe/25",
@@ -4892,6 +4853,26 @@
                       "type": "fixed"
                     }
                   ]
+                },
+                "visible": true
+              },
+              {
+                "description": "",
+                "id": "sjf2HgnXs0hBdqQA",
+                "img": "icons/svg/aura.svg",
+                "name": "Новая способность",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Азарт",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
                 },
                 "visible": true
               }
@@ -53556,7 +53537,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "standard",
+        "resultMode": "success",
         "skillModifier": 0
       }
     },
