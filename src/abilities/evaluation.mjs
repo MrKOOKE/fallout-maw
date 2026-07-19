@@ -21,6 +21,10 @@ import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura
 import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { isAbilityToggleConditionActive } from "./toggleable-conditions.mjs";
+import {
+  illuminationConditionApplies,
+  timeOfDayConditionApplies
+} from "./environment-conditions.mjs";
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -98,6 +102,8 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return false;
   if (condition.type === ABILITY_CONDITION_TYPES.aura) return abilityAuraConditionApplies(actor, condition, context);
   if (condition.type === ABILITY_CONDITION_TYPES.energyConsumption) return energyConsumptionConditionApplies(actor, condition, context);
+  if (condition.type === ABILITY_CONDITION_TYPES.timeOfDay) return timeOfDayConditionApplies(condition, context);
+  if (condition.type === ABILITY_CONDITION_TYPES.illumination) return illuminationConditionApplies(actor, condition, context);
 
   const targetActor = context?.targetToken?.actor
     ?? context?.targetToken?.document?.actor
@@ -204,7 +210,7 @@ export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry 
     auraTargetApplication: true
   });
   if (applies) return entry.changes ?? [];
-  return context?.includeAuraPenalties ? entry.penalties ?? [] : [];
+  return entry.penalties ?? [];
 }
 
 function abilityConditionsRequireTarget(conditions = []) {

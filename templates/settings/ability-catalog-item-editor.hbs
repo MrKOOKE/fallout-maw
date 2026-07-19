@@ -1803,6 +1803,29 @@
               {{/if}}
 
 
+              {{#if isTimeOfDay}}
+              <label>
+                <span>От</span>
+                <input type="time" data-field="conditionTimeFrom" value="{{timeFrom}}" step="60">
+              </label>
+              <label>
+                <span>До</span>
+                <input type="time" data-field="conditionTimeTo" value="{{timeTo}}" step="60">
+              </label>
+              {{/if}}
+
+              {{#if isIllumination}}
+              <label>
+                <span>Степень освещения</span>
+                <select data-field="conditionIlluminationLevel">
+                  {{#each illuminationLevelChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{/if}}
+
+
               {{#if isHealth}}
               <label>
                 <span>Состояние ОЗ чего</span>

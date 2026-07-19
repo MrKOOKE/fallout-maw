@@ -1954,6 +1954,29 @@
               {{/if}}
 
 
+              {{#if isTimeOfDay}}
+              <label>
+                <span>От</span>
+                <input type="time" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.timeFrom" value="{{timeFrom}}" step="60">
+              </label>
+              <label>
+                <span>До</span>
+                <input type="time" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.timeTo" value="{{timeTo}}" step="60">
+              </label>
+              {{/if}}
+
+              {{#if isIllumination}}
+              <label>
+                <span>Степень освещения</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.illuminationLevel">
+                  {{#each illuminationLevelChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{/if}}
+
+
               {{#if isHealth}}
               <label>
                 <span>Состояние ОЗ чего</span>
@@ -2809,6 +2832,29 @@
                     {{/each}}
                   </select>
                 </div>
+              </label>
+              {{/if}}
+
+
+              {{#if isTimeOfDay}}
+              <label>
+                <span>От</span>
+                <input type="time" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.timeFrom" value="{{timeFrom}}" step="60">
+              </label>
+              <label>
+                <span>До</span>
+                <input type="time" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.timeTo" value="{{timeTo}}" step="60">
+              </label>
+              {{/if}}
+
+              {{#if isIllumination}}
+              <label>
+                <span>Степень освещения</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.illuminationLevel">
+                  {{#each illuminationLevelChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
               </label>
               {{/if}}
 

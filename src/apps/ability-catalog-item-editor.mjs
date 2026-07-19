@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
+import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_ACTION_EXECUTOR_MODES,
@@ -1620,6 +1621,9 @@ function readAbilityConditions(root) {
       autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
+      timeFrom: row.querySelector("[data-field='conditionTimeFrom']")?.value ?? "00:00",
+      timeTo: row.querySelector("[data-field='conditionTimeTo']")?.value ?? "23:59",
+      illuminationLevel: row.querySelector("[data-field='conditionIlluminationLevel']")?.value ?? "normal",
       operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
       percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
       healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
@@ -2432,6 +2436,8 @@ function prepareConditionForDisplay(condition, {
   const isTriggerCost = type === ABILITY_CONDITION_TYPES.triggerCost;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
+  const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
+  const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
   const isUnsupportedEventCondition = eventReactionMode
     && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
@@ -2479,7 +2485,7 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -2522,6 +2528,8 @@ function prepareConditionForDisplay(condition, {
     hiddenEventDepthFilterRows: isEventReaction
       ? buildHiddenEventReactionDepthFilterRows(condition, condition?.eventKey)
       : [],
+    isTimeOfDay,
+    isIllumination,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -2564,6 +2572,7 @@ function prepareConditionForDisplay(condition, {
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
     eventSubjectChoices: buildEventSubjectChoices(condition?.eventSubject),
+    illuminationLevelChoices: buildIlluminationLevelChoices(condition?.illuminationLevel),
     healthTargetChoices: buildHealthTargetChoices(healthTarget),
     limbChoices: buildLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
@@ -2625,6 +2634,15 @@ function buildConditionDisplayGroups(conditions = []) {
   return groups.map(group => ({
     ...group,
     isOrGroup: Boolean(group.groupId && group.conditions.length > 1)
+  }));
+}
+
+function buildIlluminationLevelChoices(selected = "normal") {
+  const key = STEALTH_LIGHT_LEVELS.some(level => level.key === selected) ? selected : "normal";
+  return STEALTH_LIGHT_LEVELS.map(level => ({
+    value: level.key,
+    label: level.label,
+    selected: level.key === key
   }));
 }
 
@@ -2700,6 +2718,8 @@ function buildConditionTypeChoices(selected = "", {
 } = {}) {
   const choices = [
     { value: "", label: "", selected: !selected },
+    { value: ABILITY_CONDITION_TYPES.timeOfDay, label: "Время суток", selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
+    { value: ABILITY_CONDITION_TYPES.illumination, label: "Степень освещения", selected: selected === ABILITY_CONDITION_TYPES.illumination },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
     { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
@@ -3025,6 +3045,8 @@ function localizeEventReactionUi(path = "", fallback = "") {
 function isRuntimeCondition(type = "") {
   return [
     ABILITY_CONDITION_TYPES.toggleable,
+    ABILITY_CONDITION_TYPES.timeOfDay,
+    ABILITY_CONDITION_TYPES.illumination,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.targetFaction,

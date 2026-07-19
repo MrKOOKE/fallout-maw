@@ -256,7 +256,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "triggerCost", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "triggerCost", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     costs: new ArrayField(new SchemaField({
@@ -287,6 +287,14 @@ function abilityConditionField() {
       blank: false,
       choices: ["reactor", "eventSource", "eventTarget"],
       initial: "reactor"
+    }),
+    timeFrom: new StringField({ required: true, blank: false, initial: "00:00" }),
+    timeTo: new StringField({ required: true, blank: false, initial: "23:59" }),
+    illuminationLevel: new StringField({
+      required: true,
+      blank: false,
+      choices: ["normal", "shadow", "dim", "dark", "blackout"],
+      initial: "normal"
     }),
     name: new StringField({ required: true, blank: true, initial: "" }),
     cooldownSeconds: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),

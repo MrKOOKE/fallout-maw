@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "6391fee0e3b54b96bf89ebf90334c504e05953d095f6db182709a6b825981830",
-  "updatedAt": "2026-07-19T12:56:07.702Z",
+  "revision": "f138df4ec7026e00f770b81f1539614224e8563d8517b5927134bcef607ad886",
+  "updatedAt": "2026-07-19T17:08:29.199Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -137,6 +137,70 @@
                       "fixedSettings": {},
                       "id": "6QnjhsR4ovtoNI31",
                       "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>С 20:00 по 6:00 +20 ко всем Навыкам. В остальное время -10 ко всем Навыкам</p>",
+                "id": "fqLghKYaxztRKp7f",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/detya-nochi.webp",
+                "name": "Дитя ночи",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "Ihp4S0tedVe7y9Vy",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "W09WIZ7e5Y2W3Pxc",
+                          "timeFrom": "20:00",
+                          "timeTo": "06:00",
+                          "type": "timeOfDay"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "THU9UE7G8ZKtDtLL",
+                      "penalties": [
+                        {
+                          "id": "CwKdRyBrFJtfNvyI",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        }
+                      ],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0

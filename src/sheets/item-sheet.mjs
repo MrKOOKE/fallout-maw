@@ -5,6 +5,7 @@ import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
+import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   buildDamageMitigationLimbSetChoices,
@@ -6893,6 +6894,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isTriggerCost = type === ABILITY_CONDITION_TYPES.triggerCost;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
+  const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
+  const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
   const isUnsupportedEventCondition = eventReactionMode
     && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
@@ -6950,7 +6953,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -6996,6 +6999,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
         inputNamePrefix: `${functionPath}.${functionIndex}.conditions.${index}.eventFilters`
       })
       : [],
+    isTimeOfDay,
+    isIllumination,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -7038,6 +7043,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
     eventSubjectChoices: buildAbilityEventSubjectChoices(condition?.eventSubject),
+    illuminationLevelChoices: buildAbilityIlluminationLevelChoices(condition?.illuminationLevel),
     healthTargetChoices: buildAbilityHealthTargetChoices(healthTarget),
     limbChoices: buildAbilityLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
@@ -7079,6 +7085,15 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     itemCategoryRows: buildAbilityItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedAbilityItemUseCategory(condition?.itemCategories))
   };
+}
+
+function buildAbilityIlluminationLevelChoices(selected = "normal") {
+  const key = STEALTH_LIGHT_LEVELS.some(level => level.key === selected) ? selected : "normal";
+  return STEALTH_LIGHT_LEVELS.map(level => ({
+    value: level.key,
+    label: level.label,
+    selected: level.key === key
+  }));
 }
 
 function buildAbilityConditionDisplayGroups(conditions = []) {
@@ -7128,6 +7143,8 @@ function buildAbilityConditionTypeChoices(selected = "", {
 } = {}) {
   const choices = [
     { value: "", label: "", selected: !selected },
+    { value: ABILITY_CONDITION_TYPES.timeOfDay, label: "Время суток", selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
+    { value: ABILITY_CONDITION_TYPES.illumination, label: "Степень освещения", selected: selected === ABILITY_CONDITION_TYPES.illumination },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
     { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
@@ -7559,6 +7576,8 @@ function getFirstUnusedAbilityProficiencyKey(value = []) {
 function isAbilityRuntimeCondition(type = "") {
   return [
     ABILITY_CONDITION_TYPES.toggleable,
+    ABILITY_CONDITION_TYPES.timeOfDay,
+    ABILITY_CONDITION_TYPES.illumination,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.targetFaction,

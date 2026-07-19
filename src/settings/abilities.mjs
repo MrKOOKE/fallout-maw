@@ -1,5 +1,9 @@
 ﻿import { createDefaultSkillSettings, normalizeSkillSettings } from "../formulas/index.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  normalizeIlluminationLevel,
+  normalizeTimeOfDayText
+} from "../abilities/environment-conditions.mjs";
 
 export const LOCKED_FEATURES_CATEGORY_ID = "features";
 export const GENERAL_ABILITY_CATEGORY_ID = "general";
@@ -115,6 +119,8 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   toggleable: "toggleable",
   eventReaction: "eventReaction",
   triggerCost: "triggerCost",
+  timeOfDay: "timeOfDay",
+  illumination: "illumination",
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
   targetFaction: "targetFaction",
@@ -867,6 +873,8 @@ export function isAbilityFunctionTimedTriggerCost(abilityFunction = {}) {
   ].includes(condition?.type))) return false;
   return conditions.some(condition => [
     ABILITY_CONDITION_TYPES.toggleable,
+    ABILITY_CONDITION_TYPES.timeOfDay,
+    ABILITY_CONDITION_TYPES.illumination,
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
     ABILITY_CONDITION_TYPES.posture,
@@ -1002,6 +1010,27 @@ function normalizeAbilityCondition(value = {}) {
   const eventSubject = Object.values(ABILITY_EVENT_SUBJECTS).includes(rawEventSubject)
     ? rawEventSubject
     : ABILITY_EVENT_SUBJECTS.reactor;
+
+  if (type === ABILITY_CONDITION_TYPES.timeOfDay) {
+    return {
+      id,
+      groupId,
+      type,
+      eventSubject,
+      timeFrom: normalizeTimeOfDayText(value?.timeFrom, "00:00"),
+      timeTo: normalizeTimeOfDayText(value?.timeTo, "23:59")
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.illumination) {
+    return {
+      id,
+      groupId,
+      type,
+      eventSubject,
+      illuminationLevel: normalizeIlluminationLevel(value?.illuminationLevel)
+    };
+  }
 
   if (type === ABILITY_CONDITION_TYPES.targetFaction) {
     return {

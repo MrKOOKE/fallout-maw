@@ -22,24 +22,40 @@ import {
   withoutTimedTriggerCostFunctions
 } from "./trigger-cost-effects.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
+import {
+  getActorIlluminationLevel,
+  getWorldTimeMinuteOfDay,
+  illuminationLevelConditionApplies,
+  invalidateAbilityConditionLightingCache,
+  timeOfDayConditionApplies
+} from "./environment-conditions.mjs";
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const ACTOR_EFFECT_SYNC_DELAY_MS = 40;
 const AURA_STATE_SYNC_DELAY_MS = 40;
+const ILLUMINATION_CONDITION_SYNC_DELAY_MS = 120;
 const processingActors = new Set();
 const actorSyncTimers = new Map();
 const queuedActorSyncs = new Map();
 const coverSyncTimers = new Map();
 const tokenMovementSyncVersions = new Map();
+const actorIlluminationLevelCache = new Map();
+const pendingIlluminationActors = new Map();
+const environmentConditionActorIndex = new Map();
+const environmentConditionCache = new Map();
 let auraStateSyncTimer = null;
+let illuminationConditionSyncTimer = null;
+let illuminationConditionSyncAll = false;
 let processingAuraEffects = false;
 let auraStateSyncRequested = false;
+let environmentConditionIndexInitialized = false;
 
 export function registerAbilityEffectHooks() {
   registerBulkOperationFlusher(flushDeferredAbilityEffectSyncs);
   Hooks.on("createItem", item => {
+    if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (item?.type === "ability" || isEquipmentItem(item) || hasItemFreeSettingsFunction(item)) {
       queueActorAbilityEffectSync(item.parent, {}, {
         aura: item?.type === "ability" || hasItemFreeSettingsFunction(item)
@@ -49,6 +65,7 @@ export function registerAbilityEffectHooks() {
   Hooks.on("updateItem", (item, changes, options = {}) => {
     if (options?.falloutMawEventReactionProgress === true) return;
     if (options?.falloutMawTriggerTransitionState === true) return;
+    if (shouldRefreshEnvironmentConditionIndex(item, changes)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) {
       queueActorAbilityEffectSync(item.parent, {}, {
         aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)
@@ -56,6 +73,7 @@ export function registerAbilityEffectHooks() {
     }
   });
   Hooks.on("deleteItem", item => {
+    if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (item?.type === "ability") {
       void deleteAbilityEffects(item.parent, item.id);
       queueAuraStateSync();
@@ -64,6 +82,14 @@ export function registerAbilityEffectHooks() {
     if (item?.type === "gear") void deleteItemFreeSettingsEffects(item.parent, item.id);
     if (isEquipmentItem(item)) queueActorAbilityEffectSync(item.parent, {}, { aura: item?.type === "gear" });
     else if (item?.type === "gear") queueAuraStateSync();
+  });
+  Hooks.on("deleteActor", actor => {
+    const actorUuid = String(actor?.uuid ?? "");
+    if (!actorUuid) return;
+    environmentConditionActorIndex.delete(actorUuid);
+    environmentConditionCache.delete(actorUuid);
+    actorIlluminationLevelCache.delete(actorUuid);
+    pendingIlluminationActors.delete(actorUuid);
   });
   Hooks.on("updateActor", (actor, changes) => {
     if (!isAbilityEffectSyncRelevant(changes)) return;
@@ -74,6 +100,7 @@ export function registerAbilityEffectHooks() {
     const movementActionChanged = foundry.utils.hasProperty(changes, "movementAction");
     const positionChanged = isAuraTokenPositionUpdate(changes);
     if (positionChanged) {
+      invalidateAbilityConditionLightingCache();
       queueAuraSyncAfterTokenMovement(tokenDocument, { syncMovingActor: movementActionChanged });
       return;
     }
@@ -82,8 +109,16 @@ export function registerAbilityEffectHooks() {
     }
     if (relevant && !movementActionChanged) queueAuraStateSync();
   });
-  Hooks.on("createToken", () => queueAuraStateSync());
-  Hooks.on("deleteToken", () => queueAuraStateSync());
+  Hooks.on("createToken", tokenDocument => {
+    invalidateAbilityConditionLightingCache();
+    queueIlluminationConditionEffectSync(tokenDocument);
+    queueAuraStateSync();
+  });
+  Hooks.on("deleteToken", tokenDocument => {
+    invalidateAbilityConditionLightingCache();
+    queueIlluminationConditionEffectSync(tokenDocument);
+    queueAuraStateSync();
+  });
   Hooks.on("createActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
@@ -106,10 +141,29 @@ export function registerAbilityEffectHooks() {
     queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
   Hooks.on("canvasReady", () => {
+    invalidateAbilityConditionLightingCache();
+    actorIlluminationLevelCache.clear();
+    globalThis.clearTimeout(illuminationConditionSyncTimer);
+    illuminationConditionSyncTimer = null;
+    pendingIlluminationActors.clear();
+    illuminationConditionSyncAll = false;
+    environmentConditionActorIndex.clear();
+    environmentConditionCache.clear();
+    environmentConditionIndexInitialized = false;
     // Ready already runs a full sync; avoid overlapping ~300ms work during preset startup.
     if (!game.ready) return;
     void syncLoadedActorAbilityEffects();
   });
+  Hooks.on("lightingRefresh", () => {
+    invalidateAbilityConditionLightingCache();
+    queueIlluminationConditionEffectSync();
+  });
+  Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, () => {
+    invalidateAbilityConditionLightingCache();
+    actorIlluminationLevelCache.clear();
+    queueIlluminationConditionEffectSync();
+  });
+  Hooks.on("updateWorldTime", syncTimeOfDayConditionEffects);
   Hooks.on("createCombat", () => queueAuraStateSync());
   Hooks.on("updateCombat", () => queueAuraStateSync());
   Hooks.on("deleteCombat", () => queueAuraStateSync());
@@ -144,6 +198,7 @@ function queueAuraSyncAfterTokenMovement(tokenDocument, { syncMovingActor = fals
 }
 
 function queueAuraDependentStateSync(tokenDocument, { syncMovingActor = false } = {}) {
+  queueIlluminationConditionEffectSync(tokenDocument);
   if (syncMovingActor) {
     queueActorAbilityEffectSync(tokenDocument?.actor, { actorToken: tokenDocument }, { aura: true });
   }
@@ -159,8 +214,160 @@ function queueAuraDependentStateSync(tokenDocument, { syncMovingActor = false } 
   queueAuraStateSync();
 }
 
+function syncTimeOfDayConditionEffects(worldTime, deltaTime) {
+  if (!game.ready || !game.user?.isActiveGM) return;
+  const current = Number(worldTime) || 0;
+  const previous = current - (Number(deltaTime) || 0);
+  if (getWorldTimeMinuteOfDay(current) === getWorldTimeMinuteOfDay(previous)) return;
+
+  for (const { actor, context } of collectEnvironmentActorContexts()) {
+    const conditions = getActorPassiveEnvironmentConditions(actor, ABILITY_CONDITION_TYPES.timeOfDay);
+    if (!conditions.some(condition => (
+      timeOfDayConditionApplies(condition, { worldTime: previous })
+      !== timeOfDayConditionApplies(condition, { worldTime: current })
+    ))) continue;
+    queueActorAbilityEffectSync(actor, context, { aura: true });
+  }
+}
+
+function queueIlluminationConditionEffectSync(tokenDocument = null) {
+  if (!game.ready || !game.user?.isActiveGM) return;
+  const actor = tokenDocument?.actor ?? null;
+  if (!actor?.uuid) {
+    illuminationConditionSyncAll = true;
+    pendingIlluminationActors.clear();
+  } else if (!illuminationConditionSyncAll) {
+    pendingIlluminationActors.set(actor.uuid, actor);
+  }
+
+  globalThis.clearTimeout(illuminationConditionSyncTimer);
+  illuminationConditionSyncTimer = globalThis.setTimeout(() => {
+    illuminationConditionSyncTimer = null;
+    const all = illuminationConditionSyncAll;
+    illuminationConditionSyncAll = false;
+    const pendingActors = new Map(pendingIlluminationActors);
+    pendingIlluminationActors.clear();
+    syncIlluminationConditionEffects(all ? null : pendingActors);
+  }, ILLUMINATION_CONDITION_SYNC_DELAY_MS);
+}
+
+function syncIlluminationConditionEffects(targetActors = null) {
+  if (!game.ready || !game.user?.isActiveGM) return;
+  const contexts = targetActors
+    ? collectEnvironmentActorContexts({ actors: targetActors })
+    : collectEnvironmentActorContexts({ canvasOnly: true });
+
+  for (const { actor, context } of contexts) {
+    const conditions = getActorPassiveEnvironmentConditions(actor, ABILITY_CONDITION_TYPES.illumination);
+    if (!conditions.length) continue;
+    const current = getActorIlluminationLevel(actor, context);
+    const hadPrevious = actorIlluminationLevelCache.has(actor.uuid);
+    const previous = actorIlluminationLevelCache.get(actor.uuid) ?? null;
+    actorIlluminationLevelCache.set(actor.uuid, current);
+    const changed = !hadPrevious || conditions.some(condition => (
+      illuminationLevelConditionApplies(condition, previous)
+      !== illuminationLevelConditionApplies(condition, current)
+    ));
+    if (changed) queueActorAbilityEffectSync(actor, context, { aura: true });
+  }
+}
+
+function collectEnvironmentActorContexts({ canvasOnly = false, actors = null } = {}) {
+  const contexts = new Map();
+  if (!actors) ensureEnvironmentConditionActorIndex();
+  if (actors) {
+    for (const actor of actors.values()) {
+      if (actor?.uuid) contexts.set(actor.uuid, { actor, context: {} });
+    }
+  } else if (!canvasOnly) {
+    ensureEnvironmentConditionActorIndex();
+    for (const actor of environmentConditionActorIndex.values()) {
+      if (actor?.uuid) contexts.set(actor.uuid, { actor, context: {} });
+    }
+  }
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const actor = token?.actor;
+    if (!actor?.uuid) continue;
+    if (actors && !actors.has(actor.uuid)) continue;
+    if (!actors && !environmentConditionActorIndex.has(actor.uuid)) continue;
+    contexts.set(actor.uuid, { actor, context: { actorToken: token } });
+  }
+  return contexts.values();
+}
+
+function getActorPassiveEnvironmentConditions(actor, type) {
+  const actorUuid = String(actor?.uuid ?? "");
+  if (!actorUuid) return [];
+  if (!environmentConditionCache.has(actorUuid)) refreshEnvironmentConditionActorIndex(actor);
+  return environmentConditionCache.get(actorUuid)?.[type] ?? [];
+}
+
+function ensureEnvironmentConditionActorIndex() {
+  if (environmentConditionIndexInitialized) return;
+  environmentConditionIndexInitialized = true;
+  for (const actor of game.actors ?? []) refreshEnvironmentConditionActorIndex(actor);
+  // Unlinked token actors are not present in game.actors, but their passive
+  // abilities still need to react to world-time and lighting changes.
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    if (token?.actor?.uuid && !environmentConditionCache.has(token.actor.uuid)) {
+      refreshEnvironmentConditionActorIndex(token.actor);
+    }
+  }
+}
+
+function refreshEnvironmentConditionActorIndex(actor) {
+  const actorUuid = String(actor?.uuid ?? "");
+  if (!actorUuid) return;
+  const conditionsByType = collectActorPassiveEnvironmentConditions(actor);
+  environmentConditionCache.set(actorUuid, conditionsByType);
+  if (conditionsByType.timeOfDay.length || conditionsByType.illumination.length) {
+    environmentConditionActorIndex.set(actorUuid, actor);
+  } else {
+    environmentConditionActorIndex.delete(actorUuid);
+  }
+}
+
+function shouldRefreshEnvironmentConditionIndex(item, changes = {}) {
+  const actorUuid = String(item?.parent?.uuid ?? "");
+  if (!actorUuid) return false;
+  if (item?.type === "ability") return true;
+  if (item?.type !== "gear") return false;
+  return hasItemFreeSettingsFunction(item)
+    || isItemFreeSettingsUpdate(item, changes)
+    || environmentConditionActorIndex.has(actorUuid);
+}
+
+function collectActorPassiveEnvironmentConditions(actor) {
+  const conditionsByType = {
+    [ABILITY_CONDITION_TYPES.timeOfDay]: [],
+    [ABILITY_CONDITION_TYPES.illumination]: []
+  };
+  for (const item of getActorItemsWithActiveHudModules(actor)) {
+    const functions = item?.type === "ability"
+      ? item.system?.functions ?? []
+      : isActiveItemFreeSettingsItem(item)
+        ? item.system?.functions?.freeSettings?.entries ?? []
+        : [];
+    const entries = Array.isArray(functions) ? functions : Object.values(functions ?? {});
+    for (const entry of entries) {
+      if (entry?.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+      const rawConditions = entry?.conditions ?? (entry?.condition ? [entry.condition] : []);
+      const entryConditions = Array.isArray(rawConditions) ? rawConditions : Object.values(rawConditions ?? {});
+      if (entryConditions.some(condition => [
+        ABILITY_CONDITION_TYPES.eventReaction,
+        ABILITY_CONDITION_TYPES.itemUse
+      ].includes(condition?.type))) continue;
+      for (const condition of entryConditions) {
+        if (Object.hasOwn(conditionsByType, condition?.type)) conditionsByType[condition.type].push(condition);
+      }
+    }
+  }
+  return conditionsByType;
+}
+
 export async function syncLoadedActorAbilityEffects() {
   if (!game.user?.isActiveGM) return;
+  ensureEnvironmentConditionActorIndex();
   const actors = new Map();
   for (const actor of game.actors ?? []) actors.set(actor.uuid, { actor, context: {} });
   for (const token of canvas?.tokens?.placeables ?? []) {

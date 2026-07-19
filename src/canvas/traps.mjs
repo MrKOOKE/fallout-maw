@@ -13,7 +13,7 @@ import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, get
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
-import { analyzeLightingPoint } from "../stealth/index.mjs";
+import { analyzeLightingPoint } from "../stealth/lighting.mjs";
 import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import {
   isSystemEventCancelled,

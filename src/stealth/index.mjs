@@ -1,5 +1,7 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getStealthSettings } from "../settings/accessors.mjs";
+import { analyzeLightingPoint, analyzeTokenLighting } from "./lighting.mjs";
+export { analyzeLightingPoint } from "./lighting.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import { STEALTH_LIGHT_LEVELS } from "./settings.mjs";
@@ -223,7 +225,7 @@ export function computeStealthDifficulty(sourceToken, targetToken) {
   if (!sourceActor || !targetActor) return null;
 
   const settings = getStealthSettings();
-  const lighting = analyzeTokenLighting(sourceToken);
+  const lighting = getTokenLightingAnalysis(sourceToken);
   const modifiers = lighting.modifiers;
   const difficultySkillKey = String(settings.difficulty?.skillKey ?? "naturalist");
   const targetBase = Math.max(0, getActorSkillValue(targetActor, difficultySkillKey));
@@ -303,7 +305,7 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const lighting = analyzeTokenLighting(this.token);
+    const lighting = getTokenLightingAnalysis(this.token);
     const radius = calculateStealthRadius(lighting.effectiveDarkness, getStealthSettings(), this.actor);
     return {
       ...context,
@@ -1034,41 +1036,18 @@ function getDetectionMovementStateKey(pair) {
   ].join(":");
 }
 
-function analyzeTokenLighting(token) {
+function getTokenLightingAnalysis(token) {
   const settings = getStealthSettings();
-  const samples = getTokenLightingPoints(token).map(point => analyzeLightingPoint(point));
-  const brightest = samples.reduce(
-    (best, sample) => sample.effectiveDarkness < best.effectiveDarkness ? sample : best,
-    samples[0] ?? analyzeLightingPoint(getTokenCenter(token))
-  );
-  const effectiveDarkness = brightest.effectiveDarkness;
+  const measured = analyzeTokenLighting(token);
+  const effectiveDarkness = measured.effectiveDarkness;
   const modifiers = calculateLightingModifiers(effectiveDarkness, settings);
   return {
+    ...measured,
     effectiveDarkness,
     darknessLabel: effectiveDarkness.toFixed(2),
     darknessPercent: Math.round(effectiveDarkness * 100),
     condition: modifiers.condition,
     modifiers
-  };
-}
-
-export function analyzeLightingPoint(point) {
-  const elevatedPoint = {
-    x: Number(point?.x) || 0,
-    y: Number(point?.y) || 0,
-    elevation: Number(point?.elevation) || 0
-  };
-  const baseDarkness = clampNumber(
-    canvas?.effects?.getDarknessLevel?.(elevatedPoint) ?? canvas?.environment?.darknessLevel ?? canvas?.scene?.environment?.darknessLevel ?? 0,
-    0,
-    1
-  );
-  const darknessSourcePenalty = canvas?.effects?.testInsideDarkness?.(elevatedPoint) ? 1 : baseDarkness;
-  const lightIntensity = getPointLightIntensity(elevatedPoint, baseDarkness);
-  return {
-    baseDarkness,
-    effectiveDarkness: clampNumber(Math.max(baseDarkness, darknessSourcePenalty) - lightIntensity, 0, 1),
-    lightIntensity
   };
 }
 
@@ -1153,43 +1132,6 @@ function getRepresentativeDarkness(key, settings) {
   if (key === "bright") return (settings.thresholds.veryBrightMax + settings.thresholds.brightMax) / 2;
   if (key === "dim") return (settings.thresholds.brightMax + settings.thresholds.dimMax) / 2;
   return (settings.thresholds.dimMax + 1) / 2;
-}
-
-function getPointLightIntensity(point, baseDarkness) {
-  let intensity = getGlobalLightIntensity(point, baseDarkness);
-  const lightSources = canvas?.effects?.lightSources;
-  for (const source of lightSources?.values?.() ?? lightSources ?? []) {
-    if (!source?.active || isGlobalLightSource(source)) continue;
-    if (!source.testPoint?.(point)) continue;
-    intensity = Math.max(intensity, getLocalLightIntensity(source, point));
-  }
-  return clampNumber(intensity, 0, 1);
-}
-
-function getGlobalLightIntensity(point, baseDarkness) {
-  const globalLightSource = canvas?.environment?.globalLightSource;
-  if (!globalLightSource?.active) return 0;
-  const darkness = globalLightSource.data?.darkness ?? {};
-  const minimum = Number(darkness.min) || 0;
-  const maximum = Number.isFinite(Number(darkness.max)) ? Number(darkness.max) : 1;
-  if (baseDarkness < minimum || baseDarkness > maximum) return 0;
-  return canvas?.effects?.testInsideLight?.(point, { condition: source => isGlobalLightSource(source) }) ? 1 : 0;
-}
-
-function getLocalLightIntensity(source, point) {
-  const origin = source.origin ?? source;
-  const distance = Math.hypot(point.x - (Number(origin.x) || 0), point.y - (Number(origin.y) || 0));
-  const brightRadius = Math.max(0, Number(source.data?.bright) || 0);
-  const dimRadius = Math.max(brightRadius, Number(source.data?.dim) || Number(source.data?.radius) || 0);
-  if (brightRadius > 0 && distance <= brightRadius) return 1;
-  if (dimRadius <= 0 || distance > dimRadius) return 0;
-  if (dimRadius <= brightRadius) return 0.5;
-  const ratio = clampNumber((distance - brightRadius) / Math.max(1, dimRadius - brightRadius), 0, 1);
-  return 0.5 + ((1 - ratio) * 0.5);
-}
-
-function isGlobalLightSource(source) {
-  return source?.constructor?.name === "GlobalLightSource" || source?.name === "GlobalLight";
 }
 
 function updateDetectionVisualization(token) {
@@ -1553,12 +1495,6 @@ function getTokenCenter(token) {
     y: center.y,
     elevation: Number(center.elevation ?? token?.document?.elevation) || 0
   };
-}
-
-function getTokenLightingPoints(token) {
-  const points = token?.document?.getVisibilityTestPoints?.();
-  if (Array.isArray(points) && points.length) return points;
-  return [getTokenCenter(token)];
 }
 
 function isValidStealthObserver(hiddenToken, observerToken) {
