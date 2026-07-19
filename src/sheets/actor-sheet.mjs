@@ -67,7 +67,7 @@ import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
     openResearchTimeDialog,
   prepareResearchesForDisplay
 } from "../research/index.mjs";
-import { prepareOrganismDevelopmentForDisplay } from "../races/organism-development.mjs";
+import { prepareOrganismDevelopmentForDisplay, ORGANISM_DEVELOPMENT_LIMIT_EFFECT_KEY } from "../races/organism-development.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
   applyDestroyedLimbConsequences,
@@ -8489,6 +8489,10 @@ function buildEffectPathLabelMap({
     map.set(`system.limbs.${limbKey}.implantLimitBonus`, `${implantLimitLabel}: ${limbLabel}`);
     map.set(`system.limbs.${limbKey}.implantLimit`, `${implantLimitLabel}: ${limbLabel}`);
   }
+  map.set(
+    ORGANISM_DEVELOPMENT_LIMIT_EFFECT_KEY,
+    game.i18n.localize("FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentLimit")
+  );
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
   map.set("system.combat.burstStability", "Стабильность стрельбы очередью");

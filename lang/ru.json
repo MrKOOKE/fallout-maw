@@ -1939,6 +1939,7 @@
     "OrganismDevelopment": {
       "Title": "Развитие организма",
       "Threshold": "Порог для +1",
+      "Level": "Уровень развития",
       "Progress": "Прогресс"
     },
     "Advancement": {
@@ -2271,6 +2272,8 @@
         "SignatureSkillPoints": "Очков коронных навыков",
         "SkillPointsPerLevel": "Очков навыков за уровень",
         "OrganismDevelopmentThreshold": "Развитие организма: порог для +1",
+        "OrganismDevelopmentThresholdEmpty": "пусто = отключено",
+        "OrganismDevelopmentLimit": "Предел развития",
         "Title": "Типы и расы существ",
         "TraitPoints": "Очков особенностей",
         "TypeNamePlaceholder": "Например, гуманоид",

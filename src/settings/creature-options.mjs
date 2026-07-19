@@ -18,6 +18,7 @@ import { createDefaultNaturalItemSetEntry, normalizeNaturalItemSetEntries } from
 
 export const DEFAULT_BLEEDING_RESISTANCE_FORMULA = "0";
 export const DEFAULT_REGENERATION_FORMULA = "10 + con * 5";
+export const DEFAULT_ORGANISM_DEVELOPMENT_LIMIT = 50;
 
 export function createEmptyCreatureOptions() {
   return { types: [], races: [] };
@@ -42,7 +43,10 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
       researchPointsPerLevel: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
       proficiencyPointsPerLevel: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
     },
-    organismDevelopment: { threshold: 1 }
+    organismDevelopment: {
+      threshold: 1,
+      limit: DEFAULT_ORGANISM_DEVELOPMENT_LIMIT
+    }
   };
 }
 
@@ -149,9 +153,24 @@ function normalizeRaceCharacteristics(values = {}, characteristics = []) {
 }
 
 function normalizeOrganismDevelopmentSettings(value = {}) {
-  const threshold = Number(value?.threshold ?? 1);
+  const hasThresholdKey = value != null && Object.prototype.hasOwnProperty.call(value, "threshold");
+  let threshold = 1;
+  if (hasThresholdKey) {
+    const rawThreshold = value.threshold;
+    if (rawThreshold === "" || rawThreshold === null || rawThreshold === undefined) {
+      threshold = null;
+    } else {
+      const parsed = Number(rawThreshold);
+      threshold = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+  }
+
+  const parsedLimit = Number(value?.limit);
   return {
-    threshold: Number.isFinite(threshold) && threshold > 0 ? threshold : 1
+    threshold,
+    limit: Number.isFinite(parsedLimit) && parsedLimit >= 0
+      ? Math.trunc(parsedLimit)
+      : DEFAULT_ORGANISM_DEVELOPMENT_LIMIT
   };
 }
 

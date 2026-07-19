@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "26da6d91392a1027eef129f2be6ed769ccb9fbbf2efe242c0b6159bb482dc8ac",
-  "updatedAt": "2026-07-18T17:07:57.704Z",
+  "revision": "e187fe72b898515609c6be079ea6d6228ff060d07c123c137bc89bbdf0cb9ae8",
+  "updatedAt": "2026-07-19T09:08:01.971Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -25827,6 +25827,7 @@
               }
             ],
             "organismDevelopment": {
+              "limit": 50,
               "threshold": 1
             },
             "progression": {
@@ -27452,6 +27453,7 @@
               }
             ],
             "organismDevelopment": {
+              "limit": 50,
               "threshold": 1
             },
             "progression": {
@@ -49147,6 +49149,7 @@
               }
             ],
             "organismDevelopment": {
+              "limit": 50,
               "threshold": 1
             },
             "progression": {
@@ -50314,6 +50317,7 @@
               }
             ],
             "organismDevelopment": {
+              "limit": 50,
               "threshold": 1
             },
             "progression": {
@@ -51964,6 +51968,7 @@
               }
             ],
             "organismDevelopment": {
+              "limit": 50,
               "threshold": 1
             },
             "progression": {

@@ -25,6 +25,7 @@ import {
   TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
   TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY
 } from "./active-effect-changes.mjs";
+import { ORGANISM_DEVELOPMENT_LIMIT_EFFECT_KEY } from "../races/organism-development.mjs";
 import {
   getCharacteristicSettings,
   getCoverSettings,
@@ -107,6 +108,13 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildLimbMaxBonusEffectKeyTokens(),
     ...buildImplantLimitEffectKeyTokens(),
+    createEffectKeyToken({
+      code: "organismDevelopmentLimit",
+      key: "organismDevelopmentLimit",
+      label: game.i18n.localize("FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentLimit"),
+      path: ORGANISM_DEVELOPMENT_LIMIT_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.OrganismDevelopment.Title")
+    }),
     createEffectKeyToken({
       code: "blind",
       key: "blind",

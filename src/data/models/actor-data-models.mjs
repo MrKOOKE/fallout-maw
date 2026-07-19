@@ -32,6 +32,7 @@ import {
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../../config/defaults.mjs";
 import { createDefaultInventorySize } from "../../settings/creature-options.mjs";
+import { prepareActorOrganismDevelopmentLimitBase } from "../../races/organism-development.mjs";
 import { resourceField } from "./resources.mjs";
 import {
   CONSTRUCT_PART_MITIGATION_LIMB_KEY,
@@ -150,6 +151,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         researchPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA }),
         proficiencyPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA })
       }),
+      organismDevelopment: new SchemaField({
+        limit: new NumberField({ required: true, integer: true, min: 0, initial: 50, persisted: false })
+      }),
       development: developmentField()
     };
   }
@@ -157,6 +161,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   prepareBaseData() {
     this.resources ??= {};
     ensureReactionResourceBase(this.resources);
+    prepareActorOrganismDevelopmentLimitBase(this);
   }
 
   prepareDerivedData() {

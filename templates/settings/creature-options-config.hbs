@@ -141,7 +141,11 @@
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentThreshold"}}</span>
-            <input type="number" name="race.organismDevelopment.threshold" value="{{selectedRace.organismDevelopment.threshold}}" min="0.01" step="0.01">
+            <input type="number" name="race.organismDevelopment.threshold" value="{{#if selectedRace.organismDevelopment.threshold}}{{selectedRace.organismDevelopment.threshold}}{{/if}}" min="0.01" step="0.01" placeholder="{{localize "FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentThresholdEmpty"}}">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentLimit"}}</span>
+            <input type="number" name="race.organismDevelopment.limit" value="{{selectedRace.organismDevelopment.limit}}" min="0" step="1">
           </label>
         </div>
       </section>

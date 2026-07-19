@@ -1,9 +1,10 @@
 <section class="tab {{tabs.research.cssClass}} fallout-maw-research-tab" data-group="{{tabs.research.group}}" data-tab="{{tabs.research.id}}">
+  {{#if organismDevelopment.enabled}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.OrganismDevelopment.Title"}}</h2>
       <span class="fallout-maw-organism-development-threshold">
-        {{localize "FALLOUTMAW.OrganismDevelopment.Threshold"}}: {{organismDevelopment.thresholdLabel}}
+        {{localize "FALLOUTMAW.OrganismDevelopment.Level"}}: {{organismDevelopment.currentLabel}} / {{organismDevelopment.limitLabel}}
       </span>
     </div>
 
@@ -32,6 +33,7 @@
       {{/each}}
     </div>
   </section>
+  {{/if}}
 
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">

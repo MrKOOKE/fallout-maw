@@ -1879,6 +1879,7 @@
     "OrganismDevelopment": {
       "Title": "Organism Development",
       "Threshold": "Threshold for +1",
+      "Level": "Development Level",
       "Progress": "Progress"
     },
     "Advancement": {
@@ -2212,6 +2213,8 @@
         "SignatureSkillPoints": "Signature skill points",
         "SkillPointsPerLevel": "Skill points per level",
         "OrganismDevelopmentThreshold": "Organism development threshold for +1",
+        "OrganismDevelopmentThresholdEmpty": "empty = disabled",
+        "OrganismDevelopmentLimit": "Development Limit",
         "Title": "Creature Types and Races",
         "TraitPoints": "Trait points",
         "TypeNamePlaceholder": "For example, humanoid",

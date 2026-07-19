@@ -17,6 +17,7 @@ import {
   createDefaultRegeneration,
   createRaceDefaults,
   DEFAULT_BLEEDING_RESISTANCE_FORMULA,
+  DEFAULT_ORGANISM_DEVELOPMENT_LIMIT,
   DEFAULT_REGENERATION_FORMULA
 } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
@@ -734,6 +735,10 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       proficiencyPointsPerLevel: String(formData.race?.progression?.proficiencyPointsPerLevel ?? DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA).trim()
         || DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
     };
+    race.organismDevelopment = {
+      threshold: readOrganismDevelopmentThresholdFromForm(this.form, formData),
+      limit: readOrganismDevelopmentLimitFromForm(this.form, formData)
+    };
   }
 
   #readLimbsFromForm() {
@@ -1136,6 +1141,23 @@ function getUniqueId(baseId, existingIds) {
   let index = 2;
   while (used.has(`${baseId}${index}`)) index += 1;
   return `${baseId}${index}`;
+}
+
+function readOrganismDevelopmentThresholdFromForm(form, formData = {}) {
+  const rawThreshold = form?.querySelector('[name="race.organismDevelopment.threshold"]')?.value
+    ?? formData?.race?.organismDevelopment?.threshold;
+  if (rawThreshold === "" || rawThreshold === null || rawThreshold === undefined) return null;
+  const threshold = Number(rawThreshold);
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : null;
+}
+
+function readOrganismDevelopmentLimitFromForm(form, formData = {}) {
+  const rawLimit = form?.querySelector('[name="race.organismDevelopment.limit"]')?.value
+    ?? formData?.race?.organismDevelopment?.limit;
+  if (rawLimit === "" || rawLimit === null || rawLimit === undefined) {
+    return DEFAULT_ORGANISM_DEVELOPMENT_LIMIT;
+  }
+  return Math.max(0, toInteger(rawLimit));
 }
 
 function prepareNaturalItemSetRow(set = {}) {
