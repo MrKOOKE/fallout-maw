@@ -432,7 +432,10 @@ async function rollStealthCheck(sourceToken, targetToken, app = null, { animate 
       difficulty: difficulty.difficulty,
       situationalModifier: 0,
       advantage: difficulty.advantageCount > 0,
-      advantageCount: difficulty.advantageCount
+      advantageCount: difficulty.advantageCount,
+      actorToken: sourceToken,
+      targetToken,
+      targetActor: targetToken?.actor ?? null
     },
     messageData: result => isStealthCheckSuccess(result) ? createStealthSuccessMessageData(sourceToken.actor) : {}
   });

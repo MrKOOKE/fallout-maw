@@ -144,7 +144,9 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     try {
       const result = await performRepair({
         sourceActor: this.#sourceActor,
+        sourceToken: this.#sourceToken,
         targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
         itemId,
         instrumentId,
         methodIndex,
@@ -171,7 +173,9 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     try {
       const result = await performMassRepair({
         sourceActor: this.#sourceActor,
+        sourceToken: this.#sourceToken,
         targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
         toolKey: this.#toolKey,
         options
       });
@@ -389,7 +393,14 @@ function collectMassRepairInstrumentOptions(sourceActor, targetContext) {
     ));
 }
 
-async function performMassRepair({ sourceActor, targetContext, toolKey = "repair", options = {} } = {}) {
+async function performMassRepair({
+  sourceActor,
+  sourceToken = null,
+  targetContext,
+  targetToken = null,
+  toolKey = "repair",
+  options = {}
+} = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
     return undefined;
@@ -419,7 +430,9 @@ async function performMassRepair({ sourceActor, targetContext, toolKey = "repair
       summary.attempted += 1;
       const result = await performRepair({
         sourceActor,
+        sourceToken,
         targetContext: workingContext,
+        targetToken,
         itemId: currentItem.id,
         instrumentId: selection.instrumentId,
         methodIndex: selection.methodIndex,
@@ -483,7 +496,9 @@ function chooseBestRepairOption(sourceActor, item, options = {}) {
 
 async function performRepair({
   sourceActor,
+  sourceToken = null,
   targetContext,
+  targetToken = null,
   itemId,
   instrumentId,
   methodIndex = 0,
@@ -526,6 +541,9 @@ async function performRepair({
 
   const result = await runRepairChecks({
     sourceActor,
+    sourceToken,
+    targetContext,
+    targetToken,
     repairItem,
     method,
     tool,
@@ -573,10 +591,24 @@ async function performRepair({
   };
 }
 
-async function runRepairChecks({ sourceActor, repairItem, method, tool, initialValue, maxValue }) {
+async function runRepairChecks({
+  sourceActor,
+  sourceToken = null,
+  targetContext,
+  targetToken = null,
+  repairItem,
+  method,
+  tool,
+  initialValue,
+  maxValue
+}) {
   const progressPerCheck = Math.max(1, Math.ceil(maxValue * REPAIR_PROGRESS_STEP_RATIO));
   const missingValue = Math.max(0, maxValue - initialValue);
   const totalChecks = Math.max(1, Math.ceil(missingValue / progressPerCheck));
+  const targetDocument = targetToken?.actor ?? (targetContext?.actorUuid
+    ? await fromUuid(targetContext.actorUuid).catch(() => null)
+    : null);
+  const targetActor = targetDocument?.documentName === "Actor" ? targetDocument : null;
   let currentValue = initialValue;
   let availableCharges = toInteger(tool.supply?.value);
   let spentCharges = 0;
@@ -594,7 +626,12 @@ async function runRepairChecks({ sourceActor, repairItem, method, tool, initialV
     const outcome = await requestSkillCheck({
       actor: sourceActor,
       skillKey: DEFAULT_REPAIR_SKILL_KEY,
-      data: { difficulty },
+      data: {
+        difficulty,
+        actorToken: sourceToken?.object ?? sourceToken,
+        targetActor,
+        targetToken: targetToken?.object ?? targetToken
+      },
       animate: false,
       createMessage: true,
       prompt: false,

@@ -77,7 +77,8 @@ export async function applyResearchTime(actor, researchId, duration = {}, option
       },
       entries: Array.from({ length: checks }, () => ({
         data: {
-          difficulty: research.difficulty
+          difficulty: research.difficulty,
+          allowImplicitTarget: false
         }
       }))
     });

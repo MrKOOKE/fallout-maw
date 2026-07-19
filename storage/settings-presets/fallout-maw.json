@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "f10cbd7afd6af44c5a8df08232a669912f52c6a33311420e8d0aa5ba0dec55ea",
-  "updatedAt": "2026-07-17T15:58:12.606Z",
+  "revision": "26da6d91392a1027eef129f2be6ed769ccb9fbbf2efe242c0b6159bb482dc8ac",
+  "updatedAt": "2026-07-18T17:07:57.704Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3974,9 +3974,22 @@
                           "attackActionKeys": [
                             "meleeAttack"
                           ],
+                          "eventKey": "",
+                          "executionTiming": "activation",
                           "executorMode": "targets",
                           "fixedActionPointCost": 0,
                           "id": "o0eHtaXDOfkfOP4M-application-weapon-attack",
+                          "mutationBounds": "resource",
+                          "mutationFormula": "0",
+                          "mutationFormulaBinding": "carrier",
+                          "mutationInputs": [],
+                          "mutationMaximumFormula": "",
+                          "mutationMinimumFormula": "",
+                          "mutationOperation": "add",
+                          "mutationRounding": "none",
+                          "mutationTargetBinding": "carrier",
+                          "mutationTargetPath": "",
+                          "relationFilters": [],
                           "routeAutoRotate": false,
                           "routeBudgetEvaluation": "executor",
                           "routeBudgetFormula": "0",
@@ -4070,9 +4083,22 @@
                           "attackActionKeys": [
                             "snapshot"
                           ],
+                          "eventKey": "",
+                          "executionTiming": "activation",
                           "executorMode": "targets",
                           "fixedActionPointCost": 0,
                           "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
+                          "mutationBounds": "resource",
+                          "mutationFormula": "0",
+                          "mutationFormulaBinding": "carrier",
+                          "mutationInputs": [],
+                          "mutationMaximumFormula": "",
+                          "mutationMinimumFormula": "",
+                          "mutationOperation": "add",
+                          "mutationRounding": "none",
+                          "mutationTargetBinding": "carrier",
+                          "mutationTargetPath": "",
+                          "relationFilters": [],
                           "routeAutoRotate": false,
                           "routeBudgetEvaluation": "executor",
                           "routeBudgetFormula": "0",
@@ -4166,9 +4192,22 @@
                           "attackActionKeys": [
                             "all"
                           ],
+                          "eventKey": "",
+                          "executionTiming": "activation",
                           "executorMode": "targets",
                           "fixedActionPointCost": 0,
                           "id": "u6NqPLJYeinNzWNF-movement-route-route-action",
+                          "mutationBounds": "resource",
+                          "mutationFormula": "0",
+                          "mutationFormulaBinding": "carrier",
+                          "mutationInputs": [],
+                          "mutationMaximumFormula": "",
+                          "mutationMinimumFormula": "",
+                          "mutationOperation": "add",
+                          "mutationRounding": "none",
+                          "mutationTargetBinding": "carrier",
+                          "mutationTargetPath": "",
+                          "relationFilters": [],
                           "routeAutoRotate": false,
                           "routeBudgetEvaluation": "source",
                           "routeBudgetFormula": "2+spe/25",
@@ -4226,6 +4265,33 @@
                       "type": "activeApplication"
                     }
                   ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>В начале каждого хода врага или нейтрала — половину его Очков действий в качестве Очков реакции.</p></li><li><p>1 Помеху на все атакующие действия, направленные против неё.</p></li></ul>",
+                "id": "NkiGbyyLv05RZaGK",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Звёздный час",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "NkiGbyyLv05RZaGK-speech-requirement",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
                 },
                 "visible": true
               }

@@ -82,7 +82,16 @@ export async function useFirstAidItem({
     ...(inheritedChainRef ? { chainRef: inheritedChainRef } : {})
   };
 
-  const checkResult = await rollFirstAidCheck(sourceActor, targetContext, firstAid, item, inheritedChainRef);
+  const checkResult = await rollFirstAidCheck({
+    sourceActor,
+    targetActor,
+    sourceToken,
+    targetToken,
+    targetContext,
+    firstAid,
+    item,
+    chainRef: inheritedChainRef
+  });
   const resultKey = checkResult?.result?.key ?? "success";
   if (resultKey === "criticalFailure") {
     await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
@@ -333,7 +342,16 @@ function scaleSignedValue(value, multiplier = 1) {
   return number < 0 ? -finalValue : finalValue;
 }
 
-async function rollFirstAidCheck(sourceActor, targetContext = null, firstAid = {}, item = null, chainRef = null) {
+async function rollFirstAidCheck({
+  sourceActor = null,
+  targetActor = null,
+  sourceToken = null,
+  targetToken = null,
+  targetContext = null,
+  firstAid = {},
+  item = null,
+  chainRef = null
+} = {}) {
   const difficulty = Math.max(0, toInteger(firstAid.difficulty));
   if (!difficulty) return null;
   const skillKey = targetContext?.isConstruct ? "repair" : "firstAid";
@@ -341,7 +359,10 @@ async function rollFirstAidCheck(sourceActor, targetContext = null, firstAid = {
     actor: sourceActor,
     skillKey,
     data: {
-      difficulty
+      difficulty,
+      actorToken: sourceToken?.object ?? sourceToken,
+      targetToken: targetToken?.object ?? targetToken,
+      targetActor
     },
     animate: false,
     requester: item?.name ?? "",

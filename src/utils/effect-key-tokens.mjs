@@ -19,6 +19,7 @@ import {
   DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
   INITIATIVE_DISADVANTAGE_EFFECT_KEY,
+  getReverseEffectKey,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS,
   TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
@@ -136,7 +137,8 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildCoverBonusPercentEffectKeyTokens(),
     ...buildDodgeResourceEffectKeyTokens(),
     ...buildSuppressionEffectKeyTokens(),
-    ...buildCombatEffectKeyTokens()
+    ...buildCombatEffectKeyTokens(),
+    ...buildReverseInteractionEffectKeyTokens()
   ];
 
   if (includeFirstAidHealing) {
@@ -563,6 +565,126 @@ export function buildCombatEffectKeyTokens() {
       group: "Лечение"
     })
   ].filter(Boolean);
+}
+
+export function buildReverseInteractionEffectKeyTokens() {
+  const reversePenetrationActionKeys = new Set([
+    "aimedShot",
+    "snapshot",
+    "burst",
+    "volley",
+    "meleeAttack",
+    "aimedMeleeAttack"
+  ]);
+  const attackingPenetrationPaths = new Set(Array.from(reversePenetrationActionKeys)
+    .map(actionKey => `system.penetration.actions.${actionKey}`));
+  const sourceTokens = [
+    ...getSkillSettings().map(entry => createEffectKeyToken({
+      code: entry.abbr || entry.key,
+      key: entry.key,
+      label: entry.label,
+      path: `system.skills.${entry.key}.bonus`,
+      group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+    })),
+    ...buildSkillAdvantageEffectKeyTokens(),
+    ...buildSkillDisadvantageEffectKeyTokens(),
+    buildAllSkillsEffectKeyToken(),
+    buildAllSkillsAdvantageEffectKeyToken(),
+    buildAllSkillsDisadvantageEffectKeyToken(),
+    buildAllCombatAdvantageEffectKeyToken(),
+    buildAllCombatDisadvantageEffectKeyToken(),
+    ...buildCombatAttackAdvantageEffectKeyTokens().filter(token => !token.path.includes(".volley.")),
+    ...buildCombatAttackDisadvantageEffectKeyTokens().filter(token => !token.path.includes(".volley.")),
+    createEffectKeyToken({
+      code: "allAttackPenetration",
+      key: "allAttackPenetration",
+      label: game.i18n.localize("FALLOUTMAW.Effects.ReverseAllPenetration"),
+      path: "system.penetration.actions.all",
+      group: game.i18n.localize("FALLOUTMAW.Effects.ReverseGroup")
+    }),
+    ...buildActionPenetrationEffectKeyTokens().filter(token => attackingPenetrationPaths.has(token?.path)),
+    ...buildCombatEffectKeyTokens().filter(token => [
+      "system.combat.accuracy",
+      "system.combat.criticalChance",
+      "system.combat.damageFlat",
+      "system.combat.damagePercent",
+      "system.combat.burstStability",
+      "system.combat.finishingBlow",
+      "system.combat.finishingBlowChance"
+    ].includes(token?.path))
+  ].filter(Boolean);
+  const group = game.i18n.localize("FALLOUTMAW.Effects.ReverseGroup");
+  return sourceTokens.map(token => createEffectKeyToken({
+    code: `${token.code}:reverse`,
+    key: `reverse.${token.key}`,
+    label: getReverseInteractionEffectLabel(token),
+    path: getReverseEffectKey(token.path),
+    group
+  })).filter(Boolean);
+}
+
+function getReverseInteractionEffectLabel(token = {}) {
+  const path = String(token?.path ?? "");
+  const skillMatch = path.match(/^system\.skills\.([^.]+)\.(bonus|advantage|disadvantage)$/);
+  if (skillMatch) {
+    const [, skillKey, field] = skillMatch;
+    const fieldLabel = localizeReverseModifierField(field);
+    if (skillKey === "all") {
+      return game.i18n.format("FALLOUTMAW.Effects.ReverseAllSkillChecks", { modifier: fieldLabel });
+    }
+    const skill = getSkillSettings().find(entry => entry.key === skillKey);
+    return game.i18n.format("FALLOUTMAW.Effects.ReverseSkillCheck", {
+      skill: String(skill?.label ?? skillKey),
+      modifier: fieldLabel
+    });
+  }
+
+  if (path === ALL_COMBAT_ADVANTAGE_EFFECT_KEY || path === ALL_COMBAT_DISADVANTAGE_EFFECT_KEY) {
+    return game.i18n.format("FALLOUTMAW.Effects.ReverseAllCombat", {
+      modifier: localizeReverseModifierField(path.endsWith(".advantage") ? "advantage" : "disadvantage")
+    });
+  }
+
+  const actionMatch = path.match(/^system\.combat\.actions\.([^.]+)\.(advantage|disadvantage)$/);
+  if (actionMatch) {
+    const [, actionKey, field] = actionMatch;
+    const action = getAttackingWeaponActionEntries().find(entry => entry.key === actionKey);
+    return game.i18n.format("FALLOUTMAW.Effects.ReverseCombatAction", {
+      action: String(action?.actionLabel ?? action?.label ?? actionKey),
+      modifier: localizeReverseModifierField(field)
+    });
+  }
+
+  const penetrationMatch = path.match(/^system\.penetration\.actions\.([^.]+)$/);
+  if (penetrationMatch) {
+    const actionKey = penetrationMatch[1];
+    if (actionKey === "all") return game.i18n.localize("FALLOUTMAW.Effects.ReverseAllPenetration");
+    const action = getAttackingWeaponActionEntries().find(entry => entry.key === actionKey);
+    return game.i18n.format("FALLOUTMAW.Effects.ReversePenetration", {
+      action: String(action?.actionLabel ?? action?.label ?? actionKey)
+    });
+  }
+
+  const combatLabels = {
+    "system.combat.accuracy": "FALLOUTMAW.Effects.ReverseAccuracy",
+    "system.combat.criticalChance": "FALLOUTMAW.Effects.ReverseCriticalChance",
+    "system.combat.damageFlat": "FALLOUTMAW.Effects.ReverseDamageFlat",
+    "system.combat.damagePercent": "FALLOUTMAW.Effects.ReverseDamagePercent",
+    "system.combat.burstStability": "FALLOUTMAW.Effects.ReverseBurstStability",
+    "system.combat.finishingBlow": "FALLOUTMAW.Effects.ReverseFinishingBlow",
+    "system.combat.finishingBlowChance": "FALLOUTMAW.Effects.ReverseFinishingBlowChance"
+  };
+  const localizationKey = combatLabels[path];
+  return localizationKey ? game.i18n.localize(localizationKey) : String(token?.label ?? path);
+}
+
+function localizeReverseModifierField(field = "") {
+  const localizationKey = {
+    bonus: "FALLOUTMAW.Actor.Bonus",
+    advantage: "FALLOUTMAW.Effects.CombatAdvantage",
+    disadvantage: "FALLOUTMAW.Effects.CombatDisadvantage"
+  }[field];
+  return localizationKey ? game.i18n.localize(localizationKey).toLocaleLowerCase() : field;
 }
 
 export function buildSuppressionEffectKeyTokens() {

@@ -4,7 +4,14 @@ import { getSkillSettings } from "../settings/accessors.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { getActorCombatAttackEdgeCount, getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
+import {
+  ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+  getActorCombatAttackEdgeCount,
+  getActorSmartFudgeResult,
+  getCombatAttackAdvantageEffectKey,
+  getCombatAttackDisadvantageEffectKey
+} from "../utils/active-effect-changes.mjs";
 import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import { notifyAbilityTriggerCostFailure } from "../abilities/trigger-cost-runtime.mjs";
@@ -556,7 +563,7 @@ function prepareSkillCheckBatchEntries({ actor, skillKey = "", entries = [] } = 
 function createSkillCheckEventContext(actor, skill, data = {}, { source = {}, rawData = {} } = {}) {
   const sourceToken = getTokenDocument(data.actorToken);
   const targetToken = getTokenDocument(data.targetToken);
-  const targetActor = data.targetActor ?? targetToken?.actor ?? null;
+  const targetActor = targetToken?.actor ?? data.targetActor ?? null;
   const itemUuid = String(
     source?.itemUuid
     ?? rawData?.itemUuid
@@ -1289,6 +1296,7 @@ function normalizeRequestData(data, requester = "") {
     advantageCount: advantage ? Math.max(1, toInteger(data.advantageCount)) : 0,
     disadvantageCount: disadvantage ? Math.max(1, toInteger(data.disadvantageCount)) : 0,
     requester: String(requester ?? ""),
+    allowImplicitTarget: data.allowImplicitTarget !== false,
     actorToken: data.actorToken ?? null,
     targetToken: data.targetToken ?? null,
     targetActor: data.targetActor ?? null,
@@ -1322,12 +1330,21 @@ function createMutableCheck(actor, skill, data) {
     alternateKeys: ["system.skills.all.disadvantage"]
   });
   const weaponActionKey = String(data.weaponActionKey ?? context.weaponActionKey ?? "").trim();
-  const isAttackingWeaponCheck = String(data.requester ?? "") === "weaponAttack" && isAttackingWeaponAction(weaponActionKey);
-  const combatAdvantage = isAttackingWeaponCheck
-    ? getActorCombatAttackEdgeCount(actor, weaponActionKey, "advantage")
+  const isAttackingCheck = ["weaponAttack", "weaponPush", "activePush"].includes(String(data.requester ?? ""))
+    && isAttackingWeaponAction(weaponActionKey);
+  const combatAdvantage = isAttackingCheck
+    ? getContextualAbilityChangeValue(actor, getCombatAttackAdvantageEffectKey(weaponActionKey), {
+      ...context,
+      baseValue: getActorCombatAttackEdgeCount(actor, weaponActionKey, "advantage"),
+      alternateKeys: [ALL_COMBAT_ADVANTAGE_EFFECT_KEY]
+    })
     : 0;
-  const combatDisadvantage = isAttackingWeaponCheck
-    ? getActorCombatAttackEdgeCount(actor, weaponActionKey, "disadvantage")
+  const combatDisadvantage = isAttackingCheck
+    ? getContextualAbilityChangeValue(actor, getCombatAttackDisadvantageEffectKey(weaponActionKey), {
+      ...context,
+      baseValue: getActorCombatAttackEdgeCount(actor, weaponActionKey, "disadvantage"),
+      alternateKeys: [ALL_COMBAT_DISADVANTAGE_EFFECT_KEY]
+    })
     : 0;
   return {
     actor,
@@ -1357,10 +1374,10 @@ function createMutableCheck(actor, skill, data) {
 
 function resolveSkillCheckContext(actor, data = {}) {
   const explicitTargetToken = data?.targetToken ?? null;
-  const userTargetToken = getSingleUserTarget();
+  const userTargetToken = data?.allowImplicitTarget === false ? null : getSingleUserTarget();
   const selectedTargetToken = explicitTargetToken
     ?? (!data?.targetActor || userTargetToken?.actor === data.targetActor ? userTargetToken : null);
-  const targetActor = data?.targetActor ?? selectedTargetToken?.actor ?? null;
+  const targetActor = selectedTargetToken?.actor ?? data?.targetActor ?? null;
   const actorToken = data?.actorToken ?? getActorContextToken(actor);
   return {
     actorToken,

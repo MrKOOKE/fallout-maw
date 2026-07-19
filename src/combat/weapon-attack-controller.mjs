@@ -60,7 +60,14 @@ import {
   getWeaponActionBlockState,
   hasActorFixedAbilityFunction
 } from "../abilities/runtime-state.mjs";
-import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import {
+  applyPreparedSourceContextualAbilityChanges,
+  getContextualAbilityChangeValue,
+  getPreparedSourceContextualAbilityChanges,
+  getSourceContextualAbilityChangeValue,
+  getTargetReverseAbilityChangeValue,
+  mergePreparedSourceContextualAbilityChanges
+} from "../abilities/evaluation.mjs";
 import {
   getAuraRelation,
   hasAuraLineOfSight,
@@ -120,6 +127,7 @@ const SKILL_ALIASES = Object.freeze({
   prc: "resilience"
 });
 const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
+const ALL_ACTION_PENETRATION_KEY = `${ACTION_PENETRATION_KEY_PREFIX}all`;
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
@@ -2155,6 +2163,15 @@ export async function armDelayedVolleyWeapon({ token = null, weapon = null, weap
     radiusPixels: metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId)),
     shapePoints: []
   };
+  const damageContext = {
+    actor: token.actor,
+    actorToken: token,
+    token,
+    actionKey: VOLLEY_ACTION_KEY,
+    weaponActionKey: VOLLEY_ACTION_KEY,
+    weaponData: getWeaponAttackData(weapon, weaponFunctionId),
+    weaponFunctionId
+  };
   const regionRequest = buildDelayedVolleyExplosionRegionRequest({
     sceneId,
     delayedThrownItemId,
@@ -2165,14 +2182,8 @@ export async function armDelayedVolleyWeapon({ token = null, weapon = null, weap
     attackerToken: token,
     finalGeometries: [geometry],
     blastOutcomes: [{}],
-    baseDamage: getWeaponDamage(weapon, weaponFunctionId, {
-      actor: token.actor,
-      actorToken: token,
-      token,
-      actionKey: VOLLEY_ACTION_KEY,
-      weaponActionKey: VOLLEY_ACTION_KEY,
-      weaponFunctionId
-    }),
+    baseDamage: getWeaponDamage(weapon, weaponFunctionId, damageContext),
+    damageContext,
     attachmentTokenId: token.id
   });
   const region = await requestCreateDelayedVolleyExplosionRegion(regionRequest);
@@ -2204,7 +2215,7 @@ export function buildWeaponExplosionDamageRequests({
     : 1;
   const falloffDamage = Math.round(Math.max(0, Number(baseDamage) || 0) * falloff);
   const damageAmount = Math.max(0, Math.round(Number(
-    typeof damageModifier === "function" ? damageModifier(falloffDamage) : falloffDamage
+    typeof damageModifier === "function" ? damageModifier(falloffDamage, { falloff }) : falloffDamage
   ) || 0));
   const pelletDamages = distributeIntegerAmount(damageAmount, Array(Math.max(1, toInteger(pelletCount))).fill(1));
   const normalizedTypes = normalizeExplosionDamageTypes(damageTypes);
@@ -2227,6 +2238,7 @@ export function buildWeaponExplosionDamageRequests({
         scope: "healthAndLimb",
         source: {
           ...source,
+          targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
           penetrationPower,
           pelletIndex
         }
@@ -2470,15 +2482,18 @@ class WeaponAttackController {
 
   stampAttackDamageSources(requests = []) {
     const attackId = String(this.attackId ?? "").trim();
-    if (!attackId) return Array.isArray(requests) ? requests : [requests];
+    const weaponDataSnapshot = foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {});
     return (Array.isArray(requests) ? requests : [requests]).filter(Boolean).map(request => ({
       ...request,
       source: {
         ...(request?.source ?? {}),
-        attackId,
+        ...(attackId ? { attackId } : {}),
+        attackerTokenUuid: request?.source?.attackerTokenUuid ?? this.token?.document?.uuid ?? "",
         chainRef: request?.source?.chainRef ?? this.chainRef,
         damageHubOperationRef: request?.source?.damageHubOperationRef ?? this.damageHubOperationRef,
-        systemEventOperationId: String(request?.source?.systemEventOperationId ?? attackId)
+        systemEventOperationId: String(request?.source?.systemEventOperationId ?? attackId),
+        weaponFunctionId: request?.source?.weaponFunctionId ?? this.weaponFunctionId,
+        weaponData: foundry.utils.deepClone(request?.source?.weaponData ?? weaponDataSnapshot)
       }
     }));
   }
@@ -3206,9 +3221,9 @@ class WeaponAttackController {
       this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const result = await this.resolveAttackPellets({
         checkBatch,
-        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor),
         attackIndex,
-        attackCount: totalAttackCount
+        attackCount: totalAttackCount,
+        burstAttackIndex: attackIndex
       });
       await this.dodgeExposure.flush();
       for (const trajectory of result.trajectories) {
@@ -3349,7 +3364,6 @@ class WeaponAttackController {
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       if (this.attackCanceledByReaction) break;
-      const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
       const shotCount = Math.max(1, toInteger(pelletCount));
       const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(shotCount).fill(1));
       const animationTrajectory = buildConeAnimationTrajectory(this.geometry);
@@ -3364,7 +3378,9 @@ class WeaponAttackController {
           const totalPelletCount = totalAttackCount * pelletDamages.length;
           const request = await this.resolveAttackAgainstTarget(target, {
             damageAmount,
-            difficultyBonus,
+            damageShareIndex: pelletIndex,
+            damageShareCount: pelletDamages.length,
+            burstAttackIndex: attackIndex,
             penetrationStep: 0,
             checkBatch,
             allOrNothingContext: this.createAllOrNothingAttackContext({
@@ -3550,7 +3566,6 @@ class WeaponAttackController {
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       if (this.attackCanceledByReaction) break;
-      const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
       const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(Math.max(1, toInteger(pelletCount))).fill(1));
 
       for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
@@ -3568,7 +3583,9 @@ class WeaponAttackController {
           checkBatch,
           trajectory,
           baseDamage: pelletDamages[pelletIndex] ?? 0,
-          difficultyBonus,
+          damageShareIndex: pelletIndex,
+          damageShareCount: pelletDamages.length,
+          burstAttackIndex: attackIndex,
           allOrNothingContext: this.createAllOrNothingAttackContext({
             mode: "burst",
             index: projectileIndex,
@@ -3682,6 +3699,8 @@ class WeaponAttackController {
           forceAimed: index === 0,
           checkBatch,
           baseDamage: pelletDamages[index] ?? 0,
+          damageShareIndex: index,
+          damageShareCount: trajectories.length,
           allOrNothingContext: this.createAllOrNothingAttackContext({
             mode: trajectories.length > 1 || duplicatePlan.cycles > 1 ? "pellet" : "",
             index: (cycleIndex * trajectories.length) + index,
@@ -3726,7 +3745,14 @@ class WeaponAttackController {
     });
   }
 
-  async resolveAimedPelletTrajectory(selectedTarget, trajectory, targetSelection, { forceAimed = false, baseDamage = null, checkBatch = null, allOrNothingContext = null } = {}) {
+  async resolveAimedPelletTrajectory(selectedTarget, trajectory, targetSelection, {
+    forceAimed = false,
+    baseDamage = null,
+    damageShareIndex = 0,
+    damageShareCount = 1,
+    checkBatch = null,
+    allOrNothingContext = null
+  } = {}) {
     if (forceAimed || doesTrajectoryHitTarget(this.token, selectedTarget, trajectory)) {
       const blockerCount = this.ignoreAimedObstructions
         ? 0
@@ -3734,6 +3760,8 @@ class WeaponAttackController {
       return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
         blockerBonus: getAimedTargetBlockerBonus(blockerCount),
         baseDamage,
+        damageShareIndex,
+        damageShareCount,
         checkBatch,
         allOrNothingContext
       });
@@ -3743,6 +3771,8 @@ class WeaponAttackController {
       checkBatch,
       trajectory,
       baseDamage,
+      damageShareIndex,
+      damageShareCount,
       allOrNothingContext
     });
   }
@@ -3830,7 +3860,6 @@ class WeaponAttackController {
     const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", this.getWeaponDamage(), this.weaponFunctionId, {
       percentBaseAmount: this.getWeaponDamagePercentBase()
     });
-    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
@@ -3840,6 +3869,7 @@ class WeaponAttackController {
     ));
 
     let penetrationsUsed = 0;
+    let lastPenetrationPower = 0;
     let finalAnimationPoint = null;
     let hasSuccessfulHit = false;
 
@@ -3859,12 +3889,14 @@ class WeaponAttackController {
     if (firstRequest.length) {
       damageRequests.push(...firstRequest);
       hasSuccessfulHit = true;
-      if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, { type: "limb", limbKey })) penetrationsUsed += 1;
+      lastPenetrationPower = getDamageRequestGroupPenetrationPower(firstRequest);
+      const resolvedFirstLimbKey = limbKey || getSingleDamageRequestLimbKey(firstRequest);
+      if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, { type: "limb", limbKey: resolvedFirstLimbKey })) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
       const passthroughStep = hasSuccessfulHit ? penetrationsUsed : 0;
-      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower)) break;
+      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > lastPenetrationPower)) break;
       const damageAmount = getPenetratedDamageAmount(baseDamage, passthroughStep);
       if (damageAmount <= 0) break;
 
@@ -3884,7 +3916,8 @@ class WeaponAttackController {
       damageRequests.push(...request);
       hasSuccessfulHit = true;
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
-      if (penetrationsUsed >= penetrationPower) break;
+      lastPenetrationPower = getDamageRequestGroupPenetrationPower(request);
+      if (penetrationsUsed >= lastPenetrationPower) break;
 
       const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
       if (!doesDamageRequestGroupPenetratePart(request, entry.target.actor, { type: "limb", limbKey: resolvedLimbKey })) break;
@@ -3961,17 +3994,22 @@ class WeaponAttackController {
     }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
       targetToken: target,
-      limbKey: resolvedLimbKey
+      limbKey: resolvedLimbKey,
+      damageShareCount: 1
     }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
+      attackerToken: this.token,
       actor: target.actor,
+      targetToken: target,
       limbKey: resolvedLimbKey,
       amount: damageAmount,
       source: {
         weaponUuid: this.weapon.uuid,
+        weaponFunctionId: this.weaponFunctionId,
+        weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
@@ -3980,11 +4018,25 @@ class WeaponAttackController {
     }, this.weaponFunctionId);
   }
 
-  async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, { blockerBonus = 0, baseDamage = null, checkBatch = null, allOrNothingContext = null } = {}) {
+  async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
+    blockerBonus = 0,
+    baseDamage = null,
+    damageShareIndex = 0,
+    damageShareCount = 1,
+    checkBatch = null,
+    allOrNothingContext = null
+  } = {}) {
     const damageRequests = [];
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
-    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
-    checkBatch ??= penetrationPower > 0
+    const selectedPenetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+      actor: this.token.actor,
+      actorToken: this.token,
+      actionKey: this.actionKey,
+      targetActor: selectedTarget.actor,
+      targetToken: selectedTarget,
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId)
+    });
+    checkBatch ??= selectedPenetrationPower > 0
       ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -3999,6 +4051,7 @@ class WeaponAttackController {
     ));
 
     let penetrationsUsed = 0;
+    let lastPenetrationPower = 0;
     let finalAnimationPoint = null;
     let hasSuccessfulHit = false;
 
@@ -4006,15 +4059,18 @@ class WeaponAttackController {
       ? await this.resolveAimedWeaponAttackAgainstTarget(selectedTarget, targetSelection, {
         baseDamage,
         damageAmount: getPenetratedDamageAmount(baseDamage, 0),
+        damageShareIndex,
+        damageShareCount,
         difficultyBonus: blockerBonus,
         penetrationStep: 0,
-        penetrationPower,
         checkBatch,
         allOrNothingContext
       })
       : await this.resolveAimedAttackAgainstTarget(selectedTarget, {
         limbKey: targetSelection?.limbKey ?? "",
         damageAmount: getPenetratedDamageAmount(baseDamage, 0),
+        damageShareIndex,
+        damageShareCount,
         difficultyBonus: blockerBonus,
         penetrationStep: 0,
         checkBatch,
@@ -4029,17 +4085,20 @@ class WeaponAttackController {
     if (firstRequest.length) {
       damageRequests.push(...firstRequest);
       hasSuccessfulHit = true;
+      lastPenetrationPower = getDamageRequestGroupPenetrationPower(firstRequest, selectedPenetrationPower);
       if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, targetSelection)) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
       const passthroughStep = hasSuccessfulHit ? penetrationsUsed : 0;
-      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower)) break;
+      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > lastPenetrationPower)) break;
       const damageAmount = getPenetratedDamageAmount(baseDamage, passthroughStep);
       if (damageAmount <= 0) break;
 
       const request = await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
+        damageShareIndex,
+        damageShareCount,
         difficultyBonus: passthroughStep * 20,
         penetrationStep: passthroughStep,
         checkBatch,
@@ -4059,7 +4118,8 @@ class WeaponAttackController {
       damageRequests.push(...request);
       hasSuccessfulHit = true;
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
-      if (penetrationsUsed >= penetrationPower) break;
+      lastPenetrationPower = getDamageRequestGroupPenetrationPower(request);
+      if (penetrationsUsed >= lastPenetrationPower) break;
 
       const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
       if (!doesDamageRequestGroupPenetratePart(request, entry.target.actor, { type: "limb", limbKey: resolvedLimbKey })) break;
@@ -4073,7 +4133,7 @@ class WeaponAttackController {
     return { damageRequests, trajectory, checkBatch };
   }
 
-  async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0, attackIndex = 0, attackCount = 1 } = {}) {
+  async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0, attackIndex = 0, attackCount = 1, burstAttackIndex = 0 } = {}) {
     const damageRequests = [];
     const trajectories = buildAttackTrajectories(this.token, this.geometry, this.targets, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
     const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), trajectories.map(() => 1));
@@ -4086,7 +4146,10 @@ class WeaponAttackController {
         checkBatch,
         trajectory,
         baseDamage: pelletDamages[index] ?? 0,
+        damageShareIndex: index,
+        damageShareCount: trajectories.length,
         difficultyBonus,
+        burstAttackIndex,
         allOrNothingContext: this.createAllOrNothingAttackContext({
           mode: trajectories.length > 1 ? "pellet" : "",
           index: (Math.max(0, toInteger(attackIndex)) * trajectories.length) + index,
@@ -4100,13 +4163,21 @@ class WeaponAttackController {
     return { attempted, damageRequests, trajectories };
   }
 
-  async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null, difficultyBonus = 0, allOrNothingContext = null } = {}) {
+  async resolveAttackTrajectory({
+    checkBatch = null,
+    trajectory = null,
+    baseDamage = null,
+    damageShareIndex = 0,
+    damageShareCount = 1,
+    difficultyBonus = 0,
+    burstAttackIndex = 0,
+    allOrNothingContext = null
+  } = {}) {
     const damageRequests = [];
     trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
     if (!this.targets.length && !Array.isArray(trajectory?.segments)) return { attempted: true, damageRequests, trajectory };
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
-    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     let penetrationsUsed = 0;
     let attempted = true;
     let finalAnimationPoint = null;
@@ -4118,7 +4189,10 @@ class WeaponAttackController {
       if (damageAmount <= 0) break;
       const request = await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
+        damageShareIndex,
+        damageShareCount,
         difficultyBonus: Math.max(0, toInteger(difficultyBonus)) + (penetrationsUsed * 20),
+        burstAttackIndex,
         penetrationStep: penetrationsUsed,
         reflectionCount: entry.reflectionCount,
         checkBatch,
@@ -4141,7 +4215,8 @@ class WeaponAttackController {
       hasSuccessfulHit = true;
       finalAnimationSegment = entry.segment ?? trajectory;
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, finalAnimationSegment);
-      if (penetrationsUsed >= penetrationPower) break;
+      const targetPenetrationPower = getDamageRequestGroupPenetrationPower(request);
+      if (penetrationsUsed >= targetPenetrationPower) break;
 
       const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
       if (!doesDamageRequestGroupPenetratePart(request, entry.target.actor, { type: "limb", limbKey: resolvedLimbKey })) break;
@@ -4157,21 +4232,44 @@ class WeaponAttackController {
     return { attempted, damageRequests, trajectory };
   }
 
-  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, reflectionCount = 0, checkBatch = null, allOrNothingContext = null } = {}) {
+  async resolveAttackAgainstTarget(target, {
+    damageAmount = 0,
+    damageShareIndex = 0,
+    damageShareCount = 1,
+    difficultyBonus = 0,
+    burstAttackIndex = 0,
+    penetrationStep = 0,
+    reflectionCount = 0,
+    checkBatch = null,
+    allOrNothingContext = null
+  } = {}) {
     if (await this.resolveTargetReactions(target)) return null;
     this.dodgeExposure.record(target.actor);
     const limbKey = selectRandomLimbKey(target.actor, { includeDestroyed: true });
     if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const normalizedBurstAttackIndex = Math.max(0, toInteger(burstAttackIndex));
     const attackContext = this.createWeaponAttackSkillCheckContext(target, {
-      reflectionCount: Math.max(0, toInteger(reflectionCount))
+      reflectionCount: Math.max(0, toInteger(reflectionCount)),
+      burstAttackIndex: normalizedBurstAttackIndex
     });
+    const burstDifficultyBonus = getBurstShotDifficultyBonus(
+      this.weapon,
+      this.actionKey,
+      normalizedBurstAttackIndex,
+      this.weaponFunctionId,
+      this.token.actor,
+      {
+        ...attackContext,
+        targetActor: target.actor
+      }
+    );
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
+        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + burstDifficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, attackContext))
           + getRicochetAccuracyBonus(attackContext.weaponActionModifierState, reflectionCount),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, attackContext),
@@ -4193,6 +4291,8 @@ class WeaponAttackController {
     }
     const damageContext = this.createWeaponDamageContext({
       targetToken: target,
+      damageShareIndex,
+      damageShareCount,
       reflectionCount: Math.max(0, toInteger(reflectionCount))
     });
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
@@ -4201,11 +4301,15 @@ class WeaponAttackController {
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
+      attackerToken: this.token,
       actor: target.actor,
+      targetToken: target,
       limbKey,
       amount: damageAmount,
       source: {
         weaponUuid: this.weapon.uuid,
+        weaponFunctionId: this.weaponFunctionId,
+        weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
@@ -4280,6 +4384,7 @@ class WeaponAttackController {
     const delayedThrownItemId = delayedExplosion ? (existingDelayedThrownItemId || foundry.utils.randomID()) : "";
     const sourceItemUuid = this.weapon.uuid;
     const landingPoint = getAttackLandingPoint(finalGeometries, this.pointer);
+    const delayedDamageContext = delayedExplosion ? this.createWeaponDamageContext() : null;
     const delayedRegionRequest = delayedExplosion
       ? buildDelayedVolleyExplosionRegionRequest({
         sceneId: canvas.scene?.id ?? "",
@@ -4292,7 +4397,8 @@ class WeaponAttackController {
         attackerToken: this.token,
         finalGeometries,
         blastOutcomes,
-        baseDamage: this.getWeaponDamage()
+        baseDamage: getWeaponDamage(this.weapon, this.weaponFunctionId, delayedDamageContext),
+        damageContext: delayedDamageContext
       })
       : null;
 
@@ -4355,7 +4461,8 @@ class WeaponAttackController {
         difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus + requirementDifficultyBonus + Math.max(0, toInteger(difficultyBonus)),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext())),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext()),
-        ...this.createWeaponAttackSkillCheckContext()
+        ...this.createWeaponAttackSkillCheckContext(),
+        allowImplicitTarget: false
       },
       animate: false,
       createMessage: !checkBatch,
@@ -4431,16 +4538,25 @@ class WeaponAttackController {
       damageTypes: getWeaponDamageTypeEntries(this.weapon, this.weaponFunctionId),
       penetrationPower: getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
         actor: this.token.actor,
-        actionKey: this.actionKey
+        actorToken: this.token,
+        actionKey: this.actionKey,
+        targetActor: target.actor,
+        targetToken: target
       }),
-      damageModifier: amount => getCriticalDamageAmount(
+      damageModifier: (amount, { falloff = 1 } = {}) => getCriticalDamageAmount(
         this.weapon,
-        applyContextualDamageToAmount(this.weapon, amount, this.createWeaponDamageContext({ targetToken: target })),
+        applyContextualDamageToAmount(this.weapon, amount, this.createWeaponDamageContext({
+          targetToken: target,
+          damageShareCount: 1,
+          damageScale: falloff
+        })),
         blastOutcome.outcome,
         this.weaponFunctionId
       ),
       source: {
         weaponUuid: this.weapon.uuid,
+        weaponFunctionId: this.weaponFunctionId,
+        weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
@@ -4450,7 +4566,16 @@ class WeaponAttackController {
     });
   }
 
-  async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null, allOrNothingContext = null } = {}) {
+  async resolveAimedAttackAgainstTarget(target, {
+    limbKey = "",
+    damageAmount = 0,
+    damageShareIndex = 0,
+    damageShareCount = 1,
+    difficultyBonus = 0,
+    penetrationStep = 0,
+    checkBatch = null,
+    allOrNothingContext = null
+  } = {}) {
     if (await this.resolveTargetReactions(target)) return null;
     this.dodgeExposure.record(target.actor);
     if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
@@ -4489,13 +4614,17 @@ class WeaponAttackController {
     }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
       targetToken: target,
-      limbKey
+      limbKey,
+      damageShareIndex,
+      damageShareCount
     }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
+      attackerToken: this.token,
       actor: target.actor,
+      targetToken: target,
       limbKey,
       amount: damageAmount,
       source: {
@@ -4508,7 +4637,16 @@ class WeaponAttackController {
     }, this.weaponFunctionId);
   }
 
-  async resolveAimedWeaponAttackAgainstTarget(target, targetSelection, { baseDamage = 0, damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, penetrationPower = 0, checkBatch = null, allOrNothingContext = null } = {}) {
+  async resolveAimedWeaponAttackAgainstTarget(target, targetSelection, {
+    baseDamage = 0,
+    damageAmount = 0,
+    damageShareIndex = 0,
+    damageShareCount = 1,
+    difficultyBonus = 0,
+    penetrationStep = 0,
+    checkBatch = null,
+    allOrNothingContext = null
+  } = {}) {
     if (await this.resolveTargetReactions(target)) return null;
     const targetWeapon = targetSelection?.item ?? null;
     const holdingLimbKey = String(targetSelection?.limbKey ?? "").trim();
@@ -4548,12 +4686,18 @@ class WeaponAttackController {
       return null;
     }
 
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
+      targetToken: target,
+      damageShareIndex,
+      damageShareCount
+    }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
+      attackerToken: this.token,
       actor: target.actor,
+      targetToken: target,
       targetItem: targetWeapon,
       limbKey: holdingLimbKey,
       amount: damageAmount,
@@ -4569,18 +4713,22 @@ class WeaponAttackController {
     if (!weaponDamageRequests.length) return [];
 
     const requests = [...weaponDamageRequests];
+    const targetPenetrationPower = getDamageRequestGroupPenetrationPower(weaponDamageRequests);
     const penetratesWeapon = doesDamageRequestGroupPenetratePart(weaponDamageRequests, target.actor, {
       type: "weapon",
       item: targetWeapon,
       limbKey: holdingLimbKey
     });
     const limbPenetrationStep = penetrationStep + 1;
-    if (penetratesWeapon && limbPenetrationStep <= penetrationPower) {
+    if (penetratesWeapon && limbPenetrationStep <= targetPenetrationPower) {
       requests.push(...buildWeaponDamageRequests(this.weapon, {
         attackerActor: this.token.actor,
+        attackerToken: this.token,
         actor: target.actor,
+        targetToken: target,
+        penetrationPower: targetPenetrationPower,
         limbKey: holdingLimbKey,
-        amount: getPenetratedDamageAmount(baseDamage, limbPenetrationStep),
+        amount: getPenetratedDamageAmount(damageAmount, limbPenetrationStep),
         source: {
           weaponUuid: this.weapon.uuid,
           actionKey: this.actionKey,
@@ -5768,6 +5916,192 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
   return created?.[0] ?? null;
 }
 
+function createDelayedVolleySourceContextSnapshot(actor, effectKey = "", {
+  baseValue = 0,
+  alternateKeys = [],
+  ...context
+} = {}) {
+  const numericBaseValue = Number(baseValue);
+  const resolvedBaseValue = Number.isFinite(numericBaseValue) ? numericBaseValue : 0;
+  const preparedChanges = getPreparedSourceContextualAbilityChanges(actor, effectKey, {
+    ...getDamageBaselineContext(context),
+    alternateKeys
+  });
+  return {
+    baseValue: resolvedBaseValue,
+    sourceValue: applyPreparedSourceContextualAbilityChanges(resolvedBaseValue, preparedChanges),
+    preparedChanges
+  };
+}
+
+function getDelayedVolleyMergedSourceContextValue(actor, effectKey = "", context = {}, snapshot = null, {
+  alternateKeys = []
+} = {}) {
+  const storedBaseValue = Number(snapshot?.baseValue);
+  if (!Number.isFinite(storedBaseValue) || !Array.isArray(snapshot?.preparedChanges)) return null;
+  if (!actor) {
+    return applyPreparedSourceContextualAbilityChanges(storedBaseValue, snapshot.preparedChanges);
+  }
+  const targetChanges = getPreparedSourceContextualAbilityChanges(actor, effectKey, {
+    ...context,
+    alternateKeys,
+    targetContextOnly: true
+  });
+  return applyPreparedSourceContextualAbilityChanges(storedBaseValue,
+    mergePreparedSourceContextualAbilityChanges(snapshot.preparedChanges, targetChanges));
+}
+
+function getDelayedVolleyTargetPenetrationPower({
+  explosion = {},
+  source = {},
+  attackerActor = null,
+  attackerToken = null,
+  targetToken = null
+} = {}) {
+  const hasDeferredContext = explosion.penetrationBasePower !== null
+    && explosion.penetrationBasePower !== undefined
+    && explosion.penetrationBasePower !== ""
+    && Number.isFinite(Number(explosion.penetrationBasePower));
+  const baseValue = hasDeferredContext
+    ? Number(explosion.penetrationBasePower)
+    : Number(explosion.penetrationPower) || 0;
+  const effectKey = `${ACTION_PENETRATION_KEY_PREFIX}${String(source.actionKey ?? "").trim()}`;
+  const context = {
+    actorToken: attackerToken,
+    alternateKeys: [ALL_ACTION_PENETRATION_KEY],
+    targetActor: targetToken?.actor ?? null,
+    targetToken,
+    weaponActionKey: String(source.actionKey ?? ""),
+    weaponData: source.weaponData ?? null
+  };
+  let value;
+  const mergedSourceValue = getDelayedVolleyMergedSourceContextValue(
+    attackerActor,
+    effectKey,
+    context,
+    explosion.penetrationContextSnapshot,
+    { alternateKeys: [ALL_ACTION_PENETRATION_KEY] }
+  );
+  if (Number.isFinite(mergedSourceValue)) {
+    value = getTargetReverseAbilityChangeValue(attackerActor, effectKey, {
+      ...context,
+      baseValue: mergedSourceValue
+    });
+  } else if (hasDeferredContext) {
+    const snapshottedTargetlessValue = Number.isFinite(Number(explosion.penetrationPower))
+      ? Number(explosion.penetrationPower)
+      : baseValue;
+    const sourceTargetValue = getSourceContextualAbilityChangeValue(attackerActor, effectKey, {
+      ...context,
+      baseValue: snapshottedTargetlessValue,
+      targetContextOnly: true
+    });
+    value = getTargetReverseAbilityChangeValue(attackerActor, effectKey, {
+      ...context,
+      baseValue: sourceTargetValue
+    });
+  } else {
+    value = getTargetReverseAbilityChangeValue(null, effectKey, {
+      ...context,
+      baseValue
+    });
+  }
+  return Math.max(0, Math.trunc(Number(value) || 0));
+}
+
+function createDelayedVolleyCombatValueSnapshot(actor, key = "", context = {}) {
+  const effectKey = `system.combat.${String(key ?? "").trim()}`;
+  const actorBaseValue = toInteger(actor?.system?.combat?.[key]);
+  const sourceSnapshot = createDelayedVolleySourceContextSnapshot(actor, effectKey, {
+    ...context,
+    baseValue: actorBaseValue
+  });
+  const fullBaseValue = getContextualCombatValue(actor, key, getDamageBaselineContext(context));
+  return {
+    ...sourceSnapshot,
+    abilityBaseValue: sourceSnapshot.sourceValue,
+    modifierBonus: fullBaseValue - sourceSnapshot.sourceValue
+  };
+}
+
+function getDelayedVolleyCombatValueDelta(attackerActor, key = "", context = {}, snapshot = null) {
+  const effectKey = `system.combat.${String(key ?? "").trim()}`;
+  const baselineContext = getDamageBaselineContext(context);
+  const storedAbilityBase = Number(snapshot?.abilityBaseValue);
+  const storedModifierBonus = Number(snapshot?.modifierBonus);
+  const mergedSourceValue = getDelayedVolleyMergedSourceContextValue(attackerActor, effectKey, context, snapshot);
+  if (Number.isFinite(mergedSourceValue) && Number.isFinite(storedModifierBonus)) {
+    const storedSourceValue = Number.isFinite(Number(snapshot?.sourceValue))
+      ? Number(snapshot.sourceValue)
+      : applyPreparedSourceContextualAbilityChanges(Number(snapshot?.baseValue) || 0, snapshot.preparedChanges);
+    const targetAdjustedValue = getTargetReverseAbilityChangeValue(attackerActor, effectKey, {
+      ...context,
+      baseValue: mergedSourceValue
+    });
+    const baselineValue = storedSourceValue + storedModifierBonus;
+    const finalValue = targetAdjustedValue + storedModifierBonus;
+    return finalValue - baselineValue;
+  }
+
+  if (Number.isFinite(storedAbilityBase) && Number.isFinite(storedModifierBonus)) {
+    const snapshottedSourceValue = getSourceContextualAbilityChangeValue(attackerActor, effectKey, {
+      ...context,
+      baseValue: storedAbilityBase,
+      targetContextOnly: true
+    });
+    const targetAdjustedValue = getTargetReverseAbilityChangeValue(attackerActor, effectKey, {
+      ...context,
+      baseValue: snapshottedSourceValue
+    });
+    const baselineValue = storedAbilityBase + storedModifierBonus;
+    const finalValue = targetAdjustedValue + storedModifierBonus;
+    return finalValue - baselineValue;
+  }
+
+  return getContextualCombatValue(attackerActor, key, context)
+    - getContextualCombatValue(attackerActor, key, baselineContext);
+}
+
+function applyDelayedVolleyContextualDamageToAmount(amount, {
+  explosion = {},
+  source = {},
+  weapon = null,
+  attackerActor = null,
+  attackerToken = null,
+  targetToken = null,
+  damageScale = 1
+} = {}) {
+  const context = {
+    actorToken: attackerToken,
+    targetActor: targetToken?.actor ?? null,
+    targetToken,
+    weaponActionKey: String(source.actionKey ?? ""),
+    weaponData: source.weaponData ?? null,
+    weaponFunctionId: String(source.weaponFunctionId ?? "")
+  };
+  const flatDelta = getDelayedVolleyCombatValueDelta(
+    attackerActor,
+    "damageFlat",
+    context,
+    explosion.damageContextSnapshot?.damageFlat
+  );
+  const percentDelta = getDelayedVolleyCombatValueDelta(
+    attackerActor,
+    "damagePercent",
+    context,
+    explosion.damageContextSnapshot?.damagePercent
+  );
+  const storedPercentBase = Number(explosion.damagePercentBaseAmount);
+  const percentBaseAmount = Number.isFinite(storedPercentBase)
+    ? Math.max(0, storedPercentBase)
+    : getWeaponDamagePercentBase(weapon, String(source.weaponFunctionId ?? ""));
+  const scale = Math.max(0, Number(damageScale) || 0);
+  const adjusted = Math.max(0, Number(amount) || 0)
+    + (flatDelta * scale)
+    + (percentBaseAmount * scale * percentDelta / 100);
+  return Math.max(0, Math.round(adjusted));
+}
+
 async function processDelayedVolleyExplosions(worldTime = 0) {
   if (!game.user?.isGM || getResponsibleGM()?.id !== game.user.id) return;
   const scene = canvas.scene;
@@ -5792,6 +6126,19 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
     const attackerToken = scene.tokens?.get(String(region.attachment?.token ?? ""))?.object
       ?? scene.tokens?.get(String(source.attackerTokenId ?? ""))?.object
       ?? canvas.tokens?.placeables?.at(0)
+      ?? null;
+    const delayedWeapon = String(source.weaponUuid ?? "").trim() && typeof fromUuidSync === "function"
+      ? fromUuidSync(String(source.weaponUuid))
+      : null;
+    const contextualAttackerToken = attackerToken?.actor?.uuid === String(source.attackerUuid ?? "")
+      ? attackerToken
+      : null;
+    const storedAttackerDocument = String(source.attackerUuid ?? "").trim() && typeof fromUuidSync === "function"
+      ? fromUuidSync(String(source.attackerUuid))
+      : null;
+    const contextualAttackerActor = contextualAttackerToken?.actor
+      ?? getWeaponOwnerActor(delayedWeapon)
+      ?? (storedAttackerDocument?.documentName === "Actor" ? storedAttackerDocument : storedAttackerDocument?.actor)
       ?? null;
 
     const damageRequests = [];
@@ -5824,18 +6171,44 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
         if (!isDeadTarget(target)) dodgeExposure.record(target.actor);
         targetActorUuids.add(target.actor?.uuid);
         targetTokenUuids.add(target.document?.uuid);
+        const hasCriticalDamageSnapshot = Number.isFinite(Number(explosion.damageBaseAmount))
+          && explosion.criticalDamageSnapshot
+          && typeof explosion.criticalDamageSnapshot === "object";
         damageRequests.push(...buildWeaponExplosionDamageRequests({
           targetToken: target,
           center,
           radiusPixels: geometry.radiusPixels,
-          baseDamage: explosion.damageAmount,
+          baseDamage: hasCriticalDamageSnapshot ? explosion.damageBaseAmount : explosion.damageAmount,
           pelletCount: explosion.pelletCount,
           damageTypes: explosion.damageTypes,
-          penetrationPower: explosion.penetrationPower,
+          penetrationPower: getDelayedVolleyTargetPenetrationPower({
+            explosion,
+            source,
+            attackerActor: contextualAttackerActor,
+            attackerToken: contextualAttackerToken,
+            targetToken: target
+          }),
+          damageModifier: (amount, { falloff = 1 } = {}) => {
+            const adjustedAmount = applyDelayedVolleyContextualDamageToAmount(amount, {
+              explosion,
+              source,
+              weapon: delayedWeapon,
+              attackerActor: contextualAttackerActor,
+              attackerToken: contextualAttackerToken,
+              targetToken: target,
+              damageScale: falloff
+            });
+            return hasCriticalDamageSnapshot
+              ? applyCriticalDamageSnapshot(adjustedAmount, explosion.criticalDamageSnapshot)
+              : adjustedAmount;
+          },
           source: {
             weaponUuid: source.weaponUuid,
+            weaponFunctionId: source.weaponFunctionId,
+            weaponData: source.weaponData,
             actionKey: source.actionKey,
             attackerUuid: source.attackerUuid,
+            attackerTokenUuid: source.attackerTokenUuid,
             tokenId: source.attackerTokenId,
             worldTime
           }
@@ -6213,15 +6586,20 @@ function getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "") {
   });
 }
 
-function getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "", actor = null) {
+function getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "", actor = null, context = {}) {
   const base = getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId);
-  const stabilityPercent = toInteger(actor?.system?.combat?.burstStability);
+  const stabilityPercent = toInteger(getContextualAbilityChangeValue(actor, "system.combat.burstStability", {
+    ...context,
+    baseValue: toInteger(actor?.system?.combat?.burstStability),
+    weaponActionKey: String(context?.weaponActionKey ?? "burst"),
+    weaponData: context?.weaponData ?? getWeaponAttackData(weapon, weaponFunctionId)
+  }));
   return Math.max(0, Math.round(base * Math.max(0, 1 - (stabilityPercent / 100))));
 }
 
-function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponFunctionId = "", actor = null) {
+function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponFunctionId = "", actor = null, context = {}) {
   if (actionKey !== "burst") return 0;
-  return Math.max(0, toInteger(attackIndex)) * getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId, actor);
+  return Math.max(0, toInteger(attackIndex)) * getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId, actor, context);
 }
 
 function getWeaponPelletCount(weapon, weaponFunctionId = "") {
@@ -7704,10 +8082,31 @@ function buildDelayedVolleyExplosionRegionRequest({
   finalGeometries = [],
   blastOutcomes = [],
   baseDamage = 0,
+  damageContext = null,
   attachmentTokenId = ""
 } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const damageTypes = getWeaponDamageTypeEntries(weapon, weaponFunctionId);
+  const resolvedDamageContext = damageContext && typeof damageContext === "object"
+    ? damageContext
+    : {
+      actorToken: attackerToken,
+      weaponActionKey: actionKey,
+      weaponData,
+      weaponFunctionId
+    };
+  const damageContextSnapshot = {
+    damageFlat: createDelayedVolleyCombatValueSnapshot(
+      attackerToken?.actor ?? getWeaponOwnerActor(weapon),
+      "damageFlat",
+      resolvedDamageContext
+    ),
+    damagePercent: createDelayedVolleyCombatValueSnapshot(
+      attackerToken?.actor ?? getWeaponOwnerActor(weapon),
+      "damagePercent",
+      resolvedDamageContext
+    )
+  };
   const regionSettings = getVolleyRegionSettings(weapon, weaponFunctionId);
   const residualRegion = regionSettings.enabled
     ? {
@@ -7721,23 +8120,43 @@ function buildDelayedVolleyExplosionRegionRequest({
       radiusDeltaMeters: regionSettings.radiusDeltaMeters
     }
     : null;
-  const explosions = finalGeometries.map((geometry, index) => ({
-    center: serializePoint(geometry.end),
-    radiusPixels: Math.max(1, Number(geometry.radiusPixels) || 1),
-    damageAmount: getCriticalDamageAmount(
-      weapon,
-      Math.max(0, Number(baseDamage) || 0),
-      blastOutcomes[index]?.outcome,
-      weaponFunctionId
-    ),
-    pelletCount: getWeaponPelletCount(weapon, weaponFunctionId),
-    damageTypes,
-    penetrationPower: getWeaponPenetrationPower(weapon, weaponFunctionId, {
-      actor: attackerToken?.actor,
-      actionKey
-    }),
-    residualRegion
-  }));
+  const attackerActor = attackerToken?.actor ?? getWeaponOwnerActor(weapon);
+  const penetrationBasePower = getWeaponPenetrationBaseValue(weapon, weaponFunctionId, {
+    actor: attackerActor,
+    actionKey
+  });
+  const penetrationContextSnapshot = createDelayedVolleySourceContextSnapshot(
+    attackerActor,
+    `${ACTION_PENETRATION_KEY_PREFIX}${String(actionKey ?? "").trim()}`,
+    {
+      actorToken: attackerToken,
+      alternateKeys: [ALL_ACTION_PENETRATION_KEY],
+      baseValue: penetrationBasePower,
+      weaponActionKey: String(actionKey ?? ""),
+      weaponData
+    }
+  );
+  const penetrationPower = Math.max(0, Math.trunc(Number(penetrationContextSnapshot.sourceValue) || 0));
+  const explosions = finalGeometries.map((geometry, index) => {
+    const normalizedBaseDamage = Math.max(0, Number(baseDamage) || 0);
+    const outcome = blastOutcomes[index]?.outcome;
+    const criticalDamageSnapshot = getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId);
+    return {
+      center: serializePoint(geometry.end),
+      radiusPixels: Math.max(1, Number(geometry.radiusPixels) || 1),
+      damageAmount: applyCriticalDamageSnapshot(normalizedBaseDamage, criticalDamageSnapshot),
+      damageBaseAmount: normalizedBaseDamage,
+      criticalDamageSnapshot,
+      damageContextSnapshot,
+      damagePercentBaseAmount: getWeaponDamagePercentBase(weapon, weaponFunctionId),
+      pelletCount: getWeaponPelletCount(weapon, weaponFunctionId),
+      damageTypes,
+      penetrationPower,
+      penetrationBasePower,
+      penetrationContextSnapshot,
+      residualRegion
+    };
+  });
   const dominantDamageTypeKey = [...damageTypes]
     .sort((left, right) => right.weight - left.weight)
     .at(0)?.key;
@@ -7984,16 +8403,39 @@ function getWeaponMagazineSourceItem(weaponData = {}) {
   return resolveWorldItemSync(uuid);
 }
 
-function buildWeaponDamageRequests(weapon, { attackerActor = null, actor = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {
+function buildWeaponDamageRequests(weapon, {
+  attackerActor = null,
+  attackerToken = null,
+  actor = null,
+  targetToken = null,
+  penetrationPower = null,
+  limbKey = "",
+  amount = 0,
+  source = {}
+} = {}, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const damageTypes = getWeaponDamageTypeEntries(weapon, weaponFunctionId);
   const amounts = distributeIntegerAmount(amount, damageTypes.map(entry => entry.weight));
-  const penetrationPower = getWeaponPenetrationPower(weapon, weaponFunctionId, {
-    actor: attackerActor,
-    actionKey: source.actionKey
-  });
+  const hasExplicitPenetrationPower = penetrationPower !== null
+    && penetrationPower !== undefined
+    && penetrationPower !== ""
+    && Number.isFinite(Number(penetrationPower));
+  const resolvedPenetrationPower = hasExplicitPenetrationPower
+    ? Math.max(0, Math.trunc(Number(penetrationPower)))
+    : getWeaponPenetrationPower(weapon, weaponFunctionId, {
+      actor: attackerActor,
+      actorToken: attackerToken,
+      actionKey: source.actionKey,
+      targetActor: actor,
+      targetToken,
+      weaponData
+    });
   const requestSource = {
     ...source,
-    penetrationPower
+    weaponFunctionId: source.weaponFunctionId ?? weaponFunctionId,
+    weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
+    targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
+    penetrationPower: resolvedPenetrationPower
   };
   return damageTypes
     .map((entry, index) => ({
@@ -8007,17 +8449,41 @@ function buildWeaponDamageRequests(weapon, { attackerActor = null, actor = null,
     .filter(request => request.amount > 0);
 }
 
-function buildWeaponConditionDamageRequests(weapon, { attackerActor = null, actor = null, targetItem = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {
+function buildWeaponConditionDamageRequests(weapon, {
+  attackerActor = null,
+  attackerToken = null,
+  actor = null,
+  targetToken = null,
+  targetItem = null,
+  penetrationPower = null,
+  limbKey = "",
+  amount = 0,
+  source = {}
+} = {}, weaponFunctionId = "") {
   if (!targetItem?.id || !hasItemFunction(targetItem, ITEM_FUNCTIONS.condition)) return [];
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const damageTypes = getWeaponDamageTypeEntries(weapon, weaponFunctionId);
   const amounts = distributeIntegerAmount(amount, damageTypes.map(entry => entry.weight));
-  const penetrationPower = getWeaponPenetrationPower(weapon, weaponFunctionId, {
-    actor: attackerActor,
-    actionKey: source.actionKey
-  });
+  const hasExplicitPenetrationPower = penetrationPower !== null
+    && penetrationPower !== undefined
+    && penetrationPower !== ""
+    && Number.isFinite(Number(penetrationPower));
+  const resolvedPenetrationPower = hasExplicitPenetrationPower
+    ? Math.max(0, Math.trunc(Number(penetrationPower)))
+    : getWeaponPenetrationPower(weapon, weaponFunctionId, {
+      actor: attackerActor,
+      actorToken: attackerToken,
+      actionKey: source.actionKey,
+      targetActor: actor,
+      targetToken,
+      weaponData
+    });
   const requestSource = {
     ...source,
-    penetrationPower,
+    weaponFunctionId: source.weaponFunctionId ?? weaponFunctionId,
+    weaponData: foundry.utils.deepClone(source.weaponData ?? weaponData ?? {}),
+    targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
+    penetrationPower: resolvedPenetrationPower,
     targetItemUuid: targetItem.uuid
   };
   return damageTypes
@@ -8094,6 +8560,15 @@ function doesDamageRequestGroupPenetratePart(requests = [], actor = null, target
   return estimate.partDamage >= threshold;
 }
 
+function getDamageRequestGroupPenetrationPower(requests = [], fallback = 0) {
+  const values = (Array.isArray(requests) ? requests : [requests])
+    .map(request => Number(request?.source?.penetrationPower))
+    .filter(Number.isFinite)
+    .map(value => Math.max(0, Math.trunc(value)));
+  if (values.length) return Math.min(...values);
+  return Math.max(0, toInteger(fallback));
+}
+
 function isDamageRequestForTargetSelection(request = {}, targetSelection = null) {
   if (targetSelection?.type === "weapon") {
     const itemId = String(targetSelection.item?.id ?? "").trim();
@@ -8136,19 +8611,34 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "", context 
 }
 
 function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "") {
-  const baseAmount = Math.max(0, Number(amount) || 0);
+  return applyCriticalDamageSnapshot(amount, getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId));
+}
+
+function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "") {
   const stealth = getStealthAttackModifiers(getWeaponOwnerActor(weapon));
-  const stealthDamage = Math.floor(baseAmount * Math.max(0, toInteger(stealth.damageBonusPercent)) / 100);
+  const criticalSuccess = isCriticalSuccessAttack(outcome);
+  const criticalDamagePercent = criticalSuccess
+    ? Math.max(0, evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent, {
+      fallback: 150,
+      minimum: 0,
+      context: "critical damage percent"
+    }) + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage"))
+    : 100;
+  return {
+    stealthDamageBonusPercent: Math.max(0, toInteger(stealth.damageBonusPercent)),
+    criticalSuccess,
+    criticalDamagePercent
+  };
+}
+
+function applyCriticalDamageSnapshot(amount, snapshot = {}) {
+  const baseAmount = Math.max(0, Number(amount) || 0);
+  const stealthDamage = Math.floor(
+    baseAmount * Math.max(0, toInteger(snapshot.stealthDamageBonusPercent)) / 100
+  );
   const modifiedBaseAmount = baseAmount + stealthDamage;
-  if (!isCriticalSuccessAttack(outcome)) return modifiedBaseAmount;
-  const rawPercent = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent, {
-    fallback: 150,
-    minimum: 0,
-    context: "critical damage percent"
-  });
-  const percent = Math.max(0, rawPercent
-    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage"));
-  return Math.round(modifiedBaseAmount * percent / 100);
+  if (snapshot.criticalSuccess !== true) return modifiedBaseAmount;
+  return Math.round(modifiedBaseAmount * Math.max(0, Number(snapshot.criticalDamagePercent) || 0) / 100);
 }
 
 function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "") {
@@ -8388,17 +8878,43 @@ function getWeaponConditionCritChancePenalty(weapon) {
   return weakening.active ? weakening.steps * 3 : 0;
 }
 
-function getWeaponPenetrationPower(weapon, weaponFunctionId = "", { actor = null, actionKey = "" } = {}) {
-  const base = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.penetration, actor ?? getWeaponOwnerActor(weapon), {
+function getWeaponPenetrationPower(weapon, weaponFunctionId = "", {
+  actor = null,
+  actorToken = null,
+  actionKey = "",
+  targetActor = null,
+  targetToken = null,
+  weaponData = null
+} = {}) {
+  const sourceActor = actor ?? getWeaponOwnerActor(weapon);
+  let value = getWeaponPenetrationBaseValue(weapon, weaponFunctionId, {
+    actor: sourceActor,
+    actionKey
+  });
+  value = getContextualAbilityChangeValue(sourceActor, `${ACTION_PENETRATION_KEY_PREFIX}${String(actionKey ?? "").trim()}`, {
+    actorToken,
+    alternateKeys: [ALL_ACTION_PENETRATION_KEY],
+    baseValue: value,
+    targetActor,
+    targetToken,
+    weaponActionKey: String(actionKey ?? "").trim(),
+    weaponData: weaponData ?? getWeaponAttackData(weapon, weaponFunctionId)
+  });
+  return Math.max(0, Math.trunc(value));
+}
+
+function getWeaponPenetrationBaseValue(weapon, weaponFunctionId = "", { actor = null, actionKey = "" } = {}) {
+  const sourceActor = actor ?? getWeaponOwnerActor(weapon);
+  const base = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.penetration, sourceActor, {
     minimum: 0,
     context: "weapon penetration"
   });
-  const modifier = collectActionPenetrationModifier(actor, actionKey);
+  const modifier = collectActionPenetrationModifier(sourceActor, actionKey);
   let value = base;
   if (modifier.override !== null && modifier.override !== undefined && modifier.override !== "") value = Number(modifier.override);
   value *= Number.isFinite(Number(modifier.multiplier)) ? Number(modifier.multiplier) : 1;
   value += Number(modifier.add) || 0;
-  return Math.max(0, Math.trunc(value));
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
 function collectActionPenetrationModifier(actor, actionKey = "") {
@@ -9686,9 +10202,19 @@ function applyContextualDamageToAmount(weapon, amount, context = {}) {
     - getContextualCombatValue(actor, "damageFlat", baselineContext);
   const percentDelta = getContextualCombatValue(actor, "damagePercent", context)
     - getContextualCombatValue(actor, "damagePercent", baselineContext);
-  const pelletCount = Math.max(1, getWeaponPelletCount(weapon, context?.weaponFunctionId));
-  const percentBase = Math.max(0, Number(context?.damagePercentBaseAmount ?? (getWeaponDamagePercentBase(weapon, context?.weaponFunctionId) / pelletCount)) || 0);
-  const adjusted = Math.max(0, Number(amount) || 0) + (flatDelta / pelletCount) + (percentBase * percentDelta / 100);
+  const damageShareCount = Math.max(1, toInteger(context?.damageShareCount ?? 1));
+  const damageShareIndex = Math.max(0, Math.min(damageShareCount - 1, toInteger(context?.damageShareIndex)));
+  const damageScale = Math.max(0, Number(context?.damageScale ?? 1) || 0);
+  const percentBase = Math.max(0, Number(
+    context?.damagePercentBaseAmount ?? getWeaponDamagePercentBase(weapon, context?.weaponFunctionId)
+  ) || 0);
+  const totalDelta = Math.round((flatDelta + (percentBase * percentDelta / 100)) * damageScale);
+  const distributedDeltas = distributeIntegerAmount(
+    Math.abs(totalDelta),
+    Array(damageShareCount).fill(1)
+  );
+  const distributedDelta = (totalDelta < 0 ? -1 : 1) * (distributedDeltas[damageShareIndex] ?? 0);
+  const adjusted = Math.max(0, Number(amount) || 0) + distributedDelta;
   return Math.max(0, Math.round(adjusted));
 }
 

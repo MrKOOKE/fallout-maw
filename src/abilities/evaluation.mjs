@@ -13,6 +13,7 @@ import {
 import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { getActorReverseEffectChangeValue } from "../utils/active-effect-changes.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
@@ -98,7 +99,10 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.aura) return abilityAuraConditionApplies(actor, condition, context);
   if (condition.type === ABILITY_CONDITION_TYPES.energyConsumption) return energyConsumptionConditionApplies(actor, condition, context);
 
-  const targetActor = context?.targetActor ?? context?.targetToken?.actor ?? null;
+  const targetActor = context?.targetToken?.actor
+    ?? context?.targetToken?.document?.actor
+    ?? context?.targetActor
+    ?? null;
   if (condition.type === ABILITY_CONDITION_TYPES.targetFaction) {
     if (!targetActor) return false;
     const accepted = new Set(condition?.targetFactionNames ?? []);
@@ -283,42 +287,139 @@ function isActiveFreeSettingsItem(item) {
     || ["equipment", "weapon", "constructPart"].includes(item.system?.placement?.mode);
 }
 
-export function getContextualAbilityEffectChanges(actor, context = {}) {
+export function getContextualAbilityEffectChanges(actor, context = {}, { targetContextOnly = false } = {}) {
   if (!actor) return [];
   const changes = [];
+  let contextualOrder = 0;
   for (const item of getActorItemsWithActiveHudModules(actor)) {
     const functions = item?.type === "ability"
       ? item.system?.functions ?? []
       : isActiveFreeSettingsItem(item) ? item.system?.functions?.freeSettings?.entries ?? [] : [];
-    changes.push(...normalizeAbilityFunctions(functions)
-      .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-      .filter(entry => hasAbilityTargetContextCondition(entry.conditions) || hasWeaponContextCondition(entry.conditions))
-      .flatMap(entry => getConditionalFunctionChanges(actor, entry, {
+    for (const [functionIndex, entry] of normalizeAbilityFunctions(functions).entries()) {
+      if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+      const orderStart = contextualOrder;
+      contextualOrder += Math.max(1, entry.changes?.length ?? 0, entry.penalties?.length ?? 0);
+      const hasTargetContext = hasAbilityTargetContextCondition(entry.conditions);
+      if (!hasTargetContext && !hasWeaponContextCondition(entry.conditions)) continue;
+      if (targetContextOnly && !hasTargetContext) continue;
+      const selectedChanges = getConditionalFunctionChanges(actor, entry, {
         ...context,
         abilityItemId: item.id ?? "",
         functionId: entry.id ?? "",
         allowContextual: true
+      });
+      const selectedBranch = selectedChanges === entry.penalties ? "penalties" : "changes";
+      changes.push(...selectedChanges.map((change, index) => ({
+        ...change,
+        contextualOrder: orderStart + index,
+        contextualTargetContext: hasTargetContext,
+        contextualIdentity: [item.id ?? "", entry.id ?? functionIndex, selectedBranch, index].join(":")
       })));
+    }
   }
   return changes.filter(change => change?.key && change.value !== "");
 }
 
 export function getContextualAbilityChangeValue(actor, key, { baseValue = 0, alternateKeys = [], ...context } = {}) {
+  const sourceValue = getSourceContextualAbilityChangeValue(actor, key, {
+    ...context,
+    alternateKeys,
+    baseValue
+  });
+  return getTargetReverseAbilityChangeValue(actor, key, {
+    ...context,
+    alternateKeys,
+    baseValue: sourceValue
+  });
+}
+
+export function getSourceContextualAbilityChangeValue(actor, key, {
+  baseValue = 0,
+  alternateKeys = [],
+  targetContextOnly = false,
+  ...context
+} = {}) {
+  return applyPreparedSourceContextualAbilityChanges(baseValue, getPreparedSourceContextualAbilityChanges(actor, key, {
+    ...context,
+    alternateKeys,
+    targetContextOnly
+  }));
+}
+
+export function getPreparedSourceContextualAbilityChanges(actor, key, {
+  alternateKeys = [],
+  targetContextOnly = false,
+  ...context
+} = {}) {
   const acceptedKeys = new Set([key, ...alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean));
-  const changes = getContextualAbilityEffectChanges(actor, context)
+  return getContextualAbilityEffectChanges(actor, context, { targetContextOnly })
     .filter(change => acceptedKeys.has(String(change?.key ?? "").trim()))
-    .sort((left, right) => toInteger(left?.priority) - toInteger(right?.priority));
+    .map((change, index) => ({
+      key: String(change?.key ?? "").trim(),
+      type: String(change?.type ?? "add"),
+      value: evaluateEffectChangeNumber(actor, change.value, { fallback: Number.NaN }),
+      priority: toInteger(change?.priority),
+      order: Number.isFinite(Number(change?.contextualOrder)) ? Number(change.contextualOrder) : index,
+      targetContext: Boolean(change?.contextualTargetContext),
+      identity: String(change?.contextualIdentity ?? "")
+    }))
+    .filter(change => Number.isFinite(change.value))
+    .sort(comparePreparedContextualAbilityChanges);
+}
+
+export function applyPreparedSourceContextualAbilityChanges(baseValue = 0, changes = []) {
   let value = Number(baseValue) || 0;
-  for (const change of changes) {
-    const amount = evaluateEffectChangeNumber(actor, change.value, { fallback: Number.NaN });
+  for (const change of [...(changes ?? [])].sort(comparePreparedContextualAbilityChanges)) {
+    const amount = Number(change?.value);
     if (!Number.isFinite(amount)) continue;
     if (change.type === "multiply") value *= amount;
+    else if (change.type === "subtract") value -= amount;
     else if (change.type === "override") value = amount;
     else if (change.type === "upgrade") value = Math.max(value, amount);
     else if (change.type === "downgrade") value = Math.min(value, amount);
     else value += amount;
   }
   return value;
+}
+
+export function mergePreparedSourceContextualAbilityChanges(snapshotChanges = [], targetContextChanges = []) {
+  return [
+    ...(snapshotChanges ?? []).filter(change => !change?.targetContext),
+    ...(targetContextChanges ?? [])
+  ];
+}
+
+function comparePreparedContextualAbilityChanges(left = {}, right = {}) {
+  return toInteger(left?.priority) - toInteger(right?.priority)
+    || (Number(left?.order) || 0) - (Number(right?.order) || 0);
+}
+
+export function getTargetReverseAbilityChangeValue(actor, key, { baseValue = 0, alternateKeys = [], ...context } = {}) {
+  const acceptedKeys = new Set([key, ...alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean));
+  const value = Number(baseValue) || 0;
+  const targetActor = context?.targetToken?.actor
+    ?? context?.targetToken?.document?.actor
+    ?? context?.targetActor
+    ?? null;
+  if (!targetActor || isSameInteractionActor(actor, targetActor)) return value;
+  const reverseContext = {
+    ...context,
+    actorToken: context?.targetToken ?? null,
+    targetToken: context?.actorToken ?? null,
+    targetActor: actor
+  };
+  const contextualReverseChanges = getContextualAbilityEffectChanges(targetActor, reverseContext);
+  return getActorReverseEffectChangeValue(targetActor, Array.from(acceptedKeys), {
+    baseValue: value,
+    additionalChanges: contextualReverseChanges
+  });
+}
+
+function isSameInteractionActor(sourceActor, targetActor) {
+  if (sourceActor === targetActor) return true;
+  const sourceUuid = String(sourceActor?.uuid ?? "").trim();
+  const targetUuid = String(targetActor?.uuid ?? "").trim();
+  return Boolean(sourceUuid && targetUuid && sourceUuid === targetUuid);
 }
 
 export function hasAbilityTargetContextCondition(conditions = []) {

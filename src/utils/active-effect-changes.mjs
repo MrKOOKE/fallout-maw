@@ -47,6 +47,7 @@ export const DISEASE_SUPPRESSION_COUNT_EFFECT_KEY = "fallout-maw.suppression.dis
 export const TRAUMA_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.traumas.all";
 export const DISEASE_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.diseases.all";
 export const ONE_TIME_SKILL_MODIFIER_EFFECT_KEY = "fallout-maw.skillCheck.nextSkillModifier";
+export const REVERSE_EFFECT_KEY_PREFIX = `${SYSTEM_ID}.reverse.`;
 export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
   criticalSuccess: "fallout-maw.skillCheck.smartFudge.criticalSuccess",
   success: "fallout-maw.skillCheck.smartFudge.success",
@@ -116,6 +117,7 @@ export function expandActorEffectChangeKeys(actor, change = {}) {
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
   const prepared = prepareActorEffectChangeValue(actor, change, options);
   if (!prepared) return null;
+  if (isReverseEffectKey(prepared.key)) return null;
   if (isTraumaDiseaseSuppressionEffectKey(prepared.key)) return null;
   if (getCoverKeyFromBonusPercentEffectKey(prepared.key)) return null;
   if (isDodgeAmountModifierEffectKey(prepared.key)) return null;
@@ -203,6 +205,115 @@ export function evaluateActorEffectChangeNumber(actor, change = {}, { fallback =
   if (!prepared) return fallback;
   const value = Number(prepared.value);
   return Number.isFinite(value) ? value : fallback;
+}
+
+export function getReverseEffectKey(key = "") {
+  const path = String(key ?? "").trim();
+  return path ? `${REVERSE_EFFECT_KEY_PREFIX}${path}` : "";
+}
+
+export function getOriginalEffectKeyFromReverse(key = "") {
+  const path = String(key ?? "").trim();
+  if (!path.startsWith(REVERSE_EFFECT_KEY_PREFIX)) return "";
+  return path.slice(REVERSE_EFFECT_KEY_PREFIX.length).trim();
+}
+
+export function isReverseEffectKey(key = "") {
+  return Boolean(getOriginalEffectKeyFromReverse(key));
+}
+
+/**
+ * Collect changes owned by the interaction target which temporarily modify
+ * the actor acting on that target. These changes are never applied to either
+ * Actor document and exist only for the current interaction calculation.
+ */
+export function collectActorReverseEffectChanges(actor, acceptedKeys = [], { additionalChanges = [] } = {}) {
+  if (!actor) return [];
+  const acceptedKeyValues = typeof acceptedKeys === "string"
+    ? [acceptedKeys]
+    : typeof acceptedKeys?.[Symbol.iterator] === "function"
+      ? Array.from(acceptedKeys)
+      : [acceptedKeys];
+  const accepted = new Set(
+    acceptedKeyValues
+      .map(key => String(key ?? "").trim())
+      .filter(Boolean)
+  );
+  if (!accepted.size) return [];
+
+  const changes = [];
+  const suppressedTraumaDiseaseIds = getActorSuppressedTraumaDiseaseIds(actor);
+  let order = 0;
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedTraumaDiseaseIds)) continue;
+    for (const change of effect?.system?.changes ?? effect?.changes ?? []) {
+      const originalKey = getOriginalEffectKeyFromReverse(change?.key);
+      if (!accepted.has(originalKey)) continue;
+      changes.push(prepareActorReverseEffectChange(actor, change, {
+        effect,
+        originalKey,
+        order: order++
+      }));
+    }
+  }
+
+  for (const change of additionalChanges ?? []) {
+    const originalKey = getOriginalEffectKeyFromReverse(change?.key);
+    if (!accepted.has(originalKey)) continue;
+    changes.push(prepareActorReverseEffectChange(actor, change, {
+      effect: change?.effect ?? null,
+      originalKey,
+      order: order++
+    }));
+  }
+
+  return changes
+    .filter(Boolean)
+    .sort((left, right) => left.priority - right.priority || left.order - right.order);
+}
+
+export function getActorReverseEffectChangeValue(actor, acceptedKeys = [], {
+  baseValue = 0,
+  additionalChanges = []
+} = {}) {
+  const numericBaseValue = Number(baseValue);
+  let value = Number.isFinite(numericBaseValue) ? numericBaseValue : 0;
+  for (const change of collectActorReverseEffectChanges(actor, acceptedKeys, { additionalChanges })) {
+    const amount = Number(change.value);
+    if (!Number.isFinite(amount)) continue;
+    if (change.type === "multiply") value *= amount;
+    else if (change.type === "subtract") value -= amount;
+    else if (change.type === "override") value = amount;
+    else if (change.type === "upgrade") value = Math.max(value, amount);
+    else if (change.type === "downgrade") value = Math.min(value, amount);
+    else value += amount;
+  }
+  return value;
+}
+
+function prepareActorReverseEffectChange(actor, change = {}, {
+  effect = null,
+  originalKey = "",
+  order = 0
+} = {}) {
+  const source = effect ? { ...change, effect } : change;
+  const value = evaluateActorEffectChangeBaseNumber(actor, source, {
+    fallback: Number.NaN,
+    stage: change?.phase === "initial" ? "initial-active-effect" : "prepared"
+  });
+  if (!Number.isFinite(value)) return null;
+  return {
+    key: originalKey,
+    reverseKey: String(change?.key ?? "").trim(),
+    type: String(change?.type ?? "add"),
+    value,
+    priority: getEffectChangePriority(change),
+    order,
+    actorUuid: String(actor?.uuid ?? ""),
+    effectUuid: String(effect?.uuid ?? ""),
+    effect
+  };
 }
 
 export function isTraumaDiseaseSuppressionEffectKey(key = "") {
@@ -300,8 +411,11 @@ function getSuppressionSeed(actor, type = "") {
 }
 
 function getEffectChangePriority(change = {}) {
-  const priority = Number(change?.priority);
-  if (Number.isFinite(priority)) return Math.trunc(priority);
+  const configuredPriority = change?.priority;
+  const priority = Number(configuredPriority);
+  if (configuredPriority !== null && configuredPriority !== undefined && configuredPriority !== "" && Number.isFinite(priority)) {
+    return Math.trunc(priority);
+  }
   const ActiveEffect = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
   return toInteger(ActiveEffect?.CHANGE_TYPES?.[change?.type]?.defaultPriority);
 }

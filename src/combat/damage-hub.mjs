@@ -22,10 +22,15 @@ import {
   getConstructPartFunction,
   getDamageMitigationFunction,
   getProsthesisFunction,
+  getWeaponFunctionById,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
-import { evaluateActorEffectChangeNumber, getActorSuppressedTraumaDiseaseIds } from "../utils/active-effect-changes.mjs";
+import {
+  evaluateActorEffectChangeNumber,
+  getActorSuppressedTraumaDiseaseIds
+} from "../utils/active-effect-changes.mjs";
+import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
@@ -1504,7 +1509,32 @@ async function applyFinishingBlowIfEligible(targetActor, data = {}) {
   const attacker = await fromUuid(attackerUuid);
   if (!attacker) return null;
 
-  const threshold = Math.max(0, Math.min(100, toInteger(attacker.system?.combat?.finishingBlow)));
+  const weaponUuid = String(data?.source?.weaponUuid ?? "").trim();
+  const attackerTokenUuid = String(data?.source?.attackerTokenUuid ?? "").trim();
+  const targetTokenUuid = String(data?.source?.targetTokenUuid ?? "").trim();
+  const [weapon, attackerTokenDocument, targetTokenDocument] = await Promise.all([
+    weaponUuid ? fromUuid(weaponUuid).catch(() => null) : null,
+    attackerTokenUuid ? fromUuid(attackerTokenUuid).catch(() => null) : null,
+    targetTokenUuid ? fromUuid(targetTokenUuid).catch(() => null) : null
+  ]);
+  const weaponDataSnapshot = data?.source?.weaponData && typeof data.source.weaponData === "object"
+    ? data.source.weaponData
+    : null;
+  const weaponData = weaponDataSnapshot ?? (weapon
+    ? getWeaponFunctionById(weapon, String(data?.source?.weaponFunctionId ?? ""))
+    : null);
+  const applyTargetReverseChange = (key, baseValue) => getContextualAbilityChangeValue(attacker, key, {
+    baseValue,
+    actorToken: attackerTokenDocument?.object ?? attackerTokenDocument ?? null,
+    targetActor,
+    targetToken: targetTokenDocument?.object ?? targetTokenDocument ?? null,
+    weaponActionKey: String(data?.source?.actionKey ?? ""),
+    weaponData
+  });
+  const threshold = Math.max(0, Math.min(100, toInteger(applyTargetReverseChange(
+    "system.combat.finishingBlow",
+    attacker.system?.combat?.finishingBlow
+  ))));
   if (threshold <= 0) return null;
 
   const health = targetActor.health;
@@ -1518,7 +1548,10 @@ async function applyFinishingBlowIfEligible(targetActor, data = {}) {
   const limbKey = selectFinishingBlowCriticalLimbKey(targetActor, data.limbKey);
   if (!limbKey) return null;
 
-  const chance = Math.max(0, Math.min(100, toInteger(attacker.system?.combat?.finishingBlowChance)));
+  const chance = Math.max(0, Math.min(100, toInteger(applyTargetReverseChange(
+    "system.combat.finishingBlowChance",
+    attacker.system?.combat?.finishingBlowChance
+  ))));
   const roll = chance > 0 ? Math.ceil(Math.random() * 100) : 0;
   if (chance > 0 && roll > chance) return null;
 
@@ -2707,6 +2740,7 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
     skillKey: "resilience",
     data: {
       difficulty: shockCheck.difficulty,
+      allowImplicitTarget: false,
       damageHubOperationRef
     },
     chainRef,
@@ -2756,6 +2790,7 @@ async function resolveDeferredShockChecks(entries = [], {
           skillKey: "resilience",
           data: {
             difficulty: shockCheck.difficulty,
+            allowImplicitTarget: false,
             damageHubOperationRef
           },
           chainRef,

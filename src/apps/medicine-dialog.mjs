@@ -224,7 +224,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
     const result = await performTreatment({
       sourceActor: this.#sourceActor,
+      sourceToken: this.#sourceToken,
       targetContext: this.#targetContext,
+      targetToken: this.#targetToken,
       treatmentType,
       treatmentId,
       instrumentId,
@@ -243,7 +245,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
     const result = await performImplantInstallation({
       sourceActor: this.#sourceActor,
+      sourceToken: this.#sourceToken,
       targetContext: this.#targetContext,
+      targetToken: this.#targetToken,
       limbKey,
       implantSource: source,
       itemId
@@ -263,7 +267,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
     const result = await performProsthesisInstallation({
       sourceActor: this.#sourceActor,
+      sourceToken: this.#sourceToken,
       targetContext: this.#targetContext,
+      targetToken: this.#targetToken,
       limbKey,
       prosthesisSource: source,
       itemId
@@ -518,7 +524,7 @@ function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey
   };
 }
 
-async function performTreatment({ sourceActor, targetContext, treatmentType = "trauma", treatmentId, instrumentId, toolKey }) {
+async function performTreatment({ sourceActor, sourceToken = null, targetContext, targetToken = null, treatmentType = "trauma", treatmentId, instrumentId, toolKey }) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
     return undefined;
@@ -552,7 +558,9 @@ async function performTreatment({ sourceActor, targetContext, treatmentType = "t
 
   const result = await runTreatmentChecks({
     sourceActor,
+    sourceToken,
     targetContext,
+    targetToken,
     trauma,
     tool,
     initialProgress,
@@ -592,7 +600,7 @@ async function performTreatment({ sourceActor, targetContext, treatmentType = "t
   return { targetContext: updatedTargetContext };
 }
 
-async function performImplantInstallation({ sourceActor, targetContext, limbKey = "", implantSource = "", itemId = "" } = {}) {
+async function performImplantInstallation({ sourceActor, sourceToken = null, targetContext, targetToken = null, limbKey = "", implantSource = "", itemId = "" } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инвентаря ${sourceActor?.name ?? ""}.`);
     return undefined;
@@ -625,11 +633,17 @@ async function performImplantInstallation({ sourceActor, targetContext, limbKey 
   const data = getImplantFunction(implant);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
+  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
   const outcome = skillKey
     ? await requestSkillCheck({
       actor: sourceActor,
       skillKey,
-      data: { difficulty },
+      data: {
+        difficulty,
+        actorToken: sourceToken?.object ?? sourceToken,
+        targetActor,
+        targetToken: targetToken?.object ?? targetToken
+      },
       animate: false,
       createMessage: true,
       prompt: false,
@@ -955,7 +969,7 @@ function isImplantSnapshotInstallable(item) {
   return Math.max(0, toInteger(item.conditionMax)) > 0 && Math.max(0, toInteger(item.conditionValue)) > 0;
 }
 
-async function performProsthesisInstallation({ sourceActor, targetContext, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
+async function performProsthesisInstallation({ sourceActor, sourceToken = null, targetContext, targetToken = null, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инвентаря ${sourceActor?.name ?? ""}.`);
     return undefined;
@@ -977,11 +991,17 @@ async function performProsthesisInstallation({ sourceActor, targetContext, limbK
   const data = getProsthesisFunction(prosthesis);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
+  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
   const outcome = skillKey
     ? await requestSkillCheck({
       actor: sourceActor,
       skillKey,
-      data: { difficulty },
+      data: {
+        difficulty,
+        actorToken: sourceToken?.object ?? sourceToken,
+        targetActor,
+        targetToken: targetToken?.object ?? targetToken
+      },
       animate: false,
       createMessage: true,
       prompt: false,
@@ -1310,7 +1330,7 @@ function isProsthesisSnapshotInstallable(item) {
   return Math.max(0, toInteger(item.conditionMax)) > 0 && Math.max(0, toInteger(item.conditionValue)) > 0;
 }
 
-async function runTreatmentChecks({ sourceActor, targetContext = null, trauma, tool, initialProgress, maxProgress }) {
+async function runTreatmentChecks({ sourceActor, sourceToken = null, targetContext = null, targetToken = null, trauma, tool, initialProgress, maxProgress }) {
   const skillKey = String(trauma.healingSkillKey ?? "");
   const difficulty = Math.max(1, toInteger(trauma.healingDifficulty));
   const progressPerCheck = Math.max(1, Math.ceil(maxProgress * TREATMENT_PROGRESS_STEP_RATIO));
@@ -1320,6 +1340,9 @@ async function runTreatmentChecks({ sourceActor, targetContext = null, trauma, t
   let availableCharges = toInteger(tool.supply?.value);
   let spentCharges = 0;
   const entries = [];
+  const targetActor = targetToken?.actor ?? (String(targetContext?.actorUuid ?? "")
+    ? await fromUuid(String(targetContext.actorUuid))
+    : null);
 
   for (let index = 1; index <= totalChecks; index += 1) {
     const remainingProgress = Math.max(0, maxProgress - currentProgress);
@@ -1331,7 +1354,12 @@ async function runTreatmentChecks({ sourceActor, targetContext = null, trauma, t
       ? await requestSkillCheck({
         actor: sourceActor,
         skillKey,
-        data: { difficulty },
+        data: {
+          difficulty,
+          actorToken: sourceToken?.object ?? sourceToken,
+          targetActor,
+          targetToken: targetToken?.object ?? targetToken
+        },
         animate: false,
         createMessage: true,
         prompt: false,

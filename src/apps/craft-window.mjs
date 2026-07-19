@@ -2798,7 +2798,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const outcome = await requestSkillCheck({
         actor,
         skillKey: link.skillKey,
-        data: { difficulty: link.difficulty },
+        data: { difficulty: link.difficulty, allowImplicitTarget: false },
         animate: false,
         createMessage: createMessages,
         completionCollector: createMessages ? null : collector,

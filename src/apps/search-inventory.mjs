@@ -4490,7 +4490,8 @@ async function performActorButchering(payload = {}, requesterUserId = "") {
     skillKey: config.skillKey,
     entries: config.stages.map(stage => ({
       data: {
-        difficulty: stage.difficulty
+        difficulty: stage.difficulty,
+        targetActor: searchedActor
       }
     })),
     animate: false,

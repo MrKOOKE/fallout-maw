@@ -54,6 +54,7 @@ import {
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
+import { buildReverseInteractionEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
   import {
@@ -7187,6 +7188,7 @@ function buildEffectPathLabelMap({
   const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
   map.set("fallout-maw.healing", firstAidHealingLabel);
   map.set("healing", firstAidHealingLabel);
+  for (const token of buildReverseInteractionEffectKeyTokens()) map.set(token.path, token.label);
 
   return map;
 }

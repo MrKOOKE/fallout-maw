@@ -2904,11 +2904,17 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInter
     minimum: 0,
     context: "knock off balance difficulty"
   })));
+  const sourceToken = getActorSceneToken(actor);
   const checks = await requestSkillCheckBatch({
     skillKey: settings.targetSkillKey,
     entries: selection.map(entry => ({
       actor: entry.token?.actor,
-      data: { difficulty }
+      data: {
+        difficulty,
+        actorToken: entry.token,
+        targetToken: sourceToken,
+        targetActor: actor
+      }
     })),
     requester: "knockOffBalance",
     title: `${abilityName}: проверка`
@@ -4209,7 +4215,11 @@ async function useOversight(actor, abilityItem, abilityFunction) {
   const sourceSkillValue = getActorSkillValue(actor, settings.sourceSkillKey);
   const difficulty = settings.difficultyBase + sourceSkillValue;
   const recoveryPenalty = Math.max(0, Math.floor(sourceSkillValue / settings.dodgeRecoveryDivisor));
-  const outcome = await requestOversightStealthCheck(targetToken.actor, settings.targetSkillKey, difficulty, abilityName);
+  const outcome = await requestOversightStealthCheck(targetToken.actor, settings.targetSkillKey, difficulty, abilityName, {
+    actorToken: targetToken,
+    targetActor: actor,
+    targetToken: sourceToken
+  });
   if (isSuccessfulSkillCheck(outcome)) {
     await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} избежал Надзора.`);
     return true;
@@ -4237,11 +4247,15 @@ async function useOversight(actor, abilityItem, abilityFunction) {
   return true;
 }
 
-async function requestOversightStealthCheck(actor, skillKey, difficulty, abilityName) {
+async function requestOversightStealthCheck(actor, skillKey, difficulty, abilityName, {
+  actorToken = null,
+  targetActor = null,
+  targetToken = null
+} = {}) {
   return requestSkillCheck({
     actor,
     skillKey,
-    data: { difficulty },
+    data: { difficulty, actorToken, targetActor, targetToken },
     animate: false,
     prompt: false,
     requester: "oversight",
@@ -4321,7 +4335,11 @@ async function refreshOversightEffectVisibility(effect) {
     return;
   }
   if (iconVisible) return;
-  const outcome = await requestOversightStealthCheck(effect.parent, data.targetSkillKey, data.difficulty, data.abilityName);
+  const outcome = await requestOversightStealthCheck(effect.parent, data.targetSkillKey, data.difficulty, data.abilityName, {
+    actorToken: targetDocument.object ?? targetDocument,
+    targetActor: sourceDocument.actor,
+    targetToken: sourceDocument.object ?? sourceDocument
+  });
   if (isSuccessfulSkillCheck(outcome)) {
     await deleteOversightActivation(effect.parent, data.activationId);
     return;

@@ -1,6 +1,10 @@
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
-import { evaluateActorEffectChangeBaseNumber, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
+import {
+  evaluateActorEffectChangeBaseNumber,
+  isReverseEffectKey,
+  prepareActorEffectChangeForApplication
+} from "../utils/active-effect-changes.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { getDamageTypeSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
@@ -884,6 +888,13 @@ function formatEffectChange(change, actor = null, effect = null) {
       stage: getEffectChangePreparationStage(change)
     });
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(`${formatSignedValue(value, change?.type)}%`)}</span>`;
+  }
+  if (isReverseEffectKey(key)) {
+    const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
+      fallback: Number(change?.value),
+      stage: getEffectChangePreparationStage(change)
+    });
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, change?.type))}</span>`;
   }
   const preparedChange = prepareTooltipEffectChange(actor, change, effect);
   if (!preparedChange) return "";

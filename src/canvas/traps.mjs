@@ -370,7 +370,7 @@ async function handleTrapDetectionForToken(tile, token) {
   const outcome = await requestSkillCheck({
     actor,
     skillKey,
-    data: { difficulty },
+    data: { difficulty, allowImplicitTarget: false },
     animate: false,
     createMessage: true,
     messageData: result => isSkillCheckSuccess(result) ? {} : createTrapDetectionFailureMessageData(),
@@ -598,7 +598,7 @@ async function onTrapPlacementPointerDown(event) {
   const outcome = await requestSkillCheck({
     actor,
     skillKey: trapData.installation.skillKey,
-    data: { difficulty: trapData.installation.difficulty },
+    data: { difficulty: trapData.installation.difficulty, allowImplicitTarget: false },
     animate: false,
     createMessage: true,
     prompt: false,
@@ -1436,7 +1436,7 @@ class TrapDisarmDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       const outcome = await requestSkillCheck({
         actor: this.#actor,
         skillKey: "traps",
-        data: { difficulty: disarm.difficulty },
+        data: { difficulty: disarm.difficulty, allowImplicitTarget: false },
         animate: false,
         createMessage: true,
         prompt: false,
@@ -1949,7 +1949,7 @@ async function triggerTrap(tile, triggeringToken) {
       const outcome = await requestSkillCheck({
         actor,
         skillKey: trapData.evasion.skillKey,
-        data: { difficulty: evasionDifficulty },
+        data: { difficulty: evasionDifficulty, allowImplicitTarget: false },
         animate: false,
         createMessage: true,
         prompt: false,

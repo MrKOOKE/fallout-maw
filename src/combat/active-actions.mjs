@@ -312,7 +312,8 @@ async function attemptPush(attackerDocument, targetDocument, { selectedStrength 
     data: {
       difficulty: getDodgeDifficulty(targetDocument.actor),
       actorToken: attackerDocument.object ?? attackerDocument,
-      targetToken: targetDocument.object ?? targetDocument
+      targetToken: targetDocument.object ?? targetDocument,
+      weaponActionKey: "push"
     },
     animate: false,
     createMessage: true,
@@ -365,7 +366,10 @@ async function attemptGrapple(grapplerDocument, targetDocument, options = {}) {
     skillKey: resolveSkillKey(targetDocument.actor, "prc"),
     data: {
       difficulty: 50 + attackerAthletics + size.difficultyModifier + grappleDifficultyBonus,
-      situationalModifier: size.resistanceModifier
+      situationalModifier: size.resistanceModifier,
+      actorToken: targetDocument.object ?? targetDocument,
+      targetToken: grapplerDocument.object ?? grapplerDocument,
+      targetActor: grapplerDocument.actor
     },
     animate: false,
     createMessage: true,
@@ -408,7 +412,10 @@ async function escapeGrapple(targetDocument, grapplerDocument) {
     skillKey: resolveSkillKey(targetDocument.actor, "ath"),
     data: {
       difficulty: 50 + getActorSkillValue(grapplerDocument.actor, "ath") + size.difficultyModifier + grappleDifficultyBonus,
-      situationalModifier: size.escapeModifier
+      situationalModifier: size.escapeModifier,
+      actorToken: targetDocument.object ?? targetDocument,
+      targetToken: grapplerDocument.object ?? grapplerDocument,
+      targetActor: grapplerDocument.actor
     },
     animate: false,
     createMessage: true,
