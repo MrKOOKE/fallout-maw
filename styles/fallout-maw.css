@@ -6325,7 +6325,7 @@ label.fallout-maw-mitigation-cell {
   font-weight: 800;
   min-width: 0;
   padding-left: 0.75rem;
-  text-align: right;
+  text-align: left;
 }
 
 .fallout-maw-inventory-tooltip .function-grid {
@@ -6365,7 +6365,7 @@ label.fallout-maw-mitigation-cell {
   min-width: 0;
   overflow-wrap: break-word;
   padding-left: 0.75rem;
-  text-align: right;
+  text-align: left;
   white-space: normal;
   word-break: normal;
 }
@@ -6432,6 +6432,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-inventory-tooltip .function-value-token {
   display: block;
   overflow-wrap: normal;
+  text-align: left;
   white-space: nowrap;
 }
 

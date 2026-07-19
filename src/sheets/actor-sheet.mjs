@@ -56,7 +56,7 @@ import {
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
-import { buildReverseInteractionEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildCombatEffectKeyTokens, buildReverseInteractionEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
   import {
@@ -5394,7 +5394,7 @@ function getNeedChangeOrganismDevelopmentTooltipRows(entries = []) {
     })
     .filter(Boolean);
   return values.length
-    ? [[game.i18n.localize("FALLOUTMAW.Item.NeedChangeOrganismDevelopment"), values.join(", ")]]
+    ? [[game.i18n.localize("FALLOUTMAW.Item.NeedChangeOrganismDevelopment"), { html: renderTooltipValueTokens(values) }]]
     : [];
 }
 
@@ -5408,7 +5408,9 @@ function getNeedChangeDamageTooltipRows(damages = []) {
       return `${labels.get(key) ?? key}: ${value}`;
     })
     .filter(Boolean);
-  return values.length ? [["Получение урона", values.join(", ")]] : [];
+  return values.length
+    ? [[game.i18n.localize("FALLOUTMAW.Item.NeedChangeDamage"), { html: renderTooltipValueTokens(values) }]]
+    : [];
 }
 
 function buildOneTimeUseTooltipSection(item, actor = null, { includeRecipeKnowledge = true, recipeKnowledgePreviews = new Map() } = {}) {
@@ -5470,7 +5472,9 @@ function getConfiguredNeedTooltipRows(needs = [], actor = null) {
       return `${needLabels.get(key) ?? key}: ${formatSignedNumber(value)}`;
     })
     .filter(Boolean);
-  return values.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidNeeds"), values.join(", ")]] : [];
+  return values.length
+    ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidNeeds"), { html: renderTooltipValueTokens(values) }]]
+    : [];
 }
 
 function getFirstAidRemoveEffectTooltipRows(firstAid = {}) {
@@ -5485,7 +5489,9 @@ function getFirstAidRemoveEffectTooltipRows(firstAid = {}) {
     .map(entry => String(entry?.damageTypeKey ?? entry?.key ?? "").trim())
     .filter(Boolean)))
     .map(key => labels.get(key) ?? key);
-  return values.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidRemoveEffects"), values.join(", ")]] : [];
+  return values.length
+    ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidRemoveEffects"), { html: renderTooltipValueTokens(values) }]]
+    : [];
 }
 
 function getFirstAidChangeTooltipRows(firstAid = {}, actor = null, item = null) {
@@ -5530,7 +5536,9 @@ function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey
   const summaries = prepareTraumaEffectEntries(effectChanges, pathLabels)
     .map(entry => entry.summary)
     .filter(Boolean);
-  const rows = summaries.length ? [[game.i18n.localize(labelKey), summaries.join(", ")]] : [];
+  const rows = summaries.length
+    ? [[game.i18n.localize(labelKey), { html: renderTooltipValueTokens(summaries) }]]
+    : [];
   if (!healingChanges.length) return rows;
 
   const outgoingPercent = getActorHealingModifierPercent(actor, "outgoing");
@@ -5625,7 +5633,9 @@ function buildDamageSourceTooltipSection(item, actor = null) {
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.DamageSourceName"), sourceName || item.name],
     [game.i18n.localize("FALLOUTMAW.Item.DamageSourceDamage"), formatFormulaDamageValue(source?.damage, actor)],
-    ["Распределение урона", getWeaponDamageTypeLabels(source).join(", ")]
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamageDistribution"), {
+      html: renderTooltipValueTokens(getWeaponDamageTypeLabels(source))
+    }]
   ];
   const pellets = Math.max(1, evaluateTooltipFormula(source?.pellets, actor, { fallback: 1, minimum: 1 }) || 1);
   if (pellets > 1) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPellets"), pellets]);
@@ -5699,7 +5709,9 @@ function buildEnergyConsumerTooltipSection(item) {
     ],
     [game.i18n.localize("FALLOUTMAW.Item.EnergySourceClass"), installed.class],
     [game.i18n.localize("FALLOUTMAW.Item.EnergySourceReserve"), installed.sourceItemUuid ? formatReserveTooltipValue(installed.reserve) : ""],
-    [game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"), acceptedLabels.join(", ")]
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"), acceptedLabels.length
+      ? { html: renderTooltipValueTokens(acceptedLabels) }
+      : ""]
   ];
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer"), rows);
 }
@@ -5763,7 +5775,8 @@ function getLightSourceCostTooltipLabel(costs = []) {
       return `${label}: ${formatNumber(amount)}/ч`;
     })
     .filter(Boolean);
-  return entries.length ? entries.join(", ") : game.i18n.localize("FALLOUTMAW.Item.LightSourceNoResourceCosts");
+  if (!entries.length) return game.i18n.localize("FALLOUTMAW.Item.LightSourceNoResourceCosts");
+  return { html: renderTooltipValueTokens(entries) };
 }
 
 function buildModuleTooltipSection(item, evaluatingActor = null) {
@@ -5780,7 +5793,9 @@ function buildConstructPartTooltipSection(item) {
   const rows = [
     ["Тип детали", partType],
     ["Критическая деталь", game.i18n.localize(constructPart.critical ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")],
-    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.join(", ")]
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.length
+      ? { html: renderTooltipValueTokens(blockedLabels) }
+      : ""]
   ];
   return renderTooltipFunctionSection("Деталь конструкта", rows);
 }
@@ -5802,12 +5817,16 @@ function buildProsthesisTooltipSection(item, actor = null) {
   const limbLabels = getProsthesisLimbLabels(prosthesis.limbKeys, actor);
   const blockedLabels = getProsthesisBlockedEffectLabels(prosthesis.blockedPeriodicEffects);
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisLimbs"), limbLabels.join(", ")],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisLimbs"), limbLabels.length
+      ? { html: renderTooltipValueTokens(limbLabels) }
+      : ""],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisIntegration"), `${Math.max(0, Math.min(100, toInteger(prosthesis.integrationPercent)))}%`],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBreakShockResistant"), game.i18n.localize(prosthesis.breakShockResistant ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisDifficulty"), Math.max(0, toInteger(prosthesis.difficulty ?? 60))],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisSkill"), getSkillLabel(prosthesis.skillKey ?? "doctor")],
-    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.join(", ")]
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.length
+      ? { html: renderTooltipValueTokens(blockedLabels) }
+      : ""]
   ];
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis"), rows);
 }
@@ -6168,7 +6187,9 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
       baseMode,
       breakdown: stats.breakdowns?.damage
     })],
-    ["Распределение урона", getWeaponDamageDistributionLabel(item, data)]
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamageDistribution"), {
+      html: renderTooltipValueTokens(getWeaponDamageTypeLabels(getEffectiveWeaponDamageData(item, data)))
+    }]
   ];
   if (isSourceDamageMode(data)) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), getWeaponDamageSourceLabel(data)]);
@@ -6235,7 +6256,7 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     html: renderTooltipValueTokens(requirements)
   }]);
   const actions = getWeaponActionLabels(data, baseData, { actor, baseMode, item, moduleSlots });
-  if (actions.length) rows.push(["Действия", {
+  if (actions.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponActions"), {
     html: renderTooltipValueTokens(actions)
   }]);
   return rows;
@@ -7266,7 +7287,9 @@ function getWeaponVolleyRows(data = {}, { actor = null } = {}) {
   const explosionDelay = evaluateTooltipFormula(volley.regionDelaySeconds, actor);
   const regionDelta = evaluateTooltipFormula(volley.regionRadiusDeltaMeters, actor);
   if (regionRadius > 0) rows.push(["Радиус области", `${formatNumber(regionRadius)} м`]);
-  if (regionDamage) rows.push(["Урон области", regionDamage]);
+  if (regionDamage.length) {
+    rows.push(["Урон области", { html: renderTooltipValueTokens(regionDamage) }]);
+  }
   if (regionDuration > 0) rows.push(["Длительность области", `${formatNumber(regionDuration)} с`]);
   if (explosionDelay > 0) rows.push(["Задержка до взрыва", `${formatNumber(explosionDelay)} с`]);
   if (regionDelta !== 0) rows.push(["Изменение радиуса", `${regionDelta > 0 ? "+" : ""}${formatNumber(regionDelta)} м`]);
@@ -7295,6 +7318,11 @@ function isWeaponActionEnabled(data = {}, actionKey = "") {
 }
 
 function getWeaponDamageEntryLabels(entries = [], actor = null) {
+  return getWeaponDamageEntryRows(entries, actor)
+    .map(([label, value]) => `${label}: ${value}`);
+}
+
+function getWeaponDamageEntryRows(entries = [], actor = null) {
   const damageTypes = getDamageTypeSettings();
   const labels = new Map(damageTypes.map(type => [type.key, type.label ?? type.key]));
   return (entries ?? [])
@@ -7307,16 +7335,19 @@ function getWeaponDamageEntryLabels(entries = [], actor = null) {
           context: "tooltip damage entry"
         })
         : 0;
-      if (!key || (actor ? amount <= 0 : !isFormulaTextConfigured(formula))) return "";
+      if (!key || (actor ? amount <= 0 : !isFormulaTextConfigured(formula))) return null;
       const displayFormula = formatActorFormulaForDisplay(formula, actor, { includeValues: Boolean(actor) });
       const amountLabel = formula === String(amount) ? String(amount) : `${amount} (${displayFormula})`;
-      return `${labels.get(key) ?? key}: ${actor ? amountLabel : displayFormula}`;
+      return [labels.get(key) ?? key, actor ? amountLabel : displayFormula];
     })
-    .filter(Boolean)
-    .join(", ");
+    .filter(Boolean);
 }
 
 function getWeaponDamageTypeLabels(data = {}) {
+  return getWeaponDamageTypeEntries(data).map(entry => `${entry.label}: ${entry.percent}%`);
+}
+
+function getWeaponDamageTypeEntries(data = {}) {
   const damageTypes = getDamageTypeSettings();
   const labels = new Map(damageTypes.map(type => [type.key, type.label ?? type.key]));
   const rows = Array.isArray(data.damageTypes) && data.damageTypes.length
@@ -7326,9 +7357,11 @@ function getWeaponDamageTypeLabels(data = {}) {
     .filter(row => String(row?.key ?? "").trim())
     .map(row => {
       const key = String(row.key ?? "");
-      const label = labels.get(key) ?? key;
-      const percent = toInteger(row.percent);
-      return `${label}: ${percent || 100}%`;
+      return {
+        key,
+        label: labels.get(key) ?? key,
+        percent: toInteger(row.percent) || 100
+      };
     });
 }
 
@@ -8495,10 +8528,9 @@ function buildEffectPathLabelMap({
   );
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
-  map.set("system.combat.burstStability", "Стабильность стрельбы очередью");
-  map.set("system.combat.finishingBlow", "Добивание");
-  map.set("system.combat.finishingBlowChance", "Шанс добивания");
-  map.set("system.combat.unconsciousnessResistance", "Сопротивление к потере сознания");
+  for (const token of buildCombatEffectKeyTokens()) {
+    if (token?.path && token?.label) map.set(token.path, token.label);
+  }
   map.set("system.healing.incomingPercent", "Входящее лечение, %");
   map.set("system.healing.outgoingPercent", "Исходящее лечение, %");
   map.set("system.costs.actions.aimedShot", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")}: стоимость`);
