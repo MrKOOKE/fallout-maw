@@ -64,7 +64,9 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
           createLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "Создать особенность" : "Создать способность",
           emptyLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "В каталоге нет особенностей." : "В каталоге нет способностей.",
           collapse: buildCategoryCollapseState(this.#expandedCategoryIds.has(String(category.id ?? ""))),
-          abilities: (category.abilities ?? []).map(ability => ({
+          abilities: [...(category.abilities ?? [])]
+            .sort(compareAbilityNames)
+            .map(ability => ({
             ...ability,
             isFeature: category.id === LOCKED_FEATURES_CATEGORY_ID,
             cost: toInteger(ability.system?.cost),
@@ -153,6 +155,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     const index = category.abilities.findIndex(entry => entry.id === normalized.id);
     if (index >= 0) category.abilities[index] = normalized;
     else category.abilities.push(normalized);
+    category.abilities.sort(compareAbilityNames);
     this.catalog = await setAbilityCatalog(this.catalog);
     const saved = this.getAbility(categoryId, normalized.id) ?? normalized;
     this.#syncAbilityRow(categoryId, saved);
@@ -204,7 +207,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
                 : abilityRow.querySelector("[data-field='abilityCost']")?.value ?? existingAbility.system?.cost
             }
           }, abilityIndex);
-        })
+        }).sort(compareAbilityNames)
       };
     });
     return normalizeAbilityCatalog({ categories }, getSkillSettings());
@@ -374,6 +377,13 @@ function getRowIndex(form, target, selector) {
   const row = target.closest(selector);
   const rows = Array.from(form?.querySelectorAll(selector) ?? []);
   return rows.indexOf(row);
+}
+
+function compareAbilityNames(left, right) {
+  return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "ru", {
+    sensitivity: "base",
+    numeric: true
+  });
 }
 
 function getScopedRowIndex(scope, target, selector) {

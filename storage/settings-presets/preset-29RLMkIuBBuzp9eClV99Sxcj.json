@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "c79d7dec9763f6bef2e18ce07e1cfb7a832b200003d3cc443070aaa179a88047",
-  "updatedAt": "2026-07-20T09:48:19.413Z",
+  "revision": "059fa86bab33d4b2b9c32d9bf2c735fdc4a7fa24caa3a357e6f091bf34488897",
+  "updatedAt": "2026-07-20T11:47:47.375Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -18,10 +18,10 @@
           {
             "abilities": [
               {
-                "description": "<p>Когда слот очков занят вы получете +1 к Восприятию и Харизме.<br>В ином случае -1 к Восприятию и Харизме.</p>",
-                "id": "lBaJVF6DzKnhNhwy",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
-                "name": "Модник",
+                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li><li><p>Множитель развития всех не коронных навыков уменьшается на 0.2</p></li></ul>",
+                "id": "MykWY2QgZQDXBpbF",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/odaryonnyj.webp",
+                "name": "\"Одаренный\"",
                 "system": {
                   "acquisition": {
                     "difficulty": 60,
@@ -39,205 +39,32 @@
                       "activeSettings": {},
                       "changes": [
                         {
-                          "id": "kgv6AUo1S3bGnZEH",
-                          "key": "system.characteristics.perception",
+                          "id": "k7YweAMyMxBvKvrL",
+                          "key": "system.development.points.signatureSkills",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
                           "value": "1"
-                        },
-                        {
-                          "id": "GqktcSOU7FCxgqHS",
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "1"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "durationSeconds": 0,
-                          "equipmentSlotKey": "glasses",
-                          "eventSubject": "reactor",
-                          "groupId": "",
-                          "healthTarget": "general",
-                          "id": "j03C4sx6pbDZYJ5k",
-                          "limbKey": "all",
-                          "limit": 1,
-                          "operator": "occupied",
-                          "percent": 50,
-                          "type": "equipmentSlotOccupied"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "GMPnG93kryF5MHMj",
-                      "penalties": [
-                        {
-                          "id": "f9BCMUlJhJ95NxFZ",
-                          "key": "system.characteristics.perception",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "id": "su4MGB9oRyj7jLtw",
-                          "key": "system.characteristics.charisma",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<ul><li><p>Прицельные атаки получают двойную помеху.</p></li><li><p>Неприцельные атаки стоят на 1 ОД меньше.</p></li></ul>",
-                "id": "Iqzqk9O9J5my2pdM",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/strelba-navsikdku.webp",
-                "name": "Проблемы с концентрацией",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Особенности",
-                  "cost": 0,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "bhE1a6twduA420fQ",
-                          "key": "system.combat.actions.aimedShot.disadvantage",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "2"
-                        },
-                        {
-                          "id": "jG0JEYumYS2XsNPY",
-                          "key": "system.combat.actions.aimedMeleeAttack.disadvantage",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "2"
-                        },
-                        {
-                          "id": "BF2mlLL0a6CnsOXb",
-                          "key": "system.costs.actions.burst",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "id": "TgnRRNN9LKfM5kUd",
-                          "key": "system.costs.actions.snapshot",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
                         }
                       ],
                       "conditions": [],
                       "fixedKey": "",
                       "fixedSettings": {},
-                      "id": "6QnjhsR4ovtoNI31",
+                      "id": "B6JjO9nRU0oINne0",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 0,
-                      "type": "effectChanges"
+                      "type": "acquisitionChanges"
                     }
                   ]
                 },
                 "visible": true
               },
               {
-                "description": "<p>С 20:00 по 6:00 +20 ко всем Навыкам. В остальное время -10 ко всем Навыкам</p>",
-                "id": "fqLghKYaxztRKp7f",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/detya-nochi.webp",
-                "name": "Дитя ночи",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Особенности",
-                  "cost": 0,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "Ihp4S0tedVe7y9Vy",
-                          "key": "system.skills.all.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "20"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "eventSubject": "reactor",
-                          "groupId": "",
-                          "id": "W09WIZ7e5Y2W3Pxc",
-                          "timeFrom": "20:00",
-                          "timeTo": "06:00",
-                          "type": "timeOfDay"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "THU9UE7G8ZKtDtLL",
-                      "penalties": [
-                        {
-                          "id": "CwKdRyBrFJtfNvyI",
-                          "key": "system.skills.all.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-10"
-                        }
-                      ],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<ul><li><p>Каждая единица выносливости увеличивает ОЗ всех частей тела на 3.</p></li><li><p>Уклонение уменьшается на [[30+athletics/6]]</p></li></ul>",
+                "description": "<ul><li><p>Каждая единица Выносливости увеличивает ОЗ всех частей тела на 3.</p></li><li><p>Уклонение уменьшается на [[30+athletics/6]]</p></li></ul>",
                 "id": "QU8jCJ6YgiIdbtQ1",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/bolshoj-malchik.webp",
                 "name": "Большой мальчик",
@@ -345,6 +172,70 @@
                 "visible": true
               },
               {
+                "description": "<p>С 20:00 по 6:00 +20 ко всем Навыкам. В остальное время -10 ко всем Навыкам</p>",
+                "id": "fqLghKYaxztRKp7f",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/detya-nochi.webp",
+                "name": "Дитя ночи",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "Ihp4S0tedVe7y9Vy",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "W09WIZ7e5Y2W3Pxc",
+                          "timeFrom": "20:00",
+                          "timeTo": "06:00",
+                          "type": "timeOfDay"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "THU9UE7G8ZKtDtLL",
+                      "penalties": [
+                        {
+                          "id": "CwKdRyBrFJtfNvyI",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        }
+                      ],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>С 6:00 по 20:00 получаете удвоенную регенерацию. В остальное время не регенерируете вовсе.</p>",
                 "id": "KcOSFagJX9GJCSZl",
                 "img": "systems/fallout-maw/assets/icons/29-99/poceluj-solnca.webp",
@@ -427,46 +318,6 @@
                 "visible": true
               },
               {
-                "description": "<p>Вы лишены вероятности срабатывания Критического успеха и Критического провала.</p>",
-                "id": "91ljCnGdkOl5YYMM",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/genij-tehniki.webp",
-                "name": "Скучный",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Особенности",
-                  "cost": 0,
-                  "formula": "",
-                  "functions": []
-                },
-                "visible": true
-              },
-              {
-                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li><li><p>Множитель развития всех не коронных навыков уменьшается на 0.2</p></li></ul>",
-                "id": "MykWY2QgZQDXBpbF",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/odaryonnyj.webp",
-                "name": "\"Одаренный\"",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Особенности",
-                  "cost": 0,
-                  "formula": "",
-                  "functions": []
-                },
-                "visible": true
-              },
-              {
                 "description": "<ul><li><p>Уклонение увеличивается на [[20+athletics/9]]</p></li><li><p>Каждая единица Выносливости уменьшает максимум ОЗ всех частей тела на 2</p></li></ul>",
                 "id": "ti6900MDWnCpCjFE",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/miniatyurnyj.webp",
@@ -521,6 +372,91 @@
                 "visible": true
               },
               {
+                "description": "<p>Когда слот очков занят вы получете +1 к Восприятию и Харизме.<br>В ином случае -1 к Восприятию и Харизме.</p>",
+                "id": "lBaJVF6DzKnhNhwy",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
+                "name": "Модник",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "kgv6AUo1S3bGnZEH",
+                          "key": "system.characteristics.perception",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "GqktcSOU7FCxgqHS",
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 0,
+                          "equipmentSlotKey": "glasses",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "j03C4sx6pbDZYJ5k",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "occupied",
+                          "percent": 50,
+                          "type": "equipmentSlotOccupied"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "GMPnG93kryF5MHMj",
+                      "penalties": [
+                        {
+                          "id": "f9BCMUlJhJ95NxFZ",
+                          "key": "system.characteristics.perception",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "su4MGB9oRyj7jLtw",
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех +10%</p></li><li><p>С вероятностью в 50% шанс на Крит провал +10%</p></li></ul>",
                 "id": "2ExGBSWNzig4FgR8",
                 "img": "systems/fallout-maw/assets/icons/8-14/savant.webp",
@@ -544,6 +480,96 @@
                   "functions": []
                 },
                 "visible": true
+              },
+              {
+                "description": "<ul><li><p>Прицельные атаки получают двойную помеху.</p></li><li><p>Неприцельные атаки стоят на 1 ОД меньше.</p></li></ul>",
+                "id": "Iqzqk9O9J5my2pdM",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/strelba-navsikdku.webp",
+                "name": "Проблемы с концентрацией",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "bhE1a6twduA420fQ",
+                          "key": "system.combat.actions.aimedShot.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        },
+                        {
+                          "id": "jG0JEYumYS2XsNPY",
+                          "key": "system.combat.actions.aimedMeleeAttack.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        },
+                        {
+                          "id": "BF2mlLL0a6CnsOXb",
+                          "key": "system.costs.actions.burst",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "TgnRRNN9LKfM5kUd",
+                          "key": "system.costs.actions.snapshot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "6QnjhsR4ovtoNI31",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Вы лишены вероятности срабатывания Критического успеха и Критического провала.</p>",
+                "id": "91ljCnGdkOl5YYMM",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/genij-tehniki.webp",
+                "name": "Скучный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
               }
             ],
             "id": "features",
@@ -552,52 +578,6 @@
           },
           {
             "abilities": [
-              {
-                "description": "<p>Вы получаете еще один коронный навык.</p>",
-                "id": "yQ1yCA4gGpvmfz7O",
-                "img": "systems/fallout-maw/assets/icons/22-28/priz.webp",
-                "name": "Приз",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": true,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Общая категория",
-                  "cost": 6000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "wXjIiu4H2ByEYfwB",
-                          "key": "system.development.points.signatureSkills",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "1"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "cun6l601FwAEukjv",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "acquisitionChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
               {
                 "description": "<p>Вы получаете +1 к выбранной характеристиике.</p>",
                 "id": "nA1IMMboEOo8ErXF",
@@ -705,6 +685,52 @@
                   ]
                 },
                 "visible": true
+              },
+              {
+                "description": "<p>Вы получаете еще один коронный навык.</p>",
+                "id": "yQ1yCA4gGpvmfz7O",
+                "img": "systems/fallout-maw/assets/icons/22-28/priz.webp",
+                "name": "Приз",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": true,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Общая категория",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "wXjIiu4H2ByEYfwB",
+                          "key": "system.development.points.signatureSkills",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "cun6l601FwAEukjv",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "acquisitionChanges"
+                    }
+                  ]
+                },
+                "visible": true
               }
             ],
             "id": "general",
@@ -713,163 +739,6 @@
           },
           {
             "abilities": [
-              {
-                "description": "<p>Стоимость действий: Выстрел навскидку, Прицельный выстрел, Стрельба очередью уменьшается на 1 ОД</p><p>Перезарядка: 6 секунд.</p>",
-                "id": "l1BFCOKpM2z7XdmL",
-                "img": "systems/fallout-maw/assets/icons/8-14/More_Criticals.png",
-                "name": "Скорострел",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 100,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "rangedCombat"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "tn7OFHvXjnTLzcMl",
-                      "skillKey": "rangedCombat",
-                      "type": "skill",
-                      "value": 80
-                    }
-                  ],
-                  "category": "Дальний бой",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "E6PdFug0e9LD8Tnx",
-                          "key": "system.costs.actions.aimedShot",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "id": "6QDH0rM4fyYk35Tq",
-                          "key": "system.costs.actions.snapshot",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        },
-                        {
-                          "id": "eQRMK4rnMV41NPe4",
-                          "key": "system.costs.actions.burst",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "durationSeconds": 6,
-                          "equipmentSlotKey": "",
-                          "groupId": "",
-                          "healthTarget": "general",
-                          "id": "wcTXwwHHljqgw4w0",
-                          "limbKey": "all",
-                          "limit": 1,
-                          "operator": "lte",
-                          "percent": 50,
-                          "type": "cooldown"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "oY5zpjJhiO3Vqwgl",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Атака задействующая Дальний бой получает +30 к точности<br>Перезарядка: 6 секунд.</p>",
-                "id": "WNKljmsHqZYgBM9D",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/tochnost.webp",
-                "name": "Точный выстрел",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "rangedCombat"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "XOEq6KtBFkR2QcG5",
-                      "skillKey": "rangedCombat",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Дальний бой",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "qhBzVH0q5s08CDy0",
-                          "key": "system.combat.accuracy",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "30"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "eventSubject": "reactor",
-                          "groupId": "",
-                          "id": "IbeKirYyCm3wameN",
-                          "skillKeys": [
-                            "rangedCombat"
-                          ],
-                          "type": "weaponSkill"
-                        },
-                        {
-                          "durationSeconds": 6,
-                          "equipmentSlotKey": "",
-                          "groupId": "",
-                          "healthTarget": "general",
-                          "id": "qva72bm2Ruq4W4Mf",
-                          "limbKey": "all",
-                          "limit": 1,
-                          "operator": "lte",
-                          "percent": 50,
-                          "type": "cooldown"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "lAwDgX5mnYe3YB8s",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
               {
                 "description": "<p>Стоимость перезарядки -1 ОД</p>",
                 "id": "6BRhRZ5jTvqm9pb9",
@@ -1185,6 +1054,57 @@
                 "visible": true
               },
               {
+                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.<br></p><p>Ваш следующий Выстрел навскидку вместо обрезания луча об стену будет отражаться до 3-х раз. За каждое отражение +10 к точности и +10% к урону</p>",
+                "id": "P10gNdGncUa1NuuD",
+                "img": "systems/fallout-maw/assets/icons/8-14/master-karabinov.webp",
+                "name": "Рикошет",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "rangedCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "kmrx0RNM8zcS5clL",
+                      "skillKey": "rangedCombat",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Дальний бой",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "ricochet",
+                      "fixedSettings": {
+                        "accuracyBonusPerReflection": 10,
+                        "activationEnergyCost": 20,
+                        "damagePercentBonusPerReflection": 10,
+                        "maxReflections": 3,
+                        "overloadDurationSeconds": 12,
+                        "overloadEnergyCost": 20
+                      },
+                      "id": "xm5Bbdg0ad49DOjp",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Переключаемая способность<br>В активном состояние потребляет 5 энергии и позволяет атаковать сразу с двух одноручных оружий.</p>",
                 "id": "PeiDp0A9OupaUdsu",
                 "img": "systems/fallout-maw/assets/icons/8-14/master-karabinov.webp",
@@ -1225,6 +1145,88 @@
                       },
                       "sort": 0,
                       "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость действий: Выстрел навскидку, Прицельный выстрел, Стрельба очередью уменьшается на 1 ОД</p><p>Перезарядка: 6 секунд.</p>",
+                "id": "l1BFCOKpM2z7XdmL",
+                "img": "systems/fallout-maw/assets/icons/8-14/More_Criticals.png",
+                "name": "Скорострел",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 100,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "rangedCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "tn7OFHvXjnTLzcMl",
+                      "skillKey": "rangedCombat",
+                      "type": "skill",
+                      "value": 80
+                    }
+                  ],
+                  "category": "Дальний бой",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "E6PdFug0e9LD8Tnx",
+                          "key": "system.costs.actions.aimedShot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "6QDH0rM4fyYk35Tq",
+                          "key": "system.costs.actions.snapshot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "eQRMK4rnMV41NPe4",
+                          "key": "system.costs.actions.burst",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 6,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "wcTXwwHHljqgw4w0",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "cooldown"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "oY5zpjJhiO3Vqwgl",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
                     }
                   ]
                 },
@@ -1325,10 +1327,10 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.<br></p><p>Ваш следующий Выстрел навскидку вместо обрезания луча об стену будет отражаться до 3-х раз. За каждое отражение +10 к точности и +10% к урону</p>",
-                "id": "P10gNdGncUa1NuuD",
-                "img": "systems/fallout-maw/assets/icons/8-14/master-karabinov.webp",
-                "name": "Рикошет",
+                "description": "<p>Атака задействующая Дальний бой получает +30 к точности<br>Перезарядка: 6 секунд.</p>",
+                "id": "WNKljmsHqZYgBM9D",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/tochnost.webp",
+                "name": "Точный выстрел",
                 "system": {
                   "acquisition": {
                     "difficulty": 150,
@@ -1338,7 +1340,7 @@
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "kmrx0RNM8zcS5clL",
+                      "id": "XOEq6KtBFkR2QcG5",
                       "skillKey": "rangedCombat",
                       "type": "skill",
                       "value": 100
@@ -1351,25 +1353,49 @@
                     {
                       "actions": [],
                       "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "ricochet",
-                      "fixedSettings": {
-                        "accuracyBonusPerReflection": 10,
-                        "activationEnergyCost": 20,
-                        "damagePercentBonusPerReflection": 10,
-                        "maxReflections": 3,
-                        "overloadDurationSeconds": 12,
-                        "overloadEnergyCost": 20
-                      },
-                      "id": "xm5Bbdg0ad49DOjp",
+                      "changes": [
+                        {
+                          "id": "qhBzVH0q5s08CDy0",
+                          "key": "system.combat.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "30"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "IbeKirYyCm3wameN",
+                          "skillKeys": [
+                            "rangedCombat"
+                          ],
+                          "type": "weaponSkill"
+                        },
+                        {
+                          "durationSeconds": 6,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "qva72bm2Ruq4W4Mf",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "cooldown"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "lAwDgX5mnYe3YB8s",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 0,
-                      "type": "fixed"
+                      "type": "effectChanges"
                     }
                   ]
                 },
@@ -1382,67 +1408,6 @@
           },
           {
             "abilities": [
-              {
-                "description": "<p>Ваши удары (в том числе с оружием) получают +[[5 + athletics/10]] к пробивной силе.</p>",
-                "id": "2GePnXgDpE5bAj9P",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/kulachishi.webp",
-                "name": "Убойные удары",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 100,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "xIBfFzxZHGv0OcSc",
-                      "skillKey": "meleeCombat",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Ближний бой",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "jMFRvAHgPj3WhHQ3",
-                          "key": "system.penetration.actions.meleeAttack",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "5 + ath/10"
-                        },
-                        {
-                          "id": "jXI6sRg7ykuKY59Q",
-                          "key": "system.penetration.actions.aimedMeleeAttack",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "5 + ath/10"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "Xny360S1rHC233Yb",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
               {
                 "description": "<p>Стоимость Прицельной и Неприцельной атаки -1 ОД<br>Перезарядка: 6 секунд</p>",
                 "id": "kCYKcYZslouPLdO6",
@@ -1776,6 +1741,56 @@
                 "visible": true
               },
               {
+                "description": "<p>Стоимость активации: 40 энергии.<br>Перегрузка: 100 энергии на 1 час.</p><p>После активации ваш следующий Прицельный удар по ключевой части тела нанесет на 200% больше урона</p><p>Длительность ожидания атаки: 12 секунд.</p>",
+                "id": "yvLxbajw2KPEbG9i",
+                "img": "systems/fallout-maw/assets/icons/22-28/bonus-rukopashnoj-ataki.webp",
+                "name": "Смертельный удар",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "RkyAlNhAv80ENjSO",
+                      "skillKey": "meleeCombat",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Ближний бой",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "lethalStrike",
+                      "fixedSettings": {
+                        "activationEnergyCost": 40,
+                        "attackWaitDurationSeconds": 12,
+                        "damagePercentBonus": 200,
+                        "overloadDurationSeconds": 3600,
+                        "overloadEnergyCost": 100
+                      },
+                      "id": "Yg07eygzP5bxQwCu",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Переключаемая способность.</p><p>Требование: Оружие Ближнего боя.</p><p>В активном состояние потребляет 10 ед. энергии на каждую атаку, а расход состояния у оружия увеличивается в 5 раз.<br>Урон: +100%</p>",
                 "id": "YWK50DWd15fwCkNi",
                 "img": "systems/fallout-maw/assets/icons/22-28/bonus-rukopashnoj-ataki.webp",
@@ -1953,50 +1968,61 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 40 энергии.<br>Перегрузка: 100 энергии на 1 час.</p><p>После активации ваш следующий Прицельный удар по ключевой части тела нанесет на 200% больше урона</p><p>Длительность ожидания атаки: 12 секунд.</p>",
-                "id": "yvLxbajw2KPEbG9i",
-                "img": "systems/fallout-maw/assets/icons/22-28/bonus-rukopashnoj-ataki.webp",
-                "name": "Смертельный удар",
+                "description": "<p>Ваши удары (в том числе с оружием) получают +[[5 + athletics/10]] к пробивной силе.</p>",
+                "id": "2GePnXgDpE5bAj9P",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/kulachishi.webp",
+                "name": "Убойные удары",
                 "system": {
                   "acquisition": {
-                    "difficulty": 210,
+                    "difficulty": 100,
                     "onlyFree": false,
                     "onlyManual": false,
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "RkyAlNhAv80ENjSO",
+                      "id": "xIBfFzxZHGv0OcSc",
                       "skillKey": "meleeCombat",
                       "type": "skill",
-                      "value": 160
+                      "value": 100
                     }
                   ],
                   "category": "Ближний бой",
-                  "cost": 6000,
+                  "cost": 3000,
                   "formula": "",
                   "functions": [
                     {
                       "actions": [],
                       "activeSettings": {},
-                      "changes": [],
+                      "changes": [
+                        {
+                          "id": "jMFRvAHgPj3WhHQ3",
+                          "key": "system.penetration.actions.meleeAttack",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5 + ath/10"
+                        },
+                        {
+                          "id": "jXI6sRg7ykuKY59Q",
+                          "key": "system.penetration.actions.aimedMeleeAttack",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5 + ath/10"
+                        }
+                      ],
                       "conditions": [],
-                      "fixedKey": "lethalStrike",
-                      "fixedSettings": {
-                        "activationEnergyCost": 40,
-                        "attackWaitDurationSeconds": 12,
-                        "damagePercentBonus": 200,
-                        "overloadDurationSeconds": 3600,
-                        "overloadEnergyCost": 100
-                      },
-                      "id": "Yg07eygzP5bxQwCu",
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "Xny360S1rHC233Yb",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 0,
-                      "type": "fixed"
+                      "type": "effectChanges"
                     }
                   ]
                 },
@@ -2009,295 +2035,6 @@
           },
           {
             "abilities": [
-              {
-                "description": "<p>Добавляет дополнительный нижний ряд слотов в инвентаре и увеличивает грузоподъемность на 50 кг.</p>",
-                "id": "geh3jh8LBxjW2Tvx",
-                "img": "systems/fallout-maw/assets/icons/1-7/baraholshik.webp",
-                "name": "Барахольщик",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 110,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "athletics"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "sGLlWQHcfr9B9qtM",
-                      "skillKey": "athletics",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Атлетка",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "1wMsESz0ZpuT3ATb",
-                          "key": "system.load.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "50"
-                        },
-                        {
-                          "id": "C480NVWPMvC1C3S2",
-                          "key": "system.inventory.rowsBonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "1"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "92fiqPzv1Z7CkldI",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Добавляет по 2 ряда слотов сетки инвентаря в высоту и шириу, а так же увеличивает грузоподьемность на 100 кг.</p>",
-                "id": "Tuu1UCNuS9ViJB5I",
-                "img": "systems/fallout-maw/assets/icons/8-14/krepkij-hrebet.webp",
-                "name": "Крепкий хребет",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 210,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "athletics"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "fZwRx7JjJVpCmUmR",
-                      "skillKey": "athletics",
-                      "type": "skill",
-                      "value": 160
-                    }
-                  ],
-                  "category": "Атлетка",
-                  "cost": 6000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "yTO3Ders240MCxWL",
-                          "key": "system.load.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "100"
-                        },
-                        {
-                          "id": "qDc8bbCqpF4yoe0c",
-                          "key": "system.inventory.columnsBonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "2"
-                        },
-                        {
-                          "id": "qUxUUAhoM8TyxFny",
-                          "key": "system.inventory.rowsBonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "2"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "RcoeNtllJJFxjucK",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Уменьшает отдачу при стрельбе очередью на 50%</p>",
-                "id": "vO0Mt1Talbc4Zkh0",
-                "img": "systems/fallout-maw/assets/icons/1-7/tvyordaya-ruka.webp",
-                "name": "Твердая рука",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "athletics"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "d6EQ6s5wXPzS5Dy7",
-                      "skillKey": "athletics",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Атлетка",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "e0ygwqRNFug7lrGp",
-                          "key": "system.combat.burstStability",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "50"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "ne55LtLtPzLjUMsV",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Увеличивает ваши ОП на 4</p>",
-                "id": "KeI4l5UwYGowZ3yT",
-                "img": "systems/fallout-maw/assets/icons/8-14/marafonec.webp",
-                "name": "Марафонец",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "athletics"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "LpDKXAuMZkxas66j",
-                      "skillKey": "athletics",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Атлетка",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "xoFIlfmtpunPCbkV",
-                          "key": "system.resources.movementPoints.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "4"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "P1L4zUbIXzhFPDJk",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Вы больше не получаете штраф к стоимости передвижения от положения Присед.</p>",
-                "id": "DeslrzONoVH2agnv",
-                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
-                "name": "Крадун",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 110,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "athletics"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "oxhDXKUbyjkl6Pm7",
-                      "skillKey": "athletics",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Атлетка",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "fJ8vxwM8YPRbet8M",
-                          "key": "system.postures.crawl.movementMultiplier",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-1"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "XEMrtDzzo0yDU549",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
               {
                 "description": "<p>Когда состояние любой ключевой конечности &lt;=50%<br>Или<br>Когда общее ОЗ &lt;=50%<br>Сила: +4</p>",
                 "id": "vgAop7J19NFMwQUD",
@@ -2379,6 +2116,67 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "VMEez0y8JAHtE9Y5",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Добавляет дополнительный нижний ряд слотов в инвентаре и увеличивает грузоподъемность на 50 кг.</p>",
+                "id": "geh3jh8LBxjW2Tvx",
+                "img": "systems/fallout-maw/assets/icons/1-7/baraholshik.webp",
+                "name": "Барахольщик",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "sGLlWQHcfr9B9qtM",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Атлетка",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "1wMsESz0ZpuT3ATb",
+                          "key": "system.load.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "50"
+                        },
+                        {
+                          "id": "C480NVWPMvC1C3S2",
+                          "key": "system.inventory.rowsBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "92fiqPzv1Z7CkldI",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2498,6 +2296,128 @@
                 "visible": true
               },
               {
+                "description": "<p>Вы больше не получаете штраф к стоимости передвижения от положения Присед.</p>",
+                "id": "DeslrzONoVH2agnv",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Крадун",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "oxhDXKUbyjkl6Pm7",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Атлетка",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "fJ8vxwM8YPRbet8M",
+                          "key": "system.postures.crawl.movementMultiplier",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "XEMrtDzzo0yDU549",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Добавляет по 2 ряда слотов сетки инвентаря в высоту и шириу, а так же увеличивает грузоподьемность на 100 кг.</p>",
+                "id": "Tuu1UCNuS9ViJB5I",
+                "img": "systems/fallout-maw/assets/icons/8-14/krepkij-hrebet.webp",
+                "name": "Крепкий хребет",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "fZwRx7JjJVpCmUmR",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Атлетка",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "yTO3Ders240MCxWL",
+                          "key": "system.load.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "100"
+                        },
+                        {
+                          "id": "qDc8bbCqpF4yoe0c",
+                          "key": "system.inventory.columnsBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        },
+                        {
+                          "id": "qUxUUAhoM8TyxFny",
+                          "key": "system.inventory.rowsBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "RcoeNtllJJFxjucK",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Укрытия обеспечивают на 50% больше бонуса к уклонению.</p>",
                 "id": "w2ILkwVcUa9Z10Qe",
                 "img": "systems/fallout-maw/assets/icons/8-14/luchshee-ukrytie.webp",
@@ -2561,6 +2481,106 @@
                       },
                       "sort": 0,
                       "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Увеличивает ваши ОП на 4</p>",
+                "id": "KeI4l5UwYGowZ3yT",
+                "img": "systems/fallout-maw/assets/icons/8-14/marafonec.webp",
+                "name": "Марафонец",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "LpDKXAuMZkxas66j",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Атлетка",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "xoFIlfmtpunPCbkV",
+                          "key": "system.resources.movementPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "4"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "P1L4zUbIXzhFPDJk",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Сложность избегания и вырывания из вашего захвата увеличивается на 50<br>Атаки захваченного получают на 1 помеху больше.</p>",
+                "id": "wN57HiHZQg85goBL",
+                "img": "systems/fallout-maw/assets/icons/8-14/adrenalinovyj-drajv.webp",
+                "name": "Мастер по скручиванию",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "8vG3Tpe5fjcsxc73",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Атлетка",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "grapplingMaster",
+                      "fixedSettings": {
+                        "checkDifficultyBonus": 50,
+                        "targetAttackDisadvantageBonus": 1
+                      },
+                      "id": "wq6cf6uEcf2DK91J",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
                     }
                   ]
                 },
@@ -2669,6 +2689,59 @@
                 "visible": true
               },
               {
+                "description": "<p>Уменьшает отдачу при стрельбе очередью на 50%</p>",
+                "id": "vO0Mt1Talbc4Zkh0",
+                "img": "systems/fallout-maw/assets/icons/1-7/tvyordaya-ruka.webp",
+                "name": "Твердая рука",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "d6EQ6s5wXPzS5Dy7",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Атлетка",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "e0ygwqRNFug7lrGp",
+                          "key": "system.combat.burstStability",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "50"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "ne55LtLtPzLjUMsV",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Стоимость активации: 30 энергии.<br>Перегрузка: 100 энергии на 2 часа.</p><p>ОП: +3<br>ОД: +1<br>Все проверки навыка Ближний бой получают Преимущество.<br>Все проверки навыка Дальний бой получают Помеху.</p><p>Длительность: 24 секунды</p>",
                 "id": "8oRCcF5xqVHLFOJ6",
                 "img": "systems/fallout-maw/assets/icons/8-14/adrenalinovyj-drajv.webp",
@@ -2711,53 +2784,6 @@
                         "overloadEnergyCost": 100
                       },
                       "id": "G3i9Euj4WewQfkgt",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "fixed"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Сложность избегания и вырывания из вашего захвата увеличивается на 50<br>Атаки захваченного получают на 1 помеху больше.</p>",
-                "id": "wN57HiHZQg85goBL",
-                "img": "systems/fallout-maw/assets/icons/8-14/adrenalinovyj-drajv.webp",
-                "name": "Мастер по скручиванию",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "athletics"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "8vG3Tpe5fjcsxc73",
-                      "skillKey": "athletics",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Атлетка",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "grapplingMaster",
-                      "fixedSettings": {
-                        "checkDifficultyBonus": 50,
-                        "targetAttackDisadvantageBonus": 1
-                      },
-                      "id": "wq6cf6uEcf2DK91J",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2834,59 +2860,6 @@
           },
           {
             "abilities": [
-              {
-                "description": "<p>Сопротивелние ко всем видам урона: +10</p>",
-                "id": "Ddvgs7mYk9MxyL9c",
-                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
-                "name": "Непробиваемый",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 110,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "resilience"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "wU28YaUMuP8hXnWP",
-                      "skillKey": "resilience",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Стойкость",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "aaudFsac4jR809xC",
-                          "key": "system.damageResistanceBonuses.all.all",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "10"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "M9rQWYe4gpqa9lAx",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
               {
                 "description": "<p>Когда состояние вашей ключевой конечности &lt;=50%<br>Или<br>Когда ваше общее ОЗ &lt;=50%</p><p><br>ОП: +6</p>",
                 "id": "HE8qSgb8wyjvazCJ",
@@ -2979,6 +2952,59 @@
                   ]
                 },
                 "visible": true
+              },
+              {
+                "description": "<p>Сопротивелние ко всем видам урона: +10</p>",
+                "id": "Ddvgs7mYk9MxyL9c",
+                "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "name": "Непробиваемый",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "wU28YaUMuP8hXnWP",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "aaudFsac4jR809xC",
+                          "key": "system.damageResistanceBonuses.all.all",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "M9rQWYe4gpqa9lAx",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
               }
             ],
             "id": "skill-resilience",
@@ -2999,6 +3025,138 @@
           },
           {
             "abilities": [
+              {
+                "description": "<p>Ваша инициатива увеличивается на [[1+naturalist/30]]</p>",
+                "id": "ZIKYzY61NL6rpWzm",
+                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
+                "name": "Бдительный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3XJ7ODqz36szIlhR",
+                      "skillKey": "naturalist",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Натуралист",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "w4ksDZ9WyMSld645",
+                          "key": "system.attributes.initiativeBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+nat/30"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "XmhtjfdRp6zfZT2r",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость реакции: 10 энергии.<br>Перегрузка: 20 энергии на 6 секунд.</p><p>Когда вы видите, как вашего союзника атакуют, можете среагировать и увеличить атакующему сложность попадания на [[20 +naturalist/5]]</p><p><em>\"Способность можно активировать чтобы настроить дипазон регирования от 1 до 100%. Если поставить 30%, то при атаке союзника, шанс попасть в которого меньше 30% не вызовет предложение на срабатывание реакции)</em></p>",
+                "id": "O4aBwzsH29Wv3ssG",
+                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
+                "name": "Берегись!",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "QfxvcePKGFLWZfmH",
+                      "skillKey": "naturalist",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Натуралист",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "watchOut",
+                      "fixedSettings": {
+                        "defaultMinimumHitChancePercent": 1,
+                        "difficultyBase": 20,
+                        "reactionEnergyCost": 10,
+                        "reactionOverloadDurationSeconds": 6,
+                        "reactionOverloadEnergyCost": 30,
+                        "skillDivisor": 5,
+                        "sourceSkillKey": "naturalist"
+                      },
+                      "id": "4YyScOSSiYUYsO2E",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Все способности категории Натуралист более не получают перегрузку.</p><p>Время караула все равно считается отдыхом.</p><p>Вас нельзя застигнуть в расплох.</p><p>В радиусе [[1+naturalist/20]]м от вас невозможно скрыться.</p><p>Вы замечаете любую ловушку.</p><p>Ваше уклонение не может опустится ниже 70%</p>",
+                "id": "eUBdZyuzh2YpddzW",
+                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
+                "name": "Вечное бдение",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 250,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "ZyzcZ2dfIGeUdnFO",
+                      "skillKey": "naturalist",
+                      "type": "skill",
+                      "value": 200
+                    }
+                  ],
+                  "category": "Натуралист",
+                  "cost": 12000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
               {
                 "description": "<p>Увеличивает базовые ОР на 3</p>",
                 "id": "i9iQiTeIDqLRabII",
@@ -3106,27 +3264,27 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость реакции: 10 энергии.<br>Перегрузка: 20 энергии на 6 секунд.</p><p>Когда вы видите, как вашего союзника атакуют, можете среагировать и увеличить атакующему сложность попадания на [[20 +naturalist/5]]</p><p><em>\"Способность можно активировать чтобы настроить дипазон регирования от 1 до 100%. Если поставить 30%, то при атаке союзника, шанс попасть в которого меньше 30% не вызовет предложение на срабатывание реакции)</em></p>",
-                "id": "O4aBwzsH29Wv3ssG",
+                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 40 энергии на час.</p><p>После активации 3 ваших следующих проверки Натуралиста будут с преимуществом.</p>",
+                "id": "bZG09ODXVpByX5Qw",
                 "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
-                "name": "Берегись!",
+                "name": "Повышенная концентрация",
                 "system": {
                   "acquisition": {
-                    "difficulty": 150,
+                    "difficulty": 110,
                     "onlyFree": false,
                     "onlyManual": false,
                     "skillKey": "naturalist"
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "QfxvcePKGFLWZfmH",
+                      "id": "7oGQRDhHppopscRI",
                       "skillKey": "naturalist",
                       "type": "skill",
-                      "value": 100
+                      "value": 60
                     }
                   ],
                   "category": "Натуралист",
-                  "cost": 3000,
+                  "cost": 1000,
                   "formula": "",
                   "functions": [
                     {
@@ -3134,17 +3292,16 @@
                       "activeSettings": {},
                       "changes": [],
                       "conditions": [],
-                      "fixedKey": "watchOut",
+                      "fixedKey": "heightenedConcentration",
                       "fixedSettings": {
-                        "defaultMinimumHitChancePercent": 1,
-                        "difficultyBase": 20,
-                        "reactionEnergyCost": 10,
-                        "reactionOverloadDurationSeconds": 6,
-                        "reactionOverloadEnergyCost": 30,
-                        "skillDivisor": 5,
-                        "sourceSkillKey": "naturalist"
+                        "advantageCount": 1,
+                        "checkCount": 3,
+                        "energyCost": 20,
+                        "overloadDurationSeconds": 3600,
+                        "overloadEnergyCost": 40,
+                        "skillKey": "naturalist"
                       },
-                      "id": "4YyScOSSiYUYsO2E",
+                      "id": "o07B1xeqOmvoEbAL",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3189,137 +3346,6 @@
                       "fixedKey": "dangerSense",
                       "fixedSettings": {},
                       "id": "Y88FBGvUPNiKvA1Z",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "fixed"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Все способности категории Натуралист более не получают перегрузку.</p><p>Время караула все равно считается отдыхом.</p><p>Вас нельзя застигнуть в расплох.</p><p>В радиусе [[1+naturalist/20]]м от вас невозможно скрыться.</p><p>Вы замечаете любую ловушку.</p><p>Ваше уклонение не может опустится ниже 70%</p>",
-                "id": "eUBdZyuzh2YpddzW",
-                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
-                "name": "Вечное бдение",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 250,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "naturalist"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "ZyzcZ2dfIGeUdnFO",
-                      "skillKey": "naturalist",
-                      "type": "skill",
-                      "value": 200
-                    }
-                  ],
-                  "category": "Натуралист",
-                  "cost": 12000,
-                  "formula": "",
-                  "functions": []
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Ваша инициатива увеличивается на [[1+naturalist/30]]</p>",
-                "id": "ZIKYzY61NL6rpWzm",
-                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
-                "name": "Бдительный",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 110,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "naturalist"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "3XJ7ODqz36szIlhR",
-                      "skillKey": "naturalist",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Натуралист",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "w4ksDZ9WyMSld645",
-                          "key": "system.attributes.initiativeBonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "1+nat/30"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "XmhtjfdRp6zfZT2r",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 40 энергии на час.</p><p>После активации 3 ваших следующих проверки Натуралиста будут с преимуществом.</p>",
-                "id": "bZG09ODXVpByX5Qw",
-                "img": "systems/fallout-maw/assets/icons/15-21/ishejka.webp",
-                "name": "Повышенная концентрация",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 110,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "naturalist"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "7oGQRDhHppopscRI",
-                      "skillKey": "naturalist",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Натуралист",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "heightenedConcentration",
-                      "fixedSettings": {
-                        "advantageCount": 1,
-                        "checkCount": 3,
-                        "energyCost": 20,
-                        "overloadDurationSeconds": 3600,
-                        "overloadEnergyCost": 40,
-                        "skillKey": "naturalist"
-                      },
-                      "id": "o07B1xeqOmvoEbAL",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3429,179 +3455,6 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.</p><p>Вы мастерски овладели искусством выбивать из колеи кого угодно. После активации можно выбрать до [[2+speech/50]] целей и те проходят проверку Науки со сложностью [[50+speech]]. В случае провала они получают двойную помеху на [[1+speech/100]] выбранных навыка.<br>Длительность: 12 секуд.<br><br>Нельзя выбрать тех, чей интеллект &lt;=0</p>",
-                "id": "raDMFuF8gocU7zxc",
-                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Издевка",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "speech"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "mx01lpGdTjoPsbmr",
-                      "skillKey": "speech",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Красноречие",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "knockOffBalance",
-                      "fixedSettings": {
-                        "debuffDurationSeconds": 12,
-                        "difficultyFormula": "50+speech",
-                        "energyCost": 20,
-                        "overloadDurationSeconds": 12,
-                        "overloadEnergyCost": 20,
-                        "skillDisadvantageCount": 2,
-                        "skillLimitFormula": "1+speech/100",
-                        "targetLimitFormula": "2+speech/50",
-                        "targetSkillKey": "science"
-                      },
-                      "id": "Hy9zK24BFvu2mWwf",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "fixed"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Стоимость активации: 10 энергии<br>Перегрузка: 40 энергии на 1 час.<br><br>Если вы провалили проверку красноречия, то можете попробовать снова.<br>Если провал был критическим, то при желаение перебросить необходимо активировать дважды.</p>",
-                "id": "3VfbOxcGvsXx3VfQ",
-                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Оговорился",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 110,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "speech"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "4UcMyVnl1x0NroAp",
-                      "skillKey": "speech",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Красноречие",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {
-                        "changeEvaluation": "target",
-                        "costs": [
-                          {
-                            "formula": "10",
-                            "id": "IX7mmDDG5hF6ODxR",
-                            "overloadAmount": 40,
-                            "overloadDurationSeconds": 3600,
-                            "payer": "source",
-                            "resourceKey": "power"
-                          }
-                        ],
-                        "excludeSelf": true,
-                        "includeSelf": false,
-                        "name": "",
-                        "radiusFormula": "",
-                        "targetGroups": [
-                          "ally"
-                        ],
-                        "targetLimit": "1",
-                        "targetMode": "self",
-                        "targetSelectionMode": "manual",
-                        "wallsBlock": false
-                      },
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "ZA308Slttp9kfDQp",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "activeApplication"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Стоимость активации/реакции: 10 энергии.<br>Перегрузка: 20 энергии на 12 секуд.</p><p>Выберети цель в пределах видимости. Она проходит проверку Науки со сложностью [[50+speech]] и в случае провала теряет 3 ОД и ОП. При крит провале теряет 6 ОД и ОП.</p>",
-                "id": "kFwbTQXhSwjJJ72O",
-                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Смотри!",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "speech"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "U93k47U3PkHqnBEV",
-                      "skillKey": "speech",
-                      "type": "skill",
-                      "value": 60
-                    }
-                  ],
-                  "category": "Красноречие",
-                  "cost": 1000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "look",
-                      "fixedSettings": {
-                        "criticalFailureResourceLoss": 6,
-                        "difficultyFormula": "50+speech",
-                        "energyCost": 10,
-                        "failureResourceLoss": 3,
-                        "overloadDurationSeconds": 12,
-                        "overloadEnergyCost": 20,
-                        "targetSkillKey": "science"
-                      },
-                      "id": "3hHIaTFDySq0Z3LL",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "fixed"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
                 "description": "<p>Стоимость активации: 100 энергии<br>Перегрузка: 300 энергии на 12 часов.</p><p>После активации все союзники в радиусе [[20+speech/10]] метров восстанавливают [[50+speech]] ОЗ и на 18 секунд получают эффект.</p><ul><li><p>Подавление эффектов всех травм.</p></li><li><p>+[[1+speech/100]] ко всем характеристикам.</p></li><li><p>Преимущество на проверки стойкости.</p></li></ul>",
                 "id": "P2XA2WzCoZBAwlo5",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
@@ -3661,10 +3514,37 @@
                 "visible": true
               },
               {
-                "description": "<p>Активная/Переключаемая способность.</p><p>Переключаемая. \"Усиленный голос\"<br>Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p><p>Активная. \"Усиленное влияние\"<br>Стоимость активации: 20 энергии<br>Перегрузка: 40 энергии на 2 часа.</p><p>После активации вы получаете +30 к Красноречию на 18 секунд.</p><p></p>",
-                "id": "sgY5ccFsQBPkDDLV",
+                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>В начале каждого хода врага или нейтрала — половину его Очков действий в качестве Очков реакции.</p></li><li><p>1 Помеху на все атакующие действия, направленные против неё.</p></li></ul>",
+                "id": "NkiGbyyLv05RZaGK",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Опытный переговорищик",
+                "name": "Звёздный час",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "NkiGbyyLv05RZaGK-speech-requirement",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 12 секунд.</p><p>Вы мастерски овладели искусством выбивать из колеи кого угодно. После активации можно выбрать до [[2+speech/50]] целей и те проходят проверку Науки со сложностью [[50+speech]]. В случае провала они получают двойную помеху на [[1+speech/100]] выбранных навыка.<br>Длительность: 12 секуд.<br><br>Нельзя выбрать тех, чей интеллект &lt;=0</p>",
+                "id": "raDMFuF8gocU7zxc",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Издевка",
                 "system": {
                   "acquisition": {
                     "difficulty": 150,
@@ -3674,7 +3554,7 @@
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "3pWmqfeGCCSaTHpa",
+                      "id": "mx01lpGdTjoPsbmr",
                       "skillKey": "speech",
                       "type": "skill",
                       "value": 100
@@ -3687,110 +3567,28 @@
                     {
                       "actions": [],
                       "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "aIL0WWmB8ysWDbAH",
-                          "key": "system.skills.speech.advantage",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "1"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "cooldownSeconds": null,
-                          "groupId": "",
-                          "id": "AkU4lqGPPXLZdK1D",
-                          "name": "Усиленный голос",
-                          "type": "toggleable"
-                        },
-                        {
-                          "costs": [
-                            {
-                              "formula": "10",
-                              "id": "jZ00JLppLQtn1iCP",
-                              "overloadAmount": 0,
-                              "overloadDurationSeconds": 0,
-                              "resourceKey": "power"
-                            }
-                          ],
-                          "groupId": "",
-                          "id": "QS50DFXndFlh72BZ",
-                          "type": "triggerCost"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "9cgId47MAJgytqI3",
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "knockOffBalance",
+                      "fixedSettings": {
+                        "debuffDurationSeconds": 12,
+                        "difficultyFormula": "50+speech",
+                        "energyCost": 20,
+                        "overloadDurationSeconds": 12,
+                        "overloadEnergyCost": 20,
+                        "skillDisadvantageCount": 2,
+                        "skillLimitFormula": "1+speech/100",
+                        "targetLimitFormula": "2+speech/50",
+                        "targetSkillKey": "science"
+                      },
+                      "id": "Hy9zK24BFvu2mWwf",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 0,
-                      "type": "effectChanges"
-                    },
-                    {
-                      "actions": [],
-                      "activeSettings": {
-                        "changeEvaluation": "target",
-                        "costs": [
-                          {
-                            "formula": "20",
-                            "id": "uiUKO3iMFkBugcGM",
-                            "overloadAmount": 40,
-                            "overloadDurationSeconds": 7200,
-                            "payer": "source",
-                            "resourceKey": "power"
-                          }
-                        ],
-                        "excludeSelf": true,
-                        "includeSelf": false,
-                        "name": "Усиленное влияние",
-                        "radiusFormula": "",
-                        "targetGroups": [
-                          "ally"
-                        ],
-                        "targetLimit": "1",
-                        "targetMode": "self",
-                        "targetSelectionMode": "manual",
-                        "wallsBlock": false
-                      },
-                      "changes": [
-                        {
-                          "id": "itdwM3185SLOdM4p",
-                          "key": "system.skills.speech.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "30"
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "durationSeconds": 18,
-                          "equipmentSlotKey": "",
-                          "groupId": "",
-                          "healthTarget": "general",
-                          "id": "Xl2Qvd3OAa9Jgozj",
-                          "limbKey": "all",
-                          "limit": 1,
-                          "operator": "lte",
-                          "percent": 50,
-                          "type": "duration"
-                        }
-                      ],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "yZpSrh7AmL6VuP6J",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 1,
-                      "type": "activeApplication"
+                      "type": "fixed"
                     }
                   ]
                 },
@@ -4043,10 +3841,10 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 24 секунды.</p><p>После активации можно выбрать до [[1+speech/50]] союзников и те получат +[[2+speech/50]] ОП на 12 секуд.</p>",
-                "id": "CXW7GLA9KEAIhRmM",
+                "description": "<p>Стоимость активации: 10 энергии<br>Перегрузка: 40 энергии на 1 час.<br><br>Если вы провалили проверку красноречия, то можете попробовать снова.<br>Если провал был критическим, то при желаение перебросить необходимо активировать дважды.</p>",
+                "id": "3VfbOxcGvsXx3VfQ",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Шевелитесь!",
+                "name": "Оговорился",
                 "system": {
                   "acquisition": {
                     "difficulty": 110,
@@ -4056,7 +3854,7 @@
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "sgEMsZxEnLLmMoPJ",
+                      "id": "4UcMyVnl1x0NroAp",
                       "skillKey": "speech",
                       "type": "skill",
                       "value": 60
@@ -4069,13 +3867,13 @@
                     {
                       "actions": [],
                       "activeSettings": {
-                        "changeEvaluation": "source",
+                        "changeEvaluation": "target",
                         "costs": [
                           {
-                            "formula": "20",
-                            "id": "mjOOQcGltZ4eByUJ",
-                            "overloadAmount": 20,
-                            "overloadDurationSeconds": 24,
+                            "formula": "10",
+                            "id": "IX7mmDDG5hF6ODxR",
+                            "overloadAmount": 40,
+                            "overloadDurationSeconds": 3600,
                             "payer": "source",
                             "resourceKey": "power"
                           }
@@ -4087,28 +3885,142 @@
                         "targetGroups": [
                           "ally"
                         ],
-                        "targetLimit": "1+speech/50",
-                        "targetMode": "others",
+                        "targetLimit": "1",
+                        "targetMode": "self",
                         "targetSelectionMode": "manual",
-                        "wallsBlock": true
+                        "wallsBlock": false
                       },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "ZA308Slttp9kfDQp",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Активная/Переключаемая способность.</p><p>Переключаемая. \"Усиленный голос\"<br>Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p><p>Активная. \"Усиленное влияние\"<br>Стоимость активации: 20 энергии<br>Перегрузка: 40 энергии на 2 часа.</p><p>После активации вы получаете +30 к Красноречию на 18 секунд.</p><p></p>",
+                "id": "sgY5ccFsQBPkDDLV",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Опытный переговорищик",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3pWmqfeGCCSaTHpa",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
                       "changes": [
                         {
-                          "id": "CVAtLs8FrfZhAqJN",
-                          "key": "system.resources.movementPoints.bonus",
+                          "id": "aIL0WWmB8ysWDbAH",
+                          "key": "system.skills.speech.advantage",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "2+spe/50"
+                          "value": "1"
                         }
                       ],
                       "conditions": [
                         {
-                          "durationSeconds": 12,
+                          "cooldownSeconds": null,
+                          "groupId": "",
+                          "id": "AkU4lqGPPXLZdK1D",
+                          "name": "Усиленный голос",
+                          "type": "toggleable"
+                        },
+                        {
+                          "costs": [
+                            {
+                              "formula": "10",
+                              "id": "jZ00JLppLQtn1iCP",
+                              "overloadAmount": 0,
+                              "overloadDurationSeconds": 0,
+                              "resourceKey": "power"
+                            }
+                          ],
+                          "groupId": "",
+                          "id": "QS50DFXndFlh72BZ",
+                          "type": "triggerCost"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "9cgId47MAJgytqI3",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "20",
+                            "id": "uiUKO3iMFkBugcGM",
+                            "overloadAmount": 40,
+                            "overloadDurationSeconds": 7200,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "Усиленное влияние",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "itdwM3185SLOdM4p",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "30"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 18,
                           "equipmentSlotKey": "",
                           "groupId": "",
                           "healthTarget": "general",
-                          "id": "FjC2DU1pNPIwnXwR",
+                          "id": "Xl2Qvd3OAa9Jgozj",
                           "limbKey": "all",
                           "limit": 1,
                           "operator": "lte",
@@ -4118,13 +4030,13 @@
                       ],
                       "fixedKey": "",
                       "fixedSettings": {},
-                      "id": "2badYt8ARL4SDcHo",
+                      "id": "yZpSrh7AmL6VuP6J",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
-                      "sort": 0,
+                      "sort": 1,
                       "type": "activeApplication"
                     }
                   ]
@@ -4357,102 +4269,6 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они выстрелят в указанных вами направлениях.</p>",
-                "id": "hXDOkMGJjkPB7WBb",
-                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Приказ: Цельсь, пли!",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "speech"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "OUvbpRYewdgfT6MH",
-                      "skillKey": "speech",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Красноречие",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [
-                        {
-                          "actionPointCostMode": "none",
-                          "actionPointPayer": "executor",
-                          "actualActionPointCostPercent": 100,
-                          "attackActionKeys": [
-                            "snapshot"
-                          ],
-                          "executorMode": "targets",
-                          "fixedActionPointCost": 0,
-                          "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
-                          "routeAutoRotate": false,
-                          "routeBudgetEvaluation": "executor",
-                          "routeBudgetFormula": "0",
-                          "routeBudgetMode": "movementCost",
-                          "routeExecutionMode": "sequential",
-                          "routeMovementAction": "",
-                          "routeShowRuler": true,
-                          "targetMode": "free",
-                          "type": "weaponAttack"
-                        }
-                      ],
-                      "activeSettings": {
-                        "changeEvaluation": "target",
-                        "costs": [
-                          {
-                            "formula": "30",
-                            "id": "hXDOkMGJjkPB7WBb-application-cost-power",
-                            "overloadAmount": 60,
-                            "overloadDurationSeconds": 12,
-                            "payer": "source",
-                            "resourceKey": "power"
-                          },
-                          {
-                            "formula": "5",
-                            "id": "dxlGC8g29ybSEWiA",
-                            "overloadAmount": 0,
-                            "overloadDurationSeconds": 0,
-                            "payer": "source",
-                            "resourceKey": "actionPoints"
-                          }
-                        ],
-                        "excludeSelf": true,
-                        "includeSelf": false,
-                        "name": "",
-                        "radiusFormula": "",
-                        "targetGroups": [
-                          "ally"
-                        ],
-                        "targetLimit": "2+spe/50",
-                        "targetMode": "others",
-                        "targetSelectionMode": "manual",
-                        "wallsBlock": false
-                      },
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "hXDOkMGJjkPB7WBb-application",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "activeApplication"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
                 "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+spe/50]]-х союзников. Они последовательно переместятся по построенным вами маршрутам.<br>Бюджет каждого маршрута: [[3+spe/25]] ОП.</p>",
                 "id": "u6NqPLJYeinNzWNF",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
@@ -4549,29 +4365,239 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>В начале каждого хода врага или нейтрала — половину его Очков действий в качестве Очков реакции.</p></li><li><p>1 Помеху на все атакующие действия, направленные против неё.</p></li></ul>",
-                "id": "NkiGbyyLv05RZaGK",
+                "description": "<p>Стоимость активации: 30 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 12 секунд.</p><p>Активация позволяет выбрать до [[2+speech/50]]-х союзников. Они выстрелят в указанных вами направлениях.</p>",
+                "id": "hXDOkMGJjkPB7WBb",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
-                "name": "Звёздный час",
+                "name": "Приказ: Цельсь, пли!",
                 "system": {
                   "acquisition": {
-                    "difficulty": 210,
+                    "difficulty": 150,
                     "onlyFree": false,
                     "onlyManual": false,
                     "skillKey": "speech"
                   },
                   "acquisitionRequirements": [
                     {
-                      "id": "NkiGbyyLv05RZaGK-speech-requirement",
+                      "id": "OUvbpRYewdgfT6MH",
                       "skillKey": "speech",
                       "type": "skill",
-                      "value": 160
+                      "value": 100
                     }
                   ],
                   "category": "Красноречие",
-                  "cost": 6000,
+                  "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [
+                        {
+                          "actionPointCostMode": "none",
+                          "actionPointPayer": "executor",
+                          "actualActionPointCostPercent": 100,
+                          "attackActionKeys": [
+                            "snapshot"
+                          ],
+                          "executorMode": "targets",
+                          "fixedActionPointCost": 0,
+                          "id": "hXDOkMGJjkPB7WBb-application-weapon-attack",
+                          "routeAutoRotate": false,
+                          "routeBudgetEvaluation": "executor",
+                          "routeBudgetFormula": "0",
+                          "routeBudgetMode": "movementCost",
+                          "routeExecutionMode": "sequential",
+                          "routeMovementAction": "",
+                          "routeShowRuler": true,
+                          "targetMode": "free",
+                          "type": "weaponAttack"
+                        }
+                      ],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "hXDOkMGJjkPB7WBb-application-cost-power",
+                            "overloadAmount": 60,
+                            "overloadDurationSeconds": 12,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          },
+                          {
+                            "formula": "5",
+                            "id": "dxlGC8g29ybSEWiA",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "payer": "source",
+                            "resourceKey": "actionPoints"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "2+spe/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "hXDOkMGJjkPB7WBb-application",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации/реакции: 10 энергии.<br>Перегрузка: 20 энергии на 12 секуд.</p><p>Выберети цель в пределах видимости. Она проходит проверку Науки со сложностью [[50+speech]] и в случае провала теряет 3 ОД и ОП. При крит провале теряет 6 ОД и ОП.</p>",
+                "id": "kFwbTQXhSwjJJ72O",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Смотри!",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "U93k47U3PkHqnBEV",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "look",
+                      "fixedSettings": {
+                        "criticalFailureResourceLoss": 6,
+                        "difficultyFormula": "50+speech",
+                        "energyCost": 10,
+                        "failureResourceLoss": 3,
+                        "overloadDurationSeconds": 12,
+                        "overloadEnergyCost": 20,
+                        "targetSkillKey": "science"
+                      },
+                      "id": "3hHIaTFDySq0Z3LL",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 20 энергии на 24 секунды.</p><p>После активации можно выбрать до [[1+speech/50]] союзников и те получат +[[2+speech/50]] ОП на 12 секуд.</p>",
+                "id": "CXW7GLA9KEAIhRmM",
+                "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
+                "name": "Шевелитесь!",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "speech"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "sgEMsZxEnLLmMoPJ",
+                      "skillKey": "speech",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Красноречие",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [
+                          {
+                            "formula": "20",
+                            "id": "mjOOQcGltZ4eByUJ",
+                            "overloadAmount": 20,
+                            "overloadDurationSeconds": 24,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1+speech/50",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": true
+                      },
+                      "changes": [
+                        {
+                          "id": "CVAtLs8FrfZhAqJN",
+                          "key": "system.resources.movementPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2+spe/50"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 12,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "FjC2DU1pNPIwnXwR",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "2badYt8ARL4SDcHo",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               }
@@ -4640,67 +4666,6 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "zOv3WYrBCKsMiYYs",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Если после вашей атаки у цели осталось менее 40% ОЗ, то с шансом [[40+gambling/10]]% она будет добита.</p>",
-                "id": "5UoFXMjcBIB2sBTt",
-                "img": "systems/fallout-maw/assets/icons/1-7/bystraya-reakciya.webp",
-                "name": "Кровавая баня",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "gambling"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "aZ7V26z8VuDZUobr",
-                      "skillKey": "gambling",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Азарт",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [
-                        {
-                          "id": "zpqYwmjwm49jXefh",
-                          "key": "system.combat.finishingBlow",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "40"
-                        },
-                        {
-                          "id": "vypWbZ8EPszllamj",
-                          "key": "system.combat.finishingBlowChance",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "40+gam"
-                        }
-                      ],
-                      "conditions": [],
-                      "fixedKey": "",
-                      "fixedSettings": {},
-                      "id": "5PfmJyhkCoJBFvwC",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4822,54 +4787,6 @@
                       },
                       "sort": 0,
                       "type": "effectChanges"
-                    }
-                  ]
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Переключаемая способность.<br>В активном состоянии тратит 5 ед энергии когда атакуете вы или атакуют вас.<br><br>С шансом [[30+gambling/5]]% <br>Пораженная вами цель получает порчу, которая накладывает помеху на все ее проверки навыков.<br>Если поразили вас, получаете преимущество на все ваши проверки навыков.</p><p>Длительность изменения 12 секунд.</p>",
-                "id": "m1XOtzWQ8J0q5UGa",
-                "img": "systems/fallout-maw/assets/icons/8-14/klever-chetyryohlistnik.webp",
-                "name": "Порча и благословение",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 150,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "gambling"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "id": "JRAzimLXVrkghb3J",
-                      "skillKey": "gambling",
-                      "type": "skill",
-                      "value": 100
-                    }
-                  ],
-                  "category": "Азарт",
-                  "cost": 3000,
-                  "formula": "",
-                  "functions": [
-                    {
-                      "actions": [],
-                      "activeSettings": {},
-                      "changes": [],
-                      "conditions": [],
-                      "fixedKey": "curseAndBlessing",
-                      "fixedSettings": {
-                        "durationSeconds": 12,
-                        "energyCost": 5,
-                        "triggerFormula": "30+gambling/5"
-                      },
-                      "id": "U9cvop1SHa03FKwI",
-                      "penalties": [],
-                      "reactionSettings": {
-                        "costs": [],
-                        "durationSeconds": 0
-                      },
-                      "sort": 0,
-                      "type": "fixed"
                     }
                   ]
                 },
@@ -5022,6 +4939,67 @@
                 "visible": true
               },
               {
+                "description": "<p>Если после вашей атаки у цели осталось менее 40% ОЗ, то с шансом [[40+gambling/10]]% она будет добита.</p>",
+                "id": "5UoFXMjcBIB2sBTt",
+                "img": "systems/fallout-maw/assets/icons/1-7/bystraya-reakciya.webp",
+                "name": "Кровавая баня",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "gambling"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "aZ7V26z8VuDZUobr",
+                      "skillKey": "gambling",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Азарт",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "zpqYwmjwm49jXefh",
+                          "key": "system.combat.finishingBlow",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "40"
+                        },
+                        {
+                          "id": "vypWbZ8EPszllamj",
+                          "key": "system.combat.finishingBlowChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "40+gam"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "5PfmJyhkCoJBFvwC",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Все атакующие действия стоят на 1 ОД меньше.</p><p>Каждый раз когда вы совершаете атакующее действие, с шансом [[110-gambling/5]]% оно будет заблокированно и с [[60-gambling/5]]% будет заблокированно еще одно случайное действие.</p><p>После каждой атаки прошлые действия разблокируются и заблокируются новые.</p>",
                 "id": "FZVa75ao69KM9fbc",
                 "img": "systems/fallout-maw/assets/icons/8-14/klever-chetyryohlistnik.webp",
@@ -5057,6 +5035,54 @@
                         "extraBlockChanceFormula": "60-gambling/5"
                       },
                       "id": "yn8vGVtgBodE2fNX",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Переключаемая способность.<br>В активном состоянии тратит 5 ед энергии когда атакуете вы или атакуют вас.<br><br>С шансом [[30+gambling/5]]% <br>Пораженная вами цель получает порчу, которая накладывает помеху на все ее проверки навыков.<br>Если поразили вас, получаете преимущество на все ваши проверки навыков.</p><p>Длительность изменения 12 секунд.</p>",
+                "id": "m1XOtzWQ8J0q5UGa",
+                "img": "systems/fallout-maw/assets/icons/8-14/klever-chetyryohlistnik.webp",
+                "name": "Порча и благословение",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "gambling"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "JRAzimLXVrkghb3J",
+                      "skillKey": "gambling",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Азарт",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "curseAndBlessing",
+                      "fixedSettings": {
+                        "durationSeconds": 12,
+                        "energyCost": 5,
+                        "triggerFormula": "30+gambling/5"
+                      },
+                      "id": "U9cvop1SHa03FKwI",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],

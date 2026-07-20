@@ -2071,8 +2071,13 @@ function getAbilityAcquisitionRequirementLabel(requirementRows = []) {
 }
 
 function compareAbilityAvailability(left, right) {
-  if (left?.acquisitionAvailable === right?.acquisitionAvailable) return 0;
-  return left?.acquisitionAvailable ? -1 : 1;
+  if (left?.acquisitionAvailable !== right?.acquisitionAvailable) {
+    return left?.acquisitionAvailable ? -1 : 1;
+  }
+  return String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "ru", {
+    sensitivity: "base",
+    numeric: true
+  });
 }
 
 function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {
