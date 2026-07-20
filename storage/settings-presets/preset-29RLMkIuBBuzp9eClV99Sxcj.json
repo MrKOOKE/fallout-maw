@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "f7f3321473a8014c571c5d7932809b713d4ea04bd2dce9a40bef0df6828dd87d",
-  "updatedAt": "2026-07-20T07:24:04.257Z",
+  "revision": "7dca76d796754b2ef53b1d09d8d6c576613bf5daaf62610c834f23749f59c640",
+  "updatedAt": "2026-07-20T08:03:45.405Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -18,10 +18,10 @@
           {
             "abilities": [
               {
-                "description": "<p>Когда слот очков занят вы получете +2 к Восприятию.<br>В ином случае вы получаете -2 к Восприятию.</p>",
+                "description": "<p>Когда слот очков занят вы получете +1 к Восприятию и Харизме.<br>В ином случае -1 к Восприятию и Харизме.</p>",
                 "id": "lBaJVF6DzKnhNhwy",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
-                "name": "Четыре глаза",
+                "name": "Модник",
                 "system": {
                   "acquisition": {
                     "difficulty": 60,
@@ -44,7 +44,15 @@
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "2"
+                          "value": "1"
+                        },
+                        {
+                          "id": "GqktcSOU7FCxgqHS",
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
                         }
                       ],
                       "conditions": [
@@ -72,7 +80,15 @@
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "-2"
+                          "value": "-1"
+                        },
+                        {
+                          "id": "su4MGB9oRyj7jLtw",
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
                         }
                       ],
                       "reactionSettings": {
@@ -87,10 +103,10 @@
                 "visible": true
               },
               {
-                "description": "<p>Вы лишаетесь Прицельного выстрела, но Выстрел навскидку и Стрельба очередью стоят на 1 ОД меньше.</p>",
+                "description": "<ul><li><p>Прицельные атаки получают двойную помеху.</p></li><li><p>Неприцельные атаки стоят на 1 ОД меньше.</p></li></ul>",
                 "id": "Iqzqk9O9J5my2pdM",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/strelba-navsikdku.webp",
-                "name": "Стрельба навскидку",
+                "name": "Проблемы с концентрацией",
                 "system": {
                   "acquisition": {
                     "difficulty": 60,
@@ -109,23 +125,31 @@
                       "changes": [
                         {
                           "id": "bhE1a6twduA420fQ",
-                          "key": "system.blocks.actions.aimedShot",
+                          "key": "system.combat.actions.aimedShot.disadvantage",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "1"
+                          "value": "2"
                         },
                         {
                           "id": "jG0JEYumYS2XsNPY",
-                          "key": "system.costs.actions.snapshot",
+                          "key": "system.combat.actions.aimedMeleeAttack.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        },
+                        {
+                          "id": "BF2mlLL0a6CnsOXb",
+                          "key": "system.costs.actions.burst",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
                           "value": "-1"
                         },
                         {
-                          "id": "BF2mlLL0a6CnsOXb",
-                          "key": "system.costs.actions.burst",
+                          "id": "TgnRRNN9LKfM5kUd",
+                          "key": "system.costs.actions.snapshot",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
@@ -379,11 +403,11 @@
                         },
                         {
                           "id": "0fmpRcCYATi4CwNs",
-                          "key": "Урон",
+                          "key": "fallout-maw.reverse.system.combat.damagePercent",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "0"
+                          "value": "10"
                         }
                       ],
                       "conditions": [],
@@ -401,6 +425,46 @@
                   ]
                 },
                 "visible": true
+              },
+              {
+                "description": "<p>Вы лишены вероятности срабатывания Критического успеха и Критического провала.</p>",
+                "id": "91ljCnGdkOl5YYMM",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/genij-tehniki.webp",
+                "name": "Скучный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Вы получаете еще один коронный навык. </p></li><li><p>Множитель развития всех не коронных навыков уменьшается на 0.2</p></li></ul>",
+                "id": "MykWY2QgZQDXBpbF",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/odaryonnyj.webp",
+                "name": "\"Одаренный\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
               }
             ],
             "id": "features",
@@ -410,7 +474,7 @@
           {
             "abilities": [
               {
-                "description": "<p>Вы получаете дополнительный коронный навык.</p>",
+                "description": "<p>Вы получаете еще один коронный навык.</p>",
                 "id": "yQ1yCA4gGpvmfz7O",
                 "img": "systems/fallout-maw/assets/icons/22-28/priz.webp",
                 "name": "Приз",

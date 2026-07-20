@@ -344,6 +344,91 @@ export function getContextualAbilityChangeValue(actor, key, { baseValue = 0, alt
   });
 }
 
+/**
+ * Resolve many contextual keys with one attacker scan + one target reverse scan.
+ * Foundry-style: gather modifiers once for an attack context, then read scalars.
+ */
+export function getContextualAbilityChangeValues(actor, specs = [], context = {}) {
+  const list = (Array.isArray(specs) ? specs : [])
+    .map((spec, index) => {
+      const key = String(spec?.key ?? "").trim();
+      if (!key) return null;
+      return {
+        id: String(spec?.id ?? key),
+        key,
+        alternateKeys: Array.isArray(spec?.alternateKeys) ? spec.alternateKeys : [],
+        baseValue: Number(spec?.baseValue) || 0,
+        targetContextOnly: Boolean(spec?.targetContextOnly)
+      };
+    })
+    .filter(Boolean);
+
+  if (!list.length) return {};
+  if (!actor) {
+    return Object.fromEntries(list.map(spec => [spec.id, spec.baseValue]));
+  }
+
+  const needsFullContext = list.some(spec => !spec.targetContextOnly);
+  const needsTargetOnly = list.some(spec => spec.targetContextOnly);
+  const fullSourceChanges = needsFullContext ? getContextualAbilityEffectChanges(actor, context) : [];
+  const targetOnlySourceChanges = needsTargetOnly
+    ? getContextualAbilityEffectChanges(actor, context, { targetContextOnly: true })
+    : [];
+
+  const targetActor = context?.targetToken?.actor
+    ?? context?.targetToken?.document?.actor
+    ?? context?.targetActor
+    ?? null;
+  const canReverse = Boolean(targetActor) && !isSameInteractionActor(actor, targetActor);
+  const reverseChanges = canReverse
+    ? getContextualAbilityEffectChanges(targetActor, {
+      ...context,
+      actorToken: context?.targetToken ?? null,
+      targetToken: context?.actorToken ?? null,
+      targetActor: actor
+    })
+    : [];
+
+  const result = {};
+  for (const spec of list) {
+    const acceptedKeys = new Set(
+      [spec.key, ...spec.alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean)
+    );
+    const sourcePool = spec.targetContextOnly ? targetOnlySourceChanges : fullSourceChanges;
+    const prepared = prepareContextualAbilityChangesForKeys(actor, sourcePool, acceptedKeys);
+    let value = applyPreparedSourceContextualAbilityChanges(spec.baseValue, prepared);
+    if (canReverse) {
+      value = getActorReverseEffectChangeValue(targetActor, Array.from(acceptedKeys), {
+        baseValue: value,
+        additionalChanges: reverseChanges
+      });
+    }
+    result[spec.id] = value;
+  }
+  return result;
+}
+
+function prepareContextualAbilityChangesForKeys(actor, changes = [], acceptedKeys = new Set()) {
+  return (changes ?? [])
+    .filter(change => acceptedKeys.has(String(change?.key ?? "").trim()))
+    .map((change, index) => ({
+      key: String(change?.key ?? "").trim(),
+      type: String(change?.type ?? "add"),
+      value: evaluateEffectChangeNumber(actor, change.value, { fallback: Number.NaN }),
+      priority: toInteger(change?.priority),
+      order: Number.isFinite(Number(change?.contextualOrder)) ? Number(change.contextualOrder) : index,
+      targetContext: Boolean(change?.contextualTargetContext),
+      identity: String(change?.contextualIdentity ?? ""),
+      sourceItemId: String(change?.contextualSourceItemId ?? ""),
+      sourceItemUuid: String(change?.contextualSourceItemUuid ?? ""),
+      sourceName: String(change?.contextualSourceName ?? ""),
+      sourceImg: String(change?.contextualSourceImg ?? ""),
+      sourceFunctionId: String(change?.contextualSourceFunctionId ?? "")
+    }))
+    .filter(change => Number.isFinite(change.value))
+    .sort(comparePreparedContextualAbilityChanges);
+}
+
 export function getSourceContextualAbilityChangeValue(actor, key, {
   baseValue = 0,
   alternateKeys = [],

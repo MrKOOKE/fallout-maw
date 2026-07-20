@@ -63,6 +63,7 @@ import {
 import {
   applyPreparedSourceContextualAbilityChanges,
   getContextualAbilityChangeValue,
+  getContextualAbilityChangeValues,
   getPreparedSourceContextualAbilityChanges,
   getSourceContextualAbilityChangeValue,
   getTargetReverseAbilityChangeValue,
@@ -2314,6 +2315,7 @@ class WeaponAttackController {
     this.lockedGeometry = null;
     this.pushStrengthMaximum = 0;
     this.limbMenu = null;
+    this.aimedLimbMenuCache = null;
     this.chanceMenu = null;
     this.rightClickCancelCandidate = null;
     this.attackId = foundry.utils.randomID();
@@ -5040,14 +5042,27 @@ class WeaponAttackController {
     if (!this.targetedAction || this.processing) return;
     const target = this.getFocusedTarget();
     if (!target) {
+      this.aimedLimbMenuCache = null;
       this.removeLimbMenu();
+      return;
+    }
+
+    const menuContext = this.getAimedLimbMenuContext(target);
+    if (
+      this.aimedLimbMenuCache?.key === menuContext.key
+      && this.limbMenu
+      && this.limbMenu.dataset.mode === this.aimedMode
+    ) {
+      this.positionLimbMenu(target);
+      this.updateLimbMenuHover();
       return;
     }
 
     const rows = this.aimedMode === "direction"
       ? this.prepareAttackDirectionRows(target)
-      : this.prepareAimedLimbRows(target);
+      : this.prepareAimedLimbRows(target, menuContext);
     if (!rows.length) {
+      this.aimedLimbMenuCache = null;
       this.removeLimbMenu();
       if (this.meleeAction && this.aimedMode === "aim") this.refreshTargetedGeneralChanceMenu(target);
       else this.removeChanceMenu();
@@ -5066,8 +5081,39 @@ class WeaponAttackController {
         <strong class="${getAimedChanceClass(row.chance)}">${row.destroyed ? "—" : `${row.chance}%`}</strong>
       </button>
     `).join("");
+    this.aimedLimbMenuCache = { key: menuContext.key };
     this.positionLimbMenu(target);
     this.updateLimbMenuHover();
+  }
+
+  getAimedLimbMenuContext(target) {
+    const aimPoint = this.geometry
+      ? (selectTargetTrajectoryAimPoint(this.token, target, this.geometry) ?? getTokenAimPoint(target))
+      : null;
+    const trajectory = this.geometry && aimPoint
+      ? buildTrajectoryThroughPoint(this.token, this.geometry, aimPoint)
+      : null;
+    const blockerCount = this.ignoreAimedObstructions || !trajectory
+      ? 0
+      : getAimedTargetBlockers(this.token, target, trajectory).length;
+    const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
+      + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    const chanceOptions = {
+      innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
+      ignoreCover: this.ignoreAimedObstructions
+    };
+    const key = [
+      target?.id ?? "",
+      this.aimedMode,
+      this.selectedLimbKey,
+      blockerBonus,
+      toInteger(chanceOptions.innateDifficultyIgnorePercent),
+      chanceOptions.ignoreCover ? 1 : 0,
+      this.actionKey,
+      this.weaponFunctionId,
+      this.weapon?.id ?? ""
+    ].join("|");
+    return { blockerBonus, chanceOptions, key, blockerCount };
   }
 
   refreshPushStrengthMenu() {
@@ -5230,6 +5276,7 @@ class WeaponAttackController {
   }
 
   removeLimbMenu() {
+    this.aimedLimbMenuCache = null;
     this.limbMenu?.remove();
     this.limbMenu = null;
   }
@@ -5259,15 +5306,18 @@ class WeaponAttackController {
     this.limbMenu.style.top = `${Math.round(top)}px`;
   }
 
-  prepareAimedLimbRows(target) {
+  prepareAimedLimbRows(target, menuContext = null) {
     if (!this.requiresLimbSelection) return [];
-    const aimPoint = this.geometry ? (selectTargetTrajectoryAimPoint(this.token, target, this.geometry) ?? getTokenAimPoint(target)) : null;
-    const trajectory = this.geometry && aimPoint ? buildTrajectoryThroughPoint(this.token, this.geometry, aimPoint) : null;
-    const blockerCount = this.ignoreAimedObstructions || !trajectory
-      ? 0
-      : getAimedTargetBlockers(this.token, target, trajectory).length;
-    const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
-      + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    const context = menuContext ?? this.getAimedLimbMenuContext(target);
+    const { blockerBonus, chanceOptions } = context;
+    // One attacker+target contextual resolve for the whole menu (Foundry attack-config style).
+    const chanceBasis = buildAimedAttackChanceBasis(
+      this.token.actor,
+      this.weapon,
+      target.actor,
+      this.weaponFunctionId,
+      this.actionKey
+    );
     const limbRows = Object.entries(target.actor?.system?.limbs ?? {})
       .filter(([_key, limb]) => limb && typeof limb === "object")
       .map(([key, limb]) => ({
@@ -5276,10 +5326,7 @@ class WeaponAttackController {
         destroyed: isLimbDestroyed(target.actor, key),
         chance: isLimbDestroyed(target.actor, key)
           ? 0
-          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId, this.actionKey, {
-            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
-            ignoreCover: this.ignoreAimedObstructions
-          })
+          : getAimedAttackHitChanceFromBasis(chanceBasis, key, blockerBonus, chanceOptions)
       }));
     if (!this.aimedShot) return limbRows;
     const weaponRows = getHeldWeaponAimTargets(target.actor)
@@ -5289,10 +5336,7 @@ class WeaponAttackController {
         destroyed: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey),
         chance: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
           ? 0
-          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId, this.actionKey, {
-            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
-            ignoreCover: this.ignoreAimedObstructions
-          })
+          : getAimedAttackHitChanceFromBasis(chanceBasis, entry.limbKey, blockerBonus, chanceOptions)
       }));
     return [...limbRows, ...weaponRows];
   }
@@ -10386,19 +10430,82 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
 }
 
 function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "", actionKey = "", options = {}) {
+  return getAimedAttackHitChanceFromBasis(
+    buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponFunctionId, actionKey),
+    limbKey,
+    blockerBonus,
+    options
+  );
+}
+
+/** Shared attacker/target attack scalars for one target — limbs only change difficulty. */
+function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponFunctionId = "", actionKey = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
-  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
-    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context)
-    + toInteger(options.accuracyBonus);
-  const difficulty = getAimedAttackDifficulty(
+  const contextual = getContextualAbilityChangeValues(attackerActor, [
+    {
+      id: "skill",
+      key: `system.skills.${skillKey}.bonus`,
+      baseValue: toInteger(attackerActor?.system?.skills?.[skillKey]?.value),
+      alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "accuracy",
+      key: "system.combat.accuracy",
+      baseValue: toInteger(attackerActor?.system?.combat?.accuracy)
+    },
+    {
+      id: "criticalChance",
+      key: "system.combat.criticalChance",
+      baseValue: toInteger(attackerActor?.system?.combat?.criticalChance)
+    }
+  ], context);
+
+  const stealth = getStealthAttackModifiers(attackerActor);
+  const criticalModifier = evaluateWeaponFormula(weapon, weaponData?.criticalChanceModifier, {
+    minimum: -Infinity,
+    context: "critical chance"
+  })
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + toInteger(contextual.criticalChance)
+    + stealth.criticalChanceBonus
+    - getWeaponConditionCritChancePenalty(weapon);
+
+  const finalSkillValue = toInteger(contextual.skill)
+    + evaluateWeaponFormula(weapon, weaponData?.accuracyBonus, {
+      minimum: -Infinity,
+      context: "weapon accuracy"
+    })
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
+    + toInteger(contextual.accuracy)
+    - getWeaponConditionAccuracyPenalty(weapon);
+
+  return {
+    attackerActor,
     targetActor,
+    finalSkillValue,
+    criticalModifiers: {
+      criticalSuccessBonus: Math.max(0, criticalModifier),
+      criticalFailureBonus: Math.max(0, -criticalModifier)
+    },
+    requirementPenalty: getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
+  };
+}
+
+function getAimedAttackHitChanceFromBasis(basis, limbKey = "", blockerBonus = 0, options = {}) {
+  const difficulty = getAimedAttackDifficulty(
+    basis?.targetActor,
     limbKey,
-    blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId),
+    blockerBonus + toInteger(basis?.requirementPenalty),
     options
   );
-  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context));
+  return getSkillCheckSuccessChance(
+    basis?.attackerActor,
+    toInteger(basis?.finalSkillValue) + toInteger(options.accuracyBonus),
+    difficulty,
+    basis?.criticalModifiers ?? {}
+  );
 }
 
 function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "", accuracyBonus = 0 } = {}) {
