@@ -1,6 +1,20 @@
 import { calculateSkillDevelopmentBonuses } from "../advancement/calculations.mjs";
+import {
+  buildActorFormulaAutocompleteEntries,
+  buildActorFormulaReferenceData
+} from "../formulas/actor-references.mjs";
 import { evaluateFormula, evaluateSkillFormulas, getSkillValues } from "../formulas/evaluation.mjs";
-import { getCharacteristicSettings, getSkillAdvancementSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { DEFAULT_NEEDS } from "../config/defaults.mjs";
+import {
+  getActorNeedSettings,
+  getCharacteristicSettings,
+  getCreatureOptions,
+  getNeedSettings,
+  getProficiencySettings,
+  getResourceSettings,
+  getSkillAdvancementSettings,
+  getSkillSettings
+} from "../settings/accessors.mjs";
 import { toInteger } from "./numbers.mjs";
 import { formatFormulaForDisplay } from "./formula-display.mjs";
 
@@ -20,19 +34,49 @@ export function evaluateActorFormula(formula, actor = null, { fallback = 0, mini
 export function buildActorFormulaData(actor = null, { stage = "prepared" } = {}) {
   const characteristicSettings = getCharacteristicSettings();
   const skillSettings = getSkillSettings();
+  const resourceSettings = getResourceSettings();
+  const needSettings = getFormulaNeedSettings(actor, { includeGlobal: true });
+  const proficiencySettings = getProficiencySettings();
   const characteristics = buildActorFormulaCharacteristics(actor, characteristicSettings, {
     includeDevelopment: stage === "initial-active-effect"
   });
   const skills = stage === "initial-active-effect"
     ? buildInitialActiveEffectSkillValues(actor, characteristicSettings, skillSettings, characteristics)
     : getSkillValues(actor?.system?.skills ?? {});
+  const formulaReferences = buildActorFormulaReferenceData({
+    system: actor?.system ?? {},
+    characteristicSettings,
+    skillSettings,
+    resourceSettings,
+    needSettings,
+    proficiencySettings,
+    limbSettings: getActorLimbSettings(actor),
+    characteristicValues: characteristics,
+    skillValues: skills
+  });
 
   return {
     characteristicSettings,
     skillSettings,
+    resourceSettings,
+    needSettings,
+    proficiencySettings,
     characteristics,
-    skills
+    skills,
+    ...formulaReferences
   };
+}
+
+export function getActorFormulaAutocompleteEntries(subject = null) {
+  const actor = resolveFormulaActor(subject);
+  return buildActorFormulaAutocompleteEntries({
+    skills: getSkillSettings(),
+    resources: getResourceSettings(),
+    needs: getFormulaNeedSettings(actor, { includeGlobal: true }),
+    proficiencies: getProficiencySettings(),
+    limbs: getFormulaLimbSettings(actor),
+    includeLoad: true
+  });
 }
 
 export function isFormulaTextConfigured(value) {
@@ -47,8 +91,76 @@ export function formatActorFormulaForDisplay(formula = "0", actor = null, { incl
     skills: data.skillSettings,
     characteristicValues: data.characteristics,
     skillValues: data.skills,
+    variables: data.formulaVariableSettings,
+    variableValues: data.formulaVariables,
+    references: data.formulaReferenceSettings,
+    referenceValues: data.formulaReferences,
     includeValues
   });
+}
+
+function getFormulaNeedSettings(actor = null, { includeGlobal = false } = {}) {
+  const globalSettings = includeGlobal || !actor ? safeGetNeedSettings() : [];
+  if (!actor) return globalSettings;
+  let actorSettings = [];
+  try {
+    actorSettings = getActorNeedSettings(actor);
+  } catch (_error) {
+    actorSettings = [];
+  }
+  return mergeFormulaSettings(globalSettings, actorSettings);
+}
+
+function safeGetNeedSettings() {
+  try {
+    const settings = getNeedSettings();
+    return settings.length ? settings : getFallbackNeedSettings();
+  } catch (_error) {
+    return getFallbackNeedSettings();
+  }
+}
+
+function getFallbackNeedSettings() {
+  return DEFAULT_NEEDS.map(entry => ({ ...entry }));
+}
+
+function getActorLimbSettings(actor = null) {
+  return Object.entries(actor?.system?.limbs ?? {}).map(([key, limb]) => ({
+    key,
+    label: String(limb?.label ?? key)
+  }));
+}
+
+function getFormulaLimbSettings(actor = null) {
+  const configured = [];
+  try {
+    for (const race of getCreatureOptions()?.races ?? []) {
+      configured.push(...(race?.limbs ?? []));
+    }
+  } catch (_error) {
+    // Actor-owned limb definitions below remain available without settings.
+  }
+  return mergeFormulaSettings(configured, getActorLimbSettings(actor));
+}
+
+function mergeFormulaSettings(...collections) {
+  const byKey = new Map();
+  for (const entry of collections.flat()) {
+    const key = String(entry?.key ?? "").trim();
+    if (!key) continue;
+    byKey.set(key, { ...byKey.get(key), ...entry, key });
+  }
+  return Array.from(byKey.values());
+}
+
+function resolveFormulaActor(subject = null) {
+  if (!subject) return null;
+  if (subject.documentName === "Actor") return subject;
+  if (subject.actor?.documentName === "Actor") return subject.actor;
+  if (subject.parent?.documentName === "Actor") return subject.parent;
+  if (subject.parent?.actor?.documentName === "Actor") return subject.parent.actor;
+  if (subject.system?.resources || subject.system?.characteristics) return subject;
+  return null;
 }
 
 function buildActorFormulaCharacteristics(actor = null, characteristicSettings = [], { includeDevelopment = false } = {}) {

@@ -1,5 +1,14 @@
 import { evaluateFormula, getSkillValues } from "./index.mjs";
-import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { buildActorFormulaReferenceData } from "./actor-references.mjs";
+import { DEFAULT_NEEDS } from "../config/defaults.mjs";
+import {
+  getCharacteristicSettings,
+  getNeedSettings,
+  getProficiencySettings,
+  getResourceSettings,
+  getSkillSettings
+} from "../settings/accessors.mjs";
+import { buildActorFormulaData } from "../utils/actor-formulas.mjs";
 import { formatFormulaForDisplay } from "../utils/formula-display.mjs";
 
 const DESCRIPTION_FORMULA_PATTERN = /\[\[(?!\/)(?<formula>[^\]\r\n]+)]]/g;
@@ -81,15 +90,44 @@ export function buildDescriptionFormulaData(options = {}) {
   const actor = getFormulaActor(options?.relativeTo);
   const hasExplicitRollData = Object.prototype.hasOwnProperty.call(options ?? {}, "rollData");
   const rollData = hasExplicitRollData ? getRollData(options?.rollData) : null;
+  if (!hasExplicitRollData && actor) return buildActorFormulaData(actor);
   const source = hasExplicitRollData
     ? (rollData?.system ?? rollData ?? {})
     : (actor?.system ?? {});
+  const characteristicSettings = getCharacteristicSettings();
+  const skillSettings = getSkillSettings();
+  const characteristics = source?.characteristics ?? {};
+  const skills = getSkillValues(source?.skills ?? {});
+  const formulaReferences = buildActorFormulaReferenceData({
+    system: source,
+    characteristicSettings,
+    skillSettings,
+    resourceSettings: getResourceSettings(),
+    needSettings: safeGetNeedSettings(),
+    proficiencySettings: getProficiencySettings(),
+    limbSettings: Object.entries(source?.limbs ?? {}).map(([key, limb]) => ({
+      key,
+      label: String(limb?.label ?? key)
+    })),
+    characteristicValues: characteristics,
+    skillValues: skills
+  });
   return {
-    characteristicSettings: getCharacteristicSettings(),
-    skillSettings: getSkillSettings(),
-    characteristics: source?.characteristics ?? {},
-    skills: getSkillValues(source?.skills ?? {})
+    characteristicSettings,
+    skillSettings,
+    characteristics,
+    skills,
+    ...formulaReferences
   };
+}
+
+function safeGetNeedSettings() {
+  try {
+    const settings = getNeedSettings();
+    return settings.length ? settings : DEFAULT_NEEDS.map(entry => ({ ...entry }));
+  } catch (_error) {
+    return DEFAULT_NEEDS.map(entry => ({ ...entry }));
+  }
 }
 
 function getFormulaActor(document) {
@@ -112,6 +150,10 @@ function describeDescriptionFormula(formula, data, total) {
     skills: data.skillSettings,
     characteristicValues: data.characteristics,
     skillValues: data.skills,
+    variables: data.formulaVariableSettings,
+    variableValues: data.formulaVariables,
+    references: data.formulaReferenceSettings,
+    referenceValues: data.formulaReferences,
     includeValues: true
   });
   return `${resolved} = ${total}`;

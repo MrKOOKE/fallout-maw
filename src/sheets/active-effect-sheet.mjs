@@ -3,6 +3,7 @@ import { activateDescriptionFormulaAutocomplete } from "../apps/description-form
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
 import { buildEffectKeyTokens, buildResourceBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import {
   preserveTextSelectionBeforePartSync,
@@ -80,7 +81,8 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
     activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
-      skills: getSkillSettings()
+      skills: getSkillSettings(),
+      actorReferences: getActorFormulaAutocompleteEntries(this.document)
     });
     activateDescriptionFormulaAutocomplete(this.element);
   }

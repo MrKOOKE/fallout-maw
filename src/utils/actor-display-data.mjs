@@ -38,6 +38,7 @@ import {
   resolveActorInteractionToken
 } from "../items/item-interactions.mjs";
 import { toInteger } from "./numbers.mjs";
+import { getIndicatorValueState } from "./indicator-values.mjs";
 import {
   getConstructPartLimbKey,
   getConstructPartSlotId,
@@ -84,17 +85,16 @@ export function prepareIndicatorEntry({
   active = false,
   ...extra
 } = {}) {
-  const min = toInteger(data?.min);
-  const max = Math.max(min, toInteger(data?.max));
-  const scaleMax = Math.max(min, toInteger(data?.scaleMax ?? data?.max));
-  const value = Math.min(Math.max(toInteger(data?.value), min), Math.max(max, scaleMax));
-  const negativeRange = min < 0 ? Math.abs(min) : 0;
-  const positiveFloor = Math.max(0, min);
-  const positiveRange = Math.max(0, scaleMax - positiveFloor);
-  const isNegative = value < 0 && negativeRange > 0;
-  const percent = isNegative
-    ? ((Math.abs(value) / negativeRange) * 100)
-    : (positiveRange > 0 ? (((Math.max(value, positiveFloor) - positiveFloor) / positiveRange) * 100) : 0);
+  const {
+    min,
+    max,
+    scaleMax,
+    value,
+    negativeRange,
+    positiveRange,
+    isNegative,
+    percent
+  } = getIndicatorValueState(data);
   const segments = getIndicatorSegmentCount(isNegative ? negativeRange : positiveRange || scaleMax || max);
   const normalizedColor = normalizeIndicatorColor(isNegative ? "#c8463d" : color);
 

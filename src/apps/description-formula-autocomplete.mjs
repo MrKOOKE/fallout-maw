@@ -1,4 +1,5 @@
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
 import { escapeHtml, getHtmlRoot } from "../utils/dom.mjs";
 import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 
@@ -27,7 +28,8 @@ export function activateDescriptionFormulaAutocomplete(html) {
 function buildDescriptionFormulaTokens() {
   return [
     ...buildTokens(getCharacteristicSettings(), "characteristic"),
-    ...buildTokens(getSkillSettings(), "skill")
+    ...buildTokens(getSkillSettings(), "skill"),
+    ...buildTokens(getActorFormulaAutocompleteEntries(), "actor-reference")
   ];
 }
 

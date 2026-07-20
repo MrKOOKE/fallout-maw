@@ -148,7 +148,7 @@ import {
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
-import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import { getActorFormulaAutocompleteEntries, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -1223,7 +1223,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     activateItemEffectKeyAutocompletes(this.element);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
-      skills: getSkillSettings()
+      skills: getSkillSettings(),
+      actorReferences: getActorFormulaAutocompleteEntries(this.item)
     });
     activateDescriptionFormulaAutocomplete(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {

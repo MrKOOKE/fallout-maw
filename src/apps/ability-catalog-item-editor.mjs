@@ -115,6 +115,7 @@ import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { getEquipmentSlotSelectionKey } from "../utils/equipment-slots.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
 import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "./description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
@@ -313,7 +314,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     activateAbilityFunctionKeyAutocomplete(this.element);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
-      skills: getSkillSettings()
+      skills: getSkillSettings(),
+      actorReferences: getActorFormulaAutocompleteEntries()
     });
     activateDescriptionFormulaAutocomplete(this.element);
   }

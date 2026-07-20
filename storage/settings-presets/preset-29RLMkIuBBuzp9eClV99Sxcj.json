@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "f138df4ec7026e00f770b81f1539614224e8563d8517b5927134bcef607ad886",
-  "updatedAt": "2026-07-19T17:08:29.199Z",
+  "revision": "f7f3321473a8014c571c5d7932809b713d4ea04bd2dce9a40bef0df6828dd87d",
+  "updatedAt": "2026-07-20T07:24:04.257Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -30,7 +30,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
-                  "category": "",
+                  "category": "Особенности",
                   "cost": 0,
                   "formula": "",
                   "functions": [
@@ -99,7 +99,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
-                  "category": "",
+                  "category": "Особенности",
                   "cost": 0,
                   "formula": "",
                   "functions": [
@@ -211,6 +211,196 @@
                   ]
                 },
                 "visible": true
+              },
+              {
+                "description": "<ul><li><p>Каждая единица выносливости увеличивает ОЗ всех частей тела на 3.</p></li><li><p>Уклонение уменьшается на [[30+athletics/6]]</p></li></ul>",
+                "id": "QU8jCJ6YgiIdbtQ1",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/bolshoj-malchik.webp",
+                "name": "Большой мальчик",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "0dEOkoAqLD0M2YQ4",
+                          "key": "system.limbs.all.maxBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        },
+                        {
+                          "id": "ilmcLxyGkIJ3Sc1q",
+                          "key": "system.resources.dodge.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-30-ath/6"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "LcQ9JQoVYdeWTudt",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Вы получаете +25% к урону, но каждый 1% недостающего ОЗ уменьшает урон на 1%</p>",
+                "id": "cVds4ptJlHkgezQK",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/strelba-navsikdku.webp",
+                "name": "Горячая кровь",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "TAnvxAhLSXEjSF6r",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "25"
+                        },
+                        {
+                          "id": "IESJbqD2hW4QYuyY",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-heaMissingPercent"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "oielPyv4NmTdAXpM",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>С 6:00 по 20:00 получаете удвоенную регенерацию. В остальное время не регенерируете вовсе.</p>",
+                "id": "KcOSFagJX9GJCSZl",
+                "img": "systems/fallout-maw/assets/icons/29-99/poceluj-solnca.webp",
+                "name": "Дитя солнца",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Инициатива увеличивается на 5.</p></li><li><p>ОП увеличивются на 3.</p></li><li><p>Входящий по вам урон увеличивается на 10%<br></p></li></ul>",
+                "id": "GU1glhalIrsMGOkc",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/kamikadze.webp",
+                "name": "Камикадзе",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "jAYb9gkx4CysCs71",
+                          "key": "system.attributes.initiativeBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5"
+                        },
+                        {
+                          "id": "UNQwxbzOyplzwQM2",
+                          "key": "system.resources.movementPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "3"
+                        },
+                        {
+                          "id": "0fmpRcCYATi4CwNs",
+                          "key": "Урон",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "0"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "z8gBC4s02haclxUN",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
               }
             ],
             "id": "features",
@@ -232,7 +422,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
-                  "category": "",
+                  "category": "Общая категория",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -278,7 +468,7 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
-                  "category": "",
+                  "category": "Общая категория",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -400,7 +590,7 @@
                       "value": 80
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -482,7 +672,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -557,7 +747,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -610,7 +800,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -657,7 +847,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -704,7 +894,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -754,7 +944,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -802,7 +992,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -871,7 +1061,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -917,7 +1107,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -967,7 +1157,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1011,7 +1201,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Дальний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1069,7 +1259,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1130,7 +1320,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1204,7 +1394,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1253,7 +1443,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1302,7 +1492,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1350,7 +1540,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1413,7 +1603,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1462,7 +1652,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1511,7 +1701,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1591,7 +1781,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1639,7 +1829,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Ближний бой",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1696,7 +1886,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1757,7 +1947,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -1826,7 +2016,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1879,7 +2069,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -1932,7 +2122,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -1985,7 +2175,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2078,7 +2268,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2131,7 +2321,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2184,7 +2374,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2253,7 +2443,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -2308,7 +2498,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2355,7 +2545,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2410,7 +2600,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Атлетка",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2464,7 +2654,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Контроль энергии",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2521,7 +2711,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Стойкость",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2574,7 +2764,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Стойкость",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2686,7 +2876,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2739,7 +2929,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -2792,7 +2982,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -2844,7 +3034,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2888,7 +3078,7 @@
                       "value": 200
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 12000,
                   "formula": "",
                   "functions": []
@@ -2915,7 +3105,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -2968,7 +3158,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Натуралист",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3044,7 +3234,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Красноречие",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3115,7 +3305,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Красноречие",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -3169,7 +3359,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Красноречие",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3236,7 +3426,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Красноречие",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -3288,7 +3478,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Красноречие",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -3347,7 +3537,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Красноречие",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4269,7 +4459,7 @@
                       "value": 60
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 1000,
                   "formula": "",
                   "functions": [
@@ -4339,7 +4529,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4400,7 +4590,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -4461,7 +4651,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4514,7 +4704,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4562,7 +4752,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4613,7 +4803,7 @@
                       "value": 160
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -4660,7 +4850,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4708,7 +4898,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4756,7 +4946,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4805,7 +4995,7 @@
                       "value": 100
                     }
                   ],
-                  "category": "",
+                  "category": "Азарт",
                   "cost": 3000,
                   "formula": "",
                   "functions": [
@@ -4833,26 +5023,6 @@
                       "type": "fixed"
                     }
                   ]
-                },
-                "visible": true
-              },
-              {
-                "description": "",
-                "id": "sjf2HgnXs0hBdqQA",
-                "img": "icons/svg/aura.svg",
-                "name": "Новая способность",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [],
-                  "category": "Азарт",
-                  "cost": 0,
-                  "formula": "",
-                  "functions": []
                 },
                 "visible": true
               }

@@ -9,7 +9,8 @@ export function evaluateFormula(formula, data = {}) {
     characteristics: data.characteristicSettings,
     skills: data.skillSettings,
     allowSkills: Boolean(data.skills),
-    variables: data.variables
+    variables: data.variables,
+    references: data.formulaReferences ?? data.references
   };
   const options = normalizeFormulaOptions(formulaOptions);
   const expression = parseFormula(String(formula ?? "0"), formulaOptions);
@@ -23,6 +24,10 @@ export function evaluateFormula(formula, data = {}) {
 
     const variable = options.variableAliases[normalized];
     if (variable) return Number(data.formulaVariables?.[variable] ?? data[variable]) || 0;
+
+    const referenceKey = identifier.startsWith("@") ? identifier.slice(1) : identifier;
+    const reference = options.referenceAliases[referenceKey.toLowerCase()];
+    if (reference) return Number(data.formulaReferences?.[reference] ?? data.references?.[reference]) || 0;
 
     throw new Error(format("FALLOUTMAW.Formula.UnknownParameter", { identifier }));
   });

@@ -8,7 +8,12 @@ const MAX_SUGGESTIONS = 10;
 const MENU_MAX_HEIGHT = 220;
 const MENU_VIEWPORT_PADDING = 12;
 
-export function activateFormulaAutocomplete(html, { characteristics = [], skills = [], variables = [] } = {}) {
+export function activateFormulaAutocomplete(html, {
+  characteristics = [],
+  skills = [],
+  variables = [],
+  actorReferences = []
+} = {}) {
   const root = getHtmlRoot(html);
   if (!root) return;
 
@@ -17,9 +22,11 @@ export function activateFormulaAutocomplete(html, { characteristics = [], skills
     all: [
       ...buildTokens(characteristics, "characteristic"),
       ...buildTokens(skills, "skill"),
-      ...buildTokens(variables, "variable")
+      ...buildTokens(variables, "variable"),
+      ...buildTokens(actorReferences, "actor-reference")
     ]
   };
+  tokenGroups.all = deduplicateTokens(tokenGroups.all);
 
   for (const input of root.querySelectorAll(FORMULA_INPUT_SELECTOR)) {
     if (input.dataset.formulaAutocompleteActive === "true") continue;
@@ -33,18 +40,29 @@ export function activateFormulaAutocomplete(html, { characteristics = [], skills
 function buildTokens(entries, type) {
   return entries
     .map(entry => {
-      const code = String(entry.abbr || entry.key || "").trim();
-      const key = String(entry.key || "").trim();
-      const label = String(entry.label || "").trim();
+      const source = entry && typeof entry === "object" ? entry : { key: entry, abbr: entry, label: entry };
+      const code = String(source.abbr || source.key || "").trim();
+      const key = String(source.key || "").trim();
+      const label = String(source.label || "").trim();
       return {
         code,
         key,
         label,
-        type,
+        type: source.type || type,
         matches: buildSearchValues(code, key, label)
       };
     })
     .filter(token => token.code && token.key);
+}
+
+function deduplicateTokens(tokens = []) {
+  const used = new Set();
+  return tokens.filter(token => {
+    const code = String(token?.code ?? "").toLocaleLowerCase();
+    if (!code || used.has(code)) return false;
+    used.add(code);
+    return true;
+  });
 }
 
 class FormulaAutocomplete {
