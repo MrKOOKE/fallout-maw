@@ -3506,6 +3506,111 @@ body #prosemirror-dropdown {
   margin: 0;
 }
 
+.fallout-maw-acquisition-ability-controls {
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-acquisition-ability-dropzone {
+  align-items: center;
+  border: 1px dashed var(--fallout-maw-border);
+  border-radius: 5px;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.55rem;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.fallout-maw-acquisition-ability-dropzone.drag-over {
+  background: rgba(208, 174, 94, 0.16);
+  border-color: var(--fallout-maw-accent);
+}
+
+.fallout-maw-acquisition-ability-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.fallout-maw-acquisition-ability-chip {
+  align-items: center;
+  border: 1px solid rgba(210, 190, 140, 0.18);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+  padding: 0.35rem 0.4rem;
+}
+
+.fallout-maw-acquisition-ability-chip img {
+  border-radius: 3px;
+  height: 28px;
+  object-fit: cover;
+  width: 28px;
+}
+
+.fallout-maw-acquisition-ability-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-ability-catalog-picker {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-ability-catalog-picker-search {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fallout-maw-ability-catalog-picker-list {
+  display: grid;
+  gap: 0.65rem;
+  max-height: min(60vh, 520px);
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.fallout-maw-ability-catalog-picker-category {
+  border: 1px solid rgba(210, 190, 140, 0.18);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem;
+}
+
+.fallout-maw-ability-catalog-picker-category-header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.fallout-maw-ability-catalog-picker-abilities {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fallout-maw-ability-catalog-picker-row {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: auto 24px minmax(0, 1fr);
+  padding: 0.2rem 0.15rem;
+}
+
+.fallout-maw-ability-catalog-picker-row img {
+  border-radius: 3px;
+  height: 24px;
+  object-fit: cover;
+  width: 24px;
+}
+
 .fallout-maw-event-reaction-settings {
   background: rgba(72, 98, 132, 0.09);
   border: 1px solid rgba(112, 158, 205, 0.28);

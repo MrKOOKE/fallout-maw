@@ -383,13 +383,23 @@ function abilityAcquisitionRequirementField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "race", "characteristic", "skill"],
+      choices: ["", "race", "characteristic", "skill", "ability"],
       initial: ""
     }),
     raceId: new StringField({ required: true, blank: true, initial: "" }),
     characteristicKey: new StringField({ required: true, blank: true, initial: "" }),
     skillKey: new StringField({ required: true, blank: true, initial: "" }),
-    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    mode: new StringField({
+      required: true,
+      blank: true,
+      choices: ["", "present", "absent"],
+      initial: ""
+    }),
+    abilityIds: new ArrayField(new StringField({ required: true, blank: false }), {
+      required: true,
+      initial: []
+    })
   });
 }
 

@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "7dca76d796754b2ef53b1d09d8d6c576613bf5daaf62610c834f23749f59c640",
-  "updatedAt": "2026-07-20T08:03:45.405Z",
+  "revision": "c79d7dec9763f6bef2e18ce07e1cfb7a832b200003d3cc443070aaa179a88047",
+  "updatedAt": "2026-07-20T09:48:19.413Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -447,7 +447,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Вы получаете еще один коронный навык. </p></li><li><p>Множитель развития всех не коронных навыков уменьшается на 0.2</p></li></ul>",
+                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li><li><p>Множитель развития всех не коронных навыков уменьшается на 0.2</p></li></ul>",
                 "id": "MykWY2QgZQDXBpbF",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/odaryonnyj.webp",
                 "name": "\"Одаренный\"",
@@ -459,6 +459,85 @@
                     "skillKey": "meleeCombat"
                   },
                   "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Уклонение увеличивается на [[20+athletics/9]]</p></li><li><p>Каждая единица Выносливости уменьшает максимум ОЗ всех частей тела на 2</p></li></ul>",
+                "id": "ti6900MDWnCpCjFE",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/miniatyurnyj.webp",
+                "name": "Миниатюрный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "13Tj7yunPsa0Ocr2",
+                          "key": "system.limbs.all.maxBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-con*2"
+                        },
+                        {
+                          "id": "rNa3caARwx5wrKGW",
+                          "key": "system.resources.dodge.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20+ath/9"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "ADPgxgw5XcZBpW0N",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех +10%</p></li><li><p>С вероятностью в 50% шанс на Крит провал +10%</p></li></ul>",
+                "id": "2ExGBSWNzig4FgR8",
+                "img": "systems/fallout-maw/assets/icons/8-14/savant.webp",
+                "name": "Нестабильный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "bbO2KcAgZ0nLKpRK",
+                      "type": ""
+                    }
+                  ],
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",

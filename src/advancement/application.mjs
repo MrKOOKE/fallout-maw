@@ -24,7 +24,7 @@ import {
 import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { getAbilitySkillAdvancementBaseBonuses } from "../abilities/evaluation.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
-import { ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
+import { ABILITY_ACQUISITION_ABILITY_MODES, ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import {
   getNextSkillDevelopmentCostThreshold,
@@ -2026,6 +2026,41 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
         met: current >= required,
         summary: `${skill?.label || key}: ${current} / ${required}`
       });
+      continue;
+    }
+
+    if (requirement?.type === ABILITY_ACQUISITION_CONDITION_TYPES.ability) {
+      const mode = String(requirement.mode ?? ABILITY_ACQUISITION_ABILITY_MODES.present).trim()
+        === ABILITY_ACQUISITION_ABILITY_MODES.absent
+        ? ABILITY_ACQUISITION_ABILITY_MODES.absent
+        : ABILITY_ACQUISITION_ABILITY_MODES.present;
+      const abilityIds = (requirement.abilityIds ?? [])
+        .map(id => String(id ?? "").trim())
+        .filter(Boolean);
+      if (!abilityIds.length) continue;
+      const requiresPresence = mode === ABILITY_ACQUISITION_ABILITY_MODES.present;
+      for (const abilityId of abilityIds) {
+        const catalogEntry = findCatalogAbility(abilityId);
+        const abilityName = catalogEntry?.ability?.name || abilityId;
+        const hasAbility = actorHasAbility(actor, abilityId);
+        const met = requiresPresence ? hasAbility : !hasAbility;
+        const currentLabel = hasAbility ? "Есть" : "Нет";
+        const requiredLabel = requiresPresence ? "Есть" : "Нет";
+        rows.push({
+          type: requirement.type,
+          mode,
+          label: requiresPresence ? "Нужна способность" : "Исключает способность",
+          targetLabel: abilityName,
+          currentLabel,
+          requiredLabel,
+          current: currentLabel,
+          required: requiredLabel,
+          met,
+          summary: requiresPresence
+            ? `Нужна: ${abilityName} (${currentLabel})`
+            : `Исключает: ${abilityName} (${currentLabel})`
+        });
+      }
     }
   }
   return rows;
@@ -2210,9 +2245,14 @@ function formatCompactDecimal(value, digits = 2) {
 
 function renderAbilityRequirementTooltipRow(requirement) {
   const stateClass = requirement.met ? "met" : "unmet";
-  const value = requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.race
-    ? `${requirement.currentLabel} / ${requirement.targetLabel}`
-    : `${requirement.current} / ${requirement.required}`;
+  let value;
+  if (requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.race) {
+    value = `${requirement.currentLabel} / ${requirement.targetLabel}`;
+  } else if (requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.ability) {
+    value = `${requirement.currentLabel} / ${requirement.requiredLabel}`;
+  } else {
+    value = `${requirement.current} / ${requirement.required}`;
+  }
   return `
     <div class="function-row fallout-maw-advancement-tooltip-requirement ${stateClass}">
       <span>${escapeHtml(`${requirement.label}: ${requirement.targetLabel}`)}</span>

@@ -3,7 +3,9 @@ import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getIte
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
 import {
+  ABILITY_ACQUISITION_ABILITY_MODES,
   ABILITY_ACQUISITION_CONDITION_TYPES,
+  ABILITY_CATALOG_DRAG_TYPE,
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_ROUTE_BUDGET_MODES,
   ABILITY_ACTION_ROUTE_EVALUATION_MODES,
@@ -76,7 +78,8 @@ import {
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
   normalizeEventReactionProgressRequired,
-  normalizeAbilityFunctions
+  normalizeAbilityFunctions,
+  getAbilitySourceId
 } from "../settings/abilities.mjs";
 import {
   EVENT_REACTION_EXPECTED_RESULT_KEYS,
@@ -120,6 +123,8 @@ import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "./description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
+import { pickCatalogAbilities, resolveCatalogAbilityEntries } from "./ability-catalog-picker.mjs";
+import { findCatalogAbility } from "../abilities/purchase.mjs";
 
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
@@ -202,7 +207,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addToTheEndAdvantageSkill: this.#onAddToTheEndAdvantageSkill,
       deleteToTheEndAdvantageSkill: this.#onDeleteToTheEndAdvantageSkill,
       addAcquisitionRequirement: this.#onAddAcquisitionRequirement,
-      deleteAcquisitionRequirement: this.#onDeleteAcquisitionRequirement
+      deleteAcquisitionRequirement: this.#onDeleteAcquisitionRequirement,
+      openAcquisitionAbilityPicker: this.#onOpenAcquisitionAbilityPicker,
+      removeAcquisitionRequirementAbility: this.#onRemoveAcquisitionRequirementAbility
     }
   };
 
@@ -311,6 +318,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='acquisitionRequirementType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onAcquisitionRequirementTypeChange(event));
     });
+    this.#activateAcquisitionAbilityDropzones();
     activateAbilityFunctionKeyAutocomplete(this.element);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
@@ -1062,6 +1070,87 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  static async #onOpenAcquisitionAbilityPicker(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const row = target.closest("[data-acquisition-requirement-row]");
+    const index = getRowIndex(this.form, "[data-acquisition-requirement-row]", row);
+    const requirement = index >= 0 ? this.ability.system.acquisitionRequirements?.[index] : null;
+    if (!requirement || requirement.type !== ABILITY_ACQUISITION_CONDITION_TYPES.ability) return;
+
+    const selected = await pickCatalogAbilities({
+      selectedIds: requirement.abilityIds ?? [],
+      excludeIds: [this.abilityId],
+      title: "Выбор способностей"
+    });
+    if (!selected) return;
+
+    requirement.abilityIds = selected;
+    this.#activeTab = "details";
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onRemoveAcquisitionRequirementAbility(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const row = target.closest("[data-acquisition-requirement-row]");
+    const index = getRowIndex(this.form, "[data-acquisition-requirement-row]", row);
+    const requirement = index >= 0 ? this.ability.system.acquisitionRequirements?.[index] : null;
+    if (!requirement) return;
+    const abilityId = String(target.closest("[data-acquisition-requirement-ability-id]")?.dataset?.acquisitionRequirementAbilityId ?? "").trim();
+    if (!abilityId) return;
+    requirement.abilityIds = (requirement.abilityIds ?? []).filter(id => id !== abilityId);
+    this.#activeTab = "details";
+    return this.#persist({ render: true, sync: false });
+  }
+
+  #activateAcquisitionAbilityDropzones() {
+    const dropzones = this.element?.querySelectorAll?.("[data-acquisition-ability-dropzone]") ?? [];
+    for (const dropzone of dropzones) {
+      dropzone.addEventListener("dragover", event => {
+        event.preventDefault();
+        dropzone.classList.add("drag-over");
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      });
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
+      dropzone.addEventListener("drop", event => void this.#onAcquisitionAbilityDrop(event, dropzone));
+    }
+  }
+
+  async #onAcquisitionAbilityDrop(event, dropzone) {
+    event.preventDefault();
+    dropzone.classList.remove("drag-over");
+    this.#syncFromForm();
+    const row = dropzone.closest("[data-acquisition-requirement-row]");
+    const index = getRowIndex(this.form, "[data-acquisition-requirement-row]", row);
+    const requirement = index >= 0 ? this.ability.system.acquisitionRequirements?.[index] : null;
+    if (!requirement || requirement.type !== ABILITY_ACQUISITION_CONDITION_TYPES.ability) return;
+
+    const sourceId = await resolveDroppedAbilitySourceId(event);
+    if (!sourceId) {
+      ui.notifications.warn("Перетащите сюда способность из каталога.");
+      return;
+    }
+    if (sourceId === this.abilityId) {
+      ui.notifications.warn("Нельзя добавить эту же способность в её собственные условия.");
+      return;
+    }
+    if (!findCatalogAbility(sourceId)) {
+      ui.notifications.warn("Способность не найдена в каталоге.");
+      return;
+    }
+
+    const abilityIds = [...(requirement.abilityIds ?? [])];
+    if (abilityIds.includes(sourceId)) {
+      ui.notifications.warn("Эта способность уже добавлена.");
+      return;
+    }
+    abilityIds.push(sourceId);
+    requirement.abilityIds = abilityIds;
+    this.#activeTab = "details";
+    return this.#persist({ render: true, sync: false });
+  }
+
   #persist({ render = false, sync = true } = {}) {
     if (sync) this.#syncFromForm();
     this.#queueAutosave();
@@ -1712,7 +1801,11 @@ function readAcquisitionRequirements(root) {
     raceId: row.querySelector("[data-field='acquisitionRequirementRaceId']")?.value ?? "",
     characteristicKey: row.querySelector("[data-field='acquisitionRequirementCharacteristicKey']")?.value ?? "",
     skillKey: row.querySelector("[data-field='acquisitionRequirementSkillKey']")?.value ?? "",
-    value: row.querySelector("[data-field='acquisitionRequirementValue']")?.value ?? 0
+    value: row.querySelector("[data-field='acquisitionRequirementValue']")?.value ?? 0,
+    mode: row.querySelector("[data-field='acquisitionRequirementMode']")?.value ?? "",
+    abilityIds: Array.from(row.querySelectorAll("[data-field='acquisitionRequirementAbilityId']") ?? [])
+      .map(input => String(input.value ?? "").trim())
+      .filter(Boolean)
   }));
 }
 
@@ -2653,18 +2746,24 @@ function prepareAcquisitionRequirementForDisplay(requirement, { characteristicSe
   const isRace = type === ABILITY_ACQUISITION_CONDITION_TYPES.race;
   const isCharacteristic = type === ABILITY_ACQUISITION_CONDITION_TYPES.characteristic;
   const isSkill = type === ABILITY_ACQUISITION_CONDITION_TYPES.skill;
+  const isAbility = type === ABILITY_ACQUISITION_CONDITION_TYPES.ability;
+  const mode = String(requirement?.mode ?? ABILITY_ACQUISITION_ABILITY_MODES.present);
   return {
     ...requirement,
     value: Math.max(0, toInteger(requirement?.value)),
-    isPending: !isRace && !isCharacteristic && !isSkill,
+    mode,
+    isPending: !isRace && !isCharacteristic && !isSkill && !isAbility,
     isRace,
     isCharacteristic,
     isSkill,
+    isAbility,
     typeLabel: getAcquisitionRequirementTypeLabel(type),
     typeChoices: buildAcquisitionRequirementTypeChoices(type),
     raceChoices: buildRaceChoices(requirement?.raceId),
     characteristicChoices: buildCharacteristicChoices(requirement?.characteristicKey, characteristicSettings),
-    skillChoices: buildSkillChoices(requirement?.skillKey, skillSettings)
+    skillChoices: buildSkillChoices(requirement?.skillKey, skillSettings),
+    modeChoices: buildAcquisitionAbilityModeChoices(mode),
+    abilityEntries: isAbility ? resolveCatalogAbilityEntries(requirement?.abilityIds ?? []) : []
   };
 }
 
@@ -3147,7 +3246,8 @@ function buildAcquisitionRequirementTypeChoices(selected = "") {
   const labels = {
     [ABILITY_ACQUISITION_CONDITION_TYPES.race]: "Раса",
     [ABILITY_ACQUISITION_CONDITION_TYPES.characteristic]: "Характеристика",
-    [ABILITY_ACQUISITION_CONDITION_TYPES.skill]: "Навык"
+    [ABILITY_ACQUISITION_CONDITION_TYPES.skill]: "Навык",
+    [ABILITY_ACQUISITION_CONDITION_TYPES.ability]: "Другая способность"
   };
   return [
     { value: "", label: "", selected: !selected },
@@ -3157,6 +3257,33 @@ function buildAcquisitionRequirementTypeChoices(selected = "") {
       selected: selected === value
     }))
   ];
+}
+
+function buildAcquisitionAbilityModeChoices(selected = ABILITY_ACQUISITION_ABILITY_MODES.present) {
+  const mode = Object.values(ABILITY_ACQUISITION_ABILITY_MODES).includes(selected)
+    ? selected
+    : ABILITY_ACQUISITION_ABILITY_MODES.present;
+  const labels = {
+    [ABILITY_ACQUISITION_ABILITY_MODES.present]: "Наличие способности",
+    [ABILITY_ACQUISITION_ABILITY_MODES.absent]: "Отсутствие способности"
+  };
+  return Object.values(ABILITY_ACQUISITION_ABILITY_MODES).map(value => ({
+    value,
+    label: labels[value] ?? value,
+    selected: value === mode
+  }));
+}
+
+async function resolveDroppedAbilitySourceId(event) {
+  const data = TextEditor.getDragEventData(event);
+  if (data?.type === ABILITY_CATALOG_DRAG_TYPE) {
+    return String(data.sourceId ?? "").trim();
+  }
+  if (data?.type === "Item") {
+    const item = await fromUuid(String(data.uuid ?? "").trim());
+    if (item?.type === "ability") return getAbilitySourceId(item);
+  }
+  return "";
 }
 
 function buildRaceChoices(selected = "") {

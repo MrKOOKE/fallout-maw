@@ -85,6 +85,35 @@
               <input type="number" data-field="acquisitionRequirementValue" value="{{value}}" min="0" step="1">
             </label>
             {{/if}}
+            {{#if isAbility}}
+            <label>
+              <span>Режим</span>
+              <select data-field="acquisitionRequirementMode">
+                {{#each modeChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <div class="fallout-maw-acquisition-ability-controls" data-acquisition-ability-controls>
+              <div class="fallout-maw-acquisition-ability-dropzone" data-acquisition-ability-dropzone>
+                <i class="fa-solid fa-arrow-down"></i>
+                <span>Перетащите способность сюда</span>
+              </div>
+              <button type="button" data-action="openAcquisitionAbilityPicker"><i class="fa-solid fa-plus"></i> Добавить</button>
+              <div class="fallout-maw-acquisition-ability-list">
+                {{#each abilityEntries}}
+                <div class="fallout-maw-acquisition-ability-chip" data-acquisition-requirement-ability-id="{{id}}">
+                  <input type="hidden" data-field="acquisitionRequirementAbilityId" value="{{id}}">
+                  <img src="{{img}}" alt="">
+                  <strong>{{name}}</strong>
+                  <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="removeAcquisitionRequirementAbility" title="Удалить способность"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                {{else}}
+                <p class="fallout-maw-empty-list">Способности не выбраны.</p>
+                {{/each}}
+              </div>
+            </div>
+            {{/if}}
           </div>
         </div>
         {{/if}}

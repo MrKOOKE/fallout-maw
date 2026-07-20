@@ -207,7 +207,13 @@ export const ABILITY_HEALTH_LIMB_ALL = "all";
 export const ABILITY_ACQUISITION_CONDITION_TYPES = Object.freeze({
   race: "race",
   characteristic: "characteristic",
-  skill: "skill"
+  skill: "skill",
+  ability: "ability"
+});
+
+export const ABILITY_ACQUISITION_ABILITY_MODES = Object.freeze({
+  present: "present",
+  absent: "absent"
 });
 
 export const ABILITY_EQUIPMENT_OPERATORS = Object.freeze({
@@ -947,12 +953,47 @@ function normalizeAbilityAcquisitionCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_ACQUISITION_CONDITION_TYPES.ability) {
+    const rawMode = String(value?.mode ?? ABILITY_ACQUISITION_ABILITY_MODES.present).trim();
+    const mode = Object.values(ABILITY_ACQUISITION_ABILITY_MODES).includes(rawMode)
+      ? rawMode
+      : ABILITY_ACQUISITION_ABILITY_MODES.present;
+    const abilityIds = normalizeAcquisitionAbilityIds(value?.abilityIds ?? value?.abilities ?? value?.abilityId);
+    return {
+      id,
+      type,
+      mode,
+      abilityIds
+    };
+  }
+
   return {
     id,
     type,
     skillKey: String(value?.skillKey ?? value?.key ?? "").trim(),
     value: Math.max(0, toInteger(value?.value ?? value?.minimum))
   };
+}
+
+function normalizeAcquisitionAbilityIds(value) {
+  const values = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.values(value)
+      : [value];
+  const seen = new Set();
+  const abilityIds = [];
+  for (const entry of values) {
+    const abilityId = String(
+      typeof entry === "object" && entry !== null
+        ? (entry.id ?? entry.sourceId ?? entry.abilityId ?? "")
+        : (entry ?? "")
+    ).trim();
+    if (!abilityId || seen.has(abilityId)) continue;
+    seen.add(abilityId);
+    abilityIds.push(abilityId);
+  }
+  return abilityIds;
 }
 
 function normalizeAbilityCondition(value = {}) {
