@@ -82,6 +82,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         initiativeBonus: new NumberField({ required: true, integer: true, initial: 0 }),
         initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
+      skillCheck: new SchemaField({
+        disabledResults: new SchemaField({
+          criticalFailure: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+          failure: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+          success: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+          criticalSuccess: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+        })
+      }),
       combat: new SchemaField({
         accuracy: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         criticalChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
@@ -190,6 +198,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.limbSilhouetteOverride ??= false;
     this.limbSilhouette ??= null;
     this.currencies ??= {};
+    this.skillCheck ??= {};
+    this.skillCheck.disabledResults ??= {};
     this.combat ??= {};
     this.healing ??= {};
     this.trade ??= {};

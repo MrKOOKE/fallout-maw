@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "04c6d9396508c79858b1d3499d4af002ff711ea9e6b08b1a4af5010dd2e18dd5",
-  "updatedAt": "2026-07-21T07:57:29.084Z",
+  "revision": "2769a564f9a4119658637e04d648be5f0997da42a93e0ddb7298ae566672ec45",
+  "updatedAt": "2026-07-21T09:00:48.054Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -169,7 +169,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Навыки, значения которых на 20% ниже самого высокого Навыка получают +1.0 множителя развития</p></li><li><p>Вы не можете обладать коронными навыками</p></li></ul>",
+                "description": "<ul><li><p>Навыки, значения которых на 20% ниже самого высокого Навыка получают +1.0 множителя развития</p></li><li><p>Вы не можете обладать коронными навыками</p></li></ul><p>\"У вас изменится интерфейс окна навыков. Кнопки + поделятся на 3 цвета: Красный, Желтый, Зеленый.<br><br>Красный: данный навык не получает бонусов от этой особенности<br>Желтый: находится на пограничном уровне, когда еще одно вложение очков приведет к тому, что тот станет красным<br>Зеленый: Навык получает бонус так как его значение на 20% ниже самого выского\"</p>",
                 "id": "Luxb6uJIqovwlQWa",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/trenirovannyj.webp",
                 "name": "Всестороннее развитие",
@@ -821,7 +821,41 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "c9Dbe0UL2BRpxDHi",
+                          "key": "system.skillCheck.disabledResults.criticalSuccess",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "y5bqmEJyOzrjJGwg",
+                          "key": "system.skillCheck.disabledResults.criticalFailure",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "NjKO8PJeYT0LxiOc",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -54593,10 +54627,19 @@
           "grapple": "icons/svg/sword.svg",
           "push": "icons/svg/pawprint.svg"
         },
+        "combatEnd": {
+          "finish": "icons/svg/skull.svg",
+          "search": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp"
+        },
         "damageBlockedIcon": "systems/fallout-maw/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png",
         "damageReductionIcon": "systems/fallout-maw/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png",
         "dodgeConversionIcon": "icons/svg/shield.svg",
         "emptyWeaponSlotIcon": "icons/svg/combat.svg",
+        "experienceAward": {
+          "experienceSoundPath": "systems/fallout-maw/audio/Experience/fallout-4-experience-up-made-with-Voicemod.mp3",
+          "levelUpAnimationKey": "fallout-maw.generic.energy.energy_field_bot_02_regular_yellow",
+          "levelUpSoundPath": "systems/fallout-maw/audio/Experience/fallout-level-up-made-with-Voicemod.mp3"
+        },
         "levelUpIcon": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/lvl-up.webp",
         "mainActions": {
           "abilities": "systems/fallout-maw/assets/HUD/Fo4%20Inspirational.webp",
@@ -54616,7 +54659,7 @@
         "skillIcons": {
           "athletics": "systems/fallout-maw/assets/HUD/Fo4%20Action%20Boy.webp",
           "barter": "systems/fallout-maw/assets/HUD/Fo4%20Cap%20Collector.webp",
-          "doctor": "systems/fallout-maw/assets/HUD/Fo4%20Chemist.webp",
+          "doctor": "systems/fallout-maw/assets/HUD/Fo4%20Medic.webp",
           "energy": "systems/fallout-maw/assets/HUD/Fo4%20Adamantium%20Skeleton.webp",
           "firstAid": "systems/fallout-maw/assets/HUD/Fo4%20Medic.webp",
           "gambling": "systems/fallout-maw/assets/HUD/Fo4%20Bloody%20Mess.webp",

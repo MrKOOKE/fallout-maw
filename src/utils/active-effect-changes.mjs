@@ -56,6 +56,12 @@ export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
   failure: "fallout-maw.skillCheck.smartFudge.failure",
   criticalFailure: "fallout-maw.skillCheck.smartFudge.criticalFailure"
 });
+export const SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS = Object.freeze({
+  criticalFailure: "system.skillCheck.disabledResults.criticalFailure",
+  failure: "system.skillCheck.disabledResults.failure",
+  success: "system.skillCheck.disabledResults.success",
+  criticalSuccess: "system.skillCheck.disabledResults.criticalSuccess"
+});
 export const SMART_FUDGE_RESULT_ORDER = Object.freeze(["criticalSuccess", "success", "failure", "criticalFailure"]);
 
 const ALL_SKILLS_EFFECT_FIELDS = Object.freeze({
@@ -288,9 +294,16 @@ export function getActorReverseEffectChangeValue(actor, acceptedKeys = [], {
   baseValue = 0,
   additionalChanges = []
 } = {}) {
+  return applyPreparedActorReverseEffectChanges(
+    baseValue,
+    collectActorReverseEffectChanges(actor, acceptedKeys, { additionalChanges })
+  );
+}
+
+export function applyPreparedActorReverseEffectChanges(baseValue = 0, changes = []) {
   const numericBaseValue = Number(baseValue);
   let value = Number.isFinite(numericBaseValue) ? numericBaseValue : 0;
-  for (const change of collectActorReverseEffectChanges(actor, acceptedKeys, { additionalChanges })) {
+  for (const change of changes ?? []) {
     const amount = Number(change.value);
     if (!Number.isFinite(amount)) continue;
     if (change.type === "multiply") value *= amount;

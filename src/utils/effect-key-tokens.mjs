@@ -21,6 +21,7 @@ import {
   INITIATIVE_DISADVANTAGE_EFFECT_KEY,
   getReverseEffectKey,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
+  SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS,
   SMART_FUDGE_RESULT_EFFECT_KEYS,
   TRAUMA_SUPPRESSION_ALL_EFFECT_KEY,
   TRAUMA_SUPPRESSION_COUNT_EFFECT_KEY
@@ -551,6 +552,7 @@ export function buildCombatEffectKeyTokens() {
     buildAllCombatDisadvantageEffectKeyToken(),
     ...buildCombatAttackAdvantageEffectKeyTokens(),
     ...buildCombatAttackDisadvantageEffectKeyTokens(),
+    ...buildSkillCheckDisabledResultEffectKeyTokens(),
     createEffectKeyToken({
       code: "accuracy",
       key: "accuracy",
@@ -624,6 +626,40 @@ export function buildCombatEffectKeyTokens() {
   ].filter(Boolean);
 }
 
+export function buildSkillCheckDisabledResultEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.SkillCheckResultGroup");
+  return [
+    createEffectKeyToken({
+      code: "disableCriticalFailure",
+      key: "disableCriticalFailure",
+      label: game.i18n.localize("FALLOUTMAW.Effects.DisableCriticalFailure"),
+      path: SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS.criticalFailure,
+      group
+    }),
+    createEffectKeyToken({
+      code: "disableFailure",
+      key: "disableFailure",
+      label: game.i18n.localize("FALLOUTMAW.Effects.DisableFailure"),
+      path: SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS.failure,
+      group
+    }),
+    createEffectKeyToken({
+      code: "disableSuccess",
+      key: "disableSuccess",
+      label: game.i18n.localize("FALLOUTMAW.Effects.DisableSuccess"),
+      path: SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS.success,
+      group
+    }),
+    createEffectKeyToken({
+      code: "disableCriticalSuccess",
+      key: "disableCriticalSuccess",
+      label: game.i18n.localize("FALLOUTMAW.Effects.DisableCriticalSuccess"),
+      path: SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS.criticalSuccess,
+      group
+    })
+  ].filter(Boolean);
+}
+
 export function buildReverseInteractionEffectKeyTokens() {
   const reversePenetrationActionKeys = new Set([
     "aimedShot",
@@ -635,6 +671,16 @@ export function buildReverseInteractionEffectKeyTokens() {
   ]);
   const attackingPenetrationPaths = new Set(Array.from(reversePenetrationActionKeys)
     .map(actionKey => `system.penetration.actions.${actionKey}`));
+  const reverseCombatPaths = new Set([
+    "system.combat.accuracy",
+    "system.combat.criticalChance",
+    "system.combat.damageFlat",
+    "system.combat.damagePercent",
+    "system.combat.burstStability",
+    "system.combat.finishingBlow",
+    "system.combat.finishingBlowChance",
+    ...Object.values(SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS)
+  ]);
   const sourceTokens = [
     ...getSkillSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
@@ -660,15 +706,7 @@ export function buildReverseInteractionEffectKeyTokens() {
       group: game.i18n.localize("FALLOUTMAW.Effects.ReverseGroup")
     }),
     ...buildActionPenetrationEffectKeyTokens().filter(token => attackingPenetrationPaths.has(token?.path)),
-    ...buildCombatEffectKeyTokens().filter(token => [
-      "system.combat.accuracy",
-      "system.combat.criticalChance",
-      "system.combat.damageFlat",
-      "system.combat.damagePercent",
-      "system.combat.burstStability",
-      "system.combat.finishingBlow",
-      "system.combat.finishingBlowChance"
-    ].includes(token?.path))
+    ...buildCombatEffectKeyTokens().filter(token => reverseCombatPaths.has(token?.path))
   ].filter(Boolean);
   const group = game.i18n.localize("FALLOUTMAW.Effects.ReverseGroup");
   return sourceTokens.map(token => createEffectKeyToken({

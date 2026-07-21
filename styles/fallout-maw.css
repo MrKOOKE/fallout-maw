@@ -8265,15 +8265,12 @@ label.fallout-maw-mitigation-cell {
   --fallout-maw-skill-check-result-color: var(--fallout-maw-terminal-green);
 }
 
-.fallout-maw-chat-card.fallout-maw-skill-check-card.failure {
+.fallout-maw-chat-card.fallout-maw-skill-check-card.failure,
+.fallout-maw-chat-card.fallout-maw-skill-check-card.automatic-failure {
   --fallout-maw-skill-check-result-color: var(--fallout-maw-terminal-orange);
 }
 
 .fallout-maw-chat-card.fallout-maw-skill-check-card.critical-failure {
-  --fallout-maw-skill-check-result-color: var(--fallout-maw-terminal-red);
-}
-
-.fallout-maw-chat-card.fallout-maw-skill-check-card.automatic-failure {
   --fallout-maw-skill-check-result-color: var(--fallout-maw-terminal-red);
 }
 
@@ -8404,15 +8401,12 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-terminal-cyan);
 }
 
-.fallout-maw-skill-check-thresholds .failure {
+.fallout-maw-skill-check-thresholds .failure,
+.fallout-maw-skill-check-thresholds .automatic-failure {
   color: var(--fallout-maw-terminal-orange);
 }
 
 .fallout-maw-skill-check-thresholds .critical-failure {
-  color: var(--fallout-maw-terminal-red);
-}
-
-.fallout-maw-skill-check-thresholds .automatic-failure {
   color: var(--fallout-maw-terminal-red);
 }
 
@@ -8555,21 +8549,21 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-terminal-cyan);
 }
 
-.fallout-maw-skill-check-batch-result.failure {
+.fallout-maw-skill-check-batch-result.failure,
+.fallout-maw-skill-check-batch-result.automatic-failure {
   border-color: rgba(224, 142, 61, 0.56);
 }
 
-.fallout-maw-skill-check-batch-result.failure em {
+.fallout-maw-skill-check-batch-result.failure em,
+.fallout-maw-skill-check-batch-result.automatic-failure em {
   color: var(--fallout-maw-terminal-orange);
 }
 
-.fallout-maw-skill-check-batch-result.critical-failure,
-.fallout-maw-skill-check-batch-result.automatic-failure {
+.fallout-maw-skill-check-batch-result.critical-failure {
   border-color: rgba(230, 83, 69, 0.58);
 }
 
-.fallout-maw-skill-check-batch-result.critical-failure em,
-.fallout-maw-skill-check-batch-result.automatic-failure em {
+.fallout-maw-skill-check-batch-result.critical-failure em {
   color: var(--fallout-maw-terminal-red);
 }
 
@@ -9118,12 +9112,12 @@ label.fallout-maw-mitigation-cell {
   letter-spacing: 0.04em;
 }
 
-.fallout-maw-skill-check-animation-roll-track.critical-failure,
-.fallout-maw-skill-check-animation-roll-track.automatic-failure {
+.fallout-maw-skill-check-animation-roll-track.critical-failure {
   color: var(--fallout-maw-animation-red);
 }
 
-.fallout-maw-skill-check-animation-roll-track.failure {
+.fallout-maw-skill-check-animation-roll-track.failure,
+.fallout-maw-skill-check-animation-roll-track.automatic-failure {
   color: var(--fallout-maw-animation-orange);
 }
 
@@ -9221,8 +9215,9 @@ label.fallout-maw-mitigation-cell {
   animation: fallout-maw-skill-check-cell-flash 120ms steps(1, end);
 }
 
+.fallout-maw-skill-check-animation.automatic-result .fallout-maw-skill-check-animation-cell.filled .fallout-maw-skill-check-animation-cell-fill,
 .fallout-maw-skill-check-animation.automatic-failure .fallout-maw-skill-check-animation-cell.filled .fallout-maw-skill-check-animation-cell-fill {
-  animation: fallout-maw-skill-check-auto-failure-pulse 520ms steps(2, end) infinite;
+  animation: fallout-maw-skill-check-automatic-result-pulse 520ms steps(2, end) infinite;
 }
 
 @keyframes fallout-maw-skill-check-cell-flash {
@@ -9235,7 +9230,7 @@ label.fallout-maw-mitigation-cell {
   }
 }
 
-@keyframes fallout-maw-skill-check-auto-failure-pulse {
+@keyframes fallout-maw-skill-check-automatic-result-pulse {
   0% {
     filter: brightness(0.85);
     opacity: 0.72;
@@ -9307,11 +9302,8 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-animation-red);
 }
 
+.fallout-maw-skill-check-animation-segment.failure,
 .fallout-maw-skill-check-animation-segment.automatic-failure {
-  color: var(--fallout-maw-animation-red);
-}
-
-.fallout-maw-skill-check-animation-segment.failure {
   color: var(--fallout-maw-animation-orange);
 }
 

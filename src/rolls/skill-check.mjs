@@ -1,7 +1,7 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { isAttackingWeaponAction } from "../abilities/runtime-state.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
-import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -10,7 +10,8 @@ import {
   getActorCombatAttackEdgeCount,
   getActorSmartFudgeResult,
   getCombatAttackAdvantageEffectKey,
-  getCombatAttackDisadvantageEffectKey
+  getCombatAttackDisadvantageEffectKey,
+  SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
 import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
@@ -35,11 +36,50 @@ const SKILL_CHECK_ANIMATION_LAYOUT = Object.freeze({
   closeAnimationMs: 180,
   closeLayoutDelayMs: 650
 });
-const FORCED_RESULT_TO_SEGMENT = Object.freeze({
-  criticalFailure: "critical-failure",
-  failure: "failure",
-  success: "success",
-  criticalSuccess: "critical-success"
+const SKILL_CHECK_RESULT_KEYS = Object.freeze([
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+]);
+const SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS = Object.freeze(Object.fromEntries(
+  SKILL_CHECK_RESULT_KEYS.map(key => [key, `disabledResult:${key}`])
+));
+const SKILL_CHECK_RESULT_REDIRECTS = Object.freeze({
+  criticalFailure: "failure",
+  failure: "success",
+  success: "criticalSuccess",
+  criticalSuccess: "success"
+});
+const SKILL_CHECK_RESULT_META = Object.freeze({
+  criticalFailure: Object.freeze({
+    cssClass: "critical-failure",
+    labelKey: "FALLOUTMAW.SkillCheck.CriticalFailure",
+    shortLabelKey: "FALLOUTMAW.SkillCheck.CriticalFailureShort",
+    automaticLabelKey: "FALLOUTMAW.SkillCheck.AutomaticCriticalFailure",
+    automaticShortLabelKey: "FALLOUTMAW.SkillCheck.AutomaticCriticalFailureShort"
+  }),
+  failure: Object.freeze({
+    cssClass: "failure",
+    labelKey: "FALLOUTMAW.SkillCheck.Failure",
+    shortLabelKey: "FALLOUTMAW.SkillCheck.FailureShort",
+    automaticLabelKey: "FALLOUTMAW.SkillCheck.AutomaticFailure",
+    automaticShortLabelKey: "FALLOUTMAW.SkillCheck.AutomaticFailureShort"
+  }),
+  success: Object.freeze({
+    cssClass: "success",
+    labelKey: "FALLOUTMAW.SkillCheck.Success",
+    shortLabelKey: "FALLOUTMAW.SkillCheck.SuccessShort",
+    automaticLabelKey: "FALLOUTMAW.SkillCheck.AutomaticSuccess",
+    automaticShortLabelKey: "FALLOUTMAW.SkillCheck.AutomaticSuccessShort"
+  }),
+  criticalSuccess: Object.freeze({
+    cssClass: "critical-success",
+    labelKey: "FALLOUTMAW.SkillCheck.CriticalSuccess",
+    shortLabelKey: "FALLOUTMAW.SkillCheck.CriticalSuccessShort",
+    automaticLabelKey: "FALLOUTMAW.SkillCheck.AutomaticCriticalSuccess",
+    automaticShortLabelKey: "FALLOUTMAW.SkillCheck.AutomaticCriticalSuccessShort"
+  })
 });
 
 export function registerSkillCheckSocket() {
@@ -492,11 +532,14 @@ function buildSkillCheckBatchViewContext(outcomes = [], { title = "" } = {}) {
     title: String(title || first.skill?.label || game.i18n.localize("FALLOUTMAW.SkillCheck.TerminalTitle")),
     total,
     resultRows: [
+      buildBatchResultRow("automaticCriticalSuccess", "critical-success automatic-result automatic-critical-success", "FALLOUTMAW.SkillCheck.AutomaticCriticalSuccess", counts, total),
       buildBatchResultRow("criticalSuccess", "critical-success", "FALLOUTMAW.SkillCheck.CriticalSuccess", counts, total),
+      buildBatchResultRow("automaticSuccess", "success automatic-result automatic-success", "FALLOUTMAW.SkillCheck.AutomaticSuccess", counts, total),
       buildBatchResultRow("success", "success", "FALLOUTMAW.SkillCheck.Success", counts, total),
+      buildBatchResultRow("automaticFailure", "failure automatic-result automatic-failure", "FALLOUTMAW.SkillCheck.AutomaticFailure", counts, total),
       buildBatchResultRow("failure", "failure", "FALLOUTMAW.SkillCheck.Failure", counts, total),
-      buildBatchResultRow("criticalFailure", "critical-failure", "FALLOUTMAW.SkillCheck.CriticalFailure", counts, total),
-      buildBatchResultRow("automaticFailure", "automatic-failure", "FALLOUTMAW.SkillCheck.AutomaticFailure", counts, total)
+      buildBatchResultRow("automaticCriticalFailure", "critical-failure automatic-result automatic-critical-failure", "FALLOUTMAW.SkillCheck.AutomaticCriticalFailure", counts, total),
+      buildBatchResultRow("criticalFailure", "critical-failure", "FALLOUTMAW.SkillCheck.CriticalFailure", counts, total)
     ].filter(row => row.count > 0),
     difficultyRange: formatBatchDifficultyRange(outcomes),
     skillValueRange: formatBatchSkillValueRange(outcomes)
@@ -505,10 +548,18 @@ function buildSkillCheckBatchViewContext(outcomes = [], { title = "" } = {}) {
 
 function countSkillCheckResults(outcomes = []) {
   return outcomes.reduce((counts, outcome) => {
-    const key = outcome.result?.autoFailure ? "automaticFailure" : String(outcome.result?.key ?? "");
+    const resultKey = String(outcome.result?.key ?? "");
+    const automatic = Boolean(outcome.result?.automatic || outcome.result?.autoFailure);
+    const key = automatic ? getAutomaticBatchResultKey(resultKey) : resultKey;
     counts[key] = (counts[key] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function getAutomaticBatchResultKey(resultKey = "") {
+  const key = String(resultKey ?? "");
+  if (!SKILL_CHECK_RESULT_KEYS.includes(key)) return key;
+  return `automatic${key[0].toUpperCase()}${key.slice(1)}`;
 }
 
 function buildBatchResultRow(key, cssClass, labelKey, counts, total) {
@@ -604,6 +655,7 @@ function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = ""
     status: String(status ?? ""),
     resultKey: String(outcome?.result?.key ?? ""),
     automaticFailure: Boolean(outcome?.result?.autoFailure ?? outcome?.autoFailure),
+    automaticResult: outcome?.result?.automatic ? String(outcome.result.key ?? "") : "",
     difficulty: toInteger(outcome?.check?.difficulty ?? data.difficulty),
     finalSkillValue: toInteger(outcome?.finalSkillValue),
     rollTotal: toInteger(outcome?.selectedRoll?.total),
@@ -732,12 +784,16 @@ async function performSkillCheck(actor, skill, data = {}) {
   const critical = calculateCriticalThresholds(check, finalSkillValue, check.difficulty);
   const forcedResult = normalizeForcedResult(check.forcedResult);
   const smartFudgeResult = forcedResult ? "" : normalizeForcedResult(check.smartFudgeResult || getActorSmartFudgeResult(actor, { requester: check.requester, check }));
-  const autoFailure = isAutomaticFailure(finalSkillValue, check.difficulty) && !forcedResult;
+  const resultProfile = buildSkillCheckResultProfile(check.difficulty, critical, finalSkillValue, {
+    disabledResults: forcedResult ? {} : check.disabledResults,
+    mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, check.difficulty) && !forcedResult,
+    markAutomatic: !forcedResult
+  });
   const smartFudgeRollRange = smartFudgeResult
-    ? getSmartFudgeRollRange(smartFudgeResult, check.difficulty, critical, finalSkillValue, autoFailure)
+    ? getSmartFudgeRollRange(smartFudgeResult, resultProfile)
     : null;
   const forcedRollTotal = forcedResult
-    ? getForcedRollTotal(forcedResult, check.difficulty, critical, finalSkillValue)
+    ? getForcedRollTotal(forcedResult, resultProfile, check.difficulty, critical, finalSkillValue)
     : null;
   const rolls = await rollD100(edge.rollMode === "normal" ? 1 : 2, {
     forcedTotal: forcedRollTotal,
@@ -745,14 +801,7 @@ async function performSkillCheck(actor, skill, data = {}) {
   });
   const selectedRoll = selectRoll(rolls, edge.rollMode);
   const total = finalSkillValue + selectedRoll.total;
-  const result = determineResult(
-    selectedRoll.total,
-    total,
-    check.difficulty,
-    critical,
-    autoFailure,
-    forcedResult
-  );
+  const result = determineResult(selectedRoll.total, resultProfile, forcedResult);
 
   return {
     actor,
@@ -764,7 +813,10 @@ async function performSkillCheck(actor, skill, data = {}) {
     finalSkillValue,
     total,
     critical,
-    autoFailure,
+    resultProfile,
+    automatic: result.automatic,
+    automaticResultKey: result.automatic ? result.key : "",
+    autoFailure: result.autoFailure,
     result
   };
 }
@@ -798,7 +850,8 @@ async function publishSkillCheckMessage(outcome, { requester = "", messageData =
           requester,
           total,
           result: result.key,
-          autoFailure: result.autoFailure
+          autoFailure: result.autoFailure,
+          automaticResult: result.automatic ? result.key : ""
         }
       }
     }
@@ -816,7 +869,8 @@ function normalizeSkillCheckMessageData(messageData = {}) {
 }
 
 function buildSkillCheckViewContext(outcome) {
-  const { actor, check, skill, rolls, selectedRoll, edge, finalSkillValue, total, critical, autoFailure, result } = outcome;
+  const { actor, check, skill, rolls, selectedRoll, edge, finalSkillValue, total, critical, resultProfile, result } = outcome;
+  const automatic = Boolean(result?.automatic);
   return {
     actor: prepareSkillCheckActorView(actor),
     skill,
@@ -825,12 +879,15 @@ function buildSkillCheckViewContext(outcome) {
     finalSkillValue,
     critical,
     total,
-    rollEntries: buildRollEntries(rolls, selectedRoll, check.difficulty, critical, finalSkillValue, check.forcedResult, autoFailure),
-    thresholdRows: buildThresholdRows(check.difficulty, critical, finalSkillValue, autoFailure),
-    scaleSegments: buildScaleSegments(check.difficulty, critical, finalSkillValue, selectedRoll.total, check.forcedResult, autoFailure),
-    progressCells: buildProgressCells(check.difficulty, critical, finalSkillValue, autoFailure),
-    autoFailure,
-    progressTarget: autoFailure ? 100 : clamp(selectedRoll.total, 1, 100),
+    resultProfile,
+    rollEntries: buildRollEntries(rolls, selectedRoll, resultProfile, check.forcedResult),
+    thresholdRows: buildThresholdRows(resultProfile),
+    scaleSegments: buildScaleSegments(resultProfile, selectedRoll.total, check.forcedResult),
+    progressCells: buildProgressCells(resultProfile),
+    automatic,
+    automaticResultKey: automatic ? String(result?.key ?? "") : "",
+    autoFailure: Boolean(result?.autoFailure),
+    progressTarget: automatic ? 100 : clamp(selectedRoll.total, 1, 100),
     edge: {
       ...edge,
       modeLabel: formatEdgeMode(edge),
@@ -879,12 +936,14 @@ function buildSkillCheckAnimationContext(outcome, { checkId, ownerUserId }) {
     tracks,
     hasMultipleTracks: tracks.length > 1,
     edge: context.edge,
+    automatic: context.automatic,
+    automaticResultKey: context.automaticResultKey,
     autoFailure: context.autoFailure
   };
 }
 
 function buildSkillCheckAnimationTracks(context) {
-  if (context.autoFailure || !context.edge?.hasMultipleRolls) {
+  if (context.automatic || context.autoFailure || !context.edge?.hasMultipleRolls) {
     return [{
       index: 1,
       label: "",
@@ -902,14 +961,7 @@ function buildSkillCheckAnimationTracks(context) {
     label: `${game.i18n.localize("FALLOUTMAW.SkillCheck.Roll")} ${entry.index}`,
     selected: entry.selected,
     result: entry.result,
-    scaleSegments: buildScaleSegments(
-      context.difficulty,
-      context.critical,
-      context.finalSkillValue,
-      entry.total,
-      "",
-      false
-    ),
+    scaleSegments: buildScaleSegments(context.resultProfile, entry.total),
     progressCells: buildProgressCellsForTarget(context.progressCells, entry.total),
     progressTarget: clamp(entry.total, 1, 100),
     progressMarker: clamp(entry.total, 1, 100)
@@ -976,7 +1028,7 @@ async function showSkillCheckAnimation(context) {
 
   await waitForAnimationFrame();
   host.classList.remove("is-positioning");
-  if (context.autoFailure) {
+  if (context.automatic || context.autoFailure) {
     for (const track of tracks) {
       clearProgressCells(track.cells);
       activateProgressCells(track.cells, new Set(), track.cells.length, 100);
@@ -1312,53 +1364,85 @@ function normalizeRequestData(data, requester = "") {
   };
 }
 
+export function resolveSkillCheckDisabledResults(actor, context = {}) {
+  if (!actor) return normalizeSkillCheckDisabledResults();
+  const contextual = getContextualAbilityChangeValues(
+    actor,
+    buildSkillCheckDisabledResultContextSpecs(actor),
+    context
+  );
+  return normalizeSkillCheckDisabledResults(Object.fromEntries(
+    SKILL_CHECK_RESULT_KEYS.map(key => [key, contextual[SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key]]])
+  ));
+}
+
+function buildSkillCheckDisabledResultContextSpecs(actor) {
+  const prepared = actor?.system?.skillCheck?.disabledResults ?? {};
+  return SKILL_CHECK_RESULT_KEYS.map(key => ({
+    id: SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key],
+    key: SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS[key],
+    baseValue: Number(prepared?.[key]) || 0
+  }));
+}
+
+function normalizeSkillCheckDisabledResults(value = {}) {
+  return Object.fromEntries(SKILL_CHECK_RESULT_KEYS.map(key => [key, Number(value?.[key]) > 0]));
+}
+
 function createMutableCheck(actor, skill, data) {
   const context = resolveSkillCheckContext(actor, data);
-  const skillValue = getContextualAbilityChangeValue(actor, `system.skills.${skill.key}.bonus`, {
-    ...context,
-    baseValue: skill.value,
-    alternateKeys: ["system.skills.all.bonus"]
-  });
-  const skillAdvantage = getContextualAbilityChangeValue(actor, `system.skills.${skill.key}.advantage`, {
-    ...context,
-    baseValue: skill.advantage,
-    alternateKeys: ["system.skills.all.advantage"]
-  });
-  const skillDisadvantage = getContextualAbilityChangeValue(actor, `system.skills.${skill.key}.disadvantage`, {
-    ...context,
-    baseValue: skill.disadvantage,
-    alternateKeys: ["system.skills.all.disadvantage"]
-  });
   const weaponActionKey = String(data.weaponActionKey ?? context.weaponActionKey ?? "").trim();
   const isAttackingCheck = ["weaponAttack", "weaponPush", "activePush"].includes(String(data.requester ?? ""))
     && isAttackingWeaponAction(weaponActionKey);
-  const combatAdvantage = isAttackingCheck
-    ? getContextualAbilityChangeValue(actor, getCombatAttackAdvantageEffectKey(weaponActionKey), {
-      ...context,
+  const contextual = getContextualAbilityChangeValues(actor, [
+    {
+      id: "skillValue",
+      key: `system.skills.${skill.key}.bonus`,
+      baseValue: skill.value,
+      alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "skillAdvantage",
+      key: `system.skills.${skill.key}.advantage`,
+      baseValue: skill.advantage,
+      alternateKeys: ["system.skills.all.advantage"]
+    },
+    {
+      id: "skillDisadvantage",
+      key: `system.skills.${skill.key}.disadvantage`,
+      baseValue: skill.disadvantage,
+      alternateKeys: ["system.skills.all.disadvantage"]
+    },
+    ...buildSkillCheckDisabledResultContextSpecs(actor),
+    ...(isAttackingCheck ? [{
+      id: "combatAdvantage",
+      key: getCombatAttackAdvantageEffectKey(weaponActionKey),
       baseValue: getActorCombatAttackEdgeCount(actor, weaponActionKey, "advantage"),
       alternateKeys: [ALL_COMBAT_ADVANTAGE_EFFECT_KEY]
-    })
-    : 0;
-  const combatDisadvantage = isAttackingCheck
-    ? getContextualAbilityChangeValue(actor, getCombatAttackDisadvantageEffectKey(weaponActionKey), {
-      ...context,
+    }, {
+      id: "combatDisadvantage",
+      key: getCombatAttackDisadvantageEffectKey(weaponActionKey),
       baseValue: getActorCombatAttackEdgeCount(actor, weaponActionKey, "disadvantage"),
       alternateKeys: [ALL_COMBAT_DISADVANTAGE_EFFECT_KEY]
-    })
-    : 0;
+    }] : [])
+  ], context);
+  const disabledResults = normalizeSkillCheckDisabledResults(Object.fromEntries(
+    SKILL_CHECK_RESULT_KEYS.map(key => [key, contextual[SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key]]])
+  ));
   return {
     actor,
-    skill: { ...skill, value: toInteger(skillValue) },
+    skill: { ...skill, value: toInteger(contextual.skillValue) },
     difficulty: toInteger(data.difficulty ?? DEFAULT_CHECK.difficulty),
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus),
     criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus),
     advantageCount: Math.max(0, toInteger(data.advantageCount))
-      + Math.max(0, toInteger(skillAdvantage))
-      + Math.max(0, toInteger(combatAdvantage)),
+      + Math.max(0, toInteger(contextual.skillAdvantage))
+      + Math.max(0, toInteger(contextual.combatAdvantage)),
     disadvantageCount: Math.max(0, toInteger(data.disadvantageCount))
-      + Math.max(0, toInteger(skillDisadvantage))
-      + Math.max(0, toInteger(combatDisadvantage)),
+      + Math.max(0, toInteger(contextual.skillDisadvantage))
+      + Math.max(0, toInteger(contextual.combatDisadvantage)),
+    disabledResults,
     forcedResult: "",
     smartFudgeResult: String(data.smartFudgeResult ?? ""),
     requester: String(data.requester ?? ""),
@@ -1483,39 +1567,40 @@ function calculateCriticalThresholds(check, finalSkillValue = 0, difficulty = 0)
   };
 }
 
-export function calculateSkillCheckSuccessChance(actor, finalSkillValue, difficulty, {
-  criticalSuccessBonus = 0,
-  criticalFailureBonus = 0
-} = {}) {
+export function calculateSkillCheckSuccessChance(actor, finalSkillValue, difficulty, options = {}) {
+  const {
+    criticalSuccessBonus = 0,
+    criticalFailureBonus = 0
+  } = options;
   const check = {
     actor,
     criticalSuccessBonus,
     criticalFailureBonus
   };
   const critical = calculateCriticalThresholds(check, finalSkillValue, difficulty);
-  if (isAutomaticFailure(finalSkillValue, difficulty)) return 0;
-
-  let successes = 0;
-  for (let roll = 1; roll <= 100; roll += 1) {
-    if (critical.failureMaximum > 0 && roll <= critical.failureMaximum) continue;
-    if (critical.successMinimum <= 100 && roll >= critical.successMinimum) {
-      successes += 1;
-      continue;
-    }
-    if (toInteger(finalSkillValue) + roll >= toInteger(difficulty)) successes += 1;
-  }
-  return clamp(successes, 0, 100);
+  const disabledResults = options.disabledResults !== undefined
+    ? normalizeSkillCheckDisabledResults(options.disabledResults)
+    : options.context
+      ? resolveSkillCheckDisabledResults(actor, options.context)
+      : normalizeSkillCheckDisabledResults(actor?.system?.skillCheck?.disabledResults);
+  const profile = buildSkillCheckResultProfile(difficulty, critical, finalSkillValue, {
+    disabledResults,
+    mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, difficulty)
+  });
+  return clamp(profile.definitions.reduce((total, definition) => (
+    definition.key === "success" || definition.key === "criticalSuccess"
+      ? total + ((definition.maximum - definition.minimum) + 1)
+      : total
+  ), 0), 0, 100);
 }
 
 function normalizeForcedResult(value) {
   const normalized = String(value ?? "").trim();
-  return Object.hasOwn(FORCED_RESULT_TO_SEGMENT, normalized) ? normalized : "";
+  return Object.hasOwn(SKILL_CHECK_RESULT_META, normalized) ? normalized : "";
 }
 
-function getForcedRollTotal(forcedResult, difficulty, critical, finalSkillValue) {
-  const segmentClass = FORCED_RESULT_TO_SEGMENT[forcedResult];
-  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue, false);
-  const target = definitions.find(definition => definition.cssClass === segmentClass);
+function getForcedRollTotal(forcedResult, profile, difficulty, critical, finalSkillValue) {
+  const target = profile?.definitions?.find(definition => definition.key === forcedResult);
   if (target) return Math.round((target.minimum + target.maximum) / 2);
 
   if (forcedResult === "criticalFailure") return Math.max(1, Math.min(5, critical.failureMaximum || 1));
@@ -1525,11 +1610,14 @@ function getForcedRollTotal(forcedResult, difficulty, critical, finalSkillValue)
   return null;
 }
 
-function getSmartFudgeRollRange(targetResult, difficulty, critical, finalSkillValue, autoFailure = false) {
-  const segmentClass = FORCED_RESULT_TO_SEGMENT[normalizeForcedResult(targetResult)];
-  if (!segmentClass) return null;
-  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure);
-  const target = definitions.find(definition => definition.cssClass === segmentClass);
+function getSmartFudgeRollRange(targetResult, profile) {
+  const resultKey = normalizeForcedResult(targetResult);
+  if (!resultKey) return null;
+  const redirectedResultKey = resolveSkillCheckResultKeys(
+    [resultKey],
+    profile?.disabledResults ?? {}
+  )[0] ?? resultKey;
+  const target = profile?.definitions?.find(definition => definition.key === redirectedResultKey);
   if (!target) return null;
   return {
     minimum: clamp(target.minimum, 1, 100),
@@ -1537,80 +1625,30 @@ function getSmartFudgeRollRange(targetResult, difficulty, critical, finalSkillVa
   };
 }
 
-function determineResult(roll, total, difficulty, critical, autoFailure = false, forcedResult = "") {
+function determineResult(roll, profile, forcedResult = "") {
   const forced = normalizeForcedResult(forcedResult);
   if (forced) return buildForcedResult(forced);
-
-  if (autoFailure) {
-    return {
-      key: "failure",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.AutomaticFailure"),
-      cssClass: "failure automatic-failure",
-      autoFailure: true
-    };
-  }
-  if (critical.failureMaximum > 0 && roll <= critical.failureMaximum) {
-    return {
-      key: "criticalFailure",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure"),
-      cssClass: "critical-failure",
-      autoFailure: false
-    };
-  }
-  if (critical.successMinimum <= 100 && roll >= critical.successMinimum) {
-    return {
-      key: "criticalSuccess",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess"),
-      cssClass: "critical-success",
-      autoFailure: false
-    };
-  }
-  if (total >= toInteger(difficulty)) {
-    return {
-      key: "success",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.Success"),
-      cssClass: "success",
-      autoFailure: false
-    };
-  }
-  return {
-    key: "failure",
-    label: game.i18n.localize(autoFailure ? "FALLOUTMAW.SkillCheck.AutomaticFailure" : "FALLOUTMAW.SkillCheck.Failure"),
-    cssClass: "failure",
-    autoFailure
-  };
+  const normalizedRoll = clamp(roll, 1, 100);
+  const definition = profile?.definitions?.find(entry => (
+    normalizedRoll >= entry.minimum && normalizedRoll <= entry.maximum
+  ));
+  return buildSkillCheckResult(definition?.key ?? "failure", { automatic: Boolean(profile?.automatic) });
 }
 
 function buildForcedResult(forcedResult) {
-  if (forcedResult === "criticalFailure") {
-    return {
-      key: "criticalFailure",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure"),
-      cssClass: "critical-failure",
-      autoFailure: false
-    };
-  }
-  if (forcedResult === "criticalSuccess") {
-    return {
-      key: "criticalSuccess",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess"),
-      cssClass: "critical-success",
-      autoFailure: false
-    };
-  }
-  if (forcedResult === "success") {
-    return {
-      key: "success",
-      label: game.i18n.localize("FALLOUTMAW.SkillCheck.Success"),
-      cssClass: "success",
-      autoFailure: false
-    };
-  }
+  return buildSkillCheckResult(normalizeForcedResult(forcedResult) || "failure");
+}
+
+function buildSkillCheckResult(resultKey, { automatic = false } = {}) {
+  const key = SKILL_CHECK_RESULT_META[resultKey] ? resultKey : "failure";
+  const meta = SKILL_CHECK_RESULT_META[key];
+  const automaticClass = automatic ? ` automatic-result automatic-${meta.cssClass}` : "";
   return {
-    key: "failure",
-    label: game.i18n.localize("FALLOUTMAW.SkillCheck.Failure"),
-    cssClass: "failure",
-    autoFailure: false
+    key,
+    label: game.i18n.localize(automatic ? meta.automaticLabelKey : meta.labelKey),
+    cssClass: `${meta.cssClass}${automaticClass}`,
+    automatic,
+    autoFailure: automatic && key === "failure"
   };
 }
 
@@ -1649,21 +1687,11 @@ function formatEdgeMode(edge) {
 function buildRollEntries(
   rolls,
   selectedRoll,
-  difficulty,
-  critical,
-  finalSkillValue,
-  forcedResult = "",
-  autoFailure = isAutomaticFailure(finalSkillValue, difficulty)
+  profile,
+  forcedResult = ""
 ) {
   return rolls.map((roll, index) => {
-    const result = determineResult(
-      roll.total,
-      toInteger(finalSkillValue) + toInteger(roll.total),
-      difficulty,
-      critical,
-      autoFailure,
-      forcedResult
-    );
+    const result = determineResult(roll.total, profile, forcedResult);
     return {
       index: index + 1,
       total: roll.total,
@@ -1673,13 +1701,8 @@ function buildRollEntries(
   });
 }
 
-function buildThresholdRows(
-  difficulty,
-  critical,
-  finalSkillValue,
-  autoFailure = isAutomaticFailure(finalSkillValue, difficulty)
-) {
-  return buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure)
+function buildThresholdRows(profile) {
+  return (profile?.definitions ?? [])
     .slice()
     .reverse()
     .map(definition => buildThresholdRow(definition.cssClass, definition.label, definition.minimum, definition.maximum))
@@ -1687,30 +1710,22 @@ function buildThresholdRows(
 }
 
 function buildScaleSegments(
-  difficulty,
-  critical,
-  finalSkillValue,
+  profile,
   selectedRollTotal,
-  forcedResult = "",
-  autoFailure = isAutomaticFailure(finalSkillValue, difficulty)
+  forcedResult = ""
 ) {
   const roll = clamp(selectedRollTotal, 1, 100);
-  const forcedSegment = FORCED_RESULT_TO_SEGMENT[normalizeForcedResult(forcedResult)] ?? "";
-  return buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure)
+  const forcedKey = normalizeForcedResult(forcedResult);
+  return (profile?.definitions ?? [])
     .map(definition => ({
       ...definition,
-      active: forcedSegment ? definition.cssClass === forcedSegment : roll >= definition.minimum && roll <= definition.maximum,
+      active: forcedKey ? definition.key === forcedKey : roll >= definition.minimum && roll <= definition.maximum,
       width: (((definition.maximum - definition.minimum) + 1) / 100) * 100
     }));
 }
 
-function buildProgressCells(
-  difficulty,
-  critical,
-  finalSkillValue,
-  autoFailure = isAutomaticFailure(finalSkillValue, difficulty)
-) {
-  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure);
+function buildProgressCells(profile) {
+  const definitions = profile?.definitions ?? [];
   return Array.from({ length: 20 }, (_value, index) => {
     const start = index * 5;
     const end = start + 5;
@@ -1778,7 +1793,7 @@ function buildProgressCellGradient(cellStart, cellEnd, definitions) {
 }
 
 function getThresholdColorVariable(cssClass) {
-  if (cssClass === "automatic-failure") return "var(--fallout-maw-animation-red)";
+  if (cssClass === "automatic-failure") return "var(--fallout-maw-animation-orange)";
   if (cssClass === "critical-failure") return "var(--fallout-maw-animation-red)";
   if (cssClass === "failure") return "var(--fallout-maw-animation-orange)";
   if (cssClass === "success") return "var(--fallout-maw-animation-cyan)";
@@ -1791,46 +1806,91 @@ function formatPercent(value) {
   return `${rounded}%`;
 }
 
-function buildThresholdDefinitions(
-  difficulty,
-  critical,
-  finalSkillValue,
-  autoFailure = isAutomaticFailure(finalSkillValue, difficulty)
-) {
-  if (autoFailure) {
-    return [
-      buildThresholdDefinition(
-        "automatic-failure",
-        game.i18n.localize("FALLOUTMAW.SkillCheck.AutomaticFailure"),
-        game.i18n.localize("FALLOUTMAW.SkillCheck.AutomaticFailureShort"),
-        1,
-        100
-      )
-    ];
-  }
-
-  const successMinimum = clamp(toInteger(difficulty) - toInteger(finalSkillValue), 1, 100);
-  const criticalFailureMaximum = Math.min(critical.failureMaximum, 100);
-  const criticalSuccessMinimum = Math.max(critical.successMinimum, 1);
-  const failureMinimum = Math.max(1, criticalFailureMaximum + 1);
-  const failureMaximum = Math.min(successMinimum - 1, criticalSuccessMinimum - 1);
-  const normalSuccessMinimum = Math.max(successMinimum, criticalFailureMaximum + 1);
-  const normalSuccessMaximum = Math.min(100, criticalSuccessMinimum - 1);
-
-  return [
-    buildThresholdDefinition("critical-failure", game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure"), game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailureShort"), 1, criticalFailureMaximum),
-    buildThresholdDefinition("failure", game.i18n.localize("FALLOUTMAW.SkillCheck.Failure"), game.i18n.localize("FALLOUTMAW.SkillCheck.FailureShort"), failureMinimum, failureMaximum),
-    buildThresholdDefinition("success", game.i18n.localize("FALLOUTMAW.SkillCheck.Success"), game.i18n.localize("FALLOUTMAW.SkillCheck.SuccessShort"), normalSuccessMinimum, normalSuccessMaximum),
-    buildThresholdDefinition("critical-success", game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess"), game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccessShort"), criticalSuccessMinimum, 100)
-  ].filter(Boolean);
+function buildSkillCheckResultProfile(difficulty, critical, finalSkillValue, {
+  disabledResults = {},
+  mathematicalAutoFailure = isAutomaticFailure(finalSkillValue, difficulty),
+  markAutomatic = true
+} = {}) {
+  const baseResultKeys = Array.from({ length: 100 }, (_entry, index) => (
+    mathematicalAutoFailure
+      ? "failure"
+      : getBaseSkillCheckResultKey(index + 1, difficulty, critical, finalSkillValue)
+  ));
+  const normalizedDisabledResults = normalizeSkillCheckDisabledResults(disabledResults);
+  const resolvedResultKeys = resolveSkillCheckResultKeys(baseResultKeys, normalizedDisabledResults);
+  const uniqueResultKeys = Array.from(new Set(resolvedResultKeys));
+  const automatic = Boolean(markAutomatic && uniqueResultKeys.length === 1);
+  const definitions = buildSkillCheckResultDefinitions(resolvedResultKeys, { automatic });
+  return {
+    definitions,
+    disabledResults: normalizedDisabledResults,
+    mathematicalAutoFailure: Boolean(mathematicalAutoFailure),
+    automatic,
+    automaticResultKey: automatic ? uniqueResultKeys[0] : ""
+  };
 }
 
-function buildThresholdDefinition(cssClass, label, shortLabel, minimum, maximum) {
+export function resolveSkillCheckResultKeys(baseResultKeys = [], disabledResults = {}) {
+  const normalizedDisabledResults = normalizeSkillCheckDisabledResults(disabledResults);
+  const enabledResultKeys = SKILL_CHECK_RESULT_KEYS.filter(key => !normalizedDisabledResults[key]);
+  if (!enabledResultKeys.length) return (baseResultKeys ?? []).map(() => "success");
+  return (baseResultKeys ?? []).map(value => resolveSkillCheckResultKey(
+    SKILL_CHECK_RESULT_META[value] ? value : "failure",
+    normalizedDisabledResults,
+    enabledResultKeys
+  ));
+}
+
+function resolveSkillCheckResultKey(resultKey, disabledResults, enabledResultKeys) {
+  if (!disabledResults[resultKey]) return resultKey;
+  const visited = new Set();
+  let candidate = resultKey;
+  while (disabledResults[candidate] && !visited.has(candidate)) {
+    visited.add(candidate);
+    candidate = SKILL_CHECK_RESULT_REDIRECTS[candidate];
+  }
+  if (candidate && !disabledResults[candidate]) return candidate;
+
+  const sourceIndex = SKILL_CHECK_RESULT_KEYS.indexOf(resultKey);
+  return enabledResultKeys
+    .slice()
+    .sort((left, right) => {
+      const leftDistance = Math.abs(SKILL_CHECK_RESULT_KEYS.indexOf(left) - sourceIndex);
+      const rightDistance = Math.abs(SKILL_CHECK_RESULT_KEYS.indexOf(right) - sourceIndex);
+      return leftDistance - rightDistance
+        || SKILL_CHECK_RESULT_KEYS.indexOf(right) - SKILL_CHECK_RESULT_KEYS.indexOf(left);
+    })[0] ?? "success";
+}
+
+function getBaseSkillCheckResultKey(roll, difficulty, critical, finalSkillValue) {
+  if (critical.failureMaximum > 0 && roll <= critical.failureMaximum) return "criticalFailure";
+  if (critical.successMinimum <= 100 && roll >= critical.successMinimum) return "criticalSuccess";
+  return toInteger(finalSkillValue) + toInteger(roll) >= toInteger(difficulty) ? "success" : "failure";
+}
+
+function buildSkillCheckResultDefinitions(resultKeys = [], { automatic = false } = {}) {
+  const definitions = [];
+  let currentKey = resultKeys[0];
+  let minimum = 1;
+  for (let index = 1; index <= resultKeys.length; index += 1) {
+    const nextKey = resultKeys[index];
+    if (nextKey === currentKey) continue;
+    if (currentKey) definitions.push(buildThresholdDefinition(currentKey, minimum, index, { automatic }));
+    currentKey = nextKey;
+    minimum = index + 1;
+  }
+  return definitions.filter(Boolean);
+}
+
+function buildThresholdDefinition(resultKey, minimum, maximum, { automatic = false } = {}) {
   if (maximum < minimum) return null;
+  const meta = SKILL_CHECK_RESULT_META[resultKey];
+  if (!meta) return null;
   return {
-    cssClass,
-    label,
-    shortLabel,
+    key: resultKey,
+    cssClass: meta.cssClass,
+    label: game.i18n.localize(automatic ? meta.automaticLabelKey : meta.labelKey),
+    shortLabel: game.i18n.localize(automatic ? meta.automaticShortLabelKey : meta.shortLabelKey),
     minimum,
     maximum
   };

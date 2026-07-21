@@ -16,6 +16,8 @@ import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from 
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import {
+  applyPreparedActorReverseEffectChanges,
+  collectActorReverseEffectChanges,
   evaluateActorEffectChangeBaseNumber,
   getActorReverseEffectChangeValue,
   getActorSuppressedTraumaDiseaseIds,
@@ -434,10 +436,14 @@ export function getContextualAbilityChangeValues(actor, specs = [], context = {}
     .map((spec, index) => {
       const key = String(spec?.key ?? "").trim();
       if (!key) return null;
+      const alternateKeys = Array.isArray(spec?.alternateKeys) ? spec.alternateKeys : [];
       return {
         id: String(spec?.id ?? key),
         key,
-        alternateKeys: Array.isArray(spec?.alternateKeys) ? spec.alternateKeys : [],
+        alternateKeys,
+        acceptedKeys: new Set(
+          [key, ...alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean)
+        ),
         baseValue: Number(spec?.baseValue) || 0,
         targetContextOnly: Boolean(spec?.targetContextOnly)
       };
@@ -469,20 +475,25 @@ export function getContextualAbilityChangeValues(actor, specs = [], context = {}
       targetActor: actor
     })
     : [];
+  const preparedReverseChanges = canReverse
+    ? collectActorReverseEffectChanges(
+      targetActor,
+      new Set(list.flatMap(spec => Array.from(spec.acceptedKeys))),
+      { additionalChanges: reverseChanges }
+    )
+    : [];
 
   const result = {};
   for (const spec of list) {
-    const acceptedKeys = new Set(
-      [spec.key, ...spec.alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean)
-    );
+    const acceptedKeys = spec.acceptedKeys;
     const sourcePool = spec.targetContextOnly ? targetOnlySourceChanges : fullSourceChanges;
     const prepared = prepareContextualAbilityChangesForKeys(actor, sourcePool, acceptedKeys);
     let value = applyPreparedSourceContextualAbilityChanges(spec.baseValue, prepared);
     if (canReverse) {
-      value = getActorReverseEffectChangeValue(targetActor, Array.from(acceptedKeys), {
-        baseValue: value,
-        additionalChanges: reverseChanges
-      });
+      value = applyPreparedActorReverseEffectChanges(
+        value,
+        preparedReverseChanges.filter(change => acceptedKeys.has(change.key))
+      );
     }
     result[spec.id] = value;
   }
