@@ -1825,6 +1825,7 @@
       "Disabled": "Disabled",
       "Description": "Effect Description",
       "Duration": "Effect Duration",
+      "RemainingUses": "Uses Remaining",
       "DurationUnit": "Duration Unit",
       "DurationUnits": {
         "Days": "Days",

@@ -25,7 +25,8 @@ import {
 import { isConsumableActiveUseChange } from "./active-use-changes.mjs";
 import {
   EFFECT_LIFECYCLE_FLAG_KEY,
-  EFFECT_LIFECYCLE_KINDS
+  EFFECT_LIFECYCLE_KINDS,
+  getEffectFunctionDescriptor
 } from "./effect-lifecycle.mjs";
 import { syncActorAbilityEffects, syncAuraGeneratedEffects } from "./effects.mjs";
 import { registerActiveUseRuntimeHandler } from "./active-use-runtime.mjs";
@@ -947,15 +948,6 @@ async function consumeReconciledEffectSourceUse(effect, descriptor, operationId 
   const functionId = String(data?.functionId ?? descriptor?.functionData?.id ?? "").trim();
   if (!sourceItem || !functionId) return null;
   return consumeSourceItemFunctionUses(sourceItem, new Set([functionId]), operationId);
-}
-
-function getEffectFunctionDescriptor(effect) {
-  const systemFlags = effect?.flags?.[SYSTEM_ID] ?? {};
-  for (const [flagKey, data] of Object.entries(systemFlags)) {
-    if (!data || typeof data !== "object" || !data.functionData || typeof data.functionData !== "object") continue;
-    return { flagKey, data, functionData: data.functionData };
-  }
-  return null;
 }
 
 function serializeWeaponAttackUseContext(context = {}) {

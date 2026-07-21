@@ -1,5 +1,11 @@
 import { ABILITY_CONDITION_TYPES } from "../settings/abilities.mjs";
 import { isActiveUseEffectKey } from "./active-use-keys.mjs";
+import {
+  EFFECT_LIFECYCLE_KINDS,
+  getEffectFunctionDescriptor,
+  getEffectLifecycleKind,
+  getEffectSourceFunctionContext
+} from "./effect-lifecycle.mjs";
 
 /** Return only the limited-use metadata rows attached to a function. */
 export function getLimitedUseConditions(conditions = []) {
@@ -26,6 +32,27 @@ export function getLimitedUsesState(conditions = []) {
     entries,
     exhausted: entries.some(entry => entry.exhausted)
   };
+}
+
+/** Current limited-use counters represented by an ActiveEffect. */
+export function getEffectLimitedUseStates(effect = null, actor = null, sourceContext = null) {
+  if (!sourceContext) {
+    const lifecycleKind = getEffectLifecycleKind(effect);
+    if (lifecycleKind === EFFECT_LIFECYCLE_KINDS.disposableInstance) {
+      return getLimitedUsesState(getEffectFunctionDescriptor(effect)?.functionData?.conditions).entries;
+    }
+  }
+  const context = sourceContext ?? getEffectSourceFunctionContext(effect, actor);
+  if (context.lifecycleKind === EFFECT_LIFECYCLE_KINDS.disposableInstance) {
+    return getLimitedUsesState(context.descriptor?.functionData?.conditions).entries;
+  }
+  if (context.sourceItem) {
+    return context.applicableFunctions.flatMap(abilityFunction => (
+      getLimitedUsesState(abilityFunction?.conditions).entries
+    ));
+  }
+  if (context.lifecycleKind === EFFECT_LIFECYCLE_KINDS.reconciledInstance) return [];
+  return getLimitedUsesState(context.descriptor?.functionData?.conditions).entries;
 }
 
 export function isLimitedUseConditionExhausted(condition = {}) {

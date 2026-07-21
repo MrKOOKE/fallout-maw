@@ -1885,6 +1885,7 @@
       "Disabled": "Отключен",
       "Description": "Описание эффекта",
       "Duration": "Длительность эффекта",
+      "RemainingUses": "Осталось применений",
       "DurationUnit": "Единицы длительности",
       "DurationUnits": {
         "Days": "Дни",

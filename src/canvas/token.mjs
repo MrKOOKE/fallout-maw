@@ -9,9 +9,10 @@ import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs"
 import { getDamageTypeSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_FUNCTION_TYPES,
-  getAbilityFunctionTriggerCostRows,
-  normalizeAbilityFunctions
+  getAbilityFunctionTriggerCostRows
 } from "../settings/abilities.mjs";
+import { getEffectSourceFunctionContext } from "../abilities/effect-lifecycle.mjs";
+import { getEffectLimitedUseStates } from "../abilities/limited-uses-state.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import {
   formatActorFormulaForDisplay,
@@ -719,9 +720,21 @@ function registerMiddleClickGuard() {
 export function buildEffectTooltipHTML(effect, actor = null) {
   const name = localizeDocumentName(effect.name);
   const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
-  const triggerCosts = getEffectTriggerCostRows(effect, actor);
+  const sourceContext = getEffectSourceFunctionContext(effect, actor);
+  const triggerCosts = getEffectTriggerCostRows(effect, sourceContext);
   const triggerCostLines = formatEffectTriggerCostRows(triggerCosts, actor);
   const duration = getEffectDurationLabel(effect);
+  const limitedUses = getEffectLimitedUseStates(effect, actor, sourceContext);
+  const summaryRows = [
+    duration ? {
+      label: localize("FALLOUTMAW.Effects.Duration"),
+      value: duration
+    } : null,
+    limitedUses.length ? {
+      label: localize("FALLOUTMAW.Effects.RemainingUses"),
+      value: limitedUses.map(state => `${state.usesRemaining} / ${state.usesMax}`).join(" · ")
+    } : null
+  ].filter(Boolean);
   const description = String(effect.description ?? "").trim();
 
   return `
@@ -733,11 +746,11 @@ export function buildEffectTooltipHTML(effect, actor = null) {
           ${effect.disabled ? `<span>${escapeHTML(localize("FALLOUTMAW.Effects.Disabled"))}</span>` : ""}
         </div>
       </header>
-      ${duration ? `<dl>
+      ${summaryRows.length ? `<dl>${summaryRows.map(row => `
         <div>
-          <dt>${escapeHTML(localize("FALLOUTMAW.Effects.Duration"))}</dt>
-          <dd>${escapeHTML(duration)}</dd>
-        </div>
+          <dt>${escapeHTML(row.label)}</dt>
+          <dd>${escapeHTML(row.value)}</dd>
+        </div>`).join("")}
       </dl>` : ""}
       ${description ? `<section class="description">${foundry.utils.cleanHTML(description)}</section>` : ""}
       ${triggerCostLines.length ? `<section class="changes trigger-costs">
@@ -752,92 +765,17 @@ export function buildEffectTooltipHTML(effect, actor = null) {
   `;
 }
 
-function getEffectTriggerCostRows(effect, actor = null) {
-  const systemFlags = effect?.flags?.[SYSTEM_ID] ?? {};
+function getEffectTriggerCostRows(effect, sourceContext = {}) {
+  const systemFlags = sourceContext.systemFlags ?? effect?.flags?.[SYSTEM_ID] ?? {};
   const auraCosts = systemFlags?.auraGenerated?.triggerCost?.costs;
   if (Array.isArray(auraCosts) || (auraCosts && typeof auraCosts === "object")) {
     return normalizeTooltipTriggerCostRows(auraCosts);
   }
 
-  const sourceItem = resolveEffectSourceItem(effect, actor, systemFlags);
-  if (!sourceItem) return [];
-  const functions = getEffectSourceFunctions(sourceItem)
+  const applicable = (sourceContext.applicableFunctions ?? [])
     .filter(abilityFunction => abilityFunction.type === ABILITY_FUNCTION_TYPES.effectChanges)
     .filter(abilityFunction => getAbilityFunctionTriggerCostRows(abilityFunction).length > 0);
-  if (!functions.length) return [];
-
-  const functionIds = getEffectSourceFunctionIds(systemFlags);
-  const effectChangeKeys = new Set(getEffectChanges(effect).map(change => String(change?.key ?? "").trim()).filter(Boolean));
-  const applicable = functionIds.size
-    ? functions.filter(abilityFunction => functionIds.has(String(abilityFunction.id ?? "")))
-    : functions.filter(abilityFunction => abilityFunctionMatchesEffectChanges(abilityFunction, effectChangeKeys));
   return applicable.flatMap(abilityFunction => getAbilityFunctionTriggerCostRows(abilityFunction));
-}
-
-function resolveEffectSourceItem(effect, actor = null, systemFlags = {}) {
-  const uuidCandidates = [
-    systemFlags?.eventReaction?.sourceItemUuid,
-    systemFlags?.abilityTimedTriggerEffect?.sourceItemUuid,
-    systemFlags?.auraGenerated?.triggerCost?.sourceItemUuid,
-    effect?.origin
-  ];
-  for (const uuid of uuidCandidates) {
-    const item = resolveItemUuidSync(uuid);
-    if (item) return item;
-  }
-
-  const itemIds = [
-    systemFlags?.abilityEffect?.abilityItemId,
-    systemFlags?.itemEffect?.itemId,
-    systemFlags?.abilityItemUseEffect?.abilityItemId,
-    systemFlags?.abilityTimedTriggerEffect?.sourceItemId,
-    systemFlags?.activeApplication?.abilityItemId
-  ].map(value => String(value ?? "").trim()).filter(Boolean);
-  const sourceActors = [actor, effect?.parent, activeEffectTooltipToken?.actor].filter(Boolean);
-  for (const sourceActor of sourceActors) {
-    for (const itemId of itemIds) {
-      const item = sourceActor?.items?.get?.(itemId)
-        ?? Array.from(sourceActor?.items ?? []).find(entry => String(entry?.id ?? "") === itemId);
-      if (item) return item;
-    }
-  }
-  return null;
-}
-
-function resolveItemUuidSync(uuid = "") {
-  const value = String(uuid ?? "").trim();
-  if (!value) return null;
-  try {
-    const document = globalThis.fromUuidSync?.(value) ?? foundry.utils.fromUuidSync?.(value) ?? null;
-    return document?.documentName === "Item" || document?.constructor?.metadata?.name === "Item" ? document : null;
-  } catch (_error) {
-    return null;
-  }
-}
-
-function getEffectSourceFunctions(sourceItem = null) {
-  const functions = sourceItem?.type === "ability"
-    ? sourceItem.system?.functions ?? []
-    : sourceItem?.type === "gear"
-      ? sourceItem.system?.functions?.freeSettings?.entries ?? []
-      : [];
-  return normalizeAbilityFunctions(functions);
-}
-
-function getEffectSourceFunctionIds(systemFlags = {}) {
-  return new Set([
-    systemFlags?.eventReaction?.functionId,
-    systemFlags?.abilityTimedTriggerEffect?.functionId,
-    systemFlags?.abilityItemUseEffect?.functionId,
-    systemFlags?.activeApplication?.functionId,
-    systemFlags?.auraGenerated?.functionId
-  ].map(value => String(value ?? "").trim()).filter(Boolean));
-}
-
-function abilityFunctionMatchesEffectChanges(abilityFunction = {}, effectChangeKeys = new Set()) {
-  if (!effectChangeKeys.size) return false;
-  return [...(abilityFunction?.changes ?? []), ...(abilityFunction?.penalties ?? [])]
-    .some(change => effectChangeKeys.has(String(change?.key ?? "").trim()));
 }
 
 function normalizeTooltipTriggerCostRows(value = []) {

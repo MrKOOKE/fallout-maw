@@ -27,6 +27,11 @@
         <li class="effects-list">
             <div class="percent-border" style="background: conic-gradient(var(--carousel-tooltip-color) {{percent}}%, var(--carousel-tooltip-bg-color) 0);"></div>
             <img src="{{effect.img}}" alt=""><span>{{{localize effect.name}}}</span>{{#if hasDuration}}{{#if ../hasPermission}}<span class="tooltip-duration"><i class="fa-duotone fa-stopwatch"></i> {{duration}}</span>{{/if}}{{/if}}</li>
+        {{#if effect.hasLimitedUses}}
+        {{#if ../hasPermission}}
+            <div class="effect-description"><strong>{{localize "FALLOUTMAW.Effects.RemainingUses"}}:</strong> {{effect.remainingUses}}</div>
+        {{/if}}
+        {{/if}}
         {{#if effect.description}}
         {{#if ../displayDescriptions}}
             <div class="effect-description">{{{effect.description}}}</div>

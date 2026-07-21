@@ -7,6 +7,8 @@ import {
 import { TURN_CONVERSION_MODES } from "../../combat/reaction-resources.mjs";
 import { requestEndCombatTurnOperation } from "../token-action-hud.mjs";
 import { generateDescription, getInitiativeDisplay, getSystemIcons } from "./systems.mjs";
+import { getEffectLimitedUseStates } from "../../abilities/limited-uses-state.mjs";
+import { getEffectLifecycleKind } from "../../abilities/effect-lifecycle.mjs";
 
 export class CombatantPortrait {
     constructor(combatant) {
@@ -388,7 +390,23 @@ export class CombatantPortrait {
                     const duration = parseInt(effect.duration?.label ?? "");
                     const percent = effect.duration?.remaining / effect.duration?.duration;
                     const uuid = effect.uuid;
-                    turn.effects.add({ uuid, img: effect.img, name: effect.name, description: description, duration: duration, percent: isNaN(percent) ? null : percent*100, hasDuration: !isNaN(duration) });
+                    const limitedUses = getEffectLifecycleKind(effect)
+                        ? getEffectLimitedUseStates(effect, combatant.actor)
+                        : [];
+                    const remainingUses = limitedUses
+                        .map(state => `${state.usesRemaining} / ${state.usesMax}`)
+                        .join(" · ");
+                    turn.effects.add({
+                        uuid,
+                        img: effect.img,
+                        name: effect.name,
+                        description,
+                        duration,
+                        percent: isNaN(percent) ? null : percent * 100,
+                        hasDuration: !isNaN(duration),
+                        hasLimitedUses: Boolean(remainingUses),
+                        remainingUses
+                    });
                 }
             }
         }
