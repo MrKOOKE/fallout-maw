@@ -1,5 +1,6 @@
 import { normalizeActorDevelopment } from "./storage.mjs";
 import { evaluateSkillFormulas } from "../formulas/index.mjs";
+import { isSkillAdvancementMultiplierTargetApplicable } from "./skill-multiplier-effects.mjs";
 
 export function calculateRemainingDevelopmentPoints(development = {}) {
   const points = development?.points ?? {};
@@ -13,21 +14,78 @@ export function calculateRemainingDevelopmentPoints(development = {}) {
   };
 }
 
-export function calculateSkillPointMultiplier(skillKey, characteristics = {}, advancementSettings = {}, baseBonuses = {}) {
-  const entry = advancementSettings?.entries?.[skillKey] ?? {};
-  let multiplier = (Number(entry?.base) || 0) + (Number(baseBonuses?.[skillKey]) || 0);
-
-  for (const [characteristicKey, coefficient] of Object.entries(entry?.characteristics ?? {})) {
-    multiplier += (Number(characteristics?.[characteristicKey]) || 0) * (Number(coefficient) || 0);
-  }
-
-  return multiplier;
+export function calculateSkillPointMultiplier(
+  skillKey,
+  characteristics = {},
+  advancementSettings = {},
+  multiplierChanges = {},
+  { signature = false } = {}
+) {
+  return getSkillPointMultiplierBreakdown(
+    skillKey,
+    characteristics,
+    advancementSettings,
+    multiplierChanges,
+    { signature }
+  ).value;
 }
 
-export function calculateSkillDevelopmentBonus(skillKey, characteristics = {}, advancementSettings = {}, developmentSkill = {}, baseBonuses = {}) {
+export function getSkillPointMultiplierBreakdown(
+  skillKey,
+  characteristics = {},
+  advancementSettings = {},
+  multiplierChanges = {},
+  { signature = false } = {}
+) {
+  const entry = advancementSettings?.entries?.[skillKey] ?? {};
+  const base = Number(entry?.base) || 0;
+  let value = base;
+  const parts = [{ kind: "base", label: "База", operation: "add", amount: base }];
+
+  for (const [characteristicKey, coefficient] of Object.entries(entry?.characteristics ?? {})) {
+    const amount = (Number(characteristics?.[characteristicKey]) || 0) * (Number(coefficient) || 0);
+    value += amount;
+    if (amount) parts.push({
+      kind: "characteristic",
+      characteristicKey,
+      operation: "add",
+      amount
+    });
+  }
+
+  for (const change of multiplierChanges?.changes ?? []) {
+    if (!isSkillAdvancementMultiplierTargetApplicable(change?.target, skillKey, { signature })) continue;
+    const amount = Number(change?.value);
+    if (!Number.isFinite(amount)) continue;
+    const before = value;
+    value = applyMultiplierChange(value, change?.type, amount);
+    parts.push({
+      kind: "effect",
+      label: String(change?.sourceName ?? "").trim() || "Изменение эффекта",
+      operation: normalizeMultiplierChangeType(change?.type),
+      amount,
+      before,
+      after: value,
+      sourceImg: String(change?.sourceImg ?? ""),
+      sourceUuid: String(change?.sourceUuid ?? ""),
+      key: String(change?.key ?? "")
+    });
+  }
+
+  return { value, parts };
+}
+
+export function calculateSkillDevelopmentBonus(skillKey, characteristics = {}, advancementSettings = {}, developmentSkill = {}, multiplierChanges = {}) {
   const points = Math.max(0, Number(developmentSkill?.points) || 0);
-  const investedValue = points * calculateSkillPointMultiplier(skillKey, characteristics, advancementSettings, baseBonuses);
-  if (!developmentSkill?.signature) return investedValue;
+  const signature = Boolean(developmentSkill?.signature);
+  const investedValue = points * calculateSkillPointMultiplier(
+    skillKey,
+    characteristics,
+    advancementSettings,
+    multiplierChanges,
+    { signature }
+  );
+  if (!signature) return investedValue;
 
   const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
   const signatureFlatBonus = Number(advancementSettings?.signatureFlatBonus) || 0;
@@ -39,13 +97,13 @@ export function calculateSkillDevelopmentBonuses(
   characteristics = {},
   advancementSettings = {},
   development = {},
-  baseBonuses = {}
+  multiplierChanges = {}
 ) {
   const normalized = normalizeActorDevelopment(development, [], skillSettings);
   return Object.fromEntries(
     skillSettings.map(skill => [
       skill.key,
-      calculateSkillDevelopmentBonus(skill.key, characteristics, advancementSettings, normalized.skills?.[skill.key], baseBonuses)
+      calculateSkillDevelopmentBonus(skill.key, characteristics, advancementSettings, normalized.skills?.[skill.key], multiplierChanges)
     ])
   );
 }
@@ -57,7 +115,7 @@ export function calculatePureSkillDevelopmentValue(
   characteristics = {},
   advancementSettings = {},
   development = {},
-  baseBonuses = {}
+  multiplierChanges = {}
 ) {
   const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics);
   const normalized = normalizeActorDevelopment(development, [], skillSettings);
@@ -66,7 +124,24 @@ export function calculatePureSkillDevelopmentValue(
     characteristics,
     advancementSettings,
     normalized.skills?.[skillKey],
-    baseBonuses
+    multiplierChanges
   );
   return Math.max(0, Math.trunc((Number(skillBases?.[skillKey]) || 0) + (Number(developmentBonus) || 0)));
+}
+
+function applyMultiplierChange(value, type = "add", amount = 0) {
+  const operation = normalizeMultiplierChangeType(type);
+  if (operation === "multiply") return value * amount;
+  if (operation === "subtract") return value - amount;
+  if (operation === "override") return amount;
+  if (operation === "upgrade") return Math.max(value, amount);
+  if (operation === "downgrade") return Math.min(value, amount);
+  return value + amount;
+}
+
+function normalizeMultiplierChangeType(type = "add") {
+  const normalized = String(type ?? "add").trim();
+  return ["multiply", "subtract", "override", "upgrade", "downgrade"].includes(normalized)
+    ? normalized
+    : "add";
 }

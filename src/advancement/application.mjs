@@ -2,7 +2,8 @@ import {
   calculateSkillPointMultiplier,
   calculatePureSkillDevelopmentValue,
   calculateRemainingDevelopmentPoints,
-  cloneActorDevelopment
+  cloneActorDevelopment,
+  getSkillPointMultiplierBreakdown
 } from "./index.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
@@ -22,7 +23,7 @@ import {
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
 import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
-import { getAbilitySkillAdvancementBaseBonuses } from "../abilities/evaluation.mjs";
+import { getSkillAdvancementMultiplierChanges } from "../abilities/evaluation.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
 import { ABILITY_ACQUISITION_ABILITY_MODES, ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
@@ -71,6 +72,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #skillCostTooltipElement = null;
   #skillCostTooltipRestoreKey = "";
   #skillCostTooltipTimer = null;
+  #skillAdvancementMultiplierChanges = null;
   #snapshot = null;
 
   constructor(actor, options = {}) {
@@ -160,7 +162,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
-    const skillAdvancementBaseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
+    const skillAdvancementMultiplierChanges = getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
+    this.#skillAdvancementMultiplierChanges = skillAdvancementMultiplierChanges;
     const skillDevelopmentCostSettings = getSkillDevelopmentCostSettings();
     const skillDevelopmentLimit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
     const levelSettings = getLevelSettings();
@@ -187,7 +190,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       skillSettings,
       skillAdvancementSettings,
       characteristics: cleanCharacteristics,
-      baseBonuses: skillAdvancementBaseBonuses
+      multiplierChanges: skillAdvancementMultiplierChanges
     });
     const abilityCategories = await this.#prepareAbilityCategories(remaining, skillSettings, abilityRequirementContext);
     const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
@@ -253,7 +256,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           skillSettings,
           skillAdvancementSettings,
           characteristics: cleanCharacteristics,
-          baseBonuses: skillAdvancementBaseBonuses
+          multiplierChanges: skillAdvancementMultiplierChanges
         });
         const cost = getSkillDevelopmentCostForValue(pureValue, skillDevelopmentCostSettings);
         const nextThreshold = getNextSkillDevelopmentCostThreshold(pureValue, skillDevelopmentCostSettings);
@@ -262,7 +265,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           skillSettings,
           skillAdvancementSettings,
           characteristics: cleanCharacteristics,
-          baseBonuses: skillAdvancementBaseBonuses,
+          multiplierChanges: skillAdvancementMultiplierChanges,
           pureValue
         });
         const signature = Boolean(currentSkill.signature);
@@ -270,7 +273,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           skill,
           characteristics: cleanCharacteristics,
           advancementSettings: skillAdvancementSettings,
-          baseBonuses: skillAdvancementBaseBonuses,
+          multiplierChanges: skillAdvancementMultiplierChanges,
           signature
         });
         const multiplierLabel = formatSkillDevelopmentMultiplier({
@@ -278,7 +281,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           characteristics: cleanCharacteristics,
           characteristicSettings,
           advancementSettings: skillAdvancementSettings,
-          baseBonuses: skillAdvancementBaseBonuses,
+          multiplierChanges: skillAdvancementMultiplierChanges,
           signature
         });
         return {
@@ -1035,6 +1038,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  #getSkillAdvancementMultiplierChanges(skillSettings = getSkillSettings()) {
+    this.#skillAdvancementMultiplierChanges ??= getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
+    return this.#skillAdvancementMultiplierChanges;
+  }
+
   #getSkillDevelopmentLimit() {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
@@ -1058,7 +1066,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     skillSettings = getSkillSettings(),
     skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings),
     characteristics = this.#getCleanCharacteristics(characteristicSettings),
-    baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings),
+    multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings),
     pureValue = null
   } = {}) {
     const resolvedPureValue = pureValue === null
@@ -1067,14 +1075,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         skillSettings,
         skillAdvancementSettings,
         characteristics,
-        baseBonuses
+        multiplierChanges
       })
       : toInteger(pureValue);
     const liveOffset = this.#getLiveSkillValueOffset(key, {
       characteristicSettings,
       skillSettings,
       skillAdvancementSettings,
-      baseBonuses
+      multiplierChanges
     });
     const limit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
     return Math.max(0, Math.min(limit, resolvedPureValue + liveOffset));
@@ -1084,7 +1092,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     characteristicSettings = getCharacteristicSettings(),
     skillSettings = getSkillSettings(),
     skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings),
-    baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings)
+    multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings)
   } = {}) {
     const liveSkill = this.actor.system?.skills?.[key] ?? {};
     const liveValue = toInteger(liveSkill.value);
@@ -1095,7 +1103,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       skillAdvancementSettings,
       development: this.actor.system?.development ?? {},
       characteristics: cleanCharacteristics,
-      baseBonuses
+      multiplierChanges
     });
     return liveValue - cleanValue;
   }
@@ -1117,13 +1125,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const skillSettings = getSkillSettings();
     const advancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
     const characteristics = this.#getCleanCharacteristics(characteristicSettings);
-    const baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
+    const multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings);
     return this.#getPureSkillValue(key, {
       characteristicSettings,
       skillSettings,
       skillAdvancementSettings: advancementSettings,
       characteristics,
-      baseBonuses
+      multiplierChanges
     });
   }
 
@@ -1383,7 +1391,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings),
     development = this.#draft?.development ?? this.actor.system?.development ?? {},
     characteristics = this.#getCleanCharacteristics(characteristicSettings, development),
-    baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings)
+    multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings)
   } = {}) {
     const skills = Object.fromEntries(
       skillSettings.map(skill => [
@@ -1394,7 +1402,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           skillAdvancementSettings,
           development,
           characteristics,
-          baseBonuses
+          multiplierChanges
         })
       ])
     );
@@ -1407,7 +1415,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings),
     development = this.#draft?.development ?? this.actor.system?.development ?? {},
     characteristics = this.#getCleanCharacteristics(characteristicSettings, development),
-    baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings)
+    multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings)
   } = {}) {
     return calculatePureSkillDevelopmentValue(
       key,
@@ -1416,7 +1424,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       characteristics,
       skillAdvancementSettings,
       development,
-      baseBonuses
+      multiplierChanges
     );
   }
 
@@ -1784,14 +1792,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     const advancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
     const characteristics = this.#getCleanCharacteristics(characteristicSettings);
-    const baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
+    const multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings);
     const developmentCostSettings = getSkillDevelopmentCostSettings();
     const pureValue = this.#getPureSkillValue(key, {
       characteristicSettings,
       skillSettings,
       skillAdvancementSettings: advancementSettings,
       characteristics,
-      baseBonuses
+      multiplierChanges
     });
     const cost = getSkillDevelopmentCostForValue(pureValue, developmentCostSettings);
     const totalValue = this.#getPreviewSkillValue(key);
@@ -1807,7 +1815,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         skill,
         characteristics,
         advancementSettings,
-        baseBonuses,
+        multiplierChanges,
         signature
       }),
       multiplierLabel: formatSkillDevelopmentMultiplier({
@@ -1815,7 +1823,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         characteristics,
         characteristicSettings,
         advancementSettings,
-        baseBonuses,
+        multiplierChanges,
         signature
       }),
       nextThreshold: getNextSkillDevelopmentCostThreshold(pureValue, developmentCostSettings),
@@ -2049,7 +2057,7 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
         rows.push({
           type: requirement.type,
           mode,
-          label: requiresPresence ? "Нужна способность" : "Исключает способность",
+          label: requiresPresence ? "Наличие способности" : "Отсутствие способности",
           targetLabel: abilityName,
           currentLabel,
           requiredLabel,
@@ -2189,7 +2197,7 @@ function renderSkillCostTooltipHTML({
         </div>
         <div class="function-row">
           <span>Множитель</span>
-          <strong>${escapeHtml(multiplierLabel)}</strong>
+          <strong class="fallout-maw-skill-cost-tooltip-multiplier">${escapeHtml(multiplierLabel)}</strong>
         </div>
         ${nextThresholdSection}
       </div>
@@ -2202,38 +2210,95 @@ function formatSkillDevelopmentMultiplier({
   characteristics = {},
   characteristicSettings = [],
   advancementSettings = {},
-  baseBonuses = {},
+  multiplierChanges = {},
   signature = false
 } = {}) {
-  const entry = advancementSettings?.entries?.[skill.key] ?? {};
-  const base = (Number(entry.base) || 0) + (Number(baseBonuses?.[skill.key]) || 0);
-  const parts = [`База: ${formatCompactDecimal(base)}`];
+  const breakdown = getSkillPointMultiplierBreakdown(
+    skill.key,
+    characteristics,
+    advancementSettings,
+    multiplierChanges,
+    { signature }
+  );
+  const characteristicLabels = new Map(
+    characteristicSettings.map(characteristic => [characteristic.key, characteristic.label || characteristic.key])
+  );
+  const displayParts = combineSkillMultiplierEffectParts(breakdown.parts);
+  const parts = displayParts.map(part => {
+    if (part.kind === "characteristic") {
+      const label = characteristicLabels.get(part.characteristicKey) ?? part.characteristicKey;
+      return `${label}: ${formatCompactDecimal(part.amount)}`;
+    }
+    if (part.kind === "effect") return `${part.label}: ${formatSkillMultiplierOperation(part.operation, part.amount)}`;
+    return `${part.label}: ${formatCompactDecimal(part.amount)}`;
+  });
+  if (signature) {
+    const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
+    parts.push(`Коронный навык: ×${formatCompactDecimal(signatureMultiplier)}`);
+  }
+  return parts.join("\n");
+}
 
-  for (const [characteristicKey, coefficient] of Object.entries(entry.characteristics ?? {})) {
-    const value = (Number(characteristics?.[characteristicKey]) || 0) * (Number(coefficient) || 0);
-    if (!value) continue;
-    const label = characteristicSettings.find(characteristic => characteristic.key === characteristicKey)?.label ?? characteristicKey;
-    parts.push(`${label}: ${formatCompactDecimal(value)}`);
+function combineSkillMultiplierEffectParts(parts = []) {
+  const combined = [];
+  const additiveBySource = new Map();
+
+  for (const part of parts) {
+    const additive = part?.kind === "effect" && ["add", "subtract"].includes(part?.operation);
+    const sourceUuid = String(part?.sourceUuid ?? "").trim();
+    if (!additive || !sourceUuid) {
+      combined.push(part);
+      continue;
+    }
+
+    const signedAmount = part.operation === "subtract"
+      ? -(Number(part.amount) || 0)
+      : Number(part.amount) || 0;
+    const existingIndex = additiveBySource.get(sourceUuid);
+    if (existingIndex === undefined) {
+      additiveBySource.set(sourceUuid, combined.length);
+      combined.push({ ...part, operation: "add", amount: signedAmount });
+      continue;
+    }
+
+    const existing = combined[existingIndex];
+    combined[existingIndex] = {
+      ...existing,
+      amount: (Number(existing?.amount) || 0) + signedAmount
+    };
   }
 
-  if (!signature) return `(${parts.join(", ")})`;
-
-  const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
-  return `(${parts.join(", ")})*${formatCompactDecimal(signatureMultiplier)}`;
+  return combined;
 }
 
 function calculateSkillDevelopmentGain({
   skill = {},
   characteristics = {},
   advancementSettings = {},
-  baseBonuses = {},
+  multiplierChanges = {},
   signature = false
 } = {}) {
-  const baseMultiplier = calculateSkillPointMultiplier(skill.key, characteristics, advancementSettings, baseBonuses);
+  const baseMultiplier = calculateSkillPointMultiplier(
+    skill.key,
+    characteristics,
+    advancementSettings,
+    multiplierChanges,
+    { signature }
+  );
   if (!signature) return baseMultiplier;
 
   const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
   return baseMultiplier * signatureMultiplier;
+}
+
+function formatSkillMultiplierOperation(operation = "add", value = 0) {
+  const formatted = formatCompactDecimal(value);
+  if (operation === "multiply") return `×${formatted}`;
+  if (operation === "subtract") return `−${formatCompactDecimal(Math.abs(Number(value) || 0))}`;
+  if (operation === "override") return `=${formatted}`;
+  if (operation === "upgrade") return `не менее ${formatted}`;
+  if (operation === "downgrade") return `не более ${formatted}`;
+  return `${Number(value) >= 0 ? "+" : "−"}${formatCompactDecimal(Math.abs(Number(value) || 0))}`;
 }
 
 function formatFixedDecimal(value, digits = 1) {
@@ -2252,15 +2317,15 @@ function renderAbilityRequirementTooltipRow(requirement) {
   const stateClass = requirement.met ? "met" : "unmet";
   let value;
   if (requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.race) {
-    value = `${requirement.currentLabel} / ${requirement.targetLabel}`;
+    value = `${requirement.targetLabel}: сейчас ${requirement.currentLabel}`;
   } else if (requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.ability) {
-    value = `${requirement.currentLabel} / ${requirement.requiredLabel}`;
+    value = requirement.targetLabel;
   } else {
-    value = `${requirement.current} / ${requirement.required}`;
+    value = `${requirement.targetLabel}: ${requirement.current} / ${requirement.required}`;
   }
   return `
     <div class="function-row fallout-maw-advancement-tooltip-requirement ${stateClass}">
-      <span>${escapeHtml(`${requirement.label}: ${requirement.targetLabel}`)}</span>
+      <span>${escapeHtml(requirement.label)}</span>
       <strong>${escapeHtml(value)}</strong>
     </div>
   `;
@@ -2276,13 +2341,19 @@ function positionAbilityDescriptionTooltip(element, anchor, { layerElement = nul
   const anchorRect = anchor.getBoundingClientRect();
   let tooltipRect = element.getBoundingClientRect();
 
-  let left = anchorRect.left - tooltipRect.width - gap;
-  let direction = "left";
-  if (left < margin) {
-    left = anchorRect.right + gap;
+  const leftCandidate = anchorRect.left - tooltipRect.width - gap;
+  const rightCandidate = anchorRect.right + gap;
+  const preferRight = element.classList.contains("fallout-maw-skill-cost-tooltip");
+  let left = preferRight ? rightCandidate : leftCandidate;
+  let direction = preferRight ? "right" : "left";
+  if (preferRight && (left + tooltipRect.width) > (viewportWidth - margin)) {
+    left = leftCandidate;
+    direction = "left";
+  } else if (!preferRight && left < margin) {
+    left = rightCandidate;
     direction = "right";
   }
-  if ((left + tooltipRect.width) > (viewportWidth - margin)) {
+  if (left < margin || (left + tooltipRect.width) > (viewportWidth - margin)) {
     left = Math.max(margin, viewportWidth - tooltipRect.width - margin);
     direction = "clamped";
   }

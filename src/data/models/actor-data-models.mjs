@@ -45,7 +45,7 @@ import {
   hasItemFunction
 } from "../../utils/item-functions.mjs";
 import { normalizeResearchCollection } from "../../research/storage.mjs";
-import { getAbilitySkillAdvancementBaseBonuses } from "../../abilities/evaluation.mjs";
+import { getSkillAdvancementMultiplierChanges } from "../../abilities/evaluation.mjs";
 import { prepareActorEffectChangeForApplication } from "../../utils/active-effect-changes.mjs";
 import { getActorFormulaApplicationPhase } from "../../utils/actor-formulas.mjs";
 import {
@@ -233,13 +233,13 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings, proficiencySettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
-    const skillAdvancementBaseBonuses = getAbilitySkillAdvancementBaseBonuses(this.parent, skillSettings);
+    const skillAdvancementMultiplierChanges = getSkillAdvancementMultiplierChanges(this.parent, skillSettings);
     const skillBonuses = calculateSkillDevelopmentBonuses(
       skillSettings,
       this.characteristics,
       skillAdvancementSettings,
       this.development,
-      skillAdvancementBaseBonuses
+      skillAdvancementMultiplierChanges
     );
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses, skillAdvancementSettings, abilityBonuses.skills));
     replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));

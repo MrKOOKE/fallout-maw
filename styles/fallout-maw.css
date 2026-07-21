@@ -6500,6 +6500,10 @@ label.fallout-maw-mitigation-cell {
   word-break: normal;
 }
 
+.fallout-maw-inventory-tooltip .function-row .fallout-maw-skill-cost-tooltip-multiplier {
+  white-space: pre-line;
+}
+
 .fallout-maw-inventory-tooltip .tooltip-mitigation-table-list {
   display: grid;
   gap: 0.45rem;

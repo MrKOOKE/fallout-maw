@@ -13,9 +13,20 @@ import {
 import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
-import { getActorReverseEffectChangeValue } from "../utils/active-effect-changes.mjs";
+import {
+  evaluateActorEffectChangeBaseNumber,
+  getActorReverseEffectChangeValue,
+  getActorSuppressedTraumaDiseaseIds,
+  isActorTraumaDiseaseEffectSuppressed
+} from "../utils/active-effect-changes.mjs";
+import { buildActorFormulaData } from "../utils/actor-formulas.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  ALL_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET,
+  getSkillAdvancementMultiplierEffectTarget,
+  SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
+} from "../advancement/skill-multiplier-effects.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
 import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
@@ -47,23 +58,68 @@ export function getAbilityAcquisitionChanges(itemOrData) {
     .filter(change => change.key && change.value !== "" && isAbilityAcquisitionChangeKey(change.key));
 }
 
-export function getAbilitySkillAdvancementBaseBonuses(actor, skillSettings = []) {
-  const bonuses = Object.fromEntries((skillSettings ?? []).map(skill => [skill.key, 0]));
-  for (const item of actor?.items ?? []) {
-    if (item?.type !== "ability") continue;
-    for (const change of getAbilityEffectChanges(actor, item)) {
-      const key = String(change?.key ?? "");
-      if (!key.startsWith("system.skillAdvancementBase.")) continue;
-      const target = key.slice("system.skillAdvancementBase.".length);
-      const value = evaluateEffectChangeNumber(actor, change.value, { fallback: 0 });
-      if (target === "all") {
-        for (const skill of skillSettings ?? []) bonuses[skill.key] = (Number(bonuses[skill.key]) || 0) + value;
-      } else if (Object.hasOwn(bonuses, target)) {
-        bonuses[target] = (Number(bonuses[target]) || 0) + value;
-      }
-    }
+export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) {
+  if (!actor) return { changes: [] };
+  const skillKeys = new Set((skillSettings ?? []).map(skill => String(skill?.key ?? "").trim()).filter(Boolean));
+  const changes = [];
+  let order = 0;
+  let formulaData = null;
+  const getFormulaData = () => {
+    formulaData ??= buildActorFormulaData(actor, { stage: "prepared" });
+    return formulaData;
+  };
+  const appendChange = (change, source = {}, { effect = null } = {}) => {
+    const key = String(change?.key ?? "").trim();
+    const target = getSkillAdvancementMultiplierEffectTarget(key);
+    if (!target) return;
+    if (
+      target !== ALL_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
+      && target !== SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
+      && !skillKeys.has(target)
+    ) return;
+
+    const value = effect
+      ? evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
+        fallback: Number.NaN,
+        formulaData: getFormulaData
+      })
+      : evaluateEffectChangeNumber(actor, change?.value, {
+        fallback: Number.NaN,
+        formulaData: getFormulaData
+      });
+    if (!Number.isFinite(value)) return;
+    changes.push({
+      key,
+      target,
+      type: String(change?.type ?? "add").trim() || "add",
+      value,
+      priority: getSkillAdvancementChangePriority(change),
+      order: order++,
+      sourceName: String(source?.name ?? "").trim(),
+      sourceImg: String(source?.img ?? "").trim(),
+      sourceUuid: String(source?.uuid ?? "").trim()
+    });
+  };
+
+  const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor);
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedIds)) continue;
+    for (const change of effect?.system?.changes ?? []) appendChange(change, effect, { effect });
   }
-  return bonuses;
+
+  changes.sort((left, right) => left.priority - right.priority || left.order - right.order);
+  return { changes };
+}
+
+function getSkillAdvancementChangePriority(change = {}) {
+  const configured = change?.priority;
+  const numeric = Number(configured);
+  if (configured !== null && configured !== undefined && configured !== "" && Number.isFinite(numeric)) {
+    return Math.trunc(numeric);
+  }
+  const ActiveEffect = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
+  return toInteger(ActiveEffect?.CHANGE_TYPES?.[change?.type]?.defaultPriority);
 }
 
 export function abilityConditionsApply(actor, conditions = [], context = {}) {

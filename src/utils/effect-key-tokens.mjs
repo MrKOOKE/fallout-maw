@@ -37,6 +37,11 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getCoverBonusPercentEffectKey } from "../settings/cover.mjs";
+import {
+  ALL_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET,
+  getSkillAdvancementMultiplierEffectKey,
+  SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
+} from "../advancement/skill-multiplier-effects.mjs";
 
 export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   const tokens = [
@@ -59,6 +64,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
+    ...buildSkillAdvancementMultiplierEffectKeyTokens(),
     ...buildResourceBonusEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
     buildInitiativeAdvantageEffectKeyToken(),
@@ -219,6 +225,42 @@ export function buildAllSkillsDisadvantageEffectKeyToken() {
     path: ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   });
+}
+
+export function buildSkillAdvancementMultiplierEffectKeyTokens() {
+  const group = localizeOrFallback(
+    "FALLOUTMAW.Effects.SkillAdvancementMultiplierGroup",
+    "Множители развития навыков"
+  );
+  return [
+    ...getSkillSettings().map(entry => createEffectKeyToken({
+      code: `${entry.abbr || entry.key}:developmentMultiplier`,
+      key: `${entry.key}.developmentMultiplier`,
+      label: `${localizeOrFallback("FALLOUTMAW.Effects.SkillAdvancementMultiplier", "Множитель развития")}: ${entry.label || entry.key}`,
+      path: getSkillAdvancementMultiplierEffectKey(entry.key),
+      group
+    })),
+    createEffectKeyToken({
+      code: "allSkillDevelopmentMultipliers",
+      key: "allSkillDevelopmentMultipliers",
+      label: localizeOrFallback(
+        "FALLOUTMAW.Effects.AllSkillAdvancementMultipliers",
+        "Множитель развития: все навыки"
+      ),
+      path: getSkillAdvancementMultiplierEffectKey(ALL_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET),
+      group
+    }),
+    createEffectKeyToken({
+      code: "signatureSkillDevelopmentMultipliers",
+      key: "signatureSkillDevelopmentMultipliers",
+      label: localizeOrFallback(
+        "FALLOUTMAW.Effects.SignatureSkillAdvancementMultipliers",
+        "Множитель развития: все коронные навыки"
+      ),
+      path: getSkillAdvancementMultiplierEffectKey(SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET),
+      group
+    })
+  ].filter(Boolean);
 }
 
 export function buildSkillAdvantageEffectKeyTokens() {

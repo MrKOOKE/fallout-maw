@@ -724,8 +724,7 @@ function prepareAuraGeneratedChanges(sourceActor, changes = []) {
 
 function isApplicableGeneratedAuraChange(change = {}) {
   return String(change?.key ?? "").trim()
-    && String(change?.value ?? "") !== ""
-    && !String(change?.key ?? "").startsWith("system.skillAdvancementBase.");
+    && String(change?.value ?? "") !== "";
 }
 
 function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon) {
@@ -782,8 +781,7 @@ function buildAbilityEffectChanges(actor, item, context = {}) {
     actor,
     withoutTimedTriggerCostFunctions(item?.system?.functions ?? []),
     { ...context, abilityItemId: item?.id ?? "" }
-  )
-    .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
+  );
 }
 
 function buildItemFreeSettingsEffectChanges(actor, item, context = {}) {
@@ -792,8 +790,7 @@ function buildItemFreeSettingsEffectChanges(actor, item, context = {}) {
   ), {
     ...context,
     abilityItemId: item?.id ?? ""
-  })
-    .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
+  });
 }
 
 function getAbilityEffectShowIcon(actor, item, context = {}) {
@@ -894,7 +891,6 @@ function hasApplicableAbilityChanges(changes = []) {
   return (changes ?? []).some(change => (
     String(change?.key ?? "").trim()
     && String(change?.value ?? "") !== ""
-    && !String(change?.key ?? "").startsWith("system.skillAdvancementBase.")
   ));
 }
 

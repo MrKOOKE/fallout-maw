@@ -9,6 +9,7 @@ import { toInteger } from "./numbers.mjs";
 import { getActorFormulaApplicationPhase } from "./actor-formulas.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
+import { isSkillAdvancementMultiplierEffectKey } from "../advancement/skill-multiplier-effects.mjs";
 
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
@@ -75,6 +76,7 @@ const SUPPRESSION_ALL_KEYS = Object.freeze({
 
 export function expandActorEffectChangeKeys(actor, change = {}) {
   const key = String(change?.key ?? "");
+  if (isSkillAdvancementMultiplierEffectKey(key)) return [];
   if (key === ALL_LIMB_MAX_BONUS_EFFECT_KEY) {
     return Object.keys(actor?.system?.limbs ?? {})
       .filter(key => key && key !== "all")

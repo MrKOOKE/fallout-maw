@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "55c043f83b5df9b74587f0850358fdf8903c57041339bbf7454659fdf68c6f5c",
-  "updatedAt": "2026-07-21T03:38:32.535Z",
+  "revision": "9d85ccfc3fc88af94a7d100dfa39fbac4a664934b0d9c62c8800dbed13edd39c",
+  "updatedAt": "2026-07-21T06:02:54.125Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -18,7 +18,7 @@
           {
             "abilities": [
               {
-                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li><li><p>Коронные навыки развиваются еще на 20% быстрее (база 50%)</p></li><li><p>Множитель развития всех не коронных навыков: -50%</p></li></ul>",
+                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li><li><p>Множитель развития коронных навыков: +0.2</p></li><li><p>Множитель развития всех не коронных навыков: -0.5</p></li></ul>",
                 "id": "MykWY2QgZQDXBpbF",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/odaryonnyj.webp",
                 "name": "\"Одаренный\"",
@@ -67,6 +67,39 @@
                       },
                       "sort": 0,
                       "type": "acquisitionChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "2KbGMxvPpyKW1sa6",
+                          "key": "system.skillAdvancementBase.all",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-0.5"
+                        },
+                        {
+                          "id": "oiAQGshLpVMpTWwD",
+                          "key": "system.skillAdvancementBase.signature",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "0.7"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "2IHdYMLnqqMeMHIU",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 1,
+                      "type": "effectChanges"
                     }
                   ]
                 },
@@ -136,7 +169,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Навыки, значение которых на 20% ниже самого высокого Навыка получают удвоенный множитель развития</p></li><li><p>Вы не можете обладать коронными навыками</p><p></p></li></ul>",
+                "description": "<ul><li><p>Навыки, значения которых на 20% ниже самого высокого Навыка получают +1.0 множителя развития</p></li><li><p>Вы не можете обладать коронными навыками</p></li></ul>",
                 "id": "Luxb6uJIqovwlQWa",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/trenirovannyj.webp",
                 "name": "Всестороннее развитие",
@@ -26391,7 +26424,7 @@
             ],
             "organismDevelopment": {
               "limit": 50,
-              "threshold": 1
+              "threshold": 10
             },
             "progression": {
               "proficiencyPointsPerLevel": "50",
