@@ -70,7 +70,8 @@ import {
   canActivateLightSource,
   getLightSourceDisplayName,
   isLightSourceActive,
-  lightSourceUsesEnergyConsumer,
+  itemManagesEnergySources,
+  openEnergyConsumerSourceDialog,
   openLightSourceEnergyDialog,
   toggleLightSource
 } from "../items/light-source.mjs";
@@ -536,6 +537,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       toggleLightSource: { handler: TokenActionHud.#onToggleLightSource, buttons: [0, 1] },
       openLightSourceRecharge: { handler: TokenActionHud.#onOpenLightSourceRecharge, buttons: [0, 1] },
+      openEnergyConsumerManage: { handler: TokenActionHud.#onOpenEnergyConsumerManage, buttons: [0, 1] },
       openEnergyConsumption: { handler: TokenActionHud.#onOpenEnergyConsumption, buttons: [0, 1] },
       setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
@@ -1240,6 +1242,24 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (event.button !== 0) return undefined;
     if (target.disabled) return undefined;
     return openLightSourceEnergyDialog({
+      actor: this.actor,
+      token: this.token,
+      item,
+      application: this,
+      showToggle: false
+    });
+  }
+
+  static async #onOpenEnergyConsumerManage(event, target) {
+    event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
+    const itemId = String(target.dataset.itemId ?? "");
+    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    if (!item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+    if (target.disabled) return undefined;
+    return openEnergyConsumerSourceDialog({
       actor: this.actor,
       token: this.token,
       item,
@@ -3550,7 +3570,7 @@ function prepareLightSourceActionRow(item = null, token = null, forceDisabled = 
       img: normalizeImagePath(hudIcons.weaponActions?.[active ? "lightOff" : "lightOn"], "icons/svg/light.svg")
     }
   ];
-  if (lightSourceUsesEnergyConsumer(item)) {
+  if (itemManagesEnergySources(item)) {
     actions.push({
       key: "lightRecharge",
       label: game.i18n.localize("FALLOUTMAW.Item.LightSourceRecharge"),
@@ -3576,6 +3596,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
   const weaponData = moduleWeaponData;
   const actions = weaponData?.availableActions ?? {};
   const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
+  const hasEnergyConsumer = itemManagesEnergySources(selectedWeapon);
   const delayedExplosionState = getDelayedVolleyWeaponState(selectedWeapon, weaponFunction?.id);
   const buttons = [
     {
@@ -3602,7 +3623,15 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), configured: Boolean(actions.meleeAttack) },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) },
-    { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
+    { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost },
+    {
+      key: "manageEnergy",
+      label: game.i18n.localize("FALLOUTMAW.Item.LightSourceRecharge"),
+      configured: hasEnergyConsumer,
+      visible: hasEnergyConsumer,
+      isEnergyManageControl: true,
+      noActionPointCost: true
+    }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
     const broken = weaponBroken || Boolean(weaponFunction?.sourceBroken);
@@ -3612,6 +3641,15 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
         disabled: forceDisabled,
         itemId: selectedWeapon.id,
         weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id
+      };
+    }
+    if (action.isEnergyManageControl) {
+      return {
+        ...action,
+        disabled: forceDisabled,
+        itemId: selectedWeapon.id,
+        weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
+        img: normalizeImagePath(hudIcons.weaponActions?.lightRecharge, "icons/svg/upgrade.svg")
       };
     }
     const blockState = getWeaponActionBlockState(actor, action.key);

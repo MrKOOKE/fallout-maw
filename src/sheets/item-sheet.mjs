@@ -173,6 +173,7 @@ import {
   hasCraftKnowledgeData,
   resolveCraftKnowledgeItem
 } from "../items/recipe-knowledge.mjs";
+import { extractEnergyConsumerSource } from "../items/light-source.mjs";
 import {
   preserveTextSelectionBeforePartSync,
   restoreTextSelectionAfterPartSync
@@ -876,6 +877,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-energy-consumer-source]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteEnergyConsumerSource(event));
     });
+    this.element?.querySelector("[data-extract-energy-consumer-source]")?.addEventListener("click", event => this.#onExtractEnergyConsumerSource(event));
     this.element?.querySelector("[data-add-light-source-resource-cost]")?.addEventListener("click", event => this.#onAddLightSourceResourceCost(event));
     this.element?.querySelectorAll("[data-delete-light-source-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteLightSourceResourceCost(event));
@@ -4881,10 +4883,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const consumerData = this.item.system?.functions?.energyConsumer ?? {};
     const target = String(event.currentTarget?.dataset?.deleteEnergyConsumerSource ?? "");
     if (target === "active") {
-      return this.item.update({
-        "system.functions.energyConsumer.sourceItemUuid": "",
-        "system.functions.energyConsumer.installedSource": createEmptyInstalledEnergySourceData()
-      });
+      return this.#clearInstalledEnergyConsumerSource();
     }
     const index = Number(target);
     if (!Number.isInteger(index) || index < 0) return undefined;
@@ -4897,6 +4896,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       "system.functions.energyConsumer.sourceItemUuid": removedActive ? "" : active,
       "system.functions.energyConsumer.sourceItemUuids": sources,
       "system.functions.energyConsumer.installedSource": removedActive ? createEmptyInstalledEnergySourceData() : consumerData?.installedSource
+    });
+  }
+
+  async #onExtractEnergyConsumerSource(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!hasItemFunction(this.item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return undefined;
+    const actor = this.item?.actor ?? null;
+    if (actor) {
+      const extracted = await extractEnergyConsumerSource(actor, this.item);
+      if (!extracted) {
+        ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
+      }
+      return undefined;
+    }
+    return this.#clearInstalledEnergyConsumerSource();
+  }
+
+  #clearInstalledEnergyConsumerSource() {
+    return this.item.update({
+      "system.functions.energyConsumer.installedSource": createEmptyInstalledEnergySourceData()
     });
   }
 

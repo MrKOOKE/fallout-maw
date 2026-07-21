@@ -4263,8 +4263,20 @@
     </div>
     <input type="hidden" name="system.functions.energyConsumer.enabled" value="true">
     <div class="fallout-maw-panel-header">
-      <h3>{{localize "FALLOUTMAW.Item.FunctionEnergySource"}}</h3>
+      <h3>{{localize "FALLOUTMAW.Item.LightSourceCurrentEnergySource"}}</h3>
     </div>
+    {{#if energyConsumerInstalledSource}}
+    <div class="fallout-maw-magazine-source-drop active fallout-maw-energy-consumer-installed">
+      <img src="{{energyConsumerInstalledSource.img}}" alt="">
+      <strong>{{energyConsumerInstalledSource.name}}</strong>
+      {{#if energyConsumerInstalledSource.class}}<span>{{energyConsumerInstalledSource.class}}</span>{{/if}}
+      <button type="button" data-extract-energy-consumer-source title="{{localize 'FALLOUTMAW.Item.LightSourceExtract'}}" aria-label="{{localize 'FALLOUTMAW.Item.LightSourceExtract'}}">
+        <i class="fa-solid fa-up-right-from-square"></i>
+      </button>
+    </div>
+    {{else}}
+    <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.LightSourceNoEnergySource"}}</p>
+    {{/if}}
     <label class="fallout-maw-energy-consumer-reserve fallout-maw-split-number-field">
       <span>{{localize "FALLOUTMAW.Item.EnergySourceReserve"}}</span>
       <div>
@@ -4284,6 +4296,9 @@
     <input type="hidden" name="system.functions.energyConsumer.installedSource.class" value="">
     <input type="hidden" name="system.functions.energyConsumer.installedSource.img" value="">
     {{/if}}
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.EnergyConsumerSources"}}</h3>
+    </div>
     <div class="fallout-maw-energy-consumer-source-list fallout-maw-magazine-source-list">
       {{#each energyConsumerSourceItems}}
       <div class="fallout-maw-magazine-source-drop {{#if active}}active{{/if}} {{#if empty}}empty{{/if}}"

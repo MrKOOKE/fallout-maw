@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "c86e252d0244ee7461a6d2e41ef9307787406faac1c1fe88ed3c586c2fe1560e",
-  "updatedAt": "2026-07-21T14:02:20.308Z",
+  "revision": "3228a46478c176d7e840f6f4a4d3222a7ec2f059c4ca663e8b56c6499e6a3b0b",
+  "updatedAt": "2026-07-21T17:41:00.681Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -3851,6 +3851,59 @@
           {
             "abilities": [
               {
+                "description": "<ul><li><p>Натуралист: +[[5+science/5]]</p></li></ul>",
+                "id": "nMqO9CiCjnl064O3",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Анализ окружения",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "gs57I4kh7rrYgB4s",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "suOiTU74NWIYeXxC",
+                          "key": "system.skills.naturalist.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+sci/5"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "FTsXHkXzWC0xNq4T",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Стоимость активации: 10 энергии.<br>Перегрузка: 30 энергии на 30 минут.<br></p><p>Активация позволит выбрать один навык и он получит +[[10+science/5]] на следующие 2 проверки, либо до истечения срока длительности.</p><p>Длительность: 1 минута.</p>",
                 "id": "jMsgtUPb7RIABfxl",
                 "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
@@ -4043,6 +4096,358 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "LSK2nVX8OAMZlIw5",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Исследования прогрессируют на 50% быстрее</p></li><li><p>Исследования защищены от Крит провалов</p></li></ul>",
+                "id": "3h1nGzoUUaweRel5",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Познаватель",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "7fY9Tq1PppfLfM1Y",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 40 энергии.<br>Перегрузка: 200 энергии на 12 часов.</p><p>После актвации в течение следующих 24 секуд:</p><ul><li><p>+[[10+science/5]] ко всем навыкам</p></li><li><p>Защита от Критических провалов</p></li><li><p>+1 Преимущество на все проверки</p></li><li><p>Все такующие действия: -1 ОД</p></li></ul>",
+                "id": "AytU8b2bmS1lcjIp",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Поток",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "KmvQeeO7x7PZYdnx",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "40",
+                            "id": "5002prJ9cE0dBOmw",
+                            "overloadAmount": 200,
+                            "overloadDurationSeconds": 43200,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "avvAEQT0RKTtcXWD",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "PtHtJMaYgFEYnCKF",
+                          "key": "system.skillCheck.disabledResults.criticalFailure",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "I0kcsQYVOpYInBnn",
+                          "key": "system.skills.all.advantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "V6hEtw8gdV3RHYCS",
+                          "key": "system.costs.actions.aimedMeleeAttack",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "zPfmjPfaTkYuUSRn",
+                          "key": "system.costs.actions.aimedShot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "nRMvV3U9YloRYpRy",
+                          "key": "system.costs.actions.meleeAttack",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "Onq3ZTPvzMp4sHZh",
+                          "key": "system.costs.actions.snapshot",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "94MSK0Gtv4JBBekG",
+                          "key": "system.costs.actions.volley",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "id": "Lh7HDE0s28kRcAXB",
+                          "key": "system.costs.actions.burst",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 24,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "PFyTkyrZq0hZlBif",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "Y1gHZ9kyC4kU46Wo",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 10 энергии.<br>Перегрузка: 30 энергии на час.</p><p>Активируйте во время торговли и если пройдете проверку Науки сложностью (50 + Красноречие торговца):</p><ul><li><p>Надбавка цен: -50%</p></li></ul>",
+                "id": "4k8tFYML11JZOqNq",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Рациональный покупатель",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "LO7Y8rvmB4QKun6Q",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>+[[10+science/10]] ко всем Навыкам</p></li><li><p>Множитель развития всех Навыков: +0.2</p></li></ul>",
+                "id": "TtuP52o02zXvxKiK",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Торжество разума",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "cZzdO9Ic4H5iJfZ0",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "ZwnkKfQ4u2Ie7I7e",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/10"
+                        },
+                        {
+                          "id": "DDIxwfYhxB7wsrIw",
+                          "key": "system.skillAdvancementBase.all",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "0.2"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "Kq0wDwH1aR2ybsf4",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 30 энергии.<br>Перегрузка: 100 энергии на 2 часа.</p><p>После активации в течение 12 секуд вы получаете:</p><ul><li><p>+[[5+science/10]] ко всем Навыкам.</p></li><li><p>Защиту от Критического провала.</p></li></ul>",
+                "id": "mkbqEbn2MLNd4xoi",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Усиленная обработка данных",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "P8xuzm3zVQs1SMPj",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "ZhS7ofDquiz94lDr",
+                            "overloadAmount": 100,
+                            "overloadDurationSeconds": 7200,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "ytCMh4XjZN81J7Ts",
+                          "key": "system.skills.all.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+sci/10"
+                        },
+                        {
+                          "id": "73fnANXPmiRadBHw",
+                          "key": "system.skillCheck.disabledResults.criticalFailure",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "tZsaEW1b6B2hz3Eu",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],

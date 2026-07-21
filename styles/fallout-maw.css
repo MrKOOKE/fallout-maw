@@ -5208,6 +5208,11 @@ body #prosemirror-dropdown {
   max-width: 360px;
 }
 
+.fallout-maw-energy-consumer-installed {
+  margin: 0 0 0.55rem;
+  max-width: 360px;
+}
+
 .fallout-maw-magazine-source-drop {
   align-items: center;
   background: rgba(0, 0, 0, 0.18);
