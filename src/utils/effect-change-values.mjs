@@ -7,12 +7,16 @@ export function prepareEffectChangeForApplication(actor, change = {}, options = 
   return { ...change, value: result.value };
 }
 
-export function evaluateEffectChangeNumber(actor, value, { fallback = Number.NaN, stage = "prepared" } = {}) {
-  const result = tryEvaluateEffectChangeValue(actor, value, { stage });
+export function evaluateEffectChangeNumber(actor, value, {
+  fallback = Number.NaN,
+  stage = "prepared",
+  formulaData = null
+} = {}) {
+  const result = tryEvaluateEffectChangeValue(actor, value, { stage, formulaData });
   return result.ok ? result.value : fallback;
 }
 
-export function tryEvaluateEffectChangeValue(actor, value, { stage = "prepared" } = {}) {
+export function tryEvaluateEffectChangeValue(actor, value, { stage = "prepared", formulaData = null } = {}) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? { ok: true, value } : { ok: false, value: Number.NaN };
   }
@@ -25,7 +29,10 @@ export function tryEvaluateEffectChangeValue(actor, value, { stage = "prepared" 
   if (Number.isFinite(direct)) return { ok: true, value: direct };
 
   try {
-    const evaluated = evaluateFormula(text, buildActorFormulaData(actor, { stage }));
+    const data = typeof formulaData === "function"
+      ? formulaData()
+      : formulaData ?? buildActorFormulaData(actor, { stage });
+    const evaluated = evaluateFormula(text, data);
     return Number.isFinite(evaluated)
       ? { ok: true, value: evaluated }
       : { ok: false, value: Number.NaN };

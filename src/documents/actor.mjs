@@ -41,6 +41,12 @@ import {
   isActorTraumaDiseaseEffectSuppressed,
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
+import {
+  buildActorFormulaData,
+  formulaUsesPreparedActorReferences,
+  getActorFormulaApplicationPhase,
+  invalidateActorFormulaData
+} from "../utils/actor-formulas.mjs";
 const actorLoadPreparationCache = new WeakMap();
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
@@ -123,6 +129,16 @@ export class FalloutMaWActor extends Actor {
     handleActorDamageUpdate(this, changes, options);
   }
 
+  prepareData() {
+    invalidateActorFormulaData(this);
+    this._falloutMawRoutedFinalEffectKeys = null;
+    try {
+      return super.prepareData();
+    } finally {
+      invalidateActorFormulaData(this);
+    }
+  }
+
   prepareDerivedData() {
     super.prepareDerivedData();
     if (this.system?.attributes) {
@@ -170,20 +186,63 @@ export class FalloutMaWActor extends Actor {
       return;
     }
     this._completedActiveEffectPhases.add(phase);
+    invalidateActorFormulaData(this);
+
+    const formulaStage = phase === "initial" ? "initial-active-effect" : "prepared";
+    let formulaData = null;
+    const getFormulaData = () => {
+      formulaData ??= buildActorFormulaData(this, { stage: formulaStage });
+      return formulaData;
+    };
 
     const changes = [];
     const tokenChanges = [];
     const suppressedTraumaDiseaseIds = getActorSuppressedTraumaDiseaseIds(this);
-    for (const effect of this.allApplicableEffects()) {
-      if (!effect.active) continue;
-      if (isActorTraumaDiseaseEffectSuppressed(this, effect, suppressedTraumaDiseaseIds)) continue;
+    const applicableEffects = Array.from(this.allApplicableEffects()).filter(effect => (
+      effect.active
+      && !isActorTraumaDiseaseEffectSuppressed(this, effect, suppressedTraumaDiseaseIds)
+    ));
+    let routedFinalKeys = this._falloutMawRoutedFinalEffectKeys;
+    if (!(routedFinalKeys instanceof Set)) {
+      routedFinalKeys = new Set();
+      for (const effect of applicableEffects) {
+        for (const change of effect.system.changes) {
+          const configuredPhase = String(change?.phase ?? "initial").trim() || "initial";
+          if (configuredPhase !== "initial") continue;
+          const applicationPhase = getActorFormulaApplicationPhase(change, this, { formulaData: getFormulaData });
+          if (applicationPhase !== "final") continue;
+          const key = String(change?.key ?? "").trim();
+          if (key) routedFinalKeys.add(key);
+        }
+      }
+      this._falloutMawRoutedFinalEffectKeys = routedFinalKeys;
+    }
+
+    for (const effect of applicableEffects) {
       for (const change of effect.system.changes) {
-        if ((change.key === "") || (change.phase !== phase)) continue;
+        if (change.key === "") continue;
+        const configuredPhase = String(change?.phase ?? "initial").trim() || "initial";
+        const applicationPhase = configuredPhase === "initial" && routedFinalKeys.has(String(change?.key ?? "").trim())
+          ? "final"
+          : configuredPhase;
+        if (applicationPhase !== phase) continue;
         const copy = foundry.utils.deepClone(change);
         copy.effect = effect;
         if (copy.key?.startsWith("token.")) {
           copy.key = copy.key.slice(6);
-          tokenChanges.push(copy);
+          const tokenValue = copy.value;
+          const usesPreparedReferences = typeof tokenValue === "string"
+            && !Number.isFinite(Number(tokenValue.trim()))
+            && formulaUsesPreparedActorReferences(tokenValue, getFormulaData());
+          if (usesPreparedReferences) {
+            const preparedTokenChange = prepareActorEffectChangeForApplication(this, copy, {
+              stage: formulaStage,
+              formulaData: getFormulaData
+            });
+            if (preparedTokenChange) tokenChanges.push(preparedTokenChange);
+          } else {
+            tokenChanges.push(copy);
+          }
         } else {
           changes.push(...expandActorEffectChangeKeys(this, copy));
         }
@@ -196,11 +255,18 @@ export class FalloutMaWActor extends Actor {
     ActiveEffect._shimChanges(changes);
     this.tokenActiveEffectChanges[phase] = tokenChanges;
 
+    if (changes.some(change => {
+      if (typeof change?.value !== "string") return false;
+      const value = change.value.trim();
+      return value && !Number.isFinite(Number(value));
+    })) getFormulaData();
+
     const overrides = {};
     const replacementData = this.getRollData();
     for (const change of changes) {
       const preparedChange = prepareActorEffectChangeForApplication(this, change, {
-        stage: phase === "initial" ? "initial-active-effect" : "prepared"
+        stage: formulaStage,
+        formulaData: getFormulaData
       });
       if (!preparedChange) continue;
       const result = ActiveEffect.applyChange(this, preparedChange, { replacementData });
@@ -208,6 +274,7 @@ export class FalloutMaWActor extends Actor {
     }
 
     foundry.utils.mergeObject(this.overrides, foundry.utils.expandObject(overrides));
+    if (phase === "final") invalidateActorFormulaData(this);
   }
 
   get health() {

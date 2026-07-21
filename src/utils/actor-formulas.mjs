@@ -18,9 +18,17 @@ import {
 import { toInteger } from "./numbers.mjs";
 import { formatFormulaForDisplay } from "./formula-display.mjs";
 
+const FORMULA_IDENTIFIER_PATTERN = /@?[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)*/gu;
+const PREPARED_REFERENCE_PATH_PATTERN = /@?(?:system\.)?(?:skills|resources|needs|proficiencies|limbs|load)\.[\p{L}_]/iu;
+let actorFormulaDataCache = new WeakMap();
+let sharedFormulaSettingsCache = null;
+let sharedFormulaSettingsCacheScheduled = false;
+
 export function evaluateActorFormula(formula, actor = null, { fallback = 0, minimum = 0, context = "" } = {}) {
   const text = String(formula ?? "").trim();
   if (!text) return Math.max(minimum, toInteger(fallback));
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return Math.max(minimum, Math.trunc(direct));
   try {
     const value = evaluateFormula(text, buildActorFormulaData(actor));
     return Math.max(minimum, value);
@@ -31,16 +39,26 @@ export function evaluateActorFormula(formula, actor = null, { fallback = 0, mini
   }
 }
 
-export function buildActorFormulaData(actor = null, { stage = "prepared" } = {}) {
-  const characteristicSettings = getCharacteristicSettings();
-  const skillSettings = getSkillSettings();
-  const resourceSettings = getResourceSettings();
-  const needSettings = getFormulaNeedSettings(actor, { includeGlobal: true });
-  const proficiencySettings = getProficiencySettings();
-  const characteristics = buildActorFormulaCharacteristics(actor, characteristicSettings, {
-    includeDevelopment: stage === "initial-active-effect"
+export function buildActorFormulaData(actor = null, { stage = "prepared", cache = true } = {}) {
+  const normalizedStage = String(stage ?? "prepared") || "prepared";
+  const cached = cache ? getCachedActorFormulaData(actor, normalizedStage) : null;
+  if (cached) return cached;
+
+  const {
+    characteristicSettings,
+    skillSettings,
+    resourceSettings,
+    needSettings: globalNeedSettings,
+    proficiencySettings
+  } = getSharedFormulaSettings();
+  const needSettings = getFormulaNeedSettings(actor, {
+    includeGlobal: true,
+    globalSettings: globalNeedSettings
   });
-  const skills = stage === "initial-active-effect"
+  const characteristics = buildActorFormulaCharacteristics(actor, characteristicSettings, {
+    includeDevelopment: normalizedStage === "initial-active-effect"
+  });
+  const skills = normalizedStage === "initial-active-effect"
     ? buildInitialActiveEffectSkillValues(actor, characteristicSettings, skillSettings, characteristics)
     : getSkillValues(actor?.system?.skills ?? {});
   const formulaReferences = buildActorFormulaReferenceData({
@@ -55,7 +73,7 @@ export function buildActorFormulaData(actor = null, { stage = "prepared" } = {})
     skillValues: skills
   });
 
-  return {
+  const data = {
     characteristicSettings,
     skillSettings,
     resourceSettings,
@@ -65,15 +83,69 @@ export function buildActorFormulaData(actor = null, { stage = "prepared" } = {})
     skills,
     ...formulaReferences
   };
+  if (cache) setCachedActorFormulaData(actor, normalizedStage, data);
+  return data;
+}
+
+export function invalidateActorFormulaData(actor = null) {
+  if (actor && (typeof actor === "object" || typeof actor === "function")) {
+    actorFormulaDataCache.delete(actor);
+    return;
+  }
+  actorFormulaDataCache = new WeakMap();
+}
+
+/**
+ * Actor indicators are prepared after the initial Active Effect phase. A
+ * change which reads one of them must therefore be applied in the final phase
+ * so the runtime value and every later attribution use the same snapshot.
+ */
+export function getActorFormulaApplicationPhase(change = {}, actor = null, { formulaData = null } = {}) {
+  const configured = String(change?.phase ?? "initial").trim() || "initial";
+  if (configured !== "initial") return configured;
+
+  const value = change?.value;
+  if (typeof value === "number") return configured;
+  if (typeof value !== "string") return configured;
+  if (Number.isFinite(Number(value.trim()))) return configured;
+  if (PREPARED_REFERENCE_PATH_PATTERN.test(value)) return "final";
+  const data = resolveFormulaDataOption(formulaData)
+    ?? getCachedActorFormulaData(actor, "prepared")
+    ?? getCachedActorFormulaData(actor, "initial-active-effect")
+    ?? buildActorFormulaData(actor, { stage: "initial-active-effect" });
+  return formulaUsesPreparedActorReferences(value, data) ? "final" : configured;
+}
+
+export function formulaUsesPreparedActorReferences(formula = "", data = {}) {
+  const source = String(formula ?? "");
+  if (!source) return false;
+  const variableAliases = getFormulaAliasSet(data, "formulaVariables", "_formulaVariableAliases");
+  const referenceAliases = getFormulaAliasSet(data, "formulaReferences", "_formulaReferenceAliases");
+  for (const match of source.matchAll(FORMULA_IDENTIFIER_PATTERN)) {
+    const identifier = String(match[0] ?? "").replace(/^@/, "");
+    if (!identifier) continue;
+    const normalized = identifier.toLowerCase();
+    if (variableAliases.has(normalized)) return true;
+    if (
+      !normalized.startsWith("characteristics.")
+      && !normalized.startsWith("system.characteristics.")
+      && referenceAliases.has(normalized)
+    ) return true;
+  }
+  return false;
 }
 
 export function getActorFormulaAutocompleteEntries(subject = null) {
   const actor = resolveFormulaActor(subject);
+  const settings = getSharedFormulaSettings();
   return buildActorFormulaAutocompleteEntries({
-    skills: getSkillSettings(),
-    resources: getResourceSettings(),
-    needs: getFormulaNeedSettings(actor, { includeGlobal: true }),
-    proficiencies: getProficiencySettings(),
+    skills: settings.skillSettings,
+    resources: settings.resourceSettings,
+    needs: getFormulaNeedSettings(actor, {
+      includeGlobal: true,
+      globalSettings: settings.needSettings
+    }),
+    proficiencies: settings.proficiencySettings,
     limbs: getFormulaLimbSettings(actor),
     includeLoad: true
   });
@@ -99,16 +171,18 @@ export function formatActorFormulaForDisplay(formula = "0", actor = null, { incl
   });
 }
 
-function getFormulaNeedSettings(actor = null, { includeGlobal = false } = {}) {
-  const globalSettings = includeGlobal || !actor ? safeGetNeedSettings() : [];
-  if (!actor) return globalSettings;
+function getFormulaNeedSettings(actor = null, { includeGlobal = false, globalSettings = null } = {}) {
+  const globals = includeGlobal || !actor
+    ? (Array.isArray(globalSettings) ? globalSettings : safeGetNeedSettings())
+    : [];
+  if (!actor) return globals;
   let actorSettings = [];
   try {
     actorSettings = getActorNeedSettings(actor);
   } catch (_error) {
     actorSettings = [];
   }
-  return mergeFormulaSettings(globalSettings, actorSettings);
+  return mergeFormulaSettings(globals, actorSettings);
 }
 
 function safeGetNeedSettings() {
@@ -161,6 +235,63 @@ function resolveFormulaActor(subject = null) {
   if (subject.parent?.actor?.documentName === "Actor") return subject.parent.actor;
   if (subject.system?.resources || subject.system?.characteristics) return subject;
   return null;
+}
+
+function getSharedFormulaSettings() {
+  if (sharedFormulaSettingsCache) return sharedFormulaSettingsCache;
+  const snapshot = {
+    characteristicSettings: getCharacteristicSettings(),
+    skillSettings: getSkillSettings(),
+    resourceSettings: getResourceSettings(),
+    needSettings: safeGetNeedSettings(),
+    proficiencySettings: getProficiencySettings()
+  };
+  sharedFormulaSettingsCache = snapshot;
+  if (!sharedFormulaSettingsCacheScheduled) {
+    sharedFormulaSettingsCacheScheduled = true;
+    queueMicrotask(() => {
+      if (sharedFormulaSettingsCache === snapshot) sharedFormulaSettingsCache = null;
+      sharedFormulaSettingsCacheScheduled = false;
+    });
+  }
+  return snapshot;
+}
+
+function getCachedActorFormulaData(actor, stage) {
+  if (!actor || (typeof actor !== "object" && typeof actor !== "function")) return null;
+  return actorFormulaDataCache.get(actor)?.get(stage) ?? null;
+}
+
+function setCachedActorFormulaData(actor, stage, data) {
+  if (!actor || (typeof actor !== "object" && typeof actor !== "function")) return;
+  let cache = actorFormulaDataCache.get(actor);
+  if (!cache) {
+    cache = new Map();
+    actorFormulaDataCache.set(actor, cache);
+    if (actor?.documentName !== "Actor") {
+      queueMicrotask(() => {
+        if (actorFormulaDataCache.get(actor) === cache) actorFormulaDataCache.delete(actor);
+      });
+    }
+  }
+  cache.set(stage, data);
+}
+
+function resolveFormulaDataOption(value) {
+  return typeof value === "function" ? value() : value;
+}
+
+function getFormulaAliasSet(data, sourceKey, cacheKey) {
+  if (data?.[cacheKey] instanceof Set) return data[cacheKey];
+  const aliases = new Set(Object.keys(data?.[sourceKey] ?? {}).map(key => key.toLowerCase()));
+  if (data && typeof data === "object") {
+    Object.defineProperty(data, cacheKey, {
+      configurable: true,
+      enumerable: false,
+      value: aliases
+    });
+  }
+  return aliases;
 }
 
 function buildActorFormulaCharacteristics(actor = null, characteristicSettings = [], { includeDevelopment = false } = {}) {

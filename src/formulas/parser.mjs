@@ -1,6 +1,8 @@
 import { format, localize } from "../utils/i18n.mjs";
 import { getCharacteristicAliases, getSkillAliases } from "./normalization.mjs";
 
+const NORMALIZED_FORMULA_OPTIONS = Symbol("falloutMawNormalizedFormulaOptions");
+
 export function parseFormula(source, options = {}) {
   const parser = new FormulaParser(source, normalizeFormulaOptions(options));
   const expression = parser.parseExpression();
@@ -14,7 +16,9 @@ export function validateFormula(formula, options = {}) {
 }
 
 export function normalizeFormulaOptions(options = {}) {
+  if (options?.[NORMALIZED_FORMULA_OPTIONS]) return options;
   return {
+    [NORMALIZED_FORMULA_OPTIONS]: true,
     allowSkills: options.allowSkills === true,
     characteristicAliases: getCharacteristicAliases(options.characteristics),
     skillAliases: getSkillAliases(options.skills),

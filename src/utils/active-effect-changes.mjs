@@ -6,6 +6,7 @@ import {
   getCoverKeyFromBonusPercentEffectKey
 } from "../settings/cover.mjs";
 import { toInteger } from "./numbers.mjs";
+import { getActorFormulaApplicationPhase } from "./actor-formulas.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
 
@@ -155,8 +156,12 @@ function prepareActorEffectChangeValue(actor, change = {}, options = {}) {
   };
 }
 
-export function evaluateActorEffectChangeBaseNumber(actor, change = {}, { fallback = Number.NaN, stage = "prepared" } = {}) {
-  const prepared = prepareActorEffectChangeValue(actor, change, { stage });
+export function evaluateActorEffectChangeBaseNumber(actor, change = {}, {
+  fallback = Number.NaN,
+  stage = "prepared",
+  formulaData = null
+} = {}) {
+  const prepared = prepareActorEffectChangeValue(actor, change, { stage, formulaData });
   if (!prepared) return fallback;
   const value = Number(prepared.value);
   return Number.isFinite(value) ? value : fallback;
@@ -200,8 +205,12 @@ function getEffectCoverKey(effect = null) {
   ).trim();
 }
 
-export function evaluateActorEffectChangeNumber(actor, change = {}, { fallback = Number.NaN, stage = "prepared" } = {}) {
-  const prepared = prepareActorEffectChangeForApplication(actor, change, { stage });
+export function evaluateActorEffectChangeNumber(actor, change = {}, {
+  fallback = Number.NaN,
+  stage = "prepared",
+  formulaData = null
+} = {}) {
+  const prepared = prepareActorEffectChangeForApplication(actor, change, { stage, formulaData });
   if (!prepared) return fallback;
   const value = Number(prepared.value);
   return Number.isFinite(value) ? value : fallback;
@@ -298,9 +307,10 @@ function prepareActorReverseEffectChange(actor, change = {}, {
   order = 0
 } = {}) {
   const source = effect ? { ...change, effect } : change;
+  const applicationPhase = getActorFormulaApplicationPhase(change, actor);
   const value = evaluateActorEffectChangeBaseNumber(actor, source, {
     fallback: Number.NaN,
-    stage: change?.phase === "initial" ? "initial-active-effect" : "prepared"
+    stage: applicationPhase === "initial" ? "initial-active-effect" : "prepared"
   });
   if (!Number.isFinite(value)) return null;
   return {

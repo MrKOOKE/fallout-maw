@@ -47,6 +47,7 @@ import {
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { getAbilitySkillAdvancementBaseBonuses } from "../../abilities/evaluation.mjs";
 import { prepareActorEffectChangeForApplication } from "../../utils/active-effect-changes.mjs";
+import { getActorFormulaApplicationPhase } from "../../utils/actor-formulas.mjs";
 import {
   getConstructPartLimbKey,
   getConstructPartSlotId,
@@ -634,11 +635,12 @@ function resolveResourceBonusOverrideMaximum(actor, resourceKey = "", { baseMax 
 
 function collectInitialResourceBonusChanges(actor, resourceKey = "") {
   const acceptedKey = `system.resources.${resourceKey}.bonus`;
+  if (actor?._falloutMawRoutedFinalEffectKeys?.has?.(acceptedKey)) return [];
   const changes = [];
   for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
     if (!effect?.active || effect.disabled) continue;
     for (const change of effect.system?.changes ?? []) {
-      if (String(change?.phase ?? "initial") !== "initial") continue;
+      if (getActorFormulaApplicationPhase(change, actor) !== "initial") continue;
       if (String(change?.key ?? "").trim() !== acceptedKey) continue;
       changes.push({
         ...foundry.utils.deepClone(change),

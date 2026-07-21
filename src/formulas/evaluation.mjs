@@ -4,16 +4,17 @@ import { toInteger } from "../utils/numbers.mjs";
 import { parseFormula, normalizeFormulaOptions } from "./parser.mjs";
 import { normalizeCharacteristicSettings, normalizeFormulaMap, normalizeNeedSettings, normalizeResourceSettings, normalizeSkillSettings } from "./normalization.mjs";
 
+const formulaEvaluationCache = new WeakMap();
+
 export function evaluateFormula(formula, data = {}) {
-  const formulaOptions = {
-    characteristics: data.characteristicSettings,
-    skills: data.skillSettings,
-    allowSkills: Boolean(data.skills),
-    variables: data.variables,
-    references: data.formulaReferences ?? data.references
-  };
-  const options = normalizeFormulaOptions(formulaOptions);
-  const expression = parseFormula(String(formula ?? "0"), formulaOptions);
+  const source = String(formula ?? "0");
+  const context = getFormulaEvaluationContext(data);
+  const options = context.options;
+  let expression = context.expressions.get(source);
+  if (!expression) {
+    expression = parseFormula(source, options);
+    context.expressions.set(source, expression);
+  }
   const value = expression.evaluate(identifier => {
     const normalized = identifier.toLowerCase();
     const characteristic = options.characteristicAliases[normalized];
@@ -34,6 +35,30 @@ export function evaluateFormula(formula, data = {}) {
 
   if (!Number.isFinite(value)) throw new Error(localize("FALLOUTMAW.Formula.InvalidNumberValue"));
   return Math.trunc(value);
+}
+
+function getFormulaEvaluationContext(data = {}) {
+  if (data && (typeof data === "object" || typeof data === "function")) {
+    const cached = formulaEvaluationCache.get(data);
+    if (cached) return cached;
+    const created = createFormulaEvaluationContext(data);
+    formulaEvaluationCache.set(data, created);
+    return created;
+  }
+  return createFormulaEvaluationContext(data);
+}
+
+function createFormulaEvaluationContext(data = {}) {
+  return {
+    options: normalizeFormulaOptions({
+      characteristics: data?.characteristicSettings,
+      skills: data?.skillSettings,
+      allowSkills: Boolean(data?.skills),
+      variables: data?.variables,
+      references: data?.formulaReferences ?? data?.references
+    }),
+    expressions: new Map()
+  };
 }
 
 export function evaluateFormulaVariables(formula, variables = {}) {

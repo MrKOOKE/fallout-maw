@@ -96,8 +96,10 @@ import {
   resolveActorContainerPassengerActor
 } from "../utils/actor-containers.mjs";
 import {
+  buildActorFormulaData,
   evaluateActorFormula,
   formatActorFormulaForDisplay,
+  getActorFormulaApplicationPhase,
   isFormulaTextConfigured
 } from "../utils/actor-formulas.mjs";
 import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
@@ -7083,6 +7085,7 @@ function collectActorPreparedPathAttribution(actor, path = "", {
   expandEffectKeys = false
 } = {}) {
   if (!actor || !path) return emptyCombatAttribution();
+  const preparedFormulaData = buildActorFormulaData(actor, { stage: "prepared" });
   let running = toInteger(foundry.utils.getProperty(actor?._source ?? {}, path));
   const sources = [];
   if (running) sources.push({
@@ -7093,9 +7096,16 @@ function collectActorPreparedPathAttribution(actor, path = "", {
     valueLabel: `${formatSignedNumber(running)}${suffix}`
   });
 
-  for (const { effect, change } of collectActorEffectAttributionChanges(actor, path, { expandEffectKeys })) {
-    const stage = String(change?.phase ?? "initial") === "initial" ? "initial-active-effect" : "prepared";
-    const amount = evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: Number.NaN, stage });
+  for (const { effect, change, applicationPhase } of collectActorEffectAttributionChanges(actor, path, {
+    expandEffectKeys,
+    formulaData: preparedFormulaData
+  })) {
+    const stage = applicationPhase === "initial" ? "initial-active-effect" : "prepared";
+    const amount = evaluateActorEffectChangeNumber(actor, { ...change, effect }, {
+      fallback: Number.NaN,
+      stage,
+      formulaData: stage === "prepared" ? preparedFormulaData : null
+    });
     if (!Number.isFinite(amount)) continue;
     const operationStep = createItemValueAttributionStep(running, { operation: change.type, value: amount });
     const delta = operationStep.after - running;
@@ -7125,7 +7135,10 @@ function collectActorPreparedPathAttribution(actor, path = "", {
   return { value: running, sources };
 }
 
-function collectActorEffectAttributionChanges(actor, path = "", { expandEffectKeys = false } = {}) {
+function collectActorEffectAttributionChanges(actor, path = "", {
+  expandEffectKeys = false,
+  formulaData = null
+} = {}) {
   const entries = [];
   const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor);
   for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
@@ -7141,14 +7154,23 @@ function collectActorEffectAttributionChanges(actor, path = "", { expandEffectKe
       }
     }
   }
+  const routeInitialToFinal = entries.some(entry => (
+    String(entry.change?.phase ?? "initial") === "initial"
+    && getActorFormulaApplicationPhase(entry.change, actor, { formulaData }) === "final"
+  ));
+  for (const entry of entries) {
+    const configuredPhase = String(entry.change?.phase ?? "initial");
+    entry.applicationPhase = configuredPhase === "initial" && routeInitialToFinal
+      ? "final"
+      : getActorFormulaApplicationPhase(entry.change, actor, { formulaData });
+  }
   return entries.sort((left, right) => (
-    getTooltipEffectChangePhaseOrder(left.change) - getTooltipEffectChangePhaseOrder(right.change)
+    getTooltipEffectChangePhaseOrder(left.applicationPhase) - getTooltipEffectChangePhaseOrder(right.applicationPhase)
     || getTooltipEffectChangePriority(left.change) - getTooltipEffectChangePriority(right.change)
   ));
 }
 
-function getTooltipEffectChangePhaseOrder(change = {}) {
-  const phase = String(change?.phase ?? "initial");
+function getTooltipEffectChangePhaseOrder(phase = "initial") {
   if (phase === "initial") return 0;
   if (phase === "final") return 2;
   return 1;

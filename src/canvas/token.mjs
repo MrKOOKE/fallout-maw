@@ -13,7 +13,10 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
-import { formatActorFormulaForDisplay } from "../utils/actor-formulas.mjs";
+import {
+  formatActorFormulaForDisplay,
+  getActorFormulaApplicationPhase
+} from "../utils/actor-formulas.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { isTokenEquipmentHudEnabled, openTokenHudForInteraction } from "./token-equipment-hud.mjs";
 import { appendGrappleFollowMovement, commitGrappleFollowOrchestrations, GRAPPLE_FOLLOW_ORCHESTRATION_OPTION } from "../combat/active-actions.mjs";
@@ -887,14 +890,14 @@ function formatEffectChange(change, actor = null, effect = null) {
   if (isDodgeAmountModifierEffectKey(key)) {
     const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
       fallback: Number(change?.value),
-      stage: getEffectChangePreparationStage(change)
+      stage: getEffectChangePreparationStage(change, actor)
     });
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(`${formatSignedValue(value, change?.type)}%`)}</span>`;
   }
   if (isReverseEffectKey(key)) {
     const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
       fallback: Number(change?.value),
-      stage: getEffectChangePreparationStage(change)
+      stage: getEffectChangePreparationStage(change, actor)
     });
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, change?.type))}</span>`;
   }
@@ -912,12 +915,14 @@ function formatEffectChange(change, actor = null, effect = null) {
 
 function prepareTooltipEffectChange(actor, change = {}, effect = null) {
   return prepareActorEffectChangeForApplication(actor, { ...change, effect }, {
-    stage: getEffectChangePreparationStage(change)
+    stage: getEffectChangePreparationStage(change, actor)
   });
 }
 
-function getEffectChangePreparationStage(change = {}) {
-  return String(change?.phase ?? "") === "initial" ? "initial-active-effect" : "prepared";
+function getEffectChangePreparationStage(change = {}, actor = null) {
+  return getActorFormulaApplicationPhase(change, actor) === "initial"
+    ? "initial-active-effect"
+    : "prepared";
 }
 
 function formatDamageEffectChange(change, actor = null) {
