@@ -10,6 +10,11 @@ import {
   notifyAbilityTriggerCostFailure,
   payAbilityFunctionTriggerCost
 } from "./trigger-cost-runtime.mjs";
+import {
+  EFFECT_LIFECYCLE_FLAG_KEY,
+  EFFECT_LIFECYCLE_KINDS,
+  buildEffectFunctionSnapshot
+} from "./effect-lifecycle.mjs";
 
 export const ABILITY_TIMED_TRIGGER_EFFECT_FLAG_KEY = "abilityTimedTriggerEffect";
 export const ABILITY_TIMED_TRIGGER_STATE_FLAG_KEY = "abilityTimedTriggerStates";
@@ -144,10 +149,14 @@ async function createTimedTriggerEffect(actor, sourceItem, abilityFunction) {
     flags: {
       [SYSTEM_ID]: {
         kind: "temporary",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
+        },
         [ABILITY_TIMED_TRIGGER_EFFECT_FLAG_KEY]: {
           sourceItemUuid: String(sourceItem?.uuid ?? ""),
           sourceItemId: String(sourceItem?.id ?? ""),
           functionId,
+          functionData: buildEffectFunctionSnapshot(abilityFunction),
           durationSeconds,
           triggeredAt: startTime
         }

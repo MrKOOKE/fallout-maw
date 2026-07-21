@@ -71,7 +71,10 @@ const EVENT_PHASE_OVERRIDES = Object.freeze({
 const NON_SELECTABLE_EVENT_PATHS = new Set([
   "combat.reaction.requested",
   "combat.reaction.resolved",
-  "movement.token.interruptionRequested"
+  "movement.token.interruptionRequested",
+  "skill.check.committed",
+  "initiative.roll.beforeRoll",
+  "initiative.roll.resolved"
 ]);
 
 export const SYSTEM_EVENT_GROUPS = freezeRegistry([
@@ -167,8 +170,11 @@ const EVENT_DEFINITIONS = Object.freeze([
 
   // Rolls, abilities, research, and progression.
   ["skill.check.beforeRoll", "skill", "pre", "roll"],
+  ["skill.check.committed", "skill", "post", "roll"],
   ["skill.check.resolved", "skill", "post", "roll"],
   ["skill.batch.resolved", "skill", "post", "roll"],
+  ["initiative.roll.beforeRoll", "combat", "pre", "roll"],
+  ["initiative.roll.resolved", "combat", "post", "roll"],
   ["ability.acquired", "ability", "transition", "item"],
   ["ability.removed", "ability", "transition", "item"],
   ["ability.use.before", "ability", "pre", "workflow", ["initiator"]],

@@ -256,7 +256,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "triggerCost", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "triggerCost", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     costs: new ArrayField(new SchemaField({
@@ -368,6 +368,8 @@ function abilityConditionField() {
     auraIgnoreHidden: new BooleanField({ required: true, initial: true }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     limitFormula: new StringField({ required: true, blank: true, initial: "1" }),
+    usesSpent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    usesMax: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     requiredCount: new StringField({ required: true, blank: true, initial: "1" }),
     itemCategories: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
       required: true,

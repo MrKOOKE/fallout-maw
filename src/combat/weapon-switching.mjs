@@ -1,7 +1,16 @@
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
+import {
+  commitPreparedActiveUseOperations,
+  prepareActiveUseOperation
+} from "../abilities/active-use-runtime.mjs";
+import { isActorInActiveCombat } from "./combat-membership.mjs";
+import {
+  canSpendCombatActionPoints,
+  getCombatActionPointState,
+  spendCombatActionPoints
+} from "./reaction-resources.mjs";
 
 export const WEAPON_SWITCH_COST_KEY = "system.costs.weaponSwitch";
 
@@ -19,7 +28,27 @@ export function canSpendWeaponSwitchActionPoints(actor) {
 export async function spendWeaponSwitchActionPoints(actor) {
   const cost = getWeaponSwitchActionPointCost(actor);
   if (cost <= 0) return;
+  const stateBefore = getCombatActionPointState(actor);
+  if (!actor?.isOwner || !isActorInActiveCombat(actor) || !stateBefore || cost > stateBefore.value) return;
+
+  const activeUsePreparation = prepareActiveUseOperation({
+    kind: "weaponSwitchCost",
+    actor,
+    keys: new Set([WEAPON_SWITCH_COST_KEY]),
+    conditionContexts: [{ actorToken: actor?.token?.object ?? actor?.token ?? null }],
+    reverseOnly: false
+  });
+  const activeUseOperationId = `weapon-switch:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
   await spendCombatActionPoints(actor, cost);
+  const stateAfter = getCombatActionPointState(actor);
+  if (!stateAfter || stateAfter.value >= stateBefore.value || !activeUsePreparation) return;
+  try {
+    await commitPreparedActiveUseOperations([activeUsePreparation], {
+      operationId: activeUseOperationId
+    });
+  } catch (error) {
+    console.error("fallout-maw | Weapon-switch active-use commit failed", error);
+  }
 }
 
 function getWeaponSwitchActionPointCostBonus(actor) {

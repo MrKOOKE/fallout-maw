@@ -22,6 +22,11 @@ import {
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getHealingResolutionActiveUseKeys } from "../abilities/active-use-keys.mjs";
+import {
+  commitPreparedActiveUseOperations,
+  prepareActiveUseOperation
+} from "../abilities/active-use-runtime.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FIRST_AID_SOCKET = `system.${SYSTEM_ID}`;
@@ -104,6 +109,19 @@ export async function useFirstAidItem({
     ? 1 + (Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus ?? CRITICAL_SUCCESS_DEFAULT_BONUS)) / 100)
     : 1;
   const effectMultiplier = resultMultiplier * criticalSuccessMultiplier;
+  const outgoingActiveUsePreparation = firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs)
+    ? prepareActiveUseOperation({
+      kind: "firstAidOutgoingHealing",
+      actor: sourceActor,
+      keys: getHealingResolutionActiveUseKeys({ direction: "outgoing" }),
+      conditionContexts: [{
+        actorToken: sourceToken?.object ?? sourceToken,
+        targetActor,
+        targetToken: targetToken?.object ?? targetToken
+      }],
+      reverseOnly: false
+    })
+    : null;
   const healingMultiplier = effectMultiplier * Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing") / 100));
 
   const healing = calculateHealingAmount(targetActor, firstAid, healingMultiplier, targetContext);
@@ -123,6 +141,7 @@ export async function useFirstAidItem({
   const hasImmediateHealing = healing > 0;
   const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
   if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval && !hasWithdrawal) return false;
+  source.limitedUseSkipOutgoing = true;
 
   if (healing > 0) {
     await requestDamageApplication({
@@ -195,7 +214,33 @@ export async function useFirstAidItem({
   }
 
   await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
+  if (outgoingActiveUsePreparation) {
+    try {
+      await commitPreparedActiveUseOperations([outgoingActiveUsePreparation], {
+        operationId: `first-aid:${String(item.uuid ?? item.id ?? "")}:${foundry.utils.randomID()}`
+      });
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | First-aid outgoing-healing active-use commit failed`, error);
+    }
+  }
   return true;
+}
+
+function firstAidCanUseOutgoingHealing(firstAid = {}, targetContext = null, selectedLimbs = []) {
+  if (targetContext?.isConstruct) return false;
+  if (Math.max(0, toInteger(firstAid?.healing)) > 0) return true;
+  if (Math.max(0, toInteger(firstAid?.limbSelection?.value)) > 0
+    && selectedLimbs.some(entry => Math.max(0, toInteger(entry?.count)) > 0)) return true;
+  const timedLists = [
+    [firstAid?.changes, Math.max(0, toInteger(firstAid?.durationSeconds))],
+    [firstAid?.withdrawal, Math.max(0, toInteger(firstAid?.withdrawalDurationSeconds))]
+  ];
+  return timedLists.some(([changes, durationSeconds]) => durationSeconds > 0 && (
+    (Array.isArray(changes) ? changes : Object.values(changes ?? {})).some(change => (
+      FIRST_AID_HEALING_CHANGE_KEYS.has(String(change?.key ?? "").trim().toLocaleLowerCase())
+      && Number(change?.value) > 0
+    ))
+  ));
 }
 
 function calculateHealingAmount(actor, firstAid = {}, multiplier = 1, targetContext = null) {

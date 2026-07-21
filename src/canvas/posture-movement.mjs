@@ -9,11 +9,18 @@ import { prepareActorEffectChangeForApplication } from "../utils/active-effect-c
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 import { deferActorPosture, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "../combat/combat-membership.mjs";
+import {
+  getActorPostureAction,
+  isPostureEffectApplicableToActor,
+  normalizeMovementAction,
+  POSTURE_MOVEMENT_FLAG
+} from "./posture-state.mjs";
+
+export { getActorPostureAction, isPostureEffectApplicableToActor } from "./posture-state.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
 
-const POSTURE_MOVEMENT_FLAG = "postureMovement";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const DEPTH_EPSILON = 0.001;
 const MOVEMENT_RESOURCE_KEY = "movementPoints";
@@ -94,10 +101,6 @@ export function getActorPostureMovementCostMultiplier(actor) {
 export function getActorPostureWeaponActionPointCostBonus(actor) {
   const action = getActorPostureAction(actor);
   return applyPostureNumberModifier(0, collectPostureNumberModifier(actor, action, "weaponActionCost"));
-}
-
-export function getActorPostureAction(actor) {
-  return normalizeMovementAction(getActorPostureEffectData(actor)?.action);
 }
 
 export async function setActorTokensPosture(actor, action = "walk") {
@@ -619,15 +622,6 @@ function isMissingDocumentError(error) {
   return /does not exist/i.test(String(error?.message ?? error ?? ""));
 }
 
-function getActorPostureEffectData(actor) {
-  for (const effect of actor?.effects ?? []) {
-    const data = effect.getFlag?.(SYSTEM_ID, POSTURE_MOVEMENT_FLAG);
-    if (!isPostureEffectApplicableToActor(effect, actor)) continue;
-    if (data?.action) return data;
-  }
-  return null;
-}
-
 function collectPostureNumberModifier(actor, action = "", key = "") {
   const modifier = { add: 0, multiplier: 1, override: null };
   const changeKey = `${POSTURE_EFFECT_CHANGE_ROOT}.${action}.${key}`;
@@ -648,14 +642,6 @@ function collectPostureNumberModifier(actor, action = "", key = "") {
     }
   }
   return modifier;
-}
-
-export function isPostureEffectApplicableToActor(effect, actor) {
-  const data = effect?.getFlag?.(SYSTEM_ID, POSTURE_MOVEMENT_FLAG);
-  if (!data) return true;
-
-  const tokenUuid = actor?.isToken ? actor.token?.uuid : "";
-  return !tokenUuid || data.tokenUuid === tokenUuid;
 }
 
 function applyPostureNumberModifier(baseValue = 0, modifier = {}) {
@@ -709,11 +695,6 @@ function roundChangeValue(value) {
 
 function isPostureEffectAction(action) {
   return action !== "walk" && Object.hasOwn(POSTURE_ACTION_CONFIGS, action);
-}
-
-function normalizeMovementAction(action) {
-  const value = String(action ?? "").trim();
-  return value || "walk";
 }
 
 function toInteger(value) {

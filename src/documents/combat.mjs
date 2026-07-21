@@ -10,6 +10,8 @@ import {
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import {
   BLOCK_TURN_STATE_FLAG,
   createBlockTurnState,
@@ -210,15 +212,61 @@ export class FalloutMaWCombat extends Combat {
 
     const updates = [];
     const messages = [];
+    const initiativeBatchId = foundry.utils.randomID();
     for (const [i, id] of ids.entries()) {
       const combatant = this.combatants.get(id);
       if (!combatant?.isOwner) continue;
 
-      const rollFormula = buildInitiativeFormula(formula || combatant._getInitiativeFormula?.(), combatant.actor, {
-        surprised: surprisedIds.has(id)
-      });
-      const roll = combatant.getInitiativeRoll(rollFormula);
-      await roll.evaluate();
+      const surprised = surprisedIds.has(id);
+      const initiativeFormula = formula || combatant._getInitiativeFormula?.()
+        || CONFIG.Combat.initiative.formula
+        || game.system.initiative
+        || "1d20";
+      const requestedFormula = String(initiativeFormula);
+      const participant = createInitiativeParticipant(combatant);
+      const eventData = {
+        combatUuid: String(this.uuid ?? ""),
+        combatantUuid: String(combatant.uuid ?? ""),
+        combatantId: String(combatant.id ?? id ?? ""),
+        actorUuid: String(combatant.actor?.uuid ?? ""),
+        tokenUuid: String(combatant.token?.uuid ?? ""),
+        requestedFormula,
+        surprised
+      };
+      const operationId = `initiative-roll:${this.uuid}:${initiativeBatchId}:${i}:${id}`;
+      const workflow = await withSystemEventRoot({
+        kind: "initiativeRoll",
+        operationId,
+        sceneUuid: getInitiativeSceneUuid(combatant),
+        combatUuid: String(this.uuid ?? "")
+      }, scope => runTerminalSystemEventWorkflow({
+        scope,
+        beforeEventKey: "fallout-maw.initiative.roll.beforeRoll",
+        resolvedEventKey: "fallout-maw.initiative.roll.resolved",
+        occurrenceBase: `initiative:${scope.rootId}:${initiativeBatchId}:${i}:${id}`,
+        participants: {
+          source: participant,
+          target: null,
+          related: []
+        },
+        beforeData: eventData,
+        resolvedData: ({ value, status }) => ({
+          ...eventData,
+          status: String(status ?? ""),
+          evaluated: Boolean(value?.roll),
+          formula: String(value?.formula ?? ""),
+          total: Number.isFinite(Number(value?.roll?.total)) ? Number(value.roll.total) : null
+        }),
+        operation: async () => {
+          const rollFormula = buildInitiativeFormula(initiativeFormula, combatant.actor, { surprised });
+          const roll = combatant.getInitiativeRoll(rollFormula);
+          await roll.evaluate();
+          return { roll, formula: rollFormula };
+        }
+      }));
+      if (!workflow.success || !workflow.value?.roll) continue;
+
+      const { roll } = workflow.value;
       updates.push({ _id: id, initiative: roll.total });
 
       const messageData = foundry.utils.mergeObject({
@@ -245,6 +293,24 @@ export class FalloutMaWCombat extends Combat {
     await foundry.documents.ChatMessage.implementation.create(messages);
     return this;
   }
+}
+
+function createInitiativeParticipant(combatant) {
+  const participant = {
+    actorUuid: String(combatant?.actor?.uuid ?? ""),
+    tokenUuid: String(combatant?.token?.uuid ?? ""),
+    itemUuid: ""
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function getInitiativeSceneUuid(combatant) {
+  return String(
+    combatant?.token?.parent?.uuid
+    ?? combatant?.scene?.uuid
+    ?? globalThis.canvas?.scene?.uuid
+    ?? ""
+  );
 }
 
 function isBlockTurnStateUpdate(changed = {}) {

@@ -40,6 +40,7 @@ import {
   illuminationConditionApplies,
   timeOfDayConditionApplies
 } from "./environment-conditions.mjs";
+import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -154,9 +155,12 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
   const groups = new Map();
   for (const condition of conditions ?? []) {
     if (!condition?.type) continue;
-    // Trigger cost describes what happens after a function is actually used;
-    // it is metadata and never participates in AND/OR condition truth.
-    if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) continue;
+    // These rows describe what happens after a function is actually used;
+    // they are metadata and never participate in AND/OR condition truth.
+    if ([
+      ABILITY_CONDITION_TYPES.triggerCost,
+      ABILITY_CONDITION_TYPES.limitedUses
+    ].includes(condition.type)) continue;
     const groupId = String(condition?.groupId ?? "").trim();
     if (!groupId) {
       standalone.push(condition);
@@ -172,7 +176,10 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 }
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
-  if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) return true;
+  if ([
+    ABILITY_CONDITION_TYPES.triggerCost,
+    ABILITY_CONDITION_TYPES.limitedUses
+  ].includes(condition.type)) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.toggleable) {
     return isAbilityToggleConditionActive(
       actor,
@@ -269,7 +276,7 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
   return true;
 }
 
-function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
+export function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
   if (hasEventReactionCondition(conditions)) return [];
   if (!conditions.length) return entry.changes ?? [];
@@ -277,9 +284,10 @@ function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
   if (hasItemUseCondition(conditions)) return [];
   if (hasAuraDistributionCondition(conditions) && !context?.auraTargetApplication) return [];
-  return abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
+  const selectedChanges = abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
     ? entry.changes ?? []
     : entry.penalties ?? [];
+  return filterChangesForLimitedUses(selectedChanges, conditions);
 }
 
 export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry = {}, condition = {}, context = {}) {
@@ -292,8 +300,8 @@ export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry 
     satisfiedAuraConditionId: condition.id,
     auraTargetApplication: true
   });
-  if (applies) return entry.changes ?? [];
-  return entry.penalties ?? [];
+  const selectedChanges = applies ? entry.changes ?? [] : entry.penalties ?? [];
+  return filterChangesForLimitedUses(selectedChanges, entry.conditions ?? []);
 }
 
 function abilityConditionsRequireTarget(conditions = []) {

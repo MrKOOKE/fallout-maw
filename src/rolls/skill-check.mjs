@@ -163,7 +163,14 @@ export async function requestSkillCheck({
       participants: eventContext.participants,
       beforeData: buildSkillCheckBeforeEventData(resolvedSkill, normalizedData),
       resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, resolvedSkill, normalizedData, status),
-      operation: () => performSkillCheck(actor, resolvedSkill, normalizedData),
+      operation: () => performCommittedSkillCheck({
+        scope,
+        occurrenceBase,
+        participants: eventContext.participants,
+        actor,
+        skill: resolvedSkill,
+        data: normalizedData
+      }),
       beforeTerminal: async ({ success, value }) => {
         if (!success || !value) return;
         if (animate) await playSkillCheckAnimation(value);
@@ -274,7 +281,14 @@ export async function requestSkillCheckBatch({
         participants: eventContext.participants,
         beforeData: buildSkillCheckBeforeEventData(entry.skill, normalizedData),
         resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, entry.skill, normalizedData, status),
-        operation: () => performSkillCheck(entry.actor, entry.skill, normalizedData),
+        operation: () => performCommittedSkillCheck({
+          scope,
+          occurrenceBase,
+          participants: eventContext.participants,
+          actor: entry.actor,
+          skill: entry.skill,
+          data: normalizedData
+        }),
         beforeTerminal: terminalContext => {
           terminalReady.resolve(terminalContext);
           return terminalRelease.promise;
@@ -648,6 +662,26 @@ function buildSkillCheckBeforeEventData(skill, data = {}) {
   };
 }
 
+async function performCommittedSkillCheck({
+  scope,
+  occurrenceBase = "",
+  participants = {},
+  actor = null,
+  skill = null,
+  data = {}
+} = {}) {
+  const outcome = await performSkillCheck(actor, skill, data);
+  await scope.emit("fallout-maw.skill.check.committed", {
+    data: buildSkillCheckResolvedEventData(outcome, skill, data, "success"),
+    outcome: { success: true, cancelled: false, failed: false },
+    reason: "resolved"
+  }, {
+    occurrenceKey: `${occurrenceBase}:committed`,
+    participants
+  });
+  return outcome;
+}
+
 function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = "") {
   return {
     skillKey: String(outcome?.skill?.key ?? skill?.key ?? ""),
@@ -663,6 +697,7 @@ function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = ""
     rollCount: Array.isArray(outcome?.rolls) ? outcome.rolls.length : 0,
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
+    limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     damageHubOperationRef: String(data.damageHubOperationRef ?? "")
   };
 }
@@ -679,6 +714,7 @@ function serializeSkillCheckRequest(data = {}) {
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
+    limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     weaponData: serializeSkillCheckWeaponData(data.weaponData),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
@@ -1356,6 +1392,7 @@ function normalizeRequestData(data, requester = "") {
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
+    limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),

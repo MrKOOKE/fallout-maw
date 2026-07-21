@@ -26,6 +26,11 @@ import {
   quoteAbilityFunctionTriggerCost
 } from "./trigger-cost-runtime.mjs";
 import { getCurrentDamageHubOperationRef } from "../combat/damage-hub.mjs";
+import {
+  EFFECT_LIFECYCLE_FLAG_KEY,
+  EFFECT_LIFECYCLE_KINDS,
+  buildEffectFunctionSnapshot
+} from "./effect-lifecycle.mjs";
 
 const ABILITY_ITEM_USE_EFFECT_FLAG_KEY = "abilityItemUseEffect";
 const ABILITY_ITEM_USE_COMMITTED_COSTS_FLAG_KEY = "abilityItemUseCommittedTriggerCosts";
@@ -169,6 +174,7 @@ function triggerConditionsApply(actor, conditions = [], context = {}) {
 
 function triggerConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.limitedChanges) return true;
+  if (condition.type === ABILITY_CONDITION_TYPES.limitedUses) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return itemUseConditionMatches(condition, context.usedItem);
   return abilityConditionApplies(actor, condition, context);
@@ -306,11 +312,15 @@ async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunctio
     flags: {
       [SYSTEM_ID]: {
         kind: durationSeconds > 0 ? "temporary" : "active",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
+        },
         [ABILITY_ITEM_USE_EFFECT_FLAG_KEY]: {
           abilityItemId: abilityItem.id,
           abilitySourceId: getAbilitySourceId(abilityItem),
           functionId: abilityFunction.id,
           conditionId: condition.id,
+          functionData: buildEffectFunctionSnapshot(abilityFunction),
           usedItemId: usedItem?.id ?? "",
           usedItemName: usedItem?.name ?? "",
           createdAt: startTime

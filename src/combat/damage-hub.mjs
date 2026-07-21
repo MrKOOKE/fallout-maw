@@ -31,6 +31,11 @@ import {
   getActorSuppressedTraumaDiseaseIds
 } from "../utils/active-effect-changes.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import { getUnconsciousnessResistanceActiveUseKeys } from "../abilities/active-use-keys.mjs";
+import {
+  commitPreparedActiveUseOperations,
+  prepareActiveUseOperation
+} from "../abilities/active-use-runtime.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
@@ -2734,20 +2739,27 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
   chainRef = null,
   damageHubOperationRef = getCurrentDamageHubOperationRef()
 } = {}) {
-  if (!actor || !shockCheck || shockCheck.difficulty <= 0 || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  if (!actor || !shockCheck || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  const limitedUseOperationId = createLimbShockLimitedUseOperationId(actor, shockCheck, damageHubOperationRef);
+  if (shockCheck.difficulty <= 0) {
+    await commitLimbShockActiveUse(shockCheck, limitedUseOperationId);
+    return undefined;
+  }
   const outcome = await requestSkillCheck({
     actor,
     skillKey: "resilience",
     data: {
       difficulty: shockCheck.difficulty,
       allowImplicitTarget: false,
-      damageHubOperationRef
+      damageHubOperationRef,
+      limitedUseOperationId
     },
     chainRef,
     animate: false,
     createMessage: true,
     requester: getNegativeLimbShockRequester(actor, shockCheck)
   });
+  if (outcome) await commitLimbShockActiveUse(shockCheck, limitedUseOperationId);
   const resultKey = String(outcome?.result?.key ?? "");
   if (!["failure", "criticalFailure"].includes(resultKey)) return outcome;
   await createShockUnconsciousState(actor);
@@ -2756,7 +2768,14 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
 
 async function queueOrPerformNegativeLimbShockCheck(actor, shockCheck = null, deferredShockChecks = null, reason = "") {
   if (!Array.isArray(deferredShockChecks)) return performNegativeLimbShockCheck(actor, shockCheck);
-  if (!actor || !shockCheck || shockCheck.difficulty <= 0 || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  if (!actor || !shockCheck || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  if (shockCheck.difficulty <= 0) {
+    await commitLimbShockActiveUse(
+      shockCheck,
+      createLimbShockLimitedUseOperationId(actor, shockCheck, getCurrentDamageHubOperationRef())
+    );
+    return undefined;
+  }
   deferredShockChecks.push({
     actorUuid: actor.uuid,
     actor,
@@ -2785,13 +2804,15 @@ async function resolveDeferredShockChecks(entries = [], {
         const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
         if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
         const shockCheck = entry.shockCheck;
+        const limitedUseOperationId = createLimbShockLimitedUseOperationId(actor, shockCheck, damageHubOperationRef);
         const outcome = await requestSkillCheck({
           actor,
           skillKey: "resilience",
           data: {
             difficulty: shockCheck.difficulty,
             allowImplicitTarget: false,
-            damageHubOperationRef
+            damageHubOperationRef,
+            limitedUseOperationId
           },
           chainRef,
           animate: false,
@@ -2799,6 +2820,7 @@ async function resolveDeferredShockChecks(entries = [], {
           completionCollector: batch,
           requester: entry.requester
         });
+        if (outcome) await commitLimbShockActiveUse(shockCheck, limitedUseOperationId);
         batch.add(outcome);
         if (outcome) outcomes.push(outcome);
         const resultKey = String(outcome?.result?.key ?? "");
@@ -2820,11 +2842,12 @@ async function resolveDeferredShockChecks(entries = [], {
 
 function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {
   const entries = shockChecks
-    .filter(entry => entry && Number(entry.difficulty) > 0)
+    .filter(entry => entry && Number(entry.damage) > 0)
     .map(entry => ({
       limbKey: String(entry.limbKey ?? ""),
       damage: Math.max(0, roundDamageAmount(entry.damage)),
-      difficulty: Math.max(0, roundDamageAmount(entry.difficulty))
+      difficulty: Math.max(0, roundDamageAmount(entry.difficulty)),
+      activeUsePreparations: Array.from(entry.activeUsePreparations ?? []).filter(Boolean)
     }));
   if (!entries.length) return null;
   if (entries.length === 1) return entries[0];
@@ -2834,8 +2857,29 @@ function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {
     limbKey: limbKeys.at(0) ?? "",
     limbKeys,
     damage: entries.reduce((sum, entry) => sum + entry.damage, 0),
-    difficulty: entries.reduce((sum, entry) => sum + entry.difficulty, 0)
+    difficulty: entries.reduce((sum, entry) => sum + entry.difficulty, 0),
+    activeUsePreparations: entries.flatMap(entry => entry.activeUsePreparations)
   };
+}
+
+function createLimbShockLimitedUseOperationId(actor, shockCheck = {}, damageHubOperationRef = "") {
+  const scope = String(damageHubOperationRef ?? "").trim() || foundry.utils.randomID();
+  const limbScope = Array.from(shockCheck?.limbKeys ?? [shockCheck?.limbKey])
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(",") || "limb";
+  return `limb-shock:${scope}:${String(actor?.uuid ?? actor?.id ?? "actor")}:${limbScope}`;
+}
+
+async function commitLimbShockActiveUse(shockCheck = {}, operationId = "") {
+  const preparations = Array.from(shockCheck?.activeUsePreparations ?? []).filter(Boolean);
+  if (!preparations.length) return [];
+  try {
+    return await commitPreparedActiveUseOperations(preparations, { operationId });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Limb-shock active-use commit failed`, error);
+    return [];
+  }
 }
 
 function buildDestroyedLimbShockChecks(actor, limbKeys = []) {
@@ -3869,19 +3913,27 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
         const healingEntries = entries.filter(entry => entry.mode === MODE_HEALING);
         if (damageEntries.length) damageResults.push(await applyPeriodicDamageBatch(freshActor, damageEntries));
         if (healingEntries.length) {
-          await applyDamageApplicationsNow({
+          const healingRequests = healingEntries.map(entry => ({
             actorUuid: freshActor.uuid,
-            requests: healingEntries.map(entry => ({
+            amount: entry.amount,
+            damageTypeKey: entry.damageTypeKey || HEALING_DAMAGE_TYPE_KEY,
+            mode: MODE_HEALING,
+            scope: SCOPE_HEALTH,
+            applyMitigation: false,
+            processDamageTypeSettings: false,
+            source: {
+              ...(entry.source ?? {}),
+              limitedUseSkipOutgoing: true
+            }
+          }));
+          await executeDamageSystemEventWorkflow(
+            healingRequests,
+            allowedRequests => applyDamageApplicationsNow({
               actorUuid: freshActor.uuid,
-              amount: entry.amount,
-              damageTypeKey: entry.damageTypeKey || HEALING_DAMAGE_TYPE_KEY,
-              mode: MODE_HEALING,
-              scope: SCOPE_HEALTH,
-              applyMitigation: false,
-              processDamageTypeSettings: false,
-              source: entry.source
-            }))
-          }, { createSummary: false });
+              requests: allowedRequests
+            }, { createSummary: false }),
+            { batch: healingRequests.length > 1 }
+          );
         }
       } finally {
         for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
@@ -5436,10 +5488,18 @@ async function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { da
 function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
   const shockDamage = Math.max(0, roundDamageAmount(damage));
   if (shockDamage <= 0) return null;
+  const activeUsePreparation = prepareActiveUseOperation({
+    kind: "limbShockResistance",
+    actor,
+    keys: getUnconsciousnessResistanceActiveUseKeys(),
+    conditionContexts: [{ actorToken: actor?.token?.object ?? actor?.token ?? null }],
+    reverseOnly: false
+  });
   return {
     limbKey,
     damage: shockDamage,
-    difficulty: calculateLimbShockDifficulty(actor, limbKey, shockDamage, nextValue, previousValue)
+    difficulty: calculateLimbShockDifficulty(actor, limbKey, shockDamage, nextValue, previousValue),
+    activeUsePreparations: activeUsePreparation ? [activeUsePreparation] : []
   };
 }
 

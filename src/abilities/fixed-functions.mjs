@@ -190,6 +190,10 @@ import {
   resolveLimitedChangeSet
 } from "./limited-changes.mjs";
 import {
+  EFFECT_LIFECYCLE_FLAG_KEY,
+  EFFECT_LIFECYCLE_KINDS
+} from "./effect-lifecycle.mjs";
+import {
   getAuraRelation as getSharedAbilityTargetRelation,
   hasAuraLineOfSight as hasActiveApplicationLineOfSight,
   measureTokenDistanceMeters as measureActiveApplicationTokenDistance
@@ -2174,6 +2178,9 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
         flags: {
           [SYSTEM_ID]: {
             kind: "temporary",
+            [EFFECT_LIFECYCLE_FLAG_KEY]: {
+              kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
+            },
             [ACTIVE_APPLICATION_EFFECT_FLAG_KEY]: {
               abilityItemId: abilityItem.id,
               abilitySourceId: getAbilitySourceId(abilityItem),
@@ -2764,11 +2771,17 @@ async function syncActorActiveApplicationEffects(actor) {
         .map(change => prepareEffectChangeForApplication(actor, change))
         .filter(change => change.key && change.value !== "");
     const signature = JSON.stringify(changes);
-    if (signature === String(flag?.signature ?? "")) continue;
-    await effect.update({
-      "system.changes": changes,
-      [`flags.${SYSTEM_ID}.${ACTIVE_APPLICATION_EFFECT_FLAG_KEY}.signature`]: signature
-    });
+    const update = {};
+    if (signature !== String(flag?.signature ?? "")) {
+      update["system.changes"] = changes;
+      update[`flags.${SYSTEM_ID}.${ACTIVE_APPLICATION_EFFECT_FLAG_KEY}.signature`] = signature;
+    }
+    if (effect.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.disposableInstance) {
+      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
+        kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
+      };
+    }
+    if (Object.keys(update).length) await effect.update(update);
   }
 }
 

@@ -1,0 +1,39 @@
+import { SYSTEM_ID } from "../constants.mjs";
+
+export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
+export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
+export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
+export const ALL_COMBAT_ADVANTAGE_EFFECT_KEY = "system.combat.all.advantage";
+export const ALL_COMBAT_DISADVANTAGE_EFFECT_KEY = "system.combat.all.disadvantage";
+export const INITIATIVE_ADVANTAGE_EFFECT_KEY = "system.attributes.initiative.advantage";
+export const INITIATIVE_DISADVANTAGE_EFFECT_KEY = "system.attributes.initiative.disadvantage";
+export const REVERSE_EFFECT_KEY_PREFIX = `${SYSTEM_ID}.reverse.`;
+
+export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
+  criticalSuccess: "fallout-maw.skillCheck.smartFudge.criticalSuccess",
+  success: "fallout-maw.skillCheck.smartFudge.success",
+  failure: "fallout-maw.skillCheck.smartFudge.failure",
+  criticalFailure: "fallout-maw.skillCheck.smartFudge.criticalFailure"
+});
+
+export const SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS = Object.freeze({
+  criticalFailure: "system.skillCheck.disabledResults.criticalFailure",
+  failure: "system.skillCheck.disabledResults.failure",
+  success: "system.skillCheck.disabledResults.success",
+  criticalSuccess: "system.skillCheck.disabledResults.criticalSuccess"
+});
+
+export function getReverseEffectKey(key = "") {
+  const path = String(key ?? "").trim();
+  return path ? `${REVERSE_EFFECT_KEY_PREFIX}${path}` : "";
+}
+
+export function getOriginalEffectKeyFromReverse(key = "") {
+  const path = String(key ?? "").trim();
+  if (!path.startsWith(REVERSE_EFFECT_KEY_PREFIX)) return "";
+  return path.slice(REVERSE_EFFECT_KEY_PREFIX.length).trim();
+}
+
+export function isReverseEffectKey(key = "") {
+  return Boolean(getOriginalEffectKeyFromReverse(key));
+}

@@ -2168,6 +2168,16 @@
                 <input type="number" value="{{changeLimitTotal}}" disabled>
               </label>
               {{/if}}
+              {{#if isLimitedUses}}
+              <label>
+                <span>Использовано</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.usesSpent" value="{{usesSpent}}" min="0" step="1">
+              </label>
+              <label>
+                <span>Максимум применений</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.usesMax" value="{{usesMax}}" min="1" step="1">
+              </label>
+              {{/if}}
               {{#if isCooldown}}
               <label>
                 <span>Длительность, секунд</span>
@@ -3048,6 +3058,16 @@
               <label>
                 <span>Всего изменений</span>
                 <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+              {{#if isLimitedUses}}
+              <label>
+                <span>Использовано</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.usesSpent" value="{{usesSpent}}" min="0" step="1">
+              </label>
+              <label>
+                <span>Максимум применений</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.usesMax" value="{{usesMax}}" min="1" step="1">
               </label>
               {{/if}}
               {{#if isCooldown}}

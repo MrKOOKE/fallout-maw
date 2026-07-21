@@ -67,6 +67,7 @@ import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
+import { registerLimitedUseHooks, registerLimitedUseSocket } from "./abilities/limited-uses.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
 import { registerFixedAbilityFunctionHooks, registerFixedAbilityFunctionSocket } from "./abilities/fixed-functions.mjs";
 import { registerDangerSenseSocket } from "./abilities/danger-sense.mjs";
@@ -161,6 +162,7 @@ Hooks.once("init", () => {
   registerActiveActionHooks();
   registerAbilityEffectHooks();
   registerAbilityCooldownHooks();
+  registerLimitedUseHooks();
   registerAbilityItemUseHooks();
   registerFixedAbilityFunctionHooks();
   registerOneTimeSkillModifierHooks();
@@ -203,6 +205,7 @@ Hooks.once("ready", async () => {
   registerSkillCheckSocket();
   registerDamageSocket();
   registerSystemEventDispatcherSocket();
+  registerLimitedUseSocket();
   registerReactionHubSocket();
   registerAdvancementMediaSocket();
   registerAttackAnimationSocket();

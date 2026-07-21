@@ -7,7 +7,11 @@ const MANAGED_REACTION_OPTIONS = Object.freeze([
   "falloutMawEventReactionEffect",
   "falloutMawEventReactionManaged",
   "falloutMawEventReactionCleanup",
-  "falloutMawEventReactionProgress"
+  "falloutMawEventReactionProgress",
+  // A remaining-use counter is internal runtime bookkeeping, not a new
+  // gameplay event. Exhaustion deletes the effect without this option and is
+  // therefore still published normally.
+  "falloutMawLimitedUses"
 ]);
 
 const INVENTORY_SPECIAL_TYPES = new Set(["ability", "trauma", "disease"]);

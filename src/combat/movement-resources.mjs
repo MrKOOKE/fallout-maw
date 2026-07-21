@@ -1,6 +1,13 @@
 import { GRAPPLE_FOLLOW_MOVEMENT_OPTION } from "../constants.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movement.mjs";
+import {
+  getActorPostureAction,
+  getActorPostureMovementCostMultiplier
+} from "../canvas/posture-movement.mjs";
+import {
+  commitPreparedActiveUseOperations,
+  prepareActiveUseOperation
+} from "../abilities/active-use-runtime.mjs";
 import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { beginCombatResourceSpending, notifyCombatResourcesSpent } from "./resource-spending.mjs";
@@ -352,6 +359,16 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
 
       const movementSpend = Math.min(cost, state.movement.value);
       const actionSpend = cost - movementSpend;
+      if (!movementSpend && !actionSpend) return;
+
+      const activeUsePreparation = prepareActiveUseOperation({
+        kind: "combatMovementCost",
+        actor,
+        keys: getCombatMovementActiveUseKeys(actor),
+        conditionContexts: [{ actorToken: tokenDocument?.object ?? tokenDocument ?? null }],
+        reverseOnly: false
+      });
+      const activeUseOperationId = getCombatMovementActiveUseOperationId(actor, tokenDocument, movement, operation);
 
       const updates = {};
       if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
@@ -364,12 +381,19 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
       ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
       await actor.update(updates);
       if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
-      if (movementSpend || actionSpend) {
-        await notifyCombatResourcesSpent(actor, {
-          [MOVEMENT_RESOURCE_KEY]: movementSpend,
-          [state.action.key]: actionSpend
-        }, { type: "movement", tokenDocument, movement, operation });
+      if (activeUsePreparation) {
+        try {
+          await commitPreparedActiveUseOperations([activeUsePreparation], {
+            operationId: activeUseOperationId
+          });
+        } catch (error) {
+          console.error(`${FALLOUT_MAW.id} | Movement active-use commit failed`, error);
+        }
       }
+      await notifyCombatResourcesSpent(actor, {
+        [MOVEMENT_RESOURCE_KEY]: movementSpend,
+        [state.action.key]: actionSpend
+      }, { type: "movement", tokenDocument, movement, operation });
     });
   } finally {
     finishSpending();
@@ -447,6 +471,25 @@ function getCurrentMovementSpendingTranche(actor, tokenDocument, movement = {}, 
 
 function getMovementRootId(movement = {}) {
   return String(movement?.chain?.at?.(0) ?? movement?.id ?? "");
+}
+
+function getCombatMovementActiveUseKeys(actor) {
+  const keys = new Set(["system.costs.movement"]);
+  const posture = String(getActorPostureAction(actor) ?? "").trim();
+  if (posture) keys.add(`system.postures.${posture}.movementMultiplier`);
+  return keys;
+}
+
+function getCombatMovementActiveUseOperationId(actor, tokenDocument, movement = {}, operation = {}) {
+  const movementId = getMovementRootId(movement)
+    || String(operation?.id ?? operation?.operationId ?? "").trim()
+    || foundry.utils.randomID();
+  return [
+    "combat-movement",
+    String(actor?.uuid ?? actor?.id ?? ""),
+    String(tokenDocument?.uuid ?? tokenDocument?.id ?? ""),
+    movementId
+  ].join(":");
 }
 
 async function restoreLastMovementResourceSpending(tokenDocument) {

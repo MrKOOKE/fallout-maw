@@ -526,9 +526,32 @@ export function startDualWeaponAttack({
     try {
       if (!validateDualWeaponAttackResources(actor, captured, label)) return false;
       if (typeof canSpendEnergy === "function" && canSpendEnergy() === false) return false;
-      const actionPointCost = Math.max(0, ...captured.map(entry => getWeaponActionPointCost(actor, entry.weapon, entry.actionKey, entry.weaponFunctionId)));
+      const actionCosts = captured.map(entry => ({
+        entry,
+        value: getWeaponActionPointCost(actor, entry.weapon, entry.actionKey, entry.weaponFunctionId)
+      }));
+      const actionPointCost = Math.max(0, ...actionCosts.map(entry => entry.value));
       if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
+      const actionPointCostApplied = isCombatActionPointSpendingActive(actor);
+      const sharedActionUseId = foundry.utils.randomID();
+      const sharedActionEntries = actionCosts.filter(entry => entry.value === actionPointCost);
+      if (actionPointCostApplied) {
+        for (const { entry } of sharedActionEntries) {
+          Hooks.callAll("fallout-maw.weaponActionWillResolve", {
+            actor,
+            actorToken: token,
+            token,
+            weapon: entry.weapon,
+            actionKey: entry.actionKey,
+            weaponActionKey: entry.actionKey,
+            weaponFunctionId: entry.weaponFunctionId,
+            weaponData: getWeaponAttackData(entry.weapon, entry.weaponFunctionId),
+            attackId: sharedActionUseId,
+            actionPointCostApplied: true
+          });
+        }
+      }
       if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
       const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, {
         skipActionPointCost: true,
@@ -538,6 +561,27 @@ export function startDualWeaponAttack({
         if (result.status === "rejected") console.error("Fallout MaW | Dual weapon attack execution failed", result.reason);
       }
       await reactionCoordinator.drain();
+      if (actionPointCostApplied) {
+        const primary = sharedActionEntries[0]?.entry ?? captured[0];
+        await publishWeaponAttackResolved({
+          attackerUuid: actor.uuid,
+          actorUuid: actor.uuid,
+          tokenUuid: token?.document?.uuid ?? token?.uuid ?? "",
+          weaponUuid: primary?.weapon?.uuid ?? "",
+          actionKey: primary?.actionKey ?? "",
+          weaponFunctionId: primary?.weaponFunctionId ?? "",
+          attackId: sharedActionUseId,
+          actionPointCost,
+          actionPointCostApplied: true,
+          targetActorUuids: [],
+          targetTokenUuids: [],
+          killedTargetUuids: [],
+          canceledByReaction: false,
+          attackCheckCount: 0,
+          damageResults: [],
+          senderUserId: game.user?.id ?? ""
+        });
+      }
       return true;
     } finally {
       activeDualWeaponAttack?.destroy();
@@ -2179,6 +2223,7 @@ export async function armDelayedVolleyWeapon({ token = null, weapon = null, weap
   const regionRequest = buildDelayedVolleyExplosionRegionRequest({
     sceneId,
     delayedThrownItemId,
+    attackId: delayedThrownItemId,
     explodeAtWorldTime,
     weapon,
     weaponFunctionId,
@@ -2280,6 +2325,10 @@ class WeaponAttackController {
       || options.reportedActionPointCost === undefined
       ? null
       : Math.max(0, toInteger(options.reportedActionPointCost));
+    this.reportedActionPointCostApplied = options.reportedActionPointCostApplied === null
+      || options.reportedActionPointCostApplied === undefined
+      ? (this.reportedActionPointCost === null ? null : true)
+      : Boolean(options.reportedActionPointCostApplied);
     this.ignoreReactionLock = Boolean(options.ignoreReactionLock);
     this.suppressGenericEventReactions = Boolean(options.suppressGenericEventReactions);
     this.captureOnly = Boolean(options.captureOnly);
@@ -2380,8 +2429,11 @@ class WeaponAttackController {
 
   async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
     if (!attempted) return;
+    const actionPointCostApplied = this.reportedActionPointCostApplied ?? (
+      !this.skipActionPointCost && isCombatActionPointSpendingActive(this.token?.actor)
+    );
     const actionPointCost = this.reportedActionPointCost ?? (
-      isCombatActionPointSpendingActive(this.token?.actor)
+      actionPointCostApplied
         ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
         : 0
     );
@@ -2396,6 +2448,7 @@ class WeaponAttackController {
       selectedLimbKey: String(this.selectedLimbKey ?? ""),
       selectedTargetActorUuid: this.selectedTarget?.actor?.uuid ?? "",
       actionPointCost,
+      actionPointCostApplied,
       targetActorUuids: Array.from(this.attackedTargetActorUuids),
       targetTokenUuids: Array.from(this.attackedTargetTokenUuids),
       killedTargetUuids: Array.from(new Set((killedTargetUuids ?? []).map(uuid => String(uuid ?? "").trim()).filter(Boolean))),
@@ -2493,7 +2546,10 @@ class WeaponAttackController {
       source: {
         ...(request?.source ?? {}),
         ...(attackId ? { attackId } : {}),
+        attackerActorUuid: request?.source?.attackerActorUuid ?? this.token?.actor?.uuid ?? "",
         attackerTokenUuid: request?.source?.attackerTokenUuid ?? this.token?.document?.uuid ?? "",
+        weaponUuid: request?.source?.weaponUuid ?? this.weapon?.uuid ?? "",
+        actionKey: request?.source?.actionKey ?? this.actionKey,
         chainRef: request?.source?.chainRef ?? this.chainRef,
         damageHubOperationRef: request?.source?.damageHubOperationRef ?? this.damageHubOperationRef,
         systemEventOperationId: String(request?.source?.systemEventOperationId ?? attackId),
@@ -2816,9 +2872,14 @@ class WeaponAttackController {
         });
       }
     }
+    this.reportedActionPointCostApplied ??= !this.skipActionPointCost
+      && isCombatActionPointSpendingActive(this.token.actor);
     await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
       emitActionResolved: !this.attackCanceledByReaction,
       spendActionPoints: !this.skipActionPointCost,
+      actionPointCostApplied: this.reportedActionPointCostApplied,
+      attackId: this.attackId,
+      actorToken: this.token,
       chainRef: this.chainRef,
       damageHubOperationRef: this.damageHubOperationRef
     });
@@ -4398,6 +4459,7 @@ class WeaponAttackController {
       ? buildDelayedVolleyExplosionRegionRequest({
         sceneId: canvas.scene?.id ?? "",
         delayedThrownItemId,
+        attackId: this.attackId,
         explodeAtWorldTime: Number(existingDelayedThrownItem.explodeAtWorldTime)
           || ((Number(game.time?.worldTime) || 0) + explosionDelaySeconds),
         weapon: this.weapon,
@@ -6260,6 +6322,7 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
               : adjustedAmount;
           },
           source: {
+            attackId: source.attackId,
             weaponUuid: source.weaponUuid,
             weaponFunctionId: source.weaponFunctionId,
             weaponData: source.weaponData,
@@ -6297,6 +6360,7 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
       weaponUuid: String(source.weaponUuid ?? ""),
       actionKey: String(source.actionKey ?? ""),
       weaponFunctionId: String(source.weaponFunctionId ?? ""),
+      attackId: String(source.attackId ?? pending.id ?? ""),
       actionPointCost: 0,
       targetActorUuids: Array.from(targetActorUuids).filter(Boolean),
       targetTokenUuids: Array.from(targetTokenUuids).filter(Boolean),
@@ -6757,10 +6821,34 @@ function canSpendRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunc
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "", {
   emitActionResolved = true,
   spendActionPoints = true,
+  actionPointCostApplied = null,
+  attackId = "",
+  actorToken = null,
   chainRef = null,
   damageHubOperationRef = ""
 } = {}) {
   if (actionKey !== "reload") await revealActorFromStealth(actor);
+  const actionPointCostWasApplied = actionPointCostApplied === null || actionPointCostApplied === undefined
+    ? spendActionPoints && isCombatActionPointSpendingActive(actor)
+    : Boolean(actionPointCostApplied);
+  const resolvedAttackId = String(attackId ?? "").trim() || foundry.utils.randomID();
+  const resolvedContext = {
+    actor,
+    actorToken,
+    token: actorToken,
+    weapon,
+    actionKey,
+    weaponActionKey: actionKey,
+    weaponFunctionId,
+    weaponData: getWeaponAttackData(weapon, weaponFunctionId),
+    attackId: resolvedAttackId,
+    actionPointCostApplied: actionPointCostWasApplied,
+    chainRef,
+    damageHubOperationRef
+  };
+  if (emitActionResolved) {
+    Hooks.callAll("fallout-maw.weaponActionWillResolve", resolvedContext);
+  }
   if (spendActionPoints && isCombatActionPointSpendingActive(actor)) {
     const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
     if (cost > 0) {
@@ -6775,17 +6863,24 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
       }
     }
   }
-  if (emitActionResolved && actionKey !== "reload") {
-    Hooks.callAll("fallout-maw.weaponActionResolved", {
-      actor,
-      weapon,
-      actionKey,
-      weaponActionKey: actionKey,
-      weaponFunctionId,
-      weaponData: getWeaponAttackData(weapon, weaponFunctionId),
-      chainRef,
-      damageHubOperationRef
+  if (emitActionResolved && actionKey === "reload") {
+    await publishWeaponAttackResolved({
+      ...resolvedContext,
+      attackerUuid: actor?.uuid ?? "",
+      actorUuid: actor?.uuid ?? "",
+      tokenUuid: actorToken?.document?.uuid ?? actorToken?.uuid ?? "",
+      weaponUuid: weapon?.uuid ?? "",
+      actionPointCost: getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId),
+      targetActorUuids: [],
+      targetTokenUuids: [],
+      killedTargetUuids: [],
+      canceledByReaction: false,
+      attackCheckCount: 0,
+      damageResults: [],
+      senderUserId: game.user?.id ?? ""
     });
+  } else if (emitActionResolved) {
+    Hooks.callAll("fallout-maw.weaponActionResolved", resolvedContext);
   }
 }
 
@@ -8131,6 +8226,7 @@ function getVolleyExplosionDelaySeconds(weapon, weaponFunctionId = "") {
 function buildDelayedVolleyExplosionRegionRequest({
   sceneId = "",
   delayedThrownItemId = "",
+  attackId = "",
   explodeAtWorldTime = 0,
   weapon = null,
   weaponFunctionId = "",
@@ -8229,6 +8325,7 @@ function buildDelayedVolleyExplosionRegionRequest({
     color: dominantDamageType?.color ?? "#dd8431",
     explosions,
     source: {
+      attackId: String(attackId ?? ""),
       attackerUuid: attackerToken?.actor?.uuid ?? "",
       attackerTokenId: attackerToken?.id ?? "",
       attackerTokenUuid: attackerToken?.document?.uuid ?? "",

@@ -3,6 +3,10 @@ import { getCombatSettings } from "../settings/accessors.mjs";
 import { evaluateActorEffectChangeBaseNumber } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  commitPreparedActiveUseOperations,
+  prepareActiveUseOperation
+} from "../abilities/active-use-runtime.mjs";
+import {
   DODGE_LOSS_MODIFIER_EFFECT_KEY,
   DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
 } from "./dodge-effect-keys.mjs";
@@ -117,16 +121,24 @@ async function restoreActorDodgeResourceNow(actor, { mode = "full" } = {}) {
 
   const max = Math.max(0, toInteger(resource.max));
   const current = Math.max(0, toInteger(resource.value));
-  const roundRecoveryPercent = applyDodgePercentModifier(
-    actor,
-    getDodgeSettings().roundRecoveryPercent,
-    DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
-  );
+  const roundRecovery = mode === "round"
+    ? resolveDodgePercentModifier(
+      actor,
+      getDodgeSettings().roundRecoveryPercent,
+      DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+    )
+    : { value: 0, materiallyModified: false };
   const nextValue = mode === "round"
-    ? Math.min(max, current + calculateDodgeAmount(max, roundRecoveryPercent))
+    ? Math.min(max, current + calculateDodgeAmount(max, roundRecovery.value))
     : max;
   if (nextValue === current) return;
-  await updateActorDodgeValue(actor, nextValue);
+  await updateActorDodgeValue(actor, nextValue, {
+    socketAction: DODGE_SOCKET_ACTION_RESTORE,
+    activeUseKey: mode === "round" && roundRecovery.materiallyModified
+      ? DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+      : "",
+    activeUseKind: "dodgeRoundRecovery"
+  });
 }
 
 async function spendActorDodgeResource(actor, multiplier = 1) {
@@ -142,15 +154,19 @@ async function spendActorDodgeResourceNow(actor, multiplier = 1) {
 
   const max = Math.max(0, toInteger(resource.max));
   const current = Math.max(0, toInteger(resource.value));
-  const percent = applyDodgePercentModifier(
+  const loss = resolveDodgePercentModifier(
     actor,
     settings.attackCostPercent * Math.max(0, Number(multiplier) || 0),
     DODGE_LOSS_MODIFIER_EFFECT_KEY
   );
-  const amount = calculateDodgeAmount(max, percent);
+  const amount = calculateDodgeAmount(max, loss.value);
   if (amount <= 0 || current <= 0) return;
 
-  await updateActorDodgeValue(actor, Math.max(0, current - amount));
+  await updateActorDodgeValue(actor, Math.max(0, current - amount), {
+    socketAction: DODGE_SOCKET_ACTION_SPEND,
+    activeUseKey: loss.materiallyModified ? DODGE_LOSS_MODIFIER_EFFECT_KEY : "",
+    activeUseKind: "dodgeLoss"
+  });
 }
 
 function runActorDodgeMutation(actor, operation) {
@@ -167,19 +183,25 @@ function runActorDodgeMutation(actor, operation) {
   return next;
 }
 
-function applyDodgePercentModifier(actor, percent, effectKey) {
+function resolveDodgePercentModifier(actor, percent, effectKey) {
   const changes = collectDodgeAmountModifierChanges(actor, effectKey);
   let result = Math.max(0, Number(percent) || 0);
+  let materiallyModified = false;
   for (const change of changes) {
     const value = evaluateActorEffectChangeBaseNumber(actor, change, { fallback: Number.NaN });
     if (!Number.isFinite(value)) continue;
+    const previous = result;
     if (change.type === "multiply") result *= value;
     else if (change.type === "override") result = value;
     else if (change.type === "upgrade") result = Math.max(result, value);
     else if (change.type === "downgrade") result = Math.min(result, value);
     else result += value;
+    if (result !== previous) materiallyModified = true;
   }
-  return Math.max(0, result);
+  return {
+    value: Math.max(0, result),
+    materiallyModified
+  };
 }
 
 function collectDodgeAmountModifierChanges(actor, effectKey) {
@@ -196,21 +218,55 @@ function collectDodgeAmountModifierChanges(actor, effectKey) {
   return changes.sort((left, right) => toInteger(left?.priority) - toInteger(right?.priority));
 }
 
-async function updateActorDodgeValue(actor, value) {
-  if (!actor) return;
+async function updateActorDodgeValue(actor, value, {
+  socketAction = DODGE_SOCKET_ACTION_SPEND,
+  activeUseKey = "",
+  activeUseKind = "dodgeResource"
+} = {}) {
+  if (!actor) return false;
+  const nextValue = Math.max(0, toInteger(value));
+  const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
+  if (nextValue === currentValue) return false;
+  const operationId = `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
   if (actor.isOwner) {
-    await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: value });
-    return;
+    const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind);
+    await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
+    await commitDodgeActiveUseOperation(activeUsePreparation, operationId);
+    return true;
   }
-  if (game.user?.isActiveGM) return;
+  if (game.user?.isActiveGM) return false;
 
   const gm = getResponsibleGM();
-  if (!gm) return;
-  await requestDodgeSocketAction(gm, {
-    action: DODGE_SOCKET_ACTION_SPEND,
+  if (!gm) return false;
+  return requestDodgeSocketAction(gm, {
+    action: socketAction,
     actorUuid: actor.uuid,
-    value
+    value: nextValue,
+    activeUseKey,
+    operationId
   });
+}
+
+function prepareDodgeActiveUseOperation(actor, key = "", kind = "dodgeResource") {
+  const activeUseKey = String(key ?? "").trim();
+  if (!activeUseKey) return null;
+  return prepareActiveUseOperation({
+    kind,
+    actor,
+    keys: new Set([activeUseKey]),
+    conditionContexts: [{ actorToken: actor?.token?.object ?? actor?.token ?? null }],
+    reverseOnly: false
+  });
+}
+
+async function commitDodgeActiveUseOperation(preparation, operationId = "") {
+  if (!preparation) return [];
+  try {
+    return await commitPreparedActiveUseOperations([preparation], { operationId });
+  } catch (error) {
+    console.error(`${FALLOUT_MAW.id} | Dodge active-use commit failed`, error);
+    return [];
+  }
 }
 
 async function requestDodgeSocketAction(gm, payload = {}) {
@@ -250,8 +306,28 @@ async function handleDodgeSocketMessage(payload = {}) {
   try {
     const combatSpendAllowed = payload.action !== DODGE_SOCKET_ACTION_SPEND || isActorInActiveCombat(actor);
     if (actor?.isOwner && combatSpendAllowed) {
-      await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: Math.max(0, toInteger(payload.value)) });
+      const nextValue = Math.max(0, toInteger(payload.value));
+      const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
+      if (nextValue === currentValue) return;
+      const expectedActiveUseKey = payload.action === DODGE_SOCKET_ACTION_SPEND
+        ? DODGE_LOSS_MODIFIER_EFFECT_KEY
+        : DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY;
+      const requestedActiveUseKey = String(payload.activeUseKey ?? "").trim();
+      const directionMatches = payload.action === DODGE_SOCKET_ACTION_SPEND
+        ? nextValue < currentValue
+        : nextValue > currentValue;
+      const activeUseKey = directionMatches && requestedActiveUseKey === expectedActiveUseKey
+        ? expectedActiveUseKey
+        : "";
+      const activeUseKind = payload.action === DODGE_SOCKET_ACTION_SPEND
+        ? "dodgeLoss"
+        : "dodgeRoundRecovery";
+      const operationId = String(payload.operationId ?? "").trim()
+        || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
+      const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind);
+      await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
       success = true;
+      await commitDodgeActiveUseOperation(activeUsePreparation, operationId);
     }
   } finally {
     game.socket.emit(`system.${FALLOUT_MAW.id}`, {

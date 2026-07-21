@@ -2083,6 +2083,17 @@
               </label>
               {{/if}}
 
+              {{#if isLimitedUses}}
+              <label>
+                <span>Использовано</span>
+                <input type="number" data-field="conditionUsesSpent" value="{{usesSpent}}" min="0" step="1">
+              </label>
+              <label>
+                <span>Максимум применений</span>
+                <input type="number" data-field="conditionUsesMax" value="{{usesMax}}" min="1" step="1">
+              </label>
+              {{/if}}
+
               {{#if isEnergyConsumption}}
               <label>
                 <span>Название</span>

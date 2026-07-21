@@ -7,16 +7,16 @@ import {
 } from "../settings/abilities.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
-import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { getSkillCheckActiveUseKeys } from "./active-use-keys.mjs";
+import { isConsumableActiveUseChange } from "./active-use-changes.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
-import { isAttackingWeaponAction } from "./runtime-state.mjs";
 import { getAuraGeneratedEffectFlag } from "./aura-conditions.mjs";
 import {
   applyAbilityFunctionOverloadCosts,
   withAbilityOverloadCostRows
 } from "./overload.mjs";
+import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
 
-const SKILL_CHANGE_SUFFIXES = Object.freeze(["bonus", "advantage", "disadvantage"]);
 const EXCLUSIVE_TRIGGER_TYPES = new Set([
   ABILITY_CONDITION_TYPES.eventReaction,
   ABILITY_CONDITION_TYPES.itemUse
@@ -227,7 +227,7 @@ export function collectSkillCheckTriggerCostEntries({
 } = {}) {
   const key = String(skillKey ?? "").trim();
   if (!actor || !key) return [];
-  const acceptedChangeKeys = getSkillTriggerChangeKeys(key, context);
+  const acceptedChangeKeys = getSkillCheckActiveUseKeys(key, context);
   const entries = [];
   const seenFunctions = new Set();
 
@@ -238,9 +238,12 @@ export function collectSkillCheckTriggerCostEntries({
       if (!hasTriggerCostCondition(abilityFunction)) continue;
       if (isAbilityFunctionTimedTriggerCost(abilityFunction)) continue;
       if (hasExclusiveTriggerCondition(abilityFunction)) continue;
-      if (!(abilityFunction.changes ?? []).some(change => {
+      if (!filterChangesForLimitedUses(
+        abilityFunction.changes ?? [],
+        abilityFunction.conditions ?? []
+      ).some(change => {
         if (!acceptedChangeKeys.has(String(change?.key ?? "").trim())) return false;
-        return isConsumableSkillChange(actor, change);
+        return isConsumableActiveUseChange(actor, change);
       })) continue;
 
       const remainingConditions = (abilityFunction.conditions ?? [])
@@ -377,7 +380,7 @@ function collectAuraSkillTriggerCostEntries({
     const changes = Array.from(effect?.system?.changes ?? []);
     if (!changes.some(change => (
       acceptedChangeKeys.has(String(change?.key ?? "").trim())
-      && isConsumableSkillChange(actor, change)
+      && isConsumableActiveUseChange(actor, change)
     ))) continue;
 
     const identity = `aura:${String(actor?.uuid ?? actor?.id ?? "")}:${String(
@@ -427,35 +430,6 @@ function hasTriggerCostCondition(abilityFunction = {}) {
 function hasExclusiveTriggerCondition(abilityFunction = {}) {
   return (abilityFunction.conditions ?? [])
     .some(condition => EXCLUSIVE_TRIGGER_TYPES.has(condition?.type));
-}
-
-function getSkillTriggerChangeKeys(skillKey = "", context = {}) {
-  const keys = new Set();
-  for (const suffix of SKILL_CHANGE_SUFFIXES) {
-    keys.add(`system.skills.${skillKey}.${suffix}`);
-    keys.add(`system.skills.all.${suffix}`);
-  }
-  const actionKey = String(context?.weaponActionKey ?? "").trim();
-  if (String(context?.requester ?? "") === "weaponAttack" && isAttackingWeaponAction(actionKey)) {
-    keys.add("system.combat.all.advantage");
-    keys.add("system.combat.all.disadvantage");
-    keys.add(`system.combat.actions.${actionKey}.advantage`);
-    keys.add(`system.combat.actions.${actionKey}.disadvantage`);
-  }
-  return keys;
-}
-
-function isConsumableSkillChange(actor, change = {}) {
-  if (String(change?.value ?? "") === "") return false;
-  const amount = evaluateEffectChangeNumber(actor, change.value, { fallback: Number.NaN });
-  if (!Number.isFinite(amount)) return false;
-  switch (String(change?.type ?? "add")) {
-    case "multiply": return amount !== 1;
-    case "override":
-    case "upgrade":
-    case "downgrade": return true;
-    default: return amount !== 0;
-  }
 }
 
 function getFunctionIdentity(sourceItem = null, abilityFunction = null) {

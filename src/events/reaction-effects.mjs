@@ -1,6 +1,11 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
+import {
+  EFFECT_LIFECYCLE_FLAG_KEY,
+  EFFECT_LIFECYCLE_KINDS,
+  buildEffectFunctionSnapshot
+} from "../abilities/effect-lifecycle.mjs";
 
 export const EVENT_REACTION_EFFECT_FLAG_KEY = "eventReaction";
 export const EVENT_REACTION_EFFECT_KIND = "eventReaction";
@@ -164,12 +169,14 @@ export function buildEventReactionEffectData({
   const sourceItemUuid = String(sourceItem?.uuid ?? itemUuid ?? "").trim();
   const effectOriginUuid = String(originUuid || getAbilityEffectOriginUuid(reactor, sourceItem, sourceItemUuid));
   const id = String(abilityFunction?.id ?? functionId ?? "").trim();
+  const functionData = buildEffectFunctionSnapshot({ ...abilityFunction, id });
   const flag = {
     rootId,
     eventId: String(envelope?.eventId ?? ""),
     eventKey: String(envelope?.key ?? ""),
     sourceItemUuid,
     functionId: id,
+    functionData,
     reactorActorUuid: String(reactor?.uuid ?? ""),
     scope: seconds > 0 ? "timed" : "root",
     durationSeconds: seconds
@@ -186,6 +193,9 @@ export function buildEventReactionEffectData({
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
+        },
         [EVENT_REACTION_EFFECT_FLAG_KEY]: flag
       }
     }

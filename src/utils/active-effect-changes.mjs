@@ -10,15 +10,39 @@ import { getActorFormulaApplicationPhase } from "./actor-formulas.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
 import { isSkillAdvancementMultiplierEffectKey } from "../advancement/skill-multiplier-effects.mjs";
+import {
+  ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  getOriginalEffectKeyFromReverse,
+  getReverseEffectKey,
+  INITIATIVE_ADVANTAGE_EFFECT_KEY,
+  INITIATIVE_DISADVANTAGE_EFFECT_KEY,
+  isReverseEffectKey,
+  REVERSE_EFFECT_KEY_PREFIX,
+  SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS,
+  SMART_FUDGE_RESULT_EFFECT_KEYS
+} from "./active-effect-keys.mjs";
+
+export {
+  ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
+  ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  getOriginalEffectKeyFromReverse,
+  getReverseEffectKey,
+  INITIATIVE_ADVANTAGE_EFFECT_KEY,
+  INITIATIVE_DISADVANTAGE_EFFECT_KEY,
+  isReverseEffectKey,
+  REVERSE_EFFECT_KEY_PREFIX,
+  SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS,
+  SMART_FUDGE_RESULT_EFFECT_KEYS
+} from "./active-effect-keys.mjs";
 
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
-export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
-export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
-export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
-export const ALL_COMBAT_ADVANTAGE_EFFECT_KEY = "system.combat.all.advantage";
-export const ALL_COMBAT_DISADVANTAGE_EFFECT_KEY = "system.combat.all.disadvantage";
-export const INITIATIVE_ADVANTAGE_EFFECT_KEY = "system.attributes.initiative.advantage";
-export const INITIATIVE_DISADVANTAGE_EFFECT_KEY = "system.attributes.initiative.disadvantage";
 export const ALL_LIMB_MAX_BONUS_EFFECT_KEY = "system.limbs.all.maxBonus";
 export const ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimitBonus";
 export const ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY = "fallout-maw.ability.overload.energyCost";
@@ -49,19 +73,6 @@ export const DISEASE_SUPPRESSION_COUNT_EFFECT_KEY = "fallout-maw.suppression.dis
 export const TRAUMA_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.traumas.all";
 export const DISEASE_SUPPRESSION_ALL_EFFECT_KEY = "fallout-maw.suppression.diseases.all";
 export const ONE_TIME_SKILL_MODIFIER_EFFECT_KEY = "fallout-maw.skillCheck.nextSkillModifier";
-export const REVERSE_EFFECT_KEY_PREFIX = `${SYSTEM_ID}.reverse.`;
-export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
-  criticalSuccess: "fallout-maw.skillCheck.smartFudge.criticalSuccess",
-  success: "fallout-maw.skillCheck.smartFudge.success",
-  failure: "fallout-maw.skillCheck.smartFudge.failure",
-  criticalFailure: "fallout-maw.skillCheck.smartFudge.criticalFailure"
-});
-export const SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS = Object.freeze({
-  criticalFailure: "system.skillCheck.disabledResults.criticalFailure",
-  failure: "system.skillCheck.disabledResults.failure",
-  success: "system.skillCheck.disabledResults.success",
-  criticalSuccess: "system.skillCheck.disabledResults.criticalSuccess"
-});
 export const SMART_FUDGE_RESULT_ORDER = Object.freeze(["criticalSuccess", "success", "failure", "criticalFailure"]);
 
 const ALL_SKILLS_EFFECT_FIELDS = Object.freeze({
@@ -222,21 +233,6 @@ export function evaluateActorEffectChangeNumber(actor, change = {}, {
   if (!prepared) return fallback;
   const value = Number(prepared.value);
   return Number.isFinite(value) ? value : fallback;
-}
-
-export function getReverseEffectKey(key = "") {
-  const path = String(key ?? "").trim();
-  return path ? `${REVERSE_EFFECT_KEY_PREFIX}${path}` : "";
-}
-
-export function getOriginalEffectKeyFromReverse(key = "") {
-  const path = String(key ?? "").trim();
-  if (!path.startsWith(REVERSE_EFFECT_KEY_PREFIX)) return "";
-  return path.slice(REVERSE_EFFECT_KEY_PREFIX.length).trim();
-}
-
-export function isReverseEffectKey(key = "") {
-  return Boolean(getOriginalEffectKeyFromReverse(key));
 }
 
 /**

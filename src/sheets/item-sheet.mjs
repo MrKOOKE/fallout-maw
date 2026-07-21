@@ -6916,6 +6916,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
   const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
+  const isLimitedUses = type === ABILITY_CONDITION_TYPES.limitedUses;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
   const isEnergyConsumption = type === ABILITY_CONDITION_TYPES.energyConsumption;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
@@ -6959,7 +6960,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -7023,11 +7024,12 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isWeaponProficiency,
     isAura,
     isLimitedChanges,
+    isLimitedUses,
     isCooldown,
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -7037,6 +7039,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    usesSpent: Math.max(0, toInteger(condition?.usesSpent ?? 0)),
+    usesMax: Math.max(1, toInteger(condition?.usesMax ?? 1)),
     requiredCount: isAura ? normalizeAbilityFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),
     durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
     energyConsumptionName: String(condition?.name ?? "").trim(),
@@ -7189,6 +7193,13 @@ function buildAbilityConditionTypeChoices(selected = "", {
       value: ABILITY_CONDITION_TYPES.limitedChanges,
       label: "Ограниченное количество изменений",
       selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
+    });
+  }
+  if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedUses) {
+    choices.push({
+      value: ABILITY_CONDITION_TYPES.limitedUses,
+      label: "Ограниченное количество применений",
+      selected: selected === ABILITY_CONDITION_TYPES.limitedUses
     });
   }
   choices.push({

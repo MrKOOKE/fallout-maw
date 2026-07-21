@@ -134,6 +134,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   weaponProficiency: "weaponProficiency",
   aura: "aura",
   limitedChanges: "limitedChanges",
+  limitedUses: "limitedUses",
   cooldown: "cooldown",
   duration: "duration",
   energyConsumption: "energyConsumption",
@@ -1197,6 +1198,17 @@ function normalizeAbilityCondition(value = {}) {
       limit: legacyLimit,
       limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
       durationSeconds: 0
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.limitedUses) {
+    return {
+      id,
+      // Usage counters are function metadata and never participate in OR groups.
+      groupId: "",
+      type,
+      usesSpent: Math.max(0, toInteger(value?.usesSpent ?? 0)),
+      usesMax: Math.max(1, toInteger(value?.usesMax ?? 1))
     };
   }
 

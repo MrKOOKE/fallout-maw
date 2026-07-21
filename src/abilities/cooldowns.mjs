@@ -9,26 +9,19 @@ import { toInteger } from "../utils/numbers.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { syncActorAbilityEffects } from "./effects.mjs";
-import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
+import {
+  getSkillCheckActiveUseKeys,
+  getWeaponActionActiveUseKeys
+} from "./active-use-keys.mjs";
 import {
   ABILITY_FUNCTION_COOLDOWN_FLAG_KEY,
   getAbilityFunctionCooldownEffect,
   getActionBlockEffectKey,
   isAbilityFunctionCooldownEffect
 } from "./runtime-state.mjs";
+import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
 
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
-const SKILL_BONUS_KEY_PREFIX = "system.skills.";
-const SKILL_BONUS_KEY_SUFFIX = ".bonus";
-const ACTION_COST_KEY_PREFIX = "system.costs.actions.";
-const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
-const WEAPON_ACTION_COMBAT_TRIGGER_KEYS = Object.freeze([
-  "system.combat.accuracy",
-  "system.combat.criticalChance",
-  "system.combat.damageFlat",
-  "system.combat.damagePercent",
-  "system.combat.burstStability"
-]);
 
 export function registerAbilityCooldownHooks() {
   Hooks.on("fallout-maw.skillCheckResolved", outcome => {
@@ -53,8 +46,7 @@ export async function applyAbilityCooldownsForSkillCheck(outcome = {}) {
   const skillKey = String(outcome?.skill?.key ?? outcome?.check?.skill?.key ?? "").trim();
   if (!actor || !skillKey) return [];
 
-  const changeKey = `${SKILL_BONUS_KEY_PREFIX}${skillKey}${SKILL_BONUS_KEY_SUFFIX}`;
-  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([changeKey, ALL_SKILLS_BONUS_EFFECT_KEY]), {
+  return applyAbilityCooldownsForTriggeredKeys(actor, getSkillCheckActiveUseKeys(skillKey, outcome), {
     trigger: "skillCheck",
     conditionContext: getCooldownConditionContext(outcome)
   });
@@ -65,17 +57,7 @@ export async function applyAbilityCooldownsForWeaponAction(context = {}) {
   const normalizedActionKey = String(actionKey ?? "").trim();
   if (!actor || !normalizedActionKey || normalizedActionKey === "reload") return [];
 
-  const weaponData = context?.weaponData && typeof context.weaponData === "object" ? context.weaponData : null;
-  const skillKey = String(weaponData?.skillKey ?? "").trim();
-  const proficiencyKey = String(weaponData?.proficiencyKey ?? "").trim();
-  const changeKeys = new Set([
-    `${ACTION_COST_KEY_PREFIX}${normalizedActionKey}`,
-    `${ACTION_PENETRATION_KEY_PREFIX}${normalizedActionKey}`,
-    ...WEAPON_ACTION_COMBAT_TRIGGER_KEYS
-  ]);
-  if (skillKey) changeKeys.add(`${SKILL_BONUS_KEY_PREFIX}${skillKey}${SKILL_BONUS_KEY_SUFFIX}`);
-  if (proficiencyKey) changeKeys.add(`system.proficiencies.${proficiencyKey}.bonus`);
-  return applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, {
+  return applyAbilityCooldownsForTriggeredKeys(actor, getWeaponActionActiveUseKeys(context), {
     trigger: "weaponAction",
     conditionContext: getCooldownConditionContext(context)
   });
@@ -139,7 +121,10 @@ function getCooldownConditionContext(context = {}) {
 }
 
 function functionHasTriggeredChange(abilityFunction, changeKeys) {
-  return (abilityFunction.changes ?? []).some(change => {
+  return filterChangesForLimitedUses(
+    abilityFunction.changes ?? [],
+    abilityFunction.conditions ?? []
+  ).some(change => {
     const key = String(change?.key ?? "").trim();
     return key && changeKeys.has(key) && String(change?.value ?? "") !== "";
   });

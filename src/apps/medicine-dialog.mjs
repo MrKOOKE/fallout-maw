@@ -5,6 +5,11 @@ import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCreatureOptions, getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
+import { getHealingResolutionActiveUseKeys } from "../abilities/active-use-keys.mjs";
+import {
+  commitPreparedActiveUseOperations,
+  prepareActiveUseOperation
+} from "../abilities/active-use-runtime.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, hasToolFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -1376,6 +1381,12 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
       };
     }
 
+    const activeUsePreparations = prepareTreatmentHealingActiveUses({
+      sourceActor,
+      sourceToken,
+      targetActor,
+      targetToken
+    });
     const treatment = calculateTreatmentResult({
       trauma,
       tool,
@@ -1383,9 +1394,21 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
       progressForCheck,
       missingProgress: remainingProgress,
       resultKey: String(outcome.result?.key ?? "failure"),
-      healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetContext)
+      healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetActor, targetContext)
     });
     if (treatment.chargesUsed <= 0) break;
+
+    if (activeUsePreparations.length) {
+      try {
+        await commitPreparedActiveUseOperations(activeUsePreparations, {
+          operationId: `medicine-treatment:${String(sourceActor?.uuid ?? sourceActor?.id ?? "")}:${String(
+            trauma?.uuid ?? trauma?.id ?? ""
+          )}:${index}:${foundry.utils.randomID()}`
+        });
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Medicine healing active-use commit failed`, error);
+      }
+    }
 
     availableCharges -= treatment.chargesUsed;
     spentCharges += treatment.chargesUsed;
@@ -1444,9 +1467,43 @@ function calculateTreatmentResult({ trauma, tool, availableCharges, progressForC
   return { progress, chargesUsed, efficiency };
 }
 
-function getTreatmentHealingMultiplier(sourceActor, targetContext = null) {
+function prepareTreatmentHealingActiveUses({
+  sourceActor = null,
+  sourceToken = null,
+  targetActor = null,
+  targetToken = null
+} = {}) {
+  const sourcePreparation = prepareActiveUseOperation({
+    kind: "medicineOutgoingHealing",
+    actor: sourceActor,
+    keys: getHealingResolutionActiveUseKeys({ direction: "outgoing" }),
+    conditionContexts: [{
+      actorToken: sourceToken?.object ?? sourceToken,
+      targetActor,
+      targetToken: targetToken?.object ?? targetToken
+    }],
+    reverseOnly: false
+  });
+  const targetPreparation = prepareActiveUseOperation({
+    kind: "medicineIncomingHealing",
+    actor: targetActor,
+    keys: getHealingResolutionActiveUseKeys({ direction: "incoming" }),
+    conditionContexts: [{
+      actorToken: targetToken?.object ?? targetToken,
+      targetActor: sourceActor,
+      targetToken: sourceToken?.object ?? sourceToken
+    }],
+    reverseOnly: false
+  });
+  return [sourcePreparation, targetPreparation].filter(Boolean);
+}
+
+function getTreatmentHealingMultiplier(sourceActor, targetActor = null, targetContext = null) {
   const outgoing = Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing") / 100));
-  const incoming = Math.max(0, 1 + (toInteger(targetContext?.incomingHealingPercent) / 100));
+  const incomingPercent = targetActor
+    ? getActorHealingModifierPercent(targetActor, "incoming")
+    : toInteger(targetContext?.incomingHealingPercent);
+  const incoming = Math.max(0, 1 + (incomingPercent / 100));
   return outgoing * incoming;
 }
 

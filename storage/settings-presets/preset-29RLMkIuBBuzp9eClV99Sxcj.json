@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "2769a564f9a4119658637e04d648be5f0997da42a93e0ddb7298ae566672ec45",
-  "updatedAt": "2026-07-21T09:00:48.054Z",
+  "revision": "c86e252d0244ee7461a6d2e41ef9307787406faac1c1fe88ed3c586c2fe1560e",
+  "updatedAt": "2026-07-21T14:02:20.308Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -584,7 +584,7 @@
                 "visible": true
               },
               {
-                "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех: +20%</p></li><li><p>С вероятностью в 50% шанс на Крит провал: +20%</p></li></ul>",
+                "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех: +20%</p></li><li><p>С вероятностью в 50% шанс на Крит провал: +20%</p></li></ul><p>\"При одновременном срабатывание исключают друг друга\"</p>",
                 "id": "2ExGBSWNzig4FgR8",
                 "img": "systems/fallout-maw/assets/icons/8-14/savant.webp",
                 "name": "Нестабильный",
@@ -608,7 +608,64 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "1YI6e0tGQ2crCfHt",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "groupId": "",
+                          "id": "l9khhJpcDHeIjdtz",
+                          "type": ""
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "YsmYUYNM6LvBI8nf",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "vn4oOs5M9rF57QRR",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-20"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "3ULDAPzOlF6jG3oP",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -713,6 +770,69 @@
                         "durationSeconds": 0
                       },
                       "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Шанс на Крит провал (атаки): +10%</p></li><li><p>Шанс на Крит провал (атаки) по отношению к вам: +20%</p></li></ul>",
+                "id": "1ewC4XWmETQwKEda",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/porchenyj.webp",
+                "name": "Порченный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "fMgfk8RWidOn6J6n"
+                      ],
+                      "id": "JPa7RXGyoKtYJtm7",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "BpisFQ63jy39vwy7",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        },
+                        {
+                          "id": "TQfXZfCP45pLX7wE",
+                          "key": "fallout-maw.reverse.system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-20"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "soxVgWqf9rsXg1uX",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
                       "type": "effectChanges"
                     }
                   ]
@@ -871,7 +991,16 @@
                     "onlyManual": false,
                     "skillKey": "meleeCombat"
                   },
-                  "acquisitionRequirements": [],
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "1ewC4XWmETQwKEda"
+                      ],
+                      "id": "xWIBNvXUkpSzT0tE",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
@@ -3720,7 +3849,213 @@
             "name": "Скрытность"
           },
           {
-            "abilities": [],
+            "abilities": [
+              {
+                "description": "<p>Стоимость активации: 10 энергии.<br>Перегрузка: 30 энергии на 30 минут.<br></p><p>Активация позволит выбрать один навык и он получит +[[10+science/5]] на следующие 2 проверки, либо до истечения срока длительности.</p><p>Длительность: 1 минута.</p>",
+                "id": "jMsgtUPb7RIABfxl",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Надо подумать",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "ytCmdvS1YFaJaEL4",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "10",
+                            "id": "fQIgk7cwHxW4gonI",
+                            "overloadAmount": 30,
+                            "overloadDurationSeconds": 1800,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "vKgBbO6zvLNCcOU0",
+                          "key": "system.skills.rangedCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "F2YR9ZQns7KllZVN",
+                          "key": "system.skills.meleeCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "fAiUnKifixOvidA5",
+                          "key": "system.skills.athletics.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "LP63Y1Ewe8MUjShe",
+                          "key": "system.skills.energy.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "DAwEWukyXv4tv23U",
+                          "key": "system.skills.resilience.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "K4pSpyPRghELCsBP",
+                          "key": "system.skills.throwing.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "pdQTNf20zjV6RlZA",
+                          "key": "system.skills.doctor.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "jIAOfr2Jbq0zpBko",
+                          "key": "system.skills.naturalist.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "VWofjotdR1Mgd2ZU",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "CYbORPCcKPLLZ9NY",
+                          "key": "system.skills.science.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "BfQmr2ltqS9T5wh9",
+                          "key": "system.skills.repair.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "4UeD6m0PSwSMI1gQ",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        },
+                        {
+                          "id": "8XvfOrv3IzBphzub",
+                          "key": "system.skills.gambling.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10+sci/5"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 0,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "kNS7Bq73j6JwOhbR",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "limitFormula": "1",
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "limitedChanges"
+                        },
+                        {
+                          "groupId": "",
+                          "id": "cEt4C8KxuRzKRB5H",
+                          "type": "limitedUses",
+                          "usesMax": 2,
+                          "usesSpent": 0
+                        },
+                        {
+                          "durationSeconds": 60,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "vvlJ9MA2tDNoJaia",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "LSK2nVX8OAMZlIw5",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              }
+            ],
             "id": "skill-science",
             "locked": false,
             "name": "Наука"
@@ -54206,7 +54541,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "standard",
+        "resultMode": "success",
         "skillModifier": 0
       }
     },

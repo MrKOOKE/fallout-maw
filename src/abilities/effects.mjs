@@ -23,6 +23,11 @@ import {
 } from "./trigger-cost-effects.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 import {
+  EFFECT_LIFECYCLE_FLAG_KEY,
+  EFFECT_LIFECYCLE_KINDS,
+  buildEffectFunctionSnapshot
+} from "./effect-lifecycle.mjs";
+import {
   getActorIlluminationLevel,
   getWorldTimeMinuteOfDay,
   illuminationLevelConditionApplies,
@@ -65,6 +70,9 @@ export function registerAbilityEffectHooks() {
   Hooks.on("updateItem", (item, changes, options = {}) => {
     if (options?.falloutMawEventReactionProgress === true) return;
     if (options?.falloutMawTriggerTransitionState === true) return;
+    // The limited-use authority performs an awaited sync only at exhaustion.
+    // Intermediate counter updates must not enqueue actor/aura rebuilds.
+    if (options?.falloutMawLimitedUses === true) return;
     if (shouldRefreshEnvironmentConditionIndex(item, changes)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) {
       queueActorAbilityEffectSync(item.parent, {}, {
@@ -123,7 +131,8 @@ export function registerAbilityEffectHooks() {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
   });
-  Hooks.on("updateActiveEffect", effect => {
+  Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
+    if (options?.falloutMawLimitedUses === true) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
     if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
@@ -498,6 +507,11 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
     if (current.img !== item.img) update.img = item.img;
     if (current.origin !== item.uuid) update.origin = item.uuid;
     if (current.showIcon !== showIcon) update.showIcon = showIcon;
+    if (current.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) {
+      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
+        kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
+      };
+    }
     const auraCondition = hasAuraConditionFunction(item?.system?.functions ?? []);
     if (current.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
       update[`flags.${SYSTEM_ID}.${ABILITY_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
@@ -531,6 +545,11 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
     if (current.img !== item.img) update.img = item.img;
     if (current.origin !== item.uuid) update.origin = item.uuid;
     if (current.showIcon !== showIcon) update.showIcon = showIcon;
+    if (current.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) {
+      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
+        kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
+      };
+    }
     const auraCondition = hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []);
     if (current.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
       update[`flags.${SYSTEM_ID}.${ITEM_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
@@ -584,6 +603,8 @@ function buildDesiredAuraGeneratedEffects() {
       for (const entry of normalizeAbilityFunctions(source.functions)) {
         if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
         if (hasEventReactionCondition(entry.conditions)) continue;
+        const functionData = buildEffectFunctionSnapshot(entry);
+        const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
         for (const condition of findAuraDistributionConditions(entry.conditions)) {
           const targets = getAuraGeneratedTargetTokens(sourceActor, condition, { actorToken: sourceToken });
           if (!targets.length) continue;
@@ -604,9 +625,24 @@ function buildDesiredAuraGeneratedEffects() {
               entry.id,
               condition.id
             ].join(".");
-            const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
-            const signature = JSON.stringify({ key, changes, triggerCost });
-            const data = buildAuraGeneratedActiveEffectData(source, sourceActor, entry, condition, changes, key, signature);
+            // Runtime counters live on the source item. Keeping usesSpent out of
+            // the signature prevents every spent charge from recreating every
+            // projected aura effect on the scene.
+            const limitedUseIds = (functionData?.conditions ?? [])
+              .filter(candidate => candidate?.type === ABILITY_CONDITION_TYPES.limitedUses)
+              .map(candidate => String(candidate.id ?? ""));
+            const signature = JSON.stringify({ key, changes, triggerCost, limitedUseIds });
+            const data = buildAuraGeneratedActiveEffectData(
+              source,
+              sourceActor,
+              entry,
+              condition,
+              changes,
+              key,
+              signature,
+              functionData,
+              triggerCost
+            );
             const actorDesired = desired.get(targetActor.uuid) ?? new Map();
             actorDesired.set(key, data);
             desired.set(targetActor.uuid, actorDesired);
@@ -632,8 +668,17 @@ function getAuraSourceFunctionSets(actor) {
   return sources;
 }
 
-function buildAuraGeneratedActiveEffectData(source, sourceActor, entry, condition, changes, key, signature) {
-  const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
+function buildAuraGeneratedActiveEffectData(
+  source,
+  sourceActor,
+  entry,
+  condition,
+  changes,
+  key,
+  signature,
+  functionData,
+  triggerCost
+) {
   return {
     type: "base",
     name: source.item.name,
@@ -646,6 +691,9 @@ function buildAuraGeneratedActiveEffectData(source, sourceActor, entry, conditio
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.reconciledInstance
+        },
         [AURA_GENERATED_EFFECT_FLAG_KEY]: {
           key,
           signature,
@@ -654,6 +702,7 @@ function buildAuraGeneratedActiveEffectData(source, sourceActor, entry, conditio
           itemId: source.item.id,
           functionId: entry.id,
           conditionId: condition.id,
+          functionData,
           ...(triggerCost ? { triggerCost } : {})
         }
       }
@@ -741,6 +790,9 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIc
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
+        },
         [ABILITY_EFFECT_FLAG_KEY]: {
           abilityItemId: item.id,
           abilitySourceId: sourceId,
@@ -766,6 +818,9 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
+        },
         [ITEM_EFFECT_FLAG_KEY]: {
           itemId: item.id,
           signature,
@@ -843,6 +898,7 @@ function hasRuntimeConditions(conditions = []) {
   return conditions.some(condition => (
     condition?.type
     && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
+    && condition.type !== ABILITY_CONDITION_TYPES.limitedUses
     && condition.type !== ABILITY_CONDITION_TYPES.cooldown
     && condition.type !== ABILITY_CONDITION_TYPES.duration
     && condition.type !== ABILITY_CONDITION_TYPES.triggerCost
