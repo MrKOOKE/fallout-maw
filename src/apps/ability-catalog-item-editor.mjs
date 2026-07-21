@@ -66,6 +66,7 @@ import {
   normalizeRicochetSettings,
   normalizeReaperSettings,
   normalizeToTheEndSettings,
+  normalizeVersatileDevelopmentSettings,
   normalizeVirtuosoSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
@@ -1345,6 +1346,12 @@ function readFixedFunctionSettings(row) {
       damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment) {
+    return {
+      minimumPureValueGapPercent: row.querySelector("[data-field='fixed.versatileDevelopment.minimumPureValueGapPercent']")?.value,
+      developmentMultiplierBonus: row.querySelector("[data-field='fixed.versatileDevelopment.developmentMultiplierBonus']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     return {
       energyCost: row.querySelector("[data-field='fixed.aiming.energyCost']")?.value,
@@ -1846,6 +1853,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedVirtuosoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso
     ? normalizeVirtuosoSettings(normalized.fixedSettings)
     : null;
+  const fixedVersatileDevelopmentSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment
+    ? normalizeVersatileDevelopmentSettings(normalized.fixedSettings)
+    : null;
   const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
     ? normalizeAimingSettings(normalized.fixedSettings)
     : null;
@@ -1959,6 +1969,7 @@ function prepareFunctionForDisplay(entry) {
     fixedAllOrNothingSettings,
     fixedReaperSettings,
     fixedVirtuosoSettings,
+    fixedVersatileDevelopmentSettings,
     fixedAimingSettings,
     fixedRicochetSettings,
     fixedKeepAwaySettings,

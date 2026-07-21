@@ -1,6 +1,7 @@
 import {
   calculateSkillDevelopmentBonuses,
-  normalizeActorDevelopment
+  normalizeActorDevelopment,
+  resolveSkillAdvancementMultiplierChanges
 } from "../../advancement/index.mjs";
 import {
   evaluateFormula,
@@ -208,6 +209,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
     const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
+    const cleanCharacteristics = normalizeCharacteristicMap(
+      normalizeNumberMap(sourceSystem.characteristics, characteristicSettings),
+      characteristicSettings,
+      characteristicBonuses
+    );
     replaceObjectContents(this.characteristics, normalizeCharacteristicMap(
       baseCharacteristics,
       characteristicSettings,
@@ -233,7 +239,15 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings, proficiencySettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
-    const skillAdvancementMultiplierChanges = getSkillAdvancementMultiplierChanges(this.parent, skillSettings);
+    const cleanSkillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, cleanCharacteristics);
+    const skillAdvancementMultiplierChanges = resolveSkillAdvancementMultiplierChanges(
+      skillSettings,
+      cleanCharacteristics,
+      skillAdvancementSettings,
+      this.development,
+      cleanSkillBases,
+      getSkillAdvancementMultiplierChanges(this.parent, skillSettings)
+    );
     const skillBonuses = calculateSkillDevelopmentBonuses(
       skillSettings,
       this.characteristics,

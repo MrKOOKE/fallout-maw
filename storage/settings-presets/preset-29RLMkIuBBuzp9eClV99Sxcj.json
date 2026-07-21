@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "9d85ccfc3fc88af94a7d100dfa39fbac4a664934b0d9c62c8800dbed13edd39c",
-  "updatedAt": "2026-07-21T06:02:54.125Z",
+  "revision": "04c6d9396508c79858b1d3499d4af002ff711ea9e6b08b1a4af5010dd2e18dd5",
+  "updatedAt": "2026-07-21T07:57:29.084Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -193,7 +193,27 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "versatileDevelopment",
+                      "fixedSettings": {
+                        "developmentMultiplierBonus": 1,
+                        "minimumPureValueGapPercent": 20
+                      },
+                      "id": "5TvrvuxOJv281exu",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "fixed"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -54152,7 +54172,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "success",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },

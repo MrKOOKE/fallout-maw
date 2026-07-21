@@ -104,6 +104,7 @@ import {
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
   normalizeReaperSettings,
+  normalizeVersatileDevelopmentSettings,
   normalizeVirtuosoSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -6187,6 +6188,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedVirtuosoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso
     ? prepareVirtuosoSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedVersatileDevelopmentSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment
+    ? normalizeVersatileDevelopmentSettings(entry?.fixedSettings)
+    : null;
   const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
     ? prepareAimingSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -6305,6 +6309,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedAllOrNothingSettings,
     fixedReaperSettings,
     fixedVirtuosoSettings,
+    fixedVersatileDevelopmentSettings,
     fixedAimingSettings,
     fixedRicochetSettings,
     fixedKeepAwaySettings,

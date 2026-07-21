@@ -82,6 +82,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   allOrNothing: "allOrNothing",
   reaper: "reaper",
   virtuoso: "virtuoso",
+  versatileDevelopment: "versatileDevelopment",
   aiming: "aiming",
   ricochet: "ricochet",
   keepAway: "keepAway",
@@ -1383,6 +1384,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
     return normalizeVirtuosoSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment) {
+    return normalizeVersatileDevelopmentSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     return normalizeAimingSettings(value);
   }
@@ -1602,6 +1606,13 @@ export function normalizeVirtuosoSettings(value = {}) {
   return {
     accuracyBonus: toInteger(value?.accuracyBonus ?? 20),
     damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20)
+  };
+}
+
+export function normalizeVersatileDevelopmentSettings(value = {}) {
+  return {
+    minimumPureValueGapPercent: Math.max(0, Math.min(100, toNumber(value?.minimumPureValueGapPercent ?? 20))),
+    developmentMultiplierBonus: Math.max(0, toNumber(value?.developmentMultiplierBonus ?? 1))
   };
 }
 

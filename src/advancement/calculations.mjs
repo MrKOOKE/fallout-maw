@@ -37,6 +37,7 @@ export function getSkillPointMultiplierBreakdown(
   multiplierChanges = {},
   { signature = false } = {}
 ) {
+  const effectiveSignature = Boolean(signature) && multiplierChanges?.signatureSkillsDisabled !== true;
   const entry = advancementSettings?.entries?.[skillKey] ?? {};
   const base = Number(entry?.base) || 0;
   let value = base;
@@ -54,7 +55,7 @@ export function getSkillPointMultiplierBreakdown(
   }
 
   for (const change of multiplierChanges?.changes ?? []) {
-    if (!isSkillAdvancementMultiplierTargetApplicable(change?.target, skillKey, { signature })) continue;
+    if (!isSkillAdvancementMultiplierTargetApplicable(change?.target, skillKey, { signature: effectiveSignature })) continue;
     const amount = Number(change?.value);
     if (!Number.isFinite(amount)) continue;
     const before = value;
@@ -77,7 +78,7 @@ export function getSkillPointMultiplierBreakdown(
 
 export function calculateSkillDevelopmentBonus(skillKey, characteristics = {}, advancementSettings = {}, developmentSkill = {}, multiplierChanges = {}) {
   const points = Math.max(0, Number(developmentSkill?.points) || 0);
-  const signature = Boolean(developmentSkill?.signature);
+  const signature = Boolean(developmentSkill?.signature) && multiplierChanges?.signatureSkillsDisabled !== true;
   const investedValue = points * calculateSkillPointMultiplier(
     skillKey,
     characteristics,
@@ -108,6 +109,149 @@ export function calculateSkillDevelopmentBonuses(
   );
 }
 
+export function resolveSkillAdvancementMultiplierChanges(
+  skillSettings = [],
+  characteristics = {},
+  advancementSettings = {},
+  development = {},
+  skillBases = {},
+  multiplierChanges = {}
+) {
+  const normalized = normalizeActorDevelopment(development, [], skillSettings);
+  const baseChanges = (Array.isArray(multiplierChanges?.changes) ? multiplierChanges.changes : [])
+    .filter(change => !String(change?.key ?? "").startsWith("fallout-maw.fixed.versatileDevelopment."));
+  const baseState = { ...multiplierChanges, changes: baseChanges, versatileDevelopmentRules: [] };
+  const rules = Array.isArray(multiplierChanges?.versatileDevelopmentRules)
+    ? multiplierChanges.versatileDevelopmentRules.filter(rule => Number(rule?.developmentMultiplierBonus) > 0)
+    : [];
+  const baselineDevelopmentBonuses = {};
+  const baselinePureValues = {};
+
+  for (const skill of skillSettings) {
+    const skillKey = String(skill?.key ?? "").trim();
+    if (!skillKey) continue;
+    const developmentBonus = calculateSkillDevelopmentBonus(
+      skillKey,
+      characteristics,
+      advancementSettings,
+      normalized.skills?.[skillKey],
+      baseState
+    );
+    baselineDevelopmentBonuses[skillKey] = developmentBonus;
+    baselinePureValues[skillKey] = getPureSkillValue(skillBases?.[skillKey], developmentBonus);
+  }
+
+  const highestPureValue = Math.max(0, ...Object.values(baselinePureValues));
+  const changes = [...baseChanges];
+  const statesBySkill = {};
+
+  for (const skill of skillSettings) {
+    const skillKey = String(skill?.key ?? "").trim();
+    if (!skillKey) continue;
+    const pureValue = Number(baselinePureValues[skillKey]) || 0;
+    const gapPercent = highestPureValue > 0
+      ? ((highestPureValue - pureValue) / highestPureValue) * 100
+      : 0;
+    const sources = [];
+
+    for (const rule of rules) {
+      const minimumGap = Math.max(0, Math.min(100, Number(rule?.minimumPureValueGapPercent) || 0));
+      const bonus = Math.max(0, Number(rule?.developmentMultiplierBonus) || 0);
+      const eligible = qualifiesForVersatileDevelopment(pureValue, highestPureValue, minimumGap);
+      sources.push({
+        id: String(rule?.id ?? ""),
+        sourceName: String(rule?.sourceName ?? ""),
+        sourceUuid: String(rule?.sourceUuid ?? ""),
+        minimumPureValueGapPercent: minimumGap,
+        developmentMultiplierBonus: bonus,
+        eligible
+      });
+      if (!eligible || !(bonus > 0)) continue;
+
+      changes.push({
+        key: `fallout-maw.fixed.versatileDevelopment.${String(rule?.id ?? "source")}.${skillKey}`,
+        target: skillKey,
+        type: "add",
+        value: bonus,
+        priority: Number.MAX_SAFE_INTEGER,
+        order: changes.length,
+        sourceName: String(rule?.sourceName ?? "").trim() || "Всестороннее развитие",
+        sourceImg: String(rule?.sourceImg ?? "").trim(),
+        sourceUuid: String(rule?.sourceUuid ?? "").trim() || `fixed:${String(rule?.id ?? "versatileDevelopment")}`,
+        fixedFunctionId: String(rule?.functionId ?? "")
+      });
+    }
+
+    const eligible = sources.some(source => source.eligible);
+    let nextPureValue = pureValue;
+    let nextHighestPureValue = highestPureValue;
+    let nextGapPercent = gapPercent;
+    let eligibleAfterNextIncrease = false;
+    if (eligible) {
+      const currentDevelopment = normalized.skills?.[skillKey] ?? {};
+      const nextDevelopmentBonus = calculateSkillDevelopmentBonus(
+        skillKey,
+        characteristics,
+        advancementSettings,
+        { ...currentDevelopment, points: Math.max(0, Number(currentDevelopment.points) || 0) + 1 },
+        baseState
+      );
+      nextPureValue = getPureSkillValue(skillBases?.[skillKey], nextDevelopmentBonus);
+      nextHighestPureValue = Math.max(highestPureValue, nextPureValue);
+      nextGapPercent = nextHighestPureValue > 0
+        ? ((nextHighestPureValue - nextPureValue) / nextHighestPureValue) * 100
+        : 0;
+      for (const source of sources) {
+        source.nextEligible = qualifiesForVersatileDevelopment(
+          nextPureValue,
+          nextHighestPureValue,
+          source.minimumPureValueGapPercent
+        );
+        source.willLoseBonusOnNextIncrease = source.eligible && !source.nextEligible;
+      }
+      eligibleAfterNextIncrease = sources.some(source => source.nextEligible);
+    }
+
+    statesBySkill[skillKey] = {
+      pureValue,
+      highestPureValue,
+      gapPercent,
+      nextPureValue,
+      nextHighestPureValue,
+      nextGapPercent,
+      eligible,
+      eligibleAfterNextIncrease,
+      willLoseBonusOnNextIncrease: eligible && !eligibleAfterNextIncrease,
+      sources
+    };
+  }
+
+  const resolvedState = {
+    ...multiplierChanges,
+    changes,
+    versatileDevelopmentRules: rules,
+    versatileDevelopment: {
+      active: rules.length > 0,
+      highestPureValue,
+      baselinePureValues,
+      statesBySkill
+    }
+  };
+  const developmentBonuses = calculateSkillDevelopmentBonuses(
+    skillSettings,
+    characteristics,
+    advancementSettings,
+    normalized,
+    resolvedState
+  );
+  const pureValues = Object.fromEntries(skillSettings.map(skill => {
+    const skillKey = String(skill?.key ?? "").trim();
+    return [skillKey, getPureSkillValue(skillBases?.[skillKey], developmentBonuses?.[skillKey])];
+  }));
+
+  return { ...resolvedState, developmentBonuses, pureValues };
+}
+
 export function calculatePureSkillDevelopmentValue(
   skillKey,
   skillSettings = [],
@@ -117,6 +261,9 @@ export function calculatePureSkillDevelopmentValue(
   development = {},
   multiplierChanges = {}
 ) {
+  if (Object.hasOwn(multiplierChanges?.pureValues ?? {}, skillKey)) {
+    return Math.max(0, Math.trunc(Number(multiplierChanges.pureValues[skillKey]) || 0));
+  }
   const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics);
   const normalized = normalizeActorDevelopment(development, [], skillSettings);
   const developmentBonus = calculateSkillDevelopmentBonus(
@@ -127,6 +274,19 @@ export function calculatePureSkillDevelopmentValue(
     multiplierChanges
   );
   return Math.max(0, Math.trunc((Number(skillBases?.[skillKey]) || 0) + (Number(developmentBonus) || 0)));
+}
+
+function getPureSkillValue(baseValue = 0, developmentBonus = 0) {
+  return Math.max(0, Math.trunc((Number(baseValue) || 0) + (Number(developmentBonus) || 0)));
+}
+
+function qualifiesForVersatileDevelopment(pureValue = 0, highestPureValue = 0, minimumGapPercent = 0) {
+  const pure = Number(pureValue) || 0;
+  const highest = Number(highestPureValue) || 0;
+  const minimumGap = Math.max(0, Math.min(100, Number(minimumGapPercent) || 0));
+  return highest > 0
+    && pure < highest
+    && ((highest - pure) * 100) >= (highest * minimumGap);
 }
 
 function applyMultiplierChange(value, type = "add", amount = 0) {

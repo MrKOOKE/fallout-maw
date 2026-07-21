@@ -4,11 +4,13 @@ import { DEFAULT_FACTION_NAME, getActorFactionBelongs } from "../settings/factio
 import {
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
+  ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
   ABILITY_HEALTH_TARGETS,
   ABILITY_POSTURE_SUBJECTS,
-  normalizeAbilityFunctions
+  normalizeAbilityFunctions,
+  normalizeVersatileDevelopmentSettings
 } from "../settings/abilities.mjs";
 import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
@@ -59,9 +61,11 @@ export function getAbilityAcquisitionChanges(itemOrData) {
 }
 
 export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) {
-  if (!actor) return { changes: [] };
+  if (!actor) return { changes: [], versatileDevelopmentRules: [], signatureSkillsDisabled: false };
   const skillKeys = new Set((skillSettings ?? []).map(skill => String(skill?.key ?? "").trim()).filter(Boolean));
   const changes = [];
+  const versatileDevelopmentRules = [];
+  let signatureSkillsDisabled = false;
   let order = 0;
   let formulaData = null;
   const getFormulaData = () => {
@@ -108,8 +112,29 @@ export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) 
     for (const change of effect?.system?.changes ?? []) appendChange(change, effect, { effect });
   }
 
+  for (const abilityItem of actor?.items?.filter(item => item?.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (
+        abilityFunction.type !== ABILITY_FUNCTION_TYPES.fixed
+        || abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment
+      ) continue;
+      signatureSkillsDisabled = true;
+      const settings = normalizeVersatileDevelopmentSettings(abilityFunction.fixedSettings);
+      if (!(settings.developmentMultiplierBonus > 0)) continue;
+      versatileDevelopmentRules.push({
+        id: `${String(abilityItem.id ?? "")}:${String(abilityFunction.id ?? "")}`,
+        functionId: String(abilityFunction.id ?? ""),
+        minimumPureValueGapPercent: settings.minimumPureValueGapPercent,
+        developmentMultiplierBonus: settings.developmentMultiplierBonus,
+        sourceName: String(abilityItem.name ?? "").trim(),
+        sourceImg: String(abilityItem.img ?? "").trim(),
+        sourceUuid: String(abilityItem.uuid ?? "").trim()
+      });
+    }
+  }
+
   changes.sort((left, right) => left.priority - right.priority || left.order - right.order);
-  return { changes };
+  return { changes, versatileDevelopmentRules, signatureSkillsDisabled };
 }
 
 function getSkillAdvancementChangePriority(change = {}) {

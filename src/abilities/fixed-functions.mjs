@@ -39,6 +39,7 @@ import {
   normalizeReaperSettings,
   normalizeToTheEndSettings,
   normalizeVirtuosoSettings,
+  normalizeVersatileDevelopmentSettings,
   normalizeRageSettings,
   normalizeRicochetSettings,
   normalizeTwoHandsSettings,
@@ -283,6 +284,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.virtuoso
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment,
+    label: "Всестороннее развитие",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.versatileDevelopment,
+      fixedSettings: normalizeVersatileDevelopmentSettings()
     })
   }),
   Object.freeze({

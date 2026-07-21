@@ -472,6 +472,26 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedVersatileDevelopmentSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Всестороннее развитие</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Бонус отстающим навыкам</strong>
+          <label>
+            <span>Минимальное отставание от самого высокого навыка, %</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.minimumPureValueGapPercent" value="{{fixedVersatileDevelopmentSettings.minimumPureValueGapPercent}}" min="0" max="100" step="0.1">
+          </label>
+          <label>
+            <span>Бонус к множителю развития</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.developmentMultiplierBonus" value="{{fixedVersatileDevelopmentSettings.developmentMultiplierBonus}}" min="0" step="0.1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedAimingSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">
