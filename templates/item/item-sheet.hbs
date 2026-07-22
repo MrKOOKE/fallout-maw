@@ -2095,6 +2095,41 @@
                 </div>
               </div>
               {{/if}}
+              {{#if isAttackDistance}}
+              <label>
+                <span>Режим дистанции</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMode" data-ability-attack-distance-mode>
+                  {{#each attackDistanceModeChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{#if showAttackDistanceSide}}
+              <label>
+                <span>Сторона эффективной дистанции</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceSide">
+                  {{#each attackDistanceSideChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{else}}
+              <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceSide" value="{{attackDistanceSide}}">
+              {{/if}}
+              {{#if showAttackDistanceFree}}
+              <label>
+                <span>От, м</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMinMeters" value="{{attackDistanceMinMeters}}" min="0" step="any" placeholder="0">
+              </label>
+              <label>
+                <span>До, м</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMaxMeters" value="{{attackDistanceMaxMeters}}" min="0" step="any" placeholder="∞">
+              </label>
+              {{else}}
+              <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMinMeters" value="{{attackDistanceMinMeters}}">
+              <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMaxMeters" value="{{attackDistanceMaxMeters}}">
+              {{/if}}
+              {{/if}}
               {{#if isWeaponAction}}
               <div class="fallout-maw-item-use-category-field">
                 <div class="fallout-maw-item-use-category-header"><span>Типы атаки</span><button type="button" data-add-ability-weapon-action {{#unless canAddWeaponAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
@@ -2992,6 +3027,41 @@
                   {{else}}<span class="fallout-maw-empty-list">Укрытия не выбраны.</span>{{/each}}
                 </div>
               </div>
+              {{/if}}
+              {{#if isAttackDistance}}
+              <label>
+                <span>Режим дистанции</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMode" data-ability-attack-distance-mode>
+                  {{#each attackDistanceModeChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{#if showAttackDistanceSide}}
+              <label>
+                <span>Сторона эффективной дистанции</span>
+                <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceSide">
+                  {{#each attackDistanceSideChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{else}}
+              <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceSide" value="{{attackDistanceSide}}">
+              {{/if}}
+              {{#if showAttackDistanceFree}}
+              <label>
+                <span>От, м</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMinMeters" value="{{attackDistanceMinMeters}}" min="0" step="any" placeholder="0">
+              </label>
+              <label>
+                <span>До, м</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMaxMeters" value="{{attackDistanceMaxMeters}}" min="0" step="any" placeholder="∞">
+              </label>
+              {{else}}
+              <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMinMeters" value="{{attackDistanceMinMeters}}">
+              <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.attackDistanceMaxMeters" value="{{attackDistanceMaxMeters}}">
+              {{/if}}
               {{/if}}
               {{#if isWeaponAction}}
               <div class="fallout-maw-item-use-category-field">

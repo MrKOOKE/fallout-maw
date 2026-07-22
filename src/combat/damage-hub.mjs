@@ -1538,6 +1538,8 @@ async function applyFinishingBlowIfEligible(targetActor, data = {}) {
     targetToken: targetTokenDocument?.object ?? targetTokenDocument ?? null,
     weaponActionKey: String(data?.source?.actionKey ?? ""),
     weaponData,
+    attackDistanceMeters: data?.source?.attackDistanceMeters ?? null,
+    effectiveRange: data?.source?.effectiveRange ?? null,
     chanceOperationId: getActiveUseOperationId(data?.source, getCurrentDamageHubOperationRef())
   });
   const threshold = Math.max(0, Math.min(100, toInteger(applyTargetReverseChange(
@@ -6529,6 +6531,12 @@ function getDamageMitigationChanceContext(actor, source = {}) {
     actorToken: actor?.token?.object ?? actor?.token ?? null,
     targetActor: attackerActor,
     targetToken: attackerToken?.object ?? attackerToken,
+    weaponActionKey: String(source?.actionKey ?? "").trim(),
+    weaponData: source?.weaponData && typeof source.weaponData === "object"
+      ? source.weaponData
+      : null,
+    attackDistanceMeters: source?.attackDistanceMeters ?? null,
+    effectiveRange: source?.effectiveRange ?? null,
     chanceOperationId: getActiveUseOperationId(source, getCurrentDamageHubOperationRef())
   };
 }

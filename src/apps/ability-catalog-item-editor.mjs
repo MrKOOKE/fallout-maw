@@ -21,6 +21,8 @@ import {
   ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
+  ABILITY_ATTACK_DISTANCE_MODES,
+  ABILITY_ATTACK_DISTANCE_SIDES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -303,6 +305,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='conditionAuraMode']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='conditionAttackDistanceMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='active.targetMode'], [data-field='active.targetSelectionMode']")?.forEach(select => {
@@ -1734,6 +1739,10 @@ function readAbilityConditions(root) {
       postureSubject: row.querySelector("[data-field='conditionPostureSubject']")?.value ?? ABILITY_POSTURE_SUBJECTS.self,
       postureActions: readFieldValues(row, "[data-field='conditionPosture']"),
       coverKeys: readFieldValues(row, "[data-field='conditionCover']"),
+      attackDistanceMode: row.querySelector("[data-field='conditionAttackDistanceMode']")?.value ?? ABILITY_ATTACK_DISTANCE_MODES.effective,
+      attackDistanceSide: row.querySelector("[data-field='conditionAttackDistanceSide']")?.value ?? ABILITY_ATTACK_DISTANCE_SIDES.both,
+      attackDistanceMinMeters: row.querySelector("[data-field='conditionAttackDistanceMinMeters']")?.value ?? null,
+      attackDistanceMaxMeters: row.querySelector("[data-field='conditionAttackDistanceMaxMeters']")?.value ?? null,
       weaponActionKeys: readFieldValues(row, "[data-field='conditionWeaponAction']"),
       skillKeys: (() => {
         const eventSkills = readFieldValues(row, "[data-field='conditionEventSkill']");
@@ -2557,6 +2566,7 @@ function prepareConditionForDisplay(condition, {
   const isTargetType = type === ABILITY_CONDITION_TYPES.targetType;
   const isPosture = type === ABILITY_CONDITION_TYPES.posture;
   const isOccupiedCover = type === ABILITY_CONDITION_TYPES.occupiedCover;
+  const isAttackDistance = type === ABILITY_CONDITION_TYPES.attackDistance;
   const isWeaponAction = type === ABILITY_CONDITION_TYPES.weaponAction;
   const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
@@ -2569,6 +2579,9 @@ function prepareConditionForDisplay(condition, {
   const maxLimit = Math.max(1, changeCount);
   const duration = splitDurationSeconds(condition?.durationSeconds);
   const toggleCooldown = splitDurationSeconds(condition?.cooldownSeconds ?? 0);
+  const attackDistanceMode = Object.values(ABILITY_ATTACK_DISTANCE_MODES).includes(condition?.attackDistanceMode)
+    ? condition.attackDistanceMode
+    : ABILITY_ATTACK_DISTANCE_MODES.effective;
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -2596,7 +2609,7 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -2653,6 +2666,9 @@ function prepareConditionForDisplay(condition, {
     isTargetType,
     isPosture,
     isOccupiedCover,
+    isAttackDistance,
+    showAttackDistanceSide: isAttackDistance && attackDistanceMode === ABILITY_ATTACK_DISTANCE_MODES.outsideEffective,
+    showAttackDistanceFree: isAttackDistance && attackDistanceMode === ABILITY_ATTACK_DISTANCE_MODES.free,
     isWeaponAction,
     isWeaponSkill,
     isWeaponProficiency,
@@ -2709,6 +2725,10 @@ function prepareConditionForDisplay(condition, {
     canAddPosture: normalizeConditionValues(condition?.postureActions).length < ABILITY_POSTURE_ACTIONS.length,
     coverRows: buildCoverRows(condition?.coverKeys),
     canAddCover: Boolean(getFirstUnusedCoverKey(condition?.coverKeys)),
+    attackDistanceModeChoices: buildAttackDistanceModeChoices(attackDistanceMode),
+    attackDistanceSideChoices: buildAttackDistanceSideChoices(condition?.attackDistanceSide),
+    attackDistanceMinMeters: condition?.attackDistanceMinMeters ?? "",
+    attackDistanceMaxMeters: condition?.attackDistanceMaxMeters ?? "",
     weaponActionRows: buildWeaponActionRows(condition?.weaponActionKeys),
     canAddWeaponAction: Boolean(getFirstUnusedWeaponActionKey(condition?.weaponActionKeys)),
     skillRows: buildSkillRows(condition?.skillKeys),
@@ -2831,6 +2851,25 @@ function buildChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
   }));
 }
 
+function buildAttackDistanceModeChoices(selected = ABILITY_ATTACK_DISTANCE_MODES.effective) {
+  return [
+    { value: ABILITY_ATTACK_DISTANCE_MODES.effective, label: "Эффективная дистанция" },
+    { value: ABILITY_ATTACK_DISTANCE_MODES.outsideEffective, label: "Вне эффективной дистанции" },
+    { value: ABILITY_ATTACK_DISTANCE_MODES.free, label: "Свободный" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildAttackDistanceSideChoices(selected = ABILITY_ATTACK_DISTANCE_SIDES.both) {
+  const normalized = Object.values(ABILITY_ATTACK_DISTANCE_SIDES).includes(selected)
+    ? selected
+    : ABILITY_ATTACK_DISTANCE_SIDES.both;
+  return [
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.near, label: "Ближняя" },
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.far, label: "Дальняя" },
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.both, label: "Обе" }
+  ].map(choice => ({ ...choice, selected: choice.value === normalized }));
+}
+
 function buildConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
@@ -2850,6 +2889,7 @@ function buildConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.targetType, label: "Тип цели", selected: selected === ABILITY_CONDITION_TYPES.targetType },
     { value: ABILITY_CONDITION_TYPES.posture, label: "Положение", selected: selected === ABILITY_CONDITION_TYPES.posture },
     { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
+    { value: ABILITY_CONDITION_TYPES.attackDistance, label: "Дистанция атаки", selected: selected === ABILITY_CONDITION_TYPES.attackDistance },
     { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
     { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
     { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
@@ -3185,6 +3225,7 @@ function isRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.targetType,
     ABILITY_CONDITION_TYPES.posture,
     ABILITY_CONDITION_TYPES.occupiedCover,
+    ABILITY_CONDITION_TYPES.attackDistance,
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,

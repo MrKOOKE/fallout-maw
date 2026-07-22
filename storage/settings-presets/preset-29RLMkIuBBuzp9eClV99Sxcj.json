@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "89b8d4b94c47985016997066cf727b2ee8729bce24ba2e9f76fc605038bb2189",
-  "updatedAt": "2026-07-21T20:55:38.616Z",
+  "revision": "b6b0ac1d976c084d031d80e18e901ca5cf7dd3956a1bfd176fc56f37484f1fa2",
+  "updatedAt": "2026-07-22T16:30:12.523Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -18,7 +18,7 @@
           {
             "abilities": [
               {
-                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li><li><p>Множитель развития коронных навыков: +0.2</p></li><li><p>Множитель развития всех не коронных навыков: -0.5</p></li></ul>",
+                "description": "<ul><li><p>Вы получаете еще один Коронный навык.</p></li><li><p>Множитель развития Коронных навыков: +0.2</p></li><li><p>Множитель развития всех НЕ Коронных навыков: -0.5</p></li></ul>",
                 "id": "MykWY2QgZQDXBpbF",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/odaryonnyj.webp",
                 "name": "\"Одаренный\"",
@@ -106,6 +106,145 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Пока в оружейных наборах нету предметов: +20 к Красноречию</p></li><li><p>Инициатива: -2</p></li></ul><p>\"Природное не считается снаряженным оружием\"</p>",
+                "id": "wexA49G1pXomHP3A",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Безобидный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "8HpgZk8jcKAhom6S"
+                      ],
+                      "id": "1ZprLKSwdVgDicIK",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Если максимальная дистанция атаки оружия &lt;= 10м, +20 к точности и +5% урона</p></li><li><p>Штраф на атаки дальше эффективной дистациии: +50%</p></li><li><p>Помехи на все атаки дальше эффективной дистанции</p></li></ul>",
+                "id": "hQIKzdDoEgyAKnoi",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Близорукий",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "7FrhgsJK7Wd45Pme"
+                      ],
+                      "id": "RdJbkfE4NSjYc0zo",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "Un4AkK6x27tiLX1x",
+                          "key": "system.combat.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        },
+                        {
+                          "id": "8PRWv45aJzFpbrqp",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "attackDistanceMaxMeters": 10,
+                          "attackDistanceMinMeters": 0,
+                          "attackDistanceMode": "free",
+                          "attackDistanceSide": "both",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "H1T13oDCyB2ggGp5",
+                          "type": "attackDistance"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "22zYTW8Ugcl3Ydcb",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "nhcCWrUXD7TwfYh5",
+                          "key": "system.combat.all.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "attackDistanceMaxMeters": null,
+                          "attackDistanceMinMeters": null,
+                          "attackDistanceMode": "outsideEffective",
+                          "attackDistanceSide": "far",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "gjGO5CTkZJwLjdG2",
+                          "type": "attackDistance"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "DUuPijpDInH0Du66",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<ul><li><p>Каждая единица Выносливости увеличивает ОЗ всех частей тела на 3.</p></li><li><p>Уклонение -[[30+athletics/6]]</p></li></ul>",
                 "id": "QU8jCJ6YgiIdbtQ1",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/bolshoj-malchik.webp",
@@ -156,6 +295,77 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "LcQ9JQoVYdeWTudt",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Урон: +15%</p></li><li><p>Точность: -10</p></li><li><p>Шанс на крит: -10%</p></li></ul>",
+                "id": "FgGw6s38UZmhGkyy",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Взрывной",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "C0IH85GS3gL73xrb"
+                      ],
+                      "id": "B9ZwS0oPm544RYIM",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "qUWTJWCsOgmcpilb",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "15"
+                        },
+                        {
+                          "id": "0vz8I4hGFcKYWH6i",
+                          "key": "system.combat.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        },
+                        {
+                          "id": "y1MjjNV3OEDbAkLf",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "e7L3IqAa5KDmjPRw",
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -272,6 +482,35 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Штраф на атаки дальше эффективной дистациии: -50%</p></li><li><p>Если максимальная дистанция атаки оружия &gt;= 20м, то добавляет еще 10м</p></li><li><p>Помехи на все атаки ближе эффективной дистанции</p></li></ul>",
+                "id": "7FrhgsJK7Wd45Pme",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Дальномер",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "hQIKzdDoEgyAKnoi"
+                      ],
+                      "id": "8CVvJstA5uJWpvvr",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>С 20:00 по 6:00 +20 ко всем Навыкам. В остальное время -10 ко всем Навыкам</p>",
                 "id": "fqLghKYaxztRKp7f",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/detya-nochi.webp",
@@ -362,6 +601,35 @@
                         "fqLghKYaxztRKp7f"
                       ],
                       "id": "Ypsxe0hQHEc90BnF",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Урон: -10%</p><p>Когда вас атакуют (в независимости от результата) вы на 12 секуд получаете: +10% урона.<br>Складывается не более 3-х раз</p>",
+                "id": "8HpgZk8jcKAhom6S",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Злопамятный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "wexA49G1pXomHP3A"
+                      ],
+                      "id": "qqyWisSRDSa9ejVW",
                       "mode": "absent",
                       "type": "ability"
                     }
@@ -584,6 +852,60 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Урон: +10%</p></li><li><p>Оружие ломается в два раза быстрее.</p></li></ul>",
+                "id": "OMey4wEKNc6MCeDs",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Небрежный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "4jxJqvU7835iwKPC",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "Up1WoJRwHBpxs31P",
+                          "key": "",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "0"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "mOzE96C0Z8BVIOrW",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех: +20%</p></li><li><p>С вероятностью в 50% шанс на Крит провал: +20%</p></li></ul>",
                 "id": "2ExGBSWNzig4FgR8",
                 "img": "systems/fallout-maw/assets/icons/8-14/savant.webp",
@@ -615,7 +937,7 @@
                       "changes": [
                         {
                           "id": "1YI6e0tGQ2crCfHt",
-                          "key": "system.combat.criticalChance",
+                          "key": "system.skills.all.criticalSuccessChance",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
@@ -648,11 +970,11 @@
                       "changes": [
                         {
                           "id": "vn4oOs5M9rF57QRR",
-                          "key": "system.combat.criticalChance",
+                          "key": "system.skills.all.criticalFailureChance",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "-20"
+                          "value": "20"
                         }
                       ],
                       "conditions": [
@@ -780,6 +1102,196 @@
                         "durationSeconds": 0
                       },
                       "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Пока персонаж занимает половинчатое или полное укрытие:</p><ul><li><p>Точонсть: +20</p></li><li><p>ОД: +2</p></li></ul><p>Пока не занимает укрытий:</p><p>Точонсть: -20</p>",
+                "id": "kQgDksXZgQBLUoHt",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/igroman.webp",
+                "name": "Окопник",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "IcLL8AZqS23CFQeH"
+                      ],
+                      "id": "YH4gm37SgR9I7myG",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "U6WMMjN4EpvqB0hw",
+                          "key": "system.combat.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        },
+                        {
+                          "id": "cSGFnH3BLazfH18G",
+                          "key": "system.resources.actionPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "coverKeys": [
+                            "half",
+                            "full"
+                          ],
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "akiYHj5yUCqDDvCX",
+                          "type": "occupiedCover"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "7Fl8LdsH9vPUOPJl",
+                      "penalties": [
+                        {
+                          "id": "hN9yTSvXwRo72EUW",
+                          "key": "system.combat.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-20"
+                        }
+                      ],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Проверки обнаружения засад, ловушек и скрытых существ: +1 Преимущество</p><p>Проверки Красноречия и Науки: +1 Помеха</p><p></p>",
+                "id": "txsYIq9watSaxmDo",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Параноик",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>ОД: +1</p></li><li><p>ОП: +2</p></li><li><p>Укрытия на 75% менее эффектины</p></li></ul>",
+                "id": "IcLL8AZqS23CFQeH",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Полевик",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "kQgDksXZgQBLUoHt"
+                      ],
+                      "id": "bPZ9dB6NGpVkI2IN",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "IAduCPCACIpg6zo9",
+                          "key": "system.resources.actionPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "xjc74sVfDv0O3bGT",
+                          "key": "system.resources.movementPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        },
+                        {
+                          "id": "CLm1tYitZjijkRw5",
+                          "key": "fallout-maw.cover.bonusPercent.partial",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-75"
+                        },
+                        {
+                          "id": "UkutdNb3twL1fnJ5",
+                          "key": "fallout-maw.cover.bonusPercent.half",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-75"
+                        },
+                        {
+                          "id": "l0ynh0j4cm8ahNSa",
+                          "key": "fallout-maw.cover.bonusPercent.full",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-75"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "0cnZxXMavdUW5Z1h",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
                       "type": "effectChanges"
                     }
                   ]
@@ -927,6 +1439,97 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Шанс на крит: +5%</p></li><li><p>Крит урон: +30%</p></li><li><p>Обычный урон: -10%</p></li></ul>",
+                "id": "C0IH85GS3gL73xrb",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Расчетлый",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "abilityIds": [
+                        "FgGw6s38UZmhGkyy"
+                      ],
+                      "id": "y7eD2YlaHI9hXNsj",
+                      "mode": "absent",
+                      "type": "ability"
+                    }
+                  ],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "9jFyI1TwIwJKmgFS",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5"
+                        },
+                        {
+                          "id": "JfzzDoBIcl9ErSIJ",
+                          "key": "",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "0"
+                        },
+                        {
+                          "id": "3aAWAJt9xSeH1pRc",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "PmSo5KNOuaib3smv",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Если вероятность успеха проверки навыков &lt;=60%: +10% к шансу на Крит успех</p></li><li><p>Если вероятность успеха проверки навыков &gt;60%: +10% к шансу на Крит провал</p></li></ul>",
+                "id": "j7DmoG54Vtb0lH4T",
+                "img": "icons/svg/upgrade.svg",
+                "name": "Рисковый",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Вы лишены вероятности срабатывания Критического успеха и Критического провала.</p>",
                 "id": "91ljCnGdkOl5YYMM",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/genij-tehniki.webp",
@@ -1067,6 +1670,52 @@
           },
           {
             "abilities": [
+              {
+                "description": "<p>Доступных особенностей: +1</p>",
+                "id": "75bGnh6L68ieK9yL",
+                "img": "icons/svg/aura.svg",
+                "name": "\"Особенный\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": true,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Общая категория",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "9iESZLATQRzUq6gS",
+                          "key": "system.development.points.traits",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "9N6KOuaxIr6y9RdK",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "acquisitionChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
               {
                 "description": "<p>Вы получаете +1 к выбранной характеристиике.</p>",
                 "id": "nA1IMMboEOo8ErXF",
@@ -2640,7 +3289,33 @@
                   "category": "Атлетика",
                   "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "6U37DGpGrpDKCzK2",
+                          "key": "system.resources.actionPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "sc4fHtqq7wcfHaqF",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -27254,7 +27929,7 @@
             "progression": {
               "proficiencyPointsPerLevel": "50",
               "researchPointsPerLevel": "500",
-              "skillPointsPerLevel": "5+int/2"
+              "skillPointsPerLevel": "5"
             },
             "regeneration": {
               "formula": "10 + con * 5"
@@ -49242,273 +49917,6 @@
                         "description": "",
                         "equipped": false,
                         "functions": {
-                          "actorContainer": {
-                            "enabled": false,
-                            "slots": []
-                          },
-                          "additionalWeapons": {},
-                          "condition": {
-                            "enabled": false,
-                            "max": 0,
-                            "recoveryMethods": [],
-                            "value": 0,
-                            "weakeningThreshold": 10
-                          },
-                          "constructPart": {
-                            "aimedDifficultyBonus": 0,
-                            "aimedDifficultyPercent": 0,
-                            "blockedPeriodicEffects": [],
-                            "critical": false,
-                            "enabled": false,
-                            "lossEffects": [],
-                            "needs": [],
-                            "partType": "",
-                            "weaponSets": []
-                          },
-                          "container": {
-                            "enabled": false,
-                            "extraWeaponSlots": 0,
-                            "loadReduction": 0,
-                            "specialGrids": {
-                              "blocks": [],
-                              "viewport": {
-                                "x": 0,
-                                "y": 0,
-                                "zoom": 1
-                              }
-                            }
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "damageSource": {
-                            "accuracyBonus": "0",
-                            "attackAnimationDelayMs": 0,
-                            "attackAnimationKey": "",
-                            "attackSoundPath": "",
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "0",
-                            "damage": "0",
-                            "damageTypeKey": "firearm",
-                            "damageTypes": [
-                              {
-                                "key": "firearm",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "0",
-                              "value": "0"
-                            },
-                            "enabled": false,
-                            "maxRangeMeters": "0",
-                            "name": "",
-                            "pellets": "1",
-                            "penetration": "0",
-                            "volley": {
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          },
-                          "energyConsumer": {
-                            "activeConditions": {},
-                            "activeSourceUuid": "",
-                            "enabled": false,
-                            "installedSource": {
-                              "class": "",
-                              "img": "",
-                              "itemData": {},
-                              "name": "",
-                              "reserve": {
-                                "max": 0,
-                                "value": 0
-                              },
-                              "sourceItemUuid": ""
-                            },
-                            "sourceItemUuid": "",
-                            "sourceItemUuids": []
-                          },
-                          "energySource": {
-                            "class": "D",
-                            "enabled": false,
-                            "name": "",
-                            "reserve": {
-                              "max": 0,
-                              "value": 0
-                            }
-                          },
-                          "firstAid": {
-                            "actionPointCost": 0,
-                            "changes": [],
-                            "charges": {
-                              "max": 1,
-                              "value": 1
-                            },
-                            "criticalFailureDamageMax": 10,
-                            "criticalFailureDamageMin": 1,
-                            "criticalSuccessHealingBonus": 20,
-                            "difficulty": 0,
-                            "durationSeconds": 0,
-                            "enabled": false,
-                            "healing": 0,
-                            "healingIsPercentage": false,
-                            "intervalSeconds": 6,
-                            "limbSelection": {
-                              "count": 0,
-                              "value": 0
-                            },
-                            "maxDistance": 0,
-                            "needs": [],
-                            "removeEffects": [],
-                            "withdrawal": [],
-                            "withdrawalDurationSeconds": 0,
-                            "withdrawalIntervalSeconds": 6
-                          },
-                          "freeSettings": {
-                            "enabled": false,
-                            "entries": [],
-                            "useConditionWeakening": false
-                          },
-                          "implant": {
-                            "difficulty": 60,
-                            "enabled": false,
-                            "limbKeys": [],
-                            "skillKey": "doctor"
-                          },
-                          "lightSource": {
-                            "angle": 360,
-                            "bright": 0,
-                            "color": "",
-                            "dim": 0,
-                            "enabled": false,
-                            "name": "",
-                            "resourceCosts": [],
-                            "rotation": 0
-                          },
-                          "module": {
-                            "additionalWeapons": {},
-                            "enabled": false,
-                            "name": "",
-                            "targetFunction": "weapon",
-                            "weapon": {
-                              "accuracyBonus": 0,
-                              "actionPointCosts": {
-                                "aimedMeleeAttack": 0,
-                                "aimedShot": 0,
-                                "burst": 0,
-                                "meleeAttack": 0,
-                                "push": 0,
-                                "reload": 0,
-                                "snapshot": 0,
-                                "volley": 0
-                              },
-                              "attackConeDegrees": 0,
-                              "criticalChanceModifier": 0,
-                              "criticalDamagePercent": 0,
-                              "damage": 0,
-                              "effectiveRange": {
-                                "max": 0,
-                                "value": 0
-                              },
-                              "magazineMax": 0,
-                              "maxRangeMeters": 0,
-                              "penetration": 0
-                            }
-                          },
-                          "needChange": {
-                            "changes": [],
-                            "charges": {
-                              "max": 1,
-                              "value": 1
-                            },
-                            "damages": [],
-                            "durationSeconds": 0,
-                            "enabled": false,
-                            "healthRecovery": 0,
-                            "intervalSeconds": 6,
-                            "needs": [],
-                            "organismDevelopment": []
-                          },
-                          "oneTimeUse": {
-                            "changes": [],
-                            "enabled": false,
-                            "repeatApplicationBlocked": false
-                          },
-                          "prosthesis": {
-                            "blockedPeriodicEffects": [],
-                            "breakShockResistant": false,
-                            "difficulty": 60,
-                            "enabled": false,
-                            "integrationPercent": 0,
-                            "limbKeys": [],
-                            "skillKey": "doctor"
-                          },
-                          "tools": {},
-                          "trap": {
-                            "actionPointCost": 0,
-                            "detection": {
-                              "conditions": [],
-                              "difficulty": 60,
-                              "radiusMeters": "1",
-                              "skillKey": "naturalist"
-                            },
-                            "disarm": {
-                              "attempts": 1,
-                              "difficulty": 60,
-                              "toolClass": "D",
-                              "toolKey": "mechanicalHacking"
-                            },
-                            "effect": {
-                              "damage": "0",
-                              "damageRadiusMeters": "0",
-                              "damageTypeKey": "firearm",
-                              "damageTypes": [
-                                {
-                                  "key": "firearm",
-                                  "percent": 100
-                                }
-                              ],
-                              "mode": "explosion",
-                              "pellets": "1",
-                              "penetration": "0",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            },
-                            "enabled": false,
-                            "evasion": {
-                              "avoidPercent": 50,
-                              "difficulty": null,
-                              "skillKey": "athletics"
-                            },
-                            "installation": {
-                              "difficulty": 60,
-                              "skillKey": "traps"
-                            },
-                            "recharge": {
-                              "unit": "seconds",
-                              "value": null
-                            },
-                            "trigger": {
-                              "activationMode": "exit",
-                              "heightCells": 1,
-                              "imageScale": 0.5,
-                              "widthCells": 1
-                            },
-                            "triggerAnimationKey": "",
-                            "triggerSoundPath": ""
-                          },
                           "weapon": {
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
@@ -49539,6 +49947,7 @@
                             "attackAnimationKey": "fallout-maw.generic.creature.claws_01_dark_red",
                             "attackConeDegrees": 3,
                             "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Kulaki/wpn_hand_hit_flesh_02.mp3",
+                            "attackSoundVolume": 1,
                             "availableActions": {
                               "aimedMeleeAttack": true,
                               "aimedShot": false,
@@ -49570,7 +49979,7 @@
                             ],
                             "effectiveRange": {
                               "max": "1",
-                              "value": "1"
+                              "value": "0"
                             },
                             "enabled": true,
                             "magazine": {
@@ -49579,7 +49988,7 @@
                               "sourceItemUuids": [],
                               "value": 0
                             },
-                            "maxRangeMeters": "0",
+                            "maxRangeMeters": "1",
                             "meleeAttack": {
                               "actionPointCost": 5,
                               "attackConeDegrees": 120,
@@ -49732,273 +50141,6 @@
                         "description": "",
                         "equipped": false,
                         "functions": {
-                          "actorContainer": {
-                            "enabled": false,
-                            "slots": []
-                          },
-                          "additionalWeapons": {},
-                          "condition": {
-                            "enabled": false,
-                            "max": 0,
-                            "recoveryMethods": [],
-                            "value": 0,
-                            "weakeningThreshold": 10
-                          },
-                          "constructPart": {
-                            "aimedDifficultyBonus": 0,
-                            "aimedDifficultyPercent": 0,
-                            "blockedPeriodicEffects": [],
-                            "critical": false,
-                            "enabled": false,
-                            "lossEffects": [],
-                            "needs": [],
-                            "partType": "",
-                            "weaponSets": []
-                          },
-                          "container": {
-                            "enabled": false,
-                            "extraWeaponSlots": 0,
-                            "loadReduction": 0,
-                            "specialGrids": {
-                              "blocks": [],
-                              "viewport": {
-                                "x": 0,
-                                "y": 0,
-                                "zoom": 1
-                              }
-                            }
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "damageSource": {
-                            "accuracyBonus": "0",
-                            "attackAnimationDelayMs": 0,
-                            "attackAnimationKey": "",
-                            "attackSoundPath": "",
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "0",
-                            "damage": "0",
-                            "damageTypeKey": "firearm",
-                            "damageTypes": [
-                              {
-                                "key": "firearm",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "0",
-                              "value": "0"
-                            },
-                            "enabled": false,
-                            "maxRangeMeters": "0",
-                            "name": "",
-                            "pellets": "1",
-                            "penetration": "0",
-                            "volley": {
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          },
-                          "energyConsumer": {
-                            "activeConditions": {},
-                            "activeSourceUuid": "",
-                            "enabled": false,
-                            "installedSource": {
-                              "class": "",
-                              "img": "",
-                              "itemData": {},
-                              "name": "",
-                              "reserve": {
-                                "max": 0,
-                                "value": 0
-                              },
-                              "sourceItemUuid": ""
-                            },
-                            "sourceItemUuid": "",
-                            "sourceItemUuids": []
-                          },
-                          "energySource": {
-                            "class": "D",
-                            "enabled": false,
-                            "name": "",
-                            "reserve": {
-                              "max": 0,
-                              "value": 0
-                            }
-                          },
-                          "firstAid": {
-                            "actionPointCost": 0,
-                            "changes": [],
-                            "charges": {
-                              "max": 1,
-                              "value": 1
-                            },
-                            "criticalFailureDamageMax": 10,
-                            "criticalFailureDamageMin": 1,
-                            "criticalSuccessHealingBonus": 20,
-                            "difficulty": 0,
-                            "durationSeconds": 0,
-                            "enabled": false,
-                            "healing": 0,
-                            "healingIsPercentage": false,
-                            "intervalSeconds": 6,
-                            "limbSelection": {
-                              "count": 0,
-                              "value": 0
-                            },
-                            "maxDistance": 0,
-                            "needs": [],
-                            "removeEffects": [],
-                            "withdrawal": [],
-                            "withdrawalDurationSeconds": 0,
-                            "withdrawalIntervalSeconds": 6
-                          },
-                          "freeSettings": {
-                            "enabled": false,
-                            "entries": [],
-                            "useConditionWeakening": false
-                          },
-                          "implant": {
-                            "difficulty": 60,
-                            "enabled": false,
-                            "limbKeys": [],
-                            "skillKey": "doctor"
-                          },
-                          "lightSource": {
-                            "angle": 360,
-                            "bright": 0,
-                            "color": "",
-                            "dim": 0,
-                            "enabled": false,
-                            "name": "",
-                            "resourceCosts": [],
-                            "rotation": 0
-                          },
-                          "module": {
-                            "additionalWeapons": {},
-                            "enabled": false,
-                            "name": "",
-                            "targetFunction": "weapon",
-                            "weapon": {
-                              "accuracyBonus": 0,
-                              "actionPointCosts": {
-                                "aimedMeleeAttack": 0,
-                                "aimedShot": 0,
-                                "burst": 0,
-                                "meleeAttack": 0,
-                                "push": 0,
-                                "reload": 0,
-                                "snapshot": 0,
-                                "volley": 0
-                              },
-                              "attackConeDegrees": 0,
-                              "criticalChanceModifier": 0,
-                              "criticalDamagePercent": 0,
-                              "damage": 0,
-                              "effectiveRange": {
-                                "max": 0,
-                                "value": 0
-                              },
-                              "magazineMax": 0,
-                              "maxRangeMeters": 0,
-                              "penetration": 0
-                            }
-                          },
-                          "needChange": {
-                            "changes": [],
-                            "charges": {
-                              "max": 1,
-                              "value": 1
-                            },
-                            "damages": [],
-                            "durationSeconds": 0,
-                            "enabled": false,
-                            "healthRecovery": 0,
-                            "intervalSeconds": 6,
-                            "needs": [],
-                            "organismDevelopment": []
-                          },
-                          "oneTimeUse": {
-                            "changes": [],
-                            "enabled": false,
-                            "repeatApplicationBlocked": false
-                          },
-                          "prosthesis": {
-                            "blockedPeriodicEffects": [],
-                            "breakShockResistant": false,
-                            "difficulty": 60,
-                            "enabled": false,
-                            "integrationPercent": 0,
-                            "limbKeys": [],
-                            "skillKey": "doctor"
-                          },
-                          "tools": {},
-                          "trap": {
-                            "actionPointCost": 0,
-                            "detection": {
-                              "conditions": [],
-                              "difficulty": 60,
-                              "radiusMeters": "1",
-                              "skillKey": "naturalist"
-                            },
-                            "disarm": {
-                              "attempts": 1,
-                              "difficulty": 60,
-                              "toolClass": "D",
-                              "toolKey": "mechanicalHacking"
-                            },
-                            "effect": {
-                              "damage": "0",
-                              "damageRadiusMeters": "0",
-                              "damageTypeKey": "firearm",
-                              "damageTypes": [
-                                {
-                                  "key": "firearm",
-                                  "percent": 100
-                                }
-                              ],
-                              "mode": "explosion",
-                              "pellets": "1",
-                              "penetration": "0",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            },
-                            "enabled": false,
-                            "evasion": {
-                              "avoidPercent": 50,
-                              "difficulty": null,
-                              "skillKey": "athletics"
-                            },
-                            "installation": {
-                              "difficulty": 60,
-                              "skillKey": "traps"
-                            },
-                            "recharge": {
-                              "unit": "seconds",
-                              "value": null
-                            },
-                            "trigger": {
-                              "activationMode": "exit",
-                              "heightCells": 1,
-                              "imageScale": 0.5,
-                              "widthCells": 1
-                            },
-                            "triggerAnimationKey": "",
-                            "triggerSoundPath": ""
-                          },
                           "weapon": {
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
@@ -50029,6 +50171,7 @@
                             "attackAnimationKey": "fallout-maw.generic.creature.claw.creature_attack_claw_001_001_red",
                             "attackConeDegrees": 3,
                             "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Kulaki/wpn_hand_hit_flesh_02.mp3",
+                            "attackSoundVolume": 1,
                             "availableActions": {
                               "aimedMeleeAttack": true,
                               "aimedShot": false,

@@ -6,7 +6,12 @@ import {
   getAbilitySourceId,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
-import { abilityConditionsApply, getAbilityEffectChangesFromFunctions, getAbilityFunctionChangesForSatisfiedAuraCondition } from "./evaluation.mjs";
+import {
+  abilityConditionsApply,
+  getAbilityEffectChangesFromFunctions,
+  getAbilityFunctionChangesForSatisfiedAuraCondition,
+  hasAbilityWeaponContextCondition
+} from "./evaluation.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
   AURA_GENERATED_EFFECT_FLAG_KEY,
@@ -605,19 +610,23 @@ function buildDesiredAuraGeneratedEffects() {
         if (hasEventReactionCondition(entry.conditions)) continue;
         const functionData = buildEffectFunctionSnapshot(entry);
         const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
+        const lateContextual = hasAbilityWeaponContextCondition(entry.conditions);
+        if (lateContextual && !hasPotentialLateAuraChanges(entry)) continue;
         for (const condition of findAuraDistributionConditions(entry.conditions)) {
           const targets = getAuraGeneratedTargetTokens(sourceActor, condition, { actorToken: sourceToken });
           if (!targets.length) continue;
           for (const targetToken of targets) {
             const targetActor = targetToken?.actor;
             if (!targetActor) continue;
-            const changes = prepareAuraGeneratedChanges(sourceActor, getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
-              abilityItemId: source.item.id,
-              actorToken: sourceToken,
-              targetActor,
-              targetToken
-            })).filter(isApplicableGeneratedAuraChange);
-            if (!changes.length) continue;
+            const changes = lateContextual
+              ? []
+              : prepareAuraGeneratedChanges(sourceActor, getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
+                abilityItemId: source.item.id,
+                actorToken: sourceToken,
+                targetActor,
+                targetToken
+              })).filter(isApplicableGeneratedAuraChange);
+            if (!lateContextual && !changes.length) continue;
             const key = [
               source.kind,
               sourceActor.uuid,
@@ -631,7 +640,19 @@ function buildDesiredAuraGeneratedEffects() {
             const limitedUseIds = (functionData?.conditions ?? [])
               .filter(candidate => candidate?.type === ABILITY_CONDITION_TYPES.limitedUses)
               .map(candidate => String(candidate.id ?? ""));
-            const signature = JSON.stringify({ key, changes, triggerCost, limitedUseIds });
+            const projectionContext = lateContextual ? {
+              lateContextual: true,
+              sourceItemUuid: String(source.item?.uuid ?? ""),
+              sourceTokenUuid: getAuraProjectionTokenUuid(sourceToken),
+              targetTokenUuid: getAuraProjectionTokenUuid(targetToken)
+            } : {};
+            const signature = JSON.stringify({
+              key,
+              changes,
+              triggerCost,
+              limitedUseIds,
+              ...projectionContext
+            });
             const data = buildAuraGeneratedActiveEffectData(
               source,
               sourceActor,
@@ -641,7 +662,8 @@ function buildDesiredAuraGeneratedEffects() {
               key,
               signature,
               functionData,
-              triggerCost
+              triggerCost,
+              projectionContext
             );
             const actorDesired = desired.get(targetActor.uuid) ?? new Map();
             actorDesired.set(key, data);
@@ -677,7 +699,8 @@ function buildAuraGeneratedActiveEffectData(
   key,
   signature,
   functionData,
-  triggerCost
+  triggerCost,
+  projectionContext = {}
 ) {
   return {
     type: "base",
@@ -703,11 +726,23 @@ function buildAuraGeneratedActiveEffectData(
           functionId: entry.id,
           conditionId: condition.id,
           functionData,
+          ...(projectionContext?.lateContextual ? projectionContext : {}),
           ...(triggerCost ? { triggerCost } : {})
         }
       }
     }
   };
+}
+
+function hasPotentialLateAuraChanges(entry = {}) {
+  return [
+    ...(entry?.changes ?? []),
+    ...(entry?.penalties ?? [])
+  ].some(isApplicableGeneratedAuraChange);
+}
+
+function getAuraProjectionTokenUuid(token = null) {
+  return String(token?.document?.uuid ?? token?.uuid ?? "").trim();
 }
 
 function buildAuraTriggerCostData(sourceActor, source, entry) {

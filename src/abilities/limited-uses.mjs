@@ -6,6 +6,10 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { getOriginalEffectKeyFromReverse } from "../utils/active-effect-keys.mjs";
+import {
+  normalizeAttackDistanceMeters,
+  normalizeAttackEffectiveRange
+} from "../utils/attack-distance.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
   registerSystemEventObserver,
@@ -20,9 +24,11 @@ import {
   getHealingResolutionActiveUseKeys,
   getInitiativeActiveUseKeys,
   getSkillCheckActiveUseKeys,
-  getWeaponActionActiveUseKeys
+  getWeaponActionActiveUseKeys,
+  isWeaponContextSkillCheckRequester
 } from "./active-use-keys.mjs";
 import { isConsumableActiveUseChange } from "./active-use-changes.mjs";
+import { getAuraGeneratedEffectFlag } from "./aura-conditions.mjs";
 import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS,
@@ -30,7 +36,7 @@ import {
 } from "./effect-lifecycle.mjs";
 import { syncActorAbilityEffects, syncAuraGeneratedEffects } from "./effects.mjs";
 import { getActiveUseOperationId, registerActiveUseRuntimeHandler } from "./active-use-runtime.mjs";
-import { getConditionalFunctionChanges } from "./evaluation.mjs";
+import { getConditionalFunctionChanges, getLateAuraContextualChanges } from "./evaluation.mjs";
 import {
   getLimitedUseConditionState,
   getLimitedUseConditions,
@@ -173,6 +179,8 @@ function captureLimitedUsesBeforeWeaponAction(context = {}) {
   const conditionContext = buildConditionContext({
     actorToken: context?.actorToken ?? context?.token ?? null,
     weaponData: context?.weaponData,
+    attackDistanceMeters: context?.attackDistanceMeters,
+    effectiveRange: context?.effectiveRange,
     weaponActionKey: actionKey,
     requester: "weaponAttack",
     chanceOperationId: getActiveUseOperationId(context, operationId)
@@ -208,11 +216,13 @@ async function captureLimitedUsesBeforeSkillCheck(event = {}) {
     targetToken,
     targetActor,
     weaponData: request.weaponData,
+    attackDistanceMeters: request.attackDistanceMeters,
+    effectiveRange: request.effectiveRange,
     weaponActionKey: request.weaponActionKey,
     requester: request.requester,
     chanceOperationId: request.chanceOperationId
   });
-  const keys = request.requester === "weaponAttack"
+  const keys = isWeaponContextSkillCheckRequester(request.requester)
     ? getWeaponActionActiveUseKeys({
       ...conditionContext,
       actor,
@@ -267,10 +277,26 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
       event?.source?.tokenUuid
     ))
   ]);
+  const actionKey = String(sourceData?.actionKey ?? "").trim();
+  let weaponData = sourceData?.weaponData && typeof sourceData.weaponData === "object"
+    ? sourceData.weaponData
+    : null;
+  let weapon = null;
+  if (!weaponData && actionKey && String(sourceData?.weaponUuid ?? "").trim()) {
+    weapon = await resolveUuid(String(sourceData.weaponUuid).trim());
+    weaponData = weapon
+      ? getWeaponAttackData(weapon, String(sourceData?.weaponFunctionId ?? ""))
+      : null;
+  }
   const targetContext = buildConditionContext({
     actorToken: targetToken,
     targetActor: sourceActor,
     targetToken: sourceToken,
+    weaponData,
+    attackDistanceMeters: sourceData.attackDistanceMeters,
+    effectiveRange: sourceData.effectiveRange,
+    weaponActionKey: actionKey,
+    requester: actionKey ? "weaponAttack" : "",
     chanceOperationId
   });
   const captures = [];
@@ -302,17 +328,14 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
     }), [targetContext], false));
   }
 
-  const actionKey = String(sourceData?.actionKey ?? "").trim();
   if (sourceActor && actionKey) {
-    const weapon = await resolveUuid(String(sourceData?.weaponUuid ?? "").trim());
-    const weaponData = weapon
-      ? getWeaponAttackData(weapon, String(sourceData?.weaponFunctionId ?? ""))
-      : null;
     const sourceContext = buildConditionContext({
       actorToken: sourceToken,
       targetActor,
       targetToken,
       weaponData,
+      attackDistanceMeters: sourceData.attackDistanceMeters,
+      effectiveRange: sourceData.effectiveRange,
       weaponActionKey: actionKey,
       requester: "weaponAttack",
       chanceOperationId
@@ -366,6 +389,8 @@ export async function consumeLimitedUsesForSkillEvent({ event } = {}) {
     actorToken,
     targetToken,
     targetActor,
+    attackDistanceMeters: data?.attackDistanceMeters,
+    effectiveRange: data?.effectiveRange,
     requester: data?.requester,
     weaponActionKey: data?.weaponActionKey
   });
@@ -426,6 +451,8 @@ async function consumeLimitedUsesForWeaponAttackDirect(context = {}) {
   const conditionContext = buildConditionContext({
     actorToken,
     weaponData,
+    attackDistanceMeters: context?.attackDistanceMeters,
+    effectiveRange: context?.effectiveRange,
     weaponActionKey: actionKey,
     requester: "weaponAttack"
   });
@@ -665,7 +692,10 @@ async function consumeActorLimitedUses(actor, keys, {
     ].includes(lifecycleKind)) continue;
     const descriptor = getEffectFunctionDescriptor(effect);
     if (!descriptor || !getLimitedUseConditions(descriptor.functionData?.conditions).length) continue;
-    if (!hasTriggeredChange(actor, effect.system?.changes, keys, reverseOnly)) continue;
+    const triggered = lifecycleKind === EFFECT_LIFECYCLE_KINDS.reconciledInstance
+      ? hasTriggeredReconciledEffectChange(actor, effect, keys, contexts, reverseOnly)
+      : hasTriggeredChange(actor, effect.system?.changes, keys, reverseOnly);
+    if (!triggered) continue;
 
     if (lifecycleKind === EFFECT_LIFECYCLE_KINDS.disposableInstance) {
       operations.push(consumeDisposableEffectUse(effect, keys, reverseOnly, operationId));
@@ -706,7 +736,10 @@ function captureActorLimitedUseCandidates(actor, keys, contexts = [], reverseOnl
     ].includes(lifecycleKind)) continue;
     const descriptor = getEffectFunctionDescriptor(effect);
     if (!descriptor || !getLimitedUseConditions(descriptor.functionData?.conditions).length) continue;
-    if (!hasTriggeredChange(actor, effect.system?.changes, keys, reverseOnly)) continue;
+    const triggered = lifecycleKind === EFFECT_LIFECYCLE_KINDS.reconciledInstance
+      ? hasTriggeredReconciledEffectChange(actor, effect, keys, resolvedContexts, reverseOnly)
+      : hasTriggeredChange(actor, effect.system?.changes, keys, reverseOnly);
+    if (!triggered) continue;
     if (lifecycleKind === EFFECT_LIFECYCLE_KINDS.disposableInstance) {
       candidates.push({
         kind: "disposableEffect",
@@ -984,6 +1017,8 @@ function serializeWeaponAttackUseContext(context = {}) {
     attackId: String(context?.attackId ?? "").trim(),
     damageHubOperationRef: String(context?.damageHubOperationRef ?? "").trim(),
     actionPointCostApplied: context?.actionPointCostApplied === true,
+    attackDistanceMeters: normalizeAttackDistanceMeters(context?.attackDistanceMeters),
+    effectiveRange: normalizeAttackEffectiveRange(context?.effectiveRange),
     actionUseCaptured,
     actionUseCandidates,
     targetActorUuids: Array.from(context?.targetActorUuids ?? [])
@@ -1290,6 +1325,19 @@ function hasTriggeredChange(actor, changes, keys, reverseOnly) {
   });
 }
 
+function hasTriggeredReconciledEffectChange(actor, effect, keys, contexts, reverseOnly) {
+  const auraFlag = getAuraGeneratedEffectFlag(effect);
+  if (auraFlag?.lateContextual !== true) {
+    return hasTriggeredChange(actor, effect?.system?.changes, keys, reverseOnly);
+  }
+  return (contexts ?? []).some(context => hasTriggeredChange(
+    actor,
+    getLateAuraContextualChanges(actor, effect, context),
+    keys,
+    reverseOnly
+  ));
+}
+
 function buildConditionContext(context = {}) {
   const check = context?.check ?? {};
   return {
@@ -1299,6 +1347,8 @@ function buildConditionContext(context = {}) {
     weaponData: context?.weaponData && typeof context.weaponData === "object"
       ? context.weaponData
       : check?.weaponData && typeof check.weaponData === "object" ? check.weaponData : null,
+    attackDistanceMeters: context?.attackDistanceMeters ?? check?.attackDistanceMeters ?? null,
+    effectiveRange: context?.effectiveRange ?? check?.effectiveRange ?? null,
     weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim(),
     requester: String(context?.requester ?? check?.requester ?? "").trim(),
     chanceOperationId: getActiveUseOperationId(context)

@@ -1,4 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { normalizeAttackDistanceContext } from "../utils/attack-distance.mjs";
+import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
 import { dispatchSystemEvent } from "./dispatcher.mjs";
 
 let hooksRegistered = false;
@@ -19,12 +21,15 @@ export function registerFoundryCompatibilitySystemEventHooks() {
 async function emitWeaponActionResolved(context = {}) {
   const actor = context.actor ?? context.weapon?.actor ?? null;
   if (!actor) return;
+  const attackDistanceContext = normalizeAttackDistanceContext(context);
   await dispatchSystemEvent("fallout-maw.weapon.action.resolved", {
     data: {
       actorUuid: String(actor.uuid ?? ""),
       weaponUuid: String(context.weapon?.uuid ?? ""),
       actionKey: String(context.actionKey ?? context.weaponActionKey ?? ""),
       weaponFunctionId: String(context.weaponFunctionId ?? ""),
+      weaponData: serializeWeaponContextData(context.weaponData),
+      ...attackDistanceContext,
       damageHubOperationRef: String(context.damageHubOperationRef ?? "")
     },
     outcome: { success: true }
@@ -42,6 +47,10 @@ export async function emitWeaponAttackCheckResolved(context = {}) {
   const actor = context.actor ?? context.token?.actor ?? null;
   if (!actor) return;
   const outcome = context.outcome ?? {};
+  const attackDistanceContext = normalizeAttackDistanceContext({
+    attackDistanceMeters: context.attackDistanceMeters ?? outcome?.check?.attackDistanceMeters,
+    effectiveRange: context.effectiveRange ?? outcome?.check?.effectiveRange
+  });
   const checkOccurrenceId = String(context.checkOccurrenceId ?? "").trim()
     || `${String(context.weaponAttackId ?? "check")}:${foundry.utils.randomID()}`;
   await dispatchSystemEvent("fallout-maw.weapon.attack.checkResolved", {
@@ -50,9 +59,11 @@ export async function emitWeaponAttackCheckResolved(context = {}) {
       weaponUuid: String(context.weapon?.uuid ?? ""),
       actionKey: String(context.actionKey ?? ""),
       weaponFunctionId: String(context.weaponFunctionId ?? ""),
+      weaponData: serializeWeaponContextData(context.weaponData ?? outcome?.check?.weaponData),
       attackId: String(context.weaponAttackId ?? ""),
       resultKey: String(outcome?.result?.key ?? outcome?.resultKey ?? ""),
       success: Boolean(outcome?.success ?? outcome?.result?.success),
+      ...attackDistanceContext,
       damageHubOperationRef: String(context.damageHubOperationRef ?? "")
     },
     outcome: {

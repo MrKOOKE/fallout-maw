@@ -256,7 +256,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     costs: new ArrayField(new SchemaField({
@@ -327,6 +327,20 @@ function abilityConditionField() {
       required: true,
       initial: []
     }),
+    attackDistanceMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["effective", "outsideEffective", "free"],
+      initial: "effective"
+    }),
+    attackDistanceSide: new StringField({
+      required: true,
+      blank: false,
+      choices: ["near", "far", "both"],
+      initial: "both"
+    }),
+    attackDistanceMinMeters: new NumberField({ required: false, nullable: true, min: 0, initial: null }),
+    attackDistanceMaxMeters: new NumberField({ required: false, nullable: true, min: 0, initial: null }),
     weaponActionKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
       required: true,
       initial: []

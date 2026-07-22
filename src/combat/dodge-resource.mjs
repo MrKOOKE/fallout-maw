@@ -1,7 +1,9 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { evaluateActorEffectChangeBaseNumber } from "../utils/active-effect-changes.mjs";
+import { normalizeAttackDistanceContext } from "../utils/attack-distance.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
 import {
   commitPreparedActiveUseOperations,
   prepareActiveUseOperation
@@ -87,10 +89,14 @@ class DodgeAttackExposureTracker {
     this.#multiplier = Math.max(0, Number(multiplier) || 0);
   }
 
-  record(actor) {
+  record(actor, attackContext = {}) {
     if (!actor) return;
     const current = this.#group.get(actor.uuid);
-    const entry = { actor, multiplier: this.#multiplier };
+    const entry = {
+      actor,
+      multiplier: this.#multiplier,
+      conditionContext: normalizeIncomingDodgeAttackContext(actor, attackContext)
+    };
     if (!current || entry.multiplier > current.multiplier) this.#group.set(actor.uuid, entry);
   }
 
@@ -98,7 +104,7 @@ class DodgeAttackExposureTracker {
     const entries = Array.from(this.#group.values());
     this.#group.clear();
     for (const entry of entries) {
-      await spendActorDodgeResource(entry.actor, entry.multiplier);
+      await spendActorDodgeResource(entry.actor, entry.multiplier, entry.conditionContext);
     }
   }
 }
@@ -146,11 +152,11 @@ async function restoreActorDodgeResourceNow(actor, { mode = "full" } = {}) {
   });
 }
 
-async function spendActorDodgeResource(actor, multiplier = 1) {
-  return runActorDodgeMutation(actor, () => spendActorDodgeResourceNow(actor, multiplier));
+async function spendActorDodgeResource(actor, multiplier = 1, conditionContext = {}) {
+  return runActorDodgeMutation(actor, () => spendActorDodgeResourceNow(actor, multiplier, conditionContext));
 }
 
-async function spendActorDodgeResourceNow(actor, multiplier = 1) {
+async function spendActorDodgeResourceNow(actor, multiplier = 1, conditionContext = {}) {
   const settings = getDodgeSettings();
   if (!settings.enabled) return;
   if (!isActorInActiveCombat(actor)) return;
@@ -164,7 +170,7 @@ async function spendActorDodgeResourceNow(actor, multiplier = 1) {
     actor,
     settings.attackCostPercent * Math.max(0, Number(multiplier) || 0),
     DODGE_LOSS_MODIFIER_EFFECT_KEY,
-    { chanceOperationId: operationId }
+    { ...conditionContext, chanceOperationId: operationId }
   );
   const amount = calculateDodgeAmount(max, loss.value);
   if (amount <= 0 || current <= 0) return;
@@ -173,7 +179,8 @@ async function spendActorDodgeResourceNow(actor, multiplier = 1) {
     socketAction: DODGE_SOCKET_ACTION_SPEND,
     activeUseKey: loss.materiallyModified ? DODGE_LOSS_MODIFIER_EFFECT_KEY : "",
     activeUseKind: "dodgeLoss",
-    operationId
+    operationId,
+    conditionContext
   });
 }
 
@@ -236,7 +243,8 @@ async function updateActorDodgeValue(actor, value, {
   socketAction = DODGE_SOCKET_ACTION_SPEND,
   activeUseKey = "",
   activeUseKind = "dodgeResource",
-  operationId = ""
+  operationId = "",
+  conditionContext = {}
 } = {}) {
   if (!actor) return false;
   const nextValue = Math.max(0, toInteger(value));
@@ -245,9 +253,15 @@ async function updateActorDodgeValue(actor, value, {
   const resolvedOperationId = String(operationId ?? "").trim()
     || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
   if (actor.isOwner) {
-    const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind, resolvedOperationId);
+    const activeUsePreparations = prepareDodgeActiveUseOperations(
+      actor,
+      activeUseKey,
+      activeUseKind,
+      resolvedOperationId,
+      conditionContext
+    );
     await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
-    await commitDodgeActiveUseOperation(activeUsePreparation, resolvedOperationId);
+    await commitDodgeActiveUseOperations(activeUsePreparations, resolvedOperationId);
     return true;
   }
   if (game.user?.isActiveGM) return false;
@@ -259,29 +273,55 @@ async function updateActorDodgeValue(actor, value, {
     actorUuid: actor.uuid,
     value: nextValue,
     activeUseKey,
-    operationId: resolvedOperationId
+    operationId: resolvedOperationId,
+    conditionContext: serializeDodgeConditionContext(conditionContext)
   });
 }
 
-function prepareDodgeActiveUseOperation(actor, key = "", kind = "dodgeResource", operationId = "") {
+function prepareDodgeActiveUseOperations(
+  actor,
+  key = "",
+  kind = "dodgeResource",
+  operationId = "",
+  conditionContext = {}
+) {
   const activeUseKey = String(key ?? "").trim();
-  if (!activeUseKey) return null;
-  return prepareActiveUseOperation({
+  if (!activeUseKey) return [];
+  const directPreparation = prepareActiveUseOperation({
     kind,
     actor,
     keys: new Set([activeUseKey]),
     conditionContexts: [{
-      actorToken: actor?.token?.object ?? actor?.token ?? null,
+      ...conditionContext,
+      actorToken: conditionContext?.actorToken ?? actor?.token?.object ?? actor?.token ?? null,
       chanceOperationId: operationId
     }],
     reverseOnly: false
   });
+  const reverseActor = conditionContext?.targetActor ?? conditionContext?.targetToken?.actor ?? null;
+  const reversePreparation = reverseActor && !isSameActor(actor, reverseActor)
+    ? prepareActiveUseOperation({
+      kind,
+      actor: reverseActor,
+      keys: new Set([activeUseKey]),
+      conditionContexts: [{
+        ...conditionContext,
+        actorToken: conditionContext?.targetToken ?? null,
+        targetActor: actor,
+        targetToken: conditionContext?.actorToken ?? null,
+        chanceOperationId: operationId
+      }],
+      reverseOnly: true
+    })
+    : null;
+  return [directPreparation, reversePreparation].filter(Boolean);
 }
 
-async function commitDodgeActiveUseOperation(preparation, operationId = "") {
-  if (!preparation) return [];
+async function commitDodgeActiveUseOperations(preparations = [], operationId = "") {
+  const operations = (Array.isArray(preparations) ? preparations : [preparations]).filter(Boolean);
+  if (!operations.length) return [];
   try {
-    return await commitPreparedActiveUseOperations([preparation], { operationId });
+    return await commitPreparedActiveUseOperations(operations, { operationId });
   } catch (error) {
     console.error(`${FALLOUT_MAW.id} | Dodge active-use commit failed`, error);
     return [];
@@ -343,10 +383,17 @@ async function handleDodgeSocketMessage(payload = {}) {
         : "dodgeRoundRecovery";
       const operationId = String(payload.operationId ?? "").trim()
         || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
-      const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind, operationId);
+      const conditionContext = await resolveDodgeConditionContextPayload(payload.conditionContext);
+      const activeUsePreparations = prepareDodgeActiveUseOperations(
+        actor,
+        activeUseKey,
+        activeUseKind,
+        operationId,
+        conditionContext
+      );
       await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
       success = true;
-      await commitDodgeActiveUseOperation(activeUsePreparation, operationId);
+      await commitDodgeActiveUseOperations(activeUsePreparations, operationId);
     }
   } finally {
     game.socket.emit(`system.${FALLOUT_MAW.id}`, {
@@ -360,6 +407,79 @@ async function handleDodgeSocketMessage(payload = {}) {
 
 function getDodgeResource(actor) {
   return actor?.system?.resources?.[DODGE_RESOURCE_KEY] ?? null;
+}
+
+function normalizeIncomingDodgeAttackContext(actor, context = {}) {
+  const attackerToken = context?.actorToken ?? context?.attackerToken ?? null;
+  const defenderToken = isTokenForActor(context?.targetToken, actor)
+    ? context.targetToken
+    : actor?.token?.object ?? actor?.token ?? null;
+  return {
+    actorToken: defenderToken,
+    targetActor: attackerToken?.actor ?? attackerToken?.document?.actor ?? context?.attackerActor ?? null,
+    targetToken: attackerToken,
+    ...normalizeAttackDistanceContext(context),
+    weaponData: serializeWeaponContextData(context?.weaponData),
+    weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? "").trim(),
+    requester: String(context?.requester ?? "weaponAttack").trim() || "weaponAttack"
+  };
+}
+
+function serializeDodgeConditionContext(context = {}) {
+  return {
+    actorTokenUuid: getTokenUuid(context?.actorToken),
+    targetActorUuid: String(context?.targetActor?.uuid ?? "").trim(),
+    targetTokenUuid: getTokenUuid(context?.targetToken),
+    ...normalizeAttackDistanceContext(context),
+    weaponData: serializeWeaponContextData(context?.weaponData),
+    weaponActionKey: String(context?.weaponActionKey ?? "").trim(),
+    requester: String(context?.requester ?? "").trim()
+  };
+}
+
+async function resolveDodgeConditionContextPayload(payload = {}) {
+  const [actorTokenDocument, targetActor, targetTokenDocument] = await Promise.all([
+    resolveDodgeContextUuid(payload?.actorTokenUuid),
+    resolveDodgeContextUuid(payload?.targetActorUuid),
+    resolveDodgeContextUuid(payload?.targetTokenUuid)
+  ]);
+  return {
+    actorToken: actorTokenDocument?.object ?? actorTokenDocument ?? null,
+    targetActor: targetActor ?? targetTokenDocument?.actor ?? null,
+    targetToken: targetTokenDocument?.object ?? targetTokenDocument ?? null,
+    ...normalizeAttackDistanceContext(payload),
+    weaponData: serializeWeaponContextData(payload?.weaponData),
+    weaponActionKey: String(payload?.weaponActionKey ?? "").trim(),
+    requester: String(payload?.requester ?? "").trim()
+  };
+}
+
+async function resolveDodgeContextUuid(uuid = "") {
+  const value = String(uuid ?? "").trim();
+  if (!value) return null;
+  try {
+    return await fromUuid(value);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getTokenUuid(token = null) {
+  return String(token?.document?.uuid ?? token?.uuid ?? "").trim();
+}
+
+function isTokenForActor(token = null, actor = null) {
+  const tokenActor = token?.actor ?? token?.document?.actor ?? null;
+  if (!tokenActor || !actor) return false;
+  if (tokenActor === actor) return true;
+  return Boolean(tokenActor.uuid && actor.uuid && tokenActor.uuid === actor.uuid);
+}
+
+function isSameActor(left = null, right = null) {
+  if (left === right) return true;
+  const leftUuid = String(left?.uuid ?? "").trim();
+  const rightUuid = String(right?.uuid ?? "").trim();
+  return Boolean(leftUuid && rightUuid && leftUuid === rightUuid);
 }
 
 function calculateDodgeAmount(max = 0, percent = 0) {

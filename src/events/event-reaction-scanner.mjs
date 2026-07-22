@@ -228,6 +228,7 @@ export function evaluateEventReactionFilter({
   if (!subjectActor) return false;
 
   const eventData = envelope?.data && typeof envelope.data === "object" ? envelope.data : {};
+  const requestData = eventData?.request && typeof eventData.request === "object" ? eventData.request : {};
   const evaluatedCondition = condition?.type === ABILITY_CONDITION_TYPES.posture
     ? { ...condition, postureSubject: ABILITY_POSTURE_SUBJECTS.self }
     : condition;
@@ -240,8 +241,10 @@ export function evaluateEventReactionFilter({
     actorToken: subjectToken,
     targetActor: subjectActor,
     targetToken: subjectToken,
-    weaponActionKey: String(eventData.weaponActionKey ?? eventData.actionKey ?? "").trim(),
-    weaponData: eventData.weaponData ?? eventData.weapon ?? {},
+    weaponActionKey: String(eventData.weaponActionKey ?? eventData.actionKey ?? requestData.weaponActionKey ?? "").trim(),
+    weaponData: eventData.weaponData ?? eventData.weapon ?? requestData.weaponData ?? {},
+    attackDistanceMeters: eventData.attackDistanceMeters ?? requestData.attackDistanceMeters ?? null,
+    effectiveRange: eventData.effectiveRange ?? requestData.effectiveRange ?? null,
     abilityItemId: item?.id ?? "",
     functionId: abilityFunction?.id ?? ""
   }));

@@ -54,6 +54,8 @@ import {
   ABILITY_ACTIVE_APPLICATION_SELECTION_MODES,
   ABILITY_AURA_MODES,
   ABILITY_AURA_TARGET_GROUPS,
+  ABILITY_ATTACK_DISTANCE_MODES,
+  ABILITY_ATTACK_DISTANCE_SIDES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -1125,6 +1127,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#addHandledFormChangeListener(select, event => this.#onAbilityActionTypeChange(event));
     });
     this.element?.querySelectorAll("[data-ability-condition-health-target]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll("[data-ability-attack-distance-mode]").forEach(select => {
       this.#addHandledFormChangeListener(select, event => this.#onAbilityConditionTypeChange(event));
     });
     this.#addHandledFormChangeListener(
@@ -6932,6 +6937,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isTargetType = type === ABILITY_CONDITION_TYPES.targetType;
   const isPosture = type === ABILITY_CONDITION_TYPES.posture;
   const isOccupiedCover = type === ABILITY_CONDITION_TYPES.occupiedCover;
+  const isAttackDistance = type === ABILITY_CONDITION_TYPES.attackDistance;
   const isWeaponAction = type === ABILITY_CONDITION_TYPES.weaponAction;
   const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
@@ -6944,6 +6950,9 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const maxLimit = Math.max(1, changeCount);
   const duration = splitAbilityDurationSeconds(condition?.durationSeconds);
   const toggleCooldown = splitAbilityDurationSeconds(condition?.cooldownSeconds ?? 0);
+  const attackDistanceMode = Object.values(ABILITY_ATTACK_DISTANCE_MODES).includes(condition?.attackDistanceMode)
+    ? condition.attackDistanceMode
+    : ABILITY_ATTACK_DISTANCE_MODES.effective;
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -6981,7 +6990,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -7041,6 +7050,9 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isTargetType,
     isPosture,
     isOccupiedCover,
+    isAttackDistance,
+    showAttackDistanceSide: isAttackDistance && attackDistanceMode === ABILITY_ATTACK_DISTANCE_MODES.outsideEffective,
+    showAttackDistanceFree: isAttackDistance && attackDistanceMode === ABILITY_ATTACK_DISTANCE_MODES.free,
     isWeaponAction,
     isWeaponSkill,
     isWeaponProficiency,
@@ -7097,6 +7109,10 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     canAddPosture: normalizeAbilityConditionValues(condition?.postureActions).length < ABILITY_POSTURE_ACTIONS.length,
     coverRows: buildAbilityCoverRows(condition?.coverKeys),
     canAddCover: Boolean(getFirstUnusedAbilityCoverKey(condition?.coverKeys)),
+    attackDistanceModeChoices: buildAbilityAttackDistanceModeChoices(attackDistanceMode),
+    attackDistanceSideChoices: buildAbilityAttackDistanceSideChoices(condition?.attackDistanceSide),
+    attackDistanceMinMeters: condition?.attackDistanceMinMeters ?? "",
+    attackDistanceMaxMeters: condition?.attackDistanceMaxMeters ?? "",
     weaponActionRows: buildAbilityWeaponActionRows(condition?.weaponActionKeys),
     canAddWeaponAction: Boolean(getFirstUnusedAbilityWeaponActionKey(condition?.weaponActionKeys)),
     skillRows: buildAbilitySkillRows(condition?.skillKeys),
@@ -7167,6 +7183,25 @@ function buildAbilityChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
   }));
 }
 
+function buildAbilityAttackDistanceModeChoices(selected = ABILITY_ATTACK_DISTANCE_MODES.effective) {
+  return [
+    { value: ABILITY_ATTACK_DISTANCE_MODES.effective, label: "Эффективная дистанция" },
+    { value: ABILITY_ATTACK_DISTANCE_MODES.outsideEffective, label: "Вне эффективной дистанции" },
+    { value: ABILITY_ATTACK_DISTANCE_MODES.free, label: "Свободный" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildAbilityAttackDistanceSideChoices(selected = ABILITY_ATTACK_DISTANCE_SIDES.both) {
+  const normalized = Object.values(ABILITY_ATTACK_DISTANCE_SIDES).includes(selected)
+    ? selected
+    : ABILITY_ATTACK_DISTANCE_SIDES.both;
+  return [
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.near, label: "Ближняя" },
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.far, label: "Дальняя" },
+    { value: ABILITY_ATTACK_DISTANCE_SIDES.both, label: "Обе" }
+  ].map(choice => ({ ...choice, selected: choice.value === normalized }));
+}
+
 function buildAbilityConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
@@ -7186,6 +7221,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.targetType, label: "Тип цели", selected: selected === ABILITY_CONDITION_TYPES.targetType },
     { value: ABILITY_CONDITION_TYPES.posture, label: "Положение", selected: selected === ABILITY_CONDITION_TYPES.posture },
     { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
+    { value: ABILITY_CONDITION_TYPES.attackDistance, label: "Дистанция атаки", selected: selected === ABILITY_CONDITION_TYPES.attackDistance },
     { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
     { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
     { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
@@ -7627,6 +7663,7 @@ function isAbilityRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.targetType,
     ABILITY_CONDITION_TYPES.posture,
     ABILITY_CONDITION_TYPES.occupiedCover,
+    ABILITY_CONDITION_TYPES.attackDistance,
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,

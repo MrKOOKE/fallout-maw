@@ -130,6 +130,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   targetType: "targetType",
   posture: "posture",
   occupiedCover: "occupiedCover",
+  attackDistance: "attackDistance",
   weaponAction: "weaponAction",
   weaponSkill: "weaponSkill",
   weaponProficiency: "weaponProficiency",
@@ -140,6 +141,18 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   duration: "duration",
   energyConsumption: "energyConsumption",
   itemUse: "itemUse"
+});
+
+export const ABILITY_ATTACK_DISTANCE_MODES = Object.freeze({
+  effective: "effective",
+  outsideEffective: "outsideEffective",
+  free: "free"
+});
+
+export const ABILITY_ATTACK_DISTANCE_SIDES = Object.freeze({
+  near: "near",
+  far: "far",
+  both: "both"
 });
 
 export const ABILITY_EVENT_TRACKING_TARGETS = Object.freeze(["owner", "ally", "enemy", "neutral"]);
@@ -1141,6 +1154,27 @@ function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.attackDistance) {
+    const requestedMode = String(value?.attackDistanceMode ?? value?.mode ?? "").trim();
+    const attackDistanceMode = Object.values(ABILITY_ATTACK_DISTANCE_MODES).includes(requestedMode)
+      ? requestedMode
+      : ABILITY_ATTACK_DISTANCE_MODES.effective;
+    const requestedSide = String(value?.attackDistanceSide ?? value?.side ?? "").trim();
+    const attackDistanceSide = Object.values(ABILITY_ATTACK_DISTANCE_SIDES).includes(requestedSide)
+      ? requestedSide
+      : ABILITY_ATTACK_DISTANCE_SIDES.both;
+    return {
+      id,
+      groupId,
+      type,
+      eventSubject,
+      attackDistanceMode,
+      attackDistanceSide,
+      attackDistanceMinMeters: normalizeOptionalNonNegativeNumber(value?.attackDistanceMinMeters ?? value?.minMeters),
+      attackDistanceMaxMeters: normalizeOptionalNonNegativeNumber(value?.attackDistanceMaxMeters ?? value?.maxMeters)
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.weaponAction) {
     return {
       id,
@@ -1381,6 +1415,12 @@ function normalizeOptionalSeconds(value) {
   if (value === "" || value === undefined || value === null) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : null;
+}
+
+function normalizeOptionalNonNegativeNumber(value) {
+  if (value === "" || value === undefined || value === null) return null;
+  const numeric = Number(String(value).replace(",", "."));
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : null;
 }
 
 function normalizeFixedFunctionKey(value = "") {

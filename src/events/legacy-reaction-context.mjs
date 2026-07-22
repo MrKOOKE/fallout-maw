@@ -1,4 +1,5 @@
 import { serializeSystemEventPayload } from "./catalog.mjs";
+import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
 
 const COMMON_FIELDS = Object.freeze(["title", "message", "damageHubOperationRef"]);
 
@@ -11,7 +12,10 @@ const LEGACY_CONTEXT_FIELDS = Object.freeze({
     "targetTokenUuid",
     "weaponUuid",
     "actionKey",
-    "weaponFunctionId"
+    "weaponFunctionId",
+    "weaponData",
+    "attackDistanceMeters",
+    "effectiveRange"
   ]),
   weaponAttackCommitted: Object.freeze([
     "attackId",
@@ -22,7 +26,10 @@ const LEGACY_CONTEXT_FIELDS = Object.freeze({
     "weaponUuid",
     "actionKey",
     "weaponFunctionId",
-    "originalHitChance"
+    "weaponData",
+    "originalHitChance",
+    "attackDistanceMeters",
+    "effectiveRange"
   ]),
   aimedAttackLimbSelected: Object.freeze([
     "attackId",
@@ -33,7 +40,10 @@ const LEGACY_CONTEXT_FIELDS = Object.freeze({
     "weaponUuid",
     "actionKey",
     "weaponFunctionId",
-    "limbKey"
+    "weaponData",
+    "limbKey",
+    "attackDistanceMeters",
+    "effectiveRange"
   ]),
   weaponAttackResolved: Object.freeze([
     "attackId",
@@ -63,6 +73,8 @@ const LEGACY_CONTEXT_FIELDS = Object.freeze({
 });
 
 const ARRAY_FIELDS = new Set(["targetActorUuids", "targetTokenUuids", "reactorTokenUuids"]);
+const RANGE_FIELDS = new Set(["effectiveRange"]);
+const WEAPON_CONTEXT_FIELDS = new Set(["weaponData"]);
 
 /**
  * Copy only the legacy fields that fixed providers still consume. Runtime objects are neither traversed nor
@@ -85,6 +97,17 @@ export function serializeLegacyReactionContext(eventKey, rawContext = {}) {
       serialized[field] = [...value];
       continue;
     }
+    if (RANGE_FIELDS.has(field)) {
+      serialized[field] = serializeRange(value, field);
+      continue;
+    }
+    if (WEAPON_CONTEXT_FIELDS.has(field)) {
+      if (!isPlainObject(value)) {
+        throw new TypeError(`Legacy reaction field '${field}' must be a plain weapon context object.`);
+      }
+      serialized[field] = serializeWeaponContextData(value);
+      continue;
+    }
     if (
       typeof value === "string"
       || typeof value === "boolean"
@@ -99,6 +122,21 @@ export function serializeLegacyReactionContext(eventKey, rawContext = {}) {
   const chainRef = rawContext.chainRef ?? rawContext.falloutMawSystemEventChainRef;
   if (chainRef !== undefined && chainRef !== null) serialized.chainRef = serializeChainRef(chainRef);
   return serializeSystemEventPayload(serialized);
+}
+
+function serializeRange(value, field) {
+  if (!isPlainObject(value)) {
+    throw new TypeError(`Legacy reaction field '${field}' must be a plain range object.`);
+  }
+  const minimum = value.min;
+  const maximum = value.max;
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) {
+    throw new TypeError(`Legacy reaction field '${field}' must contain finite numeric min and max.`);
+  }
+  return {
+    min: Math.max(0, minimum),
+    max: Math.max(0, maximum)
+  };
 }
 
 function serializeChainRef(value) {

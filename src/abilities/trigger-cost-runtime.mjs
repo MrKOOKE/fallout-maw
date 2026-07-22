@@ -7,9 +7,14 @@ import {
 } from "../settings/abilities.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
-import { getSkillCheckActiveUseKeys } from "./active-use-keys.mjs";
+import { getOriginalEffectKeyFromReverse } from "../utils/active-effect-keys.mjs";
+import {
+  getSkillCheckActiveUseKeys,
+  getWeaponActionActiveUseKeys,
+  isWeaponContextSkillCheckRequester
+} from "./active-use-keys.mjs";
 import { isConsumableActiveUseChange } from "./active-use-changes.mjs";
-import { abilityConditionsApply } from "./evaluation.mjs";
+import { abilityConditionsApply, getLateAuraContextualChanges } from "./evaluation.mjs";
 import { getAuraGeneratedEffectFlag } from "./aura-conditions.mjs";
 import {
   applyAbilityFunctionOverloadCosts,
@@ -170,8 +175,8 @@ export async function payAbilityFunctionResourceCosts({
 
 /**
  * Pay every consumable ability function which contributes to this concrete
- * skill check. All rows are executed in one actor-locked vector so a later
- * unaffordable function cannot leave an earlier function partially spent.
+ * skill check. Rows are combined into one actor-locked vector per paying
+ * actor, so functions owned by the same actor remain an atomic spend.
  */
 export async function paySkillCheckTriggerCosts({
   actor = null,
@@ -182,40 +187,72 @@ export async function paySkillCheckTriggerCosts({
   const entries = collectSkillCheckTriggerCostEntries({ actor, skillKey, context });
   if (!entries.length) return successfulPayment({ charged: false, entries: [] });
 
-  const preparedEntries = entries.map(entry => ({
-    ...entry,
-    ...prepareAbilityFunctionResourceCostRows(
-      actor,
-      entry.sourceItem,
-      entry.abilityFunction,
-      entry.baseRows,
-      entry.identity
-    )
-  }));
-  const costRows = preparedEntries.flatMap(entry => entry.costRows);
-  if (!costRows.length) return successfulPayment({ charged: false, entries: preparedEntries });
+  const preparedEntries = entries.map(entry => {
+    const payerActor = entry.payerActor ?? actor;
+    return {
+      ...entry,
+      payerActor,
+      ...prepareAbilityFunctionResourceCostRows(
+        payerActor,
+        entry.sourceItem,
+        entry.abilityFunction,
+        entry.baseRows,
+        entry.identity
+      )
+    };
+  });
+  const paymentGroups = groupPreparedSkillTriggerCostEntries(preparedEntries);
+  if (!paymentGroups.length) return successfulPayment({ charged: false, entries: preparedEntries });
 
   const registry = resourceCostRegistry;
   if (!registry?.execute) return failedPayment("costRegistryUnavailable", { entries: preparedEntries });
-  const execution = await registry.execute(actor, costRows, createExecutionContext(context, {
-    entries: preparedEntries
-  }));
-  if (!execution?.ok) {
-    return failedPayment(execution?.reason || "spendFailed", { execution, entries: preparedEntries });
+
+  const preflightQuotes = new Map();
+  if (paymentGroups.length > 1) {
+    for (const group of paymentGroups) {
+      const quote = await registry.quote(group.actor, group.costRows, createExecutionContext(context, {
+        entries: group.entries
+      }));
+      if (!quote?.valid || !quote?.affordable) {
+        return failedPayment(quote?.reason || "spendFailed", { quote, entries: preparedEntries });
+      }
+      preflightQuotes.set(group.actor, quote);
+    }
   }
 
-  for (const entry of preparedEntries) {
-    await applyTriggerCostOverloadSafely(
-      actor,
-      entry.sourceItem,
-      entry.abilityFunction,
-      entry.effectiveBaseRows,
-      context?.chainRef
-    );
+  const executions = [];
+  for (const group of paymentGroups) {
+    const quote = preflightQuotes.get(group.actor);
+    const execution = await registry.execute(group.actor, group.costRows, {
+      ...createExecutionContext(context, { entries: group.entries }),
+      ...(quote?.fingerprint ? { expectedFingerprint: String(quote.fingerprint) } : {})
+    });
+    executions.push({ actor: group.actor, execution, entries: group.entries });
+    if (!execution?.ok) {
+      return failedPayment(execution?.reason || "spendFailed", {
+        execution,
+        executions,
+        entries: preparedEntries
+      });
+    }
+
+    for (const entry of group.entries) {
+      await applyTriggerCostOverloadSafely(
+        group.actor,
+        entry.sourceItem,
+        entry.abilityFunction,
+        entry.effectiveBaseRows,
+        context?.chainRef
+      );
+    }
   }
+
   return successfulPayment({
-    charged: execution.quote?.costs?.some(cost => Number(cost?.amount) > 0) === true,
-    execution,
+    charged: executions.some(({ execution }) => (
+      execution?.quote?.costs?.some(cost => Number(cost?.amount) > 0) === true
+    )),
+    execution: executions[0]?.execution ?? null,
+    executions,
     entries: preparedEntries
   });
 }
@@ -227,49 +264,41 @@ export function collectSkillCheckTriggerCostEntries({
 } = {}) {
   const key = String(skillKey ?? "").trim();
   if (!actor || !key) return [];
-  const acceptedChangeKeys = getSkillCheckActiveUseKeys(key, context);
+  const weaponActionKey = String(context?.weaponActionKey ?? context?.actionKey ?? "").trim();
+  const acceptedChangeKeys = isWeaponContextSkillCheckRequester(context?.requester)
+    ? getWeaponActionActiveUseKeys({
+      ...context,
+      actor,
+      actionKey: weaponActionKey,
+      weaponData: context?.weaponData,
+      activeUseStages: { check: true }
+    })
+    : getSkillCheckActiveUseKeys(key, context);
   const entries = [];
   const seenFunctions = new Set();
 
-  for (const sourceItem of getActorItemsWithActiveHudModules(actor)) {
-    for (const abilityFunction of getSourceEffectChangeFunctions(sourceItem)) {
-      const identity = getFunctionIdentity(sourceItem, abilityFunction);
-      if (!identity || seenFunctions.has(identity)) continue;
-      if (!hasTriggerCostCondition(abilityFunction)) continue;
-      if (isAbilityFunctionTimedTriggerCost(abilityFunction)) continue;
-      if (hasExclusiveTriggerCondition(abilityFunction)) continue;
-      if (!filterChangesForLimitedUses(
-        abilityFunction.changes ?? [],
-        abilityFunction.conditions ?? []
-      ).some(change => {
-        if (!acceptedChangeKeys.has(String(change?.key ?? "").trim())) return false;
-        return isConsumableActiveUseChange(actor, change);
-      })) continue;
-
-      const remainingConditions = (abilityFunction.conditions ?? [])
-        .filter(condition => condition?.type !== ABILITY_CONDITION_TYPES.triggerCost);
-      if (!abilityConditionsApply(actor, remainingConditions, {
-        ...context,
-        abilityItemId: sourceItem.id ?? "",
-        functionId: abilityFunction.id ?? "",
-        allowContextual: true
-      })) continue;
-
-      seenFunctions.add(identity);
-      entries.push({
-        identity,
-        sourceItem,
-        abilityFunction,
-        baseRows: getAbilityFunctionTriggerCostRows(abilityFunction)
-      });
-    }
-  }
-  collectAuraSkillTriggerCostEntries({
+  collectActorSkillTriggerCostEntries({
     actor,
     acceptedChangeKeys,
+    context,
     entries,
-    seenFunctions
+    seenFunctions,
+    reverseOnly: false
   });
+  const targetActor = context?.targetToken?.actor
+    ?? context?.targetToken?.document?.actor
+    ?? context?.targetActor
+    ?? null;
+  if (targetActor && !isSameInteractionActor(actor, targetActor)) {
+    collectActorSkillTriggerCostEntries({
+      actor: targetActor,
+      acceptedChangeKeys,
+      context: reverseInteractionContext(context, actor),
+      entries,
+      seenFunctions,
+      reverseOnly: true
+    });
+  }
   return entries;
 }
 
@@ -330,6 +359,10 @@ async function interceptSkillCheckTriggerCost({ event = null, control = null, sc
         weaponData: request?.weaponData && typeof request.weaponData === "object"
           ? request.weaponData
           : null,
+        attackDistanceMeters: request?.attackDistanceMeters ?? null,
+        effectiveRange: request?.effectiveRange && typeof request.effectiveRange === "object"
+          ? request.effectiveRange
+          : null,
         requester: String(request?.requester ?? "").trim(),
         weaponActionKey: String(request?.weaponActionKey ?? "").trim(),
         chanceOperationId: String(request?.chanceOperationId ?? "").trim(),
@@ -368,8 +401,10 @@ function isActiveFreeSettingsGear(item = null) {
 function collectAuraSkillTriggerCostEntries({
   actor = null,
   acceptedChangeKeys = new Set(),
+  context = {},
   entries = [],
-  seenFunctions = new Set()
+  seenFunctions = new Set(),
+  reverseOnly = false
 } = {}) {
   for (const effect of actor?.effects ?? []) {
     if (effect?.disabled || effect?.active === false) continue;
@@ -378,10 +413,14 @@ function collectAuraSkillTriggerCostEntries({
     if (!triggerCost || typeof triggerCost !== "object") continue;
     const sourceIdentity = String(triggerCost?.sourceIdentity ?? "").trim();
     if (!sourceIdentity) continue;
-    const changes = Array.from(effect?.system?.changes ?? []);
-    if (!changes.some(change => (
-      acceptedChangeKeys.has(String(change?.key ?? "").trim())
-      && isConsumableActiveUseChange(actor, change)
+    const changes = auraFlag?.lateContextual === true
+      ? getLateAuraContextualChanges(actor, effect, context)
+      : Array.from(effect?.system?.changes ?? []);
+    if (!changes.some(change => hasAcceptedTriggerCostChange(
+      actor,
+      change,
+      acceptedChangeKeys,
+      reverseOnly
     ))) continue;
 
     const identity = `aura:${String(actor?.uuid ?? actor?.id ?? "")}:${String(
@@ -416,11 +455,92 @@ function collectAuraSkillTriggerCostEntries({
     seenFunctions.add(identity);
     entries.push({
       identity,
+      payerActor: actor,
       sourceItem,
       abilityFunction,
       baseRows: getAbilityFunctionTriggerCostRows(abilityFunction)
     });
   }
+}
+
+function collectActorSkillTriggerCostEntries({
+  actor = null,
+  acceptedChangeKeys = new Set(),
+  context = {},
+  entries = [],
+  seenFunctions = new Set(),
+  reverseOnly = false
+} = {}) {
+  if (!actor) return entries;
+  for (const sourceItem of getActorItemsWithActiveHudModules(actor)) {
+    for (const abilityFunction of getSourceEffectChangeFunctions(sourceItem)) {
+      const identity = getFunctionIdentity(sourceItem, abilityFunction);
+      if (!identity || seenFunctions.has(identity)) continue;
+      if (!hasTriggerCostCondition(abilityFunction)) continue;
+      if (isAbilityFunctionTimedTriggerCost(abilityFunction)) continue;
+      if (hasExclusiveTriggerCondition(abilityFunction)) continue;
+      if (!filterChangesForLimitedUses(
+        abilityFunction.changes ?? [],
+        abilityFunction.conditions ?? []
+      ).some(change => hasAcceptedTriggerCostChange(
+        actor,
+        change,
+        acceptedChangeKeys,
+        reverseOnly
+      ))) continue;
+
+      const remainingConditions = (abilityFunction.conditions ?? [])
+        .filter(condition => condition?.type !== ABILITY_CONDITION_TYPES.triggerCost);
+      if (!abilityConditionsApply(actor, remainingConditions, {
+        ...context,
+        abilityItemId: sourceItem.id ?? "",
+        functionId: abilityFunction.id ?? "",
+        allowContextual: true
+      })) continue;
+
+      seenFunctions.add(identity);
+      entries.push({
+        identity,
+        payerActor: actor,
+        sourceItem,
+        abilityFunction,
+        baseRows: getAbilityFunctionTriggerCostRows(abilityFunction)
+      });
+    }
+  }
+  collectAuraSkillTriggerCostEntries({
+    actor,
+    acceptedChangeKeys,
+    context,
+    entries,
+    seenFunctions,
+    reverseOnly
+  });
+  return entries;
+}
+
+function hasAcceptedTriggerCostChange(actor, change, acceptedChangeKeys, reverseOnly) {
+  const key = String(change?.key ?? "").trim();
+  const sourceKey = getOriginalEffectKeyFromReverse(key);
+  if (Boolean(sourceKey) !== Boolean(reverseOnly)) return false;
+  if (!acceptedChangeKeys.has(sourceKey || key)) return false;
+  return isConsumableActiveUseChange(actor, change);
+}
+
+function reverseInteractionContext(context = {}, sourceActor = null) {
+  return {
+    ...context,
+    actorToken: context?.targetToken ?? null,
+    targetToken: context?.actorToken ?? null,
+    targetActor: sourceActor
+  };
+}
+
+function isSameInteractionActor(sourceActor, targetActor) {
+  if (sourceActor === targetActor) return true;
+  const sourceUuid = String(sourceActor?.uuid ?? "").trim();
+  const targetUuid = String(targetActor?.uuid ?? "").trim();
+  return Boolean(sourceUuid && targetUuid && sourceUuid === targetUuid);
 }
 
 function hasTriggerCostCondition(abilityFunction = {}) {
@@ -465,6 +585,19 @@ function prepareAbilityFunctionResourceCostRows(
     identity
   );
   return { rawBaseRows, effectiveBaseRows, costRows };
+}
+
+function groupPreparedSkillTriggerCostEntries(entries = []) {
+  const groups = new Map();
+  for (const entry of entries ?? []) {
+    const actor = entry?.payerActor ?? null;
+    if (!actor) continue;
+    const group = groups.get(actor) ?? { actor, entries: [], costRows: [] };
+    group.entries.push(entry);
+    group.costRows.push(...(entry.costRows ?? []));
+    groups.set(actor, group);
+  }
+  return Array.from(groups.values()).filter(group => group.costRows.length > 0);
 }
 
 function namespaceCostRows(rows = [], identity = "") {

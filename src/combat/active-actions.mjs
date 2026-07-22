@@ -303,16 +303,28 @@ async function attemptPush(attackerDocument, targetDocument, { selectedStrength 
   await spendActionPoints(attackerDocument.actor, PUSH_ACTION_POINT_COST);
   if (isActorUnableToAct(attackerDocument.actor)) return false;
 
+  const actorToken = attackerDocument.object ?? attackerDocument;
+  const targetToken = targetDocument.object ?? targetDocument;
+  const attackContext = {
+    actorToken,
+    targetActor: targetDocument.actor,
+    targetToken,
+    attackDistanceMeters: getActiveActionAttackDistanceMeters(attackerDocument, targetDocument),
+    effectiveRange: null,
+    weaponActionKey: "push",
+    requester: "activePush"
+  };
   const dodgeExposure = createDodgeAttackExposureTracker();
   dodgeExposure.begin(1);
-  dodgeExposure.record(targetDocument.actor);
+  dodgeExposure.record(targetDocument.actor, attackContext);
   const outcome = await requestSkillCheck({
     actor: attackerDocument.actor,
     skillKey: resolveSkillKey(attackerDocument.actor, "meleeCombat"),
     data: {
       difficulty: getDodgeDifficulty(targetDocument.actor),
-      actorToken: attackerDocument.object ?? attackerDocument,
-      targetToken: targetDocument.object ?? targetDocument,
+      actorToken,
+      targetToken,
+      attackDistanceMeters: attackContext.attackDistanceMeters,
       weaponActionKey: "push"
     },
     animate: false,
@@ -1502,6 +1514,18 @@ function getTokenCenter(tokenDocument) {
   const center = getTokenDocumentCenter(tokenDocument);
   if (center) return center;
   return getTokenPositionCenter({ x: tokenDocument.x, y: tokenDocument.y }, tokenDocument);
+}
+
+function getActiveActionAttackDistanceMeters(attackerDocument, targetDocument) {
+  const attackerCenter = getTokenCenter(attackerDocument);
+  const targetCenter = getTokenCenter(targetDocument);
+  const gridDistance = Math.max(0.0001, Number(canvas.scene?.grid?.distance ?? canvas.grid?.distance) || 1);
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const centerDistance = Math.hypot(
+    targetCenter.x - attackerCenter.x,
+    targetCenter.y - attackerCenter.y
+  ) * (gridDistance / gridSize);
+  return Math.max(0, centerDistance - Math.max(0, getTokenSizeRank(attackerDocument) - 1));
 }
 
 function getTokenPositionCenter(position, tokenDocument = null) {

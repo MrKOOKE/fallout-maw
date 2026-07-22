@@ -19,6 +19,8 @@ import {
   getAbilityOverloadCostEffectKey,
   DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
   DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
   INITIATIVE_DISADVANTAGE_EFFECT_KEY,
   getReverseEffectKey,
@@ -636,6 +638,20 @@ export function buildCombatEffectKeyTokens() {
       group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
+      code: "effectiveRangeNearPenaltyPercent",
+      key: "effectiveRangeNearPenaltyPercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.EffectiveRangeNearPenaltyPercent"),
+      path: EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "effectiveRangeFarPenaltyPercent",
+      key: "effectiveRangeFarPenaltyPercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.EffectiveRangeFarPenaltyPercent"),
+      path: EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
       code: "finishingBlow",
       key: "finishingBlow",
       label: game.i18n.localize("FALLOUTMAW.Effects.CombatFinishingBlow"),
@@ -724,6 +740,8 @@ export function buildReverseInteractionEffectKeyTokens() {
     "system.combat.damageFlat",
     "system.combat.damagePercent",
     "system.combat.burstStability",
+    EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
+    EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
     "system.combat.finishingBlow",
     "system.combat.finishingBlowChance",
     ...Object.values(SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS)

@@ -2,6 +2,8 @@ import { getCreatureOptions } from "../settings/accessors.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { DEFAULT_FACTION_NAME, getActorFactionBelongs } from "../settings/factions.mjs";
 import {
+  ABILITY_ATTACK_DISTANCE_MODES,
+  ABILITY_ATTACK_DISTANCE_SIDES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -14,7 +16,7 @@ import {
 } from "../settings/abilities.mjs";
 import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
-import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { evaluateEffectChangeNumber, tryEvaluateEffectChangeValue } from "../utils/effect-change-values.mjs";
 import {
   applyPreparedActorReverseEffectChanges,
   collectActorReverseEffectChanges,
@@ -23,7 +25,12 @@ import {
   getActorSuppressedTraumaDiseaseIds,
   isActorTraumaDiseaseEffectSuppressed
 } from "../utils/active-effect-changes.mjs";
-import { buildActorFormulaData } from "../utils/actor-formulas.mjs";
+import { buildActorFormulaData, evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import {
+  getEffectiveRangeDistanceState,
+  normalizeAttackDistanceMeters,
+  normalizeAttackEffectiveRange
+} from "../utils/attack-distance.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -32,7 +39,11 @@ import {
   SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
 } from "../advancement/skill-multiplier-effects.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
-import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
+import {
+  abilityAuraConditionApplies,
+  getAuraGeneratedEffectFlag,
+  isAuraDistributionCondition
+} from "./aura-conditions.mjs";
 import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import { isAbilityToggleConditionActive } from "./toggleable-conditions.mjs";
@@ -43,6 +54,10 @@ import {
 import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
 import { isActiveUseEffectKey } from "./active-use-keys.mjs";
 import { getActiveUseOperationId } from "./active-use-runtime.mjs";
+import {
+  EFFECT_LIFECYCLE_KINDS,
+  getEffectSourceFunctionContext
+} from "./effect-lifecycle.mjs";
 
 const TRIGGER_CHANCE_DECISION_LIMIT = 512;
 const triggerChanceDecisions = new Map();
@@ -237,6 +252,10 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     return accepted.size > 0 && getActorOccupiedCoverKeys(actor).some(key => accepted.has(key));
   }
 
+  if (condition.type === ABILITY_CONDITION_TYPES.attackDistance) {
+    return attackDistanceConditionApplies(actor, condition, context);
+  }
+
   if (condition.type === ABILITY_CONDITION_TYPES.weaponAction) {
     const accepted = new Set(condition?.weaponActionKeys ?? []);
     const contextActionKey = String(context?.weaponActionKey ?? "").trim();
@@ -288,13 +307,14 @@ export function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
   if (hasEventReactionCondition(conditions)) return [];
   if (!conditions.length) return entry.changes ?? [];
-  if ((hasAbilityTargetContextCondition(conditions) || hasWeaponContextCondition(conditions)) && !context?.allowContextual) return [];
+  if ((hasAbilityTargetContextCondition(conditions) || hasAbilityWeaponContextCondition(conditions)) && !context?.allowContextual) return [];
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
   if (hasItemUseCondition(conditions)) return [];
   if (hasAuraDistributionCondition(conditions) && !context?.auraTargetApplication) return [];
   const conditionContext = { ...context, functionId: entry.id ?? "" };
   const hasTriggerChance = hasTriggerChanceCondition(conditions);
   if (hasTriggerChance && !hasTriggerChanceResolutionScope(actor, conditionContext)) return [];
+  if (hasAbilityWeaponContextCondition(conditions) && hasUnresolvedWeaponContextBranch(actor, conditions, conditionContext)) return [];
   const selectedChanges = abilityConditionsApply(actor, conditions, conditionContext)
     ? entry.changes ?? []
     : entry.penalties ?? [];
@@ -305,17 +325,36 @@ export function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
 }
 
 export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry = {}, condition = {}, context = {}) {
-  if (!entry || entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) return [];
-  if (hasEventReactionCondition(entry.conditions)) return [];
-  if (hasItemUseCondition(entry.conditions)) return [];
-  const applies = abilityConditionsApply(actor, entry.conditions ?? [], {
+  return getSatisfiedAuraFunctionSelection(actor, entry, condition, context).changes;
+}
+
+function getSatisfiedAuraFunctionSelection(actor, entry = {}, condition = {}, context = {}, {
+  requireTriggerChanceScope = false
+} = {}) {
+  if (!entry || entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) return { branch: "", changes: [] };
+  if (hasEventReactionCondition(entry.conditions)) return { branch: "", changes: [] };
+  if (hasItemUseCondition(entry.conditions)) return { branch: "", changes: [] };
+  const conditionContext = {
     ...context,
     functionId: entry.id ?? "",
     satisfiedAuraConditionId: condition.id,
     auraTargetApplication: true
-  });
+  };
+  if (requireTriggerChanceScope
+    && hasTriggerChanceCondition(entry.conditions)
+    && !hasTriggerChanceResolutionScope(actor, conditionContext)) {
+    return { branch: "", changes: [] };
+  }
+  if (hasAbilityWeaponContextCondition(entry.conditions)
+    && hasUnresolvedWeaponContextBranch(actor, entry.conditions, conditionContext)) {
+    return { branch: "", changes: [] };
+  }
+  const applies = abilityConditionsApply(actor, entry.conditions ?? [], conditionContext);
   const selectedChanges = applies ? entry.changes ?? [] : entry.penalties ?? [];
-  return filterChangesForLimitedUses(selectedChanges, entry.conditions ?? []);
+  return {
+    branch: applies ? "changes" : "penalties",
+    changes: filterChangesForLimitedUses(selectedChanges, entry.conditions ?? [])
+  };
 }
 
 function abilityConditionsRequireTarget(conditions = []) {
@@ -342,7 +381,7 @@ function isTargetActorCondition(condition = {}) {
     || (condition?.type === ABILITY_CONDITION_TYPES.posture && condition?.postureSubject === ABILITY_POSTURE_SUBJECTS.target);
 }
 
-function hasWeaponContextCondition(conditions = []) {
+export function hasAbilityWeaponContextCondition(conditions = []) {
   return (conditions ?? []).some(isWeaponContextCondition);
 }
 
@@ -352,10 +391,122 @@ function hasAuraDistributionCondition(conditions = []) {
 
 function isWeaponContextCondition(condition = {}) {
   return [
+    ABILITY_CONDITION_TYPES.attackDistance,
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency
   ].includes(condition?.type);
+}
+
+function isAttackDistanceConditionResolved(actor, condition = {}, context = {}) {
+  if (normalizeAttackDistanceMeters(context?.attackDistanceMeters) === null) return false;
+  const mode = Object.values(ABILITY_ATTACK_DISTANCE_MODES).includes(condition?.attackDistanceMode)
+    ? condition.attackDistanceMode
+    : ABILITY_ATTACK_DISTANCE_MODES.effective;
+  return mode === ABILITY_ATTACK_DISTANCE_MODES.free || Boolean(resolveAttackEffectiveRange(actor, context));
+}
+
+function isWeaponContextConditionResolved(actor, condition = {}, context = {}) {
+  if (condition?.type === ABILITY_CONDITION_TYPES.attackDistance) {
+    return isAttackDistanceConditionResolved(actor, condition, context);
+  }
+  if (condition?.type === ABILITY_CONDITION_TYPES.weaponAction) {
+    return Boolean(String(context?.weaponActionKey ?? "").trim());
+  }
+  if (condition?.type === ABILITY_CONDITION_TYPES.weaponSkill) {
+    return Boolean(context?.weaponData && Object.hasOwn(context.weaponData, "skillKey"));
+  }
+  if (condition?.type === ABILITY_CONDITION_TYPES.weaponProficiency) {
+    return Boolean(context?.weaponData && Object.hasOwn(context.weaponData, "proficiencyKey"));
+  }
+  return true;
+}
+
+function hasUnresolvedWeaponContextBranch(actor, conditions = [], context = {}) {
+  const groups = new Map();
+  for (const condition of conditions ?? []) {
+    if ([
+      ABILITY_CONDITION_TYPES.triggerCost,
+      ABILITY_CONDITION_TYPES.limitedUses
+    ].includes(condition?.type)) continue;
+    if (!isWeaponContextCondition(condition) && !condition?.groupId) continue;
+    const groupId = String(condition?.groupId ?? "").trim();
+    if (!groupId) {
+      if (isWeaponContextCondition(condition)
+        && !isWeaponContextConditionResolved(actor, condition, context)) return true;
+      continue;
+    }
+    const group = groups.get(groupId) ?? [];
+    group.push(condition);
+    groups.set(groupId, group);
+  }
+
+  for (const group of groups.values()) {
+    if (!group.some(condition => isWeaponContextCondition(condition)
+      && !isWeaponContextConditionResolved(actor, condition, context))) continue;
+    const hasResolvedMatch = group.some(condition => {
+      if (isWeaponContextCondition(condition)
+        && !isWeaponContextConditionResolved(actor, condition, context)) return false;
+      return abilityConditionApplies(actor, condition, context);
+    });
+    if (!hasResolvedMatch) return true;
+  }
+  return false;
+}
+
+function attackDistanceConditionApplies(actor, condition = {}, context = {}) {
+  const distance = normalizeAttackDistanceMeters(context?.attackDistanceMeters);
+  if (distance === null) return false;
+
+  const mode = Object.values(ABILITY_ATTACK_DISTANCE_MODES).includes(condition?.attackDistanceMode)
+    ? condition.attackDistanceMode
+    : ABILITY_ATTACK_DISTANCE_MODES.effective;
+  if (mode === ABILITY_ATTACK_DISTANCE_MODES.free) {
+    const minimum = getOptionalNonNegativeNumber(condition?.attackDistanceMinMeters) ?? 0;
+    const maximum = getOptionalNonNegativeNumber(condition?.attackDistanceMaxMeters) ?? Infinity;
+    return minimum <= maximum && distance >= minimum && distance <= maximum;
+  }
+
+  const rangeState = getEffectiveRangeDistanceState({
+    attackDistanceMeters: distance,
+    effectiveRange: resolveAttackEffectiveRange(actor, context)
+  });
+  if (!rangeState.resolved) return false;
+  if (mode === ABILITY_ATTACK_DISTANCE_MODES.effective) {
+    return rangeState.side === "inside";
+  }
+
+  const side = Object.values(ABILITY_ATTACK_DISTANCE_SIDES).includes(condition?.attackDistanceSide)
+    ? condition.attackDistanceSide
+    : ABILITY_ATTACK_DISTANCE_SIDES.both;
+  if (side === ABILITY_ATTACK_DISTANCE_SIDES.near) return rangeState.side === "near";
+  if (side === ABILITY_ATTACK_DISTANCE_SIDES.far) return rangeState.side === "far";
+  return rangeState.side === "near" || rangeState.side === "far";
+}
+
+function resolveAttackEffectiveRange(actor, context = {}) {
+  const prepared = normalizeAttackEffectiveRange(context?.effectiveRange ?? context?.effectiveRangeBounds);
+  if (prepared) return prepared.max > 0 ? prepared : null;
+  if (context?.requirePreparedEffectiveRange === true) return null;
+
+  const configured = context?.weaponData?.effectiveRange ?? {};
+  const first = evaluateActorFormula(configured?.value, actor, {
+    minimum: 0,
+    context: "attack distance effective range"
+  });
+  const second = evaluateActorFormula(configured?.max, actor, {
+    minimum: 0,
+    context: "attack distance effective range max"
+  });
+  if (first <= 0 && second <= 0) return null;
+  if (second <= 0) return { min: 0, max: first };
+  return { min: Math.min(first, second), max: Math.max(first, second) };
+}
+
+function getOptionalNonNegativeNumber(value) {
+  if (value === "" || value === undefined || value === null) return null;
+  const numeric = Number(String(value).replace(",", "."));
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : null;
 }
 
 function getContextPostureAction(actor, token = null) {
@@ -398,6 +549,108 @@ function isActiveFreeSettingsItem(item) {
     || ["equipment", "weapon", "constructPart"].includes(item.system?.placement?.mode);
 }
 
+/**
+ * Resolve one descriptor-only aura projection against the current weapon
+ * operation. The source function remains authoritative; stale projections
+ * fail closed instead of falling back to their stored descriptor snapshot.
+ */
+export function getLateAuraContextualChanges(hostActor, effect, runtimeContext = {}) {
+  return getLateAuraContextualSelection(hostActor, effect, runtimeContext)?.changes ?? [];
+}
+
+function getLateAuraContextualSelection(hostActor, effect, runtimeContext = {}) {
+  if (!hostActor || !effect || effect.disabled || effect.active === false) return null;
+  const auraFlag = getAuraGeneratedEffectFlag(effect);
+  if (auraFlag?.lateContextual !== true) return null;
+
+  const sourceContext = getEffectSourceFunctionContext(effect, hostActor);
+  if (sourceContext.lifecycleKind !== EFFECT_LIFECYCLE_KINDS.reconciledInstance) return null;
+  const functionId = String(auraFlag.functionId ?? "").trim();
+  const sourceFunction = sourceContext.applicableFunctions.find(entry => (
+    String(entry?.id ?? "").trim() === functionId
+  ));
+  const sourceItem = sourceContext.sourceItem;
+  const sourceActor = sourceItem?.actor ?? sourceItem?.parent ?? null;
+  if (!sourceItem || !sourceActor || !sourceFunction) return null;
+  if (sourceFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) return null;
+  if (!hasAbilityWeaponContextCondition(sourceFunction.conditions)) return null;
+
+  const conditionId = String(auraFlag.conditionId ?? "").trim();
+  const auraCondition = (sourceFunction.conditions ?? []).find(condition => (
+    String(condition?.id ?? "").trim() === conditionId
+    && isAuraDistributionCondition(condition)
+  ));
+  if (!auraCondition) return null;
+
+  const sourceToken = resolveLateAuraToken(auraFlag.sourceTokenUuid);
+  if (!sourceToken || !isTokenForActor(sourceToken, sourceActor)) return null;
+  const runtimeHostToken = isTokenForActor(runtimeContext?.actorToken, hostActor)
+    ? runtimeContext.actorToken
+    : null;
+  const storedHostToken = resolveLateAuraToken(auraFlag.targetTokenUuid);
+  const hostToken = runtimeHostToken
+    ?? (isTokenForActor(storedHostToken, hostActor) ? storedHostToken : null);
+  if (!hostToken) return null;
+
+  const conditionContext = {
+    ...runtimeContext,
+    actorToken: sourceToken,
+    targetActor: hostActor,
+    targetToken: hostToken,
+    abilityItemId: String(sourceItem.id ?? ""),
+    functionId: String(sourceFunction.id ?? ""),
+    allowContextual: true,
+    requirePreparedEffectiveRange: true
+  };
+  const selection = getSatisfiedAuraFunctionSelection(
+    sourceActor,
+    sourceFunction,
+    auraCondition,
+    conditionContext,
+    { requireTriggerChanceScope: true }
+  );
+  let formulaData = null;
+  const changes = selection.changes.map(change => {
+    const result = tryEvaluateEffectChangeValue(sourceActor, change?.value, {
+      formulaData: () => (formulaData ??= buildActorFormulaData(sourceActor, { stage: "prepared" }))
+    });
+    if (!result.ok) return null;
+    return { ...change, value: result.value };
+  }).filter(change => change?.key && Number.isFinite(Number(change.value)));
+
+  return {
+    auraFlag,
+    branch: selection.branch,
+    changes,
+    sourceActor,
+    sourceFunction,
+    sourceItem
+  };
+}
+
+function resolveLateAuraToken(uuid = "") {
+  const value = String(uuid ?? "").trim();
+  if (!value) return null;
+  try {
+    const document = globalThis.fromUuidSync?.(value)
+      ?? globalThis.foundry?.utils?.fromUuidSync?.(value)
+      ?? null;
+    const token = document?.object ?? document;
+    return token?.actor ? token : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function isTokenForActor(token = null, actor = null) {
+  const tokenActor = token?.actor ?? token?.document?.actor ?? null;
+  if (!tokenActor || !actor) return false;
+  if (tokenActor === actor) return true;
+  const tokenActorUuid = String(tokenActor.uuid ?? "").trim();
+  const actorUuid = String(actor.uuid ?? "").trim();
+  return Boolean(tokenActorUuid && actorUuid && tokenActorUuid === actorUuid);
+}
+
 export function getContextualAbilityEffectChanges(actor, context = {}, { targetContextOnly = false } = {}) {
   if (!actor) return [];
   const changes = [];
@@ -408,10 +661,13 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
       : isActiveFreeSettingsItem(item) ? item.system?.functions?.freeSettings?.entries ?? [] : [];
     for (const [functionIndex, entry] of normalizeAbilityFunctions(functions).entries()) {
       if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+      // applyToTargets is represented by its reconciled projection, including
+      // when that projection targets the source actor itself.
+      if (hasAuraDistributionCondition(entry.conditions)) continue;
       const orderStart = contextualOrder;
       contextualOrder += Math.max(1, entry.changes?.length ?? 0, entry.penalties?.length ?? 0);
       const hasTargetContext = hasAbilityTargetContextCondition(entry.conditions);
-      const hasWeaponContext = hasWeaponContextCondition(entry.conditions);
+      const hasWeaponContext = hasAbilityWeaponContextCondition(entry.conditions);
       const hasTriggerChance = hasTriggerChanceCondition(entry.conditions);
       if (!hasTargetContext && !hasWeaponContext && !hasTriggerChance) continue;
       if (targetContextOnly && !hasTargetContext) continue;
@@ -435,6 +691,33 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
         contextualSourceFunctionId: String(entry.id ?? functionIndex)
       })));
     }
+  }
+
+  for (const effect of actor.effects ?? []) {
+    const selection = getLateAuraContextualSelection(actor, effect, context);
+    if (!selection) continue;
+    const entry = selection.sourceFunction;
+    const orderStart = contextualOrder;
+    contextualOrder += Math.max(1, entry.changes?.length ?? 0, entry.penalties?.length ?? 0);
+    const hasTargetContext = hasAbilityTargetContextCondition(entry.conditions);
+    if (targetContextOnly && !hasTargetContext) continue;
+    changes.push(...selection.changes.map((change, index) => ({
+      ...change,
+      effect,
+      contextualOrder: orderStart + index,
+      contextualTargetContext: hasTargetContext,
+      contextualIdentity: [
+        selection.auraFlag?.key ?? effect.uuid ?? effect.id ?? "",
+        entry.id ?? "",
+        selection.branch,
+        index
+      ].join(":"),
+      contextualSourceItemId: String(selection.sourceItem?.id ?? ""),
+      contextualSourceItemUuid: String(selection.sourceItem?.uuid ?? ""),
+      contextualSourceName: String(selection.sourceItem?.name ?? effect.name ?? ""),
+      contextualSourceImg: String(selection.sourceItem?.img ?? effect.img ?? ""),
+      contextualSourceFunctionId: String(entry.id ?? "")
+    })));
   }
   return changes.filter(change => change?.key && change.value !== "");
 }

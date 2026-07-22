@@ -1993,6 +1993,42 @@
               </div>
               {{/if}}
 
+              {{#if isAttackDistance}}
+              <label>
+                <span>Режим дистанции</span>
+                <select data-field="conditionAttackDistanceMode">
+                  {{#each attackDistanceModeChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{#if showAttackDistanceSide}}
+              <label>
+                <span>Сторона эффективной дистанции</span>
+              <select data-field="conditionAttackDistanceSide">
+                  {{#each attackDistanceSideChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+              </select>
+              </label>
+              {{else}}
+              <input type="hidden" data-field="conditionAttackDistanceSide" value="{{attackDistanceSide}}">
+              {{/if}}
+              {{#if showAttackDistanceFree}}
+              <label>
+                <span>От, м</span>
+                <input type="number" data-field="conditionAttackDistanceMinMeters" value="{{attackDistanceMinMeters}}" min="0" step="any" placeholder="0">
+              </label>
+              <label>
+                <span>До, м</span>
+              <input type="number" data-field="conditionAttackDistanceMaxMeters" value="{{attackDistanceMaxMeters}}" min="0" step="any" placeholder="∞">
+              </label>
+              {{else}}
+              <input type="hidden" data-field="conditionAttackDistanceMinMeters" value="{{attackDistanceMinMeters}}">
+              <input type="hidden" data-field="conditionAttackDistanceMaxMeters" value="{{attackDistanceMaxMeters}}">
+              {{/if}}
+              {{/if}}
+
               {{#if isWeaponAction}}
               <div class="fallout-maw-item-use-category-field">
                 <div class="fallout-maw-item-use-category-header">

@@ -3,6 +3,11 @@ import { isAttackingWeaponAction } from "../abilities/runtime-state.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
+import {
+  normalizeAttackDistanceMeters,
+  normalizeAttackEffectiveRange
+} from "../utils/attack-distance.mjs";
+import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
@@ -10,10 +15,12 @@ import {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   getActorCombatAttackEdgeCount,
-  getActorSmartFudgeResult,
+  getActorSmartFudgeResultValues,
   getCombatAttackAdvantageEffectKey,
   getCombatAttackDisadvantageEffectKey,
-  SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS
+  SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS,
+  SMART_FUDGE_RESULT_EFFECT_KEYS,
+  SMART_FUDGE_RESULT_ORDER
 } from "../utils/active-effect-changes.mjs";
 import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
@@ -709,7 +716,10 @@ function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = ""
     weaponAttackId: String(data.weaponAttackId ?? ""),
     chanceOperationId: String(data.chanceOperationId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
+    weaponData: serializeWeaponContextData(data.weaponData ?? outcome?.check?.weaponData),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
+    attackDistanceMeters: normalizeAttackDistanceMeters(data.attackDistanceMeters),
+    effectiveRange: normalizeAttackEffectiveRange(data.effectiveRange),
     damageHubOperationRef: String(data.damageHubOperationRef ?? "")
   };
 }
@@ -728,7 +738,9 @@ function serializeSkillCheckRequest(data = {}) {
     chanceOperationId: String(data.chanceOperationId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
-    weaponData: serializeSkillCheckWeaponData(data.weaponData),
+    weaponData: serializeWeaponContextData(data.weaponData),
+    attackDistanceMeters: normalizeAttackDistanceMeters(data.attackDistanceMeters),
+    effectiveRange: normalizeAttackEffectiveRange(data.effectiveRange),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
     allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
     allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
@@ -832,7 +844,7 @@ async function performSkillCheck(actor, skill, data = {}) {
   const finalSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier) + edge.skillModifier;
   const critical = calculateCriticalThresholds(check, finalSkillValue, check.difficulty);
   const forcedResult = normalizeForcedResult(check.forcedResult);
-  const smartFudgeResult = forcedResult ? "" : normalizeForcedResult(check.smartFudgeResult || getActorSmartFudgeResult(actor, { requester: check.requester, check }));
+  const smartFudgeResult = forcedResult ? "" : normalizeForcedResult(check.smartFudgeResult);
   const resultProfile = buildSkillCheckResultProfile(check.difficulty, critical, finalSkillValue, {
     disabledResults: forcedResult ? {} : check.disabledResults,
     mathematicalAutoFailure: isAutomaticFailure(finalSkillValue, check.difficulty) && !forcedResult,
@@ -867,16 +879,6 @@ async function performSkillCheck(actor, skill, data = {}) {
     automaticResultKey: result.automatic ? result.key : "",
     autoFailure: result.autoFailure,
     result
-  };
-}
-
-function serializeSkillCheckWeaponData(weaponData = null) {
-  if (!weaponData || typeof weaponData !== "object") return null;
-  return {
-    id: String(weaponData.id ?? weaponData._id ?? ""),
-    uuid: String(weaponData.uuid ?? ""),
-    skillKey: String(weaponData.skillKey ?? ""),
-    proficiencyKey: String(weaponData.proficiencyKey ?? "")
   };
 }
 
@@ -1402,6 +1404,8 @@ function normalizeRequestData(data, requester = "") {
     targetToken: data.targetToken ?? null,
     targetActor: data.targetActor ?? null,
     weaponData: data.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
+    attackDistanceMeters: normalizeAttackDistanceMeters(data.attackDistanceMeters),
+    effectiveRange: normalizeAttackEffectiveRange(data.effectiveRange),
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
     chanceOperationId: String(data.chanceOperationId ?? ""),
@@ -1442,9 +1446,11 @@ function normalizeSkillCheckDisabledResults(value = {}) {
 
 function createMutableCheck(actor, skill, data) {
   const context = resolveSkillCheckContext(actor, data);
+  const requester = String(data.requester ?? "");
   const weaponActionKey = String(data.weaponActionKey ?? context.weaponActionKey ?? "").trim();
-  const isAttackingCheck = ["weaponAttack", "weaponPush", "activePush"].includes(String(data.requester ?? ""))
+  const isAttackingCheck = ["weaponAttack", "weaponPush", "activePush"].includes(requester)
     && isAttackingWeaponAction(weaponActionKey);
+  const smartFudgeBaseValues = getActorSmartFudgeResultValues(actor, { requester, check: data });
   const contextual = getContextualAbilityChangeValues(actor, [
     {
       id: "skillValue",
@@ -1477,6 +1483,11 @@ function createMutableCheck(actor, skill, data) {
       alternateKeys: [ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY]
     },
     ...buildSkillCheckDisabledResultContextSpecs(actor),
+    ...(requester === "weaponAttack" ? SMART_FUDGE_RESULT_ORDER.map(result => ({
+      id: `smartFudge:${result}`,
+      key: SMART_FUDGE_RESULT_EFFECT_KEYS[result],
+      baseValue: smartFudgeBaseValues[result]
+    })) : []),
     ...(isAttackingCheck ? [{
       id: "combatAdvantage",
       key: getCombatAttackAdvantageEffectKey(weaponActionKey),
@@ -1492,6 +1503,9 @@ function createMutableCheck(actor, skill, data) {
   const disabledResults = normalizeSkillCheckDisabledResults(Object.fromEntries(
     SKILL_CHECK_RESULT_KEYS.map(key => [key, contextual[SKILL_CHECK_DISABLED_RESULT_CONTEXT_IDS[key]]])
   ));
+  const contextualSmartFudgeResult = requester === "weaponAttack"
+    ? SMART_FUDGE_RESULT_ORDER.find(result => Number(contextual[`smartFudge:${result}`]) > 0) ?? ""
+    : "";
   return {
     actor,
     skill: { ...skill, value: toInteger(contextual.skillValue) },
@@ -1509,8 +1523,8 @@ function createMutableCheck(actor, skill, data) {
       + Math.max(0, toInteger(contextual.combatDisadvantage)),
     disabledResults,
     forcedResult: "",
-    smartFudgeResult: String(data.smartFudgeResult ?? ""),
-    requester: String(data.requester ?? ""),
+    smartFudgeResult: String(data.smartFudgeResult ?? "").trim() || contextualSmartFudgeResult,
+    requester,
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
@@ -1533,6 +1547,8 @@ function resolveSkillCheckContext(actor, data = {}) {
     targetToken: selectedTargetToken,
     targetActor,
     weaponData: data?.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
+    attackDistanceMeters: normalizeAttackDistanceMeters(data?.attackDistanceMeters),
+    effectiveRange: normalizeAttackEffectiveRange(data?.effectiveRange),
     weaponActionKey: String(data?.weaponActionKey ?? "").trim(),
     chanceOperationId: getActiveUseOperationId(data)
   };

@@ -18,6 +18,8 @@ import {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   getOriginalEffectKeyFromReverse,
   getReverseEffectKey,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
@@ -36,6 +38,8 @@ export {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   getOriginalEffectKeyFromReverse,
   getReverseEffectKey,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
@@ -448,8 +452,16 @@ function getEffectChangePriority(change = {}) {
 }
 
 export function getActorSmartFudgeResult(actor, { requester = "", check = null } = {}) {
-  if (!actor || String(requester ?? "") !== "weaponAttack") return "";
+  const resultValues = getActorSmartFudgeResultValues(actor, { requester, check });
+  for (const result of SMART_FUDGE_RESULT_ORDER) {
+    if (resultValues[result] > 0) return result;
+  }
+  return "";
+}
+
+export function getActorSmartFudgeResultValues(actor, { requester = "", check = null } = {}) {
   const resultValues = Object.fromEntries(SMART_FUDGE_RESULT_ORDER.map(result => [result, 0]));
+  if (!actor || String(requester ?? "") !== "weaponAttack") return resultValues;
   for (const effect of actor.allApplicableEffects?.() ?? actor.effects ?? []) {
     if (effect?.disabled) continue;
     const allOrNothing = effect.getFlag?.(SYSTEM_ID, "allOrNothing");
@@ -462,10 +474,7 @@ export function getActorSmartFudgeResult(actor, { requester = "", check = null }
       resultValues[result] += value;
     }
   }
-  for (const result of SMART_FUDGE_RESULT_ORDER) {
-    if (resultValues[result] > 0) return result;
-  }
-  return "";
+  return resultValues;
 }
 
 export function getSmartFudgeResultForEffectKey(key = "") {

@@ -96,6 +96,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         damageFlat: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         damagePercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         burstStability: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        effectiveRangeNearPenaltyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        effectiveRangeFarPenaltyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })

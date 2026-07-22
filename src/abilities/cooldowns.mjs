@@ -117,6 +117,8 @@ function getCooldownConditionContext(context = {}) {
     weaponData: context?.weaponData && typeof context.weaponData === "object"
       ? context.weaponData
       : check?.weaponData && typeof check.weaponData === "object" ? check.weaponData : null,
+    attackDistanceMeters: context?.attackDistanceMeters ?? check?.attackDistanceMeters ?? null,
+    effectiveRange: context?.effectiveRange ?? check?.effectiveRange ?? null,
     weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim(),
     chanceOperationId: getActiveUseOperationId(context)
   };
