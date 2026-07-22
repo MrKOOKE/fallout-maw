@@ -48,6 +48,10 @@ import {
   CANVAS_TARGET_SELECTION_STARTED_HOOK
 } from "../canvas/target-selection-lifecycle.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import {
+  applyWeaponEffectiveRangeBonuses,
+  resolveBaseWeaponEffectiveRange
+} from "../utils/weapon-range.mjs";
 import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
 import {
   armDelayedVolleyWeapon,
@@ -3964,6 +3968,16 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
     String(cost?.type ?? "").trim(),
     Math.max(0, toInteger(cost?.amount))
   ]).filter(([type]) => type));
+  const effectiveRange = applyWeaponEffectiveRangeBonuses(
+    resolveBaseWeaponEffectiveRange(
+      weaponData.effectiveRange,
+      value => evaluateDialogFormula(value, actor, { minimum: 0 })
+    ),
+    {
+      nearBonusMeters: Number(actor?.system?.combat?.effectiveRangeNearBonus) || 0,
+      farBonusMeters: Number(actor?.system?.combat?.effectiveRangeFarBonus) || 0
+    }
+  );
 
   return {
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
@@ -3971,9 +3985,12 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
     criticalChanceModifier: evaluateDialogFormula(weaponData.criticalChanceModifier, actor, { minimum: -Infinity }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalChance") - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateDialogFormula(weaponData.criticalDamagePercent, actor, { fallback: 150 }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalDamage")),
     attackConeDegrees: Math.max(0, Number(weaponData.attackConeDegrees) || 0),
-    maxRangeMeters: evaluateDialogFormula(weaponData.maxRangeMeters, actor, { minimum: 0 }),
-    effectiveRangeValue: evaluateDialogFormula(weaponData.effectiveRange?.value, actor, { minimum: 0 }),
-    effectiveRangeMax: evaluateDialogFormula(weaponData.effectiveRange?.max, actor, { minimum: 0 }),
+    maxRangeMeters: Math.max(0,
+      evaluateDialogFormula(weaponData.maxRangeMeters, actor, { minimum: 0 })
+      + (Number(actor?.system?.combat?.attackRangeBonus) || 0)
+    ),
+    effectiveRangeValue: Math.max(0, Number(effectiveRange?.min) || 0),
+    effectiveRangeMax: Math.max(0, Number(effectiveRange?.max) || 0),
     penetration: Math.max(0, evaluateDialogFormula(weaponData.penetration, actor)),
     resourceCosts
   };

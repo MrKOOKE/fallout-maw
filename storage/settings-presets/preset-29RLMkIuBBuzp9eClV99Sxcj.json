@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "b6b0ac1d976c084d031d80e18e901ca5cf7dd3956a1bfd176fc56f37484f1fa2",
-  "updatedAt": "2026-07-22T16:30:12.523Z",
+  "revision": "6c2f1fd5b99ea60ff426ba620afb43847e133a02c0f5b94e95df4c49a13bf1c4",
+  "updatedAt": "2026-07-22T17:12:18.504Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -482,7 +482,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Штраф на атаки дальше эффективной дистациии: -50%</p></li><li><p>Если максимальная дистанция атаки оружия &gt;= 20м, то добавляет еще 10м</p></li><li><p>Помехи на все атаки ближе эффективной дистанции</p></li></ul>",
+                "description": "<ul><li><p>Штраф на атаки дальше эффективной дистациии: -50%</p></li><li><p>Если дистанция атаки &gt;10м: +10% Урона</p></li><li><p>Если максимальная дистанция атаки оружия &gt;= 20м, то добавляет еще 10м</p></li><li><p>Помехи на все атаки ближе эффективной дистанции</p></li></ul>",
                 "id": "7FrhgsJK7Wd45Pme",
                 "img": "icons/svg/upgrade.svg",
                 "name": "Дальномер",
@@ -506,77 +506,138 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>С 20:00 по 6:00 +20 ко всем Навыкам. В остальное время -10 ко всем Навыкам</p>",
-                "id": "fqLghKYaxztRKp7f",
-                "img": "systems/fallout-maw/assets/icons/osobennosti/detya-nochi.webp",
-                "name": "Дитя ночи",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "abilityIds": [
-                        "KcOSFagJX9GJCSZl"
-                      ],
-                      "id": "k61NhlZRE3aa2HNT",
-                      "mode": "absent",
-                      "type": "ability"
-                    }
-                  ],
-                  "category": "Особенности",
-                  "cost": 0,
-                  "formula": "",
                   "functions": [
                     {
                       "actions": [],
                       "activeSettings": {},
                       "changes": [
                         {
-                          "id": "Ihp4S0tedVe7y9Vy",
-                          "key": "system.skills.all.bonus",
+                          "id": "dQGR43kmQ9Ln8YE5",
+                          "key": "system.combat.effectiveRangeFarPenaltyPercent",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "20"
+                          "value": "-50"
                         }
                       ],
-                      "conditions": [
-                        {
-                          "eventSubject": "reactor",
-                          "groupId": "",
-                          "id": "W09WIZ7e5Y2W3Pxc",
-                          "timeFrom": "20:00",
-                          "timeTo": "06:00",
-                          "type": "timeOfDay"
-                        }
-                      ],
+                      "conditions": [],
                       "fixedKey": "",
                       "fixedSettings": {},
-                      "id": "THU9UE7G8ZKtDtLL",
-                      "penalties": [
-                        {
-                          "id": "CwKdRyBrFJtfNvyI",
-                          "key": "system.skills.all.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "-10"
-                        }
-                      ],
+                      "id": "obnBDa6lxzPPkUmI",
+                      "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 0,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "75pjSNxCPgq3GmAy",
+                          "key": "system.combat.attackRangeBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "attackDistanceMaxMeters": null,
+                          "attackDistanceMinMeters": 20,
+                          "attackDistanceMode": "free",
+                          "attackDistanceSide": "both",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "zTkQZPbaLVG1BmhD",
+                          "type": "attackDistance"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "Y5iPEQRSk2nSyIF5",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 1,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "cB1hVu0DIXzYIwyc",
+                          "key": "system.combat.all.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "attackDistanceMaxMeters": null,
+                          "attackDistanceMinMeters": null,
+                          "attackDistanceMode": "outsideEffective",
+                          "attackDistanceSide": "near",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "VXoRFB7zRe0rMiYa",
+                          "type": "attackDistance"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "KKXFBNhvuWFvVd1A",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 2,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "SmAkGLAHWGvLBDEB",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "attackDistanceMaxMeters": null,
+                          "attackDistanceMinMeters": 11,
+                          "attackDistanceMode": "free",
+                          "attackDistanceSide": "both",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "Z3lpPQcdR4KpaZE6",
+                          "type": "attackDistance"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "QOu34yIakSx4aMv5",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 3,
                       "type": "effectChanges"
                     }
                   ]
@@ -584,36 +645,7 @@
                 "visible": true
               },
               {
-                "description": "<p>С 6:00 по 20:00 получаете удвоенную регенерацию. В остальное время не регенерируете вовсе.</p>",
-                "id": "KcOSFagJX9GJCSZl",
-                "img": "systems/fallout-maw/assets/icons/29-99/poceluj-solnca.webp",
-                "name": "Дитя солнца",
-                "system": {
-                  "acquisition": {
-                    "difficulty": 60,
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat"
-                  },
-                  "acquisitionRequirements": [
-                    {
-                      "abilityIds": [
-                        "fqLghKYaxztRKp7f"
-                      ],
-                      "id": "Ypsxe0hQHEc90BnF",
-                      "mode": "absent",
-                      "type": "ability"
-                    }
-                  ],
-                  "category": "Особенности",
-                  "cost": 0,
-                  "formula": "",
-                  "functions": []
-                },
-                "visible": true
-              },
-              {
-                "description": "<p>Урон: -10%</p><p>Когда вас атакуют (в независимости от результата) вы на 12 секуд получаете: +10% урона.<br>Складывается не более 3-х раз</p>",
+                "description": "<p>Урон: -10%</p><p>Когда вас успешно атакуют на 12 секуд получаете: +10% урона.<br>Складывается не более 3-х раз</p>",
                 "id": "8HpgZk8jcKAhom6S",
                 "img": "icons/svg/upgrade.svg",
                 "name": "Злопамятный",
@@ -637,7 +669,87 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "IsOZSDWv09vJ59VM",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "6EcCLcHyRUqb2iHH",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    },
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "R9NUaV640ncJfeEH",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "autoApply": true,
+                          "combatOnly": false,
+                          "eventFilters": {},
+                          "eventKey": "fallout-maw.damage.beforeApply",
+                          "expectedResultKeys": [],
+                          "groupId": "",
+                          "id": "TgKUsge8m4AeJzf8",
+                          "progressRequired": 1,
+                          "reactionMode": "isolatedAuto",
+                          "skillKeys": [],
+                          "trackingTargets": [
+                            "owner"
+                          ],
+                          "type": "eventReaction"
+                        },
+                        {
+                          "durationSeconds": 12,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "4FIqeYmZxHu4onYw",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "J7EQBmpFEtoMzxCh",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },

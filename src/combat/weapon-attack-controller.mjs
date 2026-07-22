@@ -55,9 +55,16 @@ import {
 } from "../utils/attack-distance.mjs";
 import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
 import {
+  applyWeaponEffectiveRangeBonuses,
+  resolveBaseWeaponEffectiveRange
+} from "../utils/weapon-range.mjs";
+import {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
+  ATTACK_RANGE_BONUS_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   evaluateActorEffectChangeNumber,
   SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS
@@ -77,6 +84,7 @@ import {
   getContextualAbilityChangeValue,
   getContextualAbilityChangeValues,
   getPreparedSourceContextualAbilityChanges,
+  getSourceContextualAbilityChangeValues,
   getSourceContextualAbilityChangeValue,
   getTargetReverseAbilityChangeValue,
   mergePreparedSourceContextualAbilityChanges
@@ -986,6 +994,13 @@ class CommandedWeaponAttackController {
     this.container.addChild(shape, targetMarkers, focusedTargetMarker);
     return {
       ...entry,
+      rangeProfile: getWeaponRangeProfile(
+        entry.weapon,
+        entry.actionKey,
+        entry.token,
+        entry.weaponFunctionId,
+        { chanceOperationId: `${this.id}:${index}` }
+      ),
       index,
       previewId: `${this.id}:${index}`,
       previewBroadcasted: false,
@@ -1187,7 +1202,15 @@ class CommandedWeaponAttackController {
   refreshEntry(entry, pointer) {
     if (!entry?.token?.actor || !entry.weapon || !pointer) return;
     const origin = getTokenAimPoint(entry.token);
-    let geometry = getAttackGeometry(entry.weapon, entry.actionKey, entry.token, origin, pointer, entry.weaponFunctionId);
+    let geometry = getAttackGeometry(
+      entry.weapon,
+      entry.actionKey,
+      entry.token,
+      origin,
+      pointer,
+      entry.weaponFunctionId,
+      entry.rangeProfile
+    );
     if (!geometry) {
       entry.geometry = null;
       entry.targets = [];
@@ -2222,6 +2245,12 @@ export async function armDelayedVolleyWeapon({ token = null, weapon = null, weap
     shapePoints: []
   };
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const rangeProfile = getWeaponRangeProfile(weapon, VOLLEY_ACTION_KEY, token, weaponFunctionId, {
+    attackDistanceMeters: 0,
+    weaponAttackId: delayedThrownItemId,
+    chanceOperationId: delayedThrownItemId,
+    weaponData
+  });
   const damageContext = {
     actor: token.actor,
     actorToken: token,
@@ -2231,10 +2260,7 @@ export async function armDelayedVolleyWeapon({ token = null, weapon = null, weap
     weaponData,
     weaponFunctionId,
     attackDistanceMeters: 0,
-    effectiveRange: getEffectiveRangeBounds(
-      weaponData?.effectiveRange,
-      token.actor
-    )
+    effectiveRange: rangeProfile.effectiveRange
   };
   const baseDamage = getWeaponDamage(weapon, weaponFunctionId);
   const regionRequest = buildDelayedVolleyExplosionRegionRequest({
@@ -2334,6 +2360,12 @@ class WeaponAttackController {
     this.weapon = weapon;
     this.actionKey = actionKey;
     this.weaponFunctionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
+    this.attackId = foundry.utils.randomID();
+    this.rangeProfile = getWeaponRangeProfile(weapon, actionKey, token, this.weaponFunctionId, {
+      weaponAttackId: this.attackId,
+      chanceOperationId: this.attackId
+    });
+    this.rangeProfilesByTarget = new Map();
     this.attackModifier = normalizeWeaponAttackModifier(attackModifier);
     this.originOverride = normalizeAttackOriginOverride(options.originOverride);
     this.onBeforeExecute = typeof options.onBeforeExecute === "function" ? options.onBeforeExecute : null;
@@ -2391,7 +2423,6 @@ class WeaponAttackController {
     this.aimedLimbMenuCache = null;
     this.chanceMenu = null;
     this.rightClickCancelCandidate = null;
-    this.attackId = foundry.utils.randomID();
     this.targetSelectionSession = null;
     this.targetSelectionOutcome = null;
     this.previousViewContextMenu = null;
@@ -2542,10 +2573,44 @@ class WeaponAttackController {
 
   createWeaponAttackDistanceContext(targetToken = null, weaponData = null) {
     const resolvedWeaponData = weaponData ?? getWeaponAttackData(this.weapon, this.weaponFunctionId);
+    const rangeProfile = targetToken
+      ? this.getRangeProfileForTarget(targetToken, resolvedWeaponData)
+      : this.rangeProfile;
     return normalizeAttackDistanceContext({
       attackDistanceMeters: targetToken ? getTokenDistanceMeters(this.token, targetToken) : null,
-      effectiveRange: getEffectiveRangeBounds(resolvedWeaponData?.effectiveRange, this.token?.actor ?? null)
+      effectiveRange: rangeProfile?.effectiveRange
     });
+  }
+
+  getRangeProfileForTarget(targetToken = null, weaponData = null) {
+    if (!targetToken?.actor) return this.rangeProfile;
+    const attackDistanceMeters = getTokenDistanceMeters(this.token, targetToken);
+    return this.getRangeProfileForDistance(attackDistanceMeters, { targetToken, weaponData });
+  }
+
+  getRangeProfileForDistance(attackDistanceMeters = null, { targetToken = null, weaponData = null } = {}) {
+    const normalizedDistance = Number(attackDistanceMeters);
+    if (!Number.isFinite(normalizedDistance)) return this.rangeProfile;
+    const targetKey = String(targetToken?.document?.uuid ?? targetToken?.uuid ?? targetToken?.id ?? "");
+    const cacheKey = `${targetKey}:${normalizedDistance.toFixed(3)}`;
+    if (this.rangeProfilesByTarget.has(cacheKey)) return this.rangeProfilesByTarget.get(cacheKey);
+    const profile = getWeaponRangeProfile(
+      this.weapon,
+      this.actionKey,
+      this.token,
+      this.weaponFunctionId,
+      {
+        targetToken,
+        targetActor: targetToken?.actor ?? null,
+        weaponData: weaponData ?? getWeaponAttackData(this.weapon, this.weaponFunctionId),
+        attackDistanceMeters: normalizedDistance,
+        weaponAttackId: this.attackId,
+        chanceOperationId: this.attackId,
+        rangeConditionEffectiveRange: this.rangeProfile?.conditionEffectiveRange
+      }
+    );
+    this.rangeProfilesByTarget.set(cacheKey, profile);
+    return profile;
   }
 
   createWeaponAttackReactionContext(targetToken = null) {
@@ -2575,6 +2640,7 @@ class WeaponAttackController {
         attackerToken: this.token,
         targetToken,
         weapon: this.weapon,
+        actionKey: this.actionKey,
         weaponFunctionId: this.weaponFunctionId
       }),
       ...extra
@@ -4739,9 +4805,10 @@ class WeaponAttackController {
   async resolveVolleyBlastPoint(geometry, { checkBatch = null, difficultyBonus = 0 } = {}) {
     const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
     const attackDistanceMeters = getAttackGeometryDistanceMeters(geometry);
+    const rangeProfile = this.getRangeProfileForDistance(attackDistanceMeters, { weaponData });
     const attackContext = this.createWeaponAttackSkillCheckContext(null, {
       attackDistanceMeters,
-      effectiveRange: getEffectiveRangeBounds(weaponData?.effectiveRange, this.token?.actor ?? null)
+      effectiveRange: rangeProfile.effectiveRange
     });
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
       weaponData,
@@ -5188,9 +5255,24 @@ class WeaponAttackController {
 
   getAttackGeometry(origin) {
     if (isWhirlwindAttackModifier(this.attackModifier)) {
-      return getCircularAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.weaponFunctionId);
+      return getCircularAttackGeometry(
+        this.weapon,
+        this.actionKey,
+        this.token,
+        origin,
+        this.weaponFunctionId,
+        this.rangeProfile
+      );
     }
-    return getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer, this.weaponFunctionId);
+    return getAttackGeometry(
+      this.weapon,
+      this.actionKey,
+      this.token,
+      origin,
+      this.pointer,
+      this.weaponFunctionId,
+      this.rangeProfile
+    );
   }
 
   getAccuracyModifier(baseModifier = 0) {
@@ -5516,9 +5598,10 @@ class WeaponAttackController {
     if (this.volleyAction) {
       const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
       const attackDistanceMeters = getAttackGeometryDistanceMeters(this.geometry);
+      const rangeProfile = this.getRangeProfileForDistance(attackDistanceMeters, { weaponData });
       const previewContext = this.createWeaponAttackSkillCheckContext(null, {
         attackDistanceMeters,
-        effectiveRange: getEffectiveRangeBounds(weaponData?.effectiveRange, this.token?.actor ?? null)
+        effectiveRange: rangeProfile.effectiveRange
       });
       return [{
         label: game.i18n.localize("FALLOUTMAW.Item.AttackChanceArea"),
@@ -7374,12 +7457,16 @@ function getAttackLandingPoint(trajectories = [], fallback = null) {
   return trajectories.find(trajectory => trajectory?.end)?.end ?? fallback;
 }
 
-function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, weaponFunctionId = "") {
+function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, weaponFunctionId = "", rangeProfile = null) {
   if (!origin || !pointer) return null;
-  if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId);
+  const resolvedRangeProfile = rangeProfile
+    ?? getWeaponRangeProfile(weapon, actionKey, attackerToken, weaponFunctionId);
+  if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) {
+    return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId, resolvedRangeProfile);
+  }
 
   const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
-  const maxDistancePixels = metersToPixels(getSizeScaledActionMaxRangeMeters(weapon, actionKey, attackerToken, weaponFunctionId));
+  const maxDistancePixels = metersToPixels(getSizeScaledActionMaxRangeMeters(attackerToken, resolvedRangeProfile));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
   const angle = Math.atan2(dy, dx);
@@ -7390,10 +7477,12 @@ function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, we
   return { origin, angle, distance, rangeBonusMeters, halfAngle, end, shapePoints };
 }
 
-function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, weaponFunctionId = "") {
+function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, weaponFunctionId = "", rangeProfile = null) {
   if (!origin) return null;
+  const resolvedRangeProfile = rangeProfile
+    ?? getWeaponRangeProfile(weapon, actionKey, attackerToken, weaponFunctionId);
   const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
-  const distance = Math.max(1, metersToPixels(getSizeScaledActionMaxRangeMeters(weapon, actionKey, attackerToken, weaponFunctionId)));
+  const distance = Math.max(1, metersToPixels(getSizeScaledActionMaxRangeMeters(attackerToken, resolvedRangeProfile)));
   const angle = 0;
   const halfAngle = Math.PI;
   const end = {
@@ -7405,20 +7494,22 @@ function getCircularAttackGeometry(weapon, actionKey, attackerToken, origin, wea
   return { origin, angle, distance, rangeBonusMeters, halfAngle, end, shapePoints };
 }
 
-function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "") {
+function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "", rangeProfile = null) {
+  const resolvedRangeProfile = rangeProfile
+    ?? getWeaponRangeProfile(weapon, VOLLEY_ACTION_KEY, attackerToken, weaponFunctionId);
   const rangeBonusMeters = getTokenAttackRangeBonusMeters(attackerToken);
-  const configuredMaxRangeMeters = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters, attackerToken?.actor, {
-    minimum: 0,
-    context: "volley max range"
-  });
-  const maxRangeMeters = configuredMaxRangeMeters > 0 ? configuredMaxRangeMeters + rangeBonusMeters : 0;
+  const maxRangeMeters = resolvedRangeProfile.maxRangeUnlimited
+    ? 0
+    : Math.max(0, resolvedRangeProfile.maxRangeMeters + rangeBonusMeters);
   const maxDistancePixels = metersToPixels(maxRangeMeters);
   const radiusPixels = metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
   const angle = Math.atan2(dy, dx);
   const requestedDistance = Math.max(1, Math.hypot(dx, dy));
-  const maxDistance = maxDistancePixels > 0 ? Math.min(requestedDistance, maxDistancePixels) : requestedDistance;
+  const maxDistance = resolvedRangeProfile.maxRangeUnlimited
+    ? requestedDistance
+    : Math.min(requestedDistance, Math.max(1, maxDistancePixels));
   const clipped = getWallClippedEndpoint(attackerToken, origin, angle, maxDistance);
   return {
     type: VOLLEY_ACTION_KEY,
@@ -7463,8 +7554,67 @@ function getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId = "") {
   });
 }
 
-function getSizeScaledActionMaxRangeMeters(weapon, actionKey, attackerToken = null, weaponFunctionId = "") {
-  return getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId) + getTokenAttackRangeBonusMeters(attackerToken);
+function getSizeScaledActionMaxRangeMeters(attackerToken = null, rangeProfile = null) {
+  return Math.max(0, Number(rangeProfile?.maxRangeMeters) || 0) + getTokenAttackRangeBonusMeters(attackerToken);
+}
+
+function getWeaponRangeProfile(weapon, actionKey, attackerToken = null, weaponFunctionId = "", context = {}) {
+  const actor = attackerToken?.actor ?? getWeaponOwnerActor(weapon);
+  const weaponData = context?.weaponData ?? getWeaponAttackData(weapon, weaponFunctionId);
+  const baseEffectiveRange = resolveBaseWeaponEffectiveRange(
+    weaponData?.effectiveRange,
+    value => evaluateActorFormula(value, actor, {
+      minimum: 0,
+      context: "effective range"
+    })
+  );
+  const conditionEffectiveRange = applyWeaponEffectiveRangeBonuses(baseEffectiveRange, {
+    nearBonusMeters: Number(actor?.system?.combat?.effectiveRangeNearBonus) || 0,
+    farBonusMeters: Number(actor?.system?.combat?.effectiveRangeFarBonus) || 0
+  });
+  const modifierContext = {
+    actorToken: attackerToken,
+    token: attackerToken,
+    weapon,
+    weaponUuid: String(weapon?.uuid ?? "").trim(),
+    weaponData,
+    actionKey: String(actionKey ?? "").trim(),
+    weaponActionKey: String(actionKey ?? "").trim(),
+    weaponFunctionId,
+    ...context,
+    effectiveRange: context?.rangeConditionEffectiveRange ?? conditionEffectiveRange
+  };
+  const modifiers = getWeaponRangeModifierValues(actor, modifierContext);
+  const baseMaxRangeMeters = getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId);
+  const maxRangeUnlimited = isVolleyAttackAction(weapon, actionKey, weaponFunctionId)
+    && baseMaxRangeMeters <= 0;
+  return {
+    baseMaxRangeMeters,
+    maxRangeMeters: maxRangeUnlimited
+      ? 0
+      : Math.max(0, baseMaxRangeMeters + modifiers.attackRangeBonus),
+    maxRangeUnlimited,
+    baseEffectiveRange,
+    conditionEffectiveRange,
+    effectiveRange: applyWeaponEffectiveRangeBonuses(baseEffectiveRange, {
+      nearBonusMeters: modifiers.effectiveRangeNearBonus,
+      farBonusMeters: modifiers.effectiveRangeFarBonus
+    }),
+    modifiers
+  };
+}
+
+function getWeaponRangeModifierValues(actor, context = {}) {
+  const fields = [
+    ["attackRangeBonus", ATTACK_RANGE_BONUS_EFFECT_KEY],
+    ["effectiveRangeNearBonus", EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY],
+    ["effectiveRangeFarBonus", EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY]
+  ];
+  return getSourceContextualAbilityChangeValues(actor, fields.map(([id, key]) => ({
+    id,
+    key,
+    baseValue: Number(actor?.system?.combat?.[id]) || 0
+  })), context);
 }
 
 function getTokenAttackRangeBonusMeters(token) {
@@ -9056,7 +9206,14 @@ function getWeaponDamageDistanceContext({
     ? Math.max(0, directDistance)
     : null;
   const effectiveRange = supplied.effectiveRange
-    ?? getEffectiveRangeBounds(weaponData?.effectiveRange, attackerActor);
+    ?? getEffectiveRangeBounds(weaponData?.effectiveRange, attackerActor, {
+      ...source,
+      actorToken: attackerToken,
+      targetToken,
+      targetActor: targetToken?.actor ?? null,
+      weaponData,
+      attackDistanceMeters
+    });
   return { attackDistanceMeters, effectiveRange };
 }
 
@@ -9232,27 +9389,43 @@ function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponF
       attackDistanceMeters: distanceMeters,
       effectiveRange: Object.hasOwn(context ?? {}, "effectiveRange")
         ? context.effectiveRange
-        : getEffectiveRangeBounds(weaponData?.effectiveRange, attackerToken?.actor ?? null)
+        : getEffectiveRangeBounds(weaponData?.effectiveRange, attackerToken?.actor ?? null, {
+          ...context,
+          actorToken: attackerToken,
+          targetToken: target,
+          weaponData,
+          attackDistanceMeters: distanceMeters
+        })
     }
   );
 }
 
-function getPostureAttackEdgeModifiers({ attackerToken = null, targetToken = null, weapon = null, weaponFunctionId = "" } = {}) {
+function getPostureAttackEdgeModifiers({
+  attackerToken = null,
+  targetToken = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = ""
+} = {}) {
   if (!isVulnerableAttackPosture(getTokenAttackPosture(targetToken))) return {};
 
-  const rangeState = getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, weaponFunctionId);
+  const rangeState = getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, actionKey, weaponFunctionId);
   if (rangeState === "inside") return { advantage: true, advantageCount: 1 };
   if (rangeState === "outside") return { disadvantage: true, disadvantageCount: 1 };
   return {};
 }
 
-function getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, weaponFunctionId = "") {
+function getConfiguredEffectiveRangeState(weapon, attackerToken, targetToken, actionKey = "", weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const range = getEffectiveRangeBounds(weaponData?.effectiveRange, attackerToken?.actor ?? null);
-  if (!range) return "";
-
   const distance = getTokenDistanceMeters(attackerToken, targetToken);
   if (!Number.isFinite(distance)) return "";
+  const range = getWeaponRangeProfile(weapon, actionKey, attackerToken, weaponFunctionId, {
+    targetToken,
+    targetActor: targetToken?.actor ?? null,
+    weaponData,
+    attackDistanceMeters: distance
+  }).effectiveRange;
+  if (!range) return "";
   return distance >= range.min && distance <= range.max ? "inside" : "outside";
 }
 
@@ -9268,7 +9441,11 @@ function isVulnerableAttackPosture(action = "") {
 function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMeters = 0, actor = null, context = {}) {
   const range = Object.hasOwn(context ?? {}, "effectiveRange")
     ? context.effectiveRange
-    : getEffectiveRangeBounds(weaponData?.effectiveRange, actor);
+    : getEffectiveRangeBounds(weaponData?.effectiveRange, actor, {
+      ...context,
+      weaponData,
+      attackDistanceMeters: distanceMeters
+    });
   const rangeState = getEffectiveRangeDistanceState({
     attackDistanceMeters: distanceMeters,
     effectiveRange: range
@@ -9294,21 +9471,27 @@ function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMe
   return Math.max(0, Math.round(rangeState.basePenalty * multiplier));
 }
 
-function getEffectiveRangeBounds(effectiveRange = {}, actor = null) {
-  const first = evaluateActorFormula(effectiveRange?.value, actor, {
-    minimum: 0,
-    context: "effective range"
+function getEffectiveRangeBounds(effectiveRange = {}, actor = null, context = {}) {
+  if (context?.rangeProfile?.effectiveRange !== undefined) return context.rangeProfile.effectiveRange;
+  const baseEffectiveRange = resolveBaseWeaponEffectiveRange(
+    effectiveRange,
+    value => evaluateActorFormula(value, actor, {
+      minimum: 0,
+      context: "effective range"
+    })
+  );
+  const conditionEffectiveRange = applyWeaponEffectiveRangeBonuses(baseEffectiveRange, {
+    nearBonusMeters: Number(actor?.system?.combat?.effectiveRangeNearBonus) || 0,
+    farBonusMeters: Number(actor?.system?.combat?.effectiveRangeFarBonus) || 0
   });
-  const second = evaluateActorFormula(effectiveRange?.max, actor, {
-    minimum: 0,
-    context: "effective range max"
+  const modifiers = getWeaponRangeModifierValues(actor, {
+    ...context,
+    effectiveRange: context?.rangeConditionEffectiveRange ?? conditionEffectiveRange
   });
-  if (first <= 0 && second <= 0) return null;
-  if (second <= 0) return { min: 0, max: first };
-  return {
-    min: Math.min(first, second),
-    max: Math.max(first, second)
-  };
+  return applyWeaponEffectiveRangeBonuses(baseEffectiveRange, {
+    nearBonusMeters: modifiers.effectiveRangeNearBonus,
+    farBonusMeters: modifiers.effectiveRangeFarBonus
+  });
 }
 
 function getTokenDistanceMeters(leftToken, rightToken) {
@@ -11008,12 +11191,15 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const attackDistanceMeters = getAttackGeometryDistanceMeters(geometry);
-  const context = {
+  const baseContext = {
     ...previewContext,
     weaponData,
     weaponActionKey: String(actionKey ?? "").trim(),
-    attackDistanceMeters,
-    effectiveRange: getEffectiveRangeBounds(weaponData?.effectiveRange, attackerActor)
+    attackDistanceMeters
+  };
+  const context = {
+    ...baseContext,
+    effectiveRange: getEffectiveRangeBounds(weaponData?.effectiveRange, attackerActor, baseContext)
   };
   const skillState = getContextualAttackSkillState(attackerActor, skillKey, context);
   const finalSkillValue = skillState.value

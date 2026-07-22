@@ -799,23 +799,7 @@ export function getContextualAbilityChangeValue(actor, key, { baseValue = 0, alt
  * Foundry-style: gather modifiers once for an attack context, then read scalars.
  */
 export function getContextualAbilityChangeValues(actor, specs = [], context = {}) {
-  const list = (Array.isArray(specs) ? specs : [])
-    .map((spec, index) => {
-      const key = String(spec?.key ?? "").trim();
-      if (!key) return null;
-      const alternateKeys = Array.isArray(spec?.alternateKeys) ? spec.alternateKeys : [];
-      return {
-        id: String(spec?.id ?? key),
-        key,
-        alternateKeys,
-        acceptedKeys: new Set(
-          [key, ...alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean)
-        ),
-        baseValue: Number(spec?.baseValue) || 0,
-        targetContextOnly: Boolean(spec?.targetContextOnly)
-      };
-    })
-    .filter(Boolean);
+  const list = normalizeContextualAbilityValueSpecs(specs);
 
   if (!list.length) return {};
   if (!actor) {
@@ -865,6 +849,46 @@ export function getContextualAbilityChangeValues(actor, specs = [], context = {}
     result[spec.id] = value;
   }
   return result;
+}
+
+/** Resolve many source-owned contextual keys with one ability scan and no target reverse changes. */
+export function getSourceContextualAbilityChangeValues(actor, specs = [], context = {}) {
+  const list = normalizeContextualAbilityValueSpecs(specs);
+  if (!list.length) return {};
+  if (!actor) return Object.fromEntries(list.map(spec => [spec.id, spec.baseValue]));
+
+  const needsFullContext = list.some(spec => !spec.targetContextOnly);
+  const needsTargetOnly = list.some(spec => spec.targetContextOnly);
+  const fullSourceChanges = needsFullContext ? getContextualAbilityEffectChanges(actor, context) : [];
+  const targetOnlySourceChanges = needsTargetOnly
+    ? getContextualAbilityEffectChanges(actor, context, { targetContextOnly: true })
+    : [];
+
+  return Object.fromEntries(list.map(spec => {
+    const sourcePool = spec.targetContextOnly ? targetOnlySourceChanges : fullSourceChanges;
+    const prepared = prepareContextualAbilityChangesForKeys(actor, sourcePool, spec.acceptedKeys);
+    return [spec.id, applyPreparedSourceContextualAbilityChanges(spec.baseValue, prepared)];
+  }));
+}
+
+function normalizeContextualAbilityValueSpecs(specs = []) {
+  return (Array.isArray(specs) ? specs : [])
+    .map(spec => {
+      const key = String(spec?.key ?? "").trim();
+      if (!key) return null;
+      const alternateKeys = Array.isArray(spec?.alternateKeys) ? spec.alternateKeys : [];
+      return {
+        id: String(spec?.id ?? key),
+        key,
+        alternateKeys,
+        acceptedKeys: new Set(
+          [key, ...alternateKeys].map(value => String(value ?? "").trim()).filter(Boolean)
+        ),
+        baseValue: Number(spec?.baseValue) || 0,
+        targetContextOnly: Boolean(spec?.targetContextOnly)
+      };
+    })
+    .filter(Boolean);
 }
 
 function prepareContextualAbilityChangesForKeys(actor, changes = [], acceptedKeys = new Set()) {

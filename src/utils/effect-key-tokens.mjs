@@ -16,10 +16,13 @@ import {
   ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  ATTACK_RANGE_BONUS_EFFECT_KEY,
   getAbilityOverloadCostEffectKey,
   DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
   DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
   INITIATIVE_DISADVANTAGE_EFFECT_KEY,
@@ -635,6 +638,27 @@ export function buildCombatEffectKeyTokens() {
       key: "burstStability",
       label: game.i18n.localize("FALLOUTMAW.Effects.CombatBurstStability"),
       path: "system.combat.burstStability",
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "attackRangeBonus",
+      key: "attackRangeBonus",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AttackRangeBonus"),
+      path: ATTACK_RANGE_BONUS_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "effectiveRangeNearBonus",
+      key: "effectiveRangeNearBonus",
+      label: game.i18n.localize("FALLOUTMAW.Effects.EffectiveRangeNearBonus"),
+      path: EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "effectiveRangeFarBonus",
+      key: "effectiveRangeFarBonus",
+      label: game.i18n.localize("FALLOUTMAW.Effects.EffectiveRangeFarBonus"),
+      path: EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
       group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({

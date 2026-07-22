@@ -7,7 +7,10 @@ import {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ATTACK_RANGE_BONUS_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   getOriginalEffectKeyFromReverse,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
@@ -44,6 +47,9 @@ const SMART_FUDGE_RESULT_KEYS = Object.freeze(Object.values(SMART_FUDGE_RESULT_E
 const STATIC_ACTIVE_USE_KEYS = new Set([
   ...WEAPON_CHECK_COMBAT_KEYS,
   ...WEAPON_DAMAGE_COMBAT_KEYS,
+  ATTACK_RANGE_BONUS_EFFECT_KEY,
+  EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+  EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
   ...SKILL_CHECK_DISABLED_RESULT_KEYS,
@@ -122,6 +128,7 @@ export function getWeaponActionActiveUseKeys(context = {}) {
   if (includeAction) {
     keys.add("system.costs.action");
     keys.add(`system.costs.actions.${actionKey}`);
+    if (ATTACKING_WEAPON_ACTION_KEYS.has(actionKey)) keys.add(ATTACK_RANGE_BONUS_EFFECT_KEY);
     const actor = context?.actor ?? context?.actorToken?.actor ?? context?.token?.actor ?? null;
     const postureAction = String(context?.postureAction ?? getActorPostureAction(actor) ?? "").trim();
     if (postureAction) keys.add(`system.postures.${postureAction}.weaponActionCost`);
@@ -133,6 +140,7 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     }
     const rangePenaltyKey = getEffectiveRangePenaltyActiveUseKey(context);
     if (rangePenaltyKey) keys.add(rangePenaltyKey);
+    for (const rangeBoundaryKey of getEffectiveRangeBoundaryActiveUseKeys(context)) keys.add(rangeBoundaryKey);
   }
   if (includeDamage) {
     keys.add(`system.penetration.actions.${actionKey}`);
@@ -247,4 +255,22 @@ function getEffectiveRangePenaltyActiveUseKey(context = {}) {
   if (state.side === "near") return EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY;
   if (state.side === "far") return EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY;
   return "";
+}
+
+function getEffectiveRangeBoundaryActiveUseKeys(context = {}) {
+  const check = context?.check && typeof context.check === "object" ? context.check : {};
+  const state = getEffectiveRangeDistanceState({
+    attackDistanceMeters: context?.attackDistanceMeters ?? check.attackDistanceMeters,
+    effectiveRange: context?.effectiveRange ?? check.effectiveRange
+  });
+  if (!state.resolved) return [];
+  if (state.side === "near") return [EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY];
+  if (state.side === "far") return [EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY];
+  if (state.side === "inside") {
+    return [
+      EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+      EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY
+    ];
+  }
+  return [];
 }

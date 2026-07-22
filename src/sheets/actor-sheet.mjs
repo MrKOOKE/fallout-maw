@@ -275,6 +275,10 @@ import {
   getWeaponModuleTechnicalName,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
+import {
+  applyWeaponEffectiveRangeBonuses,
+  resolveBaseWeaponEffectiveRange
+} from "../utils/weapon-range.mjs";
 import { getWeaponActionPointCostAttribution } from "../utils/weapon-tooltip-attribution.mjs";
 import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
 import {
@@ -6203,12 +6207,11 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
   }
   rows.push(
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(evaluateTooltipFormula(data.maxRangeMeters, actor), evaluateTooltipFormula(baseData.maxRangeMeters, actor), {
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(stats.maxRangeMeters, baseStats.maxRangeMeters, {
       baseMode,
       breakdown: stats.breakdowns?.maxRangeMeters
     })],
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, baseData.effectiveRange, {
-      actor,
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(stats.effectiveRange, baseStats.effectiveRange, {
       baseMode,
       breakdowns: stats.breakdowns?.effectiveRange
     })]
@@ -6496,6 +6499,9 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
   const damagePercentAttribution = contextual ? collectActorCombatValueAttribution(actor, "damagePercent", contextual) : emptyCombatAttribution();
   const accuracyAttribution = contextual ? collectActorCombatValueAttribution(actor, "accuracy", contextual) : emptyCombatAttribution();
   const criticalChanceAttribution = contextual ? collectActorCombatValueAttribution(actor, "criticalChance", contextual) : emptyCombatAttribution();
+  const attackRangeAttribution = contextual ? collectActorCombatValueAttribution(actor, "attackRangeBonus", contextual) : emptyCombatAttribution();
+  const effectiveRangeNearAttribution = contextual ? collectActorCombatValueAttribution(actor, "effectiveRangeNearBonus", contextual) : emptyCombatAttribution();
+  const effectiveRangeFarAttribution = contextual ? collectActorCombatValueAttribution(actor, "effectiveRangeFarBonus", contextual) : emptyCombatAttribution();
   const contextualDamageFlat = damageFlatAttribution.value;
   const contextualDamagePercent = damagePercentAttribution.value + toInteger(fixedModifiers.combatValues?.damagePercent);
   const contextualAccuracy = accuracyAttribution.value + toInteger(fixedModifiers.combatValues?.accuracy);
@@ -6520,6 +6526,15 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
   const proficiencyAccuracy = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy");
   const proficiencyCriticalChance = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance");
   const proficiencyCriticalDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage");
+  const baseMaxRangeMeters = evaluateTooltipFormula(data.maxRangeMeters, actor);
+  const baseEffectiveRange = resolveBaseWeaponEffectiveRange(
+    data.effectiveRange,
+    value => evaluateTooltipFormula(value, actor)
+  );
+  const effectiveRange = applyWeaponEffectiveRangeBonuses(baseEffectiveRange, {
+    nearBonusMeters: effectiveRangeNearAttribution.value,
+    farBonusMeters: effectiveRangeFarAttribution.value
+  });
   const result = {
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
     accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor, { minimum: -Infinity })
@@ -6533,6 +6548,11 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
       + proficiencyCriticalDamage),
     penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor)),
+    maxRangeMeters: Math.max(0, baseMaxRangeMeters + attackRangeAttribution.value),
+    effectiveRange: {
+      value: Math.max(0, Number(effectiveRange?.min) || 0),
+      max: Math.max(0, Number(effectiveRange?.max) || 0)
+    },
     resourceCostMultipliers: fixedModifiers.resourceCostMultipliers ?? {}
   };
   if (!baseMode) {
@@ -6559,7 +6579,10 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
       damageFlatAttribution,
       damagePercentAttribution,
       accuracyAttribution,
-      criticalChanceAttribution
+      criticalChanceAttribution,
+      attackRangeAttribution,
+      effectiveRangeNearAttribution,
+      effectiveRangeFarAttribution
     });
   }
   return result;
@@ -6591,7 +6614,10 @@ function buildWeaponTooltipValueBreakdowns({
   damageFlatAttribution,
   damagePercentAttribution,
   accuracyAttribution,
-  criticalChanceAttribution
+  criticalChanceAttribution,
+  attackRangeAttribution,
+  effectiveRangeNearAttribution,
+  effectiveRangeFarAttribution
 } = {}) {
   const common = { item, actor, rawData, baseData, data, moduleSlots };
   const damage = buildWeaponDataFieldAttribution({
@@ -6710,12 +6736,18 @@ function buildWeaponTooltipValueBreakdowns({
     minimum: 0,
     formatValue: value => `${formatNumber(value)} м`
   });
+  appendAttributionDeltaSources(maxRangeMeters, attackRangeAttribution?.sources, { suffix: " м" });
+  reconcileBreakdownTotal(maxRangeMeters, result.maxRangeMeters, item);
+  const baseResolvedEffectiveRange = resolveBaseWeaponEffectiveRange(
+    data?.effectiveRange,
+    value => evaluateTooltipFormula(value, actor)
+  );
   const effectiveRange = {
     value: buildWeaponDataFieldAttribution({
       ...common,
       path: "effectiveRange.value",
       title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange")} — min`,
-      total: evaluateTooltipFormula(data?.effectiveRange?.value, actor),
+      total: Math.max(0, Number(baseResolvedEffectiveRange?.min) || 0),
       minimum: 0,
       formatValue: value => `${formatNumber(value)} м`
     }),
@@ -6723,11 +6755,15 @@ function buildWeaponTooltipValueBreakdowns({
       ...common,
       path: "effectiveRange.max",
       title: `${game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange")} — max`,
-      total: evaluateTooltipFormula(data?.effectiveRange?.max, actor),
+      total: Math.max(0, Number(baseResolvedEffectiveRange?.max) || 0),
       minimum: 0,
       formatValue: value => `${formatNumber(value)} м`
     })
   };
+  appendAttributionDeltaSources(effectiveRange.value, effectiveRangeNearAttribution?.sources, { suffix: " м" });
+  appendAttributionDeltaSources(effectiveRange.max, effectiveRangeFarAttribution?.sources, { suffix: " м" });
+  reconcileBreakdownTotal(effectiveRange.value, result.effectiveRange?.value, item);
+  reconcileBreakdownTotal(effectiveRange.max, result.effectiveRange?.max, item);
   const recoil = buildWeaponRecoilAttribution(item, actor, baseData, data);
   const resourceCosts = buildWeaponResourceCostAttributions(item, actor, baseData, data, fixedModifiers);
 
@@ -7041,10 +7077,16 @@ function reconcileBreakdownTotal(breakdown, target = 0, item = null, { name = ""
 function collectActorCombatValueAttribution(actor, key = "", context = null) {
   if (!actor) return emptyCombatAttribution();
   const path = `system.combat.${String(key ?? "").trim()}`;
-  const suffix = ["damagePercent", "criticalChance", "burstStability"].includes(key) ? "%" : "";
+  const metreValue = ["attackRangeBonus", "effectiveRangeNearBonus", "effectiveRangeFarBonus"].includes(key);
+  const suffix = ["damagePercent", "criticalChance", "burstStability"].includes(key)
+    ? "%"
+    : metreValue
+    ? " м"
+    : "";
   const prepared = collectActorPreparedPathAttribution(actor, path, {
     preparedValue: actor?.system?.combat?.[key],
-    suffix
+    suffix,
+    integer: !metreValue
   });
   let running = prepared.value;
   const sources = [...prepared.sources];
@@ -7084,11 +7126,13 @@ function collectActorCombatValueAttribution(actor, key = "", context = null) {
 function collectActorPreparedPathAttribution(actor, path = "", {
   preparedValue = 0,
   suffix = "",
-  expandEffectKeys = false
+  expandEffectKeys = false,
+  integer = true
 } = {}) {
   if (!actor || !path) return emptyCombatAttribution();
   const preparedFormulaData = buildActorFormulaData(actor, { stage: "prepared" });
-  let running = toInteger(foundry.utils.getProperty(actor?._source ?? {}, path));
+  const normalize = value => integer ? toInteger(value) : (Number(value) || 0);
+  let running = normalize(foundry.utils.getProperty(actor?._source ?? {}, path));
   const sources = [];
   if (running) sources.push({
     name: `${actor.name}: ${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBase", "База")}`,
@@ -7123,7 +7167,7 @@ function collectActorPreparedPathAttribution(actor, path = "", {
     });
   }
 
-  const expected = toInteger(preparedValue);
+  const expected = normalize(preparedValue);
   if (expected !== running) {
     sources.push({
       name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedActor", "Подготовленные данные персонажа"),
@@ -7249,7 +7293,7 @@ function getTooltipContextualCombatValue(actor, key, context = {}) {
   if (!actor) return 0;
   return getContextualAbilityChangeValue(actor, `system.combat.${key}`, {
     ...context,
-    baseValue: toInteger(actor?.system?.combat?.[key])
+    baseValue: Number(actor?.system?.combat?.[key]) || 0
   });
 }
 
