@@ -1,5 +1,16 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import {
+  CONTROLLED_MOVEMENT_INTERRUPTION_OPTION,
+  createMovementOptions,
+  isControlledMovementInterruption
+} from "../canvas/movement-interruptions.mjs";
 import { trackSystemMovementOperation } from "../canvas/movement-settlement.mjs";
+import {
+  clearMovementResumeContexts,
+  getMovementResumeContext,
+  INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+  withMovementResumeContext
+} from "../canvas/movement-resume-context.mjs";
 import {
   ABILITY_ROUTE_PREVIEW_MOVEMENT_OPTION,
   clearAbilityRoutePreviewStop,
@@ -16,9 +27,8 @@ import {
 export const SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION = "falloutMawSystemEventMovementBypass";
 export const SYSTEM_EVENT_CHAIN_OPTION = "falloutMawSystemEventChainRef";
 
-const CONTROLLED_INTERRUPTION_OPTION = "falloutMawControlledMovementInterruption";
-const WHERE_ARE_YOU_GOING_RESUME_OPTION = "falloutMawWhereAreYouGoingResume";
 const pendingMovementGates = new Set();
+const movementGateEpochs = new Map();
 let hooksRegistered = false;
 
 /**
@@ -32,6 +42,15 @@ export function registerFoundryMovementSystemEventHooks() {
   Hooks.on("moveToken", onMoveToken);
   Hooks.on("stopToken", onStopToken);
   Hooks.on("updateToken", onAbilityRoutePreviewPlanUpdate);
+  Hooks.on("deleteToken", tokenDocument => {
+    movementGateEpochs.delete(getMovementGateTokenKey(tokenDocument));
+    clearMovementResumeContexts(tokenDocument);
+  });
+  Hooks.on("canvasTearDown", () => {
+    pendingMovementGates.clear();
+    movementGateEpochs.clear();
+    clearMovementResumeContexts();
+  });
 }
 
 export function createMovementOccurrenceKey(tokenDocument, movement = {}, phase = "", subpath = "") {
@@ -60,10 +79,47 @@ export function serializeMovementOperation(movement = {}) {
 }
 
 function onPreMoveToken(tokenDocument, movement, operation = {}) {
+  const gateResumeContext = getMovementResumeContext(
+    tokenDocument,
+    movement,
+    operation,
+    SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION
+  );
+  const internalResumeContext = getMovementResumeContext(
+    tokenDocument,
+    movement,
+    operation,
+    INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION
+  );
+  if (gateResumeContext) {
+    const gateEpoch = Number(gateResumeContext.data?.movementGateEpoch) || 0;
+    const valid = movement?.chain?.length
+      ? movementGateEpochs.get(getMovementGateTokenKey(tokenDocument)) === gateEpoch
+      : isMovementGateCurrent(tokenDocument, movement, gateEpoch);
+    if (!valid) return false;
+  }
+  const resumeChainRef = gateResumeContext?.data?.chainRef ?? internalResumeContext?.data?.chainRef ?? null;
+  if (resumeChainRef) {
+    operation[SYSTEM_EVENT_CHAIN_OPTION] = resumeChainRef;
+    operation.falloutMawSystemEventChainRef = resumeChainRef;
+    operation.chainRef = resumeChainRef;
+  }
   if (
     operation?.[SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]
-    || operation?.[CONTROLLED_INTERRUPTION_OPTION]
-    || operation?.[WHERE_ARE_YOU_GOING_RESUME_OPTION]
+    || gateResumeContext
+    || operation?.[INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION]
+    || internalResumeContext
+  ) return true;
+
+  // Every other movement attempt supersedes an older asynchronous gate for
+  // this Token. This is causal ordering, not a time-based assumption.
+  const movementGateEpoch = beginMovementGateEpoch(tokenDocument);
+  if (
+    operation?.[CONTROLLED_MOVEMENT_INTERRUPTION_OPTION]
+    || isControlledMovementInterruption(tokenDocument, movement, operation)
+    || movement?.chain?.length
+    || operation?.isUndo
+    || operation?.isPaste
   ) return true;
   if (game.paused || !tokenDocument?.actor || !movement) return true;
 
@@ -80,7 +136,7 @@ function onPreMoveToken(tokenDocument, movement, operation = {}) {
     pendingMovementGates.add(key);
     trackSystemMovementOperation(
       tokenDocument,
-      gateAndResumeMovement(tokenDocument, movement, operation, key),
+      gateAndResumeMovement(tokenDocument, movement, operation, key, movementGateEpoch),
       { contributesToCompletion: true }
     );
   }
@@ -93,7 +149,7 @@ function movementGateNeededSync() {
   return Boolean(current.hasAnyOf(MOVEMENT_GATE_EVENT_KEYS));
 }
 
-async function gateAndResumeMovement(tokenDocument, movement, operation, pendingKey) {
+async function gateAndResumeMovement(tokenDocument, movement, operation, pendingKey, movementGateEpoch) {
   const movementData = serializeMovementOperation(movement);
   const participant = tokenParticipant(tokenDocument);
   const operationId = `movement:${createMovementOccurrenceKey(tokenDocument, movement, "root")}`;
@@ -102,6 +158,7 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
     ?? operation?.chainRef
     ?? null;
   try {
+    if (!isMovementGateCurrent(tokenDocument, movement, movementGateEpoch)) return false;
     return await withSystemEventRoot({
       kind: "tokenMovement",
       operationId,
@@ -113,10 +170,12 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
         occurrenceKey: createMovementOccurrenceKey(tokenDocument, movement, "before"),
         participants: { source: participant, target: null, related: [] }
       });
+      if (!isMovementGateCurrent(tokenDocument, movement, movementGateEpoch)) return false;
       const gate = await scope.emit("fallout-maw.movement.token.beforeStart", { data: movementData }, {
         occurrenceKey: createMovementOccurrenceKey(tokenDocument, movement, "beforeStart"),
         participants: { source: participant, target: null, related: [] }
       });
+      if (!isMovementGateCurrent(tokenDocument, movement, movementGateEpoch)) return false;
       if (gate?.control?.current || gate?.control?.remaining || gate?.control?.root) {
         await scope.emit("fallout-maw.movement.token.stopped", {
           data: movementData,
@@ -131,34 +190,47 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
 
       const waypoints = getMovementResumeWaypoints(movement);
       if (!waypoints.length) return false;
-      const completed = await tokenDocument.move(waypoints, {
-        [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true,
-        [SYSTEM_EVENT_CHAIN_OPTION]: scope.chainRef,
-        chainRef: scope.chainRef,
-        method: movement?.method,
-        split: movement?.split,
-        autoRotate: Boolean(movement?.autoRotate),
-        showRuler: Boolean(movement?.showRuler),
-        terrainOptions: movement?.terrainOptions,
-        constrainOptions: movement?.constrainOptions,
-        measureOptions: movement?.measureOptions
-      });
+      if (!isMovementGateCurrent(tokenDocument, movement, movementGateEpoch)) return false;
+      const completed = await withMovementResumeContext(
+        tokenDocument,
+        SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION,
+        { chainRef: scope.chainRef, movementGateEpoch },
+        () => tokenDocument.move(waypoints, {
+          ...createMovementOptions(movement, operation, {
+            chainRef: scope.chainRef,
+            showRuler: movement?.showRuler
+          }),
+          [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true,
+          [SYSTEM_EVENT_CHAIN_OPTION]: scope.chainRef,
+          chainRef: scope.chainRef
+        })
+      );
       await waitForTokenMovementAnimation(tokenDocument);
       return completed !== false;
     });
   } catch (error) {
     console.error(`${SYSTEM_ID} | Token movement system-event gate failed`, error);
     try {
+      if (!isMovementGateCurrent(tokenDocument, movement, movementGateEpoch)) return false;
       const waypoints = getMovementResumeWaypoints(movement);
       if (!waypoints.length) return false;
-      const completed = await tokenDocument.move(waypoints, {
-        [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true,
-        ...(inheritedChainRef ? {
-          [SYSTEM_EVENT_CHAIN_OPTION]: inheritedChainRef,
-          falloutMawSystemEventChainRef: inheritedChainRef,
-          chainRef: inheritedChainRef
-        } : {})
-      });
+      const completed = await withMovementResumeContext(
+        tokenDocument,
+        SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION,
+        { chainRef: inheritedChainRef, movementGateEpoch },
+        () => tokenDocument.move(waypoints, {
+          ...createMovementOptions(movement, operation, {
+            chainRef: inheritedChainRef,
+            showRuler: movement?.showRuler
+          }),
+          [SYSTEM_EVENT_MOVEMENT_BYPASS_OPTION]: true,
+          ...(inheritedChainRef ? {
+            [SYSTEM_EVENT_CHAIN_OPTION]: inheritedChainRef,
+            falloutMawSystemEventChainRef: inheritedChainRef,
+            chainRef: inheritedChainRef
+          } : {})
+        })
+      );
       await waitForTokenMovementAnimation(tokenDocument);
       return completed !== false;
     } catch (resumeError) {
@@ -170,6 +242,36 @@ async function gateAndResumeMovement(tokenDocument, movement, operation, pending
   }
 }
 
+function beginMovementGateEpoch(tokenDocument) {
+  const key = getMovementGateTokenKey(tokenDocument);
+  const epoch = (movementGateEpochs.get(key) ?? 0) + 1;
+  movementGateEpochs.set(key, epoch);
+  return epoch;
+}
+
+function isMovementGateCurrent(tokenDocument, movement = {}, epoch = 0) {
+  if (movementGateEpochs.get(getMovementGateTokenKey(tokenDocument)) !== epoch) return false;
+  return isTokenAtMovementOrigin(tokenDocument, movement?.origin);
+}
+
+function getMovementGateTokenKey(tokenDocument) {
+  return String(tokenDocument?.uuid ?? [tokenDocument?.parent?.id ?? "", tokenDocument?.id ?? ""].join(":"));
+}
+
+function isTokenAtMovementOrigin(tokenDocument, origin = null) {
+  if (!origin) return true;
+  const source = tokenDocument?._source ?? tokenDocument ?? {};
+  for (const field of ["x", "y", "elevation", "width", "height", "depth"]) {
+    const actual = Number(source[field] ?? origin[field] ?? 0);
+    const expected = Number(origin[field] ?? source[field] ?? 0);
+    if (!Number.isFinite(actual) || !Number.isFinite(expected) || actual !== expected) return false;
+  }
+  for (const field of ["shape", "level"]) {
+    if (String(source[field] ?? origin[field] ?? "") !== String(origin[field] ?? source[field] ?? "")) return false;
+  }
+  return true;
+}
+
 async function waitForTokenMovementAnimation(tokenDocument) {
   const animation = tokenDocument?.movement?.animation?.ended;
   if (animation?.then) await animation.catch(() => undefined);
@@ -178,6 +280,11 @@ async function waitForTokenMovementAnimation(tokenDocument) {
 function onMoveToken(tokenDocument, movement, operation = {}, user = null) {
   clearAbilityRoutePreviewStop(tokenDocument, movement?.id);
   if (!user?.isSelf || !tokenDocument?.actor || !movement) return;
+  if (
+    !isMovementOperationCompleted(movement)
+    || operation?.[CONTROLLED_MOVEMENT_INTERRUPTION_OPTION]
+    || isControlledMovementInterruption(tokenDocument, movement, operation)
+  ) return;
   const participant = tokenParticipant(tokenDocument);
   const chainRef = operation?.[SYSTEM_EVENT_CHAIN_OPTION] ?? operation?.chainRef ?? null;
   const dispatched = dispatchSystemEvent("fallout-maw.movement.token.completed", {
@@ -195,6 +302,10 @@ function onMoveToken(tokenDocument, movement, operation = {}, user = null) {
     console.error(`${SYSTEM_ID} | Token movement completion event failed`, error);
   });
   trackSystemMovementOperation(tokenDocument, dispatched);
+}
+
+export function isMovementOperationCompleted(movement = {}) {
+  return !movement?.constrained && !(movement?.pending?.waypoints?.length > 0);
 }
 
 function onAbilityRoutePreviewPlanUpdate(tokenDocument, _changes = {}, operation = {}) {
@@ -224,11 +335,11 @@ function onStopToken(tokenDocument) {
   trackSystemMovementOperation(tokenDocument, dispatched);
 }
 
-function getMovementResumeWaypoints(movement = {}) {
+export function getMovementResumeWaypoints(movement = {}) {
   const values = [
     ...(movement?.passed?.waypoints ?? []),
     ...(movement?.pending?.waypoints ?? [])
-  ];
+  ].filter(waypoint => !waypoint?.intermediate);
   if (!values.length && movement?.destination) values.push(movement.destination);
   // Foundry supports routes which deliberately revisit a position. Keep the
   // original order and repetitions (A -> B -> A) when an asynchronously gated

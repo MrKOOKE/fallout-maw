@@ -158,7 +158,7 @@ export function getRawMovementCostLimit(actor, adjustedBudget = Infinity) {
   return lower;
 }
 
-function getCombatMovementCostProfile(actor, context = {}) {
+export function getCombatMovementCostProfile(actor, context = {}) {
   const postureAction = String(getActorPostureAction(actor) ?? "").trim();
   const preparedPostureMultiplier = Number(getActorPostureMovementCostMultiplier(actor));
   const modifier = getDamageCostModifierState(actor).movement;

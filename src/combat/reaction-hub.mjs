@@ -4,6 +4,9 @@ import { getEventParticipantActorUuid } from "../events/event-reaction-schema.mj
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { canActorSpendEnergy } from "./energy-resource.mjs";
+import { actorHasIncapacitatingStatus } from "./incapacitation.mjs";
+
+export { actorHasIncapacitatingStatus } from "./incapacitation.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -30,7 +33,6 @@ const REACTION_QUERY_NAME = "falloutMawReaction";
 const DEFAULT_REACTION_TIMEOUT_MS = 20000;
 const REACTION_SOCKET_COMPLETION_GRACE_MS = 30000;
 export const REACTION_LOCK_BYPASS_OPTION = "falloutMawReactionLockBypass";
-const UNABLE_TO_ACT_STATUSES = new Set(["dead", "unconscious", "stunned"]);
 const pendingReactionSocketRequests = new Map();
 const reactionProviders = new Map();
 const activeReactionLocks = new Map();
@@ -93,15 +95,6 @@ export function isReactionSystemLocked() {
 
 export function isActorUnableToAct(actor = null) {
   return !actor || actorHasIncapacitatingStatus(actor);
-}
-
-export function actorHasIncapacitatingStatus(actor = null) {
-  if (!actor) return false;
-  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
-  return Boolean(
-    Array.from(UNABLE_TO_ACT_STATUSES).some(status => actor.statuses?.has?.(status))
-    || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
-  );
 }
 
 export async function requestReactionEvent(eventKey = "", context = {}) {

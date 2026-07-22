@@ -2406,7 +2406,15 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
       if (candidates.length) {
         candidates.sort((left, right) => left.priority - right.priority);
         const { type, tile, waypoint } = candidates[0];
-        return { type, tile, waypoint, routeOrder, priority: getTrapMovementEventPriority(type), eventId: `${type}:${tile.id}` };
+        const eventRouteOrder = type === "triggerExit" ? Math.max(0, routeOrder - 1) : routeOrder;
+        return {
+          type,
+          tile,
+          waypoint,
+          routeOrder: eventRouteOrder,
+          priority: getTrapMovementEventPriority(type),
+          eventId: `${type}:${tile.id}`
+        };
       }
     }
   }

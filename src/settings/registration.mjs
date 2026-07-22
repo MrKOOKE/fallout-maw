@@ -343,7 +343,7 @@ export function registerSystemSettings() {
     type: Object,
     preset: true,
     default: getMainPresetDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings()),
-    onChange: refreshCombatUi
+    onChange: onFactionSettingsChanged
   });
 
   game.settings.register(FALLOUT_MAW.id, FACTION_MATRIX_SETTING, {
@@ -353,7 +353,7 @@ export function registerSystemSettings() {
     type: Object,
     preset: true,
     default: getMainPresetDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix()),
-    onChange: refreshCombatUi
+    onChange: onFactionSettingsChanged
   });
 
   game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
@@ -670,4 +670,9 @@ function refreshCombatUi() {
   ui.combat?.render?.(false);
   ui.combatDock?.refresh?.();
   game.combat?._updateTurnMarkers?.();
+}
+
+function onFactionSettingsChanged() {
+  refreshCombatUi();
+  Hooks.callAll(`${FALLOUT_MAW.id}.factionSettingsChanged`);
 }

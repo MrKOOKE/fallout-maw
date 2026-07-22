@@ -143,10 +143,17 @@ import {
 } from "../combat/energy-resource.mjs";
 import { areTokensAdjacent, areTokensAdjacentAt, resolveKnockback } from "../combat/active-actions.mjs";
 import {
+  createMovementOptions,
   getMovementRouteSamples,
+  getMovementRouteWaypointProgress,
   getMovementSegmentSamples,
   registerMovementInterruptionProvider
 } from "../canvas/movement-interruptions.mjs";
+import {
+  getMovementResumeContext,
+  INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+  withMovementResumeContext
+} from "../canvas/movement-resume-context.mjs";
 import {
   DEFAULT_FACTION_NAME,
   getActorFactionBelongs,
@@ -236,7 +243,6 @@ const COUNTER_SNIPER_AIM_QUERY_NAME = "falloutMawCounterSniperAim";
 const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
 const WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID = "whereAreYouGoingMovement";
 const WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME = "falloutMawWhereAreYouGoingWeapon";
-const WHERE_ARE_YOU_GOING_RESUME_OPTION = "falloutMawWhereAreYouGoingResume";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const ACTIVE_APPLICATION_QUERY_NAME = "falloutMawActiveApplication";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
@@ -254,6 +260,7 @@ const activeApplicationAuthorityRequestsByUse = new Map();
 const activeApplicationAuthorityRequestsById = new Map();
 const actorEnergyMutationQueue = new Map();
 const activeApplicationEffectSyncTimers = new Map();
+const whereAreYouGoingSuppressedReactors = new Map();
 
 const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   Object.freeze({
@@ -4547,19 +4554,20 @@ function collectOversightMovementInterruptions({ tokenDocument, movement } = {})
   }));
   const passedWaypoints = Array.from(movement.passed?.waypoints ?? []);
   if (!passedWaypoints.length) return [];
+  const routeProgress = getMovementRouteWaypointProgress(tokenDocument, movement);
   let rawCost = 0;
   for (const [index, waypoint] of passedWaypoints.entries()) {
     rawCost += Math.max(0, Number(waypoint?.cost) || 0);
     const cost = applyCombatMovementCostModifier(tokenDocument.actor, Math.ceil(rawCost));
     if (cost < needed) continue;
-    const remainingWaypoints = [
+    const remainingWaypoints = prepareFixedMovementWaypoints([
       ...passedWaypoints.slice(index + 1),
       ...(movement.pending?.waypoints ?? [])
-    ].map(entry => ({ ...entry, checkpoint: true }));
+    ]);
     return [{
       type: REACTION_EVENT_KEYS.oversightThreshold,
       eventId: `${movement.id ?? foundry.utils.randomID()}:${index}`,
-      routeOrder: index,
+      routeOrder: routeProgress[index + 1]?.routeOrder ?? (index + 1),
       priority: -90,
       waypoint,
       remainingWaypoints
@@ -4568,18 +4576,31 @@ function collectOversightMovementInterruptions({ tokenDocument, movement } = {})
   return [];
 }
 
-async function resumeOversightMovement({ tokenDocument, movement, event } = {}) {
+async function resumeOversightMovement({
+  tokenDocument,
+  movement,
+  event,
+  options,
+  chainRef = null,
+  isCurrent = null
+} = {}) {
   const waypoints = Array.isArray(event?.remainingWaypoints) ? event.remainingWaypoints : [];
   await waitForCombatResourceSpending(tokenDocument?.actor);
+  if (typeof isCurrent === "function" && !isCurrent()) return false;
   if (!tokenDocument || !waypoints.length || isActorUnableToAct(tokenDocument.actor)) return false;
-  return tokenDocument.move(waypoints, {
-    method: movement?.method,
-    autoRotate: Boolean(movement?.autoRotate),
-    showRuler: Boolean(movement?.showRuler),
-    terrainOptions: movement?.terrainOptions,
-    constrainOptions: movement?.constrainOptions,
-    measureOptions: movement?.measureOptions
-  });
+  return withMovementResumeContext(
+    tokenDocument,
+    INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+    { chainRef },
+    () => tokenDocument.move(waypoints, {
+      ...createMovementOptions(movement, options, {
+        chainRef,
+        split: false,
+        showRuler: movement?.showRuler
+      }),
+      [INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION]: true
+    })
+  );
 }
 
 function registerOversightReactionProvider() {
@@ -5402,7 +5423,9 @@ function registerWhereAreYouGoingMovementProvider() {
   registerMovementInterruptionProvider({
     id: WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID,
     collect: collectWhereAreYouGoingMovementInterruptions,
-    execute: executeWhereAreYouGoingMovementInterruption
+    execute: executeWhereAreYouGoingMovementInterruption,
+    synchronizeOnMove: true,
+    synchronize: synchronizeWhereAreYouGoingSuppression
   });
 }
 
@@ -5410,11 +5433,20 @@ function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement,
   const mover = tokenDocument?.actor;
   const combat = getActiveSceneCombat(tokenDocument?.parent);
   if (!mover || !combat || !isTokenActiveCombatant(combat, tokenDocument)) return [];
-  const skippedReactorTokenUuids = new Set(
-    (options?.[WHERE_ARE_YOU_GOING_RESUME_OPTION]?.reactorTokenUuids ?? [])
+  const resumeContext = getMovementResumeContext(
+    tokenDocument,
+    movement,
+    options,
+    INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION
+  );
+  const tokenKey = getWhereAreYouGoingTokenKey(tokenDocument);
+  const skippedReactorTokenUuids = new Set([
+    ...(whereAreYouGoingSuppressedReactors.get(tokenKey) ?? []),
+    ...(resumeContext?.data?.skippedReactorTokenUuids ?? []),
+    ...(options?.[INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION]?.reactorTokenUuids ?? [])
       .map(uuid => String(uuid ?? "").trim())
       .filter(Boolean)
-  );
+  ]);
 
   const reactors = (tokenDocument.parent?.tokens?.contents ?? [])
     .filter(other => other?.actor && other.id !== tokenDocument.id)
@@ -5446,28 +5478,38 @@ function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement,
       const leavingReactors = reactors.filter(reactor => {
         const wasAdjacent = areTokensAdjacentAt(tokenDocument, previous.waypoint, reactor, null);
         const isAdjacent = areTokensAdjacentAt(tokenDocument, current.waypoint, reactor, null);
-        if (skippedReactorTokenUuids.has(reactor.uuid)) {
-          if (!isAdjacent) skippedReactorTokenUuids.delete(reactor.uuid);
-          return false;
-        }
+        if (skippedReactorTokenUuids.has(reactor.uuid)) return false;
         return wasAdjacent && !isAdjacent;
       });
       if (!leavingReactors.length) continue;
       return [{
         type: REACTION_EVENT_KEYS.tokenLeavingAdjacency,
         eventId: `${movement?.id ?? foundry.utils.randomID()}:${routeOrder}`,
-        routeOrder,
+        routeOrder: Math.max(0, routeOrder - 1),
         priority: -100,
         waypoint: previous.waypoint,
         reactorTokenUuids: leavingReactors.map(reactor => reactor.uuid),
-        remainingWaypoints: buildRemainingMovementWaypoints(segmentSamples, segmentIndex, samples, index)
+        remainingWaypoints: buildRemainingMovementWaypoints(
+          segmentSamples,
+          segmentIndex,
+          samples,
+          index,
+          movement.pending?.waypoints ?? []
+        )
       }];
     }
   }
   return [];
 }
 
-async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, movement, event, chainRef = null } = {}) {
+async function executeWhereAreYouGoingMovementInterruption({
+  tokenDocument,
+  movement,
+  event,
+  options,
+  chainRef = null,
+  isCurrent = null
+} = {}) {
   const mover = tokenDocument?.actor;
   if (!mover) return;
   const result = await requestReactionEvent(REACTION_EVENT_KEYS.tokenLeavingAdjacency, {
@@ -5480,7 +5522,8 @@ async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, move
     message: `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
   });
   if (result?.status === REACTION_RESULT.success) return;
-  await resumeWhereAreYouGoingMovement(tokenDocument, movement, event);
+  if (typeof isCurrent === "function" && !isCurrent()) return false;
+  await resumeWhereAreYouGoingMovement(tokenDocument, movement, event, options, chainRef);
 }
 
 async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = {} } = {}) {
@@ -5677,40 +5720,106 @@ async function handleWhereAreYouGoingWeaponQuery(data = {}) {
   return candidateId ? { candidateId } : null;
 }
 
-function buildRemainingMovementWaypoints(segmentSamples = [], segmentIndex = 0, routeSamples = [], routeIndex = 0) {
+function buildRemainingMovementWaypoints(
+  segmentSamples = [],
+  segmentIndex = 0,
+  routeSamples = [],
+  routeIndex = 0,
+  pendingWaypoints = []
+) {
   const waypoints = [
-    ...segmentSamples.slice(segmentIndex).map(sample => sample?.waypoint),
-    ...routeSamples.slice(routeIndex + 1).map(sample => sample?.waypoint)
+    ...segmentSamples.slice(segmentIndex).map(sample => ({ ...sample?.waypoint, checkpoint: false })),
+    ...routeSamples.slice(routeIndex + 1).map(sample => sample?.waypoint),
+    ...pendingWaypoints.filter(waypoint => !waypoint?.intermediate)
   ].filter(Boolean);
+  return prepareFixedMovementWaypoints(waypoints);
+}
+
+function prepareFixedMovementWaypoints(waypoints = []) {
   const result = [];
-  const seen = new Set();
-  for (const waypoint of waypoints) {
-    const key = [
-      Math.round(Number(waypoint.x) || 0),
-      Math.round(Number(waypoint.y) || 0),
-      Math.round(Number(waypoint.elevation) || 0)
-    ].join(":");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push({ ...waypoint, checkpoint: true });
+  for (const waypoint of waypoints.filter(waypoint => waypoint && !waypoint.intermediate)) {
+    const prepared = { ...waypoint };
+    if (result.length && getFixedMovementWaypointKey(result.at(-1)) === getFixedMovementWaypointKey(prepared)) {
+      result[result.length - 1] = prepared;
+    } else {
+      result.push(prepared);
+    }
   }
+  if (result.length) result.at(-1).checkpoint = true;
   return result;
 }
 
-async function resumeWhereAreYouGoingMovement(tokenDocument, movement, event = {}) {
+function getFixedMovementWaypointKey(waypoint = {}) {
+  return [
+    Math.round(Number(waypoint.x) || 0),
+    Math.round(Number(waypoint.y) || 0),
+    Number.isFinite(Number(waypoint.elevation)) ? String(Number(waypoint.elevation)) : "",
+    Number.isFinite(Number(waypoint.width)) ? String(Number(waypoint.width)) : "",
+    Number.isFinite(Number(waypoint.height)) ? String(Number(waypoint.height)) : "",
+    Number.isFinite(Number(waypoint.depth)) ? String(Number(waypoint.depth)) : "",
+    String(waypoint.shape ?? ""),
+    String(waypoint.level ?? ""),
+    String(waypoint.action ?? ""),
+    String(Boolean(waypoint.checkpoint)),
+    String(Boolean(waypoint.explicit)),
+    String(Boolean(waypoint.snapped))
+  ].join(":");
+}
+
+async function resumeWhereAreYouGoingMovement(
+  tokenDocument,
+  movement,
+  event = {},
+  operationOptions = {},
+  chainRef = null
+) {
   const waypoints = Array.isArray(event.remainingWaypoints) ? event.remainingWaypoints : [];
   if (!tokenDocument || !waypoints.length) return false;
-  return tokenDocument.move(waypoints, {
-    [WHERE_ARE_YOU_GOING_RESUME_OPTION]: {
-      reactorTokenUuids: event.reactorTokenUuids ?? []
-    },
-    method: movement?.method,
-    autoRotate: Boolean(movement?.autoRotate),
-    showRuler: Boolean(movement?.showRuler),
-    terrainOptions: movement?.terrainOptions,
-    constrainOptions: movement?.constrainOptions,
-    measureOptions: movement?.measureOptions
-  });
+  const reactorTokenUuids = (event.reactorTokenUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean);
+  suppressWhereAreYouGoingReactors(tokenDocument, reactorTokenUuids);
+  return withMovementResumeContext(
+    tokenDocument,
+    INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION,
+    { chainRef, skippedReactorTokenUuids: new Set(reactorTokenUuids) },
+    () => tokenDocument.move(waypoints, {
+      ...createMovementOptions(movement, operationOptions, {
+        chainRef,
+        split: false,
+        showRuler: movement?.showRuler
+      }),
+      [INTERNAL_SYSTEM_MOVEMENT_RESUME_OPTION]: { reactorTokenUuids }
+    })
+  );
+}
+
+function suppressWhereAreYouGoingReactors(tokenDocument, reactorTokenUuids = []) {
+  const tokenKey = getWhereAreYouGoingTokenKey(tokenDocument);
+  if (!tokenKey) return;
+  const suppressed = whereAreYouGoingSuppressedReactors.get(tokenKey) ?? new Set();
+  for (const uuid of reactorTokenUuids) if (uuid) suppressed.add(uuid);
+  whereAreYouGoingSuppressedReactors.delete(tokenKey);
+  whereAreYouGoingSuppressedReactors.set(tokenKey, suppressed);
+  while (whereAreYouGoingSuppressedReactors.size > 512) {
+    whereAreYouGoingSuppressedReactors.delete(whereAreYouGoingSuppressedReactors.keys().next().value);
+  }
+}
+
+function synchronizeWhereAreYouGoingSuppression({ tokenDocument } = {}) {
+  const tokenKey = getWhereAreYouGoingTokenKey(tokenDocument);
+  const suppressed = whereAreYouGoingSuppressedReactors.get(tokenKey);
+  if (!suppressed?.size) return;
+  for (const reactorUuid of [...suppressed]) {
+    const reactor = globalThis.fromUuidSync?.(reactorUuid)
+      ?? (tokenDocument?.parent?.tokens?.contents ?? []).find(token => token?.uuid === reactorUuid);
+    if (!reactor || !areTokensAdjacent(tokenDocument, reactor)) suppressed.delete(reactorUuid);
+  }
+  if (!suppressed.size) whereAreYouGoingSuppressedReactors.delete(tokenKey);
+}
+
+function getWhereAreYouGoingTokenKey(tokenDocument) {
+  return String(tokenDocument?.uuid ?? tokenDocument?.id ?? "").trim();
 }
 
 async function createWhereAreYouGoingChatMessage(actor, abilityItem) {
