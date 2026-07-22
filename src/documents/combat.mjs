@@ -12,6 +12,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
+import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import {
   BLOCK_TURN_STATE_FLAG,
   createBlockTurnState,
@@ -234,6 +235,7 @@ export class FalloutMaWCombat extends Combat {
         surprised
       };
       const operationId = `initiative-roll:${this.uuid}:${initiativeBatchId}:${i}:${id}`;
+      eventData.chanceOperationId = operationId;
       const workflow = await withSystemEventRoot({
         kind: "initiativeRoll",
         operationId,
@@ -258,7 +260,11 @@ export class FalloutMaWCombat extends Combat {
           total: Number.isFinite(Number(value?.roll?.total)) ? Number(value.roll.total) : null
         }),
         operation: async () => {
-          const rollFormula = buildInitiativeFormula(initiativeFormula, combatant.actor, { surprised });
+          const rollFormula = buildInitiativeFormula(initiativeFormula, combatant.actor, {
+            surprised,
+            chanceOperationId: operationId,
+            actorToken: combatant.token?.object ?? combatant.token ?? null
+          });
           const roll = combatant.getInitiativeRoll(rollFormula);
           await roll.evaluate();
           return { roll, formula: rollFormula };
@@ -329,17 +335,43 @@ function normalizeCombatantId(value) {
   return String(value ?? "").trim();
 }
 
-function buildInitiativeFormula(formula, actor, { surprised = false } = {}) {
+function buildInitiativeFormula(formula, actor, {
+  surprised = false,
+  chanceOperationId = "",
+  actorToken = null
+} = {}) {
   const source = String(formula || CONFIG.Combat.initiative.formula || game.system.initiative || "1d20");
-  const edge = calculateInitiativeEdge(actor, { surprised });
+  const baseBonus = toInteger(actor?.system?.attributes?.initiativeBonus);
+  const baseAdvantage = getActorInitiativeEdgeCount(actor, INITIATIVE_ADVANTAGE_EFFECT_KEY);
+  const baseDisadvantage = getActorInitiativeEdgeCount(actor, INITIATIVE_DISADVANTAGE_EFFECT_KEY);
+  const contextual = getContextualAbilityChangeValues(actor, [{
+    id: "bonus",
+    key: "system.attributes.initiativeBonus",
+    baseValue: baseBonus
+  }, {
+    id: "advantage",
+    key: INITIATIVE_ADVANTAGE_EFFECT_KEY,
+    baseValue: baseAdvantage
+  }, {
+    id: "disadvantage",
+    key: INITIATIVE_DISADVANTAGE_EFFECT_KEY,
+    baseValue: baseDisadvantage
+  }], { chanceOperationId, actorToken, requester: "initiative" });
+  const edge = calculateInitiativeEdgeFromCounts(contextual.advantage, contextual.disadvantage, { surprised });
   const edgeFormula = applyInitiativeRollMode(source, edge.rollMode);
-  const modifier = edge.skillModifier + (surprised ? -10 : 0);
+  const modifier = edge.skillModifier + (toInteger(contextual.bonus) - baseBonus) + (surprised ? -10 : 0);
   return modifier ? `(${edgeFormula}) ${modifier >= 0 ? "+" : "-"} ${Math.abs(modifier)}` : edgeFormula;
 }
 
 function calculateInitiativeEdge(actor, { surprised = false } = {}) {
   const advantageCount = getActorInitiativeEdgeCount(actor, INITIATIVE_ADVANTAGE_EFFECT_KEY);
-  const disadvantageCount = getActorInitiativeEdgeCount(actor, INITIATIVE_DISADVANTAGE_EFFECT_KEY) + (surprised ? 1 : 0);
+  const disadvantageCount = getActorInitiativeEdgeCount(actor, INITIATIVE_DISADVANTAGE_EFFECT_KEY);
+  return calculateInitiativeEdgeFromCounts(advantageCount, disadvantageCount, { surprised });
+}
+
+function calculateInitiativeEdgeFromCounts(advantage, disadvantage, { surprised = false } = {}) {
+  const advantageCount = Math.max(0, toInteger(advantage));
+  const disadvantageCount = Math.max(0, toInteger(disadvantage)) + (surprised ? 1 : 0);
   const net = advantageCount - disadvantageCount;
   if (net > 0) return {
     rollMode: "advantage",

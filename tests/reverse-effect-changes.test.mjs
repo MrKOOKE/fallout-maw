@@ -114,6 +114,18 @@ test("all-skills bonus changes expand to the concrete prepared bonus paths", () 
   assert.equal(keys.has("system.skills.medicine.bonus"), true);
   assert.equal(keys.has("system.skills.all.bonus"), false);
   assert.equal(changes.every(change => change.type === "add" && change.value === "5"), true);
+
+  for (const field of ["criticalSuccessChance", "criticalFailureChance"]) {
+    const criticalChanges = expandActorEffectChangeKeys(actor, {
+      key: `system.skills.all.${field}`,
+      type: "add",
+      value: "7"
+    });
+    const criticalKeys = new Set(criticalChanges.map(change => change.key));
+    assert.equal(criticalKeys.has(`system.skills.gambling.${field}`), true);
+    assert.equal(criticalKeys.has(`system.skills.medicine.${field}`), true);
+    assert.equal(criticalKeys.has(`system.skills.all.${field}`), false);
+  }
 });
 
 function createItemCollection(items = []) {
@@ -124,6 +136,48 @@ function createItemCollection(items = []) {
     [Symbol.iterator]: () => items.values()
   };
 }
+
+test("trigger chance keeps one decision for the whole active-use operation", () => {
+  const key = "system.skills.stealth.bonus";
+  const condition = {
+    id: "chance",
+    groupId: "",
+    type: "triggerChance",
+    chanceFormula: "100"
+  };
+  const source = createActor();
+  source.uuid = "Actor.source";
+  source.system = { creature: {}, limbs: {}, skills: { stealth: { bonus: 0 } } };
+  source.items = createItemCollection([{
+    id: "ability",
+    uuid: "Actor.source.Item.ability",
+    type: "ability",
+    system: {
+      functions: [{
+        id: "chance-function",
+        type: "effectChanges",
+        changes: [{ key, type: "add", value: "5" }],
+        penalties: [],
+        conditions: [condition]
+      }]
+    }
+  }]);
+
+  assert.equal(getContextualAbilityChangeValue(source, key, {
+    baseValue: 10,
+    chanceOperationId: "operation-one"
+  }), 15);
+
+  condition.chanceFormula = "0";
+  assert.equal(getContextualAbilityChangeValue(source, key, {
+    baseValue: 10,
+    chanceOperationId: "operation-one"
+  }), 15);
+  assert.equal(getContextualAbilityChangeValue(source, key, {
+    baseValue: 10,
+    chanceOperationId: "operation-two"
+  }), 10);
+});
 
 test("reverse autocomplete labels preserve the ordinary label and append only the direction suffix", () => {
   const reversePrefix = "fallout-maw.reverse.";

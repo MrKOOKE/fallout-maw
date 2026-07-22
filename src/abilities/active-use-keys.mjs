@@ -4,6 +4,8 @@ import {
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   getOriginalEffectKeyFromReverse,
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
@@ -14,7 +16,13 @@ import {
 import { getActorPostureAction } from "../canvas/posture-state.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
-const SKILL_CHANGE_SUFFIXES = Object.freeze(["bonus", "advantage", "disadvantage"]);
+const SKILL_CHANGE_SUFFIXES = Object.freeze([
+  "bonus",
+  "advantage",
+  "disadvantage",
+  "criticalSuccessChance",
+  "criticalFailureChance"
+]);
 const WEAPON_CHECK_COMBAT_KEYS = Object.freeze([
   "system.combat.accuracy",
   "system.combat.criticalChance",
@@ -35,6 +43,8 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   ...SMART_FUDGE_RESULT_KEYS,
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   "system.attributes.initiativeBonus",
   INITIATIVE_ADVANTAGE_EFFECT_KEY,
   INITIATIVE_DISADVANTAGE_EFFECT_KEY,
@@ -48,7 +58,7 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   "system.healing.outgoingPercent"
 ]);
 
-const SKILL_CHANGE_KEY_PATTERN = /^system\.skills\.[^.]+\.(?:bonus|advantage|disadvantage)$/;
+const SKILL_CHANGE_KEY_PATTERN = /^system\.skills\.[^.]+\.(?:bonus|advantage|disadvantage|criticalSuccessChance|criticalFailureChance)$/;
 const PROFICIENCY_BONUS_KEY_PATTERN = /^system\.proficiencies\.[^.]+\.bonus$/;
 const ACTION_COST_KEY_PATTERN = /^system\.costs\.actions\.[^.]+$/;
 const ACTION_PENETRATION_KEY_PATTERN = /^system\.penetration\.actions\.[^.]+$/;
@@ -66,6 +76,8 @@ export function getSkillCheckActiveUseKeys(skillKey = "", context = {}) {
     ALL_SKILLS_BONUS_EFFECT_KEY,
     ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
     ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+    ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
+    ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
     ...SKILL_CHECK_DISABLED_RESULT_KEYS
   ]);
   for (const suffix of SKILL_CHANGE_SUFFIXES) keys.add(`system.skills.${key}.${suffix}`);

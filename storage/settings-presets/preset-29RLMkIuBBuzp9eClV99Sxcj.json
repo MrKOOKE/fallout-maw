@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "3228a46478c176d7e840f6f4a4d3222a7ec2f059c4ca663e8b56c6499e6a3b0b",
-  "updatedAt": "2026-07-21T17:41:00.681Z",
+  "revision": "89b8d4b94c47985016997066cf727b2ee8729bce24ba2e9f76fc605038bb2189",
+  "updatedAt": "2026-07-21T20:55:38.616Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -499,7 +499,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Когда слот очков занят: +1 к Красноречию и Восприятию</p></li><li><p>Когда слот очков не занят: -1 к Красноречию и Восприятию</p></li></ul>",
+                "description": "<ul><li><p>Когда слот очков занят: +1 к Харизме и Восприятию</p></li><li><p>Когда слот очков не занят: -1 к Харизме и Восприятию</p></li></ul>",
                 "id": "lBaJVF6DzKnhNhwy",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
                 "name": "Модник",
@@ -584,7 +584,7 @@
                 "visible": true
               },
               {
-                "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех: +20%</p></li><li><p>С вероятностью в 50% шанс на Крит провал: +20%</p></li></ul><p>\"При одновременном срабатывание исключают друг друга\"</p>",
+                "description": "<p>При каждой проверке навыка:</p><ul><li><p>С вероятностью в 50% шанс на Крит успех: +20%</p></li><li><p>С вероятностью в 50% шанс на Крит провал: +20%</p></li></ul>",
                 "id": "2ExGBSWNzig4FgR8",
                 "img": "systems/fallout-maw/assets/icons/8-14/savant.webp",
                 "name": "Нестабильный",
@@ -624,9 +624,11 @@
                       ],
                       "conditions": [
                         {
+                          "chanceFormula": "50",
+                          "eventSubject": "reactor",
                           "groupId": "",
                           "id": "l9khhJpcDHeIjdtz",
-                          "type": ""
+                          "type": "triggerChance"
                         }
                       ],
                       "fixedKey": "",
@@ -653,7 +655,15 @@
                           "value": "-20"
                         }
                       ],
-                      "conditions": [],
+                      "conditions": [
+                        {
+                          "chanceFormula": "50",
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "XYDXapK5sjQrTUft",
+                          "type": "triggerChance"
+                        }
+                      ],
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "3ULDAPzOlF6jG3oP",
@@ -2608,6 +2618,33 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>+1 ОД</p></li></ul>",
+                "id": "E2mJFtyRCKWpXKud",
+                "img": "systems/fallout-maw/assets/icons/8-14/adrenalinovyj-drajv.webp",
+                "name": "Активный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "s6WE7RxK5q2938di",
+                      "skillKey": "athletics",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Атлетика",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>Добавляет дополнительный нижний ряд слотов в инвентаре и увеличивает грузоподъемность на 50 кг.</p>",
                 "id": "geh3jh8LBxjW2Tvx",
                 "img": "systems/fallout-maw/assets/icons/1-7/baraholshik.webp",
@@ -3489,12 +3526,6 @@
             "id": "skill-resilience",
             "locked": false,
             "name": "Стойкость"
-          },
-          {
-            "abilities": [],
-            "id": "skill-throwing",
-            "locked": false,
-            "name": "Метание"
           },
           {
             "abilities": [],
@@ -4604,7 +4635,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>В начале каждого хода врага или нейтрала — половину его Очков действий в качестве Очков реакции.</p></li><li><p>1 Помеху на все атакующие действия, направленные против неё.</p></li></ul>",
+                "description": "<p>Стоимость активации: 50 энергии и 5 ОД.<br>Перегрузка: 200 энергии на 12 часов.</p><p>Выберите себя или союзника. На протяжении следующего часа цель получает:</p><ul><li><p>Защиту от Критического провала на все проверки навыков.</p></li><li><p>В начале каждого хода врага или нейтрала — половина его Очков действий дается вам в качестве Очков реакции.</p></li><li><p>1 Помеху на все атакующие действия, направленные против неё.</p></li></ul>",
                 "id": "NkiGbyyLv05RZaGK",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Звёздный час",
@@ -4998,7 +5029,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Активная/Переключаемая способность.</p><p>Переключаемая. \"Усиленный голос\"<br>Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p><p>Активная. \"Усиленное влияние\"<br>Стоимость активации: 20 энергии<br>Перегрузка: 40 энергии на 2 часа.</p><p>После активации вы получаете +30 к Красноречию на 18 секунд.</p><p></p>",
+                "description": "<p>Активная/Переключаемая способность.</p><p>Переключаемая. \"Усиленный голос\"</p><ul><li><p>Пока активна потребляет 10 энергии на каждую проверку Красноречия и дает +1 Преимущество.</p></li></ul><p>Активная. \"Усиленное влияние\"<br>Стоимость активации: 20 энергии<br>Перегрузка: 40 энергии на 2 часа.</p><ul><li><p>После активации вы получаете +30 к Красноречию на 18 секунд.</p></li></ul><p></p>",
                 "id": "sgY5ccFsQBPkDDLV",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Опытный переговорищик",
@@ -6545,7 +6576,7 @@
               "loadFormula": "20 + 10*str",
               "loadLimitPercent": 150,
               "proficiencyPoints": 500,
-              "signatureSkillPoints": 3,
+              "signatureSkillPoints": 2,
               "traitPoints": 2
             },
             "bleedingResistanceFormula": "0",
@@ -27222,8 +27253,8 @@
             },
             "progression": {
               "proficiencyPointsPerLevel": "50",
-              "researchPointsPerLevel": "1000",
-              "skillPointsPerLevel": "10+int"
+              "researchPointsPerLevel": "500",
+              "skillPointsPerLevel": "5+int/2"
             },
             "regeneration": {
               "formula": "10 + con * 5"
@@ -54946,7 +54977,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "success",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },
@@ -55132,18 +55163,6 @@
                 "perception": 0,
                 "strength": 0
               }
-            },
-            "throwing": {
-              "base": 0.7,
-              "characteristics": {
-                "charisma": 0,
-                "dexterity": 0.04,
-                "endurance": 0,
-                "intelligence": 0,
-                "luck": 0,
-                "perception": 0,
-                "strength": 0.02
-              }
             }
           },
           "signatureFlatBonus": 15,
@@ -55184,13 +55203,6 @@
             "img": "icons/svg/d20-grey.svg",
             "key": "resilience",
             "label": "Стойкость"
-          },
-          {
-            "abbr": "thr",
-            "formula": "(dex + str)*2",
-            "img": "icons/svg/d20-grey.svg",
-            "key": "throwing",
-            "label": "Метание"
           },
           {
             "abbr": "doc",

@@ -1,6 +1,7 @@
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import {
   commitPreparedActiveUseOperations,
   prepareActiveUseOperation
@@ -14,9 +15,14 @@ import {
 
 export const WEAPON_SWITCH_COST_KEY = "system.costs.weaponSwitch";
 
-export function getWeaponSwitchActionPointCost(actor) {
+export function getWeaponSwitchActionPointCost(actor, context = {}) {
   const baseCost = Math.max(0, toInteger(getCombatSettings()?.weaponSwitch?.actionPointCost));
-  return Math.max(0, Math.ceil(baseCost + getWeaponSwitchActionPointCostBonus(actor)));
+  const preparedBonus = getWeaponSwitchActionPointCostBonus(actor);
+  const bonus = getContextualAbilityChangeValue(actor, WEAPON_SWITCH_COST_KEY, {
+    ...context,
+    baseValue: preparedBonus
+  });
+  return Math.max(0, Math.ceil(baseCost + bonus));
 }
 
 export function canSpendWeaponSwitchActionPoints(actor) {
@@ -26,7 +32,12 @@ export function canSpendWeaponSwitchActionPoints(actor) {
 }
 
 export async function spendWeaponSwitchActionPoints(actor) {
-  const cost = getWeaponSwitchActionPointCost(actor);
+  const activeUseOperationId = `weapon-switch:${String(actor?.uuid ?? actor?.id ?? "")}:${foundry.utils.randomID()}`;
+  const actorToken = actor?.token?.object ?? actor?.token ?? null;
+  const cost = getWeaponSwitchActionPointCost(actor, {
+    actorToken,
+    chanceOperationId: activeUseOperationId
+  });
   if (cost <= 0) return;
   const stateBefore = getCombatActionPointState(actor);
   if (!actor?.isOwner || !isActorInActiveCombat(actor) || !stateBefore || cost > stateBefore.value) return;
@@ -35,10 +46,9 @@ export async function spendWeaponSwitchActionPoints(actor) {
     kind: "weaponSwitchCost",
     actor,
     keys: new Set([WEAPON_SWITCH_COST_KEY]),
-    conditionContexts: [{ actorToken: actor?.token?.object ?? actor?.token ?? null }],
+    conditionContexts: [{ actorToken, chanceOperationId: activeUseOperationId }],
     reverseOnly: false
   });
-  const activeUseOperationId = `weapon-switch:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
   await spendCombatActionPoints(actor, cost);
   const stateAfter = getCombatActionPointState(actor);
   if (!stateAfter || stateAfter.value >= stateBefore.value || !activeUsePreparation) return;

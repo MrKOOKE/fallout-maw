@@ -7,6 +7,8 @@ import { toInteger } from "../utils/numbers.mjs";
 import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   getActorCombatAttackEdgeCount,
   getActorSmartFudgeResult,
   getCombatAttackAdvantageEffectKey,
@@ -16,6 +18,7 @@ import {
 import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import { notifyAbilityTriggerCostFailure } from "../abilities/trigger-cost-runtime.mjs";
+import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -155,21 +158,25 @@ export async function requestSkillCheck({
     });
     let message;
     const occurrenceBase = `skill:${scope.rootId}:${checkOccurrenceId}:${actor.uuid}:${resolvedSkill.key}`;
+    const operationData = {
+      ...normalizedData,
+      chanceOperationId: normalizedData.chanceOperationId || normalizedData.weaponAttackId || occurrenceBase
+    };
     const workflow = await runTerminalSystemEventWorkflow({
       scope,
       beforeEventKey: "fallout-maw.skill.check.beforeRoll",
       resolvedEventKey: "fallout-maw.skill.check.resolved",
       occurrenceBase,
       participants: eventContext.participants,
-      beforeData: buildSkillCheckBeforeEventData(resolvedSkill, normalizedData),
-      resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, resolvedSkill, normalizedData, status),
+      beforeData: buildSkillCheckBeforeEventData(resolvedSkill, operationData),
+      resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, resolvedSkill, operationData, status),
       operation: () => performCommittedSkillCheck({
         scope,
         occurrenceBase,
         participants: eventContext.participants,
         actor,
         skill: resolvedSkill,
-        data: normalizedData
+        data: operationData
       }),
       beforeTerminal: async ({ success, value }) => {
         if (!success || !value) return;
@@ -271,6 +278,10 @@ export async function requestSkillCheckBatch({
         rawData: entry.data
       });
       const occurrenceBase = `skill:${scope.rootId}:${batchOccurrenceId}:${index}:${entry.actor.uuid}:${entry.skill.key}`;
+      const operationData = {
+        ...normalizedData,
+        chanceOperationId: normalizedData.chanceOperationId || normalizedData.weaponAttackId || occurrenceBase
+      };
       const terminalReady = createDeferredSkillCheckBarrier();
       const terminalRelease = createDeferredSkillCheckBarrier();
       const workflowPromise = runTerminalSystemEventWorkflow({
@@ -279,15 +290,15 @@ export async function requestSkillCheckBatch({
         resolvedEventKey: "fallout-maw.skill.check.resolved",
         occurrenceBase,
         participants: eventContext.participants,
-        beforeData: buildSkillCheckBeforeEventData(entry.skill, normalizedData),
-        resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, entry.skill, normalizedData, status),
+        beforeData: buildSkillCheckBeforeEventData(entry.skill, operationData),
+        resolvedData: ({ value, status }) => buildSkillCheckResolvedEventData(value, entry.skill, operationData, status),
         operation: () => performCommittedSkillCheck({
           scope,
           occurrenceBase,
           participants: eventContext.participants,
           actor: entry.actor,
           skill: entry.skill,
-          data: normalizedData
+          data: operationData
         }),
         beforeTerminal: terminalContext => {
           terminalReady.resolve(terminalContext);
@@ -696,6 +707,7 @@ function buildSkillCheckResolvedEventData(outcome, skill, data = {}, status = ""
     total: toInteger(outcome?.total),
     rollCount: Array.isArray(outcome?.rolls) ? outcome.rolls.length : 0,
     weaponAttackId: String(data.weaponAttackId ?? ""),
+    chanceOperationId: String(data.chanceOperationId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     damageHubOperationRef: String(data.damageHubOperationRef ?? "")
@@ -713,6 +725,7 @@ function serializeSkillCheckRequest(data = {}) {
     requester: String(data.requester ?? ""),
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
+    chanceOperationId: String(data.chanceOperationId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     weaponData: serializeSkillCheckWeaponData(data.weaponData),
@@ -1391,6 +1404,7 @@ function normalizeRequestData(data, requester = "") {
     weaponData: data.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
     systemEventOperationId: String(data.systemEventOperationId ?? "").trim(),
     weaponAttackId: String(data.weaponAttackId ?? ""),
+    chanceOperationId: String(data.chanceOperationId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     limitedUseOperationId: String(data.limitedUseOperationId ?? ""),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
@@ -1450,6 +1464,18 @@ function createMutableCheck(actor, skill, data) {
       baseValue: skill.disadvantage,
       alternateKeys: ["system.skills.all.disadvantage"]
     },
+    {
+      id: "skillCriticalSuccessChance",
+      key: `system.skills.${skill.key}.criticalSuccessChance`,
+      baseValue: toInteger(actor?.system?.skills?.[skill.key]?.criticalSuccessChance),
+      alternateKeys: [ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY]
+    },
+    {
+      id: "skillCriticalFailureChance",
+      key: `system.skills.${skill.key}.criticalFailureChance`,
+      baseValue: toInteger(actor?.system?.skills?.[skill.key]?.criticalFailureChance),
+      alternateKeys: [ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY]
+    },
     ...buildSkillCheckDisabledResultContextSpecs(actor),
     ...(isAttackingCheck ? [{
       id: "combatAdvantage",
@@ -1471,8 +1497,10 @@ function createMutableCheck(actor, skill, data) {
     skill: { ...skill, value: toInteger(contextual.skillValue) },
     difficulty: toInteger(data.difficulty ?? DEFAULT_CHECK.difficulty),
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
-    criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus),
-    criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus),
+    criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus)
+      + toInteger(contextual.skillCriticalSuccessChance),
+    criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus)
+      + toInteger(contextual.skillCriticalFailureChance),
     advantageCount: Math.max(0, toInteger(data.advantageCount))
       + Math.max(0, toInteger(contextual.skillAdvantage))
       + Math.max(0, toInteger(contextual.combatAdvantage)),
@@ -1505,7 +1533,8 @@ function resolveSkillCheckContext(actor, data = {}) {
     targetToken: selectedTargetToken,
     targetActor,
     weaponData: data?.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
-    weaponActionKey: String(data?.weaponActionKey ?? "").trim()
+    weaponActionKey: String(data?.weaponActionKey ?? "").trim(),
+    chanceOperationId: getActiveUseOperationId(data)
   };
 }
 

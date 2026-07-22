@@ -41,6 +41,11 @@ import {
   timeOfDayConditionApplies
 } from "./environment-conditions.mjs";
 import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
+import { isActiveUseEffectKey } from "./active-use-keys.mjs";
+import { getActiveUseOperationId } from "./active-use-runtime.mjs";
+
+const TRIGGER_CHANCE_DECISION_LIMIT = 512;
+const triggerChanceDecisions = new Map();
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -180,6 +185,9 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     ABILITY_CONDITION_TYPES.triggerCost,
     ABILITY_CONDITION_TYPES.limitedUses
   ].includes(condition.type)) return true;
+  if (condition.type === ABILITY_CONDITION_TYPES.triggerChance) {
+    return triggerChanceConditionApplies(actor, condition, context);
+  }
   if (condition.type === ABILITY_CONDITION_TYPES.toggleable) {
     return isAbilityToggleConditionActive(
       actor,
@@ -284,10 +292,16 @@ export function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
   if (hasItemUseCondition(conditions)) return [];
   if (hasAuraDistributionCondition(conditions) && !context?.auraTargetApplication) return [];
-  const selectedChanges = abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
+  const conditionContext = { ...context, functionId: entry.id ?? "" };
+  const hasTriggerChance = hasTriggerChanceCondition(conditions);
+  if (hasTriggerChance && !hasTriggerChanceResolutionScope(actor, conditionContext)) return [];
+  const selectedChanges = abilityConditionsApply(actor, conditions, conditionContext)
     ? entry.changes ?? []
     : entry.penalties ?? [];
-  return filterChangesForLimitedUses(selectedChanges, conditions);
+  const availableChanges = filterChangesForLimitedUses(selectedChanges, conditions);
+  if (!hasTriggerChance) return availableChanges;
+  if (context?.chanceActiveOnly) return availableChanges.filter(change => isActiveUseEffectKey(change?.key));
+  return availableChanges;
 }
 
 export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry = {}, condition = {}, context = {}) {
@@ -397,13 +411,16 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
       const orderStart = contextualOrder;
       contextualOrder += Math.max(1, entry.changes?.length ?? 0, entry.penalties?.length ?? 0);
       const hasTargetContext = hasAbilityTargetContextCondition(entry.conditions);
-      if (!hasTargetContext && !hasWeaponContextCondition(entry.conditions)) continue;
+      const hasWeaponContext = hasWeaponContextCondition(entry.conditions);
+      const hasTriggerChance = hasTriggerChanceCondition(entry.conditions);
+      if (!hasTargetContext && !hasWeaponContext && !hasTriggerChance) continue;
       if (targetContextOnly && !hasTargetContext) continue;
       const selectedChanges = getConditionalFunctionChanges(actor, entry, {
         ...context,
         abilityItemId: item.id ?? "",
         functionId: entry.id ?? "",
-        allowContextual: true
+        allowContextual: true,
+        chanceActiveOnly: hasTriggerChance
       });
       const selectedBranch = selectedChanges === entry.penalties ? "penalties" : "changes";
       changes.push(...selectedChanges.map((change, index) => ({
@@ -420,6 +437,65 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
     }
   }
   return changes.filter(change => change?.key && change.value !== "");
+}
+
+function hasTriggerChanceCondition(conditions = []) {
+  return (conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerChance);
+}
+
+function triggerChanceConditionApplies(actor, condition = {}, context = {}) {
+  const scope = getTriggerChanceResolutionScope(context);
+  if (!scope) return false;
+  const identity = [
+    scope,
+    String(actor?.uuid ?? actor?.id ?? ""),
+    String(context?.abilityItemId ?? ""),
+    String(context?.functionId ?? ""),
+    String(condition?.id ?? "")
+  ].join("|");
+  const cached = triggerChanceDecisions.get(identity);
+  if (cached) return cached.applies;
+
+  const chance = Math.max(0, Math.min(100, evaluateEffectChangeNumber(actor, condition?.chanceFormula, {
+    fallback: 0
+  })));
+  const roll = getStablePercentile(identity);
+  const decision = {
+    chance,
+    roll,
+    applies: chance >= 100 || (chance > 0 && roll < chance)
+  };
+  triggerChanceDecisions.set(identity, decision);
+  trimTriggerChanceDecisions();
+  return decision.applies;
+}
+
+function hasTriggerChanceResolutionScope(_actor, context = {}) {
+  return Boolean(getTriggerChanceResolutionScope(context));
+}
+
+function getTriggerChanceResolutionScope(context = {}) {
+  const operation = getActiveUseOperationId(context);
+  if (operation) return `operation:${operation}`;
+  return "";
+}
+
+function trimTriggerChanceDecisions() {
+  while (triggerChanceDecisions.size > TRIGGER_CHANCE_DECISION_LIMIT) {
+    const oldest = triggerChanceDecisions.keys().next().value;
+    if (oldest === undefined) break;
+    triggerChanceDecisions.delete(oldest);
+  }
+}
+
+function getStablePercentile(value = "") {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  hash ^= hash >>> 16;
+  return ((hash >>> 0) / 0x100000000) * 100;
 }
 
 export function getContextualAbilityChangeValue(actor, key, { baseValue = 0, alternateKeys = [], ...context } = {}) {

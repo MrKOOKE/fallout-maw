@@ -8,6 +8,8 @@ import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
@@ -62,9 +64,12 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     })),
     ...buildSkillAdvantageEffectKeyTokens(),
     ...buildSkillDisadvantageEffectKeyTokens(),
+    ...buildSkillCriticalChanceEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
+    buildAllSkillsCriticalSuccessChanceEffectKeyToken(),
+    buildAllSkillsCriticalFailureChanceEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),
     ...buildResourceBonusEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
@@ -228,6 +233,26 @@ export function buildAllSkillsDisadvantageEffectKeyToken() {
   });
 }
 
+export function buildAllSkillsCriticalSuccessChanceEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allSkillsCriticalSuccessChance",
+    key: "allSkillsCriticalSuccessChance",
+    label: game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalSuccessChance"),
+    path: ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  });
+}
+
+export function buildAllSkillsCriticalFailureChanceEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allSkillsCriticalFailureChance",
+    key: "allSkillsCriticalFailureChance",
+    label: game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalFailureChance"),
+    path: ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  });
+}
+
 export function buildSkillAdvancementMultiplierEffectKeyTokens() {
   const group = localizeOrFallback(
     "FALLOUTMAW.Effects.SkillAdvancementMultiplierGroup",
@@ -282,6 +307,28 @@ export function buildSkillDisadvantageEffectKeyTokens() {
     path: `system.skills.${entry.key}.disadvantage`,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   })).filter(Boolean);
+}
+
+export function buildSkillCriticalChanceEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Common.Skills");
+  const criticalSuccessLabel = game.i18n.localize("FALLOUTMAW.Effects.SkillCriticalSuccessChance");
+  const criticalFailureLabel = game.i18n.localize("FALLOUTMAW.Effects.SkillCriticalFailureChance");
+  return getSkillSettings().flatMap(entry => [
+    createEffectKeyToken({
+      code: `${entry.abbr || entry.key}:criticalSuccessChance`,
+      key: `${entry.key}.criticalSuccessChance`,
+      label: `${criticalSuccessLabel}: ${entry.label || entry.key}`,
+      path: `system.skills.${entry.key}.criticalSuccessChance`,
+      group
+    }),
+    createEffectKeyToken({
+      code: `${entry.abbr || entry.key}:criticalFailureChance`,
+      key: `${entry.key}.criticalFailureChance`,
+      label: `${criticalFailureLabel}: ${entry.label || entry.key}`,
+      path: `system.skills.${entry.key}.criticalFailureChance`,
+      group
+    })
+  ]).filter(Boolean);
 }
 
 export function buildResourceBonusEffectKeyTokens(group = game.i18n.localize("FALLOUTMAW.Common.Resources")) {
@@ -691,9 +738,12 @@ export function buildReverseInteractionEffectKeyTokens() {
     })),
     ...buildSkillAdvantageEffectKeyTokens(),
     ...buildSkillDisadvantageEffectKeyTokens(),
+    ...buildSkillCriticalChanceEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
+    buildAllSkillsCriticalSuccessChanceEffectKeyToken(),
+    buildAllSkillsCriticalFailureChanceEffectKeyToken(),
     buildAllCombatAdvantageEffectKeyToken(),
     buildAllCombatDisadvantageEffectKeyToken(),
     ...buildCombatAttackAdvantageEffectKeyTokens().filter(token => !token.path.includes(".volley.")),

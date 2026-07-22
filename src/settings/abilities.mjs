@@ -120,6 +120,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   toggleable: "toggleable",
   eventReaction: "eventReaction",
   triggerCost: "triggerCost",
+  triggerChance: "triggerChance",
   timeOfDay: "timeOfDay",
   illumination: "illumination",
   healthPercent: "healthPercent",
@@ -1053,6 +1054,16 @@ function normalizeAbilityCondition(value = {}) {
   const eventSubject = Object.values(ABILITY_EVENT_SUBJECTS).includes(rawEventSubject)
     ? rawEventSubject
     : ABILITY_EVENT_SUBJECTS.reactor;
+
+  if (type === ABILITY_CONDITION_TYPES.triggerChance) {
+    return {
+      id,
+      groupId,
+      type,
+      eventSubject,
+      chanceFormula: normalizeFormulaText(value?.chanceFormula ?? value?.formula, "100")
+    };
+  }
 
   if (type === ABILITY_CONDITION_TYPES.timeOfDay) {
     return {

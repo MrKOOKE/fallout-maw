@@ -43,6 +43,8 @@ import {
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
@@ -8485,9 +8487,20 @@ function buildEffectPathLabelMap({
     base: baseLabel,
     developmentBonus: developmentBonusLabel
   });
+  const criticalSuccessChanceLabel = game.i18n.localize("FALLOUTMAW.Effects.SkillCriticalSuccessChance");
+  const criticalFailureChanceLabel = game.i18n.localize("FALLOUTMAW.Effects.SkillCriticalFailureChance");
+  for (const entry of skillSettings) {
+    const skillKey = String(entry?.key ?? "").trim();
+    if (!skillKey) continue;
+    const skillLabel = String(entry?.label ?? skillKey).trim() || skillKey;
+    map.set(`system.skills.${skillKey}.criticalSuccessChance`, `${criticalSuccessChanceLabel}: ${skillLabel}`);
+    map.set(`system.skills.${skillKey}.criticalFailureChance`, `${criticalFailureChanceLabel}: ${skillLabel}`);
+  }
   map.set(ALL_SKILLS_BONUS_EFFECT_KEY, "Все навыки");
   map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, "Преимущество: все навыки");
   map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, "Помеха: все навыки");
+  map.set(ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalSuccessChance"));
+  map.set(ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalFailureChance"));
   map.set(ALL_COMBAT_ADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllAdvantage"));
   map.set(ALL_COMBAT_DISADVANTAGE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.CombatAllDisadvantage"));
   map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, "Расход энергии на способность");

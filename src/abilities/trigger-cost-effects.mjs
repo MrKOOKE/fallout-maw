@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import {
+  ABILITY_CONDITION_TYPES,
   getAbilityFunctionEffectDurationSeconds,
   isAbilityFunctionTimedTriggerCost,
   normalizeAbilityFunctions
@@ -47,19 +48,34 @@ export async function syncTimedTriggerCostEffects(actor, sourceItem, functions =
   for (const abilityFunction of timedFunctions) {
     const functionId = String(abilityFunction.id ?? "").trim();
     if (!functionId) continue;
-    const applies = abilityConditionsApply(actor, abilityFunction.conditions ?? [], {
+    const conditionContext = {
       ...context,
       abilityItemId: sourceItem.id ?? "",
       functionId
-    });
-    const state = normalizeTransitionState(states[functionId]);
-    if (!applies) {
+    };
+    const conditions = abilityFunction.conditions ?? [];
+    const nonChanceConditions = conditions.filter(condition => condition?.type !== ABILITY_CONDITION_TYPES.triggerChance);
+    if (!abilityConditionsApply(actor, nonChanceConditions, conditionContext)) {
       if (states[functionId] !== undefined) {
         delete states[functionId];
         statesChanged = true;
       }
       continue;
     }
+    let state = normalizeTransitionState(states[functionId]);
+    if (conditions.some(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerChance) && !state.chanceOperationId) {
+      state = {
+        ...state,
+        chanceOperationId: `timed-trigger:${sourceItem.uuid ?? sourceItem.id}:${functionId}:${getWorldTime()}:${foundry.utils.randomID()}`
+      };
+      states[functionId] = state;
+      statesChanged = true;
+    }
+    const applies = abilityConditionsApply(actor, conditions, {
+      ...conditionContext,
+      chanceOperationId: state.chanceOperationId
+    });
+    if (!applies) continue;
 
     if (state.latched) {
       if (state.paymentCommitted && !state.effectCreated) {
@@ -79,6 +95,7 @@ export async function syncTimedTriggerCostEffects(actor, sourceItem, functions =
     }
 
     states[functionId] = {
+      ...state,
       latched: true,
       paymentCommitted: false,
       effectCreated: false,
@@ -198,7 +215,8 @@ function normalizeTransitionState(value = {}) {
     paymentCommitted: Boolean(value?.paymentCommitted),
     effectCreated: Boolean(value?.effectCreated),
     effectId: String(value?.effectId ?? ""),
-    changedAt: Number(value?.changedAt) || 0
+    changedAt: Number(value?.changedAt) || 0,
+    chanceOperationId: String(value?.chanceOperationId ?? "")
   };
 }
 

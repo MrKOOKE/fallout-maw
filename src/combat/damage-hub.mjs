@@ -30,10 +30,11 @@ import {
   evaluateActorEffectChangeNumber,
   getActorSuppressedTraumaDiseaseIds
 } from "../utils/active-effect-changes.mjs";
-import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import { getContextualAbilityChangeValue, getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { getUnconsciousnessResistanceActiveUseKeys } from "../abilities/active-use-keys.mjs";
 import {
   commitPreparedActiveUseOperations,
+  getActiveUseOperationId,
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
@@ -921,7 +922,9 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   }
 
   const requestedAmount = mode === MODE_HEALING
-    ? applyHealingModifierPercent(data.amount, getActorHealingModifierPercent(actor, "incoming"))
+    ? applyHealingModifierPercent(data.amount, getActorHealingModifierPercent(actor, "incoming", {
+      chanceOperationId: getActiveUseOperationId(data?.source, getCurrentDamageHubOperationRef())
+    }))
     : data.amount;
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
@@ -1534,7 +1537,8 @@ async function applyFinishingBlowIfEligible(targetActor, data = {}) {
     targetActor,
     targetToken: targetTokenDocument?.object ?? targetTokenDocument ?? null,
     weaponActionKey: String(data?.source?.actionKey ?? ""),
-    weaponData
+    weaponData,
+    chanceOperationId: getActiveUseOperationId(data?.source, getCurrentDamageHubOperationRef())
   });
   const threshold = Math.max(0, Math.min(100, toInteger(applyTargetReverseChange(
     "system.combat.finishingBlow",
@@ -1980,9 +1984,12 @@ export function applyDamageCostModifier(baseCost = 0, modifier = {}) {
   return Math.max(0, Math.ceil(cost));
 }
 
-export function getActorHealingModifierPercent(actor, direction = "incoming") {
+export function getActorHealingModifierPercent(actor, direction = "incoming", context = {}) {
   const key = direction === "outgoing" ? "outgoingPercent" : "incomingPercent";
-  return toInteger(actor?.system?.healing?.[key]);
+  return toInteger(getContextualAbilityChangeValue(actor, `system.healing.${key}`, {
+    ...context,
+    baseValue: toInteger(actor?.system?.healing?.[key])
+  }));
 }
 
 export function applyHealingModifierPercent(amount = 0, percent = 0) {
@@ -2847,6 +2854,7 @@ function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {
       limbKey: String(entry.limbKey ?? ""),
       damage: Math.max(0, roundDamageAmount(entry.damage)),
       difficulty: Math.max(0, roundDamageAmount(entry.difficulty)),
+      chanceOperationId: String(entry.chanceOperationId ?? "").trim(),
       activeUsePreparations: Array.from(entry.activeUsePreparations ?? []).filter(Boolean)
     }));
   if (!entries.length) return null;
@@ -2858,11 +2866,14 @@ function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {
     limbKeys,
     damage: entries.reduce((sum, entry) => sum + entry.damage, 0),
     difficulty: entries.reduce((sum, entry) => sum + entry.difficulty, 0),
+    chanceOperationId: entries.find(entry => entry.chanceOperationId)?.chanceOperationId ?? "",
     activeUsePreparations: entries.flatMap(entry => entry.activeUsePreparations)
   };
 }
 
 function createLimbShockLimitedUseOperationId(actor, shockCheck = {}, damageHubOperationRef = "") {
+  const existing = String(shockCheck?.chanceOperationId ?? "").trim();
+  if (existing) return existing;
   const scope = String(damageHubOperationRef ?? "").trim() || foundry.utils.randomID();
   const limbScope = Array.from(shockCheck?.limbKeys ?? [shockCheck?.limbKey])
     .map(value => String(value ?? "").trim())
@@ -5488,24 +5499,37 @@ async function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { da
 function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
   const shockDamage = Math.max(0, roundDamageAmount(damage));
   if (shockDamage <= 0) return null;
+  const damageHubOperationRef = String(getCurrentDamageHubOperationRef() ?? "").trim();
+  const chanceOperationId = damageHubOperationRef
+    ? `limb-shock:${damageHubOperationRef}:${String(actor?.uuid ?? actor?.id ?? "actor")}`
+    : "";
   const activeUsePreparation = prepareActiveUseOperation({
     kind: "limbShockResistance",
     actor,
     keys: getUnconsciousnessResistanceActiveUseKeys(),
-    conditionContexts: [{ actorToken: actor?.token?.object ?? actor?.token ?? null }],
+    conditionContexts: [{
+      actorToken: actor?.token?.object ?? actor?.token ?? null,
+      chanceOperationId
+    }],
     reverseOnly: false
   });
   return {
     limbKey,
     damage: shockDamage,
-    difficulty: calculateLimbShockDifficulty(actor, limbKey, shockDamage, nextValue, previousValue),
+    difficulty: calculateLimbShockDifficulty(actor, limbKey, shockDamage, nextValue, previousValue, { chanceOperationId }),
+    chanceOperationId,
     activeUsePreparations: activeUsePreparation ? [activeUsePreparation] : []
   };
 }
 
-function calculateLimbShockDifficulty(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
+function calculateLimbShockDifficulty(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null, context = {}) {
   const settings = getCombatSettings().unconsciousness;
   const variables = buildLimbShockFormulaVariables(actor, limbKey, damage, nextValue, previousValue);
+  variables.resistance = toInteger(getContextualAbilityChangeValue(actor, "system.combat.unconsciousnessResistance", {
+    ...context,
+    actorToken: actor?.token?.object ?? actor?.token ?? null,
+    baseValue: variables.resistance
+  }));
   const normalDifficultyDamage = evaluateLimbShockFormula(settings.normalDamageFormula, {
     ...variables,
     damage: variables.normalDamage
@@ -6409,9 +6433,33 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
   const itemWear = new Map();
   const defenseSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.defense);
   const resistanceSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.resistance);
-  const rawDefense = options.itemOnlyMitigation
+  const preparedDefense = options.itemOnlyMitigation
     ? getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.defense)
     : Math.max(0, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
+  const preparedResistance = options.itemOnlyMitigation
+    ? getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.resistance)
+    : Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
+  const mitigationContext = getDamageMitigationChanceContext(actor, source);
+  const contextual = options.itemOnlyMitigation ? {} : getContextualAbilityChangeValues(actor, [{
+    id: "defense",
+    key: `system.damageDefenseBonuses.${limbKey}.${damageTypeKey}`,
+    alternateKeys: [
+      "system.damageDefenseBonuses.all.all",
+      `system.damageDefenseBonuses.all.${damageTypeKey}`,
+      `system.damageDefenseBonuses.${limbKey}.all`
+    ],
+    baseValue: preparedDefense
+  }, {
+    id: "resistance",
+    key: `system.damageResistanceBonuses.${limbKey}.${damageTypeKey}`,
+    alternateKeys: [
+      "system.damageResistanceBonuses.all.all",
+      `system.damageResistanceBonuses.all.${damageTypeKey}`,
+      `system.damageResistanceBonuses.${limbKey}.all`
+    ],
+    baseValue: preparedResistance
+  }], mitigationContext);
+  const rawDefense = Math.max(0, Number(contextual.defense ?? preparedDefense) || 0);
   const defensePenetration = Math.min(rawDefense, mitigationPenetration);
   const defense = Math.max(0, rawDefense - defensePenetration);
   let remaining = incomingDamage;
@@ -6423,9 +6471,7 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
     blocked: defenseBlocked
   });
   remaining = Math.max(0, remaining - defenseBlocked);
-  const rawResistance = options.itemOnlyMitigation
-    ? getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.resistance)
-    : Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
+  const rawResistance = Math.max(0, Number(contextual.resistance ?? preparedResistance) || 0);
   const resistancePenetration = Math.max(0, mitigationPenetration - defensePenetration);
   const resistance = Math.max(0, rawResistance - resistancePenetration);
   const spentPenetration = defensePenetration + Math.min(rawResistance, resistancePenetration);
@@ -6462,6 +6508,28 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
         state: options.equipmentConditionDamageState
       })
       : []
+  };
+}
+
+function getDamageMitigationChanceContext(actor, source = {}) {
+  const attackerActorUuid = String(
+    source?.attackerActorUuid
+    ?? source?.attackerUuid
+    ?? source?.sourceActorUuid
+    ?? ""
+  ).trim();
+  const attackerTokenUuid = String(
+    source?.attackerTokenUuid
+    ?? source?.sourceTokenUuid
+    ?? ""
+  ).trim();
+  const attackerActor = attackerActorUuid ? fromUuidSync(attackerActorUuid) : null;
+  const attackerToken = attackerTokenUuid ? fromUuidSync(attackerTokenUuid) : null;
+  return {
+    actorToken: actor?.token?.object ?? actor?.token ?? null,
+    targetActor: attackerActor,
+    targetToken: attackerToken?.object ?? attackerToken,
+    chanceOperationId: getActiveUseOperationId(source, getCurrentDamageHubOperationRef())
   };
 }
 

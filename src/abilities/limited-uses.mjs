@@ -29,7 +29,7 @@ import {
   getEffectFunctionDescriptor
 } from "./effect-lifecycle.mjs";
 import { syncActorAbilityEffects, syncAuraGeneratedEffects } from "./effects.mjs";
-import { registerActiveUseRuntimeHandler } from "./active-use-runtime.mjs";
+import { getActiveUseOperationId, registerActiveUseRuntimeHandler } from "./active-use-runtime.mjs";
 import { getConditionalFunctionChanges } from "./evaluation.mjs";
 import {
   getLimitedUseConditionState,
@@ -143,7 +143,11 @@ async function captureLimitedUsesBeforeInitiative(event = {}) {
     return [];
   }
   const actorToken = await resolveUuid(String(event?.source?.tokenUuid ?? event?.data?.tokenUuid ?? "").trim());
-  const conditionContext = buildConditionContext({ actorToken, requester: "initiative" });
+  const conditionContext = buildConditionContext({
+    actorToken,
+    requester: "initiative",
+    chanceOperationId: getActiveUseOperationId(event?.data, getEventOccurrenceBase(event))
+  });
   const captures = captureActorLimitedUseCandidates(actor, getInitiativeActiveUseKeys({
     formula: event?.data?.requestedFormula
   }), [conditionContext], false);
@@ -170,7 +174,8 @@ function captureLimitedUsesBeforeWeaponAction(context = {}) {
     actorToken: context?.actorToken ?? context?.token ?? null,
     weaponData: context?.weaponData,
     weaponActionKey: actionKey,
-    requester: "weaponAttack"
+    requester: "weaponAttack",
+    chanceOperationId: getActiveUseOperationId(context, operationId)
   });
   const keys = getWeaponActionActiveUseKeys({
     ...conditionContext,
@@ -204,7 +209,8 @@ async function captureLimitedUsesBeforeSkillCheck(event = {}) {
     targetActor,
     weaponData: request.weaponData,
     weaponActionKey: request.weaponActionKey,
-    requester: request.requester
+    requester: request.requester,
+    chanceOperationId: request.chanceOperationId
   });
   const keys = request.requester === "weaponAttack"
     ? getWeaponActionActiveUseKeys({
@@ -235,6 +241,15 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
     return [];
   }
   const sourceData = data?.source && typeof data.source === "object" ? data.source : {};
+  const chanceOperationId = firstText(
+    sourceData.attackId,
+    sourceData.limitedUseOperationId,
+    data.chanceOperationId,
+    data.damageHubOperationRef,
+    event?.operationId,
+    event?.eventId,
+    event?.rootId
+  );
   const sourceActorUuid = firstText(
     sourceData.attackerActorUuid,
     sourceData.attackerUuid,
@@ -255,7 +270,8 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
   const targetContext = buildConditionContext({
     actorToken: targetToken,
     targetActor: sourceActor,
-    targetToken: sourceToken
+    targetToken: sourceToken,
+    chanceOperationId
   });
   const captures = [];
 
@@ -298,7 +314,8 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
       targetToken,
       weaponData,
       weaponActionKey: actionKey,
-      requester: "weaponAttack"
+      requester: "weaponAttack",
+      chanceOperationId
     });
     const damageKeys = getWeaponActionActiveUseKeys({
       ...sourceContext,
@@ -1283,7 +1300,8 @@ function buildConditionContext(context = {}) {
       ? context.weaponData
       : check?.weaponData && typeof check.weaponData === "object" ? check.weaponData : null,
     weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim(),
-    requester: String(context?.requester ?? check?.requester ?? "").trim()
+    requester: String(context?.requester ?? check?.requester ?? "").trim(),
+    chanceOperationId: getActiveUseOperationId(context)
   };
 }
 

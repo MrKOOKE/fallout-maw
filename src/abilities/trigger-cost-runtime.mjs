@@ -332,6 +332,7 @@ async function interceptSkillCheckTriggerCost({ event = null, control = null, sc
           : null,
         requester: String(request?.requester ?? "").trim(),
         weaponActionKey: String(request?.weaponActionKey ?? "").trim(),
+        chanceOperationId: String(request?.chanceOperationId ?? "").trim(),
         rootId: event?.rootId ?? scope?.rootId ?? "",
         eventId: event?.eventId ?? scope?.eventId ?? "",
         occurrenceId: event?.occurrenceKey ?? "",

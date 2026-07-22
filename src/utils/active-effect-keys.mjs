@@ -3,6 +3,8 @@ import { SYSTEM_ID } from "../constants.mjs";
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
 export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
 export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
+export const ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY = "system.skills.all.criticalSuccessChance";
+export const ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY = "system.skills.all.criticalFailureChance";
 export const ALL_COMBAT_ADVANTAGE_EFFECT_KEY = "system.combat.all.advantage";
 export const ALL_COMBAT_DISADVANTAGE_EFFECT_KEY = "system.combat.all.disadvantage";
 export const INITIATIVE_ADVANTAGE_EFFECT_KEY = "system.attributes.initiative.advantage";

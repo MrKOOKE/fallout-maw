@@ -109,6 +109,9 @@ export async function useFirstAidItem({
     ? 1 + (Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus ?? CRITICAL_SUCCESS_DEFAULT_BONUS)) / 100)
     : 1;
   const effectMultiplier = resultMultiplier * criticalSuccessMultiplier;
+  const healingOperationId = `first-aid:${String(item.uuid ?? item.id ?? "")}:${foundry.utils.randomID()}`;
+  source.chanceOperationId = healingOperationId;
+  source.limitedUseOperationId = healingOperationId;
   const outgoingActiveUsePreparation = firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs)
     ? prepareActiveUseOperation({
       kind: "firstAidOutgoingHealing",
@@ -117,12 +120,18 @@ export async function useFirstAidItem({
       conditionContexts: [{
         actorToken: sourceToken?.object ?? sourceToken,
         targetActor,
-        targetToken: targetToken?.object ?? targetToken
+        targetToken: targetToken?.object ?? targetToken,
+        chanceOperationId: healingOperationId
       }],
       reverseOnly: false
     })
     : null;
-  const healingMultiplier = effectMultiplier * Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing") / 100));
+  const healingMultiplier = effectMultiplier * Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing", {
+    actorToken: sourceToken?.object ?? sourceToken,
+    targetActor,
+    targetToken: targetToken?.object ?? targetToken,
+    chanceOperationId: healingOperationId
+  }) / 100));
 
   const healing = calculateHealingAmount(targetActor, firstAid, healingMultiplier, targetContext);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
@@ -217,7 +226,7 @@ export async function useFirstAidItem({
   if (outgoingActiveUsePreparation) {
     try {
       await commitPreparedActiveUseOperations([outgoingActiveUsePreparation], {
-        operationId: `first-aid:${String(item.uuid ?? item.id ?? "")}:${foundry.utils.randomID()}`
+        operationId: healingOperationId
       });
     } catch (error) {
       console.error(`${SYSTEM_ID} | First-aid outgoing-healing active-use commit failed`, error);

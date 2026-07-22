@@ -1381,11 +1381,15 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
       };
     }
 
+    const healingOperationId = `medicine-treatment:${String(sourceActor?.uuid ?? sourceActor?.id ?? "")}:${String(
+      trauma?.uuid ?? trauma?.id ?? ""
+    )}:${index}:${foundry.utils.randomID()}`;
     const activeUsePreparations = prepareTreatmentHealingActiveUses({
       sourceActor,
       sourceToken,
       targetActor,
-      targetToken
+      targetToken,
+      chanceOperationId: healingOperationId
     });
     const treatment = calculateTreatmentResult({
       trauma,
@@ -1394,16 +1398,18 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
       progressForCheck,
       missingProgress: remainingProgress,
       resultKey: String(outcome.result?.key ?? "failure"),
-      healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetActor, targetContext)
+      healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetActor, targetContext, {
+        sourceToken,
+        targetToken,
+        chanceOperationId: healingOperationId
+      })
     });
     if (treatment.chargesUsed <= 0) break;
 
     if (activeUsePreparations.length) {
       try {
         await commitPreparedActiveUseOperations(activeUsePreparations, {
-          operationId: `medicine-treatment:${String(sourceActor?.uuid ?? sourceActor?.id ?? "")}:${String(
-            trauma?.uuid ?? trauma?.id ?? ""
-          )}:${index}:${foundry.utils.randomID()}`
+          operationId: healingOperationId
         });
       } catch (error) {
         console.error(`${SYSTEM_ID} | Medicine healing active-use commit failed`, error);
@@ -1471,7 +1477,8 @@ function prepareTreatmentHealingActiveUses({
   sourceActor = null,
   sourceToken = null,
   targetActor = null,
-  targetToken = null
+  targetToken = null,
+  chanceOperationId = ""
 } = {}) {
   const sourcePreparation = prepareActiveUseOperation({
     kind: "medicineOutgoingHealing",
@@ -1480,7 +1487,8 @@ function prepareTreatmentHealingActiveUses({
     conditionContexts: [{
       actorToken: sourceToken?.object ?? sourceToken,
       targetActor,
-      targetToken: targetToken?.object ?? targetToken
+      targetToken: targetToken?.object ?? targetToken,
+      chanceOperationId
     }],
     reverseOnly: false
   });
@@ -1491,17 +1499,32 @@ function prepareTreatmentHealingActiveUses({
     conditionContexts: [{
       actorToken: targetToken?.object ?? targetToken,
       targetActor: sourceActor,
-      targetToken: sourceToken?.object ?? sourceToken
+      targetToken: sourceToken?.object ?? sourceToken,
+      chanceOperationId
     }],
     reverseOnly: false
   });
   return [sourcePreparation, targetPreparation].filter(Boolean);
 }
 
-function getTreatmentHealingMultiplier(sourceActor, targetActor = null, targetContext = null) {
-  const outgoing = Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing") / 100));
+function getTreatmentHealingMultiplier(sourceActor, targetActor = null, targetContext = null, {
+  sourceToken = null,
+  targetToken = null,
+  chanceOperationId = ""
+} = {}) {
+  const outgoing = Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing", {
+    actorToken: sourceToken?.object ?? sourceToken,
+    targetActor,
+    targetToken: targetToken?.object ?? targetToken,
+    chanceOperationId
+  }) / 100));
   const incomingPercent = targetActor
-    ? getActorHealingModifierPercent(targetActor, "incoming")
+    ? getActorHealingModifierPercent(targetActor, "incoming", {
+      actorToken: targetToken?.object ?? targetToken,
+      targetActor: sourceActor,
+      targetToken: sourceToken?.object ?? sourceToken,
+      chanceOperationId
+    })
     : toInteger(targetContext?.incomingHealingPercent);
   const incoming = Math.max(0, 1 + (incomingPercent / 100));
   return outgoing * incoming;

@@ -13,6 +13,7 @@ import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoin
 import { beginCombatResourceSpending, notifyCombatResourcesSpent } from "./resource-spending.mjs";
 import { ACTION_RESOURCE_KEY } from "./strict-action-points.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "./combat-membership.mjs";
+import { getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export { ACTION_RESOURCE_KEY };
@@ -157,11 +158,9 @@ export function getRawMovementCostLimit(actor, adjustedBudget = Infinity) {
   return lower;
 }
 
-function getCombatMovementCostProfile(actor) {
-  const postureMultiplierValue = Number(getActorPostureMovementCostMultiplier(actor));
-  const postureMultiplier = Number.isFinite(postureMultiplierValue)
-    ? Math.max(0, postureMultiplierValue)
-    : 1;
+function getCombatMovementCostProfile(actor, context = {}) {
+  const postureAction = String(getActorPostureAction(actor) ?? "").trim();
+  const preparedPostureMultiplier = Number(getActorPostureMovementCostMultiplier(actor));
   const modifier = getDamageCostModifierState(actor).movement;
   const hasOverride = modifier?.override !== null && modifier?.override !== undefined && modifier?.override !== "";
   const override = hasOverride ? Number(modifier.override) : NaN;
@@ -169,7 +168,20 @@ function getCombatMovementCostProfile(actor) {
   const perUnitCost = Number.isFinite(override)
     ? override
     : (Number.isFinite(multiplier) ? multiplier : 1) + (Number(modifier?.add) || 0);
-  const normalizedPerUnitCost = Math.max(0, perUnitCost);
+  const contextual = getContextualAbilityChangeValues(actor, [{
+    id: "movementCost",
+    key: "system.costs.movement",
+    baseValue: perUnitCost
+  }, ...(postureAction ? [{
+    id: "postureMultiplier",
+    key: `system.postures.${postureAction}.movementMultiplier`,
+    baseValue: preparedPostureMultiplier
+  }] : [])], context);
+  const postureMultiplierValue = Number(contextual.postureMultiplier ?? preparedPostureMultiplier);
+  const postureMultiplier = Number.isFinite(postureMultiplierValue)
+    ? Math.max(0, postureMultiplierValue)
+    : 1;
+  const normalizedPerUnitCost = Math.max(0, Number(contextual.movementCost ?? perUnitCost) || 0);
   return {
     key: JSON.stringify([postureMultiplier, normalizedPerUnitCost]),
     postureMultiplier,
@@ -350,7 +362,10 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
       await waitForMovementAnimation(movement);
       if (!isCombatMovementTracked(tokenDocument)) return;
 
-      const costProfile = getCombatMovementCostProfile(actor);
+      const activeUseOperationId = getCombatMovementActiveUseOperationId(actor, tokenDocument, movement, operation);
+      const actorToken = tokenDocument?.object ?? tokenDocument ?? null;
+      const chanceContext = { actorToken, chanceOperationId: activeUseOperationId };
+      const costProfile = getCombatMovementCostProfile(actor, chanceContext);
       const cost = getCombatMovementSpendDelta(actor, tokenDocument, movement, costProfile);
       const rawCost = getMovementSectionCost(movement?.passed);
       if (!(rawCost > 0)) return;
@@ -365,11 +380,9 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
         kind: "combatMovementCost",
         actor,
         keys: getCombatMovementActiveUseKeys(actor),
-        conditionContexts: [{ actorToken: tokenDocument?.object ?? tokenDocument ?? null }],
+        conditionContexts: [chanceContext],
         reverseOnly: false
       });
-      const activeUseOperationId = getCombatMovementActiveUseOperationId(actor, tokenDocument, movement, operation);
-
       const updates = {};
       if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
       updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [

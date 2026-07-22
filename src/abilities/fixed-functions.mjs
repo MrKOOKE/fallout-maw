@@ -1657,7 +1657,8 @@ async function executeActiveApplicationUse(scope, {
             const effectsApplied = await applyActiveApplicationEffects(actor, abilityItem, abilityFunction, durationSeconds, allowed.map(entry => entry.target), {
               chainRef: scope.chainRef,
               sourceToken,
-              selectedChanges: changeSelection.changes
+              selectedChanges: changeSelection.changes,
+              costContext: paymentContext
             });
             if (!effectsApplied) throw new Error("Active application effects could not be created.");
           } catch (error) {
@@ -2125,7 +2126,8 @@ async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFu
 async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abilityFunction, durationSeconds, targets = [], {
   chainRef = null,
   sourceToken = null,
-  selectedChanges = null
+  selectedChanges = null,
+  costContext = null
 } = {}) {
   if (durationSeconds <= 0) return true;
   const startTime = Number(game.time?.worldTime) || 0;
@@ -2133,11 +2135,24 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   const selectedFunction = Array.isArray(selectedChanges)
     ? { ...abilityFunction, changes: selectedChanges }
     : abilityFunction;
+  const chanceOperationId = [
+    String(costContext?.rootId ?? chainRef?.rootId ?? "").trim(),
+    String(costContext?.occurrenceId ?? "").trim()
+  ].filter(Boolean).join(":") || `active-application:${String(sourceActor?.uuid ?? "")}:${String(
+    abilityItem?.id ?? ""
+  )}:${String(abilityFunction?.id ?? "")}:${startTime}`;
   const plans = targets
     .filter(target => target?.actor)
     .map(target => ({
       target,
-      rawChanges: getActiveApplicationEffectChanges(sourceActor, abilityItem, selectedFunction, target, sourceToken)
+      rawChanges: getActiveApplicationEffectChanges(
+        sourceActor,
+        abilityItem,
+        selectedFunction,
+        target,
+        sourceToken,
+        chanceOperationId
+      )
         .filter(change => change?.key && String(change?.value ?? "") !== "")
     }));
   if (settings.changeEvaluation === "source") {
@@ -2192,6 +2207,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
                 ? foundry.utils.deepClone(changes)
                 : null,
               functionId: abilityFunction.id,
+              chanceOperationId,
               createdAt: startTime
             }
           }
@@ -2634,7 +2650,12 @@ async function processActiveApplicationEffectOperation(payload = {}) {
       abilityFunction,
       durationSeconds,
       resolvedTargets,
-      { chainRef: payload?.chainRef ?? null, sourceToken, selectedChanges }
+      {
+        chainRef: payload?.chainRef ?? null,
+        sourceToken,
+        selectedChanges,
+        costContext: payload?.costContext ?? null
+      }
     );
   } catch (error) {
     if (payment?.ok) {
@@ -2714,7 +2735,14 @@ function getActiveApplicationTokenDocumentCenter(tokenDocument, scene = null) {
   };
 }
 
-function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, target = {}, sourceToken = null) {
+function getActiveApplicationEffectChanges(
+  sourceActor,
+  abilityItem,
+  abilityFunction,
+  target = {},
+  sourceToken = null,
+  chanceOperationId = ""
+) {
   const subjectActor = target.actor ?? sourceActor;
   const context = {
     abilityItemId: abilityItem.id,
@@ -2722,7 +2750,8 @@ function getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunc
     actorToken: sourceToken ?? getPrimaryActorToken(sourceActor),
     targetActor: target.actor,
     targetToken: target.token,
-    allowContextual: true
+    allowContextual: true,
+    chanceOperationId
   };
   if (!abilityFunction.conditions?.length) return abilityFunction.changes ?? [];
   return abilityConditionsApply(subjectActor, abilityFunction.conditions, context)
@@ -2767,7 +2796,7 @@ async function syncActorActiveApplicationEffects(actor) {
       : getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, {
         actor,
         token: getPrimaryActorToken(actor)
-      })
+      }, null, String(flag?.chanceOperationId ?? ""))
         .map(change => prepareEffectChangeForApplication(actor, change))
         .filter(change => change.key && change.value !== "");
     const signature = JSON.stringify(changes);

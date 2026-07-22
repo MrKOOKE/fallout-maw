@@ -50,6 +50,8 @@ import {
 } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
+  ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   evaluateActorEffectChangeNumber,
   SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
@@ -101,6 +103,7 @@ import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
+import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -526,15 +529,18 @@ export function startDualWeaponAttack({
     try {
       if (!validateDualWeaponAttackResources(actor, captured, label)) return false;
       if (typeof canSpendEnergy === "function" && canSpendEnergy() === false) return false;
+      const sharedActionUseId = foundry.utils.randomID();
       const actionCosts = captured.map(entry => ({
         entry,
-        value: getWeaponActionPointCost(actor, entry.weapon, entry.actionKey, entry.weaponFunctionId)
+        value: getWeaponActionPointCost(actor, entry.weapon, entry.actionKey, entry.weaponFunctionId, {
+          actorToken: token,
+          chanceOperationId: sharedActionUseId
+        })
       }));
       const actionPointCost = Math.max(0, ...actionCosts.map(entry => entry.value));
       if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
       const actionPointCostApplied = isCombatActionPointSpendingActive(actor);
-      const sharedActionUseId = foundry.utils.randomID();
       const sharedActionEntries = actionCosts.filter(entry => entry.value === actionPointCost);
       if (actionPointCostApplied) {
         for (const { entry } of sharedActionEntries) {
@@ -548,6 +554,7 @@ export function startDualWeaponAttack({
             weaponFunctionId: entry.weaponFunctionId,
             weaponData: getWeaponAttackData(entry.weapon, entry.weaponFunctionId),
             attackId: sharedActionUseId,
+            chanceOperationId: sharedActionUseId,
             actionPointCostApplied: true
           });
         }
@@ -2434,7 +2441,10 @@ class WeaponAttackController {
     );
     const actionPointCost = this.reportedActionPointCost ?? (
       actionPointCostApplied
-        ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
+        ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+          ...this.createWeaponAttackSkillCheckContext(this.selectedTarget),
+          chanceOperationId: this.attackId
+        })
         : 0
     );
     const outcome = {
@@ -2524,6 +2534,7 @@ class WeaponAttackController {
       damageHubOperationRef: this.damageHubOperationRef,
       systemEventOperationId: this.attackId,
       weaponAttackId: this.attackId,
+      ...(this.processing || this.attackCommitted ? { chanceOperationId: this.attackId } : {}),
       weaponActionKey: this.actionKey,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
       weaponActionModifierState: this.getWeaponActionModifierState(),
@@ -2856,6 +2867,22 @@ class WeaponAttackController {
 
   async spendCurrentAttackCosts({ attackCount = 1, trajectories = [], point = null, createSpentQuantityTile = true, delayedThrownItemId = "" } = {}) {
     this.spentQuantityItemData = null;
+    const actionPointCostApplied = !this.skipActionPointCost
+      && isCombatActionPointSpendingActive(this.token.actor);
+    const actionPointCost = actionPointCostApplied
+      ? getWeaponActionPointCost(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+        ...this.createWeaponAttackSkillCheckContext(this.selectedTarget),
+        chanceOperationId: this.attackId
+      })
+      : 0;
+    if (actionPointCostApplied && actionPointCost > 0) {
+      const state = getCombatActionPointState(this.token.actor);
+      if (state && actionPointCost > state.value) {
+        canSpendCombatActionPoints(this.token.actor, actionPointCost, { label: "действия" });
+        this.attackCanceledByReaction = true;
+        return false;
+      }
+    }
     if (this.shouldSpendWeaponResourcesForAttempt()) {
       if (!(await this.spendWeaponActionModifierCosts(attackCount))) return false;
       const modifierState = this.getWeaponActionModifierState();
@@ -2872,17 +2899,18 @@ class WeaponAttackController {
         });
       }
     }
-    this.reportedActionPointCostApplied ??= !this.skipActionPointCost
-      && isCombatActionPointSpendingActive(this.token.actor);
-    await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
+    this.reportedActionPointCostApplied ??= actionPointCostApplied;
+    const spentActionPointCost = await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
       emitActionResolved: !this.attackCanceledByReaction,
       spendActionPoints: !this.skipActionPointCost,
       actionPointCostApplied: this.reportedActionPointCostApplied,
       attackId: this.attackId,
       actorToken: this.token,
       chainRef: this.chainRef,
-      damageHubOperationRef: this.damageHubOperationRef
+      damageHubOperationRef: this.damageHubOperationRef,
+      resolvedCost: actionPointCost
     });
+    this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
     this.interruptForIncapacitation();
     return true;
   }
@@ -3279,7 +3307,11 @@ class WeaponAttackController {
     const damageRequests = [];
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
+    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+      ...this.createWeaponDamageContext(),
+      actor: this.token.actor,
+      actionKey: this.actionKey
+    }) > 0;
     const checkBatch = collectCheckMessages
       ? this.createSkillCheckCollector({
         requester: "weaponAttack",
@@ -3423,7 +3455,11 @@ class WeaponAttackController {
     const damageRequests = [];
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1 || this.targets.length > 1 || pelletCount > 1;
-    const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0
+    const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+      ...this.createWeaponDamageContext(),
+      actor: this.token.actor,
+      actionKey: this.actionKey
+    }) > 0
       ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -3620,7 +3656,11 @@ class WeaponAttackController {
     const damageRequests = [];
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
+    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+      ...this.createWeaponDamageContext(),
+      actor: this.token.actor,
+      actionKey: this.actionKey
+    }) > 0;
     const checkBatch = collectCheckMessages
       ? this.createSkillCheckCollector({
         requester: "weaponAttack",
@@ -3750,7 +3790,11 @@ class WeaponAttackController {
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(pelletCount).fill(1));
     const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
-    const checkBatch = (duplicatePlan.cycles > 1 || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0)
+    const checkBatch = (duplicatePlan.cycles > 1 || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+      ...this.createWeaponDamageContext({ targetToken: target }),
+      actor: this.token.actor,
+      actionKey: this.actionKey
+    }) > 0)
       ? this.createSkillCheckCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -4077,6 +4121,7 @@ class WeaponAttackController {
       limbKey: resolvedLimbKey,
       amount: damageAmount,
       source: {
+        attackId: this.attackId,
         weaponUuid: this.weapon.uuid,
         weaponFunctionId: this.weaponFunctionId,
         weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
@@ -4099,6 +4144,7 @@ class WeaponAttackController {
     const damageRequests = [];
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     const selectedPenetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+      ...this.createWeaponDamageContext({ targetToken: selectedTarget }),
       actor: this.token.actor,
       actorToken: this.token,
       actionKey: this.actionKey,
@@ -4377,6 +4423,7 @@ class WeaponAttackController {
       limbKey,
       amount: damageAmount,
       source: {
+        attackId: this.attackId,
         weaponUuid: this.weapon.uuid,
         weaponFunctionId: this.weaponFunctionId,
         weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
@@ -4608,6 +4655,7 @@ class WeaponAttackController {
       pelletCount: getWeaponPelletCount(this.weapon, this.weaponFunctionId),
       damageTypes: getWeaponDamageTypeEntries(this.weapon, this.weaponFunctionId),
       penetrationPower: getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+        ...this.createWeaponDamageContext({ targetToken: target }),
         actor: this.token.actor,
         actorToken: this.token,
         actionKey: this.actionKey,
@@ -4625,6 +4673,7 @@ class WeaponAttackController {
         this.weaponFunctionId
       ),
       source: {
+        attackId: this.attackId,
         weaponUuid: this.weapon.uuid,
         weaponFunctionId: this.weaponFunctionId,
         weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
@@ -4699,6 +4748,7 @@ class WeaponAttackController {
       limbKey,
       amount: damageAmount,
       source: {
+        attackId: this.attackId,
         weaponUuid: this.weapon.uuid,
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
@@ -4773,6 +4823,7 @@ class WeaponAttackController {
       limbKey: holdingLimbKey,
       amount: damageAmount,
       source: {
+        attackId: this.attackId,
         weaponUuid: this.weapon.uuid,
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
@@ -4801,6 +4852,7 @@ class WeaponAttackController {
         limbKey: holdingLimbKey,
         amount: getPenetratedDamageAmount(damageAmount, limbPenetrationStep),
         source: {
+          attackId: this.attackId,
           weaponUuid: this.weapon.uuid,
           actionKey: this.actionKey,
           attackerUuid: this.token.actor.uuid,
@@ -6792,15 +6844,36 @@ export function isCombatActionPointSpendingActive(actor = null) {
   return isActorInActiveCombat(actor);
 }
 
-export function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "") {
-  const baseCost = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost, actor, {
+export function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "", context = {}) {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const baseCost = evaluateActorFormula(weaponData?.[actionKey]?.actionPointCost, actor, {
     fallback: DEFAULT_WEAPON_ACTION_POINT_COST,
     minimum: 0,
     context: "weapon action point cost"
   });
-  const modifiedCost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  const preparedCost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  const actionContext = {
+    ...context,
+    weaponActionKey: String(actionKey ?? "").trim(),
+    weaponData,
+    activeUseStages: { action: true, check: false, damage: false }
+  };
+  const postureAction = String(getActorPostureAction(actor) ?? "").trim();
+  const preparedPostureBonus = getActorPostureWeaponActionPointCostBonus(actor);
+  const contextual = getContextualAbilityChangeValues(actor, [{
+    id: "actionCost",
+    key: `system.costs.actions.${String(actionKey ?? "").trim()}`,
+    alternateKeys: ["system.costs.action"],
+    baseValue: preparedCost
+  }, ...(postureAction ? [{
+    id: "postureCost",
+    key: `system.postures.${postureAction}.weaponActionCost`,
+    baseValue: preparedPostureBonus
+  }] : [])], actionContext);
+  const modifiedCost = contextual.actionCost ?? preparedCost;
+  const postureBonus = contextual.postureCost ?? preparedPostureBonus;
   const atRandomReduction = getActorAtRandomActionPointCostReduction(actor, actionKey);
-  return Math.max(0, Math.ceil(modifiedCost + getActorPostureWeaponActionPointCostBonus(actor) - atRandomReduction));
+  return Math.max(0, Math.ceil(modifiedCost + postureBonus - atRandomReduction));
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
@@ -6825,7 +6898,8 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   attackId = "",
   actorToken = null,
   chainRef = null,
-  damageHubOperationRef = ""
+  damageHubOperationRef = "",
+  resolvedCost = null
 } = {}) {
   if (actionKey !== "reload") await revealActorFromStealth(actor);
   const actionPointCostWasApplied = actionPointCostApplied === null || actionPointCostApplied === undefined
@@ -6842,6 +6916,7 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
     weaponFunctionId,
     weaponData: getWeaponAttackData(weapon, weaponFunctionId),
     attackId: resolvedAttackId,
+    chanceOperationId: resolvedAttackId,
     actionPointCostApplied: actionPointCostWasApplied,
     chainRef,
     damageHubOperationRef
@@ -6849,8 +6924,14 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   if (emitActionResolved) {
     Hooks.callAll("fallout-maw.weaponActionWillResolve", resolvedContext);
   }
+  const hasResolvedCost = resolvedCost !== null && resolvedCost !== undefined && resolvedCost !== "";
+  const configuredCost = hasResolvedCost ? Number(resolvedCost) : Number.NaN;
+  const cost = spendActionPoints && isCombatActionPointSpendingActive(actor)
+    ? Number.isFinite(configuredCost)
+      ? Math.max(0, configuredCost)
+      : getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, resolvedContext)
+    : 0;
   if (spendActionPoints && isCombatActionPointSpendingActive(actor)) {
-    const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
     if (cost > 0) {
       const state = getCombatActionPointState(actor);
       if (state && cost <= state.value) {
@@ -6870,7 +6951,7 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
       actorUuid: actor?.uuid ?? "",
       tokenUuid: actorToken?.document?.uuid ?? actorToken?.uuid ?? "",
       weaponUuid: weapon?.uuid ?? "",
-      actionPointCost: getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId),
+      actionPointCost: cost,
       targetActorUuids: [],
       targetTokenUuids: [],
       killedTargetUuids: [],
@@ -6882,6 +6963,7 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   } else if (emitActionResolved) {
     Hooks.callAll("fallout-maw.weaponActionResolved", resolvedContext);
   }
+  return cost;
 }
 
 async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = [], { modifierState = null } = {}) {
@@ -8582,7 +8664,8 @@ function buildWeaponDamageRequests(weapon, {
       actionKey: source.actionKey,
       targetActor: actor,
       targetToken,
-      weaponData
+      weaponData,
+      chanceOperationId: getActiveUseOperationId(source)
     });
   const requestSource = {
     ...source,
@@ -8630,7 +8713,8 @@ function buildWeaponConditionDamageRequests(weapon, {
       actionKey: source.actionKey,
       targetActor: actor,
       targetToken,
-      weaponData
+      weaponData,
+      chanceOperationId: getActiveUseOperationId(source)
     });
   const requestSource = {
     ...source,
@@ -9032,27 +9116,30 @@ function getWeaponConditionCritChancePenalty(weapon) {
   return weakening.active ? weakening.steps * 3 : 0;
 }
 
-function getWeaponPenetrationPower(weapon, weaponFunctionId = "", {
-  actor = null,
-  actorToken = null,
-  actionKey = "",
-  targetActor = null,
-  targetToken = null,
-  weaponData = null
-} = {}) {
+function getWeaponPenetrationPower(weapon, weaponFunctionId = "", context = {}) {
+  const {
+    actor = null,
+    actorToken = null,
+    actionKey = "",
+    targetActor = null,
+    targetToken = null,
+    weaponData = null
+  } = context;
   const sourceActor = actor ?? getWeaponOwnerActor(weapon);
   let value = getWeaponPenetrationBaseValue(weapon, weaponFunctionId, {
     actor: sourceActor,
     actionKey
   });
   value = getContextualAbilityChangeValue(sourceActor, `${ACTION_PENETRATION_KEY_PREFIX}${String(actionKey ?? "").trim()}`, {
+    ...context,
     actorToken,
     alternateKeys: [ALL_ACTION_PENETRATION_KEY],
     baseValue: value,
     targetActor,
     targetToken,
     weaponActionKey: String(actionKey ?? "").trim(),
-    weaponData: weaponData ?? getWeaponAttackData(weapon, weaponFunctionId)
+    weaponData: weaponData ?? getWeaponAttackData(weapon, weaponFunctionId),
+    activeUseStages: { action: false, check: false, damage: true }
   });
   return Math.max(0, Math.trunc(value));
 }
@@ -10531,7 +10618,10 @@ function getGeneralAttackHitChance(attackerActor, weapon, targetActor, {
     + Math.max(0, toInteger(difficultyBonus))
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, {
-    ...getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context),
+    ...mergeSkillCriticalChanceModifiers(
+      getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context),
+      skillState
+    ),
     disabledResults: skillState.disabledResults
   });
 }
@@ -10562,7 +10652,10 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, {
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
     + Math.max(0, toInteger(difficultyBonus));
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, {
-    ...getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context),
+    ...mergeSkillCriticalChanceModifiers(
+      getWeaponCriticalCheckModifiers(weapon, weaponFunctionId, context),
+      skillState
+    ),
     disabledResults: skillState.disabledResults
   });
 }
@@ -10593,6 +10686,18 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
       key: `system.skills.${skillKey}.bonus`,
       baseValue: toInteger(attackerActor?.system?.skills?.[skillKey]?.value),
       alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "skillCriticalSuccessChance",
+      key: `system.skills.${skillKey}.criticalSuccessChance`,
+      baseValue: toInteger(attackerActor?.system?.skills?.[skillKey]?.criticalSuccessChance),
+      alternateKeys: [ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY]
+    },
+    {
+      id: "skillCriticalFailureChance",
+      key: `system.skills.${skillKey}.criticalFailureChance`,
+      baseValue: toInteger(attackerActor?.system?.skills?.[skillKey]?.criticalFailureChance),
+      alternateKeys: [ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY]
     },
     {
       id: "accuracy",
@@ -10632,8 +10737,10 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
     finalSkillValue,
     disabledResults: extractContextualSkillCheckDisabledResults(contextual, disabledResultSpecs),
     criticalModifiers: {
-      criticalSuccessBonus: Math.max(0, criticalModifier),
+      criticalSuccessBonus: Math.max(0, criticalModifier)
+        + toInteger(contextual.skillCriticalSuccessChance),
       criticalFailureBonus: Math.max(0, -criticalModifier)
+        + toInteger(contextual.skillCriticalFailureChance)
     },
     requirementPenalty: getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
   };
@@ -10685,22 +10792,51 @@ function getDirectedAttackHitChance(attackerActor, weapon, targetActor, {
     difficultyBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
   );
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty, {
-    ...getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId, context),
+    ...mergeSkillCriticalChanceModifiers(
+      getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId, context),
+      skillState
+    ),
     disabledResults: skillState.disabledResults
   });
 }
 
 function getContextualAttackSkillState(actor, skillKey = "", context = {}) {
   const disabledResultSpecs = buildSkillCheckDisabledResultContextSpecs(actor);
-  const contextual = getContextualAbilityChangeValues(actor, [{
-    id: "skill",
-    key: `system.skills.${skillKey}.bonus`,
-    baseValue: toInteger(actor?.system?.skills?.[skillKey]?.value),
-    alternateKeys: ["system.skills.all.bonus"]
-  }, ...disabledResultSpecs], context);
+  const contextual = getContextualAbilityChangeValues(actor, [
+    {
+      id: "skill",
+      key: `system.skills.${skillKey}.bonus`,
+      baseValue: toInteger(actor?.system?.skills?.[skillKey]?.value),
+      alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "skillCriticalSuccessChance",
+      key: `system.skills.${skillKey}.criticalSuccessChance`,
+      baseValue: toInteger(actor?.system?.skills?.[skillKey]?.criticalSuccessChance),
+      alternateKeys: [ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY]
+    },
+    {
+      id: "skillCriticalFailureChance",
+      key: `system.skills.${skillKey}.criticalFailureChance`,
+      baseValue: toInteger(actor?.system?.skills?.[skillKey]?.criticalFailureChance),
+      alternateKeys: [ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY]
+    },
+    ...disabledResultSpecs
+  ], context);
   return {
     value: toInteger(contextual.skill),
+    criticalSuccessBonus: toInteger(contextual.skillCriticalSuccessChance),
+    criticalFailureBonus: toInteger(contextual.skillCriticalFailureChance),
     disabledResults: extractContextualSkillCheckDisabledResults(contextual, disabledResultSpecs)
+  };
+}
+
+function mergeSkillCriticalChanceModifiers(combatModifiers = {}, skillState = {}) {
+  return {
+    criticalSuccessBonus: toInteger(combatModifiers?.criticalSuccessBonus)
+      + toInteger(skillState?.criticalSuccessBonus),
+    criticalFailureBonus: toInteger(combatModifiers?.criticalFailureBonus)
+      + toInteger(skillState?.criticalFailureBonus)
   };
 }
 

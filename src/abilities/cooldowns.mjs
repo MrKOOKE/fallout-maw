@@ -20,6 +20,7 @@ import {
   isAbilityFunctionCooldownEffect
 } from "./runtime-state.mjs";
 import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
+import { getActiveUseOperationId } from "./active-use-runtime.mjs";
 
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 
@@ -116,7 +117,8 @@ function getCooldownConditionContext(context = {}) {
     weaponData: context?.weaponData && typeof context.weaponData === "object"
       ? context.weaponData
       : check?.weaponData && typeof check.weaponData === "object" ? check.weaponData : null,
-    weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim()
+    weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim(),
+    chanceOperationId: getActiveUseOperationId(context)
   };
 }
 

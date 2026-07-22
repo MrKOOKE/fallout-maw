@@ -106,7 +106,9 @@ async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}, {
 } = {}) {
   if (!actor?.isOwner || !item) return [];
 
-  const entries = findTriggeredItemUseEntries(actor, item);
+  const entries = findTriggeredItemUseEntries(actor, item, {
+    chanceOperationId: eventId || rootId || damageHubOperationRef
+  });
   const results = [];
   for (const entry of entries) {
     const result = await advanceItemUseCounter(actor, entry, {
@@ -120,7 +122,7 @@ async function applyAbilityItemUseTriggers({ actor = null, item = null } = {}, {
   return results;
 }
 
-function findTriggeredItemUseEntries(actor, usedItem) {
+function findTriggeredItemUseEntries(actor, usedItem, { chanceOperationId = "" } = {}) {
   const entries = [];
   for (const abilityItem of getActorItemsWithActiveHudModules(actor)) {
     const sourceFunctions = abilityItem?.type === "ability"
@@ -141,7 +143,8 @@ function findTriggeredItemUseEntries(actor, usedItem) {
       const context = {
         abilityItemId: abilityItem.id,
         functionId: abilityFunction.id,
-        usedItem
+        usedItem,
+        chanceOperationId
       };
       if (!triggerConditionsApply(actor, abilityFunction.conditions, context)) continue;
 

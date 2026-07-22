@@ -1719,6 +1719,7 @@ function readAbilityConditions(root) {
       autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
+      chanceFormula: row.querySelector("[data-field='conditionChanceFormula']")?.value ?? "100",
       timeFrom: row.querySelector("[data-field='conditionTimeFrom']")?.value ?? "00:00",
       timeTo: row.querySelector("[data-field='conditionTimeTo']")?.value ?? "23:59",
       illuminationLevel: row.querySelector("[data-field='conditionIlluminationLevel']")?.value ?? "normal",
@@ -2542,6 +2543,7 @@ function prepareConditionForDisplay(condition, {
   const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
   const isTriggerCost = type === ABILITY_CONDITION_TYPES.triggerCost;
+  const isTriggerChance = type === ABILITY_CONDITION_TYPES.triggerChance;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
@@ -2594,10 +2596,11 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
+    isTriggerChance,
     isEventReactionFilter,
     isUnsupportedEventCondition,
     showEventSubject: eventReactionMode && isEventReactionFilter,
@@ -2666,6 +2669,7 @@ function prepareConditionForDisplay(condition, {
       ? ""
       : toggleCooldown.amount,
     toggleCooldownUnitChoices: buildDurationUnitChoices(toggleCooldown.unit),
+    chanceFormula: String(condition?.chanceFormula ?? "100").trim() || "100",
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
@@ -2836,6 +2840,7 @@ function buildConditionTypeChoices(selected = "", {
 } = {}) {
   const choices = [
     { value: "", label: "", selected: !selected },
+    { value: ABILITY_CONDITION_TYPES.triggerChance, label: "Вероятность срабатывания", selected: selected === ABILITY_CONDITION_TYPES.triggerChance },
     { value: ABILITY_CONDITION_TYPES.timeOfDay, label: "Время суток", selected: selected === ABILITY_CONDITION_TYPES.timeOfDay },
     { value: ABILITY_CONDITION_TYPES.illumination, label: "Степень освещения", selected: selected === ABILITY_CONDITION_TYPES.illumination },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
@@ -3170,6 +3175,7 @@ function localizeEventReactionUi(path = "", fallback = "") {
 function isRuntimeCondition(type = "") {
   return [
     ABILITY_CONDITION_TYPES.toggleable,
+    ABILITY_CONDITION_TYPES.triggerChance,
     ABILITY_CONDITION_TYPES.timeOfDay,
     ABILITY_CONDITION_TYPES.illumination,
     ABILITY_CONDITION_TYPES.healthPercent,

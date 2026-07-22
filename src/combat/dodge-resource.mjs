@@ -121,11 +121,15 @@ async function restoreActorDodgeResourceNow(actor, { mode = "full" } = {}) {
 
   const max = Math.max(0, toInteger(resource.max));
   const current = Math.max(0, toInteger(resource.value));
+  const operationId = mode === "round"
+    ? `dodgeRoundRecovery:${String(actor?.uuid ?? actor?.id ?? "")}:${foundry.utils.randomID()}`
+    : "";
   const roundRecovery = mode === "round"
-    ? resolveDodgePercentModifier(
+    ? await resolveDodgePercentModifier(
       actor,
       getDodgeSettings().roundRecoveryPercent,
-      DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+      DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY,
+      { chanceOperationId: operationId }
     )
     : { value: 0, materiallyModified: false };
   const nextValue = mode === "round"
@@ -137,7 +141,8 @@ async function restoreActorDodgeResourceNow(actor, { mode = "full" } = {}) {
     activeUseKey: mode === "round" && roundRecovery.materiallyModified
       ? DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
       : "",
-    activeUseKind: "dodgeRoundRecovery"
+    activeUseKind: "dodgeRoundRecovery",
+    operationId
   });
 }
 
@@ -154,10 +159,12 @@ async function spendActorDodgeResourceNow(actor, multiplier = 1) {
 
   const max = Math.max(0, toInteger(resource.max));
   const current = Math.max(0, toInteger(resource.value));
-  const loss = resolveDodgePercentModifier(
+  const operationId = `dodgeLoss:${String(actor?.uuid ?? actor?.id ?? "")}:${foundry.utils.randomID()}`;
+  const loss = await resolveDodgePercentModifier(
     actor,
     settings.attackCostPercent * Math.max(0, Number(multiplier) || 0),
-    DODGE_LOSS_MODIFIER_EFFECT_KEY
+    DODGE_LOSS_MODIFIER_EFFECT_KEY,
+    { chanceOperationId: operationId }
   );
   const amount = calculateDodgeAmount(max, loss.value);
   if (amount <= 0 || current <= 0) return;
@@ -165,7 +172,8 @@ async function spendActorDodgeResourceNow(actor, multiplier = 1) {
   await updateActorDodgeValue(actor, Math.max(0, current - amount), {
     socketAction: DODGE_SOCKET_ACTION_SPEND,
     activeUseKey: loss.materiallyModified ? DODGE_LOSS_MODIFIER_EFFECT_KEY : "",
-    activeUseKind: "dodgeLoss"
+    activeUseKind: "dodgeLoss",
+    operationId
   });
 }
 
@@ -183,7 +191,7 @@ function runActorDodgeMutation(actor, operation) {
   return next;
 }
 
-function resolveDodgePercentModifier(actor, percent, effectKey) {
+async function resolveDodgePercentModifier(actor, percent, effectKey, context = {}) {
   const changes = collectDodgeAmountModifierChanges(actor, effectKey);
   let result = Math.max(0, Number(percent) || 0);
   let materiallyModified = false;
@@ -198,9 +206,15 @@ function resolveDodgePercentModifier(actor, percent, effectKey) {
     else result += value;
     if (result !== previous) materiallyModified = true;
   }
+  // Lazy import keeps the damage-hub -> dodge-resource dependency acyclic at startup.
+  const { getContextualAbilityChangeValue } = await import("../abilities/evaluation.mjs");
+  const contextualResult = getContextualAbilityChangeValue(actor, effectKey, {
+    ...context,
+    baseValue: result
+  });
   return {
-    value: Math.max(0, result),
-    materiallyModified
+    value: Math.max(0, contextualResult),
+    materiallyModified: materiallyModified || contextualResult !== Math.max(0, Number(percent) || 0)
   };
 }
 
@@ -221,17 +235,19 @@ function collectDodgeAmountModifierChanges(actor, effectKey) {
 async function updateActorDodgeValue(actor, value, {
   socketAction = DODGE_SOCKET_ACTION_SPEND,
   activeUseKey = "",
-  activeUseKind = "dodgeResource"
+  activeUseKind = "dodgeResource",
+  operationId = ""
 } = {}) {
   if (!actor) return false;
   const nextValue = Math.max(0, toInteger(value));
   const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
   if (nextValue === currentValue) return false;
-  const operationId = `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
+  const resolvedOperationId = String(operationId ?? "").trim()
+    || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
   if (actor.isOwner) {
-    const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind);
+    const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind, resolvedOperationId);
     await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
-    await commitDodgeActiveUseOperation(activeUsePreparation, operationId);
+    await commitDodgeActiveUseOperation(activeUsePreparation, resolvedOperationId);
     return true;
   }
   if (game.user?.isActiveGM) return false;
@@ -243,18 +259,21 @@ async function updateActorDodgeValue(actor, value, {
     actorUuid: actor.uuid,
     value: nextValue,
     activeUseKey,
-    operationId
+    operationId: resolvedOperationId
   });
 }
 
-function prepareDodgeActiveUseOperation(actor, key = "", kind = "dodgeResource") {
+function prepareDodgeActiveUseOperation(actor, key = "", kind = "dodgeResource", operationId = "") {
   const activeUseKey = String(key ?? "").trim();
   if (!activeUseKey) return null;
   return prepareActiveUseOperation({
     kind,
     actor,
     keys: new Set([activeUseKey]),
-    conditionContexts: [{ actorToken: actor?.token?.object ?? actor?.token ?? null }],
+    conditionContexts: [{
+      actorToken: actor?.token?.object ?? actor?.token ?? null,
+      chanceOperationId: operationId
+    }],
     reverseOnly: false
   });
 }
@@ -324,7 +343,7 @@ async function handleDodgeSocketMessage(payload = {}) {
         : "dodgeRoundRecovery";
       const operationId = String(payload.operationId ?? "").trim()
         || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
-      const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind);
+      const activeUsePreparation = prepareDodgeActiveUseOperation(actor, activeUseKey, activeUseKind, operationId);
       await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
       success = true;
       await commitDodgeActiveUseOperation(activeUsePreparation, operationId);

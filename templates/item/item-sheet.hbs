@@ -1973,6 +1973,12 @@
               </label>
               {{/if}}
 
+              {{#if isTriggerChance}}
+              <label>
+                <span>Вероятность срабатывания, %</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.chanceFormula" value="{{chanceFormula}}" data-formula-autocomplete="all">
+              </label>
+              {{/if}}
 
               {{#if isTimeOfDay}}
               <label>
@@ -2865,6 +2871,12 @@
               </label>
               {{/if}}
 
+              {{#if isTriggerChance}}
+              <label>
+                <span>Вероятность срабатывания, %</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.chanceFormula" value="{{chanceFormula}}" data-formula-autocomplete="all">
+              </label>
+              {{/if}}
 
               {{#if isTimeOfDay}}
               <label>
