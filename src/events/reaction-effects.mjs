@@ -1,11 +1,21 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { getAbilityFunctionEffectDurationSeconds } from "../settings/abilities.mjs";
+import {
+  getAbilityFunctionEffectDurationSeconds,
+  getAbilitySourceId
+} from "../settings/abilities.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS,
   buildEffectFunctionSnapshot
 } from "../abilities/effect-lifecycle.mjs";
+import {
+  LIMITED_EFFECT_COPY_FLAG_KEY,
+  buildLimitedEffectCopyFlag,
+  isLimitedEffectCopyReservationFor,
+  releaseLimitedEffectCopyReservation,
+  reserveLimitedEffectCopySlot
+} from "../abilities/limited-effect-copies.mjs";
 
 export const EVENT_REACTION_EFFECT_FLAG_KEY = "eventReaction";
 export const EVENT_REACTION_EFFECT_KIND = "eventReaction";
@@ -18,6 +28,7 @@ export function createEventReactionEffectManager({
   updateEffect = (effect, data, options) => effect.update(data, options),
   deleteEffects = (actor, ids, options) => actor.deleteEmbeddedDocuments("ActiveEffect", ids, options),
   prepareChanges = (_actor, changes) => changes,
+  evaluateEffectCopyLimit = undefined,
   worldTime = () => Number(globalThis.game?.time?.worldTime) || 0,
   logger = console
 } = {}) {
@@ -32,6 +43,7 @@ export function createEventReactionEffectManager({
     functionId = "",
     envelope = {},
     chainRef = null,
+    copyReservation = null,
     durationSeconds = null,
     changes = null
   } = {}) {
@@ -54,6 +66,21 @@ export function createEventReactionEffectManager({
     const scope = seconds > 0 ? "timed" : "root";
     const identity = { reactorActorUuid, sourceItemUuid: itemUuid, functionId: id, rootId, scope };
     const existing = getEffects(reactor).find(effect => managedEffectMatches(effect, identity));
+    const effectCopyContext = {
+      recipientActor: reactor,
+      sourceActor: reactor,
+      sourceItem: sourceItem ?? { uuid: itemUuid },
+      abilityFunction
+    };
+    const effectCopyOptions = evaluateEffectCopyLimit ? { evaluateLimit: evaluateEffectCopyLimit } : {};
+    let reservation = null;
+    if (!existing) {
+      reservation = isLimitedEffectCopyReservationFor(copyReservation, effectCopyContext)
+        ? copyReservation
+        : reserveLimitedEffectCopySlot(effectCopyContext, effectCopyOptions);
+      if (!reservation.allowed) return null;
+    }
+    const effectCopyFlag = buildLimitedEffectCopyFlag(effectCopyContext, effectCopyOptions);
     const effectData = buildEventReactionEffectData({
       reactor,
       sourceItem,
@@ -64,7 +91,8 @@ export function createEventReactionEffectManager({
       envelope,
       durationSeconds: seconds,
       changes: preparedChanges,
-      worldTime: worldTime()
+      worldTime: worldTime(),
+      effectCopyFlag
     });
 
     let effect;
@@ -73,16 +101,20 @@ export function createEventReactionEffectManager({
       falloutMawEventReactionEffect: true,
       ...(chainRef ? { chainRef } : {})
     };
-    if (existing) {
-      effect = await updateEffect(existing, buildEventReactionEffectUpdate(effectData), operationOptions);
-      effect ??= existing;
-    } else {
-      const created = await createEffects(reactor, [effectData], operationOptions);
-      effect = Array.isArray(created) ? created[0] : created;
+    try {
+      if (existing) {
+        effect = await updateEffect(existing, buildEventReactionEffectUpdate(effectData), operationOptions);
+        effect ??= existing;
+      } else {
+        const created = await createEffects(reactor, [effectData], operationOptions);
+        effect = Array.isArray(created) ? created[0] : created;
+      }
+      if (!effect) throw new Error("Event Reaction ActiveEffect was not created.");
+      if (scope === "root") trackRootEffect(rootId, reactorActorUuid, effect);
+      return effect;
+    } finally {
+      releaseLimitedEffectCopyReservation(reservation);
     }
-    if (!effect) throw new Error("Event Reaction ActiveEffect was not created.");
-    if (scope === "root") trackRootEffect(rootId, reactorActorUuid, effect);
-    return effect;
   }
 
   async function cleanupRoot(rootId = "") {
@@ -162,7 +194,8 @@ export function buildEventReactionEffectData({
   envelope = {},
   durationSeconds = 0,
   changes = [],
-  worldTime = 0
+  worldTime = 0,
+  effectCopyFlag = null
 } = {}) {
   const seconds = Math.max(0, Math.trunc(Number(durationSeconds) || 0));
   const rootId = String(envelope?.rootId ?? envelope?.eventId ?? "").trim();
@@ -175,6 +208,7 @@ export function buildEventReactionEffectData({
     eventId: String(envelope?.eventId ?? ""),
     eventKey: String(envelope?.key ?? ""),
     sourceItemUuid,
+    abilitySourceId: getAbilitySourceId(sourceItem),
     functionId: id,
     functionData,
     reactorActorUuid: String(reactor?.uuid ?? ""),
@@ -196,7 +230,10 @@ export function buildEventReactionEffectData({
         [EFFECT_LIFECYCLE_FLAG_KEY]: {
           kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
         },
-        [EVENT_REACTION_EFFECT_FLAG_KEY]: flag
+        [EVENT_REACTION_EFFECT_FLAG_KEY]: flag,
+        ...(effectCopyFlag ? {
+          [LIMITED_EFFECT_COPY_FLAG_KEY]: effectCopyFlag
+        } : {})
       }
     }
   };
@@ -213,6 +250,26 @@ export function getEventReactionEffectFlag(effect = null) {
   return effect?.getFlag?.(SYSTEM_ID, EVENT_REACTION_EFFECT_FLAG_KEY)
     ?? effect?.flags?.[SYSTEM_ID]?.[EVENT_REACTION_EFFECT_FLAG_KEY]
     ?? null;
+}
+
+export function hasEventReactionEffectInstance({
+  actor = null,
+  sourceItem = null,
+  abilityFunction = null,
+  envelope = {}
+} = {}) {
+  const durationSeconds = Math.max(0, Math.trunc(Number(
+    getAbilityFunctionEffectDurationSeconds(abilityFunction)
+  ) || 0));
+  const identity = {
+    reactorActorUuid: String(actor?.uuid ?? "").trim(),
+    sourceItemUuid: String(sourceItem?.uuid ?? "").trim(),
+    functionId: String(abilityFunction?.id ?? "").trim(),
+    rootId: String(envelope?.rootId ?? envelope?.eventId ?? "").trim(),
+    scope: durationSeconds > 0 ? "timed" : "root"
+  };
+  if (Object.values(identity).some(value => !value)) return false;
+  return Array.from(actor?.effects ?? []).some(effect => managedEffectMatches(effect, identity));
 }
 
 export function isEventReactionManagedEffect(effect = null) {

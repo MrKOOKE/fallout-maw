@@ -18,6 +18,12 @@ import {
 } from "../settings/abilities.mjs";
 import { getEventReactionSubscriptions } from "./event-reaction-schema.mjs";
 import { createEventReactionProgressManager } from "./event-reaction-progress.mjs";
+import {
+  hasLimitedEffectCopyCapacity,
+  releaseLimitedEffectCopyReservation,
+  reserveLimitedEffectCopySlot
+} from "../abilities/limited-effect-copies.mjs";
+import { hasEventReactionEffectInstance } from "./reaction-effects.mjs";
 
 export const GENERIC_EVENT_REACTION_PROVIDER_ID = "fallout-maw.genericEventReaction";
 const REACTION_SUCCESS = "success";
@@ -30,6 +36,7 @@ export function createGenericEventReactionProvider({
   getItems = undefined,
   normalizeFunctions = undefined,
   conditionEvaluator = undefined,
+  evaluateEffectCopyLimit = undefined,
   canOfferToActor = defaultCanOfferToActor,
   costRegistry,
   effectManager,
@@ -76,6 +83,7 @@ export function createGenericEventReactionProvider({
       ...itemLookupOptions,
       ...functionLookupOptions,
       ...(conditionEvaluator ? { conditionEvaluator } : {}),
+      ...(evaluateEffectCopyLimit ? { evaluateEffectCopyLimit } : {}),
       warn
     });
     const offers = [];
@@ -214,6 +222,19 @@ export function createGenericEventReactionProvider({
       abilityFunction,
       conditionIds: currentProgressConditionIds
     }))) return failedResult("progressNotReady");
+    const existingEffectInstance = abilityFunction?.changes?.length
+      ? hasEventReactionEffectInstance({ actor, sourceItem, abilityFunction, envelope })
+      : false;
+    if (
+      abilityFunction?.changes?.length
+      && !existingEffectInstance
+      && !hasLimitedEffectCopyCapacity({
+        recipientActor: actor,
+        sourceActor: actor,
+        sourceItem,
+        abilityFunction
+      }, evaluateEffectCopyLimit ? { evaluateLimit: evaluateEffectCopyLimit } : {})
+    ) return failedResult("effectCopyLimitReached");
 
     const baseRows = getAbilityFunctionTriggerCostRows(abilityFunction);
     const costRows = baseRows.length
@@ -224,7 +245,18 @@ export function createGenericEventReactionProvider({
         baseRows
       )
       : [];
-    const execution = await costRegistry.execute(actor, costRows, {
+    const copyReservation = abilityFunction?.changes?.length && !existingEffectInstance
+      ? reserveLimitedEffectCopySlot({
+        recipientActor: actor,
+        sourceActor: actor,
+        sourceItem,
+        abilityFunction
+      }, evaluateEffectCopyLimit ? { evaluateLimit: evaluateEffectCopyLimit } : {})
+      : null;
+    if (copyReservation && !copyReservation.allowed) return failedResult("effectCopyLimitReached");
+    let execution;
+    try {
+      execution = await costRegistry.execute(actor, costRows, {
       expectedFingerprint: String(offer.costFingerprint ?? offer.eventReaction?.costFingerprint ?? ""),
       rootId: envelope.rootId,
       eventId: envelope.eventId,
@@ -241,9 +273,13 @@ export function createGenericEventReactionProvider({
             sourceItem,
             abilityFunction,
             envelope,
-            chainRef: context?.chainRef
+            chainRef: context?.chainRef,
+            copyReservation
           })
           : null;
+        if (abilityFunction.changes?.length && !effect) {
+          throw new Error("Event Reaction effect copy could not be created.");
+        }
         try {
           await applyAbilityFunctionOverloadCosts(actor, sourceItem, abilityFunction, {
             costs: baseRows,
@@ -269,7 +305,10 @@ export function createGenericEventReactionProvider({
           : true;
         return { effect, actionUsed, executionContext };
       }
-    });
+      });
+    } finally {
+      releaseLimitedEffectCopyReservation(copyReservation);
+    }
     if (!execution.ok) return failedResult(execution.reason);
     if (execution.afterResult?.actionUsed === false) return failedResult("actionFailed");
     try {

@@ -5,6 +5,8 @@ import {
   ABILITY_POSTURE_SUBJECTS,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import { hasLimitedEffectCopyCapacity } from "../abilities/limited-effect-copies.mjs";
+import { hasEventReactionEffectInstance } from "./reaction-effects.mjs";
 import {
   eventReactionSubscriptionMatches,
   getEventParticipantActorUuid,
@@ -72,6 +74,7 @@ export async function collectEventReactionCandidates({
   getItems = getActorItemDocuments,
   normalizeFunctions = normalizeAbilityFunctions,
   conditionEvaluator = defaultConditionEvaluator,
+  evaluateEffectCopyLimit = undefined,
   warn = defaultWarn
 } = {}) {
   const participants = await resolveEventReactionParticipants(envelope, resolveUuid);
@@ -84,6 +87,21 @@ export async function collectEventReactionCandidates({
     seenActors.add(actorUuid);
     for (const item of getActorEventReactionSourceItems(reactor, { getItems })) {
       for (const abilityFunction of getEventReactionItemFunctions(item, { normalizeFunctions })) {
+        if (
+          abilityFunction?.changes?.length
+          && !hasEventReactionEffectInstance({
+            actor: reactor,
+            sourceItem: item,
+            abilityFunction,
+            envelope
+          })
+          && !hasLimitedEffectCopyCapacity({
+            recipientActor: reactor,
+            sourceActor: reactor,
+            sourceItem: item,
+            abilityFunction
+          }, evaluateEffectCopyLimit ? { evaluateLimit: evaluateEffectCopyLimit } : {})
+        ) continue;
         const matchedConditionIds = await getMatchingEventReactionSubscriptionIds({
           reactor,
           item,

@@ -2209,6 +2209,13 @@
                 <input type="number" value="{{changeLimitTotal}}" disabled>
               </label>
               {{/if}}
+              {{#if isLimitedEffectCopies}}
+              <label>
+                <span>Максимум копий</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{effectCopyLimitFormula}}" data-formula-autocomplete="all">
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{effectCopyLimit}}">
+              </label>
+              {{/if}}
               {{#if isLimitedUses}}
               <label>
                 <span>Использовано</span>
@@ -3140,6 +3147,13 @@
               <label>
                 <span>Всего изменений</span>
                 <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+              {{#if isLimitedEffectCopies}}
+              <label>
+                <span>Максимум копий</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limitFormula" value="{{effectCopyLimitFormula}}" data-formula-autocomplete="all">
+                <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.limit" value="{{effectCopyLimit}}">
               </label>
               {{/if}}
               {{#if isLimitedUses}}

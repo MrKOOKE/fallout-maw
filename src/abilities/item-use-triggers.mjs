@@ -9,6 +9,13 @@ import {
 import { abilityConditionApplies } from "./evaluation.mjs";
 import { requestLimitedChangeSelection } from "./purchase.mjs";
 import { resolveLimitedChangeSet } from "./limited-changes.mjs";
+import {
+  LIMITED_EFFECT_COPY_FLAG_KEY,
+  buildLimitedEffectCopyFlag,
+  hasLimitedEffectCopyCapacity,
+  releaseLimitedEffectCopyReservation,
+  reserveLimitedEffectCopySlot
+} from "./limited-effect-copies.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
   ABILITY_ITEM_USE_COUNTERS_FLAG_KEY,
@@ -177,6 +184,7 @@ function triggerConditionsApply(actor, conditions = [], context = {}) {
 
 function triggerConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.limitedChanges) return true;
+  if (condition.type === ABILITY_CONDITION_TYPES.limitedEffectCopies) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.limitedUses) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.triggerCost) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return itemUseConditionMatches(condition, context.usedItem);
@@ -188,6 +196,25 @@ function itemUseConditionMatches(condition = {}, item = null) {
   if (!itemCategory) return false;
   const categories = new Set(normalizeAbilityItemUseCategories(condition.itemCategories));
   return categories.has(itemCategory);
+}
+
+function itemUseEffectCopiesAllow(actor, entry) {
+  return hasLimitedEffectCopyCapacity({
+    recipientActor: actor,
+    sourceActor: actor,
+    sourceItem: entry?.abilityItem,
+    abilityFunction: entry?.abilityFunction
+  }, getItemUseEffectCopyOptions(actor));
+}
+
+function getItemUseEffectCopyOptions(actor) {
+  return {
+    evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+      fallback: 1,
+      minimum: 1,
+      context: "item-use effect copy limit"
+    })
+  };
 }
 
 async function advanceItemUseCounter(actor, entry, {
@@ -202,16 +229,7 @@ async function advanceItemUseCounter(actor, entry, {
   const requiredCount = Math.max(1, toInteger(entry.condition?.requiredCount ?? entry.condition?.limit ?? 1));
   const counters = foundry.utils.deepClone(entry.abilityItem.getFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY) ?? {});
   const nextCount = Math.min(requiredCount, Math.max(0, toInteger(counters[key])) + 1);
-  counters[key] = nextCount;
   const updateOptions = createItemUseTriggerDocumentOptions(chainRef);
-
-  // Persist the reached threshold before any awaited picker/payment. The
-  // current attempt then either commits an effect or consumes and resets it.
-  await entry.abilityItem.update({
-    [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: counters
-  }, updateOptions);
-  if (nextCount < requiredCount) return null;
-
   const committedKey = getCommittedItemUseCostKey(entry.abilityItem, key);
   let committedCost = getCommittedItemUseCost(entry.abilityItem, key, committedKey);
   const committedEffect = findActorEffect(actor, committedCost?.effectId);
@@ -221,6 +239,18 @@ async function advanceItemUseCounter(actor, entry, {
     });
     return committedEffect;
   }
+  if (
+    nextCount >= requiredCount
+    && !itemUseEffectCopiesAllow(actor, entry)
+  ) return null;
+  counters[key] = nextCount;
+
+  // Persist the reached threshold before any awaited picker/payment. The
+  // current attempt then either commits an effect or consumes and resets it.
+  await entry.abilityItem.update({
+    [`flags.${SYSTEM_ID}.${ABILITY_ITEM_USE_COUNTERS_FLAG_KEY}`]: counters
+  }, updateOptions);
+  if (nextCount < requiredCount) return null;
 
   const paymentContext = {
     rootId,
@@ -258,51 +288,74 @@ async function advanceItemUseCounter(actor, entry, {
     return null;
   }
 
-  if (!committedCost) {
-    const payment = await payAbilityFunctionTriggerCost({
-      actor,
-      sourceItem: entry.abilityItem,
-      abilityFunction: entry.abilityFunction,
-      expectedFingerprint: costPreflight?.fingerprint ?? "",
-      context: paymentContext
-    });
-    if (!payment.ok) {
-      notifyAbilityTriggerCostFailure(payment);
-      await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions);
-      return null;
+  const effectCopyOptions = getItemUseEffectCopyOptions(actor);
+  const reservation = reserveLimitedEffectCopySlot({
+    recipientActor: actor,
+    sourceActor: actor,
+    sourceItem: entry.abilityItem,
+    abilityFunction: entry.abilityFunction
+  }, effectCopyOptions);
+  if (!reservation.allowed) return null;
+
+  try {
+    if (!committedCost) {
+      const payment = await payAbilityFunctionTriggerCost({
+        actor,
+        sourceItem: entry.abilityItem,
+        abilityFunction: entry.abilityFunction,
+        expectedFingerprint: costPreflight?.fingerprint ?? "",
+        context: paymentContext
+      });
+      if (!payment.ok) {
+        notifyAbilityTriggerCostFailure(payment);
+        await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions);
+        return null;
+      }
+      if (payment.execution) {
+        committedCost = {
+          rootId: String(rootId ?? ""),
+          eventId: String(eventId ?? ""),
+          effectId: "",
+          committedAt: Number(game.time?.worldTime) || 0
+        };
+        committedItemUseCosts.set(committedKey, committedCost);
+        await persistCommittedItemUseCost(entry.abilityItem, key, committedCost, updateOptions);
+      }
     }
-    if (payment.execution) {
-      committedCost = {
-        rootId: String(rootId ?? ""),
-        eventId: String(eventId ?? ""),
-        effectId: "",
-        committedAt: Number(game.time?.worldTime) || 0
-      };
+
+    const createdEffect = await createTriggeredAbilityEffect(actor, entry, {
+      chainRef,
+      changes,
+      effectCopyOptions
+    });
+    if (!createdEffect) return null;
+    if (committedCost) {
+      committedCost = { ...committedCost, effectId: String(createdEffect.id ?? createdEffect._id ?? "") };
       committedItemUseCosts.set(committedKey, committedCost);
       await persistCommittedItemUseCost(entry.abilityItem, key, committedCost, updateOptions);
     }
+    await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions, {
+      clearCommittedCost: Boolean(committedCost)
+    });
+    return createdEffect;
+  } finally {
+    releaseLimitedEffectCopyReservation(reservation);
   }
-
-  const createdEffect = await createTriggeredAbilityEffect(actor, entry, { chainRef, changes });
-  if (!createdEffect) return null;
-  if (committedCost) {
-    committedCost = { ...committedCost, effectId: String(createdEffect.id ?? createdEffect._id ?? "") };
-    committedItemUseCosts.set(committedKey, committedCost);
-    await persistCommittedItemUseCost(entry.abilityItem, key, committedCost, updateOptions);
-  }
-  await resetItemUseTriggerState(entry.abilityItem, counters, key, committedKey, updateOptions, {
-    clearCommittedCost: Boolean(committedCost)
-  });
-  return createdEffect;
 }
 
 async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunction, condition, usedItem } = {}, {
   chainRef = null,
-  changes = []
+  changes = [],
+  effectCopyOptions = {}
 } = {}) {
   if (!changes?.length) return null;
   const durationSeconds = resolveItemUseEffectDurationSeconds(abilityFunction, condition);
   const startTime = Number(game.time?.worldTime) || 0;
+  const effectCopyFlag = buildLimitedEffectCopyFlag({
+    sourceActor: actor,
+    sourceItem: abilityItem,
+    abilityFunction
+  }, effectCopyOptions);
   const effectData = {
     type: "base",
     name: abilityItem.name,
@@ -321,13 +374,17 @@ async function createTriggeredAbilityEffect(actor, { abilityItem, abilityFunctio
         [ABILITY_ITEM_USE_EFFECT_FLAG_KEY]: {
           abilityItemId: abilityItem.id,
           abilitySourceId: getAbilitySourceId(abilityItem),
+          sourceItemUuid: String(abilityItem?.uuid ?? ""),
           functionId: abilityFunction.id,
           conditionId: condition.id,
           functionData: buildEffectFunctionSnapshot(abilityFunction),
           usedItemId: usedItem?.id ?? "",
           usedItemName: usedItem?.name ?? "",
           createdAt: startTime
-        }
+        },
+        ...(effectCopyFlag ? {
+          [LIMITED_EFFECT_COPY_FLAG_KEY]: effectCopyFlag
+        } : {})
       }
     }
   };

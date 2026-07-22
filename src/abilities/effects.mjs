@@ -20,6 +20,7 @@ import {
   getAuraGeneratedTargetTokens
 } from "./aura-conditions.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import {
@@ -32,6 +33,15 @@ import {
   EFFECT_LIFECYCLE_KINDS,
   buildEffectFunctionSnapshot
 } from "./effect-lifecycle.mjs";
+import {
+  LIMITED_EFFECT_COPY_FLAG_KEY,
+  buildLimitedEffectCopyFlag,
+  effectCountsAsCopy,
+  getManagedEffectCopyLimit,
+  getManagedEffectSourceFunctionIdentity,
+  getPendingLimitedEffectCopyState,
+  sourceFunctionIdentitiesMatch
+} from "./limited-effect-copies.mjs";
 import {
   getActorIlluminationLevel,
   getWorldTimeMinuteOfDay,
@@ -140,15 +150,20 @@ export function registerAbilityEffectHooks() {
     if (options?.falloutMawLimitedUses === true) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
+    const expiredLimitedCopy = Boolean(
+      effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY)
+      && effect?.duration?.expired === true
+    );
     if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
-    if (!managed) return;
+    if (!managed && !expiredLimitedCopy) return;
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("deleteActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
+    const limitedCopy = Boolean(effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY));
     if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
-    if (!managed) return;
+    if (!managed && !limitedCopy) return;
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("fallout-maw.energyConsumptionChanged", actor => {
@@ -601,6 +616,7 @@ export async function syncAuraGeneratedEffects() {
 
 function buildDesiredAuraGeneratedEffects() {
   const desired = new Map();
+  const targetActors = new Map();
   for (const sourceToken of canvas?.tokens?.placeables ?? []) {
     const sourceActor = sourceToken?.actor;
     if (!sourceActor || !["character", "construct"].includes(sourceActor.type)) continue;
@@ -610,6 +626,17 @@ function buildDesiredAuraGeneratedEffects() {
         if (hasEventReactionCondition(entry.conditions)) continue;
         const functionData = buildEffectFunctionSnapshot(entry);
         const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
+        const effectCopyFlag = buildLimitedEffectCopyFlag({
+          sourceActor,
+          sourceItem: source.item,
+          abilityFunction: entry
+        }, {
+          evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
+            fallback: 1,
+            minimum: 1,
+            context: "aura effect copy limit"
+          })
+        });
         const lateContextual = hasAbilityWeaponContextCondition(entry.conditions);
         if (lateContextual && !hasPotentialLateAuraChanges(entry)) continue;
         for (const condition of findAuraDistributionConditions(entry.conditions)) {
@@ -650,6 +677,7 @@ function buildDesiredAuraGeneratedEffects() {
               key,
               changes,
               triggerCost,
+              ...(effectCopyFlag ? { effectCopyFlag } : {}),
               limitedUseIds,
               ...projectionContext
             });
@@ -663,17 +691,19 @@ function buildDesiredAuraGeneratedEffects() {
               signature,
               functionData,
               triggerCost,
+              effectCopyFlag,
               projectionContext
             );
             const actorDesired = desired.get(targetActor.uuid) ?? new Map();
             actorDesired.set(key, data);
             desired.set(targetActor.uuid, actorDesired);
+            targetActors.set(targetActor.uuid, targetActor);
           }
         }
       }
     }
   }
-  return desired;
+  return applyAuraEffectCopyLimits(desired, targetActors);
 }
 
 function getAuraSourceFunctionSets(actor) {
@@ -690,6 +720,76 @@ function getAuraSourceFunctionSets(actor) {
   return sources;
 }
 
+function applyAuraEffectCopyLimits(desired = new Map(), targetActors = new Map()) {
+  for (const [actorUuid, actorDesired] of desired.entries()) {
+    const actor = targetActors.get(actorUuid);
+    const actorEffects = Array.from(actor?.effects ?? []);
+    const existingByKey = new Map();
+    const effectsByIdentity = new Map();
+    for (const effect of actorEffects) {
+      if (!effectCountsAsCopy(effect)) continue;
+      const key = String(getAuraGeneratedEffectFlag(effect)?.key ?? "");
+      if (key) {
+        const entries = existingByKey.get(key) ?? [];
+        entries.push(effect);
+        existingByKey.set(key, entries);
+      }
+      const identity = getManagedEffectSourceFunctionIdentity(effect, actor);
+      if (!identity?.sourceKey || !identity?.functionId) continue;
+      const identityKey = `${identity.sourceKey}:${identity.functionId}`;
+      const entries = effectsByIdentity.get(identityKey) ?? [];
+      entries.push(effect);
+      effectsByIdentity.set(identityKey, entries);
+    }
+    const allDesiredKeys = new Set(actorDesired.keys());
+    const groups = new Map();
+    for (const [key, data] of actorDesired.entries()) {
+      const copyFlag = data?.flags?.[SYSTEM_ID]?.[LIMITED_EFFECT_COPY_FLAG_KEY];
+      const limit = Number(copyFlag?.limit);
+      const identity = {
+        sourceKey: String(copyFlag?.sourceKey ?? "").trim(),
+        functionId: String(copyFlag?.functionId ?? "").trim()
+      };
+      if (!identity.sourceKey || !identity.functionId || !Number.isFinite(limit) || limit < 1) continue;
+      const groupKey = `${identity.sourceKey}:${identity.functionId}`;
+      const group = groups.get(groupKey) ?? [];
+      group.push({
+        key,
+        identity,
+        limit: Math.max(1, Math.trunc(limit)),
+        existing: (existingByKey.get(key) ?? []).some(effect => sourceFunctionIdentitiesMatch(
+          identity,
+          getManagedEffectSourceFunctionIdentity(effect, actor)
+        ))
+      });
+      groups.set(groupKey, group);
+    }
+    for (const group of groups.values()) {
+      const identity = group[0].identity;
+      const groupKeys = new Set(group.map(entry => entry.key));
+      const limits = group.map(entry => entry.limit);
+      let externalCount = 0;
+      for (const effect of effectsByIdentity.get(`${identity.sourceKey}:${identity.functionId}`) ?? []) {
+        const auraKey = String(getAuraGeneratedEffectFlag(effect)?.key ?? "");
+        // An obsolete aura is deleted before new desired effects are created,
+        // so it does not occupy a future slot in this reconciliation pass.
+        if (auraKey && !allDesiredKeys.has(auraKey)) continue;
+        if (!auraKey || !groupKeys.has(auraKey)) externalCount += 1;
+        const storedLimit = getManagedEffectCopyLimit(effect);
+        if (storedLimit !== null) limits.push(storedLimit);
+      }
+      const pending = getPendingLimitedEffectCopyState(actor, identity);
+      externalCount += pending.count;
+      limits.push(...pending.limits);
+      const limit = Math.min(...limits);
+      const available = Math.max(0, limit - externalCount);
+      group.sort((left, right) => Number(right.existing) - Number(left.existing));
+      for (const entry of group.slice(available)) actorDesired.delete(entry.key);
+    }
+  }
+  return desired;
+}
+
 function buildAuraGeneratedActiveEffectData(
   source,
   sourceActor,
@@ -700,6 +800,7 @@ function buildAuraGeneratedActiveEffectData(
   signature,
   functionData,
   triggerCost,
+  effectCopyFlag,
   projectionContext = {}
 ) {
   return {
@@ -726,9 +827,17 @@ function buildAuraGeneratedActiveEffectData(
           functionId: entry.id,
           conditionId: condition.id,
           functionData,
+          ...(effectCopyFlag ? {
+            sourceItemUuid: effectCopyFlag.sourceItemUuid,
+            abilitySourceId: effectCopyFlag.abilitySourceId,
+            effectCopyLimit: effectCopyFlag.limit
+          } : {}),
           ...(projectionContext?.lateContextual ? projectionContext : {}),
           ...(triggerCost ? { triggerCost } : {})
-        }
+        },
+        ...(effectCopyFlag ? {
+          [LIMITED_EFFECT_COPY_FLAG_KEY]: effectCopyFlag
+        } : {})
       }
     }
   };
@@ -788,6 +897,10 @@ async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
     const key = String(flag?.key ?? "");
     const target = desired.get(key);
     if (!key || !target || flag?.signature !== target.flags?.[SYSTEM_ID]?.[AURA_GENERATED_EFFECT_FLAG_KEY]?.signature) {
+      deletions.push(effect.id);
+      continue;
+    }
+    if (existingByKey.has(key)) {
       deletions.push(effect.id);
       continue;
     }
@@ -933,6 +1046,7 @@ function hasRuntimeConditions(conditions = []) {
   return conditions.some(condition => (
     condition?.type
     && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
+    && condition.type !== ABILITY_CONDITION_TYPES.limitedEffectCopies
     && condition.type !== ABILITY_CONDITION_TYPES.limitedUses
     && condition.type !== ABILITY_CONDITION_TYPES.cooldown
     && condition.type !== ABILITY_CONDITION_TYPES.duration

@@ -5,6 +5,7 @@ import { getSystemEventDescriptor } from "./catalog.mjs";
 import { createGenericEventReactionProvider } from "./event-reaction-provider.mjs";
 import { createEventReactionEffectManager } from "./reaction-effects.mjs";
 import { createFoundryReactionCostRegistry } from "./foundry-reaction-costs.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 
 export function createFoundryEventReactionRuntime({
   registerRootCleanup = null,
@@ -23,10 +24,16 @@ export function createFoundryEventReactionRuntime({
     applyHealthCost,
     logger
   });
+  const evaluateEffectCopyLimit = (formula, actor) => evaluateActorFormula(formula, actor, {
+    fallback: 1,
+    minimum: 1,
+    context: "event reaction effect copy limit"
+  });
   const effectManager = createEventReactionEffectManager({
     prepareChanges: (actor, changes) => (changes ?? []).map(change => (
       prepareEffectChangeForApplication(actor, change)
     )),
+    evaluateEffectCopyLimit,
     logger
   });
   const provider = createGenericEventReactionProvider({
@@ -34,6 +41,7 @@ export function createFoundryEventReactionRuntime({
     effectManager,
     getItems: getActorItemsWithActiveHudModules,
     conditionEvaluator: abilityConditionApplies,
+    evaluateEffectCopyLimit,
     registerRootCleanup,
     canReactToEvent,
     actionRuntime,

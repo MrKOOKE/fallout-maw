@@ -179,6 +179,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
     // they are metadata and never participate in AND/OR condition truth.
     if ([
       ABILITY_CONDITION_TYPES.triggerCost,
+      ABILITY_CONDITION_TYPES.limitedEffectCopies,
       ABILITY_CONDITION_TYPES.limitedUses
     ].includes(condition.type)) continue;
     const groupId = String(condition?.groupId ?? "").trim();
@@ -198,6 +199,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if ([
     ABILITY_CONDITION_TYPES.triggerCost,
+    ABILITY_CONDITION_TYPES.limitedEffectCopies,
     ABILITY_CONDITION_TYPES.limitedUses
   ].includes(condition.type)) return true;
   if (condition.type === ABILITY_CONDITION_TYPES.triggerChance) {
@@ -427,6 +429,7 @@ function hasUnresolvedWeaponContextBranch(actor, conditions = [], context = {}) 
   for (const condition of conditions ?? []) {
     if ([
       ABILITY_CONDITION_TYPES.triggerCost,
+      ABILITY_CONDITION_TYPES.limitedEffectCopies,
       ABILITY_CONDITION_TYPES.limitedUses
     ].includes(condition?.type)) continue;
     if (!isWeaponContextCondition(condition) && !condition?.groupId) continue;

@@ -2125,6 +2125,14 @@
               </label>
               {{/if}}
 
+              {{#if isLimitedEffectCopies}}
+              <label>
+                <span>Максимум копий</span>
+                <input type="text" data-field="conditionLimitFormula" value="{{effectCopyLimitFormula}}" data-formula-autocomplete="all">
+                <input type="hidden" data-field="conditionLimitLegacy" value="{{effectCopyLimit}}">
+              </label>
+              {{/if}}
+
               {{#if isLimitedUses}}
               <label>
                 <span>Использовано</span>

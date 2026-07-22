@@ -2,9 +2,11 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
   getAbilityFunctionEffectDurationSeconds,
+  getAbilitySourceId,
   isAbilityFunctionTimedTriggerCost,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
 import {
@@ -16,6 +18,13 @@ import {
   EFFECT_LIFECYCLE_KINDS,
   buildEffectFunctionSnapshot
 } from "./effect-lifecycle.mjs";
+import {
+  LIMITED_EFFECT_COPY_FLAG_KEY,
+  buildLimitedEffectCopyFlag,
+  isLimitedEffectCopyReservationFor,
+  releaseLimitedEffectCopyReservation,
+  reserveLimitedEffectCopySlot
+} from "./limited-effect-copies.mjs";
 
 export const ABILITY_TIMED_TRIGGER_EFFECT_FLAG_KEY = "abilityTimedTriggerEffect";
 export const ABILITY_TIMED_TRIGGER_STATE_FLAG_KEY = "abilityTimedTriggerStates";
@@ -94,45 +103,62 @@ export async function syncTimedTriggerCostEffects(actor, sourceItem, functions =
       continue;
     }
 
-    states[functionId] = {
-      ...state,
-      latched: true,
-      paymentCommitted: false,
-      effectCreated: false,
-      effectId: "",
-      changedAt: getWorldTime()
-    };
-    await persistTransitionStates(sourceItem, states);
-    statesChanged = false;
-
-    const payment = await payAbilityFunctionTriggerCost({
-      actor,
+    const effectCopyOptions = getTimedTriggerEffectCopyOptions(actor);
+    const existing = findTimedTriggerEffect(actor, sourceItem, functionId);
+    const reservation = existing ? null : reserveLimitedEffectCopySlot({
+      recipientActor: actor,
+      sourceActor: actor,
       sourceItem,
-      abilityFunction,
-      context: {
-        occurrenceId: `timed-trigger:${sourceItem.uuid ?? sourceItem.id}:${functionId}:${getWorldTime()}`,
-        actorLockScope: `timed-trigger:${actor.uuid ?? actor.id}:${sourceItem.uuid ?? sourceItem.id}:${functionId}`,
-        logicalWorldTime: getWorldTime()
-      }
-    });
-    if (!payment.ok) {
-      notifyAbilityTriggerCostFailure(payment);
-      continue;
-    }
+      abilityFunction
+    }, effectCopyOptions);
+    if (reservation && !reservation.allowed) continue;
 
-    states[functionId] = {
-      ...states[functionId],
-      paymentCommitted: true
-    };
-    await persistTransitionStates(sourceItem, states);
-    const created = await createTimedTriggerEffect(actor, sourceItem, abilityFunction);
-    if (!created) continue;
-    states[functionId] = {
-      ...states[functionId],
-      effectCreated: true,
-      effectId: String(created.id ?? created._id ?? "")
-    };
-    statesChanged = true;
+    try {
+      states[functionId] = {
+        ...state,
+        latched: true,
+        paymentCommitted: false,
+        effectCreated: false,
+        effectId: "",
+        changedAt: getWorldTime()
+      };
+      await persistTransitionStates(sourceItem, states);
+      statesChanged = false;
+
+      const payment = await payAbilityFunctionTriggerCost({
+        actor,
+        sourceItem,
+        abilityFunction,
+        context: {
+          occurrenceId: `timed-trigger:${sourceItem.uuid ?? sourceItem.id}:${functionId}:${getWorldTime()}`,
+          actorLockScope: `timed-trigger:${actor.uuid ?? actor.id}:${sourceItem.uuid ?? sourceItem.id}:${functionId}`,
+          logicalWorldTime: getWorldTime()
+        }
+      });
+      if (!payment.ok) {
+        notifyAbilityTriggerCostFailure(payment);
+        continue;
+      }
+
+      states[functionId] = {
+        ...states[functionId],
+        paymentCommitted: true
+      };
+      await persistTransitionStates(sourceItem, states);
+      const created = await createTimedTriggerEffect(actor, sourceItem, abilityFunction, {
+        copyReservation: reservation,
+        effectCopyOptions
+      });
+      if (!created) continue;
+      states[functionId] = {
+        ...states[functionId],
+        effectCreated: true,
+        effectId: String(created.id ?? created._id ?? "")
+      };
+      statesChanged = true;
+    } finally {
+      releaseLimitedEffectCopyReservation(reservation);
+    }
   }
 
   if (statesChanged) await persistTransitionStates(sourceItem, states);
@@ -144,7 +170,10 @@ export function getTimedTriggerEffectFlag(effect = null) {
     ?? null;
 }
 
-async function createTimedTriggerEffect(actor, sourceItem, abilityFunction) {
+async function createTimedTriggerEffect(actor, sourceItem, abilityFunction, {
+  copyReservation = null,
+  effectCopyOptions = getTimedTriggerEffectCopyOptions(actor)
+} = {}) {
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const changes = (abilityFunction?.changes ?? [])
     .filter(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "")
@@ -152,6 +181,21 @@ async function createTimedTriggerEffect(actor, sourceItem, abilityFunction) {
   if (durationSeconds <= 0 || !changes.length) return null;
   const functionId = String(abilityFunction?.id ?? "").trim();
   const startTime = getWorldTime();
+  const existing = findTimedTriggerEffect(actor, sourceItem, functionId);
+  const effectCopyContext = {
+    recipientActor: actor,
+    sourceActor: actor,
+    sourceItem,
+    abilityFunction
+  };
+  let reservation = null;
+  if (!existing) {
+    reservation = isLimitedEffectCopyReservationFor(copyReservation, effectCopyContext)
+      ? copyReservation
+      : reserveLimitedEffectCopySlot(effectCopyContext, effectCopyOptions);
+    if (!reservation.allowed) return null;
+  }
+  const effectCopyFlag = buildLimitedEffectCopyFlag(effectCopyContext, effectCopyOptions);
   const effectData = {
     type: "base",
     name: String(sourceItem?.name ?? ""),
@@ -172,24 +216,41 @@ async function createTimedTriggerEffect(actor, sourceItem, abilityFunction) {
         [ABILITY_TIMED_TRIGGER_EFFECT_FLAG_KEY]: {
           sourceItemUuid: String(sourceItem?.uuid ?? ""),
           sourceItemId: String(sourceItem?.id ?? ""),
+          abilitySourceId: getAbilitySourceId(sourceItem),
           functionId,
           functionData: buildEffectFunctionSnapshot(abilityFunction),
           durationSeconds,
           triggeredAt: startTime
-        }
+        },
+        ...(effectCopyFlag ? {
+          [LIMITED_EFFECT_COPY_FLAG_KEY]: effectCopyFlag
+        } : {})
       }
     }
   };
-  const existing = findTimedTriggerEffect(actor, sourceItem, functionId);
-  if (existing) {
-    await existing.update(effectData, { animate: false, falloutMawTriggerCostEffect: true });
-    return existing;
+  try {
+    if (existing) {
+      await existing.update(effectData, { animate: false, falloutMawTriggerCostEffect: true });
+      return existing;
+    }
+    const [created] = await actor.createEmbeddedDocuments("ActiveEffect", [effectData], {
+      animate: false,
+      falloutMawTriggerCostEffect: true
+    });
+    return created ?? null;
+  } finally {
+    releaseLimitedEffectCopyReservation(reservation);
   }
-  const [created] = await actor.createEmbeddedDocuments("ActiveEffect", [effectData], {
-    animate: false,
-    falloutMawTriggerCostEffect: true
-  });
-  return created ?? null;
+}
+
+function getTimedTriggerEffectCopyOptions(actor) {
+  return {
+    evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+      fallback: 1,
+      minimum: 1,
+      context: "timed trigger effect copy limit"
+    })
+  };
 }
 
 function findTimedTriggerEffect(actor, sourceItem, functionId) {

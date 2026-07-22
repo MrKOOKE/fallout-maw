@@ -190,6 +190,13 @@ import {
   resolveLimitedChangeSet
 } from "./limited-changes.mjs";
 import {
+  LIMITED_EFFECT_COPY_FLAG_KEY,
+  buildLimitedEffectCopyFlag,
+  hasLimitedEffectCopyCapacity,
+  releaseLimitedEffectCopyReservation,
+  reserveLimitedEffectCopySlot
+} from "./limited-effect-copies.mjs";
+import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS
 } from "./effect-lifecycle.mjs";
@@ -1821,6 +1828,23 @@ async function gateActiveApplicationTargets(scope, {
       });
       continue;
     }
+    if (
+      durationSeconds > 0
+      && !activeApplicationTargetsHaveEffectCopyCapacity(actor, abilityItem, abilityFunction, [target])
+    ) {
+      await emitActiveApplicationResolved(scope, entry, {
+        actor,
+        abilityItem,
+        abilityFunction,
+        settings,
+        activationCosts,
+        durationSeconds,
+        status: "cancelled",
+        reason: "effectCopyLimitReached",
+        terminalTargets
+      });
+      continue;
+    }
     const participants = createActiveApplicationParticipants(actor, abilityItem, target, sourceToken);
     const gate = await scope.emit("fallout-maw.ability.application.before", {
       data: buildActiveApplicationEventData({
@@ -2088,6 +2112,25 @@ function getPrimaryActorToken(actor) {
   return canvas?.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
+function activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets = []) {
+  return targets.every(target => hasLimitedEffectCopyCapacity({
+    recipientActor: target?.actor,
+    sourceActor,
+    sourceItem: abilityItem,
+    abilityFunction
+  }, getActiveApplicationEffectCopyOptions(sourceActor)));
+}
+
+function getActiveApplicationEffectCopyOptions(sourceActor) {
+  return {
+    evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
+      fallback: 1,
+      minimum: 1,
+      context: "active application effect copy limit"
+    })
+  };
+}
+
 async function applyActiveApplicationEffects(sourceActor, abilityItem, abilityFunction, durationSeconds, targets = [], options = {}) {
   const requiresAuthority = !game.user?.isGM && targets.some(target => !target?.actor?.isOwner);
   if (!requiresAuthority) {
@@ -2130,6 +2173,9 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   costContext = null
 } = {}) {
   if (durationSeconds <= 0) return true;
+  if (!activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets)) {
+    throw new Error("Active application effect copy limit reached.");
+  }
   const startTime = Number(game.time?.worldTime) || 0;
   const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
   const selectedFunction = Array.isArray(selectedChanges)
@@ -2167,16 +2213,40 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
       plan.preparedChanges = foundry.utils.deepClone(snapshots.get(rawSignature));
     }
   }
+  for (const plan of plans) {
+    const targetActor = plan.target.actor;
+    plan.changes = settings.changeEvaluation === "source"
+      ? plan.preparedChanges
+      : plan.rawChanges
+        .map(change => prepareEffectChangeForApplication(targetActor, change))
+        .filter(change => change.key && change.value !== "");
+  }
+  const effectCopyOptions = getActiveApplicationEffectCopyOptions(sourceActor);
+  const effectCopyFlag = buildLimitedEffectCopyFlag({
+    sourceActor,
+    sourceItem: abilityItem,
+    abilityFunction
+  }, effectCopyOptions);
+  const reservations = [];
+  for (const plan of plans.filter(entry => entry.changes?.length)) {
+    const reservation = reserveLimitedEffectCopySlot({
+      recipientActor: plan.target.actor,
+      sourceActor,
+      sourceItem: abilityItem,
+      abilityFunction
+    }, effectCopyOptions);
+    if (!reservation.allowed) {
+      reservations.forEach(releaseLimitedEffectCopyReservation);
+      throw new Error("Active application effect copy limit reached.");
+    }
+    reservations.push(reservation);
+  }
   const createdEffects = [];
   try {
     for (const plan of plans) {
       const target = plan.target;
       const targetActor = target.actor;
-      const changes = settings.changeEvaluation === "source"
-        ? plan.preparedChanges
-        : plan.rawChanges
-          .map(change => prepareEffectChangeForApplication(targetActor, change))
-          .filter(change => change.key && change.value !== "");
+      const changes = plan.changes;
       if (!changes.length) continue;
       const signature = JSON.stringify(changes);
       const created = await targetActor.createEmbeddedDocuments("ActiveEffect", [{
@@ -2199,6 +2269,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
             [ACTIVE_APPLICATION_EFFECT_FLAG_KEY]: {
               abilityItemId: abilityItem.id,
               abilitySourceId: getAbilitySourceId(abilityItem),
+              sourceItemUuid: String(abilityItem?.uuid ?? ""),
               sourceActorUuid: sourceActor.uuid,
               functionData: foundry.utils.deepClone(selectedFunction),
               signature,
@@ -2209,7 +2280,10 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
               functionId: abilityFunction.id,
               chanceOperationId,
               createdAt: startTime
-            }
+            },
+            ...(effectCopyFlag ? {
+              [LIMITED_EFFECT_COPY_FLAG_KEY]: effectCopyFlag
+            } : {})
           }
         }
       }], {
@@ -2221,6 +2295,8 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   } catch (error) {
     await deleteActiveApplicationEffectsSafely(createdEffects, chainRef);
     throw error;
+  } finally {
+    reservations.forEach(releaseLimitedEffectCopyReservation);
   }
   return true;
 }
@@ -2615,6 +2691,10 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     token: tokenDocument.object ?? tokenDocument,
     actor: tokenDocument.actor
   }));
+  if (
+    durationSeconds > 0
+    && !activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, resolvedTargets)
+  ) return false;
   let payment = null;
   if (payload?.payCostsRemotely === true || !sender.isGM) {
     const planEntries = buildActiveApplicationCostPlanEntries(sourceActor, settings.costs, resolvedTargets);

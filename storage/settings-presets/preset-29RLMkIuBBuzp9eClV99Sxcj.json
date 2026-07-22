@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "6c2f1fd5b99ea60ff426ba620afb43847e133a02c0f5b94e95df4c49a13bf1c4",
-  "updatedAt": "2026-07-22T17:12:18.504Z",
+  "revision": "d35c4fd7ddd6d81f42691e5a3e54952af5d7b7126ee8ecedcb1c3b08e958ff0e",
+  "updatedAt": "2026-07-22T18:16:24.779Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -736,6 +736,13 @@
                           "operator": "lte",
                           "percent": 50,
                           "type": "duration"
+                        },
+                        {
+                          "groupId": "",
+                          "id": "dsRDUvFeiNpYRMoy",
+                          "limit": 1,
+                          "limitFormula": "3",
+                          "type": "limitedEffectCopies"
                         }
                       ],
                       "fixedKey": "",

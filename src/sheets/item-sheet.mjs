@@ -6926,10 +6926,11 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isTriggerChance = type === ABILITY_CONDITION_TYPES.triggerChance;
   const isEventReactionFilter = isEventReactionFilterType(type);
   const isDuration = type === ABILITY_CONDITION_TYPES.duration;
+  const isLimitedEffectCopies = type === ABILITY_CONDITION_TYPES.limitedEffectCopies;
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
   const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -6990,7 +6991,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -7058,12 +7059,13 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isWeaponProficiency,
     isAura,
     isLimitedChanges,
+    isLimitedEffectCopies,
     isLimitedUses,
     isCooldown,
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -7074,6 +7076,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    effectCopyLimit: Math.max(1, toInteger(condition?.limit ?? 1)),
+    effectCopyLimitFormula: String(condition?.limitFormula ?? condition?.limit ?? 1).trim() || "1",
     usesSpent: Math.max(0, toInteger(condition?.usesSpent ?? 0)),
     usesMax: Math.max(1, toInteger(condition?.usesMax ?? 1)),
     requiredCount: isAura ? normalizeAbilityFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),
@@ -7255,6 +7259,13 @@ function buildAbilityConditionTypeChoices(selected = "", {
       selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
     });
   }
+  if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedEffectCopies) {
+    choices.push({
+      value: ABILITY_CONDITION_TYPES.limitedEffectCopies,
+      label: "Ограниченное количество копий эффекта",
+      selected: selected === ABILITY_CONDITION_TYPES.limitedEffectCopies
+    });
+  }
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedUses) {
     choices.push({
       value: ABILITY_CONDITION_TYPES.limitedUses,
@@ -7290,6 +7301,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
       || choice.value === ABILITY_CONDITION_TYPES.triggerCost
       || choice.value === ABILITY_CONDITION_TYPES.duration
+      || choice.value === ABILITY_CONDITION_TYPES.limitedEffectCopies
       || isEventReactionFilterType(choice.value)
       || choice.value === selected
     ))
@@ -7299,6 +7311,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
       && choice.value !== ABILITY_CONDITION_TYPES.triggerCost
       && choice.value !== ABILITY_CONDITION_TYPES.duration
+      && choice.value !== ABILITY_CONDITION_TYPES.limitedEffectCopies
       && !isEventReactionFilterType(choice.value)
       ? { ...choice, label: `${choice.label} — ${localizeAbilityEventReactionUi("Unsupported", "unsupported")}` }
       : choice);

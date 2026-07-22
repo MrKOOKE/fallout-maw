@@ -136,6 +136,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   weaponProficiency: "weaponProficiency",
   aura: "aura",
   limitedChanges: "limitedChanges",
+  limitedEffectCopies: "limitedEffectCopies",
   limitedUses: "limitedUses",
   cooldown: "cooldown",
   duration: "duration",
@@ -1243,6 +1244,21 @@ function normalizeAbilityCondition(value = {}) {
       limit: legacyLimit,
       limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit)),
       durationSeconds: 0
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.limitedEffectCopies) {
+    const rawLimit = value?.limit ?? value?.count ?? 1;
+    const legacyLimit = Math.max(1, toInteger(rawLimit));
+    const rawFormula = value?.limitFormula ?? value?.formula
+      ?? (typeof rawLimit === "string" && !Number.isFinite(Number(rawLimit)) ? rawLimit : String(legacyLimit));
+    return {
+      id,
+      // Copy limits are function metadata and never participate in an OR group.
+      groupId: "",
+      type,
+      limit: legacyLimit,
+      limitFormula: normalizeFormulaText(rawFormula, String(legacyLimit))
     };
   }
 

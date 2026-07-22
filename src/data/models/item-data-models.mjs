@@ -256,7 +256,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
     costs: new ArrayField(new SchemaField({
