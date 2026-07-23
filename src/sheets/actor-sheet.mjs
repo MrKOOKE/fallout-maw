@@ -49,6 +49,7 @@ import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   evaluateActorEffectChangeNumber,
   expandActorEffectChangeKeys,
   getAbilityOverloadCostEffectKey,
@@ -6492,9 +6493,29 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
   rawData = baseData
 } = {}) {
   const contextual = baseMode ? null : getWeaponTooltipAbilityContext(item, data);
-  const fixedModifiers = baseMode
+  const fixedPreviewModifiers = baseMode
     ? { combatValues: {}, resourceCostMultipliers: {}, sources: [] }
     : getFixedWeaponPreviewModifiers(actor, item, data);
+  const hasConditionCost = (data?.resourceCosts ?? []).some(cost => (
+    String(cost?.type ?? "").trim() === "condition"
+    && Number(cost?.amount) > 0
+  ));
+  const conditionLossAttribution = contextual && hasConditionCost
+    ? collectActorConditionLossMultiplierAttribution(actor, contextual)
+    : { value: 1, sources: [] };
+  const fixedConditionMultiplier = Number(fixedPreviewModifiers.resourceCostMultipliers?.condition);
+  const fixedModifiers = {
+    ...fixedPreviewModifiers,
+    resourceCostMultipliers: {
+      ...(fixedPreviewModifiers.resourceCostMultipliers ?? {}),
+      condition: (Number.isFinite(fixedConditionMultiplier) ? Math.max(0, fixedConditionMultiplier) : 1)
+        * conditionLossAttribution.value
+    },
+    sources: [
+      ...conditionLossAttribution.sources,
+      ...(fixedPreviewModifiers.sources ?? [])
+    ]
+  };
   const damageFlatAttribution = contextual ? collectActorCombatValueAttribution(actor, "damageFlat", contextual) : emptyCombatAttribution();
   const damagePercentAttribution = contextual ? collectActorCombatValueAttribution(actor, "damagePercent", contextual) : emptyCombatAttribution();
   const accuracyAttribution = contextual ? collectActorCombatValueAttribution(actor, "accuracy", contextual) : emptyCombatAttribution();
@@ -6806,6 +6827,18 @@ function buildWeaponResourceCostAttributions(item, actor, baseData = {}, data = 
     }, { minimum: 0 });
 
     for (const source of fixedModifiers?.sources ?? []) {
+      const transition = source?.resourceCostMultiplierTransitions?.[type];
+      if (transition && Number.isFinite(Number(transition.after))) {
+        appendBreakdownStep(breakdown, {
+          name: source.name,
+          img: source.img,
+          operation: "override",
+          value: rawAmount * Math.max(0, Number(transition.after)),
+          valueLabel: source.valueLabel,
+          detailLabel: source.detailLabel
+        }, { minimum: 0 });
+        continue;
+      }
       const multiplier = Number(source?.resourceCostMultipliers?.[type]);
       if (!Number.isFinite(multiplier) || multiplier === 1) continue;
       appendBreakdownStep(breakdown, {
@@ -7179,6 +7212,101 @@ function collectActorPreparedPathAttribution(actor, path = "", {
     running = expected;
   }
   return { value: running, sources };
+}
+
+function collectActorConditionLossMultiplierAttribution(actor, context = null) {
+  if (!actor) return { value: 1, sources: [] };
+  const path = CONDITION_LOSS_MULTIPLIER_EFFECT_KEY;
+  const preparedFormulaData = buildActorFormulaData(actor, { stage: "prepared" });
+  const sourceValue = Number(foundry.utils.getProperty(actor?._source ?? {}, path));
+  const configuredBaseValue = Number.isFinite(sourceValue) ? sourceValue : 1;
+  let running = 1;
+  const sources = [];
+
+  const appendTransition = ({
+    name = "",
+    img = "",
+    operation = "override",
+    value = 1,
+    valueLabel = ""
+  } = {}) => {
+    const step = createItemValueAttributionStep(running, { operation, value });
+    const after = Number(step.after);
+    if (!Number.isFinite(after) || Math.abs(after - running) < 0.000001) return;
+    const before = running;
+    running = after;
+    sources.push({
+      name,
+      img,
+      valueLabel: valueLabel || formatConfiguredAttributionOperation(operation, value, after - before),
+      detailLabel: `${localizeOrFallback("FALLOUTMAW.Effects.ConditionLossMultiplier", "Множитель потери прочности")}: ${formatNumber(before)} → ${formatNumber(after)}`,
+      resourceCostMultiplierTransitions: {
+        condition: { before, after }
+      }
+    });
+  };
+
+  if (Math.abs(configuredBaseValue - 1) >= 0.000001) {
+    appendTransition({
+      name: `${actor.name}: ${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownBase", "База")}`,
+      img: actor.img,
+      operation: "override",
+      value: configuredBaseValue,
+      valueLabel: `×${formatNumber(configuredBaseValue)}`
+    });
+  }
+
+  for (const { effect, change, applicationPhase } of collectActorEffectAttributionChanges(actor, path, {
+    formulaData: preparedFormulaData
+  })) {
+    const stage = applicationPhase === "initial" ? "initial-active-effect" : "prepared";
+    const amount = evaluateActorEffectChangeNumber(actor, { ...change, effect }, {
+      fallback: Number.NaN,
+      stage,
+      formulaData: stage === "prepared" ? preparedFormulaData : null
+    });
+    if (!Number.isFinite(amount)) continue;
+    const document = getTooltipEffectSourceDocument(effect);
+    appendTransition({
+      name: document?.name ?? effect?.name,
+      img: document?.img ?? effect?.img,
+      operation: change.type,
+      value: amount
+    });
+  }
+
+  const preparedValue = Number(actor?.system?.combat?.conditionLossMultiplier);
+  const expectedPreparedValue = Number.isFinite(preparedValue) ? preparedValue : 1;
+  if (Math.abs(expectedPreparedValue - running) >= 0.000001) {
+    appendTransition({
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedActor", "Подготовленные данные персонажа"),
+      img: actor.img,
+      operation: "override",
+      value: expectedPreparedValue
+    });
+  }
+
+  if (context) {
+    for (const change of getPreparedSourceContextualAbilityChanges(actor, path, context)) {
+      appendTransition({
+        name: change.sourceName || localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownContextAbility", "Контекстная способность"),
+        img: change.sourceImg || actor.img,
+        operation: change.type,
+        value: change.value
+      });
+    }
+  }
+
+  const effectiveValue = Math.max(0, Number(running) || 0);
+  if (Math.abs(effectiveValue - running) >= 0.000001) {
+    appendTransition({
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedValue", "Итоговый расчёт"),
+      img: actor.img,
+      operation: "override",
+      value: effectiveValue
+    });
+  }
+  return { value: effectiveValue, sources };
 }
 
 function collectActorEffectAttributionChanges(actor, path = "", {

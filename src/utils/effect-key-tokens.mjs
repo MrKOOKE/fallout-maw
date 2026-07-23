@@ -17,6 +17,7 @@ import {
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
+  CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   getAbilityOverloadCostEffectKey,
   DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
   DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
@@ -673,6 +674,13 @@ export function buildCombatEffectKeyTokens() {
       key: "effectiveRangeFarPenaltyPercent",
       label: game.i18n.localize("FALLOUTMAW.Effects.EffectiveRangeFarPenaltyPercent"),
       path: EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "conditionLossMultiplier",
+      key: "conditionLossMultiplier",
+      label: game.i18n.localize("FALLOUTMAW.Effects.ConditionLossMultiplier"),
+      path: CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
       group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({

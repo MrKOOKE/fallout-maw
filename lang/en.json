@@ -1816,6 +1816,7 @@
       "CombatDamageFlat": "Flat damage",
       "CombatDamagePercent": "Damage, %",
       "CombatBurstStability": "Burst-fire stability",
+      "ConditionLossMultiplier": "Condition loss multiplier",
       "AttackRangeBonus": "Maximum attack range change, m",
       "EffectiveRangeNearBonus": "Effective-range change (Near), m",
       "EffectiveRangeFarBonus": "Effective-range change (Far), m",

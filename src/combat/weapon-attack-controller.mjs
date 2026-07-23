@@ -62,6 +62,7 @@ import {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
+  CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
@@ -225,14 +226,16 @@ class WeaponActionModifierState {
     const normalizedType = String(type ?? "").trim();
     if (!normalizedType) return;
     const normalizedMultiplier = Math.max(0, Number(multiplier) || 0);
+    const currentMultiplier = Number(this.resourceCostMultipliers.get(normalizedType));
     this.resourceCostMultipliers.set(
       normalizedType,
-      (Number(this.resourceCostMultipliers.get(normalizedType)) || 1) * normalizedMultiplier
+      (Number.isFinite(currentMultiplier) ? currentMultiplier : 1) * normalizedMultiplier
     );
   }
 
   getResourceCostMultiplier(type = "") {
-    return Number(this.resourceCostMultipliers.get(String(type ?? "").trim())) || 1;
+    const multiplier = Number(this.resourceCostMultipliers.get(String(type ?? "").trim()));
+    return Number.isFinite(multiplier) ? multiplier : 1;
   }
 
   setOption(key = "", value = true) {
@@ -295,6 +298,24 @@ function createWeaponReactionCoordinator() {
 
 function collectWeaponActionModifierState(context = {}) {
   const state = new WeaponActionModifierState(context);
+  const hasConditionCost = (context?.weaponData?.resourceCosts ?? []).some(cost => (
+    String(cost?.type ?? "").trim() === "condition"
+    && Number(cost?.amount) > 0
+  ));
+  if (hasConditionCost) {
+    const actor = context?.actor ?? context?.actorToken?.actor ?? context?.token?.actor ?? null;
+    const preparedMultiplier = Number(actor?.system?.combat?.conditionLossMultiplier);
+    const conditionLossMultiplier = actor
+      ? getSourceContextualAbilityChangeValue(actor, CONDITION_LOSS_MULTIPLIER_EFFECT_KEY, {
+        ...context,
+        baseValue: Number.isFinite(preparedMultiplier) ? preparedMultiplier : 1
+      })
+      : 1;
+    state.multiplyResourceCost(
+      "condition",
+      Number.isFinite(Number(conditionLossMultiplier)) ? Math.max(0, Number(conditionLossMultiplier)) : 1
+    );
+  }
   Hooks.callAll(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, {
     ...context,
     modifierState: state,

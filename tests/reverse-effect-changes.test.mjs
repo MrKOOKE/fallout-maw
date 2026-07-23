@@ -72,6 +72,9 @@ const {
   buildEffectKeyTokens,
   buildReverseInteractionEffectKeyTokens
 } = await import("../src/utils/effect-key-tokens.mjs");
+const {
+  getWeaponActionActiveUseKeys
+} = await import("../src/abilities/active-use-keys.mjs");
 
 function createEffect(uuid, changes, { disabled = false, active = true } = {}) {
   return {
@@ -93,6 +96,28 @@ function createActor(effects = []) {
     }
   };
 }
+
+test("condition loss multiplier is registered and participates only when an attack spends condition", () => {
+  const key = "system.combat.conditionLossMultiplier";
+  const token = buildEffectKeyTokens().find(entry => entry.path === key);
+  assert.equal(token?.label, "Множитель потери прочности");
+  assert.equal(applyPreparedSourceContextualAbilityChanges(10, [
+    { type: "multiply", value: 3, priority: 10, order: 0 }
+  ]), 30);
+
+  const actionContext = {
+    actionKey: "aimedShot",
+    activeUseStages: { action: true, check: false, damage: false }
+  };
+  assert.equal(getWeaponActionActiveUseKeys({
+    ...actionContext,
+    weaponData: { resourceCosts: [{ type: "condition", amount: 10 }] }
+  }).has(key), true);
+  assert.equal(getWeaponActionActiveUseKeys({
+    ...actionContext,
+    weaponData: { resourceCosts: [] }
+  }).has(key), false);
+});
 
 test("all-skills bonus changes expand to the concrete prepared bonus paths", () => {
   const actor = {

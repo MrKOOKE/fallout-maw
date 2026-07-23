@@ -101,6 +101,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         effectiveRangeFarBonus: new NumberField({ required: true, initial: 0, persisted: false }),
         effectiveRangeNearPenaltyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         effectiveRangeFarPenaltyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        conditionLossMultiplier: new NumberField({ required: true, min: 0, initial: 1, persisted: false }),
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })

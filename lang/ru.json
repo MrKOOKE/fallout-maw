@@ -1876,6 +1876,7 @@
       "CombatDamageFlat": "Урон, плоский",
       "CombatDamagePercent": "Урон, %",
       "CombatBurstStability": "Стабильность стрельбы очередью",
+      "ConditionLossMultiplier": "Множитель потери прочности",
       "AttackRangeBonus": "Изменение максимальной дистанции атаки, м",
       "EffectiveRangeNearBonus": "Изменение эффективной дистанции (Ближней), м",
       "EffectiveRangeFarBonus": "Изменение эффективной дистанции (Дальней), м",

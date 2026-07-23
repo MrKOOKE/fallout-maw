@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "79570577a08f4419a99f29ee5304bffa0985b96a3ecb822d52b299caa5777381",
-  "updatedAt": "2026-07-22T20:14:20.826Z",
+  "revision": "3374084902d15d8f14c6cd89afb6c06140c5ea8e83b3ffbc04a7650ad1bec9e5",
+  "updatedAt": "2026-07-23T07:19:47.105Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -1001,11 +1001,11 @@
                         },
                         {
                           "id": "Up1WoJRwHBpxs31P",
-                          "key": "",
+                          "key": "system.combat.conditionLossMultiplier",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "0"
+                          "value": "1"
                         }
                       ],
                       "conditions": [],

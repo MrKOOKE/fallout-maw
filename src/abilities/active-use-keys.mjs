@@ -8,6 +8,7 @@ import {
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
+  CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
@@ -48,6 +49,7 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   ...WEAPON_CHECK_COMBAT_KEYS,
   ...WEAPON_DAMAGE_COMBAT_KEYS,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
+  CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
@@ -123,12 +125,20 @@ export function getWeaponActionActiveUseKeys(context = {}) {
   const includeAction = !staged || stages.action === true;
   const includeCheck = !staged || stages.check === true;
   const includeDamage = !staged || stages.damage === true;
+  const weaponData = getContextObject(context, "weaponData");
 
   const keys = new Set();
   if (includeAction) {
     keys.add("system.costs.action");
     keys.add(`system.costs.actions.${actionKey}`);
-    if (ATTACKING_WEAPON_ACTION_KEYS.has(actionKey)) keys.add(ATTACK_RANGE_BONUS_EFFECT_KEY);
+    if (ATTACKING_WEAPON_ACTION_KEYS.has(actionKey)) {
+      keys.add(ATTACK_RANGE_BONUS_EFFECT_KEY);
+      const hasConditionCost = (weaponData?.resourceCosts ?? []).some(cost => (
+        String(cost?.type ?? "").trim() === "condition"
+        && Number(cost?.amount) > 0
+      ));
+      if (hasConditionCost) keys.add(CONDITION_LOSS_MULTIPLIER_EFFECT_KEY);
+    }
     const actor = context?.actor ?? context?.actorToken?.actor ?? context?.token?.actor ?? null;
     const postureAction = String(context?.postureAction ?? getActorPostureAction(actor) ?? "").trim();
     if (postureAction) keys.add(`system.postures.${postureAction}.weaponActionCost`);
@@ -147,7 +157,6 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     keys.add("system.penetration.actions.all");
     for (const key of WEAPON_DAMAGE_COMBAT_KEYS) keys.add(key);
   }
-  const weaponData = getContextObject(context, "weaponData");
   const skillKey = String(weaponData?.skillKey ?? "").trim();
   const proficiencyKey = String(weaponData?.proficiencyKey ?? "").trim();
   if (includeCheck && skillKey) {
