@@ -59,7 +59,11 @@ import {
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
-import { buildCombatEffectKeyTokens, buildReverseInteractionEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import {
+  buildCombatEffectKeyTokens,
+  buildReverseInteractionEffectKeyTokens,
+  buildSkillCheckActionEffectKeyTokens
+} from "../utils/effect-key-tokens.mjs";
 import { buildEffectTooltipHTML } from "../canvas/token.mjs";
 import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
   import {
@@ -8736,6 +8740,9 @@ function buildEffectPathLabelMap({
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
   for (const token of buildCombatEffectKeyTokens()) {
+    if (token?.path && token?.label) map.set(token.path, token.label);
+  }
+  for (const token of buildSkillCheckActionEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }
   map.set("system.healing.incomingPercent", "Входящее лечение, %");

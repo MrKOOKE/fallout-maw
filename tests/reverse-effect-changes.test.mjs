@@ -61,7 +61,9 @@ const {
   prepareActorEffectChangeForApplication
 } = await import("../src/utils/active-effect-changes.mjs");
 const {
+  abilityConditionApplies,
   applyPreparedSourceContextualAbilityChanges,
+  getConditionalFunctionChanges,
   getContextualAbilityChangeValue,
   getPreparedSourceContextualAbilityChanges,
   getSourceContextualAbilityChangeValue,
@@ -73,8 +75,14 @@ const {
   buildReverseInteractionEffectKeyTokens
 } = await import("../src/utils/effect-key-tokens.mjs");
 const {
-  getWeaponActionActiveUseKeys
+  getSkillCheckActiveUseKeys,
+  getWeaponActionActiveUseKeys,
+  isActiveUseEffectKey
 } = await import("../src/abilities/active-use-keys.mjs");
+const {
+  getSkillCheckActionEffectKeys,
+  SKILL_CHECK_ACTIONS
+} = await import("../src/rolls/skill-check-action-effects.mjs");
 
 function createEffect(uuid, changes, { disabled = false, active = true } = {}) {
   return {
@@ -236,6 +244,50 @@ test("reverse autocomplete labels preserve the ordinary label and append only th
     "Помеха: Прицельный выстрел (в мою сторону)"
   );
   assert.equal(reverseTokens.some(token => token.label.includes(": стоимость")), false);
+});
+
+test("action-specific skill-check keys are registered, reversible, and active only for their requester", () => {
+  const ordinaryTokens = buildEffectKeyTokens()
+    .filter(token => token.path.startsWith("system.skillCheck.actions."));
+  const reverseTokens = buildReverseInteractionEffectKeyTokens()
+    .filter(token => token.path.startsWith("fallout-maw.reverse.system.skillCheck.actions."));
+
+  assert.equal(ordinaryTokens.length, SKILL_CHECK_ACTIONS.length * 3);
+  assert.equal(reverseTokens.length, SKILL_CHECK_ACTIONS.length * 3);
+
+  const researchKeys = new Set(getSkillCheckActionEffectKeys("research"));
+  const activeKeys = getSkillCheckActiveUseKeys("speech", { requester: "research" });
+  assert.equal(researchKeys.size, 3);
+  assert.equal(Array.from(researchKeys).every(key => activeKeys.has(key)), true);
+  assert.equal(getSkillCheckActionEffectKeys("repair").some(key => activeKeys.has(key)), false);
+  assert.equal(Array.from(researchKeys).every(key => isActiveUseEffectKey(key)), true);
+  assert.equal(Array.from(researchKeys).every(key => isActiveUseEffectKey(getReverseEffectKey(key))), true);
+});
+
+test("engaged-skill condition is contextual and matches the skill actually used by the check", () => {
+  const condition = {
+    id: "engaged-skill",
+    groupId: "",
+    type: "engagedSkill",
+    skillKeys: ["speech", "naturalist"]
+  };
+  assert.equal(abilityConditionApplies({}, condition, { skillKey: "speech" }), true);
+  assert.equal(abilityConditionApplies({}, condition, { skill: { key: "naturalist" } }), true);
+  assert.equal(abilityConditionApplies({}, condition, { skillKey: "repair" }), false);
+  assert.equal(abilityConditionApplies({}, condition, {}), false);
+
+  const changes = [{ key: "system.skills.all.bonus", type: "add", value: "20" }];
+  const penalties = [{ key: "system.skills.all.bonus", type: "add", value: "-20" }];
+  const abilityFunction = { id: "contextual", conditions: [condition], changes, penalties };
+  assert.deepEqual(getConditionalFunctionChanges({}, abilityFunction, {}), []);
+  assert.deepEqual(getConditionalFunctionChanges({}, abilityFunction, {
+    allowContextual: true,
+    skillKey: "speech"
+  }), changes);
+  assert.deepEqual(getConditionalFunctionChanges({}, abilityFunction, {
+    allowContextual: true,
+    skillKey: "repair"
+  }), penalties);
 });
 
 test("reverse keys round-trip without becoming ordinary actor overrides", () => {

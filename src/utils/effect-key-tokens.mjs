@@ -51,6 +51,10 @@ import {
   getSkillAdvancementMultiplierEffectKey,
   SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
 } from "../advancement/skill-multiplier-effects.mjs";
+import {
+  getSkillCheckActionEffectKey,
+  SKILL_CHECK_ACTIONS
+} from "../rolls/skill-check-action-effects.mjs";
 
 export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   const tokens = [
@@ -71,6 +75,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildSkillAdvantageEffectKeyTokens(),
     ...buildSkillDisadvantageEffectKeyTokens(),
     ...buildSkillCriticalChanceEffectKeyTokens(),
+    ...buildSkillCheckActionEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
@@ -335,6 +340,22 @@ export function buildSkillCriticalChanceEffectKeyTokens() {
       group
     })
   ]).filter(Boolean);
+}
+
+export function buildSkillCheckActionEffectKeyTokens() {
+  const group = "Проверки действий";
+  const fields = [
+    { field: "bonus", code: "bonus", label: "Изменение навыка" },
+    { field: "advantage", code: "adv", label: "Преимущество" },
+    { field: "disadvantage", code: "dis", label: "Помеха" }
+  ];
+  return SKILL_CHECK_ACTIONS.flatMap(action => fields.map(field => createEffectKeyToken({
+    code: `skillCheck:${action.id}:${field.code}`,
+    key: `${action.id}.${field.field}`,
+    label: `${field.label}: ${action.label}`,
+    path: getSkillCheckActionEffectKey(action.id, field.field),
+    group
+  }))).filter(Boolean);
 }
 
 export function buildResourceBonusEffectKeyTokens(group = game.i18n.localize("FALLOUTMAW.Common.Resources")) {
@@ -789,6 +810,7 @@ export function buildReverseInteractionEffectKeyTokens() {
     ...buildSkillAdvantageEffectKeyTokens(),
     ...buildSkillDisadvantageEffectKeyTokens(),
     ...buildSkillCriticalChanceEffectKeyTokens(),
+    ...buildSkillCheckActionEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),

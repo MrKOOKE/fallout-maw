@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "3374084902d15d8f14c6cd89afb6c06140c5ea8e83b3ffbc04a7650ad1bec9e5",
-  "updatedAt": "2026-07-23T07:19:47.105Z",
+  "revision": "20c477a635ef2171949c5cbaef659f47ddfd03856c306222805c569d629d73cb",
+  "updatedAt": "2026-07-23T08:50:18.612Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -1311,7 +1311,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Проверки обнаружения засад, ловушек и скрытых существ: +1 Преимущество</p><p>Проверки Красноречия и Науки: +1 Помеха</p><p></p>",
+                "description": "<ul><li><p>Проверки Скрытности против вас: +1 Помеха</p></li><li><p>Обнаружение ловушек: +1 Преимущество</p><p></p></li><li><p>Проверки Науки: +1 Помеха</p></li></ul>",
                 "id": "txsYIq9watSaxmDo",
                 "img": "icons/svg/upgrade.svg",
                 "name": "Параноик",
@@ -1326,7 +1326,49 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "TbNXD6PsRxLJeXVf",
+                          "key": "system.skillCheck.actions.trapDetection.advantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "QUVjLJrfzwhjRvHf",
+                          "key": "fallout-maw.reverse.system.skillCheck.actions.stealth.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        },
+                        {
+                          "id": "G0Y4LxWRectvHvxP",
+                          "key": "system.skills.science.disadvantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "nA9rvGvFaSlR6yra",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -1597,7 +1639,7 @@
                         },
                         {
                           "id": "JfzzDoBIcl9ErSIJ",
-                          "key": "",
+                          "key": "Критиче",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",

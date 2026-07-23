@@ -2143,9 +2143,9 @@
                 </div>
               </div>
               {{/if}}
-              {{#if isWeaponSkill}}
+              {{#if isSkillCondition}}
               <div class="fallout-maw-item-use-category-field">
-                <div class="fallout-maw-item-use-category-header"><span>Задействованные оружием навыки</span><button type="button" data-add-ability-weapon-skill {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-header"><span>{{skillConditionLabel}}</span><button type="button" data-add-ability-weapon-skill {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
                 <div class="fallout-maw-item-use-category-list">
                   {{#each skillRows}}
                   <div class="fallout-maw-item-use-category-row" data-skill-index="{{index}}">
@@ -3083,9 +3083,9 @@
                 </div>
               </div>
               {{/if}}
-              {{#if isWeaponSkill}}
+              {{#if isSkillCondition}}
               <div class="fallout-maw-item-use-category-field">
-                <div class="fallout-maw-item-use-category-header"><span>Задействованные оружием навыки</span><button type="button" data-add-ability-weapon-skill {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-header"><span>{{skillConditionLabel}}</span><button type="button" data-add-ability-weapon-skill {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
                 <div class="fallout-maw-item-use-category-list">
                   {{#each skillRows}}
                   <div class="fallout-maw-item-use-category-row" data-skill-index="{{index}}">

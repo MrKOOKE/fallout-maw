@@ -21,6 +21,10 @@ import {
 } from "../utils/active-effect-keys.mjs";
 import { getActorPostureAction } from "../canvas/posture-state.mjs";
 import { getEffectiveRangeDistanceState } from "../utils/attack-distance.mjs";
+import {
+  getSkillCheckActionEffectKeys,
+  isSkillCheckActionEffectKey
+} from "../rolls/skill-check-action-effects.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -98,6 +102,7 @@ export function getSkillCheckActiveUseKeys(skillKey = "", context = {}) {
   for (const suffix of SKILL_CHANGE_SUFFIXES) keys.add(`system.skills.${key}.${suffix}`);
 
   const requester = getContextText(context, "requester");
+  for (const actionEffectKey of getSkillCheckActionEffectKeys(requester)) keys.add(actionEffectKey);
   if (requester === "weaponAttack") {
     for (const smartFudgeKey of SMART_FUDGE_RESULT_KEYS) keys.add(smartFudgeKey);
   }
@@ -229,6 +234,7 @@ export function isActiveUseEffectKey(key = "") {
   const sourcePath = getOriginalEffectKeyFromReverse(path) || path;
   return STATIC_ACTIVE_USE_KEYS.has(sourcePath)
     || SKILL_CHANGE_KEY_PATTERN.test(sourcePath)
+    || isSkillCheckActionEffectKey(sourcePath)
     || PROFICIENCY_BONUS_KEY_PATTERN.test(sourcePath)
     || ACTION_COST_KEY_PATTERN.test(sourcePath)
     || ACTION_PENETRATION_KEY_PATTERN.test(sourcePath)

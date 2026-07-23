@@ -9,6 +9,7 @@ import { hasLimitedEffectCopyCapacity } from "../abilities/limited-effect-copies
 import { hasEventReactionEffectInstance } from "./reaction-effects.mjs";
 import {
   eventReactionSubscriptionMatches,
+  getEventEnvelopeSkillKey,
   getEventParticipantActorUuid,
   getEventParticipantTokenUuid,
   getEventReactionSecondaryConditions,
@@ -259,6 +260,7 @@ export function evaluateEventReactionFilter({
     actorToken: subjectToken,
     targetActor: subjectActor,
     targetToken: subjectToken,
+    skillKey: getEventEnvelopeSkillKey(envelope),
     weaponActionKey: String(eventData.weaponActionKey ?? eventData.actionKey ?? requestData.weaponActionKey ?? "").trim(),
     weaponData: eventData.weaponData ?? eventData.weapon ?? requestData.weaponData ?? {},
     attackDistanceMeters: eventData.attackDistanceMeters ?? requestData.attackDistanceMeters ?? null,

@@ -33,6 +33,7 @@ export const EVENT_REACTION_FILTER_TYPES = Object.freeze([
   ABILITY_CONDITION_TYPES.attackDistance,
   ABILITY_CONDITION_TYPES.weaponAction,
   ABILITY_CONDITION_TYPES.weaponSkill,
+  ABILITY_CONDITION_TYPES.engagedSkill,
   ABILITY_CONDITION_TYPES.weaponProficiency
 ]);
 

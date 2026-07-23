@@ -215,6 +215,7 @@ async function captureLimitedUsesBeforeSkillCheck(event = {}) {
     actorToken,
     targetToken,
     targetActor,
+    skillKey,
     weaponData: request.weaponData,
     attackDistanceMeters: request.attackDistanceMeters,
     effectiveRange: request.effectiveRange,
@@ -389,6 +390,7 @@ export async function consumeLimitedUsesForSkillEvent({ event } = {}) {
     actorToken,
     targetToken,
     targetActor,
+    skillKey,
     attackDistanceMeters: data?.attackDistanceMeters,
     effectiveRange: data?.effectiveRange,
     requester: data?.requester,
@@ -1349,6 +1351,13 @@ function buildConditionContext(context = {}) {
       : check?.weaponData && typeof check.weaponData === "object" ? check.weaponData : null,
     attackDistanceMeters: context?.attackDistanceMeters ?? check?.attackDistanceMeters ?? null,
     effectiveRange: context?.effectiveRange ?? check?.effectiveRange ?? null,
+    skillKey: String(
+      context?.skillKey
+      ?? context?.skill?.key
+      ?? check?.skillKey
+      ?? check?.skill?.key
+      ?? ""
+    ).trim(),
     weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim(),
     requester: String(context?.requester ?? check?.requester ?? "").trim(),
     chanceOperationId: getActiveUseOperationId(context)

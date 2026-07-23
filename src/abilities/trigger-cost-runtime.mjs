@@ -264,36 +264,37 @@ export function collectSkillCheckTriggerCostEntries({
 } = {}) {
   const key = String(skillKey ?? "").trim();
   if (!actor || !key) return [];
-  const weaponActionKey = String(context?.weaponActionKey ?? context?.actionKey ?? "").trim();
-  const acceptedChangeKeys = isWeaponContextSkillCheckRequester(context?.requester)
+  const conditionContext = { ...context, skillKey: key };
+  const weaponActionKey = String(conditionContext?.weaponActionKey ?? conditionContext?.actionKey ?? "").trim();
+  const acceptedChangeKeys = isWeaponContextSkillCheckRequester(conditionContext?.requester)
     ? getWeaponActionActiveUseKeys({
-      ...context,
+      ...conditionContext,
       actor,
       actionKey: weaponActionKey,
-      weaponData: context?.weaponData,
+      weaponData: conditionContext?.weaponData,
       activeUseStages: { check: true }
     })
-    : getSkillCheckActiveUseKeys(key, context);
+    : getSkillCheckActiveUseKeys(key, conditionContext);
   const entries = [];
   const seenFunctions = new Set();
 
   collectActorSkillTriggerCostEntries({
     actor,
     acceptedChangeKeys,
-    context,
+    context: conditionContext,
     entries,
     seenFunctions,
     reverseOnly: false
   });
-  const targetActor = context?.targetToken?.actor
-    ?? context?.targetToken?.document?.actor
-    ?? context?.targetActor
+  const targetActor = conditionContext?.targetToken?.actor
+    ?? conditionContext?.targetToken?.document?.actor
+    ?? conditionContext?.targetActor
     ?? null;
   if (targetActor && !isSameInteractionActor(actor, targetActor)) {
     collectActorSkillTriggerCostEntries({
       actor: targetActor,
       acceptedChangeKeys,
-      context: reverseInteractionContext(context, actor),
+      context: reverseInteractionContext(conditionContext, actor),
       entries,
       seenFunctions,
       reverseOnly: true
@@ -363,6 +364,7 @@ async function interceptSkillCheckTriggerCost({ event = null, control = null, sc
         effectiveRange: request?.effectiveRange && typeof request.effectiveRange === "object"
           ? request.effectiveRange
           : null,
+        skillKey,
         requester: String(request?.requester ?? "").trim(),
         weaponActionKey: String(request?.weaponActionKey ?? "").trim(),
         chanceOperationId: String(request?.chanceOperationId ?? "").trim(),

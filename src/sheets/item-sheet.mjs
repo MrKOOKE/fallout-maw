@@ -6941,6 +6941,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isAttackDistance = type === ABILITY_CONDITION_TYPES.attackDistance;
   const isWeaponAction = type === ABILITY_CONDITION_TYPES.weaponAction;
   const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
+  const isEngagedSkill = type === ABILITY_CONDITION_TYPES.engagedSkill;
+  const isSkillCondition = isWeaponSkill || isEngagedSkill;
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
   const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
@@ -6991,7 +6993,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isTriggerCost,
@@ -7056,6 +7058,9 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     showAttackDistanceFree: isAttackDistance && attackDistanceMode === ABILITY_ATTACK_DISTANCE_MODES.free,
     isWeaponAction,
     isWeaponSkill,
+    isEngagedSkill,
+    isSkillCondition,
+    skillConditionLabel: isEngagedSkill ? "Задействованные навыки" : "Задействованные оружием навыки",
     isWeaponProficiency,
     isAura,
     isLimitedChanges,
@@ -7228,6 +7233,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.attackDistance, label: "Дистанция атаки", selected: selected === ABILITY_CONDITION_TYPES.attackDistance },
     { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
     { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
+    { value: ABILITY_CONDITION_TYPES.engagedSkill, label: "Задействованный навык", selected: selected === ABILITY_CONDITION_TYPES.engagedSkill },
     { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
     { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
@@ -7679,6 +7685,7 @@ function isAbilityRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.attackDistance,
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
+    ABILITY_CONDITION_TYPES.engagedSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,
     ABILITY_CONDITION_TYPES.aura,
     ABILITY_CONDITION_TYPES.cooldown,

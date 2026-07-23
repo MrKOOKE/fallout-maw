@@ -133,6 +133,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   attackDistance: "attackDistance",
   weaponAction: "weaponAction",
   weaponSkill: "weaponSkill",
+  engagedSkill: "engagedSkill",
   weaponProficiency: "weaponProficiency",
   aura: "aura",
   limitedChanges: "limitedChanges",
@@ -1187,6 +1188,16 @@ function normalizeAbilityCondition(value = {}) {
   }
 
   if (type === ABILITY_CONDITION_TYPES.weaponSkill) {
+    return {
+      id,
+      groupId,
+      type,
+      eventSubject,
+      skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.engagedSkill) {
     return {
       id,
       groupId,

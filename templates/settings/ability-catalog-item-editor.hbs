@@ -2046,10 +2046,10 @@
               </div>
               {{/if}}
 
-              {{#if isWeaponSkill}}
+              {{#if isSkillCondition}}
               <div class="fallout-maw-item-use-category-field">
                 <div class="fallout-maw-item-use-category-header">
-                  <span>Задействованные оружием навыки</span>
+                  <span>{{skillConditionLabel}}</span>
                   <button type="button" data-action="addConditionWeaponSkill" {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
                 </div>
                 <div class="fallout-maw-item-use-category-list">

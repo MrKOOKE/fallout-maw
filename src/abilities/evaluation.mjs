@@ -270,6 +270,12 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     return Boolean(accepted.size && weaponSkillKey && accepted.has(weaponSkillKey));
   }
 
+  if (condition.type === ABILITY_CONDITION_TYPES.engagedSkill) {
+    const accepted = new Set(condition?.skillKeys ?? []);
+    const skillKey = getContextSkillKey(context);
+    return Boolean(accepted.size && skillKey && accepted.has(skillKey));
+  }
+
   if (condition.type === ABILITY_CONDITION_TYPES.weaponProficiency) {
     const accepted = new Set(condition?.proficiencyKeys ?? []);
     const weaponProficiencyKey = String(context?.weaponData?.proficiencyKey ?? "").trim();
@@ -396,6 +402,7 @@ function isWeaponContextCondition(condition = {}) {
     ABILITY_CONDITION_TYPES.attackDistance,
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
+    ABILITY_CONDITION_TYPES.engagedSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency
   ].includes(condition?.type);
 }
@@ -418,10 +425,23 @@ function isWeaponContextConditionResolved(actor, condition = {}, context = {}) {
   if (condition?.type === ABILITY_CONDITION_TYPES.weaponSkill) {
     return Boolean(context?.weaponData && Object.hasOwn(context.weaponData, "skillKey"));
   }
+  if (condition?.type === ABILITY_CONDITION_TYPES.engagedSkill) {
+    return Boolean(getContextSkillKey(context));
+  }
   if (condition?.type === ABILITY_CONDITION_TYPES.weaponProficiency) {
     return Boolean(context?.weaponData && Object.hasOwn(context.weaponData, "proficiencyKey"));
   }
   return true;
+}
+
+function getContextSkillKey(context = {}) {
+  return String(
+    context?.skillKey
+    ?? context?.skill?.key
+    ?? context?.check?.skill?.key
+    ?? context?.weaponData?.skillKey
+    ?? ""
+  ).trim();
 }
 
 function hasUnresolvedWeaponContextBranch(actor, conditions = [], context = {}) {

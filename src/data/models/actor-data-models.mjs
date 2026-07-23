@@ -56,6 +56,7 @@ import {
   getConstructPartTypeLabel,
   getInstalledConstructPartForSlot
 } from "../../utils/construct-parts.mjs";
+import { SKILL_CHECK_ACTIONS } from "../../rolls/skill-check-action-effects.mjs";
 
 const REACTION_RESOURCE_KEY = "reactionPoints";
 import { toInteger } from "../../utils/numbers.mjs";
@@ -83,6 +84,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       skillCheck: new SchemaField({
+        actions: new SchemaField(Object.fromEntries(SKILL_CHECK_ACTIONS.map(action => [
+          action.id,
+          skillCheckActionEffectField()
+        ]))),
         disabledResults: new SchemaField({
           criticalFailure: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
           failure: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
@@ -205,6 +210,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.limbSilhouette ??= null;
     this.currencies ??= {};
     this.skillCheck ??= {};
+    this.skillCheck.actions ??= {};
     this.skillCheck.disabledResults ??= {};
     this.combat ??= {};
     this.healing ??= {};
@@ -348,6 +354,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.damageDefenses, mergeLimbDamageMaps(baseDamageDefenses, itemMitigation.defenses, damageDefenseBonuses));
     replaceObjectContents(this.damageResistances, mergeLimbDamageMaps(baseDamageResistances, itemMitigation.resistances, damageResistanceBonuses));
   }
+}
+
+function skillCheckActionEffectField() {
+  return new SchemaField({
+    bonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    advantage: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    disadvantage: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+  });
 }
 
 export class CharacterDataModel extends BaseActorDataModel {}

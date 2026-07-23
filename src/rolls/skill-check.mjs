@@ -26,6 +26,11 @@ import { getActiveSystemEventOperationId, withSystemEventRoot } from "../events/
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import { notifyAbilityTriggerCostFailure } from "../abilities/trigger-cost-runtime.mjs";
 import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
+import {
+  getSkillCheckActionEffectKey,
+  getSkillCheckActionId,
+  SKILL_CHECK_ACTION_EFFECT_FIELDS
+} from "./skill-check-action-effects.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -1445,11 +1450,18 @@ function normalizeSkillCheckDisabledResults(value = {}) {
 }
 
 function createMutableCheck(actor, skill, data) {
-  const context = resolveSkillCheckContext(actor, data);
-  const requester = String(data.requester ?? "");
+  const requester = String(data.requester ?? "").trim();
+  const skillKey = String(skill?.key ?? "").trim();
+  const context = {
+    ...resolveSkillCheckContext(actor, data),
+    requester,
+    skillKey
+  };
   const weaponActionKey = String(data.weaponActionKey ?? context.weaponActionKey ?? "").trim();
   const isAttackingCheck = ["weaponAttack", "weaponPush", "activePush"].includes(requester)
     && isAttackingWeaponAction(weaponActionKey);
+  const skillCheckActionId = getSkillCheckActionId(requester);
+  const preparedSkillCheckAction = actor?.system?.skillCheck?.actions?.[skillCheckActionId] ?? {};
   const smartFudgeBaseValues = getActorSmartFudgeResultValues(actor, { requester, check: data });
   const contextual = getContextualAbilityChangeValues(actor, [
     {
@@ -1482,6 +1494,11 @@ function createMutableCheck(actor, skill, data) {
       baseValue: toInteger(actor?.system?.skills?.[skill.key]?.criticalFailureChance),
       alternateKeys: [ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY]
     },
+    ...(skillCheckActionId ? SKILL_CHECK_ACTION_EFFECT_FIELDS.map(field => ({
+      id: `skillCheckAction:${field}`,
+      key: getSkillCheckActionEffectKey(skillCheckActionId, field),
+      baseValue: Number(preparedSkillCheckAction?.[field]) || 0
+    })) : []),
     ...buildSkillCheckDisabledResultContextSpecs(actor),
     ...(requester === "weaponAttack" ? SMART_FUDGE_RESULT_ORDER.map(result => ({
       id: `smartFudge:${result}`,
@@ -1508,7 +1525,10 @@ function createMutableCheck(actor, skill, data) {
     : "";
   return {
     actor,
-    skill: { ...skill, value: toInteger(contextual.skillValue) },
+    skill: {
+      ...skill,
+      value: toInteger(contextual.skillValue) + toInteger(contextual["skillCheckAction:bonus"])
+    },
     difficulty: toInteger(data.difficulty ?? DEFAULT_CHECK.difficulty),
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus)
@@ -1517,9 +1537,11 @@ function createMutableCheck(actor, skill, data) {
       + toInteger(contextual.skillCriticalFailureChance),
     advantageCount: Math.max(0, toInteger(data.advantageCount))
       + Math.max(0, toInteger(contextual.skillAdvantage))
+      + Math.max(0, toInteger(contextual["skillCheckAction:advantage"]))
       + Math.max(0, toInteger(contextual.combatAdvantage)),
     disadvantageCount: Math.max(0, toInteger(data.disadvantageCount))
       + Math.max(0, toInteger(contextual.skillDisadvantage))
+      + Math.max(0, toInteger(contextual["skillCheckAction:disadvantage"]))
       + Math.max(0, toInteger(contextual.combatDisadvantage)),
     disabledResults,
     forcedResult: "",
