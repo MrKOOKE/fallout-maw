@@ -63,6 +63,7 @@ import {
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
+  CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
@@ -2456,6 +2457,7 @@ class WeaponAttackController {
     this.lastTargetMarkerRenderState = null;
     this.attackCanceledByReaction = false;
     this.attackCommitted = false;
+    this.criticalDamageUsed = false;
     this.lastResolvedAttackOutcome = null;
     this.attackCheckCount = 0;
     this.attackCheckEventSequence = 0;
@@ -2514,6 +2516,14 @@ class WeaponAttackController {
         : 0
     );
     const outcome = {
+      actor: this.token?.actor ?? null,
+      actorToken: this.token,
+      targetActor: this.selectedTarget?.actor ?? null,
+      targetToken: this.selectedTarget ?? null,
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
+      weaponActionKey: this.actionKey,
+      requester: "weaponAttack",
+      ...this.createWeaponAttackDistanceContext(this.selectedTarget),
       attackerUuid: this.token?.actor?.uuid ?? "",
       actorUuid: this.token?.actor?.uuid ?? "",
       tokenUuid: this.token?.document?.uuid ?? "",
@@ -2529,6 +2539,7 @@ class WeaponAttackController {
       targetTokenUuids: Array.from(this.attackedTargetTokenUuids),
       killedTargetUuids: Array.from(new Set((killedTargetUuids ?? []).map(uuid => String(uuid ?? "").trim()).filter(Boolean))),
       canceledByReaction: Boolean(this.attackCanceledByReaction),
+      criticalDamageUsed: this.criticalDamageUsed,
       attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
       damageResults: Array.isArray(damageResults) ? damageResults : [],
       modifierState: this.getWeaponActionModifierState(),
@@ -2682,7 +2693,7 @@ class WeaponAttackController {
   stampAttackDamageSources(requests = []) {
     const attackId = String(this.attackId ?? "").trim();
     const weaponDataSnapshot = foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {});
-    return (Array.isArray(requests) ? requests : [requests]).filter(Boolean).map(request => ({
+    const sourceRequests = (Array.isArray(requests) ? requests : [requests]).filter(Boolean).map(request => ({
       ...request,
       source: {
         ...(request?.source ?? {}),
@@ -2698,6 +2709,8 @@ class WeaponAttackController {
         weaponData: foundry.utils.deepClone(request?.source?.weaponData ?? weaponDataSnapshot)
       }
     }));
+    this.criticalDamageUsed ||= sourceRequests.some(request => request?.source?.criticalSuccess === true);
+    return sourceRequests;
   }
 
   createWeaponActionModifierContext(extra = {}) {
@@ -4343,12 +4356,13 @@ class WeaponAttackController {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
+    const damageContext = this.createWeaponDamageContext({
       targetToken: target,
       limbKey: resolvedLimbKey,
       damageShareCount: 1
-    }));
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -4365,6 +4379,7 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
+        criticalSuccess: isCriticalSuccessAttack(outcome),
         penetrationStep
       }
     }, this.weaponFunctionId);
@@ -4656,7 +4671,7 @@ class WeaponAttackController {
     });
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
     damageAmount = applyRicochetDamageBonus(this.weapon, damageAmount, damageContext);
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -4673,6 +4688,7 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
+        criticalSuccess: isCriticalSuccessAttack(outcome),
         penetrationStep,
         reflectionCount: Math.max(0, toInteger(reflectionCount))
       }
@@ -4946,7 +4962,8 @@ class WeaponAttackController {
           damageScale: falloff
         }),
         blastOutcome.outcome,
-        this.weaponFunctionId
+        this.weaponFunctionId,
+        targetDamageContext
       ),
       source: {
         attackId: this.attackId,
@@ -4956,6 +4973,7 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
+        criticalSuccess: isCriticalSuccessAttack(blastOutcome?.outcome),
         ...distanceContext,
         blastCenter: serializePoint(geometry.end),
         blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId)
@@ -5016,13 +5034,14 @@ class WeaponAttackController {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
+    const damageContext = this.createWeaponDamageContext({
       targetToken: target,
       limbKey,
       damageShareIndex,
       damageShareCount
-    }));
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -5037,6 +5056,7 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
+        criticalSuccess: isCriticalSuccessAttack(outcome),
         penetrationStep
       }
     }, this.weaponFunctionId);
@@ -5098,12 +5118,13 @@ class WeaponAttackController {
       return null;
     }
 
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
+    const damageContext = this.createWeaponDamageContext({
       targetToken: target,
       damageShareIndex,
       damageShareCount
-    }));
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
     await this.notifyAttackCheckResolved(outcome, checkBatch);
     const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -5119,6 +5140,7 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
+        criticalSuccess: isCriticalSuccessAttack(outcome),
         targetItemId: targetWeapon.id,
         penetrationStep
       }
@@ -5148,6 +5170,7 @@ class WeaponAttackController {
           actionKey: this.actionKey,
           attackerUuid: this.token.actor.uuid,
           tokenId: this.token.id,
+          criticalSuccess: isCriticalSuccessAttack(outcome),
           aimedThroughItemId: targetWeapon.id,
           penetrationStep: limbPenetrationStep
         }
@@ -6587,6 +6610,23 @@ function getDelayedVolleyCombatValueDelta(attackerActor, key = "", context = {},
     - getContextualCombatValue(attackerActor, key, baselineContext);
 }
 
+function createDelayedVolleyTargetDamageContext({
+  explosion = {},
+  source = {},
+  attackerToken = null,
+  targetToken = null
+} = {}) {
+  return {
+    ...normalizeAttackDistanceContext(explosion),
+    actorToken: attackerToken,
+    targetActor: targetToken?.actor ?? null,
+    targetToken,
+    weaponActionKey: String(source.actionKey ?? ""),
+    weaponData: source.weaponData ?? null,
+    weaponFunctionId: String(source.weaponFunctionId ?? "")
+  };
+}
+
 function applyDelayedVolleyContextualDamageToAmount(amount, {
   explosion = {},
   source = {},
@@ -6596,15 +6636,12 @@ function applyDelayedVolleyContextualDamageToAmount(amount, {
   targetToken = null,
   damageScale = 1
 } = {}) {
-  const context = {
-    ...normalizeAttackDistanceContext(explosion),
-    actorToken: attackerToken,
-    targetActor: targetToken?.actor ?? null,
-    targetToken,
-    weaponActionKey: String(source.actionKey ?? ""),
-    weaponData: source.weaponData ?? null,
-    weaponFunctionId: String(source.weaponFunctionId ?? "")
-  };
+  const context = createDelayedVolleyTargetDamageContext({
+    explosion,
+    source,
+    attackerToken,
+    targetToken
+  });
   const flatDelta = getDelayedVolleyCombatValueDelta(
     attackerActor,
     "damageFlat",
@@ -6626,6 +6663,51 @@ function applyDelayedVolleyContextualDamageToAmount(amount, {
     + (flatDelta * scale)
     + (percentBaseAmount * scale * percentDelta / 100);
   return Math.max(0, Math.round(adjusted));
+}
+
+function getDelayedVolleyTargetCriticalDamageSnapshot({
+  explosion = {},
+  source = {},
+  attackerActor = null,
+  attackerToken = null,
+  targetToken = null
+} = {}) {
+  const storedCriticalSnapshot = explosion.criticalDamageSnapshot;
+  if (!storedCriticalSnapshot || typeof storedCriticalSnapshot !== "object") return null;
+  if (storedCriticalSnapshot.criticalSuccess !== true) return storedCriticalSnapshot;
+
+  const contextSnapshot = explosion.criticalDamageContextSnapshot;
+  const storedSourceValue = Number(contextSnapshot?.sourceValue);
+  if (!Number.isFinite(storedSourceValue)) return storedCriticalSnapshot;
+  const context = createDelayedVolleyTargetDamageContext({
+    explosion,
+    source,
+    attackerToken,
+    targetToken
+  });
+  const mergedSourceValue = getDelayedVolleyMergedSourceContextValue(
+    attackerActor,
+    CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
+    context,
+    contextSnapshot
+  );
+  if (!Number.isFinite(mergedSourceValue)) return storedCriticalSnapshot;
+  const targetAdjustedValue = getTargetReverseAbilityChangeValue(
+    attackerActor,
+    CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
+    {
+      ...context,
+      baseValue: mergedSourceValue
+    }
+  );
+  const targetDelta = (Number(targetAdjustedValue) || 0) - storedSourceValue;
+  return {
+    ...storedCriticalSnapshot,
+    criticalDamagePercent: Math.max(
+      0,
+      (Number(storedCriticalSnapshot.criticalDamagePercent) || 0) + targetDelta
+    )
+  };
 }
 
 async function processDelayedVolleyExplosions(worldTime = 0) {
@@ -6711,6 +6793,15 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
         const hasCriticalDamageSnapshot = Number.isFinite(Number(explosion.damageBaseAmount))
           && explosion.criticalDamageSnapshot
           && typeof explosion.criticalDamageSnapshot === "object";
+        const targetCriticalDamageSnapshot = hasCriticalDamageSnapshot
+          ? getDelayedVolleyTargetCriticalDamageSnapshot({
+            explosion,
+            source,
+            attackerActor: contextualAttackerActor,
+            attackerToken: contextualAttackerToken,
+            targetToken: target
+          })
+          : null;
         damageRequests.push(...buildWeaponExplosionDamageRequests({
           targetToken: target,
           center,
@@ -6736,7 +6827,7 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
               damageScale: falloff
             });
             return hasCriticalDamageSnapshot
-              ? applyCriticalDamageSnapshot(adjustedAmount, explosion.criticalDamageSnapshot)
+              ? applyCriticalDamageSnapshot(adjustedAmount, targetCriticalDamageSnapshot)
               : adjustedAmount;
           },
           source: {
@@ -6748,6 +6839,7 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
             attackerUuid: source.attackerUuid,
             attackerTokenUuid: source.attackerTokenUuid,
             tokenId: source.attackerTokenId,
+            criticalSuccess: targetCriticalDamageSnapshot?.criticalSuccess === true,
             ...normalizeAttackDistanceContext(explosion),
             worldTime
           }
@@ -6773,6 +6865,11 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
     await dodgeExposure.flush();
     const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
     await publishWeaponAttackResolved({
+      actor: contextualAttackerActor,
+      actorToken: contextualAttackerToken,
+      weaponData: source.weaponData ?? null,
+      weaponActionKey: String(source.actionKey ?? ""),
+      requester: "weaponAttack",
       attackerUuid: String(source.attackerUuid ?? ""),
       actorUuid: String(source.attackerUuid ?? ""),
       tokenUuid: String(source.attackerTokenUuid ?? ""),
@@ -6785,6 +6882,7 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
       targetTokenUuids: Array.from(targetTokenUuids).filter(Boolean),
       killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults),
       canceledByReaction: false,
+      criticalDamageUsed: damageRequests.some(request => request?.source?.criticalSuccess === true),
       attackCheckCount: explosions.length,
       chainRef: source.chainRef ?? null,
       damageHubOperationRef: String(source.damageHubOperationRef ?? ""),
@@ -8815,6 +8913,11 @@ function buildDelayedVolleyExplosionRegionRequest({
         snapshotContext
       )
     };
+    const criticalDamageContextSnapshot = createDelayedVolleyCombatValueSnapshot(
+      attackerActor,
+      "criticalDamagePercent",
+      snapshotContext
+    );
     const penetrationContextSnapshot = createDelayedVolleySourceContextSnapshot(
       attackerActor,
       `${ACTION_PENETRATION_KEY_PREFIX}${String(actionKey ?? "").trim()}`,
@@ -8827,7 +8930,12 @@ function buildDelayedVolleyExplosionRegionRequest({
       }
     );
     const penetrationPower = Math.max(0, Math.trunc(Number(penetrationContextSnapshot.sourceValue) || 0));
-    const criticalDamageSnapshot = getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId);
+    const criticalDamageSnapshot = getCriticalDamageSnapshot(
+      weapon,
+      outcome,
+      weaponFunctionId,
+      snapshotContext
+    );
     return {
       center: serializePoint(geometry.end),
       ...explosionDistanceContext,
@@ -8835,6 +8943,7 @@ function buildDelayedVolleyExplosionRegionRequest({
       damageAmount: applyCriticalDamageSnapshot(normalizedBaseDamage, criticalDamageSnapshot),
       damageBaseAmount: normalizedBaseDamage,
       criticalDamageSnapshot,
+      criticalDamageContextSnapshot,
       damageContextSnapshot,
       damagePercentBaseAmount: getWeaponDamagePercentBase(weapon, weaponFunctionId),
       pelletCount: getWeaponPelletCount(weapon, weaponFunctionId),
@@ -9347,19 +9456,28 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "", context 
   };
 }
 
-function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "") {
-  return applyCriticalDamageSnapshot(amount, getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId));
+function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "", explicitContext = {}) {
+  return applyCriticalDamageSnapshot(amount,
+    getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId, explicitContext));
 }
 
-function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "") {
-  const stealth = getStealthAttackModifiers(getWeaponOwnerActor(weapon));
+function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "", explicitContext = {}) {
+  const actor = getWeaponOwnerActor(weapon);
+  const stealth = getStealthAttackModifiers(actor);
   const criticalSuccess = isCriticalSuccessAttack(outcome);
+  const context = {
+    ...(outcome && typeof outcome === "object" ? outcome : {}),
+    ...(outcome?.check && typeof outcome.check === "object" ? outcome.check : {}),
+    ...(explicitContext && typeof explicitContext === "object" ? explicitContext : {})
+  };
   const criticalDamagePercent = criticalSuccess
     ? Math.max(0, evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent, {
       fallback: 150,
       minimum: 0,
       context: "critical damage percent"
-    }) + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage"))
+    })
+      + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage")
+      + getContextualCombatValue(actor, "criticalDamagePercent", context))
     : 100;
   return {
     stealthDamageBonusPercent: Math.max(0, toInteger(stealth.damageBonusPercent)),

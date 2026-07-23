@@ -1813,6 +1813,7 @@
       "CombatPenetration": "Penetration power",
       "CombatAccuracy": "Accuracy",
       "CombatCriticalChance": "Critical chance",
+      "CombatCriticalDamagePercent": "Critical damage change, %",
       "CombatDamageFlat": "Flat damage",
       "CombatDamagePercent": "Damage, %",
       "CombatBurstStability": "Burst-fire stability",

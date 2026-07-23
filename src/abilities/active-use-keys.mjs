@@ -9,6 +9,7 @@ import {
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
+  CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
@@ -52,6 +53,7 @@ const SMART_FUDGE_RESULT_KEYS = Object.freeze(Object.values(SMART_FUDGE_RESULT_E
 const STATIC_ACTIVE_USE_KEYS = new Set([
   ...WEAPON_CHECK_COMBAT_KEYS,
   ...WEAPON_DAMAGE_COMBAT_KEYS,
+  CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
@@ -161,6 +163,7 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     keys.add(`system.penetration.actions.${actionKey}`);
     keys.add("system.penetration.actions.all");
     for (const key of WEAPON_DAMAGE_COMBAT_KEYS) keys.add(key);
+    if (isCriticalSuccessContext(context)) keys.add(CRITICAL_DAMAGE_PERCENT_EFFECT_KEY);
   }
   const skillKey = String(weaponData?.skillKey ?? "").trim();
   const proficiencyKey = String(weaponData?.proficiencyKey ?? "").trim();
@@ -180,6 +183,17 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     keys.add(`system.combat.actions.${actionKey}.disadvantage`);
   }
   return keys;
+}
+
+function isCriticalSuccessContext(context = {}) {
+  if (context?.criticalSuccess === true || context?.criticalDamageUsed === true) return true;
+  const resultKey = [
+    context?.resultKey,
+    context?.result?.key,
+    context?.outcome?.result?.key,
+    context?.check?.result?.key
+  ].map(value => String(value ?? "").trim()).find(Boolean);
+  return resultKey === "criticalSuccess";
 }
 
 /** Effect keys read while resolving one incoming damage application. */

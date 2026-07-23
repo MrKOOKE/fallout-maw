@@ -339,6 +339,7 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
       effectiveRange: sourceData.effectiveRange,
       weaponActionKey: actionKey,
       requester: "weaponAttack",
+      criticalSuccess: sourceData.criticalSuccess === true,
       chanceOperationId
     });
     const damageKeys = getWeaponActionActiveUseKeys({
@@ -1360,6 +1361,8 @@ function buildConditionContext(context = {}) {
     ).trim(),
     weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim(),
     requester: String(context?.requester ?? check?.requester ?? "").trim(),
+    criticalSuccess: context?.criticalSuccess === true
+      || String(context?.resultKey ?? context?.result?.key ?? check?.result?.key ?? "").trim() === "criticalSuccess",
     chanceOperationId: getActiveUseOperationId(context)
   };
 }

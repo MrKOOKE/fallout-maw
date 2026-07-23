@@ -18,6 +18,7 @@ import {
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
+  CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
   getAbilityOverloadCostEffectKey,
   DISEASE_SUPPRESSION_ALL_EFFECT_KEY,
   DISEASE_SUPPRESSION_COUNT_EFFECT_KEY,
@@ -642,6 +643,13 @@ export function buildCombatEffectKeyTokens() {
       group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({
+      code: "criticalDamagePercent",
+      key: "criticalDamagePercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.CombatCriticalDamagePercent"),
+      path: CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
       code: "damageFlat",
       key: "damageFlat",
       label: game.i18n.localize("FALLOUTMAW.Effects.CombatDamageFlat"),
@@ -790,6 +798,7 @@ export function buildReverseInteractionEffectKeyTokens() {
   const reverseCombatPaths = new Set([
     "system.combat.accuracy",
     "system.combat.criticalChance",
+    CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
     "system.combat.damageFlat",
     "system.combat.damagePercent",
     "system.combat.burstStability",

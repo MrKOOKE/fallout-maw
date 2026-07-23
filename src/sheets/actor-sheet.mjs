@@ -6524,6 +6524,7 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
   const damagePercentAttribution = contextual ? collectActorCombatValueAttribution(actor, "damagePercent", contextual) : emptyCombatAttribution();
   const accuracyAttribution = contextual ? collectActorCombatValueAttribution(actor, "accuracy", contextual) : emptyCombatAttribution();
   const criticalChanceAttribution = contextual ? collectActorCombatValueAttribution(actor, "criticalChance", contextual) : emptyCombatAttribution();
+  const criticalDamageAttribution = contextual ? collectActorCombatValueAttribution(actor, "criticalDamagePercent", contextual) : emptyCombatAttribution();
   const attackRangeAttribution = contextual ? collectActorCombatValueAttribution(actor, "attackRangeBonus", contextual) : emptyCombatAttribution();
   const effectiveRangeNearAttribution = contextual ? collectActorCombatValueAttribution(actor, "effectiveRangeNearBonus", contextual) : emptyCombatAttribution();
   const effectiveRangeFarAttribution = contextual ? collectActorCombatValueAttribution(actor, "effectiveRangeFarBonus", contextual) : emptyCombatAttribution();
@@ -6571,7 +6572,8 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
       + contextualCriticalChance
       - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
-      + proficiencyCriticalDamage),
+      + proficiencyCriticalDamage
+      + criticalDamageAttribution.value),
     penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor)),
     maxRangeMeters: Math.max(0, baseMaxRangeMeters + attackRangeAttribution.value),
     effectiveRange: {
@@ -6605,6 +6607,7 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
       damagePercentAttribution,
       accuracyAttribution,
       criticalChanceAttribution,
+      criticalDamageAttribution,
       attackRangeAttribution,
       effectiveRangeNearAttribution,
       effectiveRangeFarAttribution
@@ -6640,6 +6643,7 @@ function buildWeaponTooltipValueBreakdowns({
   damagePercentAttribution,
   accuracyAttribution,
   criticalChanceAttribution,
+  criticalDamageAttribution,
   attackRangeAttribution,
   effectiveRangeNearAttribution,
   effectiveRangeFarAttribution
@@ -6741,6 +6745,7 @@ function buildWeaponTooltipValueBreakdowns({
     formatValue: value => `${formatNumber(value)}%`
   });
   appendProficiencyAttribution(criticalDamagePercent, actor, data, proficiencyCriticalDamage, { suffix: "%", minimum: 0 });
+  appendAttributionDeltaSources(criticalDamagePercent, criticalDamageAttribution?.sources, { suffix: "%" });
   reconcileBreakdownTotal(criticalDamagePercent, result.criticalDamagePercent, item);
 
   const penetration = buildWeaponDataFieldAttribution({
@@ -7115,7 +7120,7 @@ function collectActorCombatValueAttribution(actor, key = "", context = null) {
   if (!actor) return emptyCombatAttribution();
   const path = `system.combat.${String(key ?? "").trim()}`;
   const metreValue = ["attackRangeBonus", "effectiveRangeNearBonus", "effectiveRangeFarBonus"].includes(key);
-  const suffix = ["damagePercent", "criticalChance", "burstStability"].includes(key)
+  const suffix = ["damagePercent", "criticalChance", "criticalDamagePercent", "burstStability"].includes(key)
     ? "%"
     : metreValue
     ? " м"

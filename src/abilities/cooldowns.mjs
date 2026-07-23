@@ -21,6 +21,8 @@ import {
 } from "./runtime-state.mjs";
 import { filterChangesForLimitedUses } from "./limited-uses-state.mjs";
 import { getActiveUseOperationId } from "./active-use-runtime.mjs";
+import { CRITICAL_DAMAGE_PERCENT_EFFECT_KEY } from "../utils/active-effect-keys.mjs";
+import { registerWeaponAttackResolvedHandler } from "../combat/weapon-attack-controller.mjs";
 
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 
@@ -31,6 +33,9 @@ export function registerAbilityCooldownHooks() {
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void applyAbilityCooldownsForWeaponAction(context);
   });
+  registerWeaponAttackResolvedHandler("fallout-maw.criticalDamageCooldowns", context => (
+    applyAbilityCooldownsForCriticalDamage(context)
+  ));
   Hooks.on("createActiveEffect", effect => {
     if (isAbilityFunctionCooldownEffect(effect)) void syncActorAbilityEffects(effect.parent);
   });
@@ -60,6 +65,15 @@ export async function applyAbilityCooldownsForWeaponAction(context = {}) {
 
   return applyAbilityCooldownsForTriggeredKeys(actor, getWeaponActionActiveUseKeys(context), {
     trigger: "weaponAction",
+    conditionContext: getCooldownConditionContext(context)
+  });
+}
+
+async function applyAbilityCooldownsForCriticalDamage(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || context?.criticalDamageUsed !== true) return [];
+  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([CRITICAL_DAMAGE_PERCENT_EFFECT_KEY]), {
+    trigger: "weaponCriticalDamage",
     conditionContext: getCooldownConditionContext(context)
   });
 }

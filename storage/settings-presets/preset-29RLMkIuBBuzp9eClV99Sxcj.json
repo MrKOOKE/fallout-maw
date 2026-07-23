@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "20c477a635ef2171949c5cbaef659f47ddfd03856c306222805c569d629d73cb",
-  "updatedAt": "2026-07-23T08:50:18.612Z",
+  "revision": "82221c00e080a5134ae4615fc9f110a24c3ca9e92dc1bfaf1cfaa5153d4be9c4",
+  "updatedAt": "2026-07-23T09:33:09.212Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -106,9 +106,9 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Пока в оружейных наборах нету предметов: +20 к Красноречию</p></li><li><p>Инициатива: -2</p></li></ul><p>\"Природное не считается снаряженным оружием\"</p>",
+                "description": "<ul><li><p>Красноречие: +20</p></li><li><p>Инициатива: -2</p></li></ul>",
                 "id": "wexA49G1pXomHP3A",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/ruchnoj.webp",
                 "name": "Безобидный",
                 "system": {
                   "acquisition": {
@@ -130,14 +130,40 @@
                   "category": "Особенности",
                   "cost": 0,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "QpfyS0JUEDYhaY55",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "R38PGnR5NfmciFQ3",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },
               {
                 "description": "<ul><li><p>Если максимальная дистанция атаки оружия &lt;= 10м, +20 к точности и +5% урона</p></li><li><p>Штраф на атаки дальше эффективной дистациии: +50%</p></li><li><p>Помехи на все атаки дальше эффективной дистанции</p></li></ul>",
                 "id": "hQIKzdDoEgyAKnoi",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
                 "name": "Близорукий",
                 "system": {
                   "acquisition": {
@@ -310,7 +336,7 @@
               {
                 "description": "<ul><li><p>Урон: +15%</p></li><li><p>Точность: -10</p></li><li><p>Шанс на крит: -10%</p></li></ul>",
                 "id": "FgGw6s38UZmhGkyy",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/tyazhyolaya-ruka.webp",
                 "name": "Взрывной",
                 "system": {
                   "acquisition": {
@@ -484,7 +510,7 @@
               {
                 "description": "<ul><li><p>Штраф на атаки дальше эффективной дистациии: -50%</p></li><li><p>Если дистанция атаки &gt;10м: +10% Урона</p></li><li><p>Если максимальная дистанция атаки оружия &gt;= 20м, то добавляет еще 10м</p></li><li><p>Помехи на все атаки ближе эффективной дистанции</p></li></ul>",
                 "id": "7FrhgsJK7Wd45Pme",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/8-14/sokolinyj-glaz.webp",
                 "name": "Дальномер",
                 "system": {
                   "acquisition": {
@@ -647,7 +673,7 @@
               {
                 "description": "<p>Урон: -10%</p><p>Когда вас успешно атакуют на 12 секуд получаете: +10% урона.<br>Складывается не более 3-х раз</p>",
                 "id": "8HpgZk8jcKAhom6S",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/1-7/ubezhdyonnyj-holostyak.webp",
                 "name": "Злопамятный",
                 "system": {
                   "acquisition": {
@@ -973,7 +999,7 @@
               {
                 "description": "<ul><li><p>Урон: +10%</p></li><li><p>Оружие ломается в два раза быстрее.</p></li></ul>",
                 "id": "OMey4wEKNc6MCeDs",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/sverhprochnost.webp",
                 "name": "Небрежный",
                 "system": {
                   "acquisition": {
@@ -1313,7 +1339,7 @@
               {
                 "description": "<ul><li><p>Проверки Скрытности против вас: +1 Помеха</p></li><li><p>Обнаружение ловушек: +1 Преимущество</p><p></p></li><li><p>Проверки Науки: +1 Помеха</p></li></ul>",
                 "id": "txsYIq9watSaxmDo",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/kloustrafobiya.webp",
                 "name": "Параноик",
                 "system": {
                   "acquisition": {
@@ -1602,7 +1628,7 @@
               {
                 "description": "<ul><li><p>Шанс на крит: +5%</p></li><li><p>Крит урон: +30%</p></li><li><p>Обычный урон: -10%</p></li></ul>",
                 "id": "C0IH85GS3gL73xrb",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/8-14/master-karabinov.webp",
                 "name": "Расчетлый",
                 "system": {
                   "acquisition": {
@@ -1639,11 +1665,11 @@
                         },
                         {
                           "id": "JfzzDoBIcl9ErSIJ",
-                          "key": "Критиче",
+                          "key": "system.combat.criticalDamagePercent",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "0"
+                          "value": "30"
                         },
                         {
                           "id": "3aAWAJt9xSeH1pRc",
@@ -1673,7 +1699,7 @@
               {
                 "description": "<ul><li><p>Если вероятность успеха проверки навыков &lt;=60%: +10% к шансу на Крит успех</p></li><li><p>Если вероятность успеха проверки навыков &gt;60%: +10% к шансу на Крит провал</p></li></ul>",
                 "id": "j7DmoG54Vtb0lH4T",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/osobennosti/tochnost.webp",
                 "name": "Рисковый",
                 "system": {
                   "acquisition": {

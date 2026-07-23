@@ -1873,6 +1873,7 @@
       "CombatPenetration": "Пробивная сила",
       "CombatAccuracy": "Точность",
       "CombatCriticalChance": "Шанс на крит",
+      "CombatCriticalDamagePercent": "Изменение критического урона, %",
       "CombatDamageFlat": "Урон, плоский",
       "CombatDamagePercent": "Урон, %",
       "CombatBurstStability": "Стабильность стрельбы очередью",

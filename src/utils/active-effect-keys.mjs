@@ -13,6 +13,7 @@ export const EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY = "system.combat.effectiveRang
 export const EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY = "system.combat.effectiveRangeNearPenaltyPercent";
 export const EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY = "system.combat.effectiveRangeFarPenaltyPercent";
 export const CONDITION_LOSS_MULTIPLIER_EFFECT_KEY = "system.combat.conditionLossMultiplier";
+export const CRITICAL_DAMAGE_PERCENT_EFFECT_KEY = "system.combat.criticalDamagePercent";
 export const INITIATIVE_ADVANTAGE_EFFECT_KEY = "system.attributes.initiative.advantage";
 export const INITIATIVE_DISADVANTAGE_EFFECT_KEY = "system.attributes.initiative.disadvantage";
 export const REVERSE_EFFECT_KEY_PREFIX = `${SYSTEM_ID}.reverse.`;

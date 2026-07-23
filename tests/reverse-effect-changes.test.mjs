@@ -127,6 +127,29 @@ test("condition loss multiplier is registered and participates only when an atta
   }).has(key), false);
 });
 
+test("critical damage modifier is registered as a reversible weapon-damage key", () => {
+  const key = "system.combat.criticalDamagePercent";
+  const token = buildEffectKeyTokens().find(entry => entry.path === key);
+  const reverseToken = buildReverseInteractionEffectKeyTokens()
+    .find(entry => entry.path === getReverseEffectKey(key));
+
+  assert.equal(token?.label, "Изменение критического урона, %");
+  assert.equal(reverseToken?.label, "Изменение критического урона, % (в мою сторону)");
+  assert.equal(getWeaponActionActiveUseKeys({
+    actionKey: "aimedShot",
+    activeUseStages: { damage: true }
+  }).has(key), false);
+  assert.equal(getWeaponActionActiveUseKeys({
+    actionKey: "aimedShot",
+    criticalSuccess: true,
+    activeUseStages: { damage: true }
+  }).has(key), true);
+  assert.equal(isActiveUseEffectKey(key), true);
+  assert.equal(applyPreparedSourceContextualAbilityChanges(150, [
+    { type: "add", value: 25, priority: 20, order: 0 }
+  ]), 175);
+});
+
 test("all-skills bonus changes expand to the concrete prepared bonus paths", () => {
   const actor = {
     system: {
