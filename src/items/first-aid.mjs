@@ -13,6 +13,7 @@ import {
 } from "../combat/reaction-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { getSkillSettings } from "../settings/accessors.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
 import { getFirstAidChargesData, getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
@@ -59,6 +60,17 @@ export async function useFirstAidItem({
     ui.notifications.warn(`${item.name}: item is depleted.`);
     return false;
   }
+  const skillKey = getFirstAidSkillKey(firstAid);
+  const checkDifficulty = Math.max(0, toInteger(firstAid.difficulty));
+  const skillAvailable = sourceActor.system?.skills?.[skillKey]
+    && getSkillSettings().some(skill => skill.key === skillKey);
+  if (checkDifficulty > 0 && !skillAvailable) {
+    ui.notifications.warn(game.i18n.format("FALLOUTMAW.Item.FirstAidSkillUnavailable", {
+      item: item.name,
+      skill: skillKey
+    }));
+    return false;
+  }
   if (!isTargetInFirstAidRange(sourceToken, targetToken, firstAid)) return false;
   const targetContext = await getFirstAidTargetContext(targetToken, targetActor);
   if (!targetContext) return false;
@@ -93,12 +105,13 @@ export async function useFirstAidItem({
     targetActor,
     sourceToken,
     targetToken,
-    targetContext,
-    firstAid,
+    difficulty: checkDifficulty,
+    skillKey,
     item,
     chainRef: inheritedChainRef
   });
-  const resultKey = checkResult?.result?.key ?? "success";
+  const resultKey = checkResult?.result?.key ?? (checkDifficulty > 0 ? "" : "success");
+  if (!resultKey) return false;
   if (resultKey === "criticalFailure") {
     await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
     await applyCriticalFailureDamage(targetActor, firstAid, source);
@@ -394,19 +407,18 @@ async function rollFirstAidCheck({
   targetActor = null,
   sourceToken = null,
   targetToken = null,
-  targetContext = null,
-  firstAid = {},
+  difficulty = 0,
+  skillKey = "doctor",
   item = null,
   chainRef = null
 } = {}) {
-  const difficulty = Math.max(0, toInteger(firstAid.difficulty));
-  if (!difficulty) return null;
-  const skillKey = targetContext?.isConstruct ? "repair" : "firstAid";
+  const resolvedDifficulty = Math.max(0, toInteger(difficulty));
+  if (!resolvedDifficulty) return null;
   return requestSkillCheck({
     actor: sourceActor,
-    skillKey,
+    skillKey: String(skillKey ?? "").trim() || "doctor",
     data: {
-      difficulty,
+      difficulty: resolvedDifficulty,
       actorToken: sourceToken?.object ?? sourceToken,
       targetToken: targetToken?.object ?? targetToken,
       targetActor
@@ -419,6 +431,10 @@ async function rollFirstAidCheck({
       chainRef
     }
   });
+}
+
+function getFirstAidSkillKey(firstAid = {}) {
+  return String(firstAid?.skillKey ?? "").trim() || "doctor";
 }
 
 async function getFirstAidTargetContext(targetToken, fallbackActor = null) {

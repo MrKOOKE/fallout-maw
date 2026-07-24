@@ -1593,6 +1593,8 @@
       "FirstAidActionPointCost": "Application Cost, AP",
       "FirstAidMaxDistance": "Maximum Distance",
       "FirstAidDifficulty": "Application Difficulty",
+      "FirstAidSkill": "Check Skill",
+      "FirstAidSkillUnavailable": "Cannot use {item}: check skill “{skill}” is unavailable.",
       "FirstAidCriticalSuccessBonus": "Critical Success: Healing Bonus, %",
       "FirstAidCriticalFailureDamageMin": "Critical Failure: Min Damage",
       "FirstAidCriticalFailureDamageMax": "Critical Failure: Max Damage",

@@ -5315,7 +5315,11 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const maxDistance = Number(firstAid.maxDistance) || 0;
   if (maxDistance) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidMaxDistance"), formatNumber(maxDistance)]);
   const difficulty = Math.max(0, toInteger(firstAid.difficulty));
-  if (difficulty) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDifficulty"), difficulty]);
+  if (difficulty) {
+    const skillKey = String(firstAid.skillKey ?? "").trim() || "doctor";
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidSkill"), getSkillLabel(skillKey)]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDifficulty"), difficulty]);
+  }
   const criticalSuccess = Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus));
   if (criticalSuccess) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidCriticalSuccessBonus"), `${criticalSuccess}%`]);
   const criticalMin = Math.max(0, toInteger(firstAid.criticalFailureDamageMin));

@@ -599,6 +599,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       oneTimeUseEffectRows: buildFirstAidEffectRowsFromChanges(item.system?.functions?.oneTimeUse?.changes),
       oneTimeUseRecipeItems: buildOneTimeUseRecipeItemRows(item.system?.functions?.oneTimeUse?.recipeItemUuids),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
+      firstAidSkillChoices: buildSkillChoices(
+        String(item.system?.functions?.firstAid?.skillKey ?? "").trim() || "doctor",
+        skillSettings
+      ),
       firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
       firstAidWithdrawalDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.withdrawalDurationSeconds),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
@@ -3476,6 +3480,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.actionPointCost": 0,
         "system.functions.firstAid.maxDistance": 0,
         "system.functions.firstAid.difficulty": 0,
+        "system.functions.firstAid.skillKey": "doctor",
         "system.functions.firstAid.criticalSuccessHealingBonus": 20,
         "system.functions.firstAid.criticalFailureDamageMin": 1,
         "system.functions.firstAid.criticalFailureDamageMax": 10,

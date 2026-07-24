@@ -1605,6 +1605,8 @@
       "FirstAidActionPointCost": "Стоимость применения, ОД",
       "FirstAidMaxDistance": "Максимальная дистанция",
       "FirstAidDifficulty": "Сложность применения",
+      "FirstAidSkill": "Навык проверки",
+      "FirstAidSkillUnavailable": "Невозможно применить {item}: навык проверки «{skill}» недоступен.",
       "FirstAidCriticalSuccessBonus": "Крит. успех: бонус лечения, %",
       "FirstAidCriticalFailureDamageMin": "Крит. провал: урон мин",
       "FirstAidCriticalFailureDamageMax": "Крит. провал: урон макс",

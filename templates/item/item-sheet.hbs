@@ -3632,6 +3632,14 @@
         <input type="number" name="system.functions.firstAid.difficulty" value="{{system.functions.firstAid.difficulty}}" min="0" step="1">
       </label>
       <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidSkill"}}</span>
+        <select name="system.functions.firstAid.skillKey">
+          {{#each firstAidSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.FirstAidCriticalSuccessBonus"}}</span>
         <input type="number" name="system.functions.firstAid.criticalSuccessHealingBonus" value="{{system.functions.firstAid.criticalSuccessHealingBonus}}" min="0" step="1">
       </label>

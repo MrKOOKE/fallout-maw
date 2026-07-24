@@ -172,6 +172,7 @@ export function convertParsedFirstAidToFunction(parsed = null) {
     actionPointCost: Math.max(0, parseInteger(parsed.actionPointCost)),
     maxDistance: scaleFeetDistance(parsed.maxDistance),
     difficulty: Math.max(0, parseInteger(parsed.difficulty)),
+    skillKey: "doctor",
     criticalSuccessHealingBonus: 20,
     criticalFailureDamageMin: 1,
     criticalFailureDamageMax: 10,

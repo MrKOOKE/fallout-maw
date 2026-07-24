@@ -1079,6 +1079,7 @@ function firstAidFunctionField(options = {}) {
     actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     maxDistance: new NumberField({ required: true, min: 0, initial: 0 }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    skillKey: new StringField({ required: true, blank: false, initial: "doctor" }),
     criticalSuccessHealingBonus: new NumberField({ required: true, integer: true, min: 0, initial: 20 }),
     criticalFailureDamageMin: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
     criticalFailureDamageMax: new NumberField({ required: true, integer: true, min: 0, initial: 10 }),

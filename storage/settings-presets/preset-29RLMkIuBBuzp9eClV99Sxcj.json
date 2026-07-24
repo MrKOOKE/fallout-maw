@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "82221c00e080a5134ae4615fc9f110a24c3ca9e92dc1bfaf1cfaa5153d4be9c4",
-  "updatedAt": "2026-07-23T09:33:09.212Z",
+  "revision": "5c26af81431da62766ea58746b701fe62a02ff9f4331168dd772474305f3708c",
+  "updatedAt": "2026-07-24T04:46:02.089Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -671,7 +671,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Урон: -10%</p><p>Когда вас успешно атакуют на 12 секуд получаете: +10% урона.<br>Складывается не более 3-х раз</p>",
+                "description": "<ul><li><p>Когда вас успешно атакуют на 12 секуд получаете: +10% урона.</p></li><li><p>Урон: -10%</p></li></ul><p>Складывается не более 3-х раз</p>",
                 "id": "8HpgZk8jcKAhom6S",
                 "img": "systems/fallout-maw/assets/icons/1-7/ubezhdyonnyj-holostyak.webp",
                 "name": "Злопамятный",
@@ -1254,7 +1254,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Пока персонаж занимает половинчатое или полное укрытие:</p><ul><li><p>Точонсть: +20</p></li><li><p>ОД: +2</p></li></ul><p>Пока не занимает укрытий:</p><p>Точонсть: -20</p>",
+                "description": "<p>Пока персонаж занимает половинчатое или полное укрытие:</p><ul><li><p>Точонсть: +20</p></li><li><p>ОД: +2</p></li></ul><p>Пока не занимает укрытий:</p><ul><li><p>Точонсть: -20</p></li></ul>",
                 "id": "kQgDksXZgQBLUoHt",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/igroman.webp",
                 "name": "Окопник",
@@ -1399,9 +1399,9 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>ОД: +1</p></li><li><p>ОП: +2</p></li><li><p>Укрытия на 75% менее эффектины</p></li></ul>",
+                "description": "<ul><li><p>ОД: +1</p></li><li><p>ОП: +2</p></li><li><p>Укрытия на 75% менее эффективны</p></li></ul>",
                 "id": "IcLL8AZqS23CFQeH",
-                "img": "icons/svg/upgrade.svg",
+                "img": "systems/fallout-maw/assets/icons/15-21/ne-slomlennyj.webp",
                 "name": "Полевик",
                 "system": {
                   "acquisition": {
@@ -4888,14 +4888,6 @@
                           "value": "10+sci/5"
                         },
                         {
-                          "id": "K4pSpyPRghELCsBP",
-                          "key": "system.skills.throwing.bonus",
-                          "phase": "initial",
-                          "priority": null,
-                          "type": "add",
-                          "value": "10+sci/5"
-                        },
-                        {
                           "id": "pdQTNf20zjV6RlZA",
                           "key": "system.skills.doctor.bonus",
                           "phase": "initial",
@@ -5024,7 +5016,33 @@
                   "category": "Наука",
                   "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "jAMpwK1sBAFBqkjJ",
+                          "key": "Исследо",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "0"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "d64V9nYdDZ0ZFylE",
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -53790,25 +53808,29 @@
         {
           "img": "systems/fallout-maw/assets/currencies/caps.webp",
           "key": "caps",
-          "label": "Крышки",
+          "label": "Рубль",
+          "primaryTrade": true,
           "value": 1
         },
         {
           "img": "systems/fallout-maw/assets/currencies/denarii.webp",
           "key": "denarii",
-          "label": "Динарии",
+          "label": "Медяк",
+          "primaryTrade": false,
           "value": 2
         },
         {
           "img": "systems/fallout-maw/assets/currencies/ncrDollars.webp",
           "key": "ncrDollars",
-          "label": "Доллары НКР",
+          "label": "Серебряник",
+          "primaryTrade": false,
           "value": 3
         },
         {
           "img": "systems/fallout-maw/assets/currencies/brotherhoodChecks.webp",
           "key": "brotherhoodChecks",
-          "label": "Чеки братства",
+          "label": "Золотой",
+          "primaryTrade": false,
           "value": 6
         }
       ]
