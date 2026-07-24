@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { ENERGY_RESOURCE_KEY } from "../combat/energy-resource.mjs";
 import { deleteHealedTraumas, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
 import { createDiseaseImmunityEffect } from "./need-thresholds.mjs";
@@ -8,7 +9,10 @@ import {
   getSkillSettings,
   getTimeMechanicsIgnored
 } from "../settings/accessors.mjs";
-import { DEFAULT_REGENERATION_FORMULA } from "../settings/creature-options.mjs";
+import {
+  DEFAULT_ENERGY_REGENERATION_FORMULA,
+  DEFAULT_REGENERATION_FORMULA
+} from "../settings/creature-options.mjs";
 import {
   getActorTimeSegments,
   isRestModeTime,
@@ -62,24 +66,36 @@ function countWholeHourTicks(seconds) {
 }
 
 async function applyActorRegeneration(actor, tickCount) {
-  const amountPerTick = evaluateActorRegeneration(actor);
-  const totalAmount = Math.max(0, amountPerTick * Math.max(0, toInteger(tickCount)));
-  if (totalAmount <= 0) return;
+  const ticks = Math.max(0, toInteger(tickCount));
+  const healthAmount = Math.max(0, evaluateActorRegeneration(actor) * ticks);
+  const energyAmount = Math.max(0, evaluateActorRegeneration(actor, {
+    formulaKey: "energyFormula",
+    fallbackFormula: DEFAULT_ENERGY_REGENERATION_FORMULA,
+    label: "energy"
+  }) * ticks);
+  if (healthAmount <= 0 && energyAmount <= 0) return;
 
-  let remaining = totalAmount;
-  const treatmentTargets = getTreatmentTargets(actor);
-  if (treatmentTargets.length) {
-    remaining = await applyTreatmentRegeneration(actor, treatmentTargets, remaining);
+  if (healthAmount > 0) {
+    let remaining = healthAmount;
+    const treatmentTargets = getTreatmentTargets(actor);
+    if (treatmentTargets.length) {
+      remaining = await applyTreatmentRegeneration(actor, treatmentTargets, remaining);
+    }
+
+    if (remaining > 0) await applyLimbRegeneration(actor, remaining);
   }
-
-  if (remaining > 0) await applyLimbRegeneration(actor, remaining);
+  if (energyAmount > 0) await applyEnergyRegeneration(actor, energyAmount);
 }
 
-function evaluateActorRegeneration(actor) {
+function evaluateActorRegeneration(actor, {
+  formulaKey = "formula",
+  fallbackFormula = DEFAULT_REGENERATION_FORMULA,
+  label = "health"
+} = {}) {
   const characteristicSettings = getCharacteristicSettings();
   const skillSettings = getSkillSettings();
   const race = getCreatureOptions(characteristicSettings).races.find(entry => entry.id === actor.system?.creature?.raceId);
-  const formula = String(race?.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA;
+  const formula = String(race?.regeneration?.[formulaKey] ?? fallbackFormula).trim() || fallbackFormula;
 
   try {
     return Math.max(0, evaluateFormula(formula, {
@@ -89,7 +105,7 @@ function evaluateActorRegeneration(actor) {
       skills: getSkillValues(actor.system?.skills ?? {})
     }));
   } catch (error) {
-    console.warn(`${SYSTEM_ID} | Regeneration formula failed for ${actor.name}: ${error.message}`);
+    console.warn(`${SYSTEM_ID} | ${label} regeneration formula failed for ${actor.name}: ${error.message}`);
     return 0;
   }
 }
@@ -153,6 +169,25 @@ async function applyLimbRegeneration(actor, amount) {
       regeneration: true
     }
   });
+}
+
+async function applyEnergyRegeneration(actor, amount) {
+  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
+  if (!resource) return;
+
+  const minimum = Math.max(0, toInteger(resource.min));
+  const maximum = Math.max(minimum, toInteger(resource.max));
+  const current = Math.min(maximum, Math.max(minimum, toInteger(resource.value)));
+  const next = Math.min(maximum, current + Math.max(0, toInteger(amount)));
+  if (next <= current) return;
+
+  const update = {
+    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: next
+  };
+  if (Object.hasOwn(resource, "spent")) {
+    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, maximum - next);
+  }
+  await actor.update(update);
 }
 
 function distributeRegeneration(entries, amount) {

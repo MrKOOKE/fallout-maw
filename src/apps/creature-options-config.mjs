@@ -17,6 +17,7 @@ import {
   createDefaultRegeneration,
   createRaceDefaults,
   DEFAULT_BLEEDING_RESISTANCE_FORMULA,
+  DEFAULT_ENERGY_REGENERATION_FORMULA,
   DEFAULT_ORGANISM_DEVELOPMENT_LIMIT,
   DEFAULT_REGENERATION_FORMULA
 } from "../settings/creature-options.mjs";
@@ -718,7 +719,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
     };
     race.regeneration = {
-      formula: String(formData.race?.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA
+      formula: String(formData.race?.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA,
+      energyFormula: String(formData.race?.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA).trim()
+        || DEFAULT_ENERGY_REGENERATION_FORMULA
     };
     race.bleedingResistanceFormula = String(formData.race?.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim()
       || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
@@ -864,7 +867,13 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       try {
         validateFormula(race.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
       } catch (error) {
-        ui.notifications.error(`${race.name || race.id} / Регенерация: ${error.message}`);
+        ui.notifications.error(`${race.name || race.id} / Регенерация / Здоровье: ${error.message}`);
+        throw error;
+      }
+      try {
+        validateFormula(race.regeneration?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
+      } catch (error) {
+        ui.notifications.error(`${race.name || race.id} / Регенерация / Энергия: ${error.message}`);
         throw error;
       }
 

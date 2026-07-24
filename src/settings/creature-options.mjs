@@ -18,6 +18,7 @@ import { createDefaultNaturalItemSetEntry, normalizeNaturalItemSetEntries } from
 
 export const DEFAULT_BLEEDING_RESISTANCE_FORMULA = "0";
 export const DEFAULT_REGENERATION_FORMULA = "10 + con * 5";
+export const DEFAULT_ENERGY_REGENERATION_FORMULA = "20 + energy / 10";
 export const DEFAULT_ORGANISM_DEVELOPMENT_LIMIT = 50;
 
 export function createEmptyCreatureOptions() {
@@ -77,7 +78,10 @@ export function createDefaultRaceBaseParameters() {
 }
 
 export function createDefaultRegeneration() {
-  return { formula: DEFAULT_REGENERATION_FORMULA };
+  return {
+    formula: DEFAULT_REGENERATION_FORMULA,
+    energyFormula: DEFAULT_ENERGY_REGENERATION_FORMULA
+  };
 }
 
 export function normalizeCreatureOptions(options = {}, characteristics = [], damageTypes = []) {
@@ -144,7 +148,9 @@ function normalizeBleedingResistanceFormula(value) {
 
 function normalizeRegeneration(value = {}) {
   return {
-    formula: String(value?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA
+    formula: String(value?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA,
+    energyFormula: String(value?.energyFormula ?? DEFAULT_ENERGY_REGENERATION_FORMULA).trim()
+      || DEFAULT_ENERGY_REGENERATION_FORMULA
   };
 }
 

@@ -160,7 +160,7 @@ class HackingDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     try {
       const outcome = await requestSkillCheck({
         actor: this.#hackerActor,
-        skillKey: "lockpicking",
+        skillKey: "repair",
         data: {
           difficulty: selectedMethod.difficulty,
           allowImplicitTarget: false,

@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "d55eba33e47c2a7caaf84d0a73546f3583410a7c0b47974cdcca60cfdaccf4fb",
-  "updatedAt": "2026-07-24T15:14:02.260Z",
+  "revision": "ef759551bb4e4568becc6f57268c2d8839f6b899f0ad36aceed952e63b822f09",
+  "updatedAt": "2026-07-24T15:54:57.490Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -28990,6 +28990,7 @@
               "skillPointsPerLevel": "5"
             },
             "regeneration": {
+              "energyFormula": "20 + energy / 10",
               "formula": "10 + con * 5"
             },
             "typeId": "MIZppvewG3PKNEhG",
@@ -30616,6 +30617,7 @@
               "skillPointsPerLevel": "10+int"
             },
             "regeneration": {
+              "energyFormula": "20 + energy / 10",
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
@@ -51780,6 +51782,7 @@
               "skillPointsPerLevel": "10 + int"
             },
             "regeneration": {
+              "energyFormula": "20 + energy / 10",
               "formula": "20 + con * 10"
             },
             "typeId": "MIZppvewG3PKNEhG",
@@ -52948,6 +52951,7 @@
               "skillPointsPerLevel": "10 + int"
             },
             "regeneration": {
+              "energyFormula": "20 + energy / 10",
               "formula": "20 + con * 10"
             },
             "typeId": "newType2",
@@ -54599,6 +54603,7 @@
               "skillPointsPerLevel": "10 + int"
             },
             "regeneration": {
+              "energyFormula": "20 + energy / 10",
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
