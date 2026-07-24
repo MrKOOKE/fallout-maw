@@ -625,6 +625,7 @@ function weaponFunctionField({ named = false, fieldOptions = {} } = {}) {
       max: new StringField({ required: true, blank: true, initial: "0" })
     }),
     penetration: new StringField({ required: true, blank: true, initial: "0" }),
+    noiseLevel: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
     magazine: new SchemaField({
       value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -823,6 +824,7 @@ function weaponModuleModifiersField() {
       max: new NumberField({ required: true, initial: 0 })
     }),
     penetration: new NumberField({ required: true, integer: true, initial: 0 }),
+    noiseLevel: new NumberField({ required: true, integer: true, initial: 0 }),
     magazineMax: new NumberField({ required: true, integer: true, initial: 0 }),
     actionPointCosts: new SchemaField({
       aimedShot: new NumberField({ required: true, integer: true, initial: 0 }),

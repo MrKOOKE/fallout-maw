@@ -56,6 +56,7 @@ import {
   getSkillCheckActionEffectKey,
   SKILL_CHECK_ACTIONS
 } from "../rolls/skill-check-action-effects.mjs";
+import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
 
 export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   const tokens = [
@@ -170,6 +171,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildDodgeResourceEffectKeyTokens(),
     ...buildSuppressionEffectKeyTokens(),
     ...buildCombatEffectKeyTokens(),
+    ...buildStealthAttackBonusEffectKeyTokens(),
     ...buildReverseInteractionEffectKeyTokens()
   ];
 
@@ -746,6 +748,40 @@ export function buildCombatEffectKeyTokens() {
       label: "Исходящее лечение, %",
       path: "system.healing.outgoingPercent",
       group: "Лечение"
+    })
+  ].filter(Boolean);
+}
+
+export function buildStealthAttackBonusEffectKeyTokens() {
+  const group = game.i18n.localize("FALLOUTMAW.Effects.StealthAttackGroup");
+  return [
+    createEffectKeyToken({
+      code: "stealthAccuracy",
+      key: "stealthAccuracy",
+      label: game.i18n.localize("FALLOUTMAW.Effects.StealthAttackAccuracy"),
+      path: STEALTH_ATTACK_BONUS_EFFECT_KEYS.accuracy,
+      group
+    }),
+    createEffectKeyToken({
+      code: "stealthCriticalChance",
+      key: "stealthCriticalChance",
+      label: game.i18n.localize("FALLOUTMAW.Effects.StealthAttackCriticalChance"),
+      path: STEALTH_ATTACK_BONUS_EFFECT_KEYS.criticalChance,
+      group
+    }),
+    createEffectKeyToken({
+      code: "stealthDamagePercent",
+      key: "stealthDamagePercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.StealthAttackDamagePercent"),
+      path: STEALTH_ATTACK_BONUS_EFFECT_KEYS.damagePercent,
+      group
+    }),
+    createEffectKeyToken({
+      code: "stealthCriticalDamagePercent",
+      key: "stealthCriticalDamagePercent",
+      label: game.i18n.localize("FALLOUTMAW.Effects.StealthAttackCriticalDamagePercent"),
+      path: STEALTH_ATTACK_BONUS_EFFECT_KEYS.criticalDamagePercent,
+      group
     })
   ].filter(Boolean);
 }

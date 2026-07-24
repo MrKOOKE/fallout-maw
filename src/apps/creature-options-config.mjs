@@ -31,6 +31,7 @@ import {
   NATURAL_RACE_ITEM_KINDS
 } from "../races/natural-items.mjs";
 import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildImplantLimitEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildStealthAttackBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
@@ -1131,7 +1132,8 @@ function buildEffectKeyTokens() {
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),
     buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
-    ...buildCombatEffectKeyTokens()
+    ...buildCombatEffectKeyTokens(),
+    ...buildStealthAttackBonusEffectKeyTokens()
   ].filter(Boolean);
 }
 

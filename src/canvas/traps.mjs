@@ -35,6 +35,7 @@ import {
   getRelationFromScore,
   getRelationTo
 } from "../settings/factions.mjs";
+import { shouldPauseAfterTrapDetection } from "./trap-pause-policy.mjs";
 
 const TRAP_SOCKET = `system.${SYSTEM_ID}`;
 const TRAP_SOCKET_SCOPE = "fallout-maw.traps";
@@ -415,7 +416,7 @@ async function handleTrapDetectionForToken(tile, token) {
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<p><strong>${escapeHTML(actor.name)}</strong> обнаруживает ловушку.</p>`
   });
-  pauseGameForTrap();
+  if (shouldPauseAfterTrapDetection(game.combat)) pauseGameForTrap();
   return true;
 }
 

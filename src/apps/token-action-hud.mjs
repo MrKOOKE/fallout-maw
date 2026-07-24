@@ -90,7 +90,11 @@ import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search
 import { openCraftWindow } from "./craft-window.mjs";
 import { openRecipeKnowledgeManager } from "./recipe-knowledge-manager.mjs";
 import { openCampFromHud } from "./camp-window.mjs";
-import { openStealthWindow } from "../stealth/index.mjs";
+import {
+  calculateStealthDamageBonusAmount,
+  getStealthAttackModifiers,
+  openStealthWindow
+} from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import {
   canSpendActorTwoHandsEnergy,
@@ -3962,6 +3966,18 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
   const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent + proficiencyDamage + skillDamageBonuses.percent) / 100)
     + skillDamageBonuses.flat;
   const weakening = getConditionWeakeningData(weapon, { minimumRatio: 0.1 });
+  const postConditionDamage = Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1)));
+  const stealth = getStealthAttackModifiers(actor);
+  const stealthDamageShareCount = Math.max(1, evaluateDialogFormula(
+    weaponData.pellets,
+    actor,
+    { fallback: 1, minimum: 1 }
+  ));
+  const stealthDamageBonusAmount = calculateStealthDamageBonusAmount(
+    postConditionDamage,
+    stealth.damageBonusPercent,
+    { shareCount: stealthDamageShareCount }
+  );
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
   const resourceCosts = Object.fromEntries(getWeaponAttackPowerPreviewResourceCosts(weaponData).map(cost => [
@@ -3980,10 +3996,20 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
   );
 
   return {
-    damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
-    accuracyBonus: evaluateDialogFormula(weaponData.accuracyBonus, actor, { minimum: -Infinity }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "accuracy") - conditionAccuracyPenalty,
-    criticalChanceModifier: evaluateDialogFormula(weaponData.criticalChanceModifier, actor, { minimum: -Infinity }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalChance") - conditionCritPenalty,
-    criticalDamagePercent: Math.max(0, evaluateDialogFormula(weaponData.criticalDamagePercent, actor, { fallback: 150 }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalDamage")),
+    damage: postConditionDamage + stealthDamageBonusAmount,
+    accuracyBonus: evaluateDialogFormula(weaponData.accuracyBonus, actor, { minimum: -Infinity })
+      + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "accuracy")
+      + toInteger(stealth.accuracyBonus)
+      - conditionAccuracyPenalty,
+    criticalChanceModifier: evaluateDialogFormula(weaponData.criticalChanceModifier, actor, { minimum: -Infinity })
+      + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalChance")
+      + toInteger(stealth.criticalChanceBonus)
+      - conditionCritPenalty,
+    criticalDamagePercent: Math.max(0,
+      evaluateDialogFormula(weaponData.criticalDamagePercent, actor, { fallback: 150 })
+      + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalDamage")
+      + toInteger(stealth.criticalDamageBonusPercent)
+    ),
     attackConeDegrees: Math.max(0, Number(weaponData.attackConeDegrees) || 0),
     maxRangeMeters: Math.max(0,
       evaluateDialogFormula(weaponData.maxRangeMeters, actor, { minimum: 0 })

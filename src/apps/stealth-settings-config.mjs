@@ -1,10 +1,12 @@
 import { TEMPLATES } from "../constants.mjs";
 import {
+  getCharacteristicSettings,
   getStealthSettings,
   getSkillSettings,
   setStealthSettings
 } from "../settings/accessors.mjs";
 import { DEFAULT_STEALTH_SETTINGS } from "../stealth/settings.mjs";
+import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
@@ -78,6 +80,12 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    const attackBonuses = this.element?.querySelector?.("[data-stealth-attack-bonuses]");
+    activateFormulaAutocomplete(attackBonuses, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings(),
+      actorReferences: getActorFormulaAutocompleteEntries()
+    });
     activateFormulaAutocomplete(this.element, {
       skills: getSkillSettings(),
       variables: [...DETECTION_RANGE_FORMULA_VARIABLES, ...AUTO_DETECTION_FORMULA_VARIABLES]

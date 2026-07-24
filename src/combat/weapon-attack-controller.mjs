@@ -73,9 +73,15 @@ import {
 } from "../utils/active-effect-changes.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
-import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
+import { applyWeaponModuleModifiers, getWeaponNoiseLevel } from "../utils/weapon-modules.mjs";
 import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natural-items.mjs";
-import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
+import {
+  calculateStealthDamageBonusAmount,
+  clearWeaponNoisePreview,
+  getStealthAttackModifiers,
+  resolveWeaponNoiseDetection,
+  setWeaponNoisePreview
+} from "../stealth/index.mjs";
 import {
   getActorAtRandomActionPointCostReduction,
   getWeaponActionBlockState,
@@ -401,11 +407,32 @@ export function requestWeaponAttackCompletion({ attackId = "" } = {}) {
 }
 
 class DualWeaponAttackPreview {
-  constructor() {
+  constructor(token = null, entries = []) {
+    this.token = token;
+    this.weaponEntries = Array.isArray(entries) ? entries : [];
+    this.sourceId = `dual-weapon-attack:${foundry.utils.randomID()}`;
+    this.noiseLevel = this.getCombinedNoiseLevel();
+    this.destroyed = false;
+    this.suppressed = false;
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
     this.entries = [];
     getAttackPreviewLayer().addChild(this.container);
+    this.onItemUpdate = this.onItemUpdate.bind(this);
+    Hooks.on("updateItem", this.onItemUpdate);
+    setWeaponNoisePreview(this.token, this.sourceId, this.noiseLevel);
+  }
+
+  getCombinedNoiseLevel() {
+    return Math.max(0, ...this.weaponEntries.map(entry => (
+      getWeaponNoiseLevel(getWeaponAttackData(entry.weapon, entry.weaponFunctionId))
+    )));
+  }
+
+  onItemUpdate(item = null) {
+    if (item?.parent?.uuid !== this.token?.actor?.uuid || this.destroyed) return;
+    this.noiseLevel = this.getCombinedNoiseLevel();
+    if (!this.suppressed) setWeaponNoisePreview(this.token, this.sourceId, this.noiseLevel);
   }
 
   add(selection = {}) {
@@ -425,9 +452,23 @@ class DualWeaponAttackPreview {
       target ? getTargetCenterMarkerPosition(target) : null
     );
     this.entries.push({ shape, targetMarkers });
+    this.noiseLevel = Math.max(
+      this.noiseLevel,
+      getWeaponNoiseLevel(getWeaponAttackData(selection.weapon, selection.weaponFunctionId))
+    );
+    if (!this.suppressed) setWeaponNoisePreview(this.token, this.sourceId, this.noiseLevel);
+  }
+
+  suppressNoisePreview() {
+    this.suppressed = true;
+    clearWeaponNoisePreview(this.token?.id ?? this.token?.document?.id ?? "", this.sourceId);
   }
 
   destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    Hooks.off("updateItem", this.onItemUpdate);
+    this.suppressNoisePreview();
     this.container.destroy({ children: true });
     this.entries = [];
   }
@@ -595,14 +636,20 @@ export function startDualWeaponAttack({
         }
       }
       if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
+      activeDualWeaponAttack?.suppressNoisePreview();
       const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, {
         skipActionPointCost: true,
-        reactionCoordinator
+        reactionCoordinator,
+        deferWeaponNoiseDetection: true,
+        returnWeaponNoiseMetadata: true
       })));
       for (const result of results) {
         if (result.status === "rejected") console.error("Fallout MaW | Dual weapon attack execution failed", result.reason);
       }
       await reactionCoordinator.drain();
+      const attemptedNoiseLevels = results
+        .filter(result => result.status === "fulfilled" && result.value?.weaponNoiseAttempted)
+        .map(result => getWeaponNoiseLevel({ noiseLevel: result.value.noiseLevel }));
       if (actionPointCostApplied) {
         const primary = sharedActionEntries[0]?.entry ?? captured[0];
         await publishWeaponAttackResolved({
@@ -622,6 +669,11 @@ export function startDualWeaponAttack({
           attackCheckCount: 0,
           damageResults: [],
           senderUserId: game.user?.id ?? ""
+        });
+      }
+      if (attemptedNoiseLevels.length) {
+        await resolveWeaponNoiseDetection(token, {
+          noiseLevel: Math.max(...attemptedNoiseLevels)
         });
       }
       return true;
@@ -652,7 +704,9 @@ export function startDualWeaponAttack({
     });
     if (!controller.hasRequiredWeaponResources(getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId))) return undefined;
     if (activeAttack && !cancelWeaponAttack()) return undefined;
-    if (index === 0 && !activeDualWeaponAttack) activeDualWeaponAttack = new DualWeaponAttackPreview();
+    if (index === 0 && !activeDualWeaponAttack) {
+      activeDualWeaponAttack = new DualWeaponAttackPreview(token, entries);
+    }
     activeAttack = controller;
     ui.notifications.info(`${label}: выберите траекторию ${index + 1} / ${entries.length}.`);
     controller.activate();
@@ -1005,7 +1059,8 @@ class CommandedWeaponAttackController {
       pointerDown: event => this.onPointerDown(event),
       cancel: event => this.onCancel(event),
       keyDown: event => this.onKeyDown(event),
-      tick: () => this.onTick()
+      tick: () => this.onTick(),
+      itemUpdate: item => this.onItemUpdate(item)
     };
   }
 
@@ -1025,6 +1080,8 @@ class CommandedWeaponAttackController {
       ),
       index,
       previewId: `${this.id}:${index}`,
+      noisePreviewSourceId: `commanded-weapon-attack:${this.id}:${index}`,
+      noiseLevel: getWeaponNoiseLevel(getWeaponAttackData(entry.weapon, entry.weaponFunctionId)),
       previewBroadcasted: false,
       lastBroadcastPreviewState: null,
       pointer: null,
@@ -1047,6 +1104,9 @@ class CommandedWeaponAttackController {
 
   activate() {
     getAttackPreviewLayer().addChild(this.container);
+    for (const entry of this.entries) {
+      setWeaponNoisePreview(entry.token, entry.noisePreviewSourceId, entry.noiseLevel);
+    }
     this.targetSelectionSession = startCanvasTargetSelectionSession({
       kind: "commandedWeaponAttacks",
       controller: this
@@ -1055,6 +1115,7 @@ class CommandedWeaponAttackController {
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.addEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app?.ticker?.add?.(this.events.tick);
+    Hooks.on("updateItem", this.events.itemUpdate);
     const canvasView = canvas.app?.view ?? null;
     this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     if (canvasView) canvasView.oncontextmenu = this.events.cancel;
@@ -1069,10 +1130,12 @@ class CommandedWeaponAttackController {
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.removeEventListener("keydown", this.events.keyDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
+    Hooks.off("updateItem", this.events.itemUpdate);
     const canvasView = canvas.app?.view ?? null;
     if (canvasView?.oncontextmenu === this.events.cancel) canvasView.oncontextmenu = this.previousViewContextMenu;
     this.rightClickCancelCandidate = null;
     this.previousViewContextMenu = null;
+    this.clearNoisePreviews();
     this.clearBroadcastPreviews();
     this.container.destroy({ children: true });
     if (activeCommandedAttack === this) activeCommandedAttack = null;
@@ -1089,6 +1152,24 @@ class CommandedWeaponAttackController {
   onTick() {
     if (this.processing || this.destroyed) return;
     for (const entry of this.entries) this.drawFocusedTargetMarkerForEntry(entry, performance.now());
+  }
+
+  onItemUpdate(item = null) {
+    if (this.processing || this.destroyed) return;
+    for (const entry of this.entries) {
+      if (item?.parent?.uuid !== entry.token?.actor?.uuid) continue;
+      entry.noiseLevel = getWeaponNoiseLevel(getWeaponAttackData(entry.weapon, entry.weaponFunctionId));
+      setWeaponNoisePreview(entry.token, entry.noisePreviewSourceId, entry.noiseLevel);
+    }
+  }
+
+  clearNoisePreviews() {
+    for (const entry of this.entries) {
+      clearWeaponNoisePreview(
+        entry.token?.id ?? entry.token?.document?.id ?? "",
+        entry.noisePreviewSourceId
+      );
+    }
   }
 
   onKeyDown(event) {
@@ -1392,6 +1473,7 @@ class CommandedWeaponAttackController {
     if (this.processing) return false;
     this.finishTargetSelection();
     this.processing = true;
+    this.clearNoisePreviews();
     try {
       const selections = this.entries.map(entry => serializeCommandedAttackSelection({
         token: entry.token,
@@ -1937,7 +2019,9 @@ async function executeCapturedWeaponAttack(selection = {}, {
   skipActionPointCost = true,
   reportedActionPointCost = null,
   reactionCoordinator = null,
-  chainRef = null
+  chainRef = null,
+  deferWeaponNoiseDetection = false,
+  returnWeaponNoiseMetadata = false
 } = {}) {
   const token = selection?.token ?? null;
   const weapon = selection?.weapon ?? null;
@@ -1949,7 +2033,9 @@ async function executeCapturedWeaponAttack(selection = {}, {
     skipActionPointCost,
     reportedActionPointCost,
     reactionCoordinator,
-    chainRef
+    chainRef,
+    deferWeaponNoiseDetection,
+    finishAfterAttack: true
   });
   controller.pointer = deserializePoint(selection.pointer);
   controller.geometry = deserializeGeometry(selection.geometry);
@@ -1964,23 +2050,23 @@ async function executeCapturedWeaponAttack(selection = {}, {
       controller.aimedMode = "limb";
       controller.refresh(true);
       await controller.performAimedAttack(selection.selectedLimbKey);
-      return didCapturedWeaponAttackExecute(controller);
+      return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
     }
     if (selection.mode === "directed") {
       controller.selectedTarget = selectedTarget;
       controller.aimedMode = "direction";
       controller.refresh(true);
       await controller.performDirectedAttack(selection.directionKey);
-      return didCapturedWeaponAttackExecute(controller);
+      return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
     }
     if (selection.mode === "push") {
       controller.refresh(true);
       await controller.performPushAttack(selection.selectedStrength);
-      return didCapturedWeaponAttackExecute(controller);
+      return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
     }
     controller.refresh(true);
     await controller.performCurrentAttack();
-    return didCapturedWeaponAttackExecute(controller);
+    return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
   } finally {
     controller.destroy();
   }
@@ -1988,6 +2074,16 @@ async function executeCapturedWeaponAttack(selection = {}, {
 
 function didCapturedWeaponAttackExecute(controller = null) {
   return Boolean(controller?.lastResolvedAttackOutcome) || Number(controller?.attackCheckCount) > 0;
+}
+
+function getCapturedWeaponAttackResult(controller = null, { includeWeaponNoiseMetadata = false } = {}) {
+  const executed = didCapturedWeaponAttackExecute(controller) || Boolean(controller?.weaponNoiseAttempted);
+  if (!includeWeaponNoiseMetadata) return executed;
+  return {
+    executed,
+    weaponNoiseAttempted: Boolean(controller?.weaponNoiseAttempted),
+    noiseLevel: getWeaponNoiseLevel({ noiseLevel: controller?.weaponNoiseLevel })
+  };
 }
 
 export async function executeWeaponAttackAgainstToken({
@@ -2409,6 +2505,7 @@ class WeaponAttackController {
     this.captureOnly = Boolean(options.captureOnly);
     this.onCapture = typeof options.onCapture === "function" ? options.onCapture : null;
     this.reactionCoordinator = options.reactionCoordinator?.run ? options.reactionCoordinator : null;
+    this.deferWeaponNoiseDetection = Boolean(options.deferWeaponNoiseDetection);
     this.finishAfterAttack = Boolean(options.finishAfterAttack);
     this.constrainedTarget = Boolean(options.constrainedTarget);
     this.interactiveControlReleased = false;
@@ -2461,6 +2558,10 @@ class WeaponAttackController {
     this.lastResolvedAttackOutcome = null;
     this.attackCheckCount = 0;
     this.attackCheckEventSequence = 0;
+    this.weaponNoisePreviewSourceId = `weapon-attack:${this.attackId}`;
+    this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
+    this.weaponNoiseAttempted = false;
+    this.weaponNoiseDetectionResolved = false;
     this.skillCheckCollectors = new Set();
     this.reactionTargetKeys = new Set();
     this.attackedTargetActorUuids = new Set();
@@ -2474,12 +2575,14 @@ class WeaponAttackController {
       confirm: event => this.onConfirm(event),
       cancel: event => this.onCancel(event),
       pointerDown: event => this.onPointerDown(event),
-      tick: () => this.onTick()
+      tick: () => this.onTick(),
+      itemUpdate: item => this.onItemUpdate(item)
     };
   }
 
   activate() {
     this.attachPreview();
+    this.syncWeaponNoisePreview();
     if (isWhirlwindAttackModifier(this.attackModifier)) this.pointer = getTokenAimPoint(this.token);
     this.targetSelectionSession = startCanvasTargetSelectionSession({
       kind: "weaponAttack",
@@ -2491,6 +2594,7 @@ class WeaponAttackController {
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app.ticker.add(this.events.tick);
+    Hooks.on("updateItem", this.events.itemUpdate);
     const canvasView = canvas.app?.view ?? null;
     this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     if (canvasView) canvasView.oncontextmenu = this.events.cancel;
@@ -2550,7 +2654,33 @@ class WeaponAttackController {
     };
     this.lastResolvedAttackOutcome = outcome;
     await publishWeaponAttackResolved(outcome);
+    await this.finalizeWeaponNoiseDetection();
     return outcome;
+  }
+
+  syncWeaponNoisePreview() {
+    if (this.destroyed || this.processing || this.previewSuppressed) return false;
+    this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
+    setWeaponNoisePreview(this.token, this.weaponNoisePreviewSourceId, this.weaponNoiseLevel);
+    return true;
+  }
+
+  clearWeaponNoisePreview() {
+    clearWeaponNoisePreview(
+      this.token?.id ?? this.token?.document?.id ?? "",
+      this.weaponNoisePreviewSourceId
+    );
+  }
+
+  async finalizeWeaponNoiseDetection() {
+    if (
+      !this.weaponNoiseAttempted
+      || this.weaponNoiseDetectionResolved
+      || this.deferWeaponNoiseDetection
+    ) return false;
+    this.weaponNoiseDetectionResolved = true;
+    await resolveWeaponNoiseDetection(this.token, { noiseLevel: this.weaponNoiseLevel });
+    return true;
   }
 
   async notifyAttackCheckResolved(outcome = null, completionCollector = null) {
@@ -2903,6 +3033,7 @@ class WeaponAttackController {
 
   suppressPreview() {
     this.previewSuppressed = true;
+    this.clearWeaponNoisePreview();
     this.shape.clear();
     this.meleeDirectionPreview.clear();
     this.clearTargetMarkers();
@@ -2918,6 +3049,7 @@ class WeaponAttackController {
     if (this.destroyed) return;
     this.previewSuppressed = false;
     this.attachPreview();
+    this.syncWeaponNoisePreview();
     this.refresh(true);
   }
 
@@ -2959,14 +3091,21 @@ class WeaponAttackController {
       this.destroy();
       return true;
     }
-    if (refresh) this.refresh(true);
+    if (refresh) {
+      this.syncWeaponNoisePreview();
+      this.refresh(true);
+    }
     return false;
   }
 
   beginProcessingCycle() {
     if (this.processing) return false;
     this.finishTargetSelection();
+    this.weaponNoiseLevel = getWeaponNoiseLevel(getWeaponAttackData(this.weapon, this.weaponFunctionId));
+    this.weaponNoiseAttempted = false;
+    this.weaponNoiseDetectionResolved = false;
     this.processing = true;
+    this.clearWeaponNoisePreview();
     this.releaseInteractiveControl();
     if (this.onProcessingStarted) {
       try {
@@ -3059,7 +3198,8 @@ class WeaponAttackController {
         return false;
       }
     }
-    if (this.shouldSpendWeaponResourcesForAttempt()) {
+    const weaponAttempted = this.shouldSpendWeaponResourcesForAttempt();
+    if (weaponAttempted) {
       if (!(await this.spendWeaponActionModifierCosts(attackCount))) return false;
       const modifierState = this.getWeaponActionModifierState();
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId, { modifierState });
@@ -3088,6 +3228,7 @@ class WeaponAttackController {
       resolvedCost: actionPointCost
     });
     this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
+    this.weaponNoiseAttempted = weaponAttempted;
     this.interruptForIncapacitation();
     return true;
   }
@@ -3130,6 +3271,7 @@ class WeaponAttackController {
     if (this.destroyed) return;
     this.finishTargetSelection();
     this.destroyed = true;
+    this.clearWeaponNoisePreview();
     void this.abortSkillCheckCollectors();
     if (typeof this.attackModifier?.onDestroy === "function") {
       try {
@@ -3165,6 +3307,7 @@ class WeaponAttackController {
     canvas.stage.off("mousemove", this.events.move);
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
+    Hooks.off("updateItem", this.events.itemUpdate);
     const canvasView = canvas.app?.view ?? null;
     if (canvasView?.oncontextmenu === this.events.cancel) canvasView.oncontextmenu = this.previousViewContextMenu;
     this.previousViewContextMenu = null;
@@ -3399,6 +3542,15 @@ class WeaponAttackController {
     }
     if (this.processing || this.isInteractionLocked()) return;
     this.drawFocusedTargetMarkerForPreview(performance.now());
+  }
+
+  onItemUpdate(item = null) {
+    if (
+      this.processing
+      || this.destroyed
+      || item?.parent?.uuid !== this.token?.actor?.uuid
+    ) return;
+    this.syncWeaponNoisePreview();
   }
 
   async onConfirm(event) {
@@ -3822,6 +3974,7 @@ class WeaponAttackController {
       });
     }
     await this.playAttackAnimationsIfNeeded(trajectories, { attempted });
+    await this.finalizeWeaponNoiseDetection();
     this.completeProcessingCycle();
   }
 
@@ -4825,6 +4978,7 @@ class WeaponAttackController {
         }),
         requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest)
       ]);
+      await this.finalizeWeaponNoiseDetection();
       this.completeProcessingCycle();
       return;
     }
@@ -7367,7 +7521,6 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   damageHubOperationRef = "",
   resolvedCost = null
 } = {}) {
-  if (actionKey !== "reload") await revealActorFromStealth(actor);
   const actionPointCostWasApplied = actionPointCostApplied === null || actionPointCostApplied === undefined
     ? spendActionPoints && isCombatActionPointSpendingActive(actor)
     : Boolean(actionPointCostApplied);
@@ -9477,7 +9630,8 @@ function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "", expli
       context: "critical damage percent"
     })
       + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage")
-      + getContextualCombatValue(actor, "criticalDamagePercent", context))
+      + getContextualCombatValue(actor, "criticalDamagePercent", context)
+      + stealth.criticalDamageBonusPercent)
     : 100;
   return {
     stealthDamageBonusPercent: Math.max(0, toInteger(stealth.damageBonusPercent)),
@@ -9488,8 +9642,9 @@ function getCriticalDamageSnapshot(weapon, outcome, weaponFunctionId = "", expli
 
 function applyCriticalDamageSnapshot(amount, snapshot = {}) {
   const baseAmount = Math.max(0, Number(amount) || 0);
-  const stealthDamage = Math.floor(
-    baseAmount * Math.max(0, toInteger(snapshot.stealthDamageBonusPercent)) / 100
+  const stealthDamage = calculateStealthDamageBonusAmount(
+    baseAmount,
+    snapshot.stealthDamageBonusPercent
   );
   const modifiedBaseAmount = baseAmount + stealthDamage;
   if (snapshot.criticalSuccess !== true) return modifiedBaseAmount;
@@ -9666,12 +9821,14 @@ function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId
 
 function getWeaponAccuracyModifier(weapon, weaponFunctionId = "", context = {}) {
   const actor = getWeaponOwnerActor(weapon);
+  const stealth = getStealthAttackModifiers(actor);
   return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus, {
     minimum: -Infinity,
     context: "weapon accuracy"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
     + getContextualCombatValue(actor, "accuracy", context)
+    + stealth.accuracyBonus
     - getWeaponConditionAccuracyPenalty(weapon);
 }
 
@@ -11431,6 +11588,7 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
     })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
     + toInteger(contextual.accuracy)
+    + stealth.accuracyBonus
     - getWeaponConditionAccuracyPenalty(weapon);
 
   return {

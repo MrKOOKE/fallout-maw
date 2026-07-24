@@ -14,6 +14,12 @@ export const DEFAULT_STEALTH_SETTINGS = Object.freeze({
     skillKey: "naturalist",
     rangeFormula: "5 + навык / 10"
   }),
+  attackBonuses: Object.freeze({
+    accuracyFormula: "0",
+    criticalChanceFormula: "luck",
+    damagePercentFormula: "stealth / 5",
+    criticalDamagePercentFormula: "0"
+  }),
   attenuationLevels: Object.freeze([
     Object.freeze({ threshold: 1, penaltyPercent: 90 }),
     Object.freeze({ threshold: 0.75, penaltyPercent: 70 }),
@@ -47,6 +53,7 @@ export function normalizeStealthSettings(value = {}) {
   return {
     difficulty: normalizeDifficultySettings(source.difficulty, source.difficultyMode),
     detection: normalizeDetectionSettings(source.detection),
+    attackBonuses: normalizeAttackBonusSettings(source.attackBonuses),
     attenuationLevels: normalizeThresholdRows(source.attenuationLevels, DEFAULT_STEALTH_SETTINGS.attenuationLevels, "penaltyPercent", 0, 100),
     difficultyLevels: normalizeThresholdRows(source.difficultyLevels, DEFAULT_STEALTH_SETTINGS.difficultyLevels, "difficultyBonus", -999, 999),
     autoDetection: normalizeAutoDetection(source.autoDetection)
@@ -66,6 +73,16 @@ function normalizeDetectionSettings(value = {}) {
   return {
     skillKey: String(value?.skillKey ?? defaults.skillKey).trim() || defaults.skillKey,
     rangeFormula: normalizeFormula(value?.rangeFormula, defaults.rangeFormula)
+  };
+}
+
+function normalizeAttackBonusSettings(value = {}) {
+  const defaults = DEFAULT_STEALTH_SETTINGS.attackBonuses;
+  return {
+    accuracyFormula: normalizeFormula(value?.accuracyFormula, defaults.accuracyFormula),
+    criticalChanceFormula: normalizeFormula(value?.criticalChanceFormula, defaults.criticalChanceFormula),
+    damagePercentFormula: normalizeFormula(value?.damagePercentFormula, defaults.damagePercentFormula),
+    criticalDamagePercentFormula: normalizeFormula(value?.criticalDamagePercentFormula, defaults.criticalDamagePercentFormula)
   };
 }
 

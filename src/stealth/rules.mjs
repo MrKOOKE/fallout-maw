@@ -2,7 +2,10 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { evaluateFormula } from "../formulas/evaluation.mjs";
 import { STEALTH_SETTINGS_SETTING } from "../settings/constants.mjs";
 import { analyzeTokenLighting } from "./lighting.mjs";
-import { createDefaultStealthSettings, normalizeStealthSettings } from "./settings.mjs";
+import {
+  createDefaultStealthSettings,
+  normalizeStealthSettings
+} from "./settings.mjs";
 
 export const STEALTH_HIDDEN_OBSERVER_DIFFICULTY_MODIFIER = -50;
 
@@ -80,17 +83,6 @@ export function computeStealthDifficulty(sourceToken, targetToken, settings = ge
       ...lighting,
       modifiers
     }
-  };
-}
-
-export function getStealthAttackModifiers(actor) {
-  if (!isActorStealthed(actor)) return {
-    criticalChanceBonus: 0,
-    damageBonusPercent: 0
-  };
-  return {
-    criticalChanceBonus: getActorCharacteristicValue(actor, "luck"),
-    damageBonusPercent: Math.max(0, Math.floor(getActorSkillValue(actor, "stealth") / 5))
   };
 }
 

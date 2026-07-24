@@ -4210,6 +4210,7 @@
         </div>
       </label>
       <label><span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span><input type="number" name="system.functions.module.weapon.penetration" value="{{system.functions.module.weapon.penetration}}" step="1"></label>
+      <label><span>{{localize "FALLOUTMAW.Item.WeaponNoiseLevel"}}</span><input type="number" name="system.functions.module.weapon.noiseLevel" value="{{system.functions.module.weapon.noiseLevel}}" step="1"></label>
       <label><span>{{localize "FALLOUTMAW.Item.WeaponMagazine"}}</span><input type="number" name="system.functions.module.weapon.magazineMax" value="{{system.functions.module.weapon.magazineMax}}" step="1"></label>
     </div>
     <div class="fallout-maw-panel-header">
@@ -4934,6 +4935,10 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
         <input type="text" name="{{path}}.penetration" value="{{weaponData.penetration}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponNoiseLevel"}}</span>
+        <input type="number" name="{{path}}.noiseLevel" value="{{weaponData.noiseLevel}}" min="0" step="1">
       </label>
       {{#if hasMagazineCost}}
         <label class="fallout-maw-split-number-field">

@@ -6,7 +6,10 @@ import {
   deferStealthedTokenVisibilityRefresh,
   registerBulkOperationFlusher
 } from "../utils/bulk-operation.mjs";
-import { isPointInsideObserverZone, invalidateStealthDetectionCache } from "./detection.mjs";
+import {
+  isPointInsideObserverZone,
+  invalidateStealthDetectionCache
+} from "./detection.mjs";
 import { invalidateLightingAnalysisCache } from "./lighting.mjs";
 import { registerStealthMovementProvider } from "./movement.mjs";
 import { invalidateStealthRelationCache, isValidStealthObserver } from "./observers.mjs";
@@ -28,12 +31,18 @@ import {
   registerStealthAllyVisibilityPatch
 } from "./visibility-adapter.mjs";
 import {
+  clearWeaponNoiseDetectionQueues,
+  configureWeaponNoiseDetection
+} from "./weapon-noise.mjs";
+import {
+  canRenderDetectionVisualizationForLocalUser,
   cleanupAllStealthVisualizations,
   cleanupTokenStealthVisualization,
   configureStealthVisualization,
   onTokenHoverForDetectionZone,
   queueDetectionVisualizationRefresh,
   removeDetectionVisualization,
+  setPersistentDetectionVisualization,
   trackDetectionVisualizationMovement,
   updateDetectionVisualization
 } from "./visualization.mjs";
@@ -74,6 +83,10 @@ export function registerStealthHooks() {
     rollStealthCheck,
     pauseGame: pauseGameForStealthDetection
   });
+  configureWeaponNoiseDetection({
+    rollStealthCheck,
+    pauseGame: pauseGameForStealthDetection
+  });
   if (game.ready) registerStealthSocket();
   else Hooks.once("ready", registerStealthSocket);
 
@@ -84,6 +97,9 @@ export function registerStealthHooks() {
   Hooks.on("createToken", onTokenCreated);
   Hooks.on("updateToken", onTokenUpdated);
   Hooks.on("deleteToken", onTokenDeleted);
+  Hooks.on("drawToken", synchronizePersistentDetectionVisualization);
+  Hooks.on("refreshToken", synchronizePersistentDetectionVisualization);
+  Hooks.on("controlToken", () => queueStealthRefresh({ visualization: true }));
   Hooks.on("canvasReady", onCanvasReady);
   Hooks.on("canvasTearDown", cleanupAllStealthUi);
   Hooks.on("updateScene", onSceneUpdated);
@@ -399,17 +415,18 @@ function onActorUpdated(actor, changes = {}) {
   const factionChanged = hasChangedPath(changes, factionRoots);
   const skillChanged = hasChangedPath(changes, skillRoots);
   const statusChanged = hasChangedPath(changes, ["statuses", "system.statuses", "system.conditions"]);
-  if (!factionChanged && !skillChanged && !statusChanged) return;
+  const permissionChanged = hasChangedPath(changes, ["ownership"]);
+  if (!factionChanged && !skillChanged && !statusChanged && !permissionChanged) return;
 
   if (factionChanged) {
     invalidateStealthRelationCache(actor);
     queueStealthedTokenVisibilityRefresh();
   }
   if (skillChanged) invalidateStealthDetectionCache();
-  if (skillChanged || statusChanged || factionChanged) {
+  if (skillChanged || statusChanged || factionChanged || permissionChanged) {
     queueStealthRefresh({ actor, visualization: true });
   }
-  if (statusChanged) synchronizeActorStealthState(actor);
+  if (statusChanged || permissionChanged) synchronizeActorStealthState(actor);
 }
 
 function onActiveEffectChanged(effect, changes = null, operation = "update") {
@@ -424,6 +441,7 @@ function onActiveEffectChanged(effect, changes = null, operation = "update") {
 function onTokenCreated(tokenDocument) {
   if (!isDocumentInActiveScene(tokenDocument)) return;
   if (tokenDocument?.actor && isActorStealthed(tokenDocument.actor)) queueStealthedTokenVisibilityRefresh();
+  synchronizePersistentDetectionVisualization(tokenDocument?.object);
   const emitsLight = tokenEmitsLight(tokenDocument);
   if (emitsLight) {
     invalidateLightingAnalysisCache();
@@ -436,6 +454,8 @@ function onTokenCreated(tokenDocument) {
 
 function onTokenUpdated(tokenDocument, changes = {}) {
   if (!isDocumentInActiveScene(tokenDocument)) return;
+  synchronizePersistentDetectionVisualization(tokenDocument?.object);
+  const localVisibilityChanged = hasChangedPath(changes, ["hidden"]);
   const geometryChanged = hasChangedPath(changes, [
     "sight",
     "detectionModes",
@@ -449,6 +469,8 @@ function onTokenUpdated(tokenDocument, changes = {}) {
     "actorId",
     "actorLink"
   ]);
+  if (!geometryChanged && !localVisibilityChanged) return;
+  if (localVisibilityChanged) queueStealthRefresh({ visualization: true });
   if (!geometryChanged) return;
   invalidateLightingAnalysisCache();
   invalidateStealthDetectionCache();
@@ -501,6 +523,7 @@ function onCanvasReady() {
   invalidateStealthDetectionCache();
   invalidateStealthRelationCache();
   captureRuntimePerceptionSignature();
+  synchronizePersistentStealthVisualizations();
   queueStealthRefresh({ allWindows: true, visibility: true, visualization: true });
 }
 
@@ -667,14 +690,30 @@ function onFactionSettingsChanged() {
 }
 
 function synchronizeActorStealthState(actor) {
-  if (!actor || isActorStealthed(actor)) return;
-  if (targetMode) {
+  if (!actor) return;
+  const stealthed = isActorStealthed(actor);
+  if (!stealthed && targetMode) {
     const source = globalThis.canvas?.tokens?.get(targetMode.sourceTokenId);
     if (source?.actor?.uuid === actor.uuid) stopTargetingMode();
   }
   for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
-    if (token.actor?.uuid === actor.uuid) removeDetectionVisualization(token.id);
+    if (token.actor?.uuid !== actor.uuid) continue;
+    if (stealthed) synchronizePersistentDetectionVisualization(token);
+    else cleanupTokenStealthVisualization(token.id);
   }
+}
+
+function synchronizePersistentStealthVisualizations() {
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    synchronizePersistentDetectionVisualization(token);
+  }
+}
+
+function synchronizePersistentDetectionVisualization(token) {
+  if (!token?.id) return false;
+  const active = canRenderDetectionVisualizationForLocalUser(token);
+  setPersistentDetectionVisualization(token, active);
+  return active;
 }
 
 function queueStealthRefresh({
@@ -779,6 +818,7 @@ function cleanupAllStealthUi() {
   stealthWindows.clear();
   cleanupAllStealthVisualizations();
   tokenAnimationTasks.clear();
+  clearWeaponNoiseDetectionQueues();
   pendingActorRefreshes.clear();
   refreshAllWindowsPending = false;
   visibilityRefreshPending = false;
@@ -810,7 +850,7 @@ function handleStealthSocketMessage(message = {}, senderUserId = "") {
 }
 
 function pauseGameForStealthDetection({ localOnly = false } = {}) {
-  if (game.paused) return;
+  if (game.paused || game.combat?.started) return;
   if (!game.user?.isGM) {
     if (!localOnly) requestStealthDetectionPause();
     return;

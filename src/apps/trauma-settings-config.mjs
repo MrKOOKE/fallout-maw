@@ -18,6 +18,7 @@ import {
   normalizeTraumaSettings
 } from "../settings/traumas.mjs";
 import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildStealthAttackBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 
 export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -487,6 +488,7 @@ function buildEffectKeyTokens() {
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),
     buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
-    ...buildCombatEffectKeyTokens()
+    ...buildCombatEffectKeyTokens(),
+    ...buildStealthAttackBonusEffectKeyTokens()
   ].filter(Boolean);
 }

@@ -27,6 +27,31 @@
     </div>
   </section>
 
+  <section class="fallout-maw-panel" data-stealth-attack-bonuses>
+    <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Settings.Stealth.AttackBonusesTitle"}}</h2>
+    </header>
+    <p class="hint">{{localize "FALLOUTMAW.Settings.Stealth.AttackBonusesHint"}}</p>
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Stealth.AccuracyFormula"}}</span>
+        <input type="text" name="attackBonuses.accuracyFormula" value="{{settings.attackBonuses.accuracyFormula}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Stealth.CriticalChanceFormula"}}</span>
+        <input type="text" name="attackBonuses.criticalChanceFormula" value="{{settings.attackBonuses.criticalChanceFormula}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Stealth.DamagePercentFormula"}}</span>
+        <input type="text" name="attackBonuses.damagePercentFormula" value="{{settings.attackBonuses.damagePercentFormula}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Stealth.CriticalDamagePercentFormula"}}</span>
+        <input type="text" name="attackBonuses.criticalDamagePercentFormula" value="{{settings.attackBonuses.criticalDamagePercentFormula}}" data-formula-autocomplete="all">
+      </label>
+    </div>
+  </section>
+
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>Максимальная дальность обнаружения скрытых целей</h2>

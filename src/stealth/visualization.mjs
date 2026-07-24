@@ -1,21 +1,33 @@
 import {
+  getGridOffsetKey,
   getStealthObserverZones,
   getTokenVisualizationGridKey,
-  invalidateStealthDetectionCache
+  invalidateStealthDetectionCache,
+  weaponNoiseToRangeBonus
 } from "./detection.mjs";
 import { isValidStealthObserver } from "./observers.mjs";
-import { isActorStealthed } from "./rules.mjs";
+import {
+  canControlStealth,
+  getRuntimeStealthSettings,
+  isActorStealthed
+} from "./rules.mjs";
 
 const STEALTH_DETECTION_LAYER = "falloutMawStealthDetectionZones";
 const STEALTH_DETECTION_HOVER_LAYER = "falloutMawStealthDetectionHoverZone";
+const STEALTH_PERSISTENT_SOURCE_ID = "stealth-persistent";
+const STEALTH_WINDOW_SOURCE_ID = "stealth-window";
+const WEAPON_SOURCE_PREFIX = "weapon:";
 const VISUALIZATION_COALESCE_MS = 50;
+const BASE_ZONE_COLOR = 0xff3b3b;
+const ADDED_ZONE_COLOR = 0xff6a55;
 
-const activeVisualizations = new Set();
+const visualizationSources = new Map();
 const detectionVisualizations = new Map();
 const movementKeys = new Map();
 const movementTrackers = new Map();
 
 let hoverTokenId = null;
+let detectionNoiseOverlay = null;
 let refreshTimeout = null;
 let pendingRefreshAfterMovement = false;
 let pendingInvalidation = false;
@@ -32,32 +44,155 @@ export function configureStealthVisualization({ refreshWindows } = {}) {
  */
 export function updateDetectionVisualization(token) {
   if (!token?.id) return;
-  activeVisualizations.add(token.id);
-  queueDetectionVisualizationRefresh();
+  setDetectionVisualizationSource(token.id, STEALTH_WINDOW_SOURCE_ID, 0);
 }
 
 export function removeDetectionVisualization(tokenId, { refreshHover = true } = {}) {
   if (!tokenId) return;
-  activeVisualizations.delete(tokenId);
+  clearDetectionVisualizationSource(tokenId, STEALTH_WINDOW_SOURCE_ID, { refreshHover });
+}
+
+export function setPersistentDetectionVisualization(token, active = true) {
+  if (!token?.id) return;
+  if (active) setDetectionVisualizationSource(token.id, STEALTH_PERSISTENT_SOURCE_ID, 0);
+  else clearDetectionVisualizationSource(token.id, STEALTH_PERSISTENT_SOURCE_ID);
+}
+
+/**
+ * Apply one local privacy gate to persistent, window, and weapon sources.
+ * Foundry can consider a controlled manually-hidden token visible, so that
+ * document flag must be checked explicitly for non-GM users.
+ */
+export function canRenderDetectionVisualizationForLocalUser(token) {
+  const activeCanvas = globalThis.canvas;
+  const user = globalThis.game?.user;
+  if (!activeCanvas?.ready || !token?.actor || !isActorStealthed(token.actor)) return false;
+  const parentScene = token.document?.parent;
+  if (parentScene?.documentName === "Scene" && parentScene.id !== activeCanvas.scene?.id) return false;
+  if (!user?.isGM && (token.document?.hidden === true || token.hidden === true)) return false;
+  if (!canControlStealth(token.actor)) return false;
+  if (token.visible === false || token.isVisible === false || token.renderable === false) return false;
+  return true;
+}
+
+export function setWeaponNoisePreview(token, sourceId, noiseLevel) {
+  const normalizedSourceId = String(sourceId ?? "").trim();
+  if (!token?.id || !normalizedSourceId) return;
+  setDetectionVisualizationSource(
+    token.id,
+    `${WEAPON_SOURCE_PREFIX}${normalizedSourceId}`,
+    normalizeNoiseLevel(noiseLevel)
+  );
+}
+
+export function clearWeaponNoisePreview(tokenId, sourceId) {
+  const normalizedSourceId = String(sourceId ?? "").trim();
+  if (!tokenId || !normalizedSourceId) return;
+  clearDetectionVisualizationSource(tokenId, `${WEAPON_SOURCE_PREFIX}${normalizedSourceId}`);
+}
+
+function setDetectionVisualizationSource(tokenId, sourceId, noiseLevel) {
+  let sources = visualizationSources.get(tokenId);
+  if (!sources) {
+    sources = new Map();
+    visualizationSources.set(tokenId, sources);
+  }
+  const normalizedNoise = normalizeNoiseLevel(noiseLevel);
+  if (sources.get(sourceId) === normalizedNoise) return;
+  sources.set(sourceId, normalizedNoise);
+  queueDetectionVisualizationRefresh();
+}
+
+function clearDetectionVisualizationSource(tokenId, sourceId, { refreshHover = true } = {}) {
+  const sources = visualizationSources.get(tokenId);
+  if (!sources?.delete(sourceId)) return;
+  if (!sources.size) {
+    removeAllDetectionVisualizationSources(tokenId, { refreshHover });
+    queueDetectionVisualizationRefresh();
+    return;
+  }
+  queueDetectionVisualizationRefresh();
+}
+
+function getEffectiveVisualizationRequest(sources, settings) {
+  const hasPersistentSource = sources?.has(STEALTH_PERSISTENT_SOURCE_ID);
+  const hasStealthWindow = sources?.has(STEALTH_WINDOW_SOURCE_ID);
+  const autoDetectionEnabled = settings?.autoDetection?.enabled === true;
+  const noiseLevel = autoDetectionEnabled ? getMaximumWeaponNoiseSource(sources) : 0;
+  return {
+    active: Boolean(
+      hasPersistentSource
+      || hasStealthWindow
+      || (autoDetectionEnabled && hasWeaponVisualizationSource(sources))
+    ),
+    noiseLevel
+  };
+}
+
+function getMaximumWeaponNoiseSource(sources) {
+  let noiseLevel = 0;
+  for (const [sourceId, sourceNoise] of sources ?? []) {
+    if (!sourceId.startsWith(WEAPON_SOURCE_PREFIX)) continue;
+    noiseLevel = Math.max(noiseLevel, normalizeNoiseLevel(sourceNoise));
+  }
+  return noiseLevel;
+}
+
+function hasWeaponVisualizationSource(sources) {
+  for (const sourceId of sources?.keys?.() ?? []) {
+    if (sourceId.startsWith(WEAPON_SOURCE_PREFIX)) return true;
+  }
+  return false;
+}
+
+function normalizeNoiseLevel(value) {
+  return Math.max(0, Math.trunc(Number(value) || 0));
+}
+
+function removeAllDetectionVisualizationSources(tokenId, {
+  refreshHover = true,
+  refreshNoise = true
+} = {}) {
+  if (!tokenId) return;
+  visualizationSources.delete(tokenId);
+  destroyRenderedDetectionVisualization(tokenId);
+  movementKeys.delete(tokenId);
+  stopDetectionVisualizationMovementTracking(tokenId);
+  if (refreshNoise) rebuildDetectionNoiseOverlay();
+  if (refreshHover) refreshDetectionHoverFill();
+}
+
+function destroyRenderedDetectionVisualization(tokenId) {
   const visualization = detectionVisualizations.get(tokenId);
   if (visualization) visualization.container?.destroy?.({ children: true });
   detectionVisualizations.delete(tokenId);
-  movementKeys.delete(tokenId);
-  stopDetectionVisualizationMovementTracking(tokenId);
-  if (refreshHover) refreshDetectionHoverFill();
 }
 
 export function refreshDetectionVisualizations({ invalidate = false } = {}) {
   if (invalidate) invalidateStealthDetectionCache();
   const activeCanvas = globalThis.canvas;
-  for (const tokenId of [...activeVisualizations]) {
+  const settings = getRuntimeStealthSettings();
+  for (const [tokenId, sources] of [...visualizationSources]) {
     const token = activeCanvas?.tokens?.get(tokenId);
     if (!token?.actor || !isActorStealthed(token.actor)) {
-      removeDetectionVisualization(tokenId, { refreshHover: false });
+      removeAllDetectionVisualizationSources(tokenId, {
+        refreshHover: false,
+        refreshNoise: false
+      });
       continue;
     }
-    rebuildDetectionVisualization(token);
+    if (!canRenderDetectionVisualizationForLocalUser(token)) {
+      destroyRenderedDetectionVisualization(tokenId);
+      continue;
+    }
+    const request = getEffectiveVisualizationRequest(sources, settings);
+    if (!request.active) {
+      destroyRenderedDetectionVisualization(tokenId);
+      continue;
+    }
+    rebuildDetectionVisualization(token, request, settings);
   }
+  rebuildDetectionNoiseOverlay();
   refreshDetectionHoverFill();
 }
 
@@ -112,7 +247,7 @@ export function onTokenHoverForDetectionZone(token, hovered) {
 }
 
 export function cleanupTokenStealthVisualization(tokenId) {
-  removeDetectionVisualization(tokenId);
+  removeAllDetectionVisualizationSources(tokenId);
 }
 
 export function cleanupAllStealthVisualizations() {
@@ -124,13 +259,15 @@ export function cleanupAllStealthVisualizations() {
   for (const visualization of detectionVisualizations.values()) {
     visualization.container?.destroy?.({ children: true });
   }
-  activeVisualizations.clear();
+  visualizationSources.clear();
   detectionVisualizations.clear();
   movementKeys.clear();
   movementTrackers.clear();
   pendingRefreshAfterMovement = false;
   pendingInvalidation = false;
   hoverTokenId = null;
+  detectionNoiseOverlay?.destroy?.({ children: true });
+  detectionNoiseOverlay = null;
   const gridLayer = globalThis.canvas?.interface?.grid;
   gridLayer?.destroyHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
   const layer = globalThis.canvas?.controls?.[STEALTH_DETECTION_LAYER];
@@ -139,18 +276,30 @@ export function cleanupAllStealthVisualizations() {
 }
 
 export function getStealthVisualizationStats() {
+  let sourceCount = 0;
+  let maximumNoiseLevel = 0;
+  for (const sources of visualizationSources.values()) {
+    sourceCount += sources.size;
+    maximumNoiseLevel = Math.max(maximumNoiseLevel, getMaximumWeaponNoiseSource(sources));
+  }
   return Object.freeze({
-    active: activeVisualizations.size,
+    active: visualizationSources.size,
+    sources: sourceCount,
+    maximumNoiseLevel,
     rendered: detectionVisualizations.size,
     movements: movementTrackers.size,
     queued: Boolean(refreshTimeout)
   });
 }
 
-function rebuildDetectionVisualization(token) {
+function rebuildDetectionVisualization(token, request, settings) {
   if (!token?.id || !globalThis.canvas?.controls) return;
   const previous = detectionVisualizations.get(token.id);
-  const zones = getStealthObserverZones(token, { visibleOnly: true });
+  const zones = getStealthObserverZones(token, {
+    visibleOnly: true,
+    rangeBonus: weaponNoiseToRangeBonus(request.noiseLevel),
+    settings
+  });
   if (!zones.length) {
     previous?.container?.destroy?.({ children: true });
     detectionVisualizations.delete(token.id);
@@ -164,7 +313,7 @@ function rebuildDetectionVisualization(token) {
     const graphics = new PIXI.Graphics();
     graphics.eventMode = "none";
     graphics.interactiveChildren = false;
-    drawGridZoneOutline(graphics, zone);
+    drawBaseGridZone(graphics, zone);
     container.addChild(graphics);
   }
   getDetectionLayer().addChild(container);
@@ -195,9 +344,9 @@ function flushPendingRefreshAfterMovement() {
 }
 
 function isTokenRelevantToDetectionVisualization(token) {
-  if (!token?.actor || !activeVisualizations.size) return false;
-  if (activeVisualizations.has(token.id)) return true;
-  for (const hiddenTokenId of activeVisualizations) {
+  if (!token?.actor || !visualizationSources.size) return false;
+  if (visualizationSources.has(token.id)) return true;
+  for (const hiddenTokenId of visualizationSources.keys()) {
     const hiddenToken = globalThis.canvas?.tokens?.get(hiddenTokenId);
     if (hiddenToken && isValidStealthObserver(hiddenToken, token)) return true;
   }
@@ -227,16 +376,31 @@ function refreshDetectionHoverFill() {
 
   const gridLayer = activeCanvas.interface.grid;
   gridLayer.addHighlightLayer(STEALTH_DETECTION_HOVER_LAYER);
-  for (const zone of zones) {
-    for (const offset of zone.offsets) {
-      const { x, y } = activeCanvas.grid.getTopLeftPoint(offset);
-      gridLayer.highlightPosition(STEALTH_DETECTION_HOVER_LAYER, {
-        x,
-        y,
-        color: 0xff3b3b,
-        alpha: 0.14
-      });
-    }
+  const baseOffsets = collectUniqueGridOffsets(
+    zones.map(zone => zone.baseOffsets ?? zone.offsets)
+  );
+  const baseKeys = new Set(baseOffsets.map(getGridOffsetKey));
+  const addedOffsets = collectUniqueGridOffsets(
+    zones.map(zone => zone.addedOffsets)
+  ).filter(offset => !baseKeys.has(getGridOffsetKey(offset)));
+
+  for (const offset of baseOffsets) {
+    const { x, y } = activeCanvas.grid.getTopLeftPoint(offset);
+    gridLayer.highlightPosition(STEALTH_DETECTION_HOVER_LAYER, {
+      x,
+      y,
+      color: BASE_ZONE_COLOR,
+      alpha: 0.14
+    });
+  }
+  for (const offset of addedOffsets) {
+    const { x, y } = activeCanvas.grid.getTopLeftPoint(offset);
+    gridLayer.highlightPosition(STEALTH_DETECTION_HOVER_LAYER, {
+      x,
+      y,
+      color: ADDED_ZONE_COLOR,
+      alpha: 0.08
+    });
   }
 }
 
@@ -244,13 +408,89 @@ function clearDetectionHoverFill() {
   globalThis.canvas?.interface?.grid?.clearHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
 }
 
-function drawGridZoneOutline(graphics, zone) {
-  graphics.lineStyle(2, 0xff3b3b, 0.85);
-  const edges = collectGridBoundaryEdges(zone.offsets, offset => canvas.grid.getVertices(offset));
+function drawBaseGridZone(graphics, zone) {
+  const baseOffsets = zone.baseOffsets ?? zone.offsets ?? [];
+  drawGridZoneOutline(graphics, baseOffsets, { width: 2, color: BASE_ZONE_COLOR, alpha: 0.85 });
+}
+
+/**
+ * Render all noise additions once for the local canvas. Keeping this outside
+ * observer/token containers prevents overlapping zones from multiplying fill
+ * alpha or drawing the same expanded edge more than once.
+ */
+function rebuildDetectionNoiseOverlay() {
+  detectionNoiseOverlay?.destroy?.({ children: true });
+  detectionNoiseOverlay = null;
+
+  const activeCanvas = globalThis.canvas;
+  if (!activeCanvas?.controls || activeCanvas.grid?.isGridless) return;
+
+  const noiseZones = [];
+  for (const visualization of detectionVisualizations.values()) {
+    for (const zone of visualization.zones ?? []) {
+      if (zone.addedOffsets?.length) noiseZones.push(zone);
+    }
+  }
+  if (!noiseZones.length) return;
+
+  const addedOffsets = collectUniqueGridOffsets(
+    noiseZones.map(zone => zone.addedOffsets)
+  );
+  const expandedOffsets = collectUniqueGridOffsets(
+    noiseZones.map(zone => zone.offsets)
+  );
+  if (!addedOffsets.length || !expandedOffsets.length) return;
+
+  const graphics = new PIXI.Graphics();
+  graphics.eventMode = "none";
+  graphics.interactiveChildren = false;
+  drawGridZoneFill(graphics, addedOffsets, ADDED_ZONE_COLOR, 0.08);
+  drawGridZoneOutline(graphics, expandedOffsets, {
+    width: 1,
+    color: ADDED_ZONE_COLOR,
+    alpha: 0.45
+  });
+
+  const layer = getDetectionLayer();
+  if (typeof layer.addChildAt === "function") layer.addChildAt(graphics, 0);
+  else layer.addChild(graphics);
+  detectionNoiseOverlay = graphics;
+}
+
+function drawGridZoneFill(graphics, offsets, color, alpha) {
+  graphics.beginFill(color, alpha);
+  for (const offset of offsets) {
+    const vertices = globalThis.canvas?.grid?.getVertices?.(offset) ?? [];
+    if (vertices.length < 3) continue;
+    graphics.drawPolygon(vertices.flatMap(vertex => [Number(vertex.x) || 0, Number(vertex.y) || 0]));
+  }
+  graphics.endFill();
+}
+
+function drawGridZoneOutline(graphics, offsets, { width, color, alpha }) {
+  graphics.lineStyle(width, color, alpha);
+  const edges = collectGridBoundaryEdges(
+    offsets,
+    offset => globalThis.canvas?.grid?.getVertices?.(offset)
+  );
   for (const edge of edges) {
     graphics.moveTo(edge.start.x, edge.start.y);
     graphics.lineTo(edge.end.x, edge.end.y);
   }
+}
+
+/**
+ * Build a stable scene-grid union without mutating cached zone offsets.
+ */
+export function collectUniqueGridOffsets(offsetGroups = []) {
+  const uniqueOffsets = new Map();
+  for (const offsets of offsetGroups ?? []) {
+    for (const offset of offsets ?? []) {
+      const key = getGridOffsetKey(offset);
+      if (!uniqueOffsets.has(key)) uniqueOffsets.set(key, offset);
+    }
+  }
+  return [...uniqueOffsets.values()];
 }
 
 /**

@@ -9658,6 +9658,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       max: 0
     },
     penetration: 0,
+    noiseLevel: 1,
     magazine: {
       value: 0,
       max: 0,

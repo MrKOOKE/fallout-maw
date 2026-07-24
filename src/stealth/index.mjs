@@ -7,6 +7,14 @@ export {
 } from "./controller.mjs";
 export {
   computeStealthDifficulty,
-  getStealthAttackModifiers,
   isActorStealthed
 } from "./rules.mjs";
+export {
+  calculateStealthDamageBonusAmount,
+  getStealthAttackModifiers
+} from "./attack-bonuses.mjs";
+export {
+  clearWeaponNoisePreview,
+  setWeaponNoisePreview
+} from "./visualization.mjs";
+export { resolveWeaponNoiseDetection } from "./weapon-noise.mjs";

@@ -4,13 +4,16 @@ import { afterEach, test } from "node:test";
 import {
   buildObserverDetectionZone,
   computeDetectionPathCost,
+  getStealthObserverZones,
   getStealthDetectionCacheStats,
   invalidateStealthDetectionCache,
-  testStealthDetectionPoint
+  testStealthDetectionPoint,
+  weaponNoiseToRangeBonus
 } from "../src/stealth/detection.mjs";
 import { invalidateLightingAnalysisCache } from "../src/stealth/lighting.mjs";
 
 const originalCanvas = globalThis.canvas;
+const originalGame = globalThis.game;
 const originalPIXI = globalThis.PIXI;
 
 afterEach(() => {
@@ -18,6 +21,8 @@ afterEach(() => {
   invalidateLightingAnalysisCache();
   if (originalCanvas === undefined) delete globalThis.canvas;
   else globalThis.canvas = originalCanvas;
+  if (originalGame === undefined) delete globalThis.game;
+  else globalThis.game = originalGame;
   if (originalPIXI === undefined) delete globalThis.PIXI;
   else globalThis.PIXI = originalPIXI;
 });
@@ -80,10 +85,169 @@ test("preview construction and its LRU cache both obey cell budgets", () => {
   assert.ok(oversized.offsets.length <= bounded.maxPreviewCells);
 });
 
-function createLinearCanvas({ cells, cellSize, darknessBand = null }) {
-  const scene = { id: `scene-${cells}-${cellSize}`, grid: { distance: 1 } };
+test("range bonus splits one preview scan into base and weapon-noise cells", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 7, cellSize: 100 });
+  const observer = createObserverWithUnlimitedSight("observer-noise-bands");
+  const settings = createSettings("2");
+
+  const baseZone = buildObserverDetectionZone(observer, { settings });
+  const expandedZone = buildObserverDetectionZone(observer, { rangeBonus: 2, settings });
+
+  assert.deepEqual(baseZone.offsets.map(({ j }) => j), [0, 1, 2]);
+  assert.deepEqual(expandedZone.baseOffsets.map(({ j }) => j), [0, 1, 2]);
+  assert.deepEqual(expandedZone.addedOffsets.map(({ j }) => j), [3, 4]);
+  assert.deepEqual(expandedZone.offsets.map(({ j }) => j), [0, 1, 2, 3, 4]);
+  assert.equal(expandedZone.range, 4);
+  assert.equal(expandedZone.baseRange, 2);
+  assert.equal(expandedZone.rangeBonus, 2);
+  assert.equal(expandedZone.maxRange, 4);
+  assert.notStrictEqual(expandedZone, baseZone);
+  assert.strictEqual(
+    buildObserverDetectionZone(observer, { rangeBonus: 2, settings }),
+    expandedZone
+  );
+});
+
+test("authoritative point checks apply weapon noise on gridded and gridless scenes", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 7, cellSize: 100 });
+  const observer = createObserverWithUnlimitedSight("observer-noise-point");
+  const settings = createSettings("2");
+  const origin = { x: 0, y: 0, elevation: 0 };
+  const target = { x: 400, y: 0, elevation: 0 };
+
+  assert.equal(testStealthDetectionPoint(observer, origin, target, { settings }), false);
+  assert.equal(testStealthDetectionPoint(observer, origin, target, { rangeBonus: 2, settings }), true);
+
+  globalThis.canvas.grid.isGridless = true;
+  invalidateStealthDetectionCache();
+  assert.equal(testStealthDetectionPoint(observer, origin, target, { settings }), false);
+  assert.equal(testStealthDetectionPoint(observer, origin, target, { rangeBonus: 2, settings }), true);
+});
+
+test("weapon noise adds exact unattenuated cells beyond a darkness-shaped base zone", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({
+    cells: 8,
+    cellSize: 100,
+    gridDistance: 1,
+    darknessBand: [-1, 10_000]
+  });
+  const observer = createObserver("observer-dark-noise");
+  const settings = Object.freeze({
+    detection: Object.freeze({ skillKey: "naturalist", rangeFormula: "0" }),
+    attenuationLevels: Object.freeze([
+      Object.freeze({ threshold: 0, penaltyPercent: 80 })
+    ])
+  });
+  const rangeBonus = weaponNoiseToRangeBonus(5);
+
+  const zone = buildObserverDetectionZone(observer, { rangeBonus, settings });
+  assert.deepEqual(zone.baseOffsets.map(({ j }) => j), [0]);
+  assert.deepEqual(zone.addedOffsets.map(({ j }) => j), [1, 2, 3, 4, 5]);
+
+  globalThis.canvas.grid.isGridless = true;
+  invalidateStealthDetectionCache();
+  const origin = { x: 0, y: 0, elevation: 0 };
+  assert.equal(
+    testStealthDetectionPoint(observer, origin, { x: 500, y: 0 }, { rangeBonus, settings }),
+    true
+  );
+  assert.equal(
+    testStealthDetectionPoint(observer, origin, { x: 501, y: 0 }, { rangeBonus, settings }),
+    false
+  );
+});
+
+test("weapon noise converts integer cells independently of grid units and size", () => {
+  globalThis.canvas = {
+    scene: { grid: { distance: 2 } },
+    grid: { distance: 9, size: 140 }
+  };
+  assert.equal(weaponNoiseToRangeBonus(5), 10);
+  assert.equal(weaponNoiseToRangeBonus(5.9), 10);
+  assert.equal(weaponNoiseToRangeBonus(-3), 0);
+  assert.equal(weaponNoiseToRangeBonus("invalid"), 0);
+
+  globalThis.canvas = {
+    scene: { grid: { distance: 7 } },
+    grid: { distance: 1, size: 60, isGridless: true }
+  };
+  assert.equal(weaponNoiseToRangeBonus(5), 35);
+});
+
+test("one noise level reaches every adjacent hex but not the second ring", () => {
+  installRectangleMock();
+  globalThis.canvas = createHexCanvas({ cellSize: 100, gridDistance: 3 });
+  const observer = createObserver("observer-hex-noise");
+  const settings = createSettings("0");
+  const rangeBonus = weaponNoiseToRangeBonus(1);
+
+  const zone = buildObserverDetectionZone(observer, { rangeBonus, settings });
+  assert.deepEqual(zone.baseOffsets.map(({ j }) => j), [0]);
+  assert.deepEqual(zone.addedOffsets.map(({ j }) => j), [1, 2, 3, 4, 5, 6]);
+  assert.equal(zone.offsets.some(({ j }) => j === 7), false);
+
+  const origin = { x: 0, y: 0, elevation: 0 };
+  for (const point of globalThis.canvas.hexCenters.slice(1, 7)) {
+    assert.equal(testStealthDetectionPoint(observer, origin, point, { rangeBonus, settings }), true);
+  }
+  assert.equal(
+    testStealthDetectionPoint(
+      observer,
+      origin,
+      globalThis.canvas.hexCenters[7],
+      { rangeBonus, settings }
+    ),
+    false
+  );
+});
+
+test("local previews exclude hidden observers for players but retain them for GMs", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 4, cellSize: 100 });
+  globalThis.canvas.visibility = { tokenVision: false };
+  globalThis.game = { user: { isGM: false } };
+
+  const hiddenToken = {
+    id: "hidden-source",
+    actor: createActor("Actor.hidden-source")
+  };
+  const visibleObserver = createObserverWithUnlimitedSight("visible-observer");
+  visibleObserver.actor = createActor("Actor.visible-observer");
+  visibleObserver.document.uuid = "Scene.scene.Token.visible-observer";
+  visibleObserver.visible = true;
+  visibleObserver.renderable = true;
+  const hiddenObserver = createObserverWithUnlimitedSight("gm-hidden-observer");
+  hiddenObserver.actor = createActor("Actor.gm-hidden-observer");
+  hiddenObserver.document.uuid = "Scene.scene.Token.gm-hidden-observer";
+  hiddenObserver.document.hidden = true;
+  hiddenObserver.visible = true;
+  hiddenObserver.renderable = true;
+  globalThis.canvas.tokens = {
+    placeables: [hiddenToken, visibleObserver, hiddenObserver]
+  };
+  const settings = createSettings("1");
+
+  assert.deepEqual(
+    getStealthObserverZones(hiddenToken, { visibleOnly: true, settings })
+      .map(zone => zone.observerToken.id),
+    ["visible-observer"]
+  );
+
+  globalThis.game.user.isGM = true;
+  assert.deepEqual(
+    getStealthObserverZones(hiddenToken, { visibleOnly: true, settings })
+      .map(zone => zone.observerToken.id),
+    ["visible-observer", "gm-hidden-observer"]
+  );
+});
+
+function createLinearCanvas({ cells, cellSize, gridDistance = 1, darknessBand = null }) {
+  const scene = { id: `scene-${cells}-${cellSize}-${gridDistance}`, grid: { distance: gridDistance } };
   const grid = {
-    distance: 1,
+    distance: gridDistance,
     isGridless: false,
     size: cellSize,
     getCenterPoint: ({ j }) => ({ x: j * cellSize, y: 0, elevation: 0 }),
@@ -103,6 +267,70 @@ function createLinearCanvas({ cells, cellSize, darknessBand = null }) {
         && point.x <= darknessBand[1] ? 1 : 0,
       testInsideDarkness: () => false
     }
+  };
+}
+
+function createHexCanvas({ cellSize, gridDistance }) {
+  const height = cellSize * (Math.sqrt(3) / 2);
+  const hexCenters = [
+    { x: 0, y: 0, elevation: 0 },
+    { x: cellSize, y: 0, elevation: 0 },
+    { x: cellSize / 2, y: height, elevation: 0 },
+    { x: -cellSize / 2, y: height, elevation: 0 },
+    { x: -cellSize, y: 0, elevation: 0 },
+    { x: -cellSize / 2, y: -height, elevation: 0 },
+    { x: cellSize / 2, y: -height, elevation: 0 },
+    { x: cellSize * 2, y: 0, elevation: 0 }
+  ];
+  const grid = {
+    distance: gridDistance,
+    isGridless: false,
+    size: cellSize,
+    getCenterPoint: ({ j }) => hexCenters[j],
+    getOffset: point => {
+      let nearest = 0;
+      let nearestDistance = Infinity;
+      for (let index = 0; index < hexCenters.length; index += 1) {
+        const center = hexCenters[index];
+        const distance = Math.hypot(point.x - center.x, point.y - center.y);
+        if (distance >= nearestDistance) continue;
+        nearest = index;
+        nearestDistance = distance;
+      }
+      return { i: 0, j: nearest };
+    },
+    getOffsetRange: () => [0, 0, 1, hexCenters.length]
+  };
+  return {
+    ready: true,
+    hexCenters,
+    scene: {
+      id: `scene-hex-${cellSize}-${gridDistance}`,
+      grid: { distance: gridDistance }
+    },
+    grid,
+    dimensions: {
+      rect: {
+        x: -cellSize * 3,
+        y: -cellSize * 3,
+        width: cellSize * 6,
+        height: cellSize * 6
+      }
+    },
+    environment: { darknessLevel: 0, globalLightSource: { active: false } },
+    effects: {
+      lightSources: new Map(),
+      getDarknessLevel: () => 0,
+      testInsideDarkness: () => false
+    }
+  };
+}
+
+function createActor(uuid) {
+  return {
+    uuid,
+    system: { skills: { naturalist: { value: 0 } } },
+    getFlag: () => undefined
   };
 }
 

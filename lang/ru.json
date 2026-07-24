@@ -1742,6 +1742,7 @@
       "WeaponEffectiveRange": "Эффективная дистанция",
       "WeaponEffectiveRangeMax": "Макс. эффективная дистанция",
       "WeaponPenetration": "Пробивная сила",
+      "WeaponNoiseLevel": "Уровень шума",
       "WeaponMagazine": "Магазин",
       "WeaponResourceCosts": "Расход ресурсов на атаку",
       "WeaponAddResourceCost": "Добавить расход",
@@ -1776,6 +1777,7 @@
       "TooltipBreakdownProficiency": "Владение",
       "TooltipBreakdownSkill": "Навык",
       "TooltipBreakdownBaseBonus": "Базовый бонус",
+      "TooltipBreakdownStealthAttack": "Атака из скрытности",
       "TooltipBreakdownDamageUnit": "урона",
       "TooltipBreakdownHealingUnit": "лечения",
       "TooltipBreakdownRecoilUnit": "сложности",
@@ -1882,6 +1884,11 @@
       "CombatCriticalDamagePercent": "Изменение критического урона, %",
       "CombatDamageFlat": "Урон, плоский",
       "CombatDamagePercent": "Урон, %",
+      "StealthAttackGroup": "Атака из скрытности",
+      "StealthAttackAccuracy": "Атака из скрытности: точность",
+      "StealthAttackCriticalChance": "Атака из скрытности: шанс на крит",
+      "StealthAttackDamagePercent": "Атака из скрытности: урон, %",
+      "StealthAttackCriticalDamagePercent": "Атака из скрытности: критический урон, %",
       "CombatBurstStability": "Стабильность стрельбы очередью",
       "ConditionLossMultiplier": "Множитель потери прочности",
       "AttackRangeBonus": "Изменение максимальной дистанции атаки, м",
@@ -2195,6 +2202,14 @@
         "AreasTitle": "Области",
         "AreaMovementDamageThresholdFormula": "Передвижение внутри области наносит урон после N очков движения",
         "AreaMovementDamageThresholdHint": "Формула для каждого актёра. ОД и ОП — максимумы соответствующих ресурсов; результат округляется вниз, минимум 1."
+      },
+      "Stealth": {
+        "AttackBonusesTitle": "Бонусы атаки из скрытности",
+        "AttackBonusesHint": "Формулы рассчитываются по параметрам атакующего и применяются, пока он скрыт.",
+        "AccuracyFormula": "Формула бонуса точности",
+        "CriticalChanceFormula": "Формула бонуса шанса на крит, %",
+        "DamagePercentFormula": "Формула бонуса урона, %",
+        "CriticalDamagePercentFormula": "Формула бонуса критического урона, %"
       },
       "HUD": {
         "Title": "Настройки HUD",

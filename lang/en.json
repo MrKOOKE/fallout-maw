@@ -1682,6 +1682,7 @@
       "WeaponEffectiveRange": "Effective Range",
       "WeaponEffectiveRangeMax": "Max Effective Range",
       "WeaponPenetration": "Penetration",
+      "WeaponNoiseLevel": "Noise Level",
       "WeaponMagazine": "Magazine",
       "WeaponResourceCosts": "Attack Resource Costs",
       "WeaponAddResourceCost": "Add Cost",
@@ -1716,6 +1717,7 @@
       "TooltipBreakdownProficiency": "Proficiency",
       "TooltipBreakdownSkill": "Skill",
       "TooltipBreakdownBaseBonus": "Base Bonus",
+      "TooltipBreakdownStealthAttack": "Attack from Stealth",
       "TooltipBreakdownDamageUnit": "damage",
       "TooltipBreakdownHealingUnit": "healing",
       "TooltipBreakdownRecoilUnit": "difficulty",
@@ -1822,6 +1824,11 @@
       "CombatCriticalDamagePercent": "Critical damage change, %",
       "CombatDamageFlat": "Flat damage",
       "CombatDamagePercent": "Damage, %",
+      "StealthAttackGroup": "Stealth attack",
+      "StealthAttackAccuracy": "Stealth attack: accuracy",
+      "StealthAttackCriticalChance": "Stealth attack: critical chance",
+      "StealthAttackDamagePercent": "Stealth attack: damage, %",
+      "StealthAttackCriticalDamagePercent": "Stealth attack: critical damage, %",
       "CombatBurstStability": "Burst-fire stability",
       "ConditionLossMultiplier": "Condition loss multiplier",
       "AttackRangeBonus": "Maximum attack range change, m",
@@ -2135,6 +2142,14 @@
         "AreasTitle": "Areas",
         "AreaMovementDamageThresholdFormula": "Movement inside an area deals damage after N movement points",
         "AreaMovementDamageThresholdHint": "Evaluated per actor. ОД and ОП are the resource maximums; the result is rounded down with a minimum of 1."
+      },
+      "Stealth": {
+        "AttackBonusesTitle": "Stealth Attack Bonuses",
+        "AttackBonusesHint": "These formulas use the attacker's parameters and apply while the attacker is hidden.",
+        "AccuracyFormula": "Accuracy bonus formula",
+        "CriticalChanceFormula": "Critical chance bonus formula, %",
+        "DamagePercentFormula": "Damage bonus formula, %",
+        "CriticalDamagePercentFormula": "Critical damage bonus formula, %"
       },
       "HUD": {
         "Title": "HUD Settings",

@@ -116,6 +116,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
+      stealth: new SchemaField({
+        attackBonuses: new SchemaField({
+          accuracy: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+          criticalChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+          damagePercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+          criticalDamagePercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+        })
+      }),
       healing: new SchemaField({
         incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         outgoingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
@@ -218,6 +226,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.skillCheck.actions ??= {};
     this.skillCheck.disabledResults ??= {};
     this.combat ??= {};
+    this.stealth ??= {};
+    this.stealth.attackBonuses ??= {};
     this.healing ??= {};
     this.trade ??= {};
     this.hacking ??= {};

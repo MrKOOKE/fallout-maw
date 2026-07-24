@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "0c3ad578a398d62ed5513a59670aae85d0aa9e64722f0a2740f3e6822261ad7a",
-  "updatedAt": "2026-07-24T09:47:35.519Z",
+  "revision": "d55eba33e47c2a7caaf84d0a73546f3583410a7c0b47974cdcca60cfdaccf4fb",
+  "updatedAt": "2026-07-24T15:14:02.260Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -108,7 +108,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Красноречие: +20</p></li><li><p>Инициатива: -2</p></li></ul>",
+                "description": "<ul><li><p>Красноречие: +20 (Чистый бонус)</p></li><li><p>Инициатива: -2</p></li></ul>",
                 "id": "wexA49G1pXomHP3A",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/ruchnoj.webp",
                 "name": "Безобидный",
@@ -150,7 +150,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "R38PGnR5NfmciFQ3",
-                      "includeInPureValues": false,
+                      "includeInPureValues": true,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -364,6 +364,61 @@
                       "fixedSettings": {},
                       "id": "W4cJuXmMxjbCSvEo",
                       "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Наука: +20 (Чистый бонус)</p></li><li><p>Атлетика: -10 (Чистый бонус)</p></li></ul>",
+                "id": "wnEBPFTyVd3MG4XX",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Большая голова",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "MKrNZj01Ep0Qu2Fm",
+                          "key": "system.skills.science.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        },
+                        {
+                          "id": "0d1GMznnxG0MrfvC",
+                          "key": "system.skills.athletics.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-10"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "1LHElIYzVSDuPyDt",
+                      "includeInPureValues": true,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -785,6 +840,53 @@
                 "visible": true
               },
               {
+                "description": "<ul><li><p>Здоровье всех частей тела: +[[endurance]]</p></li></ul>",
+                "id": "k5SpRTytsuw2neID",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Живчик",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "ASJ1Ya6pcCFlxsGx",
+                          "key": "system.limbs.all.maxBonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "con"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "dV6kMg7D2sZ4fdDV",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<ul><li><p>Когда вас успешно атакуют на 12 секуд получаете: +10% урона.</p></li><li><p>Урон: -10%</p></li></ul><p>Складывается не более 3-х раз</p>",
                 "id": "8HpgZk8jcKAhom6S",
                 "img": "systems/fallout-maw/assets/icons/1-7/ubezhdyonnyj-holostyak.webp",
@@ -1157,6 +1259,61 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "mOzE96C0Z8BVIOrW",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Скрытность: +20 (Чистый бонус)</p></li><li><p>Красноречие: -10 (Чистый бонус)</p></li></ul>",
+                "id": "muDPefYyH2Za3m9b",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Неприметный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "xsjorGUGBRklAmxg",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        },
+                        {
+                          "id": "ZLYN8JMyGC2Q0Car",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "Ji4UaRdeHNA95Ba0",
                       "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
@@ -2119,6 +2276,77 @@
                       "fixedSettings": {},
                       "id": "YQHWGPI2hSwy2Evc",
                       "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Ремесло: +20 (Чистый бонус)</p></li><li><p>Атлетика: -5 (Чистый бонус)</p></li><li><p>Дальний бой: -5 (Чистый бонус)</p></li><li><p>Ближний бой: -5 (Чистый бонус)</p></li></ul>",
+                "id": "vFd2v0g2ZMu9DUXr",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Тонкое запястье",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "Cd63uMi39Vk7x70C",
+                          "key": "system.skills.repair.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20"
+                        },
+                        {
+                          "id": "Of1iqsXmNPPw1k2O",
+                          "key": "system.skills.rangedCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-5"
+                        },
+                        {
+                          "id": "aAJfpTt2C5kFlD5M",
+                          "key": "system.skills.meleeCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-5"
+                        },
+                        {
+                          "id": "heRb5oPDorIZ4Ctm",
+                          "key": "system.skills.athletics.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-5"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "CFW3SOZggBx2Imb1",
+                      "includeInPureValues": true,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -56237,6 +56465,12 @@
       "id": "fallout-maw.stealthSettings",
       "scope": "world",
       "value": {
+        "attackBonuses": {
+          "accuracyFormula": "luck*2",
+          "criticalChanceFormula": "luck/2",
+          "criticalDamagePercentFormula": "luck*3",
+          "damagePercentFormula": "luck"
+        },
         "attenuationLevels": [
           {
             "penaltyPercent": 90,
@@ -56263,6 +56497,9 @@
           "rangeFormula": "5 + навык / 10",
           "skillKey": "naturalist"
         },
+        "difficulty": {
+          "skillKey": "naturalist"
+        },
         "difficultyLevels": [
           {
             "difficultyBonus": 0,
@@ -56284,8 +56521,7 @@
             "difficultyBonus": 120,
             "threshold": 0
           }
-        ],
-        "difficultyMode": "perception"
+        ]
       }
     },
     {

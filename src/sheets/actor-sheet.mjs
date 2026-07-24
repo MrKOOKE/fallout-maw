@@ -62,6 +62,7 @@ import {
 import {
   buildCombatEffectKeyTokens,
   buildReverseInteractionEffectKeyTokens,
+  buildStealthAttackBonusEffectKeyTokens,
   buildSkillCheckActionEffectKeyTokens
 } from "../utils/effect-key-tokens.mjs";
 import { buildEffectTooltipHTML } from "../canvas/token.mjs";
@@ -109,6 +110,11 @@ import {
   getActorFormulaApplicationPhase,
   isFormulaTextConfigured
 } from "../utils/actor-formulas.mjs";
+import {
+  calculateStealthDamageBonusAmount,
+  getStealthAttackModifiers
+} from "../stealth/attack-bonuses.mjs";
+import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
 import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
@@ -274,6 +280,7 @@ import {
 import {
   applyWeaponModuleModifiers,
   WEAPON_MODULE_ACTION_KEYS,
+  getWeaponNoiseLevel,
   getWeaponModuleDisplayName,
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
@@ -5893,6 +5900,7 @@ function getModuleTooltipRows(item, evaluatingActor = null) {
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), weapon.maxRangeMeters, { suffix: " м" });
   pushModuleEffectiveRangeRow(rows, weapon.effectiveRange);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), weapon.penetration);
+  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"), weapon.noiseLevel);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), weapon.magazineMax);
   rows.push(...getModuleActionPointRows(weapon.actionPointCosts));
   rows.push(...getModuleAddedWeaponFunctionRows(item, moduleData.additionalWeapons, evaluatingActor));
@@ -6262,6 +6270,10 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     baseMode,
     breakdown: stats.breakdowns?.penetration
   })]);
+  rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"), renderChangedNumber(stats.noiseLevel, baseStats.noiseLevel, {
+    baseMode,
+    breakdown: stats.breakdowns?.noiseLevel
+  })]);
   rows.push(...getWeaponResourceCostRows(data, baseData, {
     baseMode,
     resourceCostMultipliers: stats.resourceCostMultipliers,
@@ -6551,6 +6563,18 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
     + contextualDamageFlat
     + skillDamageBonuses.flat;
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
+  const postConditionDamage = Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1)));
+  const stealth = baseMode ? null : getStealthAttackModifiers(actor);
+  const stealthEffectAttributions = collectStealthAttackEffectAttributions(actor, stealth);
+  const stealthDamageShareCount = Math.max(1, toInteger(
+    data?._evaluatedPellets
+    ?? evaluateTooltipFormula(data?.pellets, actor, { fallback: 1, minimum: 1 })
+  ));
+  const stealthDamageBonusAmount = calculateStealthDamageBonusAmount(
+    postConditionDamage,
+    stealth?.damageBonusPercent,
+    { shareCount: stealthDamageShareCount }
+  );
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
   const proficiencyAccuracy = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy");
@@ -6566,19 +6590,23 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
     farBonusMeters: effectiveRangeFarAttribution.value
   });
   const result = {
-    damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
+    damage: postConditionDamage + stealthDamageBonusAmount,
     accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor, { minimum: -Infinity })
       + proficiencyAccuracy
       + contextualAccuracy
+      + toInteger(stealth?.accuracyBonus)
       - conditionAccuracyPenalty,
     criticalChanceModifier: evaluateTooltipFormula(data.criticalChanceModifier, actor, { minimum: -Infinity })
       + proficiencyCriticalChance
       + contextualCriticalChance
+      + toInteger(stealth?.criticalChanceBonus)
       - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
       + proficiencyCriticalDamage
-      + criticalDamageAttribution.value),
+      + criticalDamageAttribution.value
+      + toInteger(stealth?.criticalDamageBonusPercent)),
     penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor)),
+    noiseLevel: getWeaponNoiseLevel(data),
     maxRangeMeters: Math.max(0, baseMaxRangeMeters + attackRangeAttribution.value),
     effectiveRange: {
       value: Math.max(0, Number(effectiveRange?.min) || 0),
@@ -6604,6 +6632,9 @@ function getWeaponTooltipCalculatedStats(item, data = {}, {
       proficiencyCriticalDamage,
       skillDamageBonuses,
       weakening,
+      stealth,
+      stealthEffectAttributions,
+      stealthDamageBonusAmount,
       conditionAccuracyPenalty,
       conditionCritPenalty,
       fixedModifiers,
@@ -6640,6 +6671,9 @@ function buildWeaponTooltipValueBreakdowns({
   proficiencyCriticalDamage,
   skillDamageBonuses,
   weakening,
+  stealth,
+  stealthEffectAttributions,
+  stealthDamageBonusAmount,
   conditionAccuracyPenalty,
   conditionCritPenalty,
   fixedModifiers,
@@ -6699,6 +6733,13 @@ function buildWeaponTooltipValueBreakdowns({
       valueLabel: `×${formatNumber(weakening.ratio)}`
     }, { minimum: 0, round: Math.floor });
   }
+  appendStealthAttackDamageAttribution(
+    damage,
+    actor,
+    stealth,
+    stealthEffectAttributions?.damagePercent,
+    stealthDamageBonusAmount
+  );
   reconcileBreakdownTotal(damage, result.damage, item);
 
   const accuracyBonus = buildWeaponDataFieldAttribution({
@@ -6712,6 +6753,12 @@ function buildWeaponTooltipValueBreakdowns({
   appendProficiencyAttribution(accuracyBonus, actor, data, proficiencyAccuracy);
   appendAttributionDeltaSources(accuracyBonus, accuracyAttribution.sources);
   appendFixedCombatAttribution(accuracyBonus, fixedModifiers, "accuracy");
+  appendStealthAttackAttribution(accuracyBonus, actor, {
+    formula: stealth?.accuracyFormula,
+    formulaValue: stealth?.formulaValues?.accuracy,
+    effectAttribution: stealthEffectAttributions?.accuracy,
+    finalValue: stealth?.accuracyBonus
+  });
   if (conditionAccuracyPenalty) appendBreakdownStep(accuracyBonus, {
     name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownCondition", "Состояние предмета"),
     img: item?.img,
@@ -6730,6 +6777,13 @@ function buildWeaponTooltipValueBreakdowns({
   });
   appendProficiencyAttribution(criticalChanceModifier, actor, data, proficiencyCriticalChance, { suffix: "%" });
   appendAttributionDeltaSources(criticalChanceModifier, criticalChanceAttribution.sources, { suffix: "%" });
+  appendStealthAttackAttribution(criticalChanceModifier, actor, {
+    formula: stealth?.criticalChanceFormula,
+    formulaValue: stealth?.formulaValues?.criticalChance,
+    effectAttribution: stealthEffectAttributions?.criticalChance,
+    finalValue: stealth?.criticalChanceBonus,
+    suffix: "%"
+  });
   if (conditionCritPenalty) appendBreakdownStep(criticalChanceModifier, {
     name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownCondition", "Состояние предмета"),
     img: item?.img,
@@ -6750,6 +6804,13 @@ function buildWeaponTooltipValueBreakdowns({
   });
   appendProficiencyAttribution(criticalDamagePercent, actor, data, proficiencyCriticalDamage, { suffix: "%", minimum: 0 });
   appendAttributionDeltaSources(criticalDamagePercent, criticalDamageAttribution?.sources, { suffix: "%" });
+  appendStealthAttackAttribution(criticalDamagePercent, actor, {
+    formula: stealth?.criticalDamagePercentFormula,
+    formulaValue: stealth?.formulaValues?.criticalDamagePercent,
+    effectAttribution: stealthEffectAttributions?.criticalDamagePercent,
+    finalValue: stealth?.criticalDamageBonusPercent,
+    suffix: "%"
+  }, { minimum: 0 });
   reconcileBreakdownTotal(criticalDamagePercent, result.criticalDamagePercent, item);
 
   const penetration = buildWeaponDataFieldAttribution({
@@ -6761,6 +6822,18 @@ function buildWeaponTooltipValueBreakdowns({
     integer: true
   });
   reconcileBreakdownTotal(penetration, result.penetration, item);
+
+  const noiseLevel = buildWeaponDataFieldAttribution({
+    ...common,
+    path: "noiseLevel",
+    title: game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"),
+    total: result.noiseLevel,
+    fallback: 1,
+    minimum: 0,
+    sourceMinimum: Number.NEGATIVE_INFINITY,
+    integer: true
+  });
+  reconcileBreakdownTotal(noiseLevel, result.noiseLevel, item);
 
   const maxRangeMeters = buildWeaponDataFieldAttribution({
     ...common,
@@ -6807,6 +6880,7 @@ function buildWeaponTooltipValueBreakdowns({
     criticalChanceModifier,
     criticalDamagePercent,
     penetration,
+    noiseLevel,
     maxRangeMeters,
     effectiveRange,
     recoil,
@@ -6882,6 +6956,7 @@ function buildWeaponDataFieldAttribution({
   total = 0,
   fallback = 0,
   minimum = Number.NEGATIVE_INFINITY,
+  sourceMinimum = minimum,
   integer = false,
   formatValue = formatNumber
 } = {}) {
@@ -6925,7 +7000,7 @@ function buildWeaponDataFieldAttribution({
       operation: "add",
       value: sourceValue,
       detailLabel: `${formatActorFormulaForDisplay(sourceFormula, actor, { includeValues: Boolean(actor) })} = ${formatValue(sourceValue)}`
-    }, { minimum });
+    }, { minimum: sourceMinimum });
   }
 
   const baseTarget = evaluateWeaponTooltipField(item, baseData, path, actor, { fallback, minimum });
@@ -6943,7 +7018,7 @@ function buildWeaponDataFieldAttribution({
       img: itemData?.img,
       operation: "add",
       value: amount
-    }, { minimum });
+    }, { minimum: sourceMinimum });
   }
 
   const attackPower = getWeaponAttackPowerState(rawData);
@@ -6955,7 +7030,7 @@ function buildWeaponDataFieldAttribution({
       img: item?.img,
       operation: "add",
       value: attackPowerAmount
-    }, { minimum });
+    }, { minimum: sourceMinimum });
   }
 
   reconcileBreakdownTotal(breakdown, total, item);
@@ -7094,6 +7169,101 @@ function appendAttributionDeltaSources(breakdown, sources = [], { suffix = "" } 
       valueLabel: source.valueLabel ?? `${formatSignedNumber(value)}${suffix}`
     });
   }
+}
+
+function collectStealthAttackEffectAttributions(actor, stealth = null) {
+  const empty = () => emptyCombatAttribution();
+  if (!actor || !stealth?.active) {
+    return {
+      accuracy: empty(),
+      criticalChance: empty(),
+      damagePercent: empty(),
+      criticalDamagePercent: empty()
+    };
+  }
+  const collect = (field, suffix = "") => collectActorPreparedPathAttribution(
+    actor,
+    STEALTH_ATTACK_BONUS_EFFECT_KEYS[field],
+    {
+      preparedValue: stealth.effectValues?.[field],
+      suffix
+    }
+  );
+  return {
+    accuracy: collect("accuracy"),
+    criticalChance: collect("criticalChance", "%"),
+    damagePercent: collect("damagePercent", "%"),
+    criticalDamagePercent: collect("criticalDamagePercent", "%")
+  };
+}
+
+function appendStealthAttackAttribution(breakdown, actor, {
+  formula = "0",
+  formulaValue = 0,
+  effectAttribution = null,
+  finalValue = 0,
+  suffix = ""
+} = {}, options = {}) {
+  if (!breakdown) return null;
+  const before = Number(breakdown.total) || 0;
+  const baseAmount = Math.max(0, toInteger(formulaValue));
+  if (baseAmount) {
+    const formattedValue = `${formatSignedNumber(baseAmount)}${suffix}`;
+    appendBreakdownStep(breakdown, {
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownStealthAttack", "Атака из скрытности"),
+      img: actor?.img,
+      operation: "add",
+      value: baseAmount,
+      valueLabel: formattedValue,
+      detailLabel: `${formatActorFormulaForDisplay(formula, actor, {
+        includeValues: Boolean(actor)
+      })} = ${formattedValue}`
+    }, options);
+  }
+  appendAttributionDeltaSources(breakdown, effectAttribution?.sources, { suffix });
+
+  const expected = before + Math.max(0, toInteger(finalValue));
+  if (Math.abs(expected - (Number(breakdown.total) || 0)) >= 0.000001) {
+    appendBreakdownStep(breakdown, {
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownPreparedValue", "Итоговый расчёт"),
+      img: actor?.img,
+      operation: "add",
+      value: expected - (Number(breakdown.total) || 0)
+    }, options);
+  }
+  return breakdown;
+}
+
+function appendStealthAttackDamageAttribution(
+  breakdown,
+  actor,
+  stealth = null,
+  effectAttribution = null,
+  bonusAmount = 0
+) {
+  if (!breakdown || !stealth?.active) return null;
+  const sources = [];
+  const formulaPercent = Math.max(0, toInteger(stealth.formulaValues?.damagePercent));
+  if (formulaPercent) {
+    const formattedPercent = `${formatSignedNumber(formulaPercent)}%`;
+    sources.push({
+      name: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownStealthAttack", "Атака из скрытности"),
+      img: actor?.img,
+      operation: "add",
+      value: formulaPercent,
+      valueLabel: formattedPercent,
+      detailLabel: `${formatActorFormulaForDisplay(stealth.damagePercentFormula ?? "0", actor, {
+        includeValues: Boolean(actor)
+      })} = ${formattedPercent}`
+    });
+  }
+  sources.push(...(effectAttribution?.sources ?? []));
+  return appendParallelPercentSources(breakdown, sources, {
+    expectedPercent: Math.max(0, toInteger(stealth.damageBonusPercent)),
+    round: Math.floor,
+    total: (Number(breakdown.total) || 0) + Math.max(0, toInteger(bonusAmount)),
+    contributionUnit: localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownDamageUnit", "урон")
+  });
 }
 
 function appendBreakdownStep(breakdown, source = {}, options = {}) {
@@ -8749,6 +8919,9 @@ function buildEffectPathLabelMap({
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
   for (const token of buildCombatEffectKeyTokens()) {
+    if (token?.path && token?.label) map.set(token.path, token.label);
+  }
+  for (const token of buildStealthAttackBonusEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }
   for (const token of buildSkillCheckActionEffectKeyTokens()) {

@@ -64,12 +64,25 @@ export function getInstalledWeaponModuleItems(weaponData = {}, { moduleSlots = n
     .filter(itemData => itemData?.system && isWeaponModuleItem(itemData));
 }
 
+export function getWeaponNoiseLevel(weaponData = {}) {
+  const rawValue = weaponData?.noiseLevel;
+  if (rawValue === undefined || rawValue === null || rawValue === "") return 1;
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 1;
+}
+
 export function applyWeaponModuleModifiers(weaponData = {}, options = {}) {
   const modules = getInstalledWeaponModuleItems(weaponData, options);
   if (!modules.length) return weaponData;
 
   const result = foundry.utils.deepClone(weaponData);
-  for (const itemData of modules) applySingleWeaponModule(result, getModuleFunction(itemData).weapon ?? {});
+  let noiseDelta = 0;
+  for (const itemData of modules) {
+    const modifiers = getModuleFunction(itemData).weapon ?? {};
+    applySingleWeaponModule(result, modifiers);
+    noiseDelta += toInteger(modifiers.noiseLevel);
+  }
+  result.noiseLevel = Math.max(0, getWeaponNoiseLevel(result) + noiseDelta);
   return result;
 }
 

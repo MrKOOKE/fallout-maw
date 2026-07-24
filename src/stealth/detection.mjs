@@ -17,6 +17,7 @@ const STEALTH_DETECTION_ZONE_CACHE_CELL_LIMIT = 16_384;
 const STEALTH_DETECTION_POINT_CACHE_LIMIT = 2_048;
 const DETECTION_PREVIEW_PATH_SAMPLE_LIMIT = 16;
 const DETECTION_PREVIEW_CELL_TEST_LIMIT = 4_096;
+const DETECTION_DISTANCE_EPSILON = 1e-6;
 
 const detectionZoneCache = new Map();
 const detectionPointCache = new Map();
@@ -32,6 +33,7 @@ let detectionZoneCachedCells = 0;
  */
 export function getStealthObserverZones(hiddenToken, {
   visibleOnly = false,
+  rangeBonus = 0,
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
@@ -40,13 +42,14 @@ export function getStealthObserverZones(hiddenToken, {
   let observers = (activeCanvas.tokens?.placeables ?? [])
     .filter(observerToken => isValidStealthObserver(hiddenToken, observerToken));
   if (visibleOnly && observers.length) {
+    observers = observers.filter(isObserverVisibleToLocalPreview);
     const visibility = testObserverVisibilityBatch(hiddenToken, observers);
     observers = observers.filter(observerToken => visibility.get(getTokenDocumentUuid(observerToken)) === true);
   }
 
   const zones = [];
   for (const observerToken of observers) {
-    const zone = buildObserverDetectionZone(observerToken, { settings });
+    const zone = buildObserverDetectionZone(observerToken, { rangeBonus, settings });
     if (!zone?.offsets?.length) continue;
     zones.push({ hiddenToken, observerToken, ...zone });
   }
@@ -55,16 +58,25 @@ export function getStealthObserverZones(hiddenToken, {
 
 export function buildObserverDetectionZone(observerToken, {
   origin = null,
+  rangeBonus = 0,
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
   if (!observerToken?.actor || !activeCanvas?.ready || activeCanvas.grid?.isGridless) return null;
-  const maxRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+  const baseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+  const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
+  const maxRange = baseRange + normalizedRangeBonus;
   const maxPixels = sceneDistanceToPixels(maxRange);
   if (maxPixels <= 0) return null;
 
   const center = normalizePoint(origin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
-  const cacheKey = getDetectionZoneCacheKey(observerToken, center, settings, maxRange);
+  const cacheKey = getDetectionZoneCacheKey(
+    observerToken,
+    center,
+    settings,
+    baseRange,
+    normalizedRangeBonus
+  );
   const cached = readCache(detectionZoneCache, cacheKey);
   if (cached) return cached;
 
@@ -79,6 +91,8 @@ export function buildObserverDetectionZone(observerToken, {
   );
   const [i0, j0, i1, j1] = previewRange.range;
   const offsets = [];
+  const baseOffsets = [];
+  const addedOffsets = [];
   const radiusWithCell = maxPixels + (activeCanvas.grid.size / 2);
   const radiusSquared = radiusWithCell * radiusWithCell;
 
@@ -90,20 +104,36 @@ export function buildObserverDetectionZone(observerToken, {
       const dy = point.y - center.y;
       if ((dx * dx) + (dy * dy) > radiusSquared) continue;
       if (observerToken.checkCollision?.(point, { origin: center, type: "sight", mode: "any" })) continue;
-      if (computeDetectionPathCost(observerToken, center, point, settings, {
-        costLimit: maxRange,
+      const path = computeDetectionPathReach(observerToken, center, point, settings, {
+        baseRange,
         sampleLimit: DETECTION_PREVIEW_PATH_SAMPLE_LIMIT
-      }) > maxRange) continue;
+      });
+      const insideBase = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON;
+      const addedDistance = Math.max(0, path.directDistance - path.baseReachDistance);
+      if (!insideBase && addedDistance > normalizedRangeBonus + DETECTION_DISTANCE_EPSILON) continue;
       offsets.push(offset);
+      if (insideBase) baseOffsets.push(offset);
+      else addedOffsets.push(offset);
     }
   }
 
-  const zone = { offsets, origin: center, range: maxRange, truncated: previewRange.truncated };
+  const zone = {
+    offsets,
+    baseOffsets,
+    addedOffsets,
+    origin: center,
+    range: maxRange,
+    baseRange,
+    rangeBonus: normalizedRangeBonus,
+    maxRange,
+    truncated: previewRange.truncated
+  };
   writeDetectionZoneCache(cacheKey, zone);
   return zone;
 }
 
 export function testStealthDetectionPoint(observerToken, observerOrigin, targetPoint, {
+  rangeBonus = 0,
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
@@ -113,9 +143,18 @@ export function testStealthDetectionPoint(observerToken, observerOrigin, targetP
   if (!activeCanvas.grid?.isGridless && activeCanvas.grid?.getOffset && activeCanvas.grid?.getCenterPoint) {
     point = normalizePoint(activeCanvas.grid.getCenterPoint(activeCanvas.grid.getOffset(point)), origin.elevation);
   }
-  const maxRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+  const baseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+  const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
+  const maxRange = baseRange + normalizedRangeBonus;
   if (maxRange <= 0) return false;
-  const cacheKey = getDetectionPointCacheKey(observerToken, origin, point, settings, maxRange);
+  const cacheKey = getDetectionPointCacheKey(
+    observerToken,
+    origin,
+    point,
+    settings,
+    baseRange,
+    normalizedRangeBonus
+  );
   const cached = readCache(detectionPointCache, cacheKey, { allowFalse: true });
   if (cached.hit) return cached.value;
 
@@ -124,14 +163,115 @@ export function testStealthDetectionPoint(observerToken, observerOrigin, targetP
   let result = true;
   if (directDistance > maxRange + margin) result = false;
   else if (observerToken.checkCollision?.(point, { origin, type: "sight", mode: "any" })) result = false;
-  else result = computeDetectionPathCost(observerToken, origin, point, settings, { costLimit: maxRange }) <= maxRange;
+  else {
+    const path = computeDetectionPathReach(observerToken, origin, point, settings, { baseRange });
+    result = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON
+      || Math.max(0, path.directDistance - path.baseReachDistance)
+        <= normalizedRangeBonus + DETECTION_DISTANCE_EPSILON;
+  }
 
   writeCache(detectionPointCache, cacheKey, result, STEALTH_DETECTION_POINT_CACHE_LIMIT);
   return result;
 }
 
-export function isPointInsideObserverZone(point, observerToken, observerOrigin, settings = getRuntimeStealthSettings()) {
-  return testStealthDetectionPoint(observerToken, observerOrigin, point, { settings });
+export function isPointInsideObserverZone(
+  point,
+  observerToken,
+  observerOrigin,
+  settings = getRuntimeStealthSettings(),
+  { rangeBonus = 0 } = {}
+) {
+  return testStealthDetectionPoint(observerToken, observerOrigin, point, { rangeBonus, settings });
+}
+
+/**
+ * Convert the integer weapon noise scale to an unattenuated physical
+ * scene-distance extension. Deriving it through the rendered grid size makes
+ * one level exactly one cell regardless of the configured distance units.
+ * Gridless scenes retain the same virtual grid-size scale for continuous
+ * authoritative checks.
+ */
+export function weaponNoiseToRangeBonus(noiseLevel) {
+  const normalizedNoise = Math.max(0, Math.trunc(Number(noiseLevel) || 0));
+  const gridSize = Math.max(1, Number(globalThis.canvas?.grid?.size) || 100);
+  return pixelsToSceneDistance(normalizedNoise * gridSize);
+}
+
+/**
+ * Measure the ordinary darkness-attenuated path cost and the physical point
+ * where that ordinary budget is exhausted. Weapon noise extends from this
+ * boundary in raw scene distance, so darkness can shape the original zone
+ * without shrinking a configured number of additional cells.
+ */
+function computeDetectionPathReach(
+  observerToken,
+  origin,
+  destination,
+  settings,
+  { baseRange = 0, sampleLimit = Infinity } = {}
+) {
+  const directDistance = measurePointSceneDistance(origin, destination);
+  const normalizedBaseRange = Math.max(0, Number(baseRange) || 0);
+  if (directDistance <= 0) {
+    return { cost: 0, directDistance: 0, baseReachDistance: 0 };
+  }
+
+  const unaidedSightRange = getObserverUnaidedSightRange(observerToken);
+  if (unaidedSightRange === Infinity || unaidedSightRange >= directDistance) {
+    return {
+      cost: directDistance,
+      directDistance,
+      baseReachDistance: Math.min(directDistance, normalizedBaseRange)
+    };
+  }
+
+  const activeCanvas = globalThis.canvas;
+  const stepPixels = Math.max(1, Number(activeCanvas?.grid?.size) || 100);
+  const exactSteps = Math.max(1, Math.ceil(sceneDistanceToPixels(directDistance) / stepPixels));
+  const normalizedSampleLimit = Number.isFinite(Number(sampleLimit))
+    ? Math.max(1, Math.floor(Number(sampleLimit)))
+    : Infinity;
+  const steps = Math.min(exactSteps, normalizedSampleLimit);
+  let consumed = 0;
+  let traveled = 0;
+  let baseReachDistance = normalizedBaseRange <= 0 ? 0 : null;
+  let last = origin;
+
+  const consume = (distance, costFactor) => {
+    if (distance <= 0) return;
+    const factor = Math.max(0.0001, Number(costFactor) || 1);
+    const segmentCost = distance * factor;
+    if (baseReachDistance === null && consumed + segmentCost >= normalizedBaseRange) {
+      baseReachDistance = traveled + ((normalizedBaseRange - consumed) / factor);
+    }
+    consumed += segmentCost;
+    traveled += distance;
+  };
+
+  for (let index = 1; index <= steps; index += 1) {
+    const ratio = index / steps;
+    const point = {
+      x: origin.x + ((destination.x - origin.x) * ratio),
+      y: origin.y + ((destination.y - origin.y) * ratio),
+      elevation: origin.elevation + ((destination.elevation - origin.elevation) * ratio)
+    };
+    const segmentDistance = measurePointSceneDistance(last, point);
+    const startDistance = measurePointSceneDistance(origin, last);
+    const endDistance = measurePointSceneDistance(origin, point);
+    const distanceDelta = Math.max(0.0001, endDistance - startDistance);
+    const unaidedRatio = clampNumber((unaidedSightRange - startDistance) / distanceDelta, 0, 1);
+    const unaidedDistance = segmentDistance * unaidedRatio;
+    const attenuatedDistance = Math.max(0, segmentDistance - unaidedDistance);
+    consume(unaidedDistance, 1);
+    if (attenuatedDistance > 0) {
+      const factor = getDetectionRangeFactor(analyzeLightingPoint(point).effectiveDarkness, settings);
+      consume(attenuatedDistance, 1 / Math.max(0.01, factor));
+    }
+    last = point;
+  }
+
+  if (baseReachDistance === null) baseReachDistance = directDistance;
+  return { cost: consumed, directDistance, baseReachDistance };
 }
 
 export function computeDetectionPathCost(
@@ -261,7 +401,7 @@ function getCenteredOffsetRangeStart(minimum, maximum, span, center) {
   return Math.min(latest, Math.max(minimum, desired));
 }
 
-function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
+function getDetectionZoneCacheKey(observerToken, origin, settings, baseRange, rangeBonus) {
   const activeCanvas = globalThis.canvas;
   const offset = activeCanvas?.grid?.getOffset?.(origin) ?? { i: Math.round(origin.y), j: Math.round(origin.x) };
   return [
@@ -271,13 +411,14 @@ function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
     normalizeExactCacheNumber(origin.x),
     normalizeExactCacheNumber(origin.y),
     normalizeExactCacheNumber(origin.elevation),
-    Math.round(maxRange * 100),
+    Math.round(baseRange * 100),
+    Math.round(rangeBonus * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
     getSettingsSignature(settings)
   ].join(":");
 }
 
-function getDetectionPointCacheKey(observerToken, origin, point, settings, maxRange) {
+function getDetectionPointCacheKey(observerToken, origin, point, settings, baseRange, rangeBonus) {
   const activeCanvas = globalThis.canvas;
   const originOffset = activeCanvas?.grid?.getOffset?.(origin) ?? { i: Math.round(origin.y), j: Math.round(origin.x) };
   const pointOffset = activeCanvas?.grid?.getOffset?.(point) ?? { i: Math.round(point.y), j: Math.round(point.x) };
@@ -292,7 +433,8 @@ function getDetectionPointCacheKey(observerToken, origin, point, settings, maxRa
     normalizeExactCacheNumber(point.y),
     normalizeExactCacheNumber(origin.elevation),
     normalizeExactCacheNumber(point.elevation),
-    Math.round(maxRange * 100),
+    Math.round(baseRange * 100),
+    Math.round(rangeBonus * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
     getSettingsSignature(settings)
   ].join(":");
@@ -317,6 +459,11 @@ function normalizeSceneRange(value, fallback = 0) {
   return Math.max(0, number);
 }
 
+function normalizeRangeBonus(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : 0;
+}
+
 function normalizeRangeCachePart(value) {
   return value === Infinity ? "inf" : Math.round((Number(value) || 0) * 100);
 }
@@ -328,6 +475,17 @@ function normalizeExactCacheNumber(value) {
 
 function getTokenDocumentUuid(token) {
   return String(token?.document?.uuid ?? token?.uuid ?? "").trim();
+}
+
+function isObserverVisibleToLocalPreview(observerToken) {
+  if (globalThis.game?.user?.isGM) return true;
+  if (observerToken?.document?.hidden === true || observerToken?.hidden === true) return false;
+  if (
+    observerToken?.visible === false
+    || observerToken?.isVisible === false
+    || observerToken?.renderable === false
+  ) return false;
+  return true;
 }
 
 function readCache(map, key, { allowFalse = false } = {}) {
