@@ -42,10 +42,44 @@ export async function grantCatalogAbility(actor, sourceId = "") {
   const entry = findCatalogAbility(sourceId);
   if (!entry) return null;
   const itemData = prepareAbilityItemData(entry.ability, { categoryId: entry.category.id });
-  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
+  const result = await grantAbilityItemData(actor, itemData, { sourceId });
+  return result.item;
+}
+
+/**
+ * Run every intentional ability grant through the same pre-create pipeline.
+ * The selected limited changes are persisted on the embedded Item, so passive
+ * effect projection can never see the unselected catalog rows.
+ */
+export async function grantAbilityItemData(actor, itemData = {}, {
+  sourceId = "",
+  createOptions = {},
+  limitContext = "ability grant change limit",
+  evaluateLimit = null,
+  chooseLimitedChanges = null
+} = {}) {
+  if (!actor || itemData?.type !== "ability") return { item: null, cancelled: false };
+
+  const normalizedItemData = foundry.utils.deepClone(itemData);
+  delete normalizedItemData._id;
+  delete normalizedItemData.id;
+
+  const resolvedSourceId = getRewardAbilitySourceId(normalizedItemData) || String(sourceId ?? "").trim();
+  if (resolvedSourceId && actorHasAbility(actor, resolvedSourceId)) {
+    return { item: null, cancelled: false };
+  }
+
+  const preparedItemData = await applyLimitedChangeSelectionsToGrant(normalizedItemData, actor, {
+    limitContext,
+    evaluateLimit,
+    chooseLimitedChanges
+  });
+  if (!preparedItemData) return { item: null, cancelled: true };
+
+  const created = await actor.createEmbeddedDocuments("Item", [preparedItemData], createOptions);
   const item = created?.[0] ?? null;
   await applyAbilityAcquisitionChanges(actor, item);
-  return item;
+  return { item, cancelled: false };
 }
 
 export async function completeAbilityResearch(actor, researchId = "", options = {}) {
@@ -78,22 +112,15 @@ export async function grantAbilityResearchReward(actor, research = {}) {
 
   const itemData = getAbilityRewardItemData(research) ?? getCatalogAbilityRewardItemData(sourceId);
   if (!itemData) return null;
-  const normalizedItemData = foundry.utils.deepClone(itemData);
-  delete normalizedItemData._id;
-
-  const rewardSourceId = getRewardAbilitySourceId(normalizedItemData) || sourceId;
-  if (rewardSourceId && actorHasAbility(actor, rewardSourceId)) return null;
-
-  const preparedItemData = await applyLimitedChangeSelectionsToReward(normalizedItemData, actor);
-  if (!preparedItemData) {
+  const result = await grantAbilityItemData(actor, itemData, {
+    sourceId,
+    limitContext: "ability reward change limit"
+  });
+  if (result.cancelled) {
     ui.notifications.warn("Выбор изменений способности не завершён. Завершённое исследование оставлено без выдачи награды.");
     return REWARD_SELECTION_ABORTED;
   }
-
-  const created = await actor.createEmbeddedDocuments("Item", [preparedItemData]);
-  const item = created?.[0] ?? null;
-  await applyAbilityAcquisitionChanges(actor, item);
-  return item;
+  return result.item;
 }
 
 export function getAbilitySourceFlagPath() {
@@ -118,13 +145,18 @@ function getRewardAbilitySourceId(itemData = {}) {
   return String(itemData?.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
 }
 
-async function applyLimitedChangeSelectionsToReward(itemData = {}, actor = null) {
+async function applyLimitedChangeSelectionsToGrant(itemData = {}, actor = null, {
+  limitContext = "ability grant change limit",
+  evaluateLimit = null,
+  chooseLimitedChanges = null
+} = {}) {
   const functions = normalizeAbilityFunctions(itemData.system?.functions ?? []);
   let changed = false;
 
   for (const entry of functions) {
     if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
     if (hasEventReactionCondition(entry.conditions)) continue;
+    if ((entry.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.itemUse)) continue;
 
     const limitedConditions = (entry.conditions ?? []).filter(condition => condition.type === ABILITY_CONDITION_TYPES.limitedChanges);
     if (!limitedConditions.length) continue;
@@ -135,18 +167,20 @@ async function applyLimitedChangeSelectionsToReward(itemData = {}, actor = null)
       changes: entry.changes ?? [],
       conditions: limitedConditions,
       actor,
-      evaluateLimit: formula => evaluateActorFormula(formula, actor, {
+      evaluateLimit: evaluateLimit ?? (formula => evaluateActorFormula(formula, actor, {
         fallback: 1,
         minimum: 1,
-        context: "ability reward change limit"
-      }),
-      choose: ({ changes, selectionIds, limit, actor: evaluationActor }) => requestLimitedChangeSelection({
-        abilityName: itemData.name,
-        changes,
-        selectionIds,
-        limit,
-        evaluationActors: [evaluationActor]
-      })
+        context: limitContext
+      })),
+      choose: chooseLimitedChanges ?? (({ changes, selectionIds, limit, actor: evaluationActor }) => (
+        requestLimitedChangeSelection({
+          abilityName: itemData.name,
+          changes,
+          selectionIds,
+          limit,
+          evaluationActors: [evaluationActor]
+        })
+      ))
     });
     if (selection.cancelled) return null;
     entry.changes = selection.changes;

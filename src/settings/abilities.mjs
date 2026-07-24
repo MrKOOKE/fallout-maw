@@ -1249,7 +1249,8 @@ function normalizeAbilityCondition(value = {}) {
       ?? (typeof rawLimit === "string" && !Number.isFinite(Number(rawLimit)) ? rawLimit : String(legacyLimit));
     return {
       id,
-      groupId,
+      // Change limits are grant/use metadata and never participate in an OR group.
+      groupId: "",
       type,
       operator: "lte",
       percent: 50,

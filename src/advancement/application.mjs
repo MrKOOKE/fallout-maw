@@ -1049,10 +1049,22 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (available < 1) return this.forceRender();
 
     this.#draft.development.traits ??= {};
+    const hadTraitState = Object.hasOwn(this.#draft.development.traits, sourceId);
+    const previousTraitState = this.#draft.development.traits[sourceId];
     this.#draft.development.traits[sourceId] = true;
     this.#draft.development.points.traits = available - 1;
     await this.#applyDraftToActor();
-    await grantCatalogAbility(this.actor, sourceId);
+
+    const granted = await grantCatalogAbility(this.actor, sourceId);
+    if (!granted) {
+      if (hadTraitState) this.#draft.development.traits[sourceId] = previousTraitState;
+      else delete this.#draft.development.traits[sourceId];
+      this.#draft.development.points.traits = available;
+      await this.#applyDraftToActor();
+      this.#syncDraftFromActor();
+      return this.forceRender();
+    }
+
     this.#syncDraftFromActor();
     return this.forceRender();
   }

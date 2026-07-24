@@ -1,6 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
-import { actorHasAbility, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import { actorHasAbility, findCatalogAbility, grantAbilityItemData } from "../abilities/purchase.mjs";
 import {
   ABILITY_CATALOG_DRAG_TYPE,
   getAbilitySourceCategoryId,
@@ -1257,7 +1257,10 @@ async function applyPersonalGeneratorTokenItems(document) {
   const rolledEntries = await rollPersonalItemBlocks(config.items);
   const rolledAbilities = rolledEntries.filter(entry => entry?.type === "ability");
   const rolledItems = rolledEntries.filter(entry => entry?.type !== "ability");
-  if (rolledAbilities.length) await createPersonalGeneratorAbilityItems(actor, rolledAbilities);
+  const abilityResult = rolledAbilities.length
+    ? await createPersonalGeneratorAbilityItems(actor, rolledAbilities)
+    : { items: [], cancelled: false };
+  if (abilityResult.cancelled) return undefined;
 
   if (!rolledItems.length) {
     await document.setFlag?.(SYSTEM_ID, "personalGeneratorItemsApplied", true);
@@ -1303,32 +1306,46 @@ async function applyPersonalGeneratorTokenAbilities(document) {
     const itemData = await createEmbeddedAbilityData({ ...entry, kind: "ability" });
     if (itemData) abilitiesData.push(itemData);
   }
-  await createPersonalGeneratorAbilityItems(actor, abilitiesData);
+  const result = await createPersonalGeneratorAbilityItems(actor, abilitiesData);
+  if (result.cancelled) return undefined;
 
   await document.setFlag?.(SYSTEM_ID, "personalGeneratorAbilitiesApplied", true);
   return undefined;
 }
 
 async function createPersonalGeneratorAbilityItems(actor, abilitiesData = []) {
-  if (!actor || !abilitiesData.length) return [];
+  if (!actor || !abilitiesData.length) return { items: [], cancelled: false };
 
-  const creates = [];
+  const created = [];
   for (const sourceData of abilitiesData) {
     if (sourceData?.type !== "ability") continue;
     const sourceId = getAbilitySourceId(sourceData);
-    if (sourceId) {
+    const catalogEntry = sourceId ? findCatalogAbility(sourceId) : null;
+    let result;
+    if (catalogEntry) {
       if (actorHasAbility(actor, sourceId)) continue;
-      const item = await grantCatalogAbility(actor, sourceId);
-      if (item) continue;
+      const itemData = prepareAbilityItemData(catalogEntry.ability, {
+        categoryId: catalogEntry.category.id
+      });
+      result = await grantAbilityItemData(actor, itemData, {
+        sourceId,
+        createOptions: { render: false }
+      });
+    } else {
+      result = await grantAbilityItemData(actor, sourceData, {
+        sourceId,
+        createOptions: { render: false }
+      });
     }
 
-    const itemData = foundry.utils.deepClone(sourceData);
-    delete itemData._id;
-    delete itemData.id;
-    creates.push(itemData);
+    if (result.item) created.push(result.item);
+    if (result.cancelled) {
+      ui.notifications.warn(`Выбор изменений способности «${sourceData.name}» не завершён. Способность не добавлена.`);
+      return { items: created, cancelled: true };
+    }
   }
 
-  return creates.length ? actor.createEmbeddedDocuments("Item", creates, { render: false }) : [];
+  return { items: created, cancelled: false };
 }
 
 async function finalizePersonalGeneratorToken(document) {

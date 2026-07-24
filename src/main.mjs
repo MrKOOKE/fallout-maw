@@ -71,7 +71,7 @@ import { registerLimitedUseHooks, registerLimitedUseSocket } from "./abilities/l
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
 import { registerFixedAbilityFunctionHooks, registerFixedAbilityFunctionSocket } from "./abilities/fixed-functions.mjs";
 import { registerDangerSenseSocket } from "./abilities/danger-sense.mjs";
-import { actorHasAbility, grantCatalogAbility } from "./abilities/purchase.mjs";
+import { actorHasAbility, grantAbilityItemData, grantCatalogAbility } from "./abilities/purchase.mjs";
 import { ABILITY_CATALOG_DRAG_TYPE, getAbilitySourceId } from "./settings/abilities.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
 import { registerSystemEventDispatcherSocket } from "./events/dispatcher.mjs";
@@ -323,9 +323,11 @@ async function dropAbilityItemOnCanvasToken(canvas, data = {}, item = null) {
   }
 
   const itemData = item.toObject();
-  delete itemData._id;
-  delete itemData.id;
-  const [created] = await actor.createEmbeddedDocuments("Item", [itemData]);
+  const { item: created, cancelled } = await grantAbilityItemData(actor, itemData);
+  if (cancelled) {
+    ui.notifications.warn("Выбор изменений способности не завершён. Способность не добавлена.");
+    return false;
+  }
   if (created) ui.notifications.info(`${actor.name}: добавлена способность ${created.name}.`);
   return false;
 }

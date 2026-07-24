@@ -194,6 +194,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
     // they are metadata and never participate in AND/OR condition truth.
     if ([
       ABILITY_CONDITION_TYPES.triggerCost,
+      ABILITY_CONDITION_TYPES.limitedChanges,
       ABILITY_CONDITION_TYPES.limitedEffectCopies,
       ABILITY_CONDITION_TYPES.limitedUses
     ].includes(condition.type)) continue;
@@ -214,6 +215,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if ([
     ABILITY_CONDITION_TYPES.triggerCost,
+    ABILITY_CONDITION_TYPES.limitedChanges,
     ABILITY_CONDITION_TYPES.limitedEffectCopies,
     ABILITY_CONDITION_TYPES.limitedUses
   ].includes(condition.type)) return true;
@@ -330,6 +332,9 @@ export function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
   if (hasEventReactionCondition(conditions)) return [];
   if (!conditions.length) return entry.changes ?? [];
+  // A persisted limitedChanges row means the grant-time selection was bypassed.
+  // Fail closed instead of passively projecting every unselected bonus.
+  if (conditions.some(condition => condition?.type === ABILITY_CONDITION_TYPES.limitedChanges)) return [];
   if ((hasAbilityTargetContextCondition(conditions) || hasAbilityWeaponContextCondition(conditions)) && !context?.allowContextual) return [];
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
   if (hasItemUseCondition(conditions)) return [];

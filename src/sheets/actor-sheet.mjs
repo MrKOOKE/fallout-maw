@@ -218,7 +218,7 @@ import {
 } from "../utils/item-value-attribution.mjs";
 import { decomposePreparedSkillValue } from "../utils/skill-value-attribution.mjs";
 import { buildAbilityTooltipCostGroups } from "../utils/ability-tooltip-costs.mjs";
-import { actorHasAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import { actorHasAbility, grantAbilityItemData, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
   getAbilityOverloadResourceCostSources,
@@ -835,11 +835,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         ui.notifications.info(`${this.actor.name}: добавлена способность ${item.name}.`);
         return item;
       }
+      return null;
     }
 
-    delete itemData._id;
-    delete itemData.id;
-    const [created] = await this.actor.createEmbeddedDocuments("Item", [itemData]);
+    const { item: created, cancelled } = await grantAbilityItemData(this.actor, itemData);
+    if (cancelled) {
+      ui.notifications.warn("Выбор изменений способности не завершён. Способность не добавлена.");
+      return null;
+    }
     if (created) ui.notifications.info(`${this.actor.name}: добавлена способность ${created.name}.`);
     return created ?? null;
   }
