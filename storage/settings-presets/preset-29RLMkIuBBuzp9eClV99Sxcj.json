@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "5c26af81431da62766ea58746b701fe62a02ff9f4331168dd772474305f3708c",
-  "updatedAt": "2026-07-24T04:46:02.089Z",
+  "revision": "0c3ad578a398d62ed5513a59670aae85d0aa9e64722f0a2740f3e6822261ad7a",
+  "updatedAt": "2026-07-24T09:47:35.519Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -60,6 +60,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "B6JjO9nRU0oINne0",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -93,6 +94,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "2IHdYMLnqqMeMHIU",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -148,6 +150,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "R38PGnR5NfmciFQ3",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -161,7 +164,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>Если максимальная дистанция атаки оружия &lt;= 10м, +20 к точности и +5% урона</p></li><li><p>Штраф на атаки дальше эффективной дистациии: +50%</p></li><li><p>Помехи на все атаки дальше эффективной дистанции</p></li></ul>",
+                "description": "<ul><li><p>Если максимальная дистанция атаки оружия &lt;= 10м, +20 к точности и +10% урона</p></li><li><p>Штраф на атаки дальше эффективной дистациии: +50%</p></li><li><p>Помехи на все атаки дальше эффективной дистанции</p></li></ul>",
                 "id": "hQIKzdDoEgyAKnoi",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
                 "name": "Близорукий",
@@ -222,6 +225,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "22zYTW8Ugcl3Ydcb",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -258,12 +262,114 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "DUuPijpDInH0Du66",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Одно изменение на выбор:</p><ul><li><p>+10 точности</p></li><li><p>+5% урон</p></li><li><p>+2% Крит успех</p></li><li><p>+10% Крит урон</p></li><li><p>+5 ко всем сопротивлениям</p></li><li><p>+1 ОП</p></li></ul>",
+                "id": "wiOlkFee9EfalCjm",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Боевая подготовка",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "W8ZcLaOkkbaVy14r",
+                          "key": "system.combat.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "PCSD25mDoBGi592K",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5"
+                        },
+                        {
+                          "id": "dPBPdRXcQ0FN3eB7",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        },
+                        {
+                          "id": "F5Qt3P0XbOlP3qhr",
+                          "key": "system.combat.criticalDamagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "sx69hUHRTw254SQy",
+                          "key": "system.damageResistanceBonuses.all.all",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5"
+                        },
+                        {
+                          "id": "RBkD8RKcYrplX4Gd",
+                          "key": "system.resources.movementPoints.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 0,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "YlraGZ11KrhmuJRb",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "limitFormula": "1",
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "limitedChanges"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "W4cJuXmMxjbCSvEo",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
                       "type": "effectChanges"
                     }
                   ]
@@ -321,6 +427,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "LcQ9JQoVYdeWTudt",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -392,6 +499,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "e7L3IqAa5KDmjPRw",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -441,6 +549,7 @@
                         "minimumPureValueGapPercent": 20
                       },
                       "id": "5TvrvuxOJv281exu",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -495,6 +604,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "oielPyv4NmTdAXpM",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -550,6 +660,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "obnBDa6lxzPPkUmI",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -586,6 +697,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "Y5iPEQRSk2nSyIF5",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -622,6 +734,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "KKXFBNhvuWFvVd1A",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -658,6 +771,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "QOu34yIakSx4aMv5",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -713,6 +827,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "6EcCLcHyRUqb2iHH",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -774,6 +889,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "J7EQBmpFEtoMzxCh",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -836,6 +952,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "z8gBC4s02haclxUN",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -899,6 +1016,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "ADPgxgw5XcZBpW0N",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -967,6 +1085,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "GMPnG93kryF5MHMj",
+                      "includeInPureValues": false,
                       "penalties": [
                         {
                           "id": "f9BCMUlJhJ95NxFZ",
@@ -1038,6 +1157,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "mOzE96C0Z8BVIOrW",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1101,6 +1221,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "YsmYUYNM6LvBI8nf",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1134,6 +1255,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "3ULDAPzOlF6jG3oP",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1208,6 +1330,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "WzIEYquwlHLELO1q",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1241,12 +1364,162 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "rI5H2zSNshAQxghe",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
                         "durationSeconds": 0
                       },
                       "sort": 1,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>+10 к одному выбранному Навыку (Чистый бонус)</p></li></ul>",
+                "id": "XteDP5VzGGpCZJ6B",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Обученный",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Особенности",
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "snzFb36X0DFmz9Sf",
+                          "key": "system.skills.rangedCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "Y9QEyNqbQksNO7su",
+                          "key": "system.skills.meleeCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "9tc943XGV4ujbjbx",
+                          "key": "system.skills.athletics.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "qf6ST7uBedAjJabb",
+                          "key": "system.skills.energy.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "wNMiH3QjDrE47U8H",
+                          "key": "system.skills.resilience.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "bisfvDDxvPQzREm5",
+                          "key": "system.skills.doctor.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "X9BymThEpPzHFWW2",
+                          "key": "system.skills.naturalist.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "ftSp2wjzTfSDUsIy",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "SMVcjb8n6bsHt3nv",
+                          "key": "system.skills.science.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "cBFWFS4KDlCR0OAi",
+                          "key": "system.skills.repair.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "Nda5ehFvPAihJjjK",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "IVtPUWtL6KkLRBa5",
+                          "key": "system.skills.gambling.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 0,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "LBfiAFEHnHOYOaoP",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "limitFormula": "1",
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "limitedChanges"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "1DkeKAFuuy5CfYbc",
+                      "includeInPureValues": true,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
                       "type": "effectChanges"
                     }
                   ]
@@ -1315,6 +1588,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "7Fl8LdsH9vPUOPJl",
+                      "includeInPureValues": false,
                       "penalties": [
                         {
                           "id": "hN9yTSvXwRo72EUW",
@@ -1386,6 +1660,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "nA9rvGvFaSlR6yra",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1473,6 +1748,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "0cnZxXMavdUW5Z1h",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1536,6 +1812,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "soxVgWqf9rsXg1uX",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1613,6 +1890,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "6QnjhsR4ovtoNI31",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1684,6 +1962,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "PmSo5KNOuaib3smv",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1767,6 +2046,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "NjKO8PJeYT0LxiOc",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1838,6 +2118,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "YQHWGPI2hSwy2Evc",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1858,7 +2139,7 @@
           {
             "abilities": [
               {
-                "description": "<p>Доступных особенностей: +1</p>",
+                "description": "<ul><li><p>Доступных особенностей: +1</p></li></ul>",
                 "id": "75bGnh6L68ieK9yL",
                 "img": "icons/svg/aura.svg",
                 "name": "\"Особенный\"",
@@ -1891,6 +2172,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "9N6KOuaxIr6y9RdK",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -1904,7 +2186,213 @@
                 "visible": true
               },
               {
-                "description": "<p>Вы получаете +1 к выбранной характеристиике.</p>",
+                "description": "<ul><li><p>+10 к двум выбранным Навыкам (Чистый бонус)</p></li></ul>",
+                "id": "ksU63pIru8a4VS2P",
+                "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
+                "name": "Дополнительная подготовка",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": true,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Общая категория",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "1RfWixSuNzS0ykoL",
+                          "key": "system.skills.rangedCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "bguy1utvtu6W5NMm",
+                          "key": "system.skills.meleeCombat.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "CHasIPj3m5ss8N1O",
+                          "key": "system.skills.athletics.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "IaM0K9Th9cshZP7O",
+                          "key": "system.skills.energy.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "61MZSkzMSE6WRH4f",
+                          "key": "system.skills.resilience.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "BCLiM9ViIWF5I9Sk",
+                          "key": "system.skills.doctor.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "cA3ga5xyRMoK8g2W",
+                          "key": "system.skills.naturalist.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "wRVusfysObw5YWb2",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "eFKF4PVoHJ2b9FlB",
+                          "key": "system.skills.science.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "aDQoP3kW9cjEHBau",
+                          "key": "system.skills.repair.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "FBRKsiuWHfXAhETA",
+                          "key": "system.skills.speech.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        },
+                        {
+                          "id": "bbWpN7968nOpYowI",
+                          "key": "system.skills.gambling.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "10"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 0,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "0JsmHxhQcYYI9cls",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "limitFormula": "2",
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "limitedChanges"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "3k4wYF3Xht80lHFV",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>Урон по союзникам: -80%</p></li></ul>",
+                "id": "6QN6DNXTnnirqYh6",
+                "img": "icons/svg/aura.svg",
+                "name": "Дружеские подколки",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": true,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Общая категория",
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "S05At5bTF2Puj0RB",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-80"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "OE6W2XR11n4l2NCk",
+                          "targetFactionNames": [
+                            "Игроки"
+                          ],
+                          "type": "targetFaction"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "NSvSH4NkQBkoH1JP",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<ul><li><p>+1 к выбранной Характеристиике (Чистый бонус)</p></li></ul>",
                 "id": "nA1IMMboEOo8ErXF",
                 "img": "systems/fallout-maw/assets/icons/1-7/intensivnaya-trenirovka.webp",
                 "name": "Интенсивная тренировка",
@@ -1999,6 +2487,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "cTZJBq0PZstYBQek",
+                      "includeInPureValues": true,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2012,7 +2501,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Вы получаете еще один коронный навык.</p>",
+                "description": "<ul><li><p>Вы получаете еще один коронный навык.</p></li></ul>",
                 "id": "yQ1yCA4gGpvmfz7O",
                 "img": "systems/fallout-maw/assets/icons/22-28/priz.webp",
                 "name": "Приз",
@@ -2045,6 +2534,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "cun6l601FwAEukjv",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2105,6 +2595,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "oteR0pZnPuBvqOQD",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2152,6 +2643,7 @@
                         "damagePercentBonus": 20
                       },
                       "id": "6VyXZIj8YJrLPV26",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2199,6 +2691,7 @@
                         "innateDifficultyIgnorePercent": 100
                       },
                       "id": "cE6dqpMhWMAE4hhi",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2249,6 +2742,7 @@
                         "overloadEnergyCost": 10
                       },
                       "id": "OfkdnQNdCN1J18A8",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2297,6 +2791,7 @@
                         "reactionOverloadEnergyCost": 40
                       },
                       "id": "0lNS8FhG3EpumGEI",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2366,6 +2861,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "H53OqeqYdCS0u6CS",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2417,6 +2913,7 @@
                         "overloadEnergyCost": 20
                       },
                       "id": "xm5Bbdg0ad49DOjp",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2463,6 +2960,7 @@
                         "energyCost": 10
                       },
                       "id": "JkpBZFRLuOFVg1Sc",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2545,6 +3043,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "oY5zpjJhiO3Vqwgl",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2595,6 +3094,7 @@
                         "overloadEnergyCost": 100
                       },
                       "id": "gov0LXPs7otdx5Ee",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2639,6 +3139,7 @@
                       "fixedKey": "hawkEye",
                       "fixedSettings": {},
                       "id": "XfF4uEY1XlItTq9h",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2714,6 +3215,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "lAwDgX5mnYe3YB8s",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2795,6 +3297,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "bvi3Ui5k0T7QBE8z",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2844,6 +3347,7 @@
                         "overloadEnergyCost": 40
                       },
                       "id": "JLOQtj5aV6xwIlt5",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2893,6 +3397,7 @@
                         "overloadEnergyCost": 40
                       },
                       "id": "8an4FkuQiVp5iJnG",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -2941,6 +3446,7 @@
                         "requiredSkillKey": "meleeCombat"
                       },
                       "id": "bJMTTcKSzqMiEtkb",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3004,6 +3510,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "FjxIb7wHHRphbAz2",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3053,6 +3560,7 @@
                         "requiredSkillKey": "meleeCombat"
                       },
                       "id": "q5olLD7EFxiCIezP",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3103,6 +3611,7 @@
                         "overloadEnergyCost": 100
                       },
                       "id": "Yg07eygzP5bxQwCu",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3152,6 +3661,7 @@
                         "requiredSkillKey": "meleeCombat"
                       },
                       "id": "yOsVH4KU7Iapno4O",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3232,6 +3742,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "3jASjPuIgNucLAdf",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3280,6 +3791,7 @@
                         "reactionOverloadEnergyCost": 40
                       },
                       "id": "XwILAwAUauJdWQp3",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3341,6 +3853,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "Xny360S1rHC233Yb",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3441,6 +3954,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "VMEez0y8JAHtE9Y5",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3494,6 +4008,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "sc4fHtqq7wcfHaqF",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3555,6 +4070,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "92fiqPzv1Z7CkldI",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3608,6 +4124,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "kurh4woJgb2DHJhJ",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3661,6 +4178,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "7o1pNHR0zfV3c4Wh",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3714,6 +4232,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "XEMrtDzzo0yDU549",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3783,6 +4302,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "RcoeNtllJJFxjucK",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3852,6 +4372,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "WX54d7Oe499ZvixK",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3905,6 +4426,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "P1L4zUbIXzhFPDJk",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -3952,6 +4474,7 @@
                         "targetAttackDisadvantageBonus": 1
                       },
                       "id": "wq6cf6uEcf2DK91J",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4007,6 +4530,7 @@
                         "reactionOverloadEnergyCost": 20
                       },
                       "id": "FAaKkX0xgxOGw0M7",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4054,6 +4578,7 @@
                         "dodgeRoundRecoveryBonusPercent": 30
                       },
                       "id": "EKvr3nayDZ4UVTIb",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4107,6 +4632,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "ne55LtLtPzLjUMsV",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4162,6 +4688,7 @@
                         "overloadEnergyCost": 100
                       },
                       "id": "G3i9Euj4WewQfkgt",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4219,6 +4746,7 @@
                         "skillDivisor": 50
                       },
                       "id": "EzZvimotrCZIh9qo",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4319,6 +4847,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "x8agb8JFR9SvQq1Y",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4372,6 +4901,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "M9rQWYe4gpqa9lAx",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4438,6 +4968,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "XmhtjfdRp6zfZT2r",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4490,6 +5021,7 @@
                         "sourceSkillKey": "naturalist"
                       },
                       "id": "4YyScOSSiYUYsO2E",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4570,6 +5102,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "sTZ9W6A0laoefuaj",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4623,6 +5156,7 @@
                         "targetSkillKey": "stealth"
                       },
                       "id": "986uI7MJpHr7ljIs",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4674,6 +5208,7 @@
                         "skillKey": "naturalist"
                       },
                       "id": "o07B1xeqOmvoEbAL",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4718,6 +5253,7 @@
                       "fixedKey": "dangerSense",
                       "fixedSettings": {},
                       "id": "Y88FBGvUPNiKvA1Z",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4784,6 +5320,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "FTsXHkXzWC0xNq4T",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -4981,6 +5518,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "LSK2nVX8OAMZlIw5",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5034,6 +5572,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "d64V9nYdDZ0ZFylE",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5187,6 +5726,66 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "Y1gHZ9kyC4kU46Wo",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энергии.<br>Перегрузка: 40 энергии на пол часа.</p><p>Выбранная цель проходит проверку Скрытности со сложностью [[25+science]] и в случае провала получает метку на 24 часа.</p><ul><li><p>Все проверки навыков по отношению к ней: +20</p></li><li><p>Урон -10%</p></li><li><p>Точность: -20</p></li></ul><p></p>",
+                "id": "HoQMcdhxQaoMpBEs",
+                "img": "icons/svg/aura.svg",
+                "name": "Разбор повадок",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "science"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "lUZcaPSU2STzqgmt",
+                      "skillKey": "science",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Наука",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "fo1M4Qxq6IP7G2Kc",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5227,7 +5826,7 @@
                 "visible": true
               },
               {
-                "description": "<ul><li><p>+[[10+science/10]] ко всем Навыкам</p></li><li><p>Множитель развития всех Навыков: +0.2</p></li></ul>",
+                "description": "<ul><li><p>+[[10+science/10]] ко всем Навыкам (Чистый бонус)</p></li><li><p>Множитель развития всех Навыков: +0.2</p></li></ul>",
                 "id": "TtuP52o02zXvxKiK",
                 "img": "systems/fallout-maw/assets/icons/1-7/zdes-i-sejchas.webp",
                 "name": "Торжество разума",
@@ -5275,6 +5874,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "Kq0wDwH1aR2ybsf4",
+                      "includeInPureValues": true,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5359,6 +5959,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "tZsaEW1b6B2hz3Eu",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5443,6 +6044,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "6zUYzpgk749eWDlF",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5502,6 +6104,7 @@
                         "suppressTraumas": true
                       },
                       "id": "aFcKBtB0oiaz4fhb",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5583,6 +6186,7 @@
                         "targetSkillKey": "science"
                       },
                       "id": "Hy9zK24BFvu2mWwf",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5829,6 +6433,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "fNUeKtYjrdDmIuY7",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5896,6 +6501,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "ZA308Slttp9kfDQp",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -5971,6 +6577,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "9cgId47MAJgytqI3",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6032,6 +6639,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "yZpSrh7AmL6VuP6J",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6161,6 +6769,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "mUlSTXyvnZPmOYoG",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6257,6 +6866,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "o0eHtaXDOfkfOP4M-application",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6353,6 +6963,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "u6NqPLJYeinNzWNF-movement-route",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6449,6 +7060,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "hXDOkMGJjkPB7WBb-application",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6501,6 +7113,7 @@
                         "targetSkillKey": "science"
                       },
                       "id": "3hHIaTFDySq0Z3LL",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6590,6 +7203,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "2badYt8ARL4SDcHo",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6667,6 +7281,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "zOv3WYrBCKsMiYYs",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6728,6 +7343,7 @@
                         }
                       },
                       "id": "lHEZyFnilBKm2oOk",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6781,6 +7397,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "Lnf2iZZThjd9iEwP",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6832,6 +7449,7 @@
                         "pelletCoveragePercent": 50
                       },
                       "id": "UgNhPa99CEy0N3ol",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6879,6 +7497,7 @@
                         "killChanceFormula": "50+gambling/10"
                       },
                       "id": "wU4RJh1iSOIU1c0N",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6927,6 +7546,7 @@
                         "failureCharges": 1
                       },
                       "id": "R8OwhOdLx05GU7ya",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -6988,6 +7608,7 @@
                       "fixedKey": "",
                       "fixedSettings": {},
                       "id": "5PfmJyhkCoJBFvwC",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -7036,6 +7657,7 @@
                         "extraBlockChanceFormula": "60-gambling/5"
                       },
                       "id": "yn8vGVtgBodE2fNX",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -7084,6 +7706,7 @@
                         "triggerFormula": "30+gambling/5"
                       },
                       "id": "U9cvop1SHa03FKwI",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -7133,6 +7756,7 @@
                         "overloadEnergyCost": 50
                       },
                       "id": "Wq4JEWDhFcugUswj",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],
@@ -7184,6 +7808,7 @@
                         "successBonusFormula": "10+gambling/5"
                       },
                       "id": "mGmZ6IRQoOdw9a3p",
+                      "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
                         "costs": [],

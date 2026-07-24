@@ -30,6 +30,10 @@
         "NoActive": "No active abilities.",
         "NoPassive": "No passive abilities."
       },
+      "PureValues": {
+        "Label": "Pure values?",
+        "Hint": "Treat this function's skill and characteristic changes as the actor's own values during advancement."
+      },
       "Actions": {
         "Add": "Add action",
         "Title": "Actions",

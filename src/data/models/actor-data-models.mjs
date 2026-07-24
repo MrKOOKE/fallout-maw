@@ -47,6 +47,10 @@ import {
 } from "../../utils/item-functions.mjs";
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { getSkillAdvancementMultiplierChanges } from "../../abilities/evaluation.mjs";
+import {
+  applyAdvancementPureCharacteristic,
+  collectAdvancementPureValueProjection
+} from "../../advancement/pure-value-effects.mjs";
 import { prepareActorEffectChangeForApplication } from "../../utils/active-effect-changes.mjs";
 import { getActorFormulaApplicationPhase } from "../../utils/actor-formulas.mjs";
 import {
@@ -226,6 +230,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const sourceSystem = this.parent?._source?.system ?? {};
     const isConstruct = this.parent?.type === "construct";
     const preparedBonusMode = isConstruct ? "delta" : "prepared";
+    const advancementPureValues = collectAdvancementPureValueProjection(
+      this.parent,
+      characteristicSettings,
+      skillSettings
+    );
     const sourceResources = mergePreparedBonuses(sourceSystem.resources, this.resources, { preparedBonusMode });
     const sourceNeeds = mergePreparedBonuses(sourceSystem.needs, this.needs, { preparedBonusMode });
     const sourceProficiencies = mergePreparedBonuses(sourceSystem.proficiencies, this.proficiencies, { preparedBonusMode });
@@ -233,7 +242,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
     const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
     const cleanCharacteristics = normalizeCharacteristicMap(
-      normalizeNumberMap(sourceSystem.characteristics, characteristicSettings),
+      Object.fromEntries(characteristicSettings.map(characteristic => [
+        characteristic.key,
+        applyAdvancementPureCharacteristic(
+          advancementPureValues,
+          characteristic.key,
+          sourceSystem.characteristics?.[characteristic.key]
+        )
+      ])),
       characteristicSettings,
       characteristicBonuses
     );
@@ -262,7 +278,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings, proficiencySettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
-    const cleanSkillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, cleanCharacteristics);
+    const cleanSkillBases = mergeNumberMaps(
+      evaluateSkillFormulas(skillSettings, characteristicSettings, cleanCharacteristics),
+      advancementPureValues.skillBonusDeltas
+    );
     const skillAdvancementMultiplierChanges = resolveSkillAdvancementMultiplierChanges(
       skillSettings,
       cleanCharacteristics,

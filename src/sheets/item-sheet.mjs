@@ -1,11 +1,13 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
+import { activateAdvancementPureValuesControls } from "../apps/advancement-pure-values-control.mjs";
 import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
+import { hasAdvancementPureValueFunctionChanges } from "../advancement/pure-value-keys.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   buildDamageMitigationLimbSetChoices,
@@ -745,6 +747,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedAbilityActionCheckboxes(form, submitData);
+    normalizeSubmittedAdvancementPureValueCheckboxes(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
     normalizeSubmittedToggleableConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
@@ -770,6 +773,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedAbilityActionCheckboxes(form, submitData);
+    normalizeSubmittedAdvancementPureValueCheckboxes(form, submitData);
     normalizeSubmittedTriggerCostConditions(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
     normalizeSubmittedToggleableConditions(form, submitData);
@@ -1233,6 +1237,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       event => this.#onToolFunctionKeyChange(event)
     );
     activateItemEffectKeyAutocompletes(this.element);
+    activateAdvancementPureValuesControls(this.element);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings(),
@@ -6332,6 +6337,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     isFixed,
     canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
     canConfigureActions: isEffectChanges || isActiveApplication,
+    showPureValuesToggle: isEffectChanges && hasAdvancementPureValueFunctionChanges(entry),
     fixedKey,
     activeApplicationSettings,
     fixedDeusSettings,
@@ -8201,6 +8207,13 @@ function normalizeSubmittedAbilityActionCheckboxes(form = null, submitData = {})
     "input[type='checkbox'][name$='.routeShowRuler']"
   ].join(", ");
   for (const input of form?.querySelectorAll?.(selector) ?? []) {
+    const path = String(input?.name ?? "").trim();
+    if (path) foundry.utils.setProperty(submitData, path, Boolean(input.checked));
+  }
+}
+
+function normalizeSubmittedAdvancementPureValueCheckboxes(form = null, submitData = {}) {
+  for (const input of form?.querySelectorAll?.("input[type='checkbox'][data-advancement-pure-values-input][name]") ?? []) {
     const path = String(input?.name ?? "").trim();
     if (path) foundry.utils.setProperty(submitData, path, Boolean(input.checked));
   }

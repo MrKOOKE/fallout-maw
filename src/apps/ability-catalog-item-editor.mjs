@@ -122,9 +122,11 @@ import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisi
 import { getEquipmentSlotSelectionKey } from "../utils/equipment-slots.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
+import { hasAdvancementPureValueFunctionChanges } from "../advancement/pure-value-keys.mjs";
 import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "./description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
+import { activateAdvancementPureValuesControls } from "./advancement-pure-values-control.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { pickCatalogAbilities, resolveCatalogAbilityEntries } from "./ability-catalog-picker.mjs";
 import { findCatalogAbility } from "../abilities/purchase.mjs";
@@ -326,6 +328,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     });
     this.#activateAcquisitionAbilityDropzones();
     activateAbilityFunctionKeyAutocomplete(this.element);
+    activateAdvancementPureValuesControls(this.element);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings(),
@@ -1235,6 +1238,7 @@ function readAbilityFunctions(root, previousValue = []) {
     return {
       id,
       type: row.dataset.functionType,
+      includeInPureValues: Boolean(row.querySelector("[data-advancement-pure-values-input]")?.checked),
       fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
       fixedSettings: readFixedFunctionSettings(row),
       activeSettings: readActiveApplicationSettings(row, previousFunction?.activeSettings),
@@ -1973,6 +1977,7 @@ function prepareFunctionForDisplay(entry) {
     isFixed,
     canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
     canConfigureActions: isEffectChanges || isActiveApplication,
+    showPureValuesToggle: isEffectChanges && hasAdvancementPureValueFunctionChanges(normalized),
     fixedKey,
     activeApplicationSettings,
     fixedWhereAreYouGoingSettings,

@@ -58,6 +58,7 @@ import {
   EFFECT_LIFECYCLE_KINDS,
   getEffectSourceFunctionContext
 } from "./effect-lifecycle.mjs";
+import { isAdvancementPureValueEffectKey } from "../advancement/pure-value-keys.mjs";
 
 const TRIGGER_CHANCE_DECISION_LIMIT = 512;
 const triggerChanceDecisions = new Map();
@@ -70,10 +71,24 @@ export function getAbilityEffectChanges(actor, item, context = {}) {
 }
 
 export function getAbilityEffectChangesFromFunctions(actor, functions = [], context = {}) {
-  return normalizeAbilityFunctions(functions)
-    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .flatMap(entry => getConditionalFunctionChanges(actor, entry, context))
-    .filter(change => change.key && change.value !== "");
+  return getAbilityEffectProjectionFromFunctions(actor, functions, context).changes;
+}
+
+export function getAbilityEffectProjectionFromFunctions(actor, functions = [], context = {}) {
+  const changes = [];
+  const pureChangeIndexes = [];
+  for (const entry of normalizeAbilityFunctions(functions)) {
+    if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+    for (const change of getConditionalFunctionChanges(actor, entry, context)) {
+      if (!change.key || change.value === "") continue;
+      const index = changes.length;
+      changes.push(change);
+      if (entry.includeInPureValues && isAdvancementPureValueEffectKey(change.key)) {
+        pureChangeIndexes.push(index);
+      }
+    }
+  }
+  return { changes, pureChangeIndexes };
 }
 
 export function getAbilityAcquisitionChanges(itemOrData) {

@@ -59,6 +59,7 @@ export function buildEffectFunctionSnapshot(abilityFunction = {}) {
   return clonePlainData({
     id: normalized.id,
     type: normalized.type,
+    includeInPureValues: normalized.includeInPureValues === true,
     changes: normalized.changes ?? [],
     conditions: normalized.conditions ?? [],
     penalties: normalized.penalties ?? []

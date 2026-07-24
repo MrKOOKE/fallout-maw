@@ -4,6 +4,7 @@ import {
   normalizeIlluminationLevel,
   normalizeTimeOfDayText
 } from "../abilities/environment-conditions.mjs";
+import { hasAdvancementPureValueFunctionChanges } from "../advancement/pure-value-keys.mjs";
 
 export const LOCKED_FEATURES_CATEGORY_ID = "features";
 export const GENERAL_ABILITY_CATEGORY_ID = "general";
@@ -573,6 +574,10 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   const activeSettings = type === ABILITY_FUNCTION_TYPES.activeApplication
     ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
     : {};
+  const changes = isLegacy
+    ? legacyFunctionToChanges(value)
+    : normalizeAbilityChanges(value?.changes ?? value?.effects);
+  const penalties = normalizeAbilityChanges(value?.penalties);
   const legacyActiveDuration = type === ABILITY_FUNCTION_TYPES.activeApplication
     ? Math.max(0, toInteger(value?.activeSettings?.durationSeconds ?? value?.settings?.durationSeconds ?? 0))
     : 0;
@@ -591,6 +596,9 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
+    includeInPureValues: type === ABILITY_FUNCTION_TYPES.effectChanges
+      && Boolean(value?.includeInPureValues)
+      && hasAdvancementPureValueFunctionChanges({ changes, penalties }),
     fixedKey: type === ABILITY_FUNCTION_TYPES.fixed ? normalizeFixedFunctionKey(value?.fixedKey) : "",
     fixedSettings: type === ABILITY_FUNCTION_TYPES.fixed
       ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
@@ -599,14 +607,12 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     // Legacy storage is intentionally cleared after its rows have been migrated
     // into the standalone triggerCost condition above.
     reactionSettings: { durationSeconds: 0, costs: [] },
-    changes: isLegacy
-      ? legacyFunctionToChanges(value)
-      : normalizeAbilityChanges(value?.changes ?? value?.effects),
+    changes,
     actions: [ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication].includes(type)
       ? normalizeAbilityActions(value?.actions)
       : [],
     conditions,
-    penalties: normalizeAbilityChanges(value?.penalties),
+    penalties,
     sort: index
   };
 }

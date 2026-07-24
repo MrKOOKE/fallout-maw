@@ -139,6 +139,7 @@ function abilityFunctionField() {
       choices: ["effectChanges", "activeApplication", "acquisitionChanges", "characteristicBonus", "skillBonus", "fixed"],
       initial: "effectChanges"
     }),
+    includeInPureValues: new BooleanField({ required: true, initial: false }),
     fixedKey: new StringField({ required: true, blank: true, initial: "" }),
     fixedSettings: new ObjectField({ required: true, initial: {} }),
     activeSettings: new ObjectField({ required: true, initial: {} }),

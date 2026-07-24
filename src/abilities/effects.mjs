@@ -8,7 +8,7 @@ import {
 } from "../settings/abilities.mjs";
 import {
   abilityConditionsApply,
-  getAbilityEffectChangesFromFunctions,
+  getAbilityEffectProjectionFromFunctions,
   getAbilityFunctionChangesForSatisfiedAuraCondition,
   hasAbilityWeaponContextCondition
 } from "./evaluation.mjs";
@@ -33,6 +33,10 @@ import {
   EFFECT_LIFECYCLE_KINDS,
   buildEffectFunctionSnapshot
 } from "./effect-lifecycle.mjs";
+import {
+  ADVANCEMENT_PURE_EFFECT_FLAG_KEY,
+  buildAdvancementPureEffectFlag
+} from "../advancement/pure-value-effects.mjs";
 import {
   LIMITED_EFFECT_COPY_FLAG_KEY,
   buildLimitedEffectCopyFlag,
@@ -507,7 +511,7 @@ export async function syncActorAbilityEffects(actor, context = {}) {
 async function syncSingleAbilityEffect(actor, item, context = {}) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === item.id);
   const operationOptions = getAbilityEffectOperationOptions(item);
-  const changes = buildAbilityEffectChanges(actor, item, context);
+  const { changes, pureChangeIndexes } = buildAbilityEffectProjection(actor, item, context);
   if (!changes.length) {
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
     return;
@@ -515,7 +519,13 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
 
   const sourceId = getAbilitySourceId(item);
   const showIcon = getAbilityEffectShowIcon(actor, item, context);
-  const signature = JSON.stringify({ itemId: item.id, sourceId, changes, showIcon });
+  const signature = JSON.stringify({
+    itemId: item.id,
+    sourceId,
+    changes,
+    showIcon,
+    ...(pureChangeIndexes.length ? { pureChangeIndexes } : {})
+  });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
   if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
@@ -540,20 +550,29 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon)], operationOptions);
+  await actor.createEmbeddedDocuments(
+    "ActiveEffect",
+    [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon, pureChangeIndexes)],
+    operationOptions
+  );
 }
 
 async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === item.id);
   const operationOptions = getItemFreeSettingsEffectOperationOptions(item);
-  const changes = buildItemFreeSettingsEffectChanges(actor, item, context);
+  const { changes, pureChangeIndexes } = buildItemFreeSettingsEffectProjection(actor, item, context);
   if (!changes.length) {
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
     return;
   }
 
   const showIcon = getItemFreeSettingsEffectShowIcon(actor, item, context);
-  const signature = JSON.stringify({ itemId: item.id, changes, showIcon });
+  const signature = JSON.stringify({
+    itemId: item.id,
+    changes,
+    showIcon,
+    ...(pureChangeIndexes.length ? { pureChangeIndexes } : {})
+  });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
   if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
@@ -578,7 +597,11 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon)], operationOptions);
+  await actor.createEmbeddedDocuments(
+    "ActiveEffect",
+    [buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon, pureChangeIndexes)],
+    operationOptions
+  );
 }
 
 function queueAuraStateSync() {
@@ -677,6 +700,7 @@ function buildDesiredAuraGeneratedEffects() {
               key,
               changes,
               triggerCost,
+              ...(entry.includeInPureValues ? { advancementPure: true } : {}),
               ...(effectCopyFlag ? { effectCopyFlag } : {}),
               limitedUseIds,
               ...projectionContext
@@ -924,8 +948,9 @@ function isApplicableGeneratedAuraChange(change = {}) {
     && String(change?.value ?? "") !== "";
 }
 
-function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon) {
+function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon, pureChangeIndexes = []) {
   const auraCondition = hasAuraConditionFunction(item?.system?.functions ?? []);
+  const advancementPureFlag = buildAdvancementPureEffectFlag(pureChangeIndexes);
   return {
     type: "base",
     name: item.name,
@@ -941,6 +966,9 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIc
         [EFFECT_LIFECYCLE_FLAG_KEY]: {
           kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
         },
+        ...(advancementPureFlag ? {
+          [ADVANCEMENT_PURE_EFFECT_FLAG_KEY]: advancementPureFlag
+        } : {}),
         [ABILITY_EFFECT_FLAG_KEY]: {
           abilityItemId: item.id,
           abilitySourceId: sourceId,
@@ -952,8 +980,9 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIc
   };
 }
 
-function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon) {
+function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon, pureChangeIndexes = []) {
   const auraCondition = hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []);
+  const advancementPureFlag = buildAdvancementPureEffectFlag(pureChangeIndexes);
   return {
     type: "base",
     name: item.name,
@@ -969,6 +998,9 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
         [EFFECT_LIFECYCLE_FLAG_KEY]: {
           kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
         },
+        ...(advancementPureFlag ? {
+          [ADVANCEMENT_PURE_EFFECT_FLAG_KEY]: advancementPureFlag
+        } : {}),
         [ITEM_EFFECT_FLAG_KEY]: {
           itemId: item.id,
           signature,
@@ -979,16 +1011,16 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
   };
 }
 
-function buildAbilityEffectChanges(actor, item, context = {}) {
-  return getAbilityEffectChangesFromFunctions(
+function buildAbilityEffectProjection(actor, item, context = {}) {
+  return getAbilityEffectProjectionFromFunctions(
     actor,
     withoutTimedTriggerCostFunctions(item?.system?.functions ?? []),
     { ...context, abilityItemId: item?.id ?? "" }
   );
 }
 
-function buildItemFreeSettingsEffectChanges(actor, item, context = {}) {
-  return getAbilityEffectChangesFromFunctions(actor, withoutTimedTriggerCostFunctions(
+function buildItemFreeSettingsEffectProjection(actor, item, context = {}) {
+  return getAbilityEffectProjectionFromFunctions(actor, withoutTimedTriggerCostFunctions(
     item?.system?.functions?.freeSettings?.entries ?? []
   ), {
     ...context,

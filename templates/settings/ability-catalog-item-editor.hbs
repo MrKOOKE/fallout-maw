@@ -1491,6 +1491,12 @@
         <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
         {{/each}}
       </div>
+      {{#if isEffectChanges}}
+      <label class="fallout-maw-pure-values-toggle" data-advancement-pure-values-toggle title="{{localize 'FALLOUTMAW.Ability.PureValues.Hint'}}" {{#unless showPureValuesToggle}}hidden{{/unless}}>
+        <span>{{localize "FALLOUTMAW.Ability.PureValues.Label"}}</span>
+        <input type="checkbox" data-field="includeInPureValues" data-advancement-pure-values-input {{checked includeInPureValues}}>
+      </label>
+      {{/if}}
     </fieldset>
     {{/if}}
 

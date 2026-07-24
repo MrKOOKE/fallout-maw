@@ -25,6 +25,10 @@ import {
 } from "../config/defaults.mjs";
 import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { getSkillAdvancementMultiplierChanges } from "../abilities/evaluation.mjs";
+import {
+  applyAdvancementPureCharacteristic,
+  collectAdvancementPureValueProjection
+} from "./pure-value-effects.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
 import { ABILITY_ACQUISITION_ABILITY_MODES, ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
@@ -50,6 +54,7 @@ const REPEAT_INTERVAL_MS = 45;
 
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
+  #advancementPureValues = null;
   #actorUpdateHookId = null;
   #abilityTooltipAnchor = null;
   #abilityTooltipDocumentAbortController = null;
@@ -166,6 +171,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    this.#advancementPureValues = collectAdvancementPureValueProjection(
+      this.actor,
+      characteristicSettings,
+      skillSettings
+    );
     this.#skillAdvancementMultiplierSource = getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
     this.#skillAdvancementMultiplierChanges = null;
     const skillDevelopmentCostSettings = getSkillDevelopmentCostSettings();
@@ -1082,12 +1092,17 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     }
 
     this.#skillAdvancementMultiplierSource ??= getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
+    const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics);
+    const pureValueProjection = this.#getAdvancementPureValues(characteristicSettings, skillSettings);
+    for (const [skillKey, bonus] of Object.entries(pureValueProjection.skillBonusDeltas ?? {})) {
+      skillBases[skillKey] = toInteger(skillBases[skillKey]) + toInteger(bonus);
+    }
     const resolved = resolveSkillAdvancementMultiplierChanges(
       skillSettings,
       characteristics,
       skillAdvancementSettings,
       development,
-      evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics),
+      skillBases,
       this.#skillAdvancementMultiplierSource
     );
     if (usesCurrentDraft) this.#skillAdvancementMultiplierChanges = resolved;
@@ -1153,7 +1168,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       max,
       toInteger(liveSkill.base) + toInteger(liveSkill.developmentBonus) + externalBonus
     ));
-    return externalBonus + (liveValue - preparedValue);
+    const pureBonus = toInteger(this.#getAdvancementPureValues().skillBonusDeltas?.[key]);
+    return externalBonus - pureBonus + (liveValue - preparedValue);
   }
 
   #getPreviewSkillPureValue(key) {
@@ -1434,13 +1450,30 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #getCleanCharacteristics(characteristicSettings = getCharacteristicSettings(), development = this.#draft?.development) {
+    const pureValueProjection = this.#getAdvancementPureValues(characteristicSettings);
     return Object.fromEntries(
       characteristicSettings.map(characteristic => [
         characteristic.key,
-        toInteger(this.#draft?.characteristics?.[characteristic.key])
+        applyAdvancementPureCharacteristic(
+          pureValueProjection,
+          characteristic.key,
+          this.#draft?.characteristics?.[characteristic.key]
+        )
           + toInteger(development?.characteristics?.[characteristic.key])
       ])
     );
+  }
+
+  #getAdvancementPureValues(
+    characteristicSettings = getCharacteristicSettings(),
+    skillSettings = getSkillSettings()
+  ) {
+    this.#advancementPureValues ??= collectAdvancementPureValueProjection(
+      this.actor,
+      characteristicSettings,
+      skillSettings
+    );
+    return this.#advancementPureValues;
   }
 
   #getAbilityRequirementContext({

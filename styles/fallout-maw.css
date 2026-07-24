@@ -1069,6 +1069,31 @@ body #prosemirror-dropdown {
   width: auto;
 }
 
+.fallout-maw-pure-values-toggle {
+  align-items: center;
+  display: flex;
+  font-size: 0.9em;
+  gap: 0.45rem;
+  justify-content: flex-end;
+  margin: 0.45rem 0 0 auto;
+  opacity: 0.72;
+  width: fit-content;
+}
+
+.fallout-maw-pure-values-toggle:hover {
+  opacity: 1;
+}
+
+.fallout-maw-pure-values-toggle[hidden] {
+  display: none;
+}
+
+.fallout-maw-pure-values-toggle input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+  width: auto;
+}
+
 .fallout-maw-checkbox-row {
   align-items: center;
   display: flex;

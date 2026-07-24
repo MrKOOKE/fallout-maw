@@ -5,10 +5,14 @@ import {
 import { formatResearchValue, roundResearchValue } from "../research/storage.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  applyAdvancementPureCharacteristic,
+  collectAdvancementPureValueProjection
+} from "../advancement/pure-value-effects.mjs";
 
 const ORGANISM_EFFECT_NAME = "Развитие организма";
 const ORGANISM_FLAG_KEY = "organismDevelopment";
-const CHARACTERISTIC_BONUS = 2;
+const CHARACTERISTIC_BONUS = 1;
 
 export const ORGANISM_DEVELOPMENT_LIMIT_EFFECT_KEY = "system.organismDevelopment.limit";
 
@@ -67,13 +71,18 @@ export function calculateActorPureCharacteristicSum(actor) {
   const sourceCharacteristics = actor?.system?._source?.characteristics ?? {};
   const developmentCharacteristics = actor?.system?.development?.characteristics ?? {};
   const organismBonuses = getOrganismDevelopmentCharacteristicBonuses(actor);
+  const pureValueProjection = collectAdvancementPureValueProjection(
+    actor,
+    characteristicSettings,
+    []
+  );
 
   return characteristicSettings.reduce((total, characteristic) => {
     const sourceValue = Object.hasOwn(sourceCharacteristics, characteristic.key)
       ? toInteger(sourceCharacteristics[characteristic.key])
       : toInteger(actor?.system?.characteristics?.[characteristic.key]);
     return total
-      + sourceValue
+      + applyAdvancementPureCharacteristic(pureValueProjection, characteristic.key, sourceValue)
       + toInteger(developmentCharacteristics[characteristic.key])
       + toInteger(organismBonuses[characteristic.key]);
   }, 0);
