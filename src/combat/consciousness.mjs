@@ -104,6 +104,14 @@ export function calculateConsciousnessRecoveryValue(resource = null, restoredHea
   return Math.min(state.max, state.value + recovery);
 }
 
+/**
+ * Consciousness follows the complete applied healing delta, including the
+ * portion below zero which is intentionally absent from aggregate health.
+ */
+export function calculateConsciousnessHealingGain(previousValue = 0, nextValue = 0) {
+  return Math.max(0, toInteger(nextValue) - toInteger(previousValue));
+}
+
 export function buildConsciousnessValueData(resource = null, requestedValue = 0) {
   const state = getConsciousnessState(resource);
   if (!state) return null;

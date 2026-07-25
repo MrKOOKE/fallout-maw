@@ -52,6 +52,7 @@ import {
   CONSCIOUSNESS_RESOURCE_KEY,
   CONSCIOUSNESS_RECOVERY_TARGET_PATH,
   buildConsciousnessUpdateData,
+  calculateConsciousnessHealingGain,
   calculateConsciousnessRecoveryValue,
   calculateShockConsciousnessValue,
   hasConsciousnessDepletionTransition,
@@ -1498,8 +1499,8 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     if (isConstructPartLimb(actor, limbKey)) continue;
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
-  if (mode === MODE_HEALING && actualHealthDelta > 0) {
-    mergeConsciousnessRecoveryUpdate(updateData, actor, actualHealthDelta);
+  if (mode === MODE_HEALING && actualLimbDelta > 0) {
+    mergeConsciousnessRecoveryUpdate(updateData, actor, actualLimbDelta);
   }
   if (Object.keys(updateData).length) {
     await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
@@ -1830,6 +1831,10 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
     const limb = freshActor?.system?.limbs?.[limbKey];
     if (!freshActor || !limb) return undefined;
     const max = Math.max(0, toInteger(limb.max));
+    const restoredLimbHealth = Math.max(
+      max,
+      calculateConsciousnessHealingGain(limb.value, max)
+    );
 
     await deleteLimbTraumas(freshActor, limbKey);
     await deleteLimbLossEffects(freshActor, limbKey);
@@ -1839,7 +1844,7 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
       [`system.limbs.${limbKey}.spent`]: 0,
       [`system.limbs.${limbKey}.damageAccumulation`]: replaceDamageAccumulation()
     };
-    mergeConsciousnessRecoveryUpdate(updateData, freshActor, max);
+    mergeConsciousnessRecoveryUpdate(updateData, freshActor, restoredLimbHealth);
     await freshActor.update(updateData, { falloutMawSkipDamageStatusSync: true });
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
@@ -4808,21 +4813,16 @@ async function distributeManualHealthValueUpdate(actor, changes = {}) {
   for (const [limbKey, accumulation] of result.damageAccumulation ?? new Map()) {
     changes[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
-  let actualHealthDelta = result.healthDelta;
+  let consciousnessRecoveryDelta = result.limbDelta;
   if (result.prosthesisHealthAdjustments?.length) {
-    const plannedProsthesisHealthDelta = result.prosthesisHealthAdjustments
-      .reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry?.amount)), 0);
     const actualProsthesisHealthDelta = await applyManualProsthesisHealthAdjustments(
       actor,
       result.prosthesisHealthAdjustments
     );
-    actualHealthDelta = Math.max(
-      0,
-      result.healthDelta - plannedProsthesisHealthDelta + actualProsthesisHealthDelta
-    );
+    consciousnessRecoveryDelta += actualProsthesisHealthDelta;
   }
-  if (mode === MODE_HEALING && actualHealthDelta > 0) {
-    mergeConsciousnessRecoveryUpdate(changes, actor, actualHealthDelta);
+  if (mode === MODE_HEALING && consciousnessRecoveryDelta > 0) {
+    mergeConsciousnessRecoveryUpdate(changes, actor, consciousnessRecoveryDelta);
   }
   return true;
 }
@@ -6124,7 +6124,7 @@ function applyHealingAllocations(actor, allocations = new Map(), { limbStates = 
     const cap = Math.min(Math.max(0, toInteger(limb.max)), getLimbHealingCap(actor, limbKey));
     const previousRunningValue = state.nextValue;
     state.nextValue = Math.min(cap, state.nextValue + healing);
-    const actualLimbDelta = Math.max(0, state.nextValue - previousRunningValue);
+    const actualLimbDelta = calculateConsciousnessHealingGain(previousRunningValue, state.nextValue);
     if (!actualLimbDelta) continue;
 
     const positiveGain = Math.max(0, state.nextValue) - Math.max(0, previousRunningValue);
@@ -6697,7 +6697,7 @@ function synchronizeManualLimbValueUpdates(actor, changes = {}) {
     setUpdatePath(changes, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
     const accumulationPath = `system.limbs.${limbKey}.damageAccumulation`;
     if (value > previousValue) {
-      restoredHealth += Math.max(0, Math.max(0, value) - Math.max(0, previousValue));
+      restoredHealth += calculateConsciousnessHealingGain(previousValue, value);
       if (!hasUpdatePath(changes, accumulationPath)) {
         Object.assign(changes, buildAccumulationUpdate(actor, limbKey, "", value - previousValue, MODE_HEALING));
       }

@@ -79,11 +79,58 @@ test("failed shock checks fully deplete consciousness", () => {
   );
 });
 
-test("actual restored health replenishes consciousness one-for-one up to maximum", () => {
+test("actual restored health replenishes consciousness one-for-one up to maximum", async () => {
   const resource = { min: 0, value: 12, max: 50 };
   assert.equal(calculateConsciousnessRecoveryValue(resource, 7), 19);
   assert.equal(calculateConsciousnessRecoveryValue(resource, 100), 50);
   assert.equal(calculateConsciousnessRecoveryValue(resource, -5), 12);
+
+  const previousFoundry = globalThis.foundry;
+  globalThis.foundry = {
+    applications: {
+      api: { DialogV2: class DialogV2 {} },
+      ux: { FormDataExtended: class FormDataExtended {} },
+      handlebars: { renderTemplate: async () => "" }
+    },
+    utils: {
+      hasProperty: () => false,
+      setProperty: (object, path, value) => {
+        object[path] = value;
+        return true;
+      }
+    }
+  };
+
+  try {
+    const { prepareActorDamageUpdate } = await import("../src/combat/damage-hub.mjs");
+    const actor = {
+      uuid: "Actor.negative-limb-healing",
+      items: [],
+      system: {
+        limbs: {
+          arm: { value: -20, min: -100, max: 100, missing: false, critical: false }
+        },
+        resources: {
+          health: { value: 0, min: 0, max: 100 },
+          consciousness: { value: 10, min: 0, max: 100, spent: 90, recoveryTarget: 100 }
+        },
+        combat: { consciousnessRecoveryTarget: 100 }
+      }
+    };
+    const changes = {
+      "system.limbs.arm.value": -10,
+      "system.limbs.arm.damageAccumulation": {}
+    };
+
+    await prepareActorDamageUpdate(actor, changes);
+
+    assert.equal(changes["system.resources.consciousness.value"], 20);
+    assert.equal(changes["system.resources.consciousness.spent"], 80);
+    assert.equal(changes["system.combat.consciousnessRecoveryTarget"], 100);
+  } finally {
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+  }
 });
 
 test("persisted consciousness value and spent fields remain coherent", () => {
