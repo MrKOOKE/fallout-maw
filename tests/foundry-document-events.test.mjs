@@ -306,6 +306,15 @@ test("Foundry hook adapter captures pre-state and dispatches post-commit only on
   assert.equal(dispatchOptions.after["system.resources.health.value"], 8);
   assert.equal(dispatchOptions.delta["system.resources.health.value"], 8);
 
+  const migrationOptions = { falloutMawDocumentMigration: true };
+  callbacks.get("preUpdateActor")(actor, {}, migrationOptions, "player-1");
+  callbacks.get("updateActor")(actor, {
+    "system.resources.consciousness.value": 0
+  }, migrationOptions, "player-1");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.length, 1);
+  assert.equal(roots.length, 1);
+
   active = false;
   callbacks.get("updateActor")(actor, { "system.resources.health.value": 7 }, {}, "player-1");
   await new Promise(resolve => setImmediate(resolve));

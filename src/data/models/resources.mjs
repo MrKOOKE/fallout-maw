@@ -6,7 +6,14 @@ export function resourceField(value = 0, max = value, options = {}) {
     spent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     bonus: new NumberField({ required: true, integer: true, initial: 0 }),
     value: new NumberField({ required: true, integer: true, initial: value }),
-    max: new NumberField({ required: true, integer: true, initial: max })
+    max: new NumberField({ required: true, integer: true, initial: max }),
+    recoveryTarget: new NumberField({
+      required: true,
+      integer: true,
+      min: 0,
+      initial: 0,
+      persisted: false
+    })
   }, options);
 }
 

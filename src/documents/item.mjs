@@ -24,7 +24,7 @@ import {
 import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
-import { handleItemDamageUpdate } from "../combat/damage-hub.mjs";
+import { handleItemDamageUpdate, prepareItemDamageUpdate } from "../combat/damage-hub.mjs";
 import {
   cleanBooleanSlotSelections,
   getCreatureEquipmentSlotSelectionKeys,
@@ -62,6 +62,7 @@ export class FalloutMaWItem extends Item {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
+    prepareItemDamageUpdate(this, data, options, { operation: "create" });
     this.updateSource(getCleanSlotRequirementSource(this));
     if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
       ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
@@ -183,6 +184,13 @@ export class FalloutMaWItem extends Item {
       }
     }
 
+    prepareItemDamageUpdate(this, changes, options, { operation: "update" });
+    return undefined;
+  }
+
+  async _preDelete(options, user) {
+    if ((await super._preDelete(options, user)) === false) return false;
+    prepareItemDamageUpdate(this, this.toObject(), options, { operation: "delete" });
     return undefined;
   }
 
@@ -194,6 +202,11 @@ export class FalloutMaWItem extends Item {
   _onCreate(data, options, userId) {
     super._onCreate(data, options, userId);
     handleItemDamageUpdate(this, data, options);
+  }
+
+  _onDelete(options, userId) {
+    super._onDelete(options, userId);
+    handleItemDamageUpdate(this, this.toObject(), options);
   }
 
   get isEquipped() {

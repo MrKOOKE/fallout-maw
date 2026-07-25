@@ -1,7 +1,11 @@
 import { ensureConstructPartSlotSource } from "../utils/construct-parts.mjs";
 import { FIXED_GEAR_FUNCTION_KEYS } from "../utils/item-functions.mjs";
+import { CONSCIOUSNESS_RESOURCE_KEY } from "../combat/consciousness.mjs";
+
+export const LEGACY_CONSCIOUSNESS_MIGRATION_PENDING_FLAG = "legacyConsciousnessMigrationPending";
 
 const ACTOR_MIGRATIONS = Object.freeze([
+  migrateLegacyShockUnconsciousness,
   migrateLegacyConstructPartSlots
 ]);
 
@@ -92,6 +96,36 @@ function isEnabledFunctionData(data) {
 
 function migrateLegacyConstructPartSlots(source) {
   ensureConstructPartSlotSource(source);
+}
+
+function migrateLegacyShockUnconsciousness(source) {
+  const systemFlags = source?.flags?.["fallout-maw"];
+  const legacyState = systemFlags?.shockUnconscious;
+  if (!legacyState || typeof legacyState !== "object") return;
+  const legacyProgress = Math.max(
+    0,
+    Math.trunc(Number(legacyState.progress) || 0)
+  );
+
+  source.system ??= {};
+  source.system.resources ??= {};
+  const current = source.system.resources[CONSCIOUSNESS_RESOURCE_KEY];
+  source.system.resources[CONSCIOUSNESS_RESOURCE_KEY] = {
+    ...(current && typeof current === "object" ? current : {}),
+    min: 0,
+    value: 0,
+    // The derived maximum is unavailable during source migration. Preparation
+    // safely clamps this sentinel to the actor's real consciousness capacity.
+    spent: Number.MAX_SAFE_INTEGER
+  };
+
+  delete systemFlags.shockUnconscious;
+  // Runtime source migration alone does not remove the old flag from the
+  // database. A primary-GM ready migration persists only documents carrying
+  // this transient marker, then removes the marker in the same replacement.
+  systemFlags[LEGACY_CONSCIOUSNESS_MIGRATION_PENDING_FLAG] = {
+    progress: legacyProgress
+  };
 }
 
 function migrateLegacyWeaponAndArmorTypes(source) {

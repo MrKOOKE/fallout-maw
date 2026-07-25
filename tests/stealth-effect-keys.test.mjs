@@ -92,7 +92,7 @@ test("stealth attack effect keys are available in autocomplete with localized la
 
 test("actor schema exposes four transient signed stealth attack deltas", async () => {
   const source = await readFile(new URL("../src/data/models/actor-data-models.mjs", import.meta.url), "utf8");
-  const block = source.match(/stealth:\s*new SchemaField\(\{[\s\S]*?\n\s{6}\}\),\n\s{6}healing:/)?.[0] ?? "";
+  const block = source.match(/stealth:\s*new SchemaField\(\{[\s\S]*?\r?\n\s{6}\}\),\r?\n\s{6}healing:/)?.[0] ?? "";
 
   assert.ok(block);
   for (const field of Object.keys(EXPECTED_KEYS)) {

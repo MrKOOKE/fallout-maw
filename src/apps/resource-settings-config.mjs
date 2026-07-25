@@ -12,7 +12,8 @@ import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 const RESOURCE_FORMULA_VARIABLES = Object.freeze([
-  Object.freeze({ key: "limbs", abbr: "limbs", label: "Все части тела" })
+  Object.freeze({ key: "limbs", abbr: "limbs", label: "Все части тела" }),
+  Object.freeze({ key: "criticalLimbs", abbr: "criticalLimbs", label: "Среднее ключевых частей тела" })
 ]);
 
 export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
@@ -55,7 +56,8 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       resources: this.resources.map(resource => ({
         ...resource,
-        locked: isFixedResourceKey(resource.key)
+        locked: isFixedResourceKey(resource.key),
+        formulaLocked: resource.key === "consciousness"
       }))
     };
   }

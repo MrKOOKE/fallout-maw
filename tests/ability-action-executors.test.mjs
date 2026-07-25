@@ -9,6 +9,8 @@ globalThis.foundry = {
     handlebars: { renderTemplate: async () => "" }
   },
   utils: {
+    deepClone: value => structuredClone(value),
+    mergeObject: (target, source) => ({ ...target, ...source }),
     randomID: () => "test-id"
   }
 };
@@ -163,6 +165,7 @@ test("movement routes require every explicit waypoint in order", async () => {
 
 test("native movement planning converts an adjusted OP budget back to raw Foundry cost", () => {
   const actor = {
+    items: { contents: [] },
     effects: [{
       disabled: false,
       changes: [{ key: "system.costs.movement", type: "override", value: "2" }]
@@ -247,7 +250,7 @@ test("movement-route actions retain constructor defaults and use native path mea
 
   const document = {
     _source: movementSource(),
-    actor: { uuid: "Actor.route" }
+    actor: { uuid: "Actor.route", items: { contents: [] } }
   };
   const token = {
     findMovementPath: points => ({ result: points.map(point => ({ ...point })) }),

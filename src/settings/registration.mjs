@@ -56,6 +56,7 @@ import {
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
+  DOCUMENT_MIGRATION_VERSION_SETTING,
   FACTION_MATRIX_SETTING,
   FACTION_SETTINGS_SETTING,
   ITEM_CATEGORIES_SETTING,
@@ -104,6 +105,14 @@ import { syncLoadedActorNaturalRaceItems } from "../races/natural-items.mjs";
 
 export function registerSystemSettings() {
   registerPersonalGeneratorSettings();
+
+  game.settings.register(FALLOUT_MAW.id, DOCUMENT_MIGRATION_VERSION_SETTING, {
+    name: "Document Migration Version",
+    scope: "world",
+    config: false,
+    type: Number,
+    default: 0
+  });
 
   game.settings.register(FALLOUT_MAW.id, SETTINGS_PRESET_STATE_SETTING, {
     name: "Settings Preset State",

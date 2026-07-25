@@ -68,6 +68,7 @@
           <div class="fallout-maw-token-hud-meter-card" data-token-hud-resource-card data-resource-key="{{key}}">
             <div class="fallout-maw-token-hud-meter-header">
               <span>{{label}}</span>
+              {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-label">{{localize "FALLOUTMAW.Actor.ConsciousnessRecoveryTarget" value=recoveryTarget}}</span>{{/if}}
               {{#if ../meterSections.resources.editable}}
               <label class="fallout-maw-token-hud-meter-value-editor">
                 <input type="number" value="{{value}}" min="{{min}}" max="{{max}}" step="1" data-token-hud-meter-value-input data-section="resources" data-key="{{key}}" data-original-value="{{value}}" aria-label="{{label}}">
@@ -80,6 +81,7 @@
             <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}" data-resource-limited="{{blockedAmount}}">
               <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
               {{#if blockedAmount}}<span class="fallout-maw-resource-meter-blocked" style="{{blockedStyle}}" aria-hidden="true"></span>{{/if}}
+              {{#if hasRecoveryTarget}}<span class="fallout-maw-consciousness-recovery-marker" style="{{recoveryTargetStyle}}" title="{{localize 'FALLOUTMAW.Actor.ConsciousnessRecoveryTarget' value=recoveryTarget}}" aria-label="{{localize 'FALLOUTMAW.Actor.ConsciousnessRecoveryTarget' value=recoveryTarget}}"></span>{{/if}}
               <span class="fallout-maw-resource-meter-preview" aria-hidden="true"></span>
             </div>
           </div>

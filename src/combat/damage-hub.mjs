@@ -48,6 +48,15 @@ import {
   getConstructPartTypeLabel,
   getInstalledConstructPartForLimb
 } from "../utils/construct-parts.mjs";
+import {
+  CONSCIOUSNESS_RESOURCE_KEY,
+  CONSCIOUSNESS_RECOVERY_TARGET_PATH,
+  buildConsciousnessUpdateData,
+  calculateConsciousnessRecoveryValue,
+  calculateShockConsciousnessValue,
+  hasConsciousnessDepletionTransition,
+  isConsciousnessUnconscious
+} from "./consciousness.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 export const DAMAGE_APPLIED_HOOK = "fallout-maw.damageApplied";
@@ -56,10 +65,13 @@ const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const LIMB_LOSS_EFFECT_KIND = "limbLoss";
-const SHOCK_UNCONSCIOUS_FLAG_KEY = "shockUnconscious";
 const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
 const FIRST_AID_WITHDRAWAL_EFFECT_KIND = "firstAidWithdrawal";
 const FIRST_AID_WITHDRAWAL_PAYLOAD_FLAG_KEY = "firstAidWithdrawal";
+const ITEM_ACTOR_HEALTH_SNAPSHOT_OPTION = "falloutMawActorHealthBeforeItemMutation";
+const ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION = "falloutMawVitalStatusBeforeByActor";
+const ACTIVE_EFFECT_CONSCIOUSNESS_RELEVANCE_OPTION = "falloutMawConsciousnessEffectRelevantBefore";
+const VITAL_STATUS_SYNCHRONIZATION_OPTION = "falloutMawVitalStatusSynchronization";
 const BLEEDING_DAMAGE_EFFECT_KIND = "bleedingDamage";
 const PERIODIC_DAMAGE_EFFECT_KIND = "periodicDamage";
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
@@ -131,6 +143,8 @@ const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "penetration"
 ]);
 let damageTimeHooksRegistered = false;
+let consciousnessHooksRegistered = false;
+let consciousnessStatusSynchronizationReady = false;
 const combatRoundWorldTimes = new Map();
 const processingPeriodicEffectUuids = new Set();
 const damageMitigationTextureCache = new Map();
@@ -149,6 +163,30 @@ export function registerLethalDamagePreventionHandler(handler) {
 
 export function registerDamageHubConfig() {
   CONFIG.ActiveEffect.expiryEvents[MANAGED_TIMED_DAMAGE_EXPIRY] = "FALLOUTMAW.Effects.ManagedTimedDamageExpiry";
+  registerConsciousnessHooks();
+}
+
+export async function startConsciousnessStatusSynchronization() {
+  consciousnessStatusSynchronizationReady = true;
+
+  const actors = new Map();
+  for (const actor of game.actors?.contents ?? []) {
+    if (actor?.uuid && ["character", "construct"].includes(actor.type)) actors.set(actor.uuid, actor);
+  }
+  for (const scene of game.scenes?.contents ?? []) {
+    for (const token of scene.tokens ?? []) {
+      const actor = token.actorLink ? null : token.actor;
+      if (actor?.uuid && ["character", "construct"].includes(actor.type)) actors.set(actor.uuid, actor);
+    }
+  }
+
+  const synchronized = [];
+  for (const actor of actors.values()) {
+    if (!canApplyDamageLocally(actor)) continue;
+    await queueActorDamageStatusSync(actor);
+    synchronized.push(actor);
+  }
+  return synchronized;
 }
 
 export function registerDamageSocket() {
@@ -1460,12 +1498,14 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     if (isConstructPartLimb(actor, limbKey)) continue;
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
+  if (mode === MODE_HEALING && actualHealthDelta > 0) {
+    mergeConsciousnessRecoveryUpdate(updateData, actor, actualHealthDelta);
+  }
   if (Object.keys(updateData).length) {
     await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
   }
   if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
 
-  if (mode === MODE_HEALING && actualHealthDelta > 0) await advanceShockUnconsciousRecovery(actor, actualHealthDelta);
   const destroyedLimbKeys = mode === MODE_DAMAGE && actualLimbDelta > 0
     ? await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()))
     : new Set();
@@ -1793,12 +1833,14 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
 
     await deleteLimbTraumas(freshActor, limbKey);
     await deleteLimbLossEffects(freshActor, limbKey);
-    await freshActor.update({
+    const updateData = {
       [`system.limbs.${limbKey}.missing`]: false,
       [`system.limbs.${limbKey}.value`]: max,
       [`system.limbs.${limbKey}.spent`]: 0,
       [`system.limbs.${limbKey}.damageAccumulation`]: replaceDamageAccumulation()
-    }, { falloutMawSkipDamageStatusSync: true });
+    };
+    mergeConsciousnessRecoveryUpdate(updateData, freshActor, max);
+    await freshActor.update(updateData, { falloutMawSkipDamageStatusSync: true });
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
   });
@@ -1872,8 +1914,6 @@ export async function fullyRestoreActorDamageState(actor) {
 
     await deleteDamageStateItems(freshActor);
     await deleteDamageSystemEffects(freshActor);
-    await freshActor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
-
     const updates = buildFullDamageRestoreUpdate(freshActor);
     if (Object.keys(updates).length) await freshActor.update(updates, { falloutMawSkipDamageStatusSync: true });
     const prosthesisUpdates = buildFullProsthesisRestoreUpdates(freshActor);
@@ -1934,41 +1974,114 @@ export function getDamageCostModifierState(actor, { actionKey = "" } = {}) {
 }
 
 export async function prepareActorDamageUpdate(actor, changes = {}, options = {}) {
-  if (!options?.falloutMawSkipDamageStatusSync) await distributeManualHealthValueUpdate(actor, changes, options);
-  synchronizeManualLimbValueUpdates(actor, changes);
+  captureActorVitalStatusSnapshot(actor, changes, options);
+  const manualHealthAdjusted = !options?.falloutMawSkipDamageStatusSync
+    && await distributeManualHealthValueUpdate(actor, changes);
+  const manuallyRestoredHealth = synchronizeManualLimbValueUpdates(actor, changes);
+  if (
+    !options?.falloutMawSkipDamageStatusSync
+    && !manualHealthAdjusted
+    && manuallyRestoredHealth > 0
+  ) {
+    mergeConsciousnessRecoveryUpdate(changes, actor, manuallyRestoredHealth);
+  }
+  const consciousnessValuePath = `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`;
+  if (hasUpdatePath(changes, consciousnessValuePath)) {
+    mergeConsciousnessValueUpdate(
+      changes,
+      actor,
+      getUpdatePath(changes, consciousnessValuePath)
+    );
+  }
   return preventCriticalLimbHealthRecovery(actor, changes);
+}
+
+export function prepareItemDamageUpdate(item, changes = {}, options = {}, { operation = "update" } = {}) {
+  if (
+    options?.falloutMawSkipConsciousnessRecovery
+    || options?.falloutMawConstructPartConditionSync
+  ) return 0;
+
+  const actor = item?.parent;
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  if (!actorUuid || !itemMutationMayChangeAggregateHealth(item, changes, operation)) return 0;
+
+  const snapshots = options[ITEM_ACTOR_HEALTH_SNAPSHOT_OPTION] ??= {};
+  snapshots[actorUuid] ??= {
+    value: Math.max(0, roundDamageAmount(actor?.system?.resources?.health?.value)),
+    consumed: false
+  };
+  return snapshots[actorUuid].value;
 }
 
 export function handleActorDamageUpdate(actor, changes = {}, options = {}) {
   if (!canApplyDamageLocally(actor)) return undefined;
-  const healingDelta = Math.max(0, roundDamageAmount(options?.falloutMawShockHealingDelta));
-  if (healingDelta > 0) void advanceShockUnconsciousRecovery(actor, healingDelta);
   if (!options?.falloutMawLimbCapSync) void synchronizeActorLimbValueCaps(actor);
   if (options?.falloutMawSkipDamageStatusSync) return undefined;
-  if (!isDamageStatusUpdateRelevant(changes)) return undefined;
+  const directlyRelevant = isDamageStatusUpdateRelevant(changes);
+  const derivedRelevant = isDerivedVitalStatusUpdateRelevant(changes);
+  if (!directlyRelevant && !derivedRelevant) return undefined;
+  const restoredDerivedHealth = getActorDerivedHealthRecovery(actor, changes, options);
+  if (restoredDerivedHealth > 0) {
+    return recoverConsciousnessFromDerivedHealth(actor, restoredDerivedHealth, options);
+  }
+  if (
+    !directlyRelevant
+    && derivedRelevant
+    && !hasActorVitalStatusTransition(actor, options)
+  ) return undefined;
   return queueActorDamageStatusSync(actor);
 }
 
 export function handleItemDamageUpdate(item, changes = {}, options = {}) {
   if (isTraumaCapUpdateRelevant(item, changes, options)) void synchronizeActorLimbValueCaps(item.parent);
-  if (options?.falloutMawConstructPartConditionSync) return undefined;
-  if (!isConstructPartConditionUpdateRelevant(item, changes)) return undefined;
   const actor = item?.parent;
+  const restoredHealth = consumeItemActorHealthRecovery(actor, options);
+  const consciousness = actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
+  const consciousnessRecoveryRequired = restoredHealth > 0
+    && calculateConsciousnessRecoveryValue(consciousness, restoredHealth) !== toInteger(consciousness?.value);
+  const constructPartChanged = !options?.falloutMawConstructPartConditionSync
+    && isConstructPartConditionUpdateRelevant(item, changes);
+  const prosthesisVitalStatusChanged = isProsthesisVitalStatusUpdateRelevant(item, changes);
+  if (!consciousnessRecoveryRequired && !constructPartChanged && !prosthesisVitalStatusChanged) {
+    return undefined;
+  }
+  if (!canApplyDamageLocally(actor)) return undefined;
+
   const actorUuid = actor?.uuid;
   const itemId = item?.id;
   if (!actorUuid || !itemId) return undefined;
 
   return queueActorDamageMutation(actorUuid, async freshActor => {
     const freshItem = freshActor?.items?.get?.(itemId);
-    if (!freshItem) return undefined;
-    const limbKey = getConstructPartLimbKey(getConstructPartSlotId(freshItem));
-    if (!limbKey) return undefined;
-    if (isConstructPartDestroyed(freshItem)) {
-      await applyDestroyedLimbConsequencesNow(freshActor, [limbKey]);
-    } else {
-      await deleteLimbTraumas(freshActor, limbKey);
-      await deleteLimbLossEffects(freshActor, limbKey);
-      await deleteLimbTimedDamageEffects(freshActor, limbKey);
+    let consciousnessThresholdChanged = false;
+
+    if (consciousnessRecoveryRequired) {
+      const updateData = {};
+      mergeConsciousnessRecoveryUpdate(updateData, freshActor, restoredHealth);
+      if (Object.keys(updateData).length) {
+        consciousnessThresholdChanged = hasConsciousnessThresholdTransition(freshActor, updateData);
+        await freshActor.update(updateData, {
+          falloutMawSkipDamageStatusSync: true,
+          falloutMawConsciousnessStateSync: true
+        });
+      }
+    }
+
+    if (constructPartChanged) {
+      const limbKey = getConstructPartLimbKey(getConstructPartSlotId(freshItem ?? item));
+      if (limbKey) {
+        if (!freshItem || isConstructPartDestroyed(freshItem)) {
+          await applyDestroyedLimbConsequencesNow(freshActor, [limbKey]);
+        } else {
+          await deleteLimbTraumas(freshActor, limbKey);
+          await deleteLimbLossEffects(freshActor, limbKey);
+          await deleteLimbTimedDamageEffects(freshActor, limbKey);
+        }
+      }
+    }
+    if (!consciousnessThresholdChanged && !constructPartChanged && !prosthesisVitalStatusChanged) {
+      return freshActor;
     }
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
@@ -2030,25 +2143,116 @@ function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
 
 function isDamageStatusUpdateRelevant(changes = {}) {
   return hasUpdatePath(changes, "system.resources.health.value")
+    || hasUpdatePath(changes, `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`)
     || updateTouchesPath(changes, "system.limbs");
+}
+
+function isDerivedVitalStatusUpdateRelevant(changes = {}) {
+  return updateTouchesPath(changes, "system.characteristics")
+    || updateTouchesPath(changes, "system.skills")
+    || updateTouchesPath(changes, "system.development.characteristics")
+    || updateTouchesPath(changes, "system.development.skills")
+    || updateTouchesPath(changes, "system.creature.raceId")
+    || updateTouchesPath(changes, "system.constructPartSlots")
+    || updateTouchesPath(changes, `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.bonus`)
+    || updateTouchesPath(changes, `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.spent`)
+    || updateTouchesPath(changes, CONSCIOUSNESS_RECOVERY_TARGET_PATH);
+}
+
+function captureActorVitalStatusSnapshot(actor, changes = {}, options = {}) {
+  if (
+    options?.falloutMawSkipDamageStatusSync
+    || !isDerivedVitalStatusUpdateRelevant(changes)
+  ) return;
+
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  if (!actorUuid) return;
+  const snapshots = options[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION] ??= {};
+  snapshots[actorUuid] ??= {
+    dead: hasDestroyedCriticalLimb(actor),
+    unconscious: isActorConsciousnessDepleted(actor),
+    healthValue: Math.max(0, roundDamageAmount(actor?.system?.resources?.health?.value)),
+    consciousnessValue: toInteger(actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.value)
+  };
+}
+
+function hasActorVitalStatusTransition(actor, options = {}) {
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  const snapshot = options?.[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION]?.[actorUuid];
+  if (!snapshot) return true;
+  return snapshot.dead !== hasDestroyedCriticalLimb(actor)
+    || snapshot.unconscious !== isActorConsciousnessDepleted(actor);
+}
+
+function getActorDerivedHealthRecovery(actor, changes = {}, options = {}) {
+  if (
+    !isDerivedVitalStatusUpdateRelevant(changes)
+    || hasUpdatePath(changes, "system.resources.health.value")
+    || hasUpdatePath(changes, `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`)
+  ) return 0;
+
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  const snapshot = options?.[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION]?.[actorUuid];
+  if (!snapshot) return 0;
+  const current = Math.max(0, roundDamageAmount(actor?.system?.resources?.health?.value));
+  return Math.max(0, current - Math.max(0, roundDamageAmount(snapshot.healthValue)));
+}
+
+function recoverConsciousnessFromDerivedHealth(actor, restoredHealth = 0, options = {}) {
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  if (!actorUuid) return undefined;
+  const snapshot = options?.[ACTOR_VITAL_STATUS_SNAPSHOTS_OPTION]?.[actorUuid];
+
+  return queueActorDamageMutation(actorUuid, async freshActor => {
+    const resource = freshActor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
+    const requestedValue = toInteger(snapshot?.consciousnessValue) + restoredHealth;
+    const valueData = buildConsciousnessUpdateData(resource, requestedValue);
+    if (
+      valueData
+      && (
+        valueData.value !== toInteger(resource?.value)
+        || valueData.spent !== toInteger(resource?.spent)
+      )
+    ) {
+      await freshActor.update({
+        [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`]: valueData.value,
+        [`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.spent`]: valueData.spent,
+        [CONSCIOUSNESS_RECOVERY_TARGET_PATH]: valueData.recoveryTarget
+      }, {
+        falloutMawSkipDamageStatusSync: true,
+        falloutMawConsciousnessStateSync: true
+      });
+    }
+    await queueActorDamageStatusSync(freshActor);
+    return freshActor;
+  });
 }
 
 function queueActorDamageStatusSync(actor) {
   const actorUuid = actor?.uuid;
   if (!actorUuid) return undefined;
 
-  const previous = actorDamageStatusSyncQueue.get(actorUuid) ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
+  const pending = actorDamageStatusSyncQueue.get(actorUuid);
+  if (pending) {
+    pending.actor = actor;
+    pending.requested = true;
+    return pending.promise;
+  }
+
+  const state = { actor, requested: true, promise: null };
+  state.promise = Promise.resolve()
     .then(async () => {
-      const freshActor = fromUuidSync(actorUuid) ?? actor;
-      await synchronizeActorVitalStatuses(freshActor);
+      do {
+        state.requested = false;
+        const freshActor = fromUuidSync(actorUuid) ?? state.actor;
+        await synchronizeActorVitalStatuses(freshActor);
+      } while (state.requested);
     })
     .finally(() => {
-      if (actorDamageStatusSyncQueue.get(actorUuid) === next) actorDamageStatusSyncQueue.delete(actorUuid);
+      if (actorDamageStatusSyncQueue.get(actorUuid) === state) actorDamageStatusSyncQueue.delete(actorUuid);
     });
-  actorDamageStatusSyncQueue.set(actorUuid, next);
-  return next;
+  actorDamageStatusSyncQueue.set(actorUuid, state);
+  return state.promise;
 }
 
 function queueActorDamageMutation(actorOrUuid, operation) {
@@ -2613,12 +2817,59 @@ function isConstructPartConditionUpdateRelevant(item, changes = {}) {
   if (
     item?.type !== "gear"
     || item.parent?.type !== "construct"
-    || !hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
-    || String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart
+    || (
+      !hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+      && !updateTouchesPath(changes, "system.functions.constructPart")
+    )
   ) return false;
 
   return updateTouchesPath(changes, "system.functions.condition")
-    || updateTouchesPath(changes, "system.functions.constructPart.critical");
+    || updateTouchesPath(changes, "system.functions.constructPart")
+    || updateTouchesPath(changes, "system.equipped")
+    || updateTouchesPath(changes, "system.placement");
+}
+
+function isProsthesisVitalStatusUpdateRelevant(item, changes = {}) {
+  if (
+    item?.type !== "gear"
+    || !["character", "construct"].includes(item.parent?.type)
+    || (
+      !hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+      && !updateTouchesPath(changes, "system.functions.prosthesis")
+    )
+  ) return false;
+
+  return updateTouchesPath(changes, "system.functions.condition")
+    || updateTouchesPath(changes, "system.functions.prosthesis")
+    || updateTouchesPath(changes, "system.equipped")
+    || updateTouchesPath(changes, "system.placement");
+}
+
+function itemMutationMayChangeAggregateHealth(item, changes = {}, operation = "update") {
+  if (item?.type !== "gear" || !["character", "construct"].includes(item.parent?.type)) return false;
+  const healthFunction = hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    || hasItemFunction(item, ITEM_FUNCTIONS.constructPart);
+  if (operation !== "update") return healthFunction;
+  if (!healthFunction && !(
+    updateTouchesPath(changes, "system.functions.prosthesis")
+    || updateTouchesPath(changes, "system.functions.constructPart")
+  )) return false;
+
+  return updateTouchesPath(changes, "system.functions.condition")
+    || updateTouchesPath(changes, "system.functions.prosthesis")
+    || updateTouchesPath(changes, "system.functions.constructPart")
+    || updateTouchesPath(changes, "system.equipped")
+    || updateTouchesPath(changes, "system.placement");
+}
+
+function consumeItemActorHealthRecovery(actor, options = {}) {
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  const snapshot = options?.[ITEM_ACTOR_HEALTH_SNAPSHOT_OPTION]?.[actorUuid];
+  if (!snapshot || snapshot.consumed) return 0;
+
+  snapshot.consumed = true;
+  const current = Math.max(0, roundDamageAmount(actor?.system?.resources?.health?.value));
+  return Math.max(0, current - Math.max(0, roundDamageAmount(snapshot.value)));
 }
 
 function isTraumaCapUpdateRelevant(item, changes = {}, options = {}) {
@@ -2723,12 +2974,21 @@ function isActorDead(actor) {
 
 async function synchronizeActorVitalStatuses(actor) {
   if (!actor?.toggleStatusEffect) return;
+  const preparedRecoveryTarget = toInteger(
+    actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.recoveryTarget
+  );
+  if (preparedRecoveryTarget !== toInteger(actor.system?.combat?.consciousnessRecoveryTarget)) {
+    await actor.update({
+      [CONSCIOUSNESS_RECOVERY_TARGET_PATH]: preparedRecoveryTarget
+    }, {
+      falloutMawSkipDamageStatusSync: true,
+      falloutMawConsciousnessStateSync: true
+    });
+  }
   const dead = hasDestroyedCriticalLimb(actor);
-  const health = actor.health;
-  const unconscious = !dead && (hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min)));
+  const unconscious = !dead && isActorConsciousnessDepleted(actor);
   if (dead) {
     await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.dead);
-    if (hasShockUnconscious(actor)) await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
     await setActorStatus(actor, STATUS_EFFECTS.unconscious, false, { animate: false });
     await setActorStatus(actor, STATUS_EFFECTS.dead, true);
     return;
@@ -2748,7 +3008,7 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
   chainRef = null,
   damageHubOperationRef = getCurrentDamageHubOperationRef()
 } = {}) {
-  if (!actor || !shockCheck || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  if (!actor || !shockCheck || isActorConsciousnessDepleted(actor) || isActorDead(actor)) return undefined;
   const limitedUseOperationId = createLimbShockLimitedUseOperationId(actor, shockCheck, damageHubOperationRef);
   if (shockCheck.difficulty <= 0) {
     await commitLimbShockActiveUse(shockCheck, limitedUseOperationId);
@@ -2770,14 +3030,13 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null, {
   });
   if (outcome) await commitLimbShockActiveUse(shockCheck, limitedUseOperationId);
   const resultKey = String(outcome?.result?.key ?? "");
-  if (!["failure", "criticalFailure"].includes(resultKey)) return outcome;
-  await createShockUnconsciousState(actor);
+  if (resultKey) await applyShockConsciousnessResult(actor, resultKey);
   return outcome;
 }
 
 async function queueOrPerformNegativeLimbShockCheck(actor, shockCheck = null, deferredShockChecks = null, reason = "") {
   if (!Array.isArray(deferredShockChecks)) return performNegativeLimbShockCheck(actor, shockCheck);
-  if (!actor || !shockCheck || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  if (!actor || !shockCheck || isActorConsciousnessDepleted(actor) || isActorDead(actor)) return undefined;
   if (shockCheck.difficulty <= 0) {
     await commitLimbShockActiveUse(
       shockCheck,
@@ -2811,7 +3070,7 @@ async function resolveDeferredShockChecks(entries = [], {
     try {
       for (const entry of queued) {
         const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
-        if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
+        if (!actor || isActorConsciousnessDepleted(actor) || isActorDead(actor)) continue;
         const shockCheck = entry.shockCheck;
         const limitedUseOperationId = createLimbShockLimitedUseOperationId(actor, shockCheck, damageHubOperationRef);
         const outcome = await requestSkillCheck({
@@ -2833,7 +3092,7 @@ async function resolveDeferredShockChecks(entries = [], {
         batch.add(outcome);
         if (outcome) outcomes.push(outcome);
         const resultKey = String(outcome?.result?.key ?? "");
-        if (["failure", "criticalFailure"].includes(resultKey)) await createShockUnconsciousState(actor);
+        if (resultKey) await applyShockConsciousnessResult(actor, resultKey);
       }
       if (batch.size) await batch.publish({ forceBatch: true });
       return outcomes;
@@ -2916,59 +3175,86 @@ function getNegativeLimbShockRequester(actor, shockCheck = {}) {
   return `${label}: шок (${shockCheck.damage})`;
 }
 
-async function createShockUnconsciousState(actor) {
+export function isActorConsciousnessDepleted(actor) {
+  return isConsciousnessUnconscious(actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]);
+}
+
+async function applyShockConsciousnessResult(actor, resultKey = "") {
   if (!actor || isActorDead(actor)) return false;
-  const target = calculateShockRecoveryTarget(actor);
-  await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.unconscious);
-  await actor.setFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY, {
-    target,
-    progress: 0,
-    createdAt: Number(game.time?.worldTime) || 0
-  });
-  await setActorStatus(actor, STATUS_EFFECTS.unconscious, true);
+  const resource = actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
+  const nextValue = calculateShockConsciousnessValue(resource, resultKey);
+  return updateActorConsciousnessValue(actor, nextValue);
+}
+
+function mergeConsciousnessRecoveryUpdate(updateData, actor, restoredHealth = 0) {
+  const resource = actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
+  if (!resource || roundDamageAmount(restoredHealth) <= 0) return false;
+
+  const valuePath = `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`;
+  const pendingValue = hasUpdatePath(updateData, valuePath)
+    ? getUpdatePath(updateData, valuePath)
+    : resource.value;
+  const nextValue = calculateConsciousnessRecoveryValue(
+    { ...resource, value: pendingValue },
+    restoredHealth
+  );
+  return mergeConsciousnessValueUpdate(updateData, actor, nextValue);
+}
+
+function mergeConsciousnessValueUpdate(updateData, actor, requestedValue = 0) {
+  const resource = actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
+  const pendingRecoveryTarget = hasUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH)
+    ? getUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH)
+    : resource?.recoveryTarget;
+  const valueData = buildConsciousnessUpdateData({
+    ...resource,
+    recoveryTarget: pendingRecoveryTarget
+  }, requestedValue);
+  if (!valueData) return false;
+
+  const valuePath = `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`;
+  const spentPath = `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.spent`;
+  const currentValue = hasUpdatePath(updateData, valuePath)
+    ? toInteger(getUpdatePath(updateData, valuePath))
+    : toInteger(resource.value);
+  const currentSpent = hasUpdatePath(updateData, spentPath)
+    ? toInteger(getUpdatePath(updateData, spentPath))
+    : toInteger(resource.spent);
+  const currentRecoveryTarget = hasUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH)
+    ? toInteger(getUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH))
+    : toInteger(actor?.system?.combat?.consciousnessRecoveryTarget);
+  if (
+    valueData.value === currentValue
+    && valueData.spent === currentSpent
+    && valueData.recoveryTarget === currentRecoveryTarget
+  ) return false;
+
+  setUpdatePath(updateData, valuePath, valueData.value);
+  setUpdatePath(updateData, spentPath, valueData.spent);
+  setUpdatePath(updateData, CONSCIOUSNESS_RECOVERY_TARGET_PATH, valueData.recoveryTarget);
   return true;
 }
 
-async function advanceShockUnconsciousRecovery(actor, amount = 0) {
-  const recovery = getShockUnconscious(actor);
-  const healing = roundDamageAmount(amount);
-  if (!recovery || healing <= 0) return false;
+async function updateActorConsciousnessValue(actor, requestedValue = 0) {
+  if (!actor) return false;
+  const updateData = {};
+  if (!mergeConsciousnessValueUpdate(updateData, actor, requestedValue)) return false;
+  const thresholdChanged = hasConsciousnessThresholdTransition(actor, updateData);
 
-  const target = Math.max(1, roundDamageAmount(recovery.target));
-  const progress = Math.min(target, Math.max(0, roundDamageAmount(recovery.progress)) + healing);
-  if (progress >= target) {
-    await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
-    await queueActorDamageStatusSync(actor);
-    return true;
-  }
-
-  await actor.setFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY, {
-    ...recovery,
-    target,
-    progress
+  await actor.update(updateData, {
+    falloutMawSkipDamageStatusSync: true,
+    falloutMawConsciousnessStateSync: true
   });
-  await queueActorDamageStatusSync(actor);
-  return false;
+  if (thresholdChanged) await queueActorDamageStatusSync(actor);
+  return true;
 }
 
-function hasShockUnconscious(actor) {
-  return Boolean(getShockUnconscious(actor));
-}
-
-function getShockUnconscious(actor) {
-  const data = actor?.getFlag?.(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY)
-    ?? actor?.flags?.[SYSTEM_ID]?.[SHOCK_UNCONSCIOUS_FLAG_KEY];
-  if (!data || typeof data !== "object") return null;
-  const target = Math.max(1, roundDamageAmount(data.target));
-  const progress = Math.max(0, roundDamageAmount(data.progress));
-  return { ...data, target, progress };
-}
-
-function calculateShockRecoveryTarget(actor) {
-  const criticalLimbs = Object.entries(actor?.system?.limbs ?? {}).filter(([_key, limb]) => Boolean(limb?.critical));
-  const count = Math.max(1, criticalLimbs.length);
-  const total = criticalLimbs.reduce((sum, [key]) => sum + Math.max(0, getEffectiveLimbStateValue(actor, key)), 0);
-  return Math.max(1, roundDamageAmount(total / (count * 2)));
+function hasConsciousnessThresholdTransition(actor, updateData = {}) {
+  const resource = actor?.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY];
+  if (!resource) return false;
+  const valuePath = `system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.value`;
+  if (!hasUpdatePath(updateData, valuePath)) return false;
+  return hasConsciousnessDepletionTransition(resource, getUpdatePath(updateData, valuePath));
 }
 
 async function setActorStatus(actor, statusId = "", active = false, options = {}) {
@@ -3062,10 +3348,11 @@ function isOverlayStatusEffect(statusId = "") {
 }
 
 function getStatusAnimationOptions(statusId = "", { animate = null } = {}) {
-  if (SUPPRESSED_STATUS_EFFECT_ANIMATIONS.has(statusId)) return { animate: false };
-  if (animate === false) return { animate: false };
-  if (animate === true) return {};
-  return isOverlayStatusEffect(statusId) ? {} : { animate: false };
+  const options = { [VITAL_STATUS_SYNCHRONIZATION_OPTION]: true };
+  if (SUPPRESSED_STATUS_EFFECT_ANIMATIONS.has(statusId)) return { ...options, animate: false };
+  if (animate === false) return { ...options, animate: false };
+  if (animate === true) return options;
+  return isOverlayStatusEffect(statusId) ? options : { ...options, animate: false };
 }
 
 function getActorStatusEffectIds(actor, status) {
@@ -4494,7 +4781,7 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
   return applyDamageApplicationsNow({ actorUuid: actor.uuid, requests }, { createSummary: false });
 }
 
-async function distributeManualHealthValueUpdate(actor, changes = {}, options = {}) {
+async function distributeManualHealthValueUpdate(actor, changes = {}) {
   const healthValuePath = "system.resources.health.value";
   if (!hasUpdatePath(changes, healthValuePath)) return false;
 
@@ -4521,13 +4808,107 @@ async function distributeManualHealthValueUpdate(actor, changes = {}, options = 
   for (const [limbKey, accumulation] of result.damageAccumulation ?? new Map()) {
     changes[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
+  let actualHealthDelta = result.healthDelta;
   if (result.prosthesisHealthAdjustments?.length) {
-    await applyManualProsthesisHealthAdjustments(actor, result.prosthesisHealthAdjustments);
+    const plannedProsthesisHealthDelta = result.prosthesisHealthAdjustments
+      .reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry?.amount)), 0);
+    const actualProsthesisHealthDelta = await applyManualProsthesisHealthAdjustments(
+      actor,
+      result.prosthesisHealthAdjustments
+    );
+    actualHealthDelta = Math.max(
+      0,
+      result.healthDelta - plannedProsthesisHealthDelta + actualProsthesisHealthDelta
+    );
   }
-  if (mode === MODE_HEALING && result.healthDelta > 0) {
-    options.falloutMawShockHealingDelta = (Number(options.falloutMawShockHealingDelta) || 0) + result.healthDelta;
+  if (mode === MODE_HEALING && actualHealthDelta > 0) {
+    mergeConsciousnessRecoveryUpdate(changes, actor, actualHealthDelta);
   }
   return true;
+}
+
+function registerConsciousnessHooks() {
+  if (consciousnessHooksRegistered) return;
+  consciousnessHooksRegistered = true;
+
+  Hooks.on("preUpdateActiveEffect", (effect, _changes, options = {}) => {
+    if (options?.[VITAL_STATUS_SYNCHRONIZATION_OPTION]) return;
+    if (activeEffectMayAffectConsciousness(effect)) {
+      options[ACTIVE_EFFECT_CONSCIOUSNESS_RELEVANCE_OPTION] = true;
+    }
+  });
+  Hooks.on("createActiveEffect", (effect, options = {}) => {
+    if (options?.[VITAL_STATUS_SYNCHRONIZATION_OPTION]) return;
+    if (activeEffectMayAffectConsciousness(effect)) queueConsciousnessStatusSyncForEffect(effect);
+  });
+  Hooks.on("updateActiveEffect", (effect, changes = {}, options = {}) => {
+    if (options?.[VITAL_STATUS_SYNCHRONIZATION_OPTION]) return;
+    const relevant = Boolean(
+      options?.[ACTIVE_EFFECT_CONSCIOUSNESS_RELEVANCE_OPTION]
+      || activeEffectMayAffectConsciousness(effect)
+    );
+    if (!relevant) return;
+    if (
+      updateTouchesPath(changes, "system.changes")
+      || updateTouchesPath(changes, "disabled")
+      || updateTouchesPath(changes, "transfer")
+      || updateTouchesPath(changes, "statuses")
+    ) queueConsciousnessStatusSyncForEffect(effect);
+  });
+  Hooks.on("deleteActiveEffect", (effect, options = {}) => {
+    if (options?.[VITAL_STATUS_SYNCHRONIZATION_OPTION]) return;
+    if (activeEffectMayAffectConsciousness(effect)) queueConsciousnessStatusSyncForEffect(effect);
+  });
+  Hooks.on(`${SYSTEM_ID}.preparedActorsRefreshed`, actors => {
+    if (!consciousnessStatusSynchronizationReady) return;
+    for (const actor of actors ?? []) {
+      if (canApplyDamageLocally(actor)) void queueActorDamageStatusSync(actor);
+    }
+  });
+  Hooks.on(`${SYSTEM_ID}.consciousnessDocumentMigrated`, actor => {
+    if (consciousnessStatusSynchronizationReady && canApplyDamageLocally(actor)) {
+      void queueActorDamageStatusSync(actor);
+    }
+  });
+  Hooks.on("canvasReady", () => {
+    if (!consciousnessStatusSynchronizationReady) return;
+    for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+      const actor = token?.actor;
+      if (["character", "construct"].includes(actor?.type) && canApplyDamageLocally(actor)) {
+        void queueActorDamageStatusSync(actor);
+      }
+    }
+  });
+}
+
+function queueConsciousnessStatusSyncForEffect(effect) {
+  if (!consciousnessStatusSynchronizationReady) return undefined;
+  const actor = getActiveEffectActor(effect);
+  if (!["character", "construct"].includes(actor?.type) || !canApplyDamageLocally(actor)) return undefined;
+  return queueActorDamageStatusSync(actor);
+}
+
+function getActiveEffectActor(effect) {
+  const parent = effect?.parent;
+  if (parent?.documentName === "Actor") return parent;
+  if (parent?.documentName === "Item") {
+    return parent.actor ?? (parent.parent?.documentName === "Actor" ? parent.parent : null);
+  }
+  return null;
+}
+
+function activeEffectMayAffectConsciousness(effect) {
+  if (Array.from(effect?.statuses ?? []).some(statusId => (
+    INCAPACITATING_DODGE_OVERRIDE_STATUSES.has(String(statusId ?? "").trim())
+  ))) return true;
+
+  return Array.from(effect?.system?.changes ?? []).some(change => {
+    const key = String(change?.key ?? "").trim();
+    return key.startsWith(`system.resources.${CONSCIOUSNESS_RESOURCE_KEY}.`)
+      || key.startsWith("system.limbs.")
+      || key.startsWith("system.characteristics.")
+      || key.startsWith("system.skills.");
+  });
 }
 
 async function applyDamageEntriesBatch(actor, entries = [], { deferredShockChecks = null } = {}) {
@@ -6305,6 +6686,7 @@ function getResponsibleGM() {
 }
 
 function synchronizeManualLimbValueUpdates(actor, changes = {}) {
+  let restoredHealth = 0;
   for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     const valuePath = `system.limbs.${limbKey}.value`;
     if (!hasUpdatePath(changes, valuePath)) continue;
@@ -6314,10 +6696,14 @@ function synchronizeManualLimbValueUpdates(actor, changes = {}) {
     setUpdatePath(changes, valuePath, value);
     setUpdatePath(changes, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
     const accumulationPath = `system.limbs.${limbKey}.damageAccumulation`;
-    if (value > previousValue && !hasUpdatePath(changes, accumulationPath)) {
-      Object.assign(changes, buildAccumulationUpdate(actor, limbKey, "", value - previousValue, MODE_HEALING));
+    if (value > previousValue) {
+      restoredHealth += Math.max(0, Math.max(0, value) - Math.max(0, previousValue));
+      if (!hasUpdatePath(changes, accumulationPath)) {
+        Object.assign(changes, buildAccumulationUpdate(actor, limbKey, "", value - previousValue, MODE_HEALING));
+      }
     }
   }
+  return roundDamageAmount(restoredHealth);
 }
 
 function setLimbValueUpdate(updateData, actor, limbKey, value, { persistValue = true } = {}) {
@@ -6956,12 +7342,16 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
 }
 
 async function applyManualProsthesisHealthAdjustments(actor, entries = []) {
+  let healthDelta = 0;
   for (const entry of entries ?? []) {
     const item = actor?.items?.get?.(String(entry?.itemId ?? ""));
     if (!item) continue;
-    if (entry?.mode === MODE_HEALING) await applyProsthesisIntegratedHealthHealing(actor, item, entry.amount);
-    else await applyProsthesisIntegratedHealthDamage(actor, item, entry.amount);
+    const result = entry?.mode === MODE_HEALING
+      ? await applyProsthesisIntegratedHealthHealing(actor, item, entry.amount)
+      : await applyProsthesisIntegratedHealthDamage(actor, item, entry.amount);
+    healthDelta += Math.max(0, roundDamageAmount(result?.healthDelta));
   }
+  return roundDamageAmount(healthDelta);
 }
 
 async function applyProsthesisIntegratedHealthDamage(actor, prosthesis, healthAmount = 0) {
@@ -7086,7 +7476,7 @@ async function applyProsthesisConditionHealing(actor, prosthesis, amount = 0) {
   await actor.updateEmbeddedDocuments("Item", [{
     _id: prosthesis.id,
     "system.functions.condition.value": result.next
-  }]);
+  }], { falloutMawSkipConsciousnessRecovery: true });
   await queueActorDamageStatusSync(actor);
   return {
     item: actor.items?.get(prosthesis.id) ?? prosthesis,

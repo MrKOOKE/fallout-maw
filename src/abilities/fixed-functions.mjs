@@ -575,7 +575,12 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
 ]);
 
 export function registerFixedAbilityFunctionHooks() {
-  Hooks.on("updateActor", actor => queueActiveApplicationEffectSync(actor));
+  Hooks.on("updateActor", (actor, _changes, options = {}) => {
+    if (
+      !options?.falloutMawDocumentMigration
+      && !options?.falloutMawConsciousnessStateSync
+    ) queueActiveApplicationEffectSync(actor);
+  });
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
   registerWeaponAttackResolvedHandler("fallout-maw.fixed.counterAttack", requestCounterAttackReaction);

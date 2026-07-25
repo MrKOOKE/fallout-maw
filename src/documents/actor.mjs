@@ -118,7 +118,10 @@ export class FalloutMaWActor extends Actor {
       if (nextName) foundry.utils.setProperty(changes, "prototypeToken.name", nextName);
     }
     await prepareActorDamageUpdate(this, changes, options);
-    syncTrackedResourceValueUpdates(this, changes);
+    if (
+      !options?.falloutMawDocumentMigration
+      && !options?.falloutMawConsciousnessStateSync
+    ) syncTrackedResourceValueUpdates(this, changes);
     return undefined;
   }
 
@@ -279,6 +282,10 @@ export class FalloutMaWActor extends Actor {
 
   get health() {
     return this.system?.resources?.health;
+  }
+
+  get consciousness() {
+    return this.system?.resources?.consciousness;
   }
 
   getDevelopment() {

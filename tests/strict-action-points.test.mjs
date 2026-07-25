@@ -241,6 +241,7 @@ test("dodge spending ignores unrelated combat and uses the actor's hidden starte
   const actor = {
     uuid: "Actor.Dodge",
     isOwner: true,
+    items: { contents: [] },
     effects: [],
     system: { resources: { dodge: { value: 10, max: 10 } } },
     updates: [],
@@ -348,7 +349,7 @@ test("every direct movement, posture, active-action and dodge spend path recheck
   );
   assert.match(
     dodge,
-    /async function spendActorDodgeResourceNow\(actor, multiplier = 1\) \{[\s\S]*?if \(!isActorInActiveCombat\(actor\)\) return;/u
+    /async function spendActorDodgeResourceNow\(actor, multiplier = 1, conditionContext = \{\}\) \{[\s\S]*?if \(!isActorInActiveCombat\(actor\)\) return;/u
   );
   assert.match(
     dodge,
@@ -365,6 +366,7 @@ function installFoundryImportGlobals() {
     },
     utils: {
       deepClone: value => structuredClone(value),
+      randomID: () => "test-id",
       mergeObject: (target, source, { inplace = false } = {}) => {
         const result = inplace ? target : structuredClone(target ?? {});
         mergePlainObjects(result, source ?? {});

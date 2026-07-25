@@ -27,7 +27,7 @@
         <input type="text" data-field="key" value="{{key}}" {{#if locked}}disabled{{/if}}>
         <input type="text" data-field="label" value="{{label}}">
         <input type="color" data-field="color" value="{{color}}">
-        <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all">
+        <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all" {{#if formulaLocked}}disabled{{/if}}>
         {{#if locked}}
         <span class="fallout-maw-locked-resource-indicator" title="{{localize 'FALLOUTMAW.Common.Locked'}}"><i class="fa-solid fa-lock"></i></span>
         {{else}}

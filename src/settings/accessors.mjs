@@ -661,7 +661,6 @@ export function refreshPreparedActors() {
 }
 
 /** Refresh prepared Actor data after CONFIG has already been synchronized. */
-/** Refresh prepared Actor data after CONFIG has already been synchronized. */
 export function refreshPreparedActorsAfterConfig({ worldOnly = false } = {}) {
   syncActorTrackableAttributes();
   const actors = worldOnly
@@ -671,6 +670,7 @@ export function refreshPreparedActorsAfterConfig({ worldOnly = false } = {}) {
     actor.reset();
     if (actor.sheet?.rendered) actor.sheet.render(false);
   }
+  globalThis.Hooks?.callAll?.(`${FALLOUT_MAW.id}.preparedActorsRefreshed`, actors);
 }
 
 export function syncActorTrackableAttributes() {
@@ -697,6 +697,11 @@ export function syncActorTrackableAttributes() {
 
 function getLoadedActors() {
   const actors = new Set(game.actors?.contents ?? []);
+  for (const scene of game.scenes?.contents ?? []) {
+    for (const tokenDocument of scene.tokens ?? []) {
+      if (!tokenDocument.actorLink && tokenDocument.actor) actors.add(tokenDocument.actor);
+    }
+  }
   for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
     if (token.actor) actors.add(token.actor);
   }

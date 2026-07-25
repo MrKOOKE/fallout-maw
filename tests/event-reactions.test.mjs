@@ -1,43 +1,54 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
+globalThis.foundry = {
+  applications: {
+    api: { DialogV2: class DialogV2 {} },
+    ux: { FormDataExtended: class FormDataExtended {} },
+    handlebars: { renderTemplate: async () => "" }
+  }
+};
+
+const {
   eventReactionCombatAllows,
   eventReactionSkillKeysMatch,
   eventReactionSubscriptionMatches,
   eventReactionTrackingTargetsMatch,
   getEventTrackingRelation
-} from "../src/events/event-reaction-schema.mjs";
-import {
+} = await import("../src/events/event-reaction-schema.mjs");
+const {
   collectActiveSceneReactorActors,
   collectEventReactionCandidates,
   evaluateEventReactionSecondaryConditions
-} from "../src/events/event-reaction-scanner.mjs";
-import {
+} = await import("../src/events/event-reaction-scanner.mjs");
+const {
   REACTION_COST_FAILURES,
   STRICT_REACTION_RESOURCE_UPDATE_OPTION,
   applyReactionHealthCost,
   createResourceCostRegistry,
   spendActorResourceCostVector
-} from "../src/events/reaction-costs.mjs";
-import {
+} = await import("../src/events/reaction-costs.mjs");
+const {
   buildEventReactionEffectData,
   createEventReactionEffectManager,
   getEventReactionEffectFlag
-} from "../src/events/reaction-effects.mjs";
-import { createGenericEventReactionProvider, buildEventReactionCostLines } from "../src/events/event-reaction-provider.mjs";
-import {
+} = await import("../src/events/reaction-effects.mjs");
+const {
+  createGenericEventReactionProvider,
+  buildEventReactionCostLines
+} = await import("../src/events/event-reaction-provider.mjs");
+const {
   ABILITY_OVERLOAD_EFFECT_FLAG_KEY,
   ABILITY_OVERLOAD_REACTION_COST_ID,
   getAbilityOverloadReactionCostId,
   withAbilityOverloadCostRows,
   withAbilityOverloadEnergyCostRows
-} from "../src/abilities/overload.mjs";
-import {
+} = await import("../src/abilities/overload.mjs");
+const {
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   getAbilityOverloadCostEffectKey
-} from "../src/utils/active-effect-changes.mjs";
-import { SYSTEM_ID } from "../src/constants.mjs";
+} = await import("../src/utils/active-effect-changes.mjs");
+const { SYSTEM_ID } = await import("../src/constants.mjs");
 
 const EVENT_KEY = "fallout-maw.weapon.attack.targeted";
 
@@ -682,7 +693,7 @@ test("generic provider consumes a declined opportunity for the same operation an
   assert.equal((await provider.collect({ eventKey: EVENT_KEY, context })).length, 1);
 });
 
-test("generic provider allows a nested skill-check reaction under a new operation id", async () => {
+test("generic provider consumes one chance across nested operations in the same root", async () => {
   const skillKey = "fallout-maw.skill.check.beforeRoll";
   const actor = { uuid: "Actor.C", items: [] };
   const item = createSourceItem(actor, {
@@ -733,11 +744,10 @@ test("generic provider allows a nested skill-check reaction under a new operatio
     }
   });
   assert.equal(parent.length, 1);
-  assert.equal(nested.length, 1);
-  assert.notEqual(parent[0].chanceKey, nested[0].chanceKey);
+  assert.equal(nested.length, 0);
 });
 
-test("generic provider offers separately for two skill-check subjects in one operation", async () => {
+test("generic provider consumes one chance across skill-check subjects in one operation", async () => {
   const skillKey = "fallout-maw.skill.check.beforeRoll";
   const actor = { uuid: "Actor.C", items: [] };
   const item = createSourceItem(actor, {
@@ -787,8 +797,7 @@ test("generic provider offers separately for two skill-check subjects in one ope
     }
   });
   assert.equal(first.length, 1);
-  assert.equal(second.length, 1);
-  assert.notEqual(first[0].chanceKey, second[0].chanceKey);
+  assert.equal(second.length, 0);
 });
 
 function eventEnvelope(overrides = {}) {
@@ -808,7 +817,7 @@ function eventFunction({ id, trackingTargets = [[]], extraConditions = [], event
     id,
     type: "effectChanges",
     reactionSettings: { durationSeconds: 0, costs: [] },
-    changes: [],
+    changes: [{ key: "system.test", type: "add", value: "1", phase: "initial" }],
     penalties: [],
     conditions: [
       ...trackingTargets.map((targets, index) => ({

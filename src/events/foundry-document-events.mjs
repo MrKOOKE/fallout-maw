@@ -3,6 +3,7 @@ import { withSystemEventRoot } from "./dispatcher.mjs";
 const SYSTEM_EVENT_PREFIX = "fallout-maw.";
 const BEFORE_SNAPSHOTS_OPTION = "falloutMawSystemEventBeforeByUuid";
 const OCCURRENCE_BASE_OPTION = "falloutMawSystemEventOccurrenceBase";
+const DOCUMENT_MIGRATION_OPTION = "falloutMawDocumentMigration";
 const MANAGED_REACTION_OPTIONS = Object.freeze([
   "falloutMawEventReactionEffect",
   "falloutMawEventReactionManaged",
@@ -321,11 +322,16 @@ export function registerFoundryDocumentSystemEventHooks({
   const on = (name, callback) => registrations.push({ name, id: hooks.on(name, callback) });
 
   for (const documentName of ["Actor", "Item", "ActiveEffect", "Combat", "Combatant"]) {
-    on(`preUpdate${documentName}`, (document, _changes, options = {}) => captureBeforeOperation(document, options, randomId));
-    on(`preDelete${documentName}`, (document, options = {}) => captureBeforeOperation(document, options, randomId));
+    on(`preUpdate${documentName}`, (document, _changes, options = {}) => {
+      if (!options?.[DOCUMENT_MIGRATION_OPTION]) captureBeforeOperation(document, options, randomId);
+    });
+    on(`preDelete${documentName}`, (document, options = {}) => {
+      if (!options?.[DOCUMENT_MIGRATION_OPTION]) captureBeforeOperation(document, options, randomId);
+    });
   }
 
   on("updateActor", (actor, changes, options = {}, userId = "") => {
+    if (options?.[DOCUMENT_MIGRATION_OPTION]) return;
     emitAfterCommit(classifyActorUpdate(actor, changes, snapshotOptions(actor, options)), actor, options, userId);
   });
   on("createItem", (item, options = {}, userId = "") => emitAfterCommit(classifyItemCreate(item), item, options, userId));

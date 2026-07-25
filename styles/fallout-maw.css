@@ -4264,6 +4264,13 @@ body #prosemirror-dropdown {
   line-height: 1.2;
 }
 
+.fallout-maw-consciousness-recovery-label {
+  color: #f3e7b5;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  opacity: 0.9;
+}
+
 .fallout-maw-limb-select {
   appearance: none;
   background: transparent;
@@ -4350,6 +4357,19 @@ body #prosemirror-dropdown {
   min-width: 0;
   position: relative;
   z-index: 1;
+}
+
+.fallout-maw-consciousness-recovery-marker {
+  background: #f3e7b5;
+  bottom: 0;
+  box-shadow: 0 0 4px rgba(255, 242, 190, 0.9);
+  left: var(--meter-recovery-target-left, 0%);
+  pointer-events: auto;
+  position: absolute;
+  top: 0;
+  transform: translateX(-100%);
+  width: 3px;
+  z-index: 4;
 }
 
 .fallout-maw-resource-meter-preview {

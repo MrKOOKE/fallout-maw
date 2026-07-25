@@ -23,6 +23,7 @@ const OLD_DEFAULT_HEALTH_FORMULA = "10 + str + con*2";
 const OLD_EXPLICIT_LIMB_HEALTH_FORMULA = "head + eyes + torso + groin + leftArm + rightArm + leftLeg + rightLeg";
 const DEFAULT_RESOURCE_COLORS = Object.freeze({
   health: "#c64b44",
+  consciousness: "#7f6bc2",
   energy: "#4f9f61",
   dodge: "#4f97a5",
   actionPoints: "#74b84e",
@@ -502,7 +503,9 @@ function normalizeFixedResourceSetting(defaultResource, source = {}) {
     key: defaultResource.key,
     abbr: defaultResource.abbr,
     label: source.label || defaultResource.label,
-    formula: source.formula || defaultResource.formula,
+    formula: defaultResource.key === "consciousness"
+      ? defaultResource.formula
+      : source.formula || defaultResource.formula,
     color: normalizeHexColor(source.color, getDefaultColorForKey(defaultResource.key))
   };
 }

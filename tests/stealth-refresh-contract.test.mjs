@@ -36,5 +36,5 @@ test("moving lights get a final cache invalidation and repeated targeting clicks
 
 test("public stealth entrypoint stays a small dependency facade", () => {
   assert.doesNotMatch(facadeSource, /weapon-attack-controller|reaction-hub|ApplicationV2|Hooks\.on/);
-  assert.ok(facadeSource.split(/\r?\n/).length <= 20);
+  assert.ok(facadeSource.trimEnd().split(/\r?\n/).length <= 20);
 });

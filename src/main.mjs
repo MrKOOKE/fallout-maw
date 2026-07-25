@@ -54,7 +54,12 @@ import { registerButcheringConfigHooks } from "./apps/butchering-config.mjs";
 import { registerHackingHooks, registerHackingSocket } from "./apps/hacking-dialog.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerOneTimeSkillModifierHooks } from "./rolls/one-time-skill-modifiers.mjs";
-import { registerDamageHubConfig, registerDamageSocket } from "./combat/damage-hub.mjs";
+import {
+  registerDamageHubConfig,
+  registerDamageSocket,
+  startConsciousnessStatusSynchronization
+} from "./combat/damage-hub.mjs";
+import { migrateWorldConsciousnessData } from "./migrations/world.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
@@ -199,6 +204,7 @@ Hooks.once("ready", async () => {
   await initializeSettingsPresets();
   await finalizeSystemSettings();
   await finalizeSettingsPresetStartup();
+  await migrateWorldConsciousnessData();
   initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
   refreshSkillCheckControlButton();
@@ -237,6 +243,7 @@ Hooks.once("ready", async () => {
   await syncPeriodicDamageRegionEffects();
   await recoverFoundrySystemEventEffects();
   await armFoundryVisionTracking();
+  await startConsciousnessStatusSynchronization();
   initializeCraftRecipeWorldIndex();
 });
 

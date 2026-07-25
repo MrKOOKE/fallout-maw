@@ -61,6 +61,11 @@ import {
   getInstalledConstructPartForSlot
 } from "../../utils/construct-parts.mjs";
 import { SKILL_CHECK_ACTIONS } from "../../rolls/skill-check-action-effects.mjs";
+import {
+  CONSCIOUSNESS_RESOURCE_KEY,
+  calculateCriticalLimbAverageMaximum,
+  resolveConsciousnessMaximum
+} from "../../combat/consciousness.mjs";
 
 const REACTION_RESOURCE_KEY = "reactionPoints";
 import { toInteger } from "../../utils/numbers.mjs";
@@ -114,7 +119,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         conditionLossMultiplier: new NumberField({ required: true, min: 0, initial: 1, persisted: false }),
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
-        unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+        unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        consciousnessRecoveryTarget: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
       }),
       stealth: new SchemaField({
         attackBonuses: new SchemaField({
@@ -327,15 +333,16 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       normalizeLimbMap(this.limbs, limbSettings, limbMaximums, limbSource)
     );
 
+    const limbResourceFormulaVariables = buildLimbResourceFormulaVariables(this.limbs);
     const resourceMaximums = isConstruct
-      ? buildZeroResourceMaximums(resourceSettings)
+      ? buildConstructResourceMaximums(resourceSettings, limbResourceFormulaVariables)
       : evaluateResourceSettings(
         resourceSettings,
         characteristicSettings,
         skillSettings,
         this.characteristics,
         skillValues,
-        buildLimbResourceFormulaVariables(limbMaximums)
+        limbResourceFormulaVariables
       );
     const reactionResource = {
       ...(sourceResources?.[REACTION_RESOURCE_KEY] ?? {}),
@@ -344,7 +351,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.resources, normalizeResourceMap(sourceResources, resourceSettings, resourceMaximums, {
       actor: this.parent,
       sourceResources: sourceSystem.resources,
-      trackSpent: true
+      trackSpent: true,
+      consciousnessRecoveryTarget: this.combat.consciousnessRecoveryTarget
     }));
     ensureReactionResource(this.resources, reactionResource);
     synchronizeAggregateHealthResource(this.resources, this.limbs);
@@ -670,12 +678,20 @@ function normalizeResourceMap(
   currentResources = {},
   settings = [],
   maximums = {},
-  { actor = null, sourceResources = {}, trackSpent = false, defaultToMin = false } = {}
+  {
+    actor = null,
+    sourceResources = {},
+    trackSpent = false,
+    defaultToMin = false,
+    consciousnessRecoveryTarget = 0
+  } = {}
 ) {
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentResources?.[setting.key];
-      const min = Math.max(0, toInteger(current?.min));
+      const min = setting.key === CONSCIOUSNESS_RESOURCE_KEY
+        ? 0
+        : Math.max(0, toInteger(current?.min));
       const baseMax = toInteger(maximums?.[setting.key]);
       let bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
       let max = Math.max(min, baseMax + bonus);
@@ -687,7 +703,14 @@ function normalizeResourceMap(
         max = Math.max(min, Math.trunc(overriddenMax));
         bonus = max - baseMax;
       }
-      const spent = trackSpent
+      const storedRecoveryTarget = setting.key === CONSCIOUSNESS_RESOURCE_KEY
+        ? Math.max(0, toInteger(consciousnessRecoveryTarget))
+        : 0;
+      const calculatedMax = max;
+      if (setting.key === CONSCIOUSNESS_RESOURCE_KEY) {
+        max = resolveConsciousnessMaximum(calculatedMax, storedRecoveryTarget);
+      }
+      let spent = trackSpent
         ? getTrackedResourceSpent(current, min, max)
         : Math.max(0, toInteger(current?.spent));
       const fallbackValue = trackSpent
@@ -695,8 +718,23 @@ function normalizeResourceMap(
         : current && typeof current === "object"
           ? current.value
           : defaultToMin ? min : max;
-      const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
-      return [setting.key, { min, spent, bonus, value, max }];
+      let value = Math.min(Math.max(toInteger(fallbackValue), min), max);
+      let recoveryTarget = 0;
+      if (setting.key === CONSCIOUSNESS_RESOURCE_KEY) {
+        recoveryTarget = storedRecoveryTarget;
+        if (recoveryTarget > 0 && value >= recoveryTarget) {
+          recoveryTarget = 0;
+          max = calculatedMax;
+          spent = trackSpent
+            ? getTrackedResourceSpent(current, min, max)
+            : Math.min(Math.max(0, spent), Math.max(0, max - min));
+          value = Math.min(Math.max(max - spent, min), max);
+        } else if (recoveryTarget <= 0 && max > min && value <= min) {
+          recoveryTarget = max;
+        }
+      }
+      const normalizedSpent = trackSpent ? Math.max(0, max - value) : spent;
+      return [setting.key, { min, spent: normalizedSpent, bonus, value, max, recoveryTarget }];
     })
   );
 }
@@ -776,6 +814,14 @@ function buildZeroResourceMaximums(settings = []) {
   return Object.fromEntries((settings ?? []).map(setting => [setting.key, 0]));
 }
 
+function buildConstructResourceMaximums(settings = [], variables = {}) {
+  const maximums = buildZeroResourceMaximums(settings);
+  if (Object.hasOwn(maximums, CONSCIOUSNESS_RESOURCE_KEY)) {
+    maximums[CONSCIOUSNESS_RESOURCE_KEY] = Math.max(0, toInteger(variables.criticalLimbs));
+  }
+  return maximums;
+}
+
 function ensureReactionResourceBase(resources = {}) {
   const current = resources[REACTION_RESOURCE_KEY];
   if (current && typeof current === "object") {
@@ -784,11 +830,19 @@ function ensureReactionResourceBase(resources = {}) {
       spent: Math.max(0, toInteger(current.spent)),
       bonus: toInteger(current.bonus),
       value: Math.max(0, toInteger(current.value)),
-      max: Math.max(0, toInteger(current.max))
+      max: Math.max(0, toInteger(current.max)),
+      recoveryTarget: 0
     };
     return;
   }
-  resources[REACTION_RESOURCE_KEY] = { min: 0, spent: 0, bonus: 0, value: 0, max: 0 };
+  resources[REACTION_RESOURCE_KEY] = {
+    min: 0,
+    spent: 0,
+    bonus: 0,
+    value: 0,
+    max: 0,
+    recoveryTarget: 0
+  };
 }
 
 function ensureReactionResource(resources = {}, currentResource = resources[REACTION_RESOURCE_KEY]) {
@@ -803,7 +857,8 @@ function ensureReactionResource(resources = {}, currentResource = resources[REAC
     spent,
     bonus,
     value,
-    max
+    max,
+    recoveryTarget: 0
   };
 }
 
@@ -876,7 +931,7 @@ function normalizeProficiencyMap(currentProficiencies = {}, proficiencySettings 
       const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
       const max = Math.max(min, toInteger(proficiency.max) + bonus);
       const value = Math.min(Math.max(toInteger(current?.value), min), max);
-      return [proficiency.key, { min, spent: 0, bonus, value, max }];
+      return [proficiency.key, { min, spent: 0, bonus, value, max, recoveryTarget: 0 }];
     })
   );
 }
@@ -912,9 +967,10 @@ function evaluateLimbMaximums(settings = [], characteristicSettings = [], skillS
   );
 }
 
-function buildLimbResourceFormulaVariables(limbMaximums = {}) {
+function buildLimbResourceFormulaVariables(limbs = {}) {
   return {
-    limbs: Object.values(limbMaximums ?? {}).reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0)
+    limbs: Object.values(limbs ?? {}).reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.max)), 0),
+    criticalLimbs: calculateCriticalLimbAverageMaximum(limbs)
   };
 }
 

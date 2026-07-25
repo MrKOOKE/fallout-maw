@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "ef759551bb4e4568becc6f57268c2d8839f6b899f0ad36aceed952e63b822f09",
-  "updatedAt": "2026-07-24T15:54:57.490Z",
+  "revision": "7308e8de23edc170e998e9175d8e1398d364aa37cb0ba343fae45c63181e3d74",
+  "updatedAt": "2026-07-25T14:34:32.008Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -56187,7 +56187,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "success",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },

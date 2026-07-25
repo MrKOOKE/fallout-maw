@@ -23,7 +23,6 @@ import {
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 
-const { DialogV2 } = foundry.applications.api;
 const ACTIVE_LIGHT_SOURCES_FLAG = "activeLightSources";
 const BASE_LIGHT_FLAG = "lightSourceBaseLight";
 const RESOURCE_REMAINDERS_FLAG = "lightSourceResourceRemainders";
@@ -123,6 +122,7 @@ export async function openLightSourceEnergyDialog(options = {}) {
 
 export async function openEnergyConsumerSourceDialog({ actor = null, token = null, item = null, application = null, showToggle = false } = {}) {
   if (!actor?.isOwner || !item) return undefined;
+  const { DialogV2 } = foundry.applications.api;
   const hasLight = hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true });
   const managesEnergy = itemManagesEnergySources(item);
   if (!hasLight && !managesEnergy) return undefined;

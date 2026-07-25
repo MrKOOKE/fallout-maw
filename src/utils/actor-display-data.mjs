@@ -85,6 +85,16 @@ export function prepareIndicatorEntry({
   active = false,
   ...extra
 } = {}) {
+  const recoveryTarget = Math.max(0, toInteger(data?.recoveryTarget));
+  const meterData = recoveryTarget > 0
+    ? {
+        ...data,
+        scaleMax: Math.max(
+          toInteger(data?.scaleMax ?? data?.max),
+          recoveryTarget
+        )
+      }
+    : data;
   const {
     min,
     max,
@@ -94,9 +104,13 @@ export function prepareIndicatorEntry({
     positiveRange,
     isNegative,
     percent
-  } = getIndicatorValueState(data);
+  } = getIndicatorValueState(meterData);
   const segments = getIndicatorSegmentCount(isNegative ? negativeRange : positiveRange || scaleMax || max);
   const normalizedColor = normalizeIndicatorColor(isNegative ? "#c8463d" : color);
+  const hasRecoveryTarget = recoveryTarget > 0 && positiveRange > 0;
+  const recoveryTargetPercent = hasRecoveryTarget
+    ? Math.max(0, Math.min(100, ((recoveryTarget - Math.max(0, min)) / positiveRange) * 100))
+    : 0;
 
   return {
     ...extra,
@@ -112,6 +126,10 @@ export function prepareIndicatorEntry({
     inputName,
     isNegative,
     percent: Number(percent.toFixed(2)),
+    recoveryTarget,
+    hasRecoveryTarget,
+    recoveryTargetPercent: Number(recoveryTargetPercent.toFixed(2)),
+    recoveryTargetStyle: `--meter-recovery-target-left: ${Number(recoveryTargetPercent.toFixed(2))}%`,
     segments,
     meterStyle: buildIndicatorMeterStyle(normalizedColor, segments),
     fillStyle: buildIndicatorFillStyle(normalizedColor, percent, { reverse: isNegative })

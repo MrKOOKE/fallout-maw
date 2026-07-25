@@ -552,6 +552,10 @@
           "Label": "Skill · Check · Before Roll",
           "Description": "Skill · Check · Before Roll. Awaited before the action is committed; observers may modify or cancel it."
         },
+        "SkillCheckCommitted": {
+          "Label": "Skill · Check · Committed",
+          "Description": "Skill · Check · Committed. Emitted after the roll result is committed."
+        },
         "SkillCheckResolved": {
           "Label": "Skill · Check · Resolved",
           "Description": "Skill · Check · Resolved. Emitted after the workflow commits or reaches its terminal result."
@@ -559,6 +563,14 @@
         "SkillBatchResolved": {
           "Label": "Skill · Batch · Resolved",
           "Description": "Skill · Batch · Resolved. Emitted after the workflow commits or reaches its terminal result."
+        },
+        "InitiativeRollBeforeRoll": {
+          "Label": "Initiative · Roll · Before Roll",
+          "Description": "Initiative · Roll · Before Roll. Emitted before the initiative roll is evaluated."
+        },
+        "InitiativeRollResolved": {
+          "Label": "Initiative · Roll · Resolved",
+          "Description": "Initiative · Roll · Resolved. Emitted after the initiative roll reaches its final result."
         },
         "AbilityAcquired": {
           "Label": "Ability · Acquired",
@@ -1433,6 +1445,7 @@
       "ClearInventoryConfirm": "Delete {count} inventory item(s) from {actor}?",
       "ClearInventoryEquipped": "Delete equipped gear/weapons too ({count})",
       "ClearInventoryTitle": "Clear Inventory",
+      "ConsciousnessRecoveryTarget": "Wake-up threshold: {value}",
       "Dodge": "Dodge",
       "FreeEdit": "Free Editing",
       "EmptySlot": "Empty",
