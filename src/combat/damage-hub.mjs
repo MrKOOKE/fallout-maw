@@ -3747,6 +3747,7 @@ async function createFirstAidEffect(actor, request = {}) {
   const flags = {
     [TRAUMA_FLAG_SCOPE]: {
       kind: "temporary",
+      [MANAGED_TIMED_DAMAGE_FLAG_KEY]: true,
       [DAMAGE_EFFECT_FLAG_KEY]: damageEffect
     }
   };
@@ -3766,7 +3767,8 @@ async function createFirstAidEffect(actor, request = {}) {
   if (data.durationSeconds > 0) {
     effectData.duration = {
       seconds: data.durationSeconds,
-      startTime
+      startTime,
+      expiry: MANAGED_TIMED_DAMAGE_EXPIRY
     };
   }
   return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
@@ -3812,6 +3814,7 @@ async function createFirstAidWithdrawalEffect(actor, request = {}) {
     ? {
       [TRAUMA_FLAG_SCOPE]: {
         kind: "temporary",
+        [MANAGED_TIMED_DAMAGE_FLAG_KEY]: true,
         [DAMAGE_EFFECT_FLAG_KEY]: damageEffect
       }
     }
@@ -3829,7 +3832,8 @@ async function createFirstAidWithdrawalEffect(actor, request = {}) {
   if (data.durationSeconds > 0) {
     effectData.duration = {
       seconds: data.durationSeconds,
-      startTime
+      startTime,
+      expiry: MANAGED_TIMED_DAMAGE_EXPIRY
     };
   }
   return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
@@ -3875,7 +3879,7 @@ function normalizeStoredFirstAidWithdrawalPayload(withdrawal = null, itemName = 
 }
 
 async function applyStoredFirstAidWithdrawalOnDelete(effect) {
-  if (!game.user?.isGM) return;
+  if (!game.user?.isActiveGM) return;
   const payload = effect.getFlag?.(TRAUMA_FLAG_SCOPE, FIRST_AID_WITHDRAWAL_PAYLOAD_FLAG_KEY);
   if (!payload) return;
   const actor = effect.parent;
@@ -4210,6 +4214,7 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
       const effectUpdates = [];
       const effectDeleteIds = new Set();
       const lockedEffectUuids = new Set();
+      let refreshManagedExpiry = false;
 
       for (const effect of Array.from(freshActor.effects ?? [])) {
         const damageChanges = getDamageEffectChanges(effect).filter(isDamageHubManagedTimedEffect);
@@ -4226,6 +4231,7 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
         entries.push(...tickResult.entries);
         if (tickResult.update) effectUpdates.push(tickResult.update);
         if (tickResult.deleteEffectId) effectDeleteIds.add(tickResult.deleteEffectId);
+        if (tickResult.refreshExpiry) refreshManagedExpiry = true;
       }
 
       try {
@@ -4262,6 +4268,7 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
             { batch: healingRequests.length > 1 }
           );
         }
+        if (refreshManagedExpiry) await refreshManagedTimedEffectExpiration(freshActor);
       } finally {
         for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
       }
@@ -4551,7 +4558,9 @@ function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
 
 function preventIgnoredTimedDamageEffectDeletion(effect, options = {}, _userId) {
   if (options?.falloutMawAllowManagedTimedDamageExpiration) return undefined;
-  if (isManagedTimedDamageEffect(effect) && (Number(effect.duration?.remaining) <= 0 || effect.duration?.expired)) return false;
+  if (isManagedTimedDamageEffect(effect) && (Number(effect.duration?.remaining) <= 0 || effect.duration?.expired)) {
+    return effect.duration?.expiry === MANAGED_TIMED_DAMAGE_EXPIRY ? undefined : false;
+  }
   if (!getTimeMechanicsIgnored()) return undefined;
   const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
   if (data?.kind !== "resourceLimit" && data?.kind !== "resourceBlock") return undefined;
@@ -4748,12 +4757,13 @@ function collectPeriodicHealingEffectTicks(effect, data, now) {
       }
     }]
     : [];
+  const reachedEnd = remainingTicks <= 0 || hasTimedEffectReachedEnd(effect, data, now);
   const hasFoundryDuration = Number(effect.duration?.seconds) > 0;
-  const shouldDelete = !hasFoundryDuration
-    && (remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0));
+  const usesManagedExpiry = effect.duration?.expiry === MANAGED_TIMED_DAMAGE_EXPIRY;
+  const shouldDelete = reachedEnd && !hasFoundryDuration;
   return {
     entries: entries.filter(entry => entry.amount > 0),
-    update: !shouldDelete && dueTicks > 0
+    update: !reachedEnd && dueTicks > 0
       ? {
         effectId: effect.id,
         data: {
@@ -4762,12 +4772,28 @@ function collectPeriodicHealingEffectTicks(effect, data, now) {
         }
       }
       : null,
-    deleteEffectId: shouldDelete ? effect.id : ""
+    deleteEffectId: shouldDelete ? effect.id : "",
+    refreshExpiry: reachedEnd && usesManagedExpiry
   };
 }
 
-function collectFirstAidTemporaryEffectTicks(_effect, _data, _now) {
-  return { entries: [], update: null, deleteEffectId: "" };
+function collectFirstAidTemporaryEffectTicks(effect, data, now) {
+  const reachedEnd = hasTimedEffectReachedEnd(effect, data, now);
+  const hasFoundryDuration = Number(effect.duration?.seconds) > 0;
+  return {
+    entries: [],
+    update: null,
+    deleteEffectId: reachedEnd && !hasFoundryDuration ? effect.id : "",
+    refreshExpiry: reachedEnd && effect.duration?.expiry === MANAGED_TIMED_DAMAGE_EXPIRY
+  };
+}
+
+async function refreshManagedTimedEffectExpiration(actor) {
+  const ActiveEffectClass = foundry.documents?.ActiveEffect?.implementation ?? globalThis.ActiveEffect;
+  if (!ActiveEffectClass?.registry?.refresh || !actor) return;
+  await ActiveEffectClass.registry.refresh(MANAGED_TIMED_DAMAGE_EXPIRY, {
+    actors: new Set([actor])
+  });
 }
 
 async function updatePeriodicEffect(effect, updateData = {}) {
@@ -6355,6 +6381,13 @@ function getLoadedActors() {
     if (token.actor?.uuid && !actors.has(token.actor.uuid)) actors.set(token.actor.uuid, token.actor);
   }
   return actors.values();
+}
+
+function hasTimedEffectReachedEnd(effect, data = {}, now = 0) {
+  const endTime = Number(data.endTime);
+  if (Number.isFinite(endTime) && Number(now) >= endTime) return true;
+  const remaining = Number(effect?.duration?.remaining);
+  return Number.isFinite(remaining) && remaining <= 0;
 }
 
 function broadcastDamageNumbers(actor, entries = []) {
