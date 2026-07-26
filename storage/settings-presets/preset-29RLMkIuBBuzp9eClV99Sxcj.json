@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "08ed0808a2916993d4e1bc664ed61fba75087ac7872e39e894118ab5dc9b0b77",
-  "updatedAt": "2026-07-26T10:57:23.120Z",
+  "revision": "603bbceb69f2fd048dd5bfc98b7c7d92658b41ada26f796e5acf83ccbde3bd8f",
+  "updatedAt": "2026-07-26T13:27:51.793Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -2066,7 +2066,7 @@
                 "description": "<ul><li><p>Шанс на крит: +5%</p></li><li><p>Крит урон: +30%</p></li><li><p>Обычный урон: -10%</p></li></ul>",
                 "id": "C0IH85GS3gL73xrb",
                 "img": "systems/fallout-maw/assets/icons/8-14/master-karabinov.webp",
-                "name": "Расчетлый",
+                "name": "Расчетливый",
                 "system": {
                   "acquisition": {
                     "difficulty": 60,
@@ -4992,7 +4992,7 @@
                     {
                       "actions": [],
                       "activeSettings": {
-                        "changeEvaluation": "target",
+                        "changeEvaluation": "source",
                         "costs": [
                           {
                             "formula": "80",
@@ -5156,7 +5156,70 @@
                   "category": "Контроль энергии",
                   "cost": 1000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [
+                          {
+                            "formula": "30",
+                            "id": "bzpqo2mYQxatia3N",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 1800,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": false,
+                        "includeSelf": true,
+                        "name": "",
+                        "radiusFormula": "1",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": true
+                      },
+                      "changes": [
+                        {
+                          "id": "BoccxxhoYn6A6qPF",
+                          "key": "fallout-maw.healing",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "20+ene/5"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 30,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "hg1sn62t6Vio2F8K",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "7ZNAbmCpCATNlr2x",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               }
@@ -7159,7 +7222,7 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 40 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 2 часа.</p><p>После активации вы можете выбрать до [[1+speech/50]] союзников и те в течеие следующих 12 секунд тратят на 1 ОД меньше совершая атакующие действия.</p>",
+                "description": "<p>Стоимость активации: 40 энергии и 5 ОД.<br>Перегрузка: 60 энергии на 2 часа.</p><p>После активации вы можете выбрать до [[1+speech/50]] союзников и те в течеие следующих 12 секунд</p><ul><li><p>-1 ОД на все атакующие действия</p></li></ul>",
                 "id": "sqhL8OlmEiivDw0f",
                 "img": "systems/fallout-maw/assets/icons/1-7/lider.webp",
                 "name": "Пламенный клич",

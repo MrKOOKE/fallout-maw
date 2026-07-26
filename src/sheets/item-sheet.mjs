@@ -3554,7 +3554,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.healing": 0,
         "system.functions.firstAid.healingIsPercentage": false,
         "system.functions.firstAid.durationSeconds": 0,
-        "system.functions.firstAid.intervalSeconds": 6,
         "system.functions.firstAid.actionPointCost": 0,
         "system.functions.firstAid.maxDistance": 0,
         "system.functions.firstAid.difficulty": 0,
@@ -3570,7 +3569,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.removeEffects": [],
         "system.functions.firstAid.changes": [],
         "system.functions.firstAid.withdrawalDurationSeconds": 0,
-        "system.functions.firstAid.withdrawalIntervalSeconds": 6,
         "system.functions.firstAid.withdrawal": []
       });
     }
@@ -6252,7 +6250,7 @@ function prepareConstructPartLossEffectRow(effect = {}, index = 0) {
 
 function activateItemEffectKeyAutocompletes(root) {
   if (!root) return;
-  activateEffectKeyAutocomplete(root, buildEffectKeyTokens({ includeFirstAidHealing: true }), {
+  activateEffectKeyAutocomplete(root, buildEffectKeyTokens({ includePeriodicHealing: true }), {
     selector: "input[data-effect-key-autocomplete]:not([data-ability-acquisition-change-key])"
   });
   activateEffectKeyAutocomplete(root, buildAbilityAcquisitionChangeKeyTokens(), {

@@ -3889,7 +3889,7 @@
       <h3>{{localize "FALLOUTMAW.Item.FirstAidEffectChanges"}}</h3>
       <button type="button" data-add-first-aid-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
     </div>
-    <div class="fallout-maw-list-grid three-columns">
+    <div class="fallout-maw-list-grid">
       <label class="fallout-maw-split-number-field">
         <span>{{localize "FALLOUTMAW.Item.FirstAidDuration"}}</span>
         <div>
@@ -3900,10 +3900,6 @@
             {{/each}}
           </select>
         </div>
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.FirstAidIntervalSeconds"}}</span>
-        <input type="number" name="system.functions.firstAid.intervalSeconds" value="{{system.functions.firstAid.intervalSeconds}}" min="1" step="1">
       </label>
     </div>
     <div class="fallout-maw-effect-change-list">
@@ -3935,7 +3931,7 @@
       <h3>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalChanges"}}</h3>
       <button type="button" data-add-first-aid-withdrawal-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
     </div>
-    <div class="fallout-maw-list-grid three-columns">
+    <div class="fallout-maw-list-grid">
       <label class="fallout-maw-split-number-field">
         <span>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalDuration"}}</span>
         <div>
@@ -3946,10 +3942,6 @@
             {{/each}}
           </select>
         </div>
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalIntervalSeconds"}}</span>
-        <input type="number" name="system.functions.firstAid.withdrawalIntervalSeconds" value="{{system.functions.firstAid.withdrawalIntervalSeconds}}" min="1" step="1">
       </label>
     </div>
     <div class="fallout-maw-effect-change-list">
@@ -4089,7 +4081,7 @@
         </div>
       </label>
       <label>
-        <span>{{localize "FALLOUTMAW.Item.FirstAidIntervalSeconds"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.NeedChangeIntervalSeconds"}}</span>
         <input type="number" name="system.functions.needChange.intervalSeconds" value="{{system.functions.needChange.intervalSeconds}}" min="1" step="1">
       </label>
     </div>

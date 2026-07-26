@@ -8,6 +8,7 @@ import {
   DAMAGE_BARRIER_ALL_EFFECT_KEY,
   getDamageBarrierEffectKey
 } from "../combat/damage-barriers.mjs";
+import { PERIODIC_HEALING_EFFECT_KEY } from "../combat/periodic-healing.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -62,7 +63,7 @@ import {
 } from "../rolls/skill-check-action-effects.mjs";
 import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
 
-export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
+export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
     ...getCharacteristicSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
@@ -180,12 +181,12 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildReverseInteractionEffectKeyTokens()
   ];
 
-  if (includeFirstAidHealing) {
+  if (includePeriodicHealing) {
     tokens.push(createEffectKeyToken({
       code: "heal",
       key: "healing",
       label: game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick"),
-      path: "fallout-maw.healing",
+      path: PERIODIC_HEALING_EFFECT_KEY,
       group: game.i18n.localize("FALLOUTMAW.Item.FirstAidEffectChanges")
     }));
   }

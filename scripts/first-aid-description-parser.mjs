@@ -168,7 +168,6 @@ export function convertParsedFirstAidToFunction(parsed = null) {
     healing: Math.max(0, parseInteger(parsed.healing)),
     healingIsPercentage: Boolean(parsed.healingIsPercentage),
     durationSeconds: Math.max(0, parseInteger(parsed.durationSeconds)),
-    intervalSeconds: 6,
     actionPointCost: Math.max(0, parseInteger(parsed.actionPointCost)),
     maxDistance: scaleFeetDistance(parsed.maxDistance),
     difficulty: Math.max(0, parseInteger(parsed.difficulty)),
@@ -187,7 +186,6 @@ export function convertParsedFirstAidToFunction(parsed = null) {
     removeEffects: Array.isArray(parsed.removeEffects) ? parsed.removeEffects : [],
     changes: Array.isArray(parsed.changes) ? parsed.changes : [],
     withdrawalDurationSeconds: Math.max(0, parseInteger(parsed.withdrawalDurationSeconds)),
-    withdrawalIntervalSeconds: 6,
     withdrawal: Array.isArray(parsed.withdrawal) ? parsed.withdrawal : []
   };
 }

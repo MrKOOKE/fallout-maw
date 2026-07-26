@@ -7,6 +7,7 @@ import {
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
 import { parseDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
+import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { getDamageTypeSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
@@ -837,6 +838,15 @@ function formatEffectChange(change, actor = null, effect = null) {
       : stringifyChangeValue(change?.value);
     const path = getDamageBarrierLabel(damageBarrier);
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(remaining)}</span>`;
+  }
+  if (isPeriodicHealingEffectKey(key)) {
+    const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
+      fallback: Number(change?.value),
+      stage: getEffectChangePreparationStage(change, actor)
+    });
+    const healing = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : stringifyChangeValue(change?.value);
+    const path = localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(healing, change?.type))}</span>`;
   }
   const path = getChangeKeyLabel(key);
   if (isDodgeAmountModifierEffectKey(key)) {

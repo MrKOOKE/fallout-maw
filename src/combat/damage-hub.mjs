@@ -36,6 +36,13 @@ import {
   commitDamageBarrierLedger,
   createDamageBarrierLedger
 } from "./damage-barriers.mjs";
+import {
+  PERIODIC_HEALING_INTERVAL_SECONDS,
+  countPeriodicHealingTicks,
+  evaluatePeriodicHealingPerTick,
+  getPeriodicHealingEffectChanges,
+  isPeriodicHealingEffectKey
+} from "./periodic-healing.mjs";
 import { getContextualAbilityChangeValue, getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { getUnconsciousnessResistanceActiveUseKeys } from "../abilities/active-use-keys.mjs";
 import {
@@ -164,6 +171,7 @@ const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "penetration"
 ]);
 let damageTimeHooksRegistered = false;
+let periodicHealingEffectHooksRegistered = false;
 let consciousnessHooksRegistered = false;
 let consciousnessStatusSynchronizationReady = false;
 const combatRoundWorldTimes = new Map();
@@ -184,7 +192,80 @@ export function registerLethalDamagePreventionHandler(handler) {
 
 export function registerDamageHubConfig() {
   CONFIG.ActiveEffect.expiryEvents[MANAGED_TIMED_DAMAGE_EXPIRY] = "FALLOUTMAW.Effects.ManagedTimedDamageExpiry";
+  registerPeriodicHealingEffectHooks();
   registerConsciousnessHooks();
+}
+
+function registerPeriodicHealingEffectHooks() {
+  if (periodicHealingEffectHooksRegistered) return;
+  Hooks.on("preCreateActiveEffect", preparePeriodicHealingEffectCreate);
+  Hooks.on("preUpdateActiveEffect", preparePeriodicHealingEffectUpdate);
+  periodicHealingEffectHooksRegistered = true;
+}
+
+function preparePeriodicHealingEffectCreate(effect) {
+  if (effect?.parent?.documentName !== "Actor") return;
+  if (!getPeriodicHealingEffectChanges(effect).length) return;
+  const update = {
+    [`flags.${TRAUMA_FLAG_SCOPE}.${MANAGED_TIMED_DAMAGE_FLAG_KEY}`]: true
+  };
+  if (hasFiniteActiveEffectDuration(effect)) {
+    update["duration.expiry"] = MANAGED_TIMED_DAMAGE_EXPIRY;
+  }
+  effect.updateSource(update);
+}
+
+function preparePeriodicHealingEffectUpdate(effect, changes = {}) {
+  if (effect?.parent?.documentName !== "Actor") return;
+  const flattenedChanges = foundry.utils.flattenObject(changes);
+  const changesWereUpdated = Object.keys(flattenedChanges)
+    .some(path => path === "system.changes" || path.startsWith("system.changes."));
+  const prospectiveSource = changesWereUpdated ? effect.toObject() : null;
+  if (prospectiveSource) {
+    for (const [path, value] of Object.entries(flattenedChanges)) {
+      if (path === "system.changes" || path.startsWith("system.changes.")) {
+        foundry.utils.setProperty(prospectiveSource, path, value);
+      }
+    }
+  }
+  const replacement = prospectiveSource
+    ? foundry.utils.getProperty(prospectiveSource, "system.changes")
+    : null;
+  const healingChanges = changesWereUpdated
+    ? getPeriodicHealingEffectChanges({ system: { changes: replacement } })
+    : getPeriodicHealingEffectChanges(effect);
+  if (!healingChanges.some(change => isPeriodicHealingEffectKey(change?.key))) {
+    if (
+      changesWereUpdated
+      && getPeriodicHealingEffectChanges(effect).length
+      && !effect?.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY)
+    ) {
+      changes[`flags.${TRAUMA_FLAG_SCOPE}.-=${MANAGED_TIMED_DAMAGE_FLAG_KEY}`] = null;
+      if (effect?.duration?.expiry === MANAGED_TIMED_DAMAGE_EXPIRY) changes["duration.expiry"] = null;
+    }
+    return;
+  }
+
+  changes[`flags.${TRAUMA_FLAG_SCOPE}.${MANAGED_TIMED_DAMAGE_FLAG_KEY}`] = true;
+  if (hasFiniteActiveEffectDuration(effect, changes)) {
+    changes["duration.expiry"] = MANAGED_TIMED_DAMAGE_EXPIRY;
+  } else if (isActiveEffectDurationUpdated(changes) && effect?.duration?.expiry === MANAGED_TIMED_DAMAGE_EXPIRY) {
+    changes["duration.expiry"] = null;
+  }
+}
+
+function isActiveEffectDurationUpdated(changes = {}) {
+  return Object.keys(foundry.utils.flattenObject(changes))
+    .some(path => path === "duration.value" || path === "duration.units");
+}
+
+function hasFiniteActiveEffectDuration(effect, changes = {}) {
+  const changedValue = changes["duration.value"]
+    ?? foundry.utils.getProperty(changes, "duration.value");
+  const sourceValue = changedValue !== undefined
+    ? changedValue
+    : effect?._source?.duration?.value;
+  return typeof sourceValue === "number" && Number.isFinite(sourceValue);
 }
 
 export async function startConsciousnessStatusSynchronization() {
@@ -4171,31 +4252,37 @@ async function createFirstAidWithdrawalEffect(actor, request = {}) {
 }
 
 function normalizeFirstAidEffectRequest(request = {}) {
+  const source = request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {};
   return {
     actorUuid: String(request.actorUuid ?? "").trim(),
     itemName: String(request.itemName ?? "").trim(),
     itemImg: String(request.itemImg ?? "").trim(),
     healingPerTick: Math.max(0, toInteger(request.healingPerTick)),
     durationSeconds: Math.max(0, toInteger(request.durationSeconds)),
-    intervalSeconds: Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
+    intervalSeconds: source.kind === "firstAid"
+      ? PERIODIC_HEALING_INTERVAL_SECONDS
+      : Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
     changes: normalizeEffectChanges(request.changes),
     withdrawal: request.withdrawal && typeof request.withdrawal === "object"
       ? foundry.utils.deepClone(request.withdrawal)
       : null,
-    source: request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {}
+    source
   };
 }
 
 function normalizeFirstAidWithdrawalRequest(request = {}) {
+  const source = request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {};
   return {
     actorUuid: String(request.actorUuid ?? "").trim(),
     itemName: String(request.itemName ?? "").trim(),
     itemImg: String(request.itemImg ?? "").trim(),
     healingPerTick: Math.max(0, toInteger(request.healingPerTick)),
     durationSeconds: Math.max(0, toInteger(request.durationSeconds)),
-    intervalSeconds: Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
+    intervalSeconds: source.kind === "firstAid"
+      ? PERIODIC_HEALING_INTERVAL_SECONDS
+      : Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
     changes: normalizeEffectChanges(request.changes),
-    source: request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {}
+    source
   };
 }
 
@@ -4549,20 +4636,37 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
 
       for (const effect of Array.from(freshActor.effects ?? [])) {
         const damageChanges = getDamageEffectChanges(effect).filter(isDamageHubManagedTimedEffect);
+        const periodicHealingChanges = getPeriodicHealingEffectChanges(effect);
         const flagData = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
         const flagManaged = isFlagManagedTimedEffect(flagData);
-        if (effect.disabled || (!damageChanges.length && !flagManaged)) continue;
+        if (effect.disabled || (!damageChanges.length && !flagManaged && !periodicHealingChanges.length)) continue;
         if (!effect.uuid || processingPeriodicEffectUuids.has(effect.uuid)) continue;
-        const tickResult = damageChanges.length
-          ? collectDamageHubManagedTimedEffectTicks(effect, damageChanges, now)
-          : collectFlagManagedTimedEffectTicks(effect, flagData, now);
-        if (!tickResult.entries.length && !tickResult.update && !tickResult.deleteEffectId) continue;
+        const tickResults = [];
+        if (damageChanges.length) {
+          tickResults.push(collectDamageHubManagedTimedEffectTicks(effect, damageChanges, now));
+        } else if (flagManaged) {
+          tickResults.push(collectFlagManagedTimedEffectTicks(effect, flagData, now));
+        }
+        if (periodicHealingChanges.length) {
+          tickResults.push(collectAbilityPeriodicHealingEffectTicks(
+            effect,
+            periodicHealingChanges,
+            freshActor,
+            now,
+            now - elapsed
+          ));
+        }
+        if (!tickResults.some(result => (
+          result.entries.length || result.update || result.deleteEffectId || result.refreshExpiry
+        ))) continue;
         processingPeriodicEffectUuids.add(effect.uuid);
         lockedEffectUuids.add(effect.uuid);
-        entries.push(...tickResult.entries);
-        if (tickResult.update) effectUpdates.push(tickResult.update);
-        if (tickResult.deleteEffectId) effectDeleteIds.add(tickResult.deleteEffectId);
-        if (tickResult.refreshExpiry) refreshManagedExpiry = true;
+        for (const tickResult of tickResults) {
+          entries.push(...tickResult.entries);
+          if (tickResult.update) effectUpdates.push(tickResult.update);
+          if (tickResult.deleteEffectId) effectDeleteIds.add(tickResult.deleteEffectId);
+          if (tickResult.refreshExpiry) refreshManagedExpiry = true;
+        }
       }
 
       try {
@@ -4586,8 +4690,7 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
             applyMitigation: false,
             processDamageTypeSettings: false,
             source: {
-              ...(entry.source ?? {}),
-              limitedUseSkipOutgoing: true
+              ...(entry.source ?? {})
             }
           }));
           await executeDamageSystemEventWorkflow(
@@ -4835,10 +4938,18 @@ async function preserveTimedDamageEffects(deltaTime) {
     for (const effect of Array.from(actor.effects ?? [])) {
       if (effect.disabled) continue;
       const damageChanges = getDamageEffectChanges(effect).filter(isDamageHubManagedTimedEffect);
+      const periodicHealingChanges = getPeriodicHealingEffectChanges(effect);
       const flagData = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
       const updateData = damageChanges.length
         ? buildIgnoredDamageEffectChangesUpdate(effect, damageChanges, elapsed)
-        : buildIgnoredTimedDamageEffectUpdate(effect, flagData, elapsed);
+        : {};
+      if (isFlagManagedTimedEffect(flagData)) {
+        Object.assign(updateData, buildIgnoredTimedDamageEffectUpdate(effect, flagData, elapsed));
+      }
+      if (periodicHealingChanges.length) {
+        const startTime = Number(effect?.start?.time);
+        if (Number.isFinite(startTime)) updateData["start.time"] = startTime + elapsed;
+      }
       if (!Object.keys(updateData).length) continue;
       await updatePeriodicEffect(effect, updateData);
     }
@@ -4909,7 +5020,10 @@ function preventManagedTimedDamageEffectExpiration(effect, changes = {}, options
 }
 
 function isManagedTimedDamageEffect(effect) {
-  return Boolean(effect?.getFlag?.(TRAUMA_FLAG_SCOPE, MANAGED_TIMED_DAMAGE_FLAG_KEY));
+  return Boolean(
+    effect?.getFlag?.(TRAUMA_FLAG_SCOPE, MANAGED_TIMED_DAMAGE_FLAG_KEY)
+    || getPeriodicHealingEffectChanges(effect).length
+  );
 }
 
 function isDamageHubManagedTimedEffect(data) {
@@ -4979,6 +5093,100 @@ function collectFlagManagedTimedEffectTicks(effect, data, now) {
     return collectFirstAidTemporaryEffectTicks(effect, data, now);
   }
   return { entries: [], update: null, deleteEffectId: "" };
+}
+
+function collectAbilityPeriodicHealingEffectTicks(effect, changes, actor, now, previousTime) {
+  const startTime = Number(effect?.start?.time);
+  const durationSeconds = getPeriodicHealingEffectDurationSeconds(effect);
+  const dueTicks = countPeriodicHealingTicks({
+    startTime,
+    previousTime,
+    currentTime: now,
+    durationSeconds
+  });
+  const amountPerTick = evaluatePeriodicHealingPerTick(changes, change => (
+    evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
+      fallback: Number(change?.value),
+      stage: "prepared"
+    })
+  ));
+  const sourceActor = getPeriodicHealingSourceActor(effect, actor);
+  const operationId = `periodic-healing:${String(effect?.uuid ?? effect?.id ?? "")}:${Number(now) || 0}`;
+  const outgoingPercent = amountPerTick > 0
+    ? getActorHealingModifierPercent(sourceActor, "outgoing", {
+      targetActor: actor,
+      chanceOperationId: operationId
+    })
+    : 0;
+  const effectivePerTick = applyHealingModifierPercent(amountPerTick, outgoingPercent);
+  const reachedEnd = Number.isFinite(durationSeconds)
+    && Number.isFinite(startTime)
+    && Number(now) >= startTime + durationSeconds;
+  const usesManagedExpiry = effect?.duration?.expiry === MANAGED_TIMED_DAMAGE_EXPIRY;
+  const sourceActorUuid = String(sourceActor?.uuid ?? actor?.uuid ?? "");
+  const entries = dueTicks > 0 && effectivePerTick > 0
+    ? [{
+      mode: MODE_HEALING,
+      amount: effectivePerTick * dueTicks,
+      damageTypeKey: HEALING_DAMAGE_TYPE_KEY,
+      scope: SCOPE_HEALTH,
+      source: {
+        kind: "abilityPeriodicHealing",
+        sourceActorUuid,
+        sourceItemUuid: getPeriodicHealingSourceItemUuid(effect),
+        periodicHealingEffectUuid: String(effect?.uuid ?? ""),
+        dueTicks,
+        chanceOperationId: operationId,
+        limitedUseOperationId: operationId,
+        worldTime: Number(now) || 0
+      }
+    }]
+    : [];
+  return {
+    entries,
+    update: null,
+    deleteEffectId: reachedEnd && !usesManagedExpiry ? String(effect?.id ?? "") : "",
+    refreshExpiry: reachedEnd && usesManagedExpiry
+  };
+}
+
+function getPeriodicHealingEffectDurationSeconds(effect) {
+  const seconds = Number(effect?.duration?.seconds);
+  return Number.isFinite(seconds) ? Math.max(0, seconds) : Number.POSITIVE_INFINITY;
+}
+
+function getPeriodicHealingSourceActor(effect, fallbackActor = null) {
+  const systemFlags = effect?.flags?.[SYSTEM_ID] ?? {};
+  const actorUuids = Object.values(systemFlags)
+    .filter(value => value && typeof value === "object")
+    .map(value => String(value?.sourceActorUuid ?? "").trim())
+    .filter(Boolean);
+  for (const uuid of actorUuids) {
+    const actor = resolvePeriodicHealingSourceDocument(uuid, effect);
+    if (actor) return actor;
+  }
+
+  const origin = resolvePeriodicHealingSourceDocument(String(effect?.origin ?? ""), effect);
+  if (origin?.documentName === "Actor") return origin;
+  if (origin?.parent?.documentName === "Actor") return origin.parent;
+  return fallbackActor;
+}
+
+function getPeriodicHealingSourceItemUuid(effect) {
+  const origin = resolvePeriodicHealingSourceDocument(String(effect?.origin ?? ""), effect);
+  return origin?.documentName === "Item" ? String(origin.uuid ?? effect?.origin ?? "") : "";
+}
+
+function resolvePeriodicHealingSourceDocument(uuid = "", relative = null) {
+  const value = String(uuid ?? "").trim();
+  if (!value) return null;
+  try {
+    return globalThis.fromUuidSync?.(value, { relative })
+      ?? globalThis.foundry?.utils?.fromUuidSync?.(value, { relative })
+      ?? null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function collectPeriodicDamageEffectTicks(effect, data, now) {

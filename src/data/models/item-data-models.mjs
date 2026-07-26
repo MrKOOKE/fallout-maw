@@ -1125,7 +1125,6 @@ function firstAidFunctionField(options = {}) {
     healing: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     healingIsPercentage: new BooleanField({ required: true, initial: false }),
     durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    intervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
     actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     maxDistance: new NumberField({ required: true, min: 0, initial: 0 }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -1150,7 +1149,6 @@ function firstAidFunctionField(options = {}) {
     }), { required: true, initial: [] }),
     changes: new ArrayField(traumaEffectField(), { required: true, initial: [] }),
     withdrawalDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    withdrawalIntervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
     withdrawal: new ArrayField(traumaEffectField(), { required: true, initial: [] })
   }, options);
 }

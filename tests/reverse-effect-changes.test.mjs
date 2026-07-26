@@ -105,6 +105,19 @@ function createActor(effects = []) {
   };
 }
 
+test("periodic healing is a standard ability autocomplete key but never applies as an actor data path", () => {
+  assert.equal(buildEffectKeyTokens().some(entry => entry.path === "fallout-maw.healing"), false);
+  const token = buildEffectKeyTokens({ includePeriodicHealing: true })
+    .find(entry => entry.path === "fallout-maw.healing");
+  assert.equal(token?.code, "heal");
+  assert.equal(token?.key, "healing");
+  assert.equal(prepareActorEffectChangeForApplication(null, {
+    key: "fallout-maw.healing",
+    type: "add",
+    value: "40"
+  }), null);
+});
+
 test("condition loss multiplier is registered and participates only when an attack spends condition", () => {
   const key = "system.combat.conditionLossMultiplier";
   const token = buildEffectKeyTokens().find(entry => entry.path === key);

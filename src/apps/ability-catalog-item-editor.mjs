@@ -2931,7 +2931,7 @@ function buildFunctionChoices() {
 
 function activateAbilityFunctionKeyAutocomplete(root) {
   if (!root) return;
-  activateEffectKeyAutocomplete(root, buildEffectKeyTokens(), {
+  activateEffectKeyAutocomplete(root, buildEffectKeyTokens({ includePeriodicHealing: true }), {
     selector: "input[data-effect-key-autocomplete]:not([data-ability-acquisition-change-key])"
   });
   activateEffectKeyAutocomplete(root, buildAbilityAcquisitionChangeKeyTokens(), {

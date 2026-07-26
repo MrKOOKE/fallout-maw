@@ -25,6 +25,10 @@ import {
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
 import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
+import {
+  PERIODIC_HEALING_INTERVAL_SECONDS,
+  isPeriodicHealingEffectKey
+} from "../combat/periodic-healing.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FIRST_AID_SOCKET = `system.${SYSTEM_ID}`;
@@ -32,7 +36,6 @@ const FIRST_AID_SOCKET_SCOPE = "fallout-maw.firstAid";
 const FIRST_AID_SOCKET_TIMEOUT = 10000;
 const HEALING_DAMAGE_TYPE_KEY = "healing";
 const CRITICAL_SUCCESS_DEFAULT_BONUS = 20;
-const FIRST_AID_HEALING_CHANGE_KEYS = new Set(["fallout-maw.healing", "healing"]);
 const pendingFirstAidSocketRequests = new Map();
 
 export function registerFirstAidSocket() {
@@ -206,14 +209,13 @@ export async function useFirstAidItem({
       itemImg: item.img,
       healingPerTick,
       durationSeconds,
-      intervalSeconds: Math.max(1, toInteger(firstAid.intervalSeconds) || 6),
+      intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
       changes,
       withdrawal: hasWithdrawal ? buildFirstAidWithdrawalPayload({
         itemName: item.name,
         itemImg: item.img,
         healingPerTick: withdrawalHealingPerTick,
         durationSeconds: withdrawalDurationSeconds,
-        intervalSeconds: Math.max(1, toInteger(firstAid.withdrawalIntervalSeconds) || 6),
         changes: withdrawalChanges,
         source
       }) : null,
@@ -226,7 +228,7 @@ export async function useFirstAidItem({
       itemImg: item.img,
       healingPerTick: withdrawalHealingPerTick,
       durationSeconds: withdrawalDurationSeconds,
-      intervalSeconds: Math.max(1, toInteger(firstAid.withdrawalIntervalSeconds) || 6),
+      intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
       changes: withdrawalChanges,
       source
     });
@@ -256,7 +258,7 @@ function firstAidCanUseOutgoingHealing(firstAid = {}, targetContext = null, sele
   ];
   return timedLists.some(([changes, durationSeconds]) => durationSeconds > 0 && (
     (Array.isArray(changes) ? changes : Object.values(changes ?? {})).some(change => (
-      FIRST_AID_HEALING_CHANGE_KEYS.has(String(change?.key ?? "").trim().toLocaleLowerCase())
+      isPeriodicHealingEffectKey(change?.key)
       && Number(change?.value) > 0
     ))
   ));
@@ -287,7 +289,7 @@ function normalizeFirstAidEffectChangeList(changes = [], multiplier = 1, healing
   const normalized = source
     .map(change => {
       const key = String(change?.key ?? "").trim();
-      if (FIRST_AID_HEALING_CHANGE_KEYS.has(key.toLocaleLowerCase())) {
+      if (isPeriodicHealingEffectKey(key)) {
         const value = scaleHealingChangeValue(change?.value, healingMultiplier);
         healingPerTick += toInteger(value);
         return null;
@@ -313,7 +315,6 @@ function buildFirstAidWithdrawalPayload({
   itemImg = "",
   healingPerTick = 0,
   durationSeconds = 0,
-  intervalSeconds = 6,
   changes = [],
   source = {}
 } = {}) {
@@ -323,7 +324,7 @@ function buildFirstAidWithdrawalPayload({
     itemImg,
     healingPerTick,
     durationSeconds,
-    intervalSeconds,
+    intervalSeconds: PERIODIC_HEALING_INTERVAL_SECONDS,
     changes,
     source
   };
