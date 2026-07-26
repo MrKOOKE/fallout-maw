@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "7308e8de23edc170e998e9175d8e1398d364aa37cb0ba343fae45c63181e3d74",
-  "updatedAt": "2026-07-25T14:34:32.008Z",
+  "revision": "01bdf8e50895c45575e762c8b941ef6654ccd5cdef422e0b7d9f915c4b811fe6",
+  "updatedAt": "2026-07-26T06:46:21.793Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -4994,6 +4994,33 @@
           },
           {
             "abilities": [
+              {
+                "description": "<ul><li><p>Каждый раз, когда вы получаете урон, 20% конвертируют в 24 часовой бонус к сопротивлению от этого вида урона.</p></li></ul><p>Предел накопления сопротивлений: 50 (сумма всех сопротивлений полученных от этой способности)</p>",
+                "id": "LBlBhvSdFu9lQ4bL",
+                "img": "icons/svg/aura.svg",
+                "name": "Адаптивное сопротивление",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "resilience"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "dariG8UlFhLHzbZD",
+                      "skillKey": "resilience",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Стойкость",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
               {
                 "description": "<p>Когда состояние вашей ключевой конечности &lt;=50%<br>Или<br>Когда ваше общее ОЗ &lt;=50%</p><p><br>ОП: +6</p>",
                 "id": "HE8qSgb8wyjvazCJ",

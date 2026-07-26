@@ -158,6 +158,7 @@ const TRADE_OFFER_DEFAULT_COLUMNS = 14;
 const TRADE_OFFER_MAX_ROWS = 60;
 const PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH = `flags.${SYSTEM_ID}.inventory.personalTradeSettlements`;
 const PERSONAL_TRADE_SETTLEMENT_LEDGER_LIMIT = 50;
+const PERSONAL_TRADE_REJECTION_FEEDBACK_MS = 1000;
 
 function getFixedTradeOfferGridColumns() {
   return TRADE_OFFER_DEFAULT_COLUMNS;
@@ -1822,7 +1823,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
-  async #completePersonalTradeOffers() {
+  async #completePersonalTradeOffers(approvalButton = null) {
     if (this.#tradeCompletionInProgress) return;
     this.beginTradeCompletionLock();
     try {
@@ -1831,7 +1832,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const searchedTotal = Math.max(0, toInteger(tradeContext?.offers?.searched?.total));
       const difference = Math.abs(searcherTotal - searchedTotal);
       if (difference > 0) {
-        const approved = await requestPersonalTradeApproval({
+        const approved = await this.#requestPersonalTradeApprovalWithFeedback(approvalButton, {
           searcherActor: this.#searcherActor,
           searchedActor: this.#searchedActor,
           searcherTotal,
@@ -1867,6 +1868,30 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     } finally {
       this.endTradeCompletionLock({ render: false });
     }
+  }
+
+  async #requestPersonalTradeApprovalWithFeedback(button, payload) {
+    const approvalButton = button && this.element?.contains(button)
+      ? button
+      : this.element?.querySelector?.('[data-trade-ready="searcher"]');
+    approvalButton?.classList.remove("personal-trade-approval-rejected");
+    approvalButton?.classList.add("personal-trade-approval-pending");
+    approvalButton?.setAttribute("aria-busy", "true");
+
+    let approved;
+    try {
+      approved = await requestPersonalTradeApproval(payload);
+    } finally {
+      approvalButton?.classList.remove("personal-trade-approval-pending");
+      approvalButton?.removeAttribute("aria-busy");
+    }
+    if (approved) return true;
+
+    approvalButton?.classList.add("personal-trade-approval-rejected");
+    ui.notifications.warn("Сделка не состоялась.");
+    await new Promise(resolve => window.setTimeout(resolve, PERSONAL_TRADE_REJECTION_FEEDBACK_MS));
+    approvalButton?.classList.remove("personal-trade-approval-rejected");
+    return false;
   }
 
   #getActorByUuid(uuid) {
@@ -2629,7 +2654,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!TRADE_OFFER_SIDES.includes(side) || !this.#canConfirmTradeSide(side)) return;
     if (this.#tradeOffers.completed) return;
     if (this.#isPersonalTradeMode()) {
-      await this.#completePersonalTradeOffers();
+      await this.#completePersonalTradeOffers(button);
       return;
     }
     if (this.#tradeSessionSnapshot) {

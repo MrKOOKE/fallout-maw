@@ -102,6 +102,7 @@ test("a successful mutation commits update, delete and create in one Foundry bat
     documentOptions: {
       falloutMawSystemEventChainRef: "test-chain",
       action: "must-not-override",
+      diff: true,
       render: false,
       [INVENTORY_ATOMIC_OPTION]: false
     }
@@ -122,6 +123,7 @@ test("a successful mutation commits update, delete and create in one Foundry bat
     calls[0].map(operation => operation[INVENTORY_EXPECTED_IDS_OPTION]),
     [["updated"], ["deleted"], ["created-copy"]]
   );
+  assert.equal(calls[0][0].diff, false, "callers cannot re-enable diff for atomic inventory updates");
   assert.deepEqual(
     actor.items.contents.map(item => [
       item._id,
@@ -143,18 +145,18 @@ test("an incomplete batch result compensates a partially committed cross-actor t
     randomIds: ["transferred-copy", "operation-partial"],
     modifyBatch: async operations => {
       calls.push(structuredCloneBatch(operations));
-      const applied = applyBatchOperations(operations);
       callIndex += 1;
       if (callIndex === 1) {
         assert.deepEqual(operations.map(operation => operation.action), [
           "delete",
           "create"
         ]);
+        const [deleted] = applyBatchOperations([operations[0]]);
         assert.equal(sourceActor.items.get("transferred"), undefined);
-        assert.ok(targetActor.items.get("transferred-copy"));
-        return [applied[0], []];
+        assert.equal(targetActor.items.get("transferred-copy"), undefined);
+        return [deleted, []];
       }
-      return applied;
+      return applyBatchOperations(operations);
     }
   });
 
@@ -171,13 +173,12 @@ test("an incomplete batch result compensates a partially committed cross-actor t
     ], {
       reason: "partial-transfer-test"
     }),
-    /returned 0 of 1 requested Documents/
+    /did not fully persist the requested state: Foundry did not persist every created inventory Item/
   );
 
   assert.equal(calls.length, 2, "one recovery batch must follow the failed batch");
   assert.deepEqual(calls[1].map(operation => operation.action), [
-    "create",
-    "delete"
+    "create"
   ]);
   assert.equal(
     calls[1].every(operation => operation.falloutMawInventoryRecovery === true),
@@ -189,6 +190,77 @@ test("an incomplete batch result compensates a partially committed cross-actor t
   );
   assert.deepEqual(sourceActor.items.get("transferred"), sourceSnapshot);
   assert.equal(targetActor.items.get("transferred-copy"), undefined);
+});
+
+test("a short batch response is accepted when the exact requested state was committed", async () => {
+  const actor = createActor("short-committed", [
+    createItem({ id: "moved", x: 1 })
+  ]);
+  let batchCalls = 0;
+  installFoundryMock({
+    randomIds: ["operation-short-committed"],
+    modifyBatch: async operations => {
+      batchCalls += 1;
+      applyBatchOperations(operations);
+      return [];
+    }
+  });
+
+  await executeInventoryMutation({
+    actor,
+    updates: [{ _id: "moved", "system.placement.x": 2 }]
+  }, { reason: "short-committed" });
+
+  assert.equal(batchCalls, 1, "a committed operation must not run compensation");
+  assert.equal(actor.items.get("moved").system.placement.x, 2);
+});
+
+test("a no-op Item update omitted by Foundry does not become a false inventory failure", async () => {
+  const actor = createActor("omitted-no-op", [
+    createItem({ id: "stationary", x: 1 })
+  ]);
+  let batchCalls = 0;
+  installFoundryMock({
+    randomIds: ["operation-omitted-no-op"],
+    modifyBatch: async operations => {
+      batchCalls += 1;
+      assert.equal(operations[0].diff, false);
+      return [];
+    }
+  });
+
+  await executeInventoryMutation({
+    actor,
+    updates: [{ _id: "stationary", "system.placement.x": 1 }]
+  }, { reason: "omitted-no-op" });
+
+  assert.equal(batchCalls, 1);
+  assert.equal(actor.items.get("stationary").system.placement.x, 1);
+});
+
+test("a nominally complete response is rejected when an explicit Item field was not persisted", async () => {
+  const actor = createActor("wrong-update-state", [
+    createItem({ id: "moved", x: 1 })
+  ]);
+  let batchCalls = 0;
+  installFoundryMock({
+    randomIds: ["operation-wrong-update-state"],
+    modifyBatch: async operations => {
+      batchCalls += 1;
+      return operations.map(operation => operation.updates.map(update => actor.items.get(update._id)));
+    }
+  });
+
+  await assert.rejects(
+    executeInventoryMutation({
+      actor,
+      updates: [{ _id: "moved", "system.placement.x": 2 }]
+    }, { reason: "wrong-update-state" }),
+    /did not persist Item "moved" inventory field "system\.placement\.x"/
+  );
+
+  assert.equal(batchCalls, 1, "an unchanged Actor does not need compensation");
+  assert.equal(actor.items.get("moved").system.placement.x, 1);
 });
 
 test("inventory Items and Actor currency fields commit in the same Foundry batch", async () => {
@@ -221,6 +293,8 @@ test("inventory Items and Actor currency fields commit in the same Foundry batch
   ]);
   assert.equal(calls[0][1][INVENTORY_ATOMIC_OPTION], undefined);
   assert.equal(calls[0][1][INVENTORY_EXPECTED_IDS_OPTION], undefined);
+  assert.equal(calls[0][0].diff, false);
+  assert.equal(calls[0][1].diff, false);
   assert.equal(actor.system.currencies.caps, 7);
   assert.equal(actor.items.get("kept").system.placement.x, 2);
 });
@@ -235,9 +309,12 @@ test("an incomplete Actor result restores both currency and inventory Items", as
   installFoundryMock({
     randomIds: ["operation-actor-recovery"],
     modifyBatch: async operations => {
-      const applied = applyBatchOperations(operations);
       callIndex += 1;
-      return callIndex === 1 ? [applied[0], []] : applied;
+      if (callIndex === 1) {
+        const [deleted] = applyBatchOperations([operations[0]]);
+        return [deleted, []];
+      }
+      return applyBatchOperations(operations);
     }
   });
 
@@ -247,7 +324,7 @@ test("an incomplete Actor result restores both currency and inventory Items", as
       deletes: ["spent"],
       actorUpdates: { "system.currencies.caps": 5 }
     }, { reason: "trade-recovery" }),
-    /returned 0 of 1 requested/
+    /did not fully persist the requested state: Foundry did not persist Actor inventory field/
   );
 
   assert.equal(callIndex, 2);

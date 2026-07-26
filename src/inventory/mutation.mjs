@@ -213,8 +213,7 @@ async function executePreparedMutation(plans, {
   let results;
   try {
     results = await foundry.documents.modifyBatch(operations);
-    assertCompleteBatchResults(results, operationMeta);
-    assertCommittedInventoryState(plans, { validateLoad });
+    assertCompleteBatchResults(results, operationMeta, plans, { validateLoad });
   } catch (error) {
     const recoveryError = await recoverPartialInventoryMutation(plans, { operationId, reason });
     if (recoveryError) {
@@ -447,6 +446,7 @@ function createFoundryBatchOperations(plans, {
         falloutMawInventoryOperationId: operationId,
         falloutMawInventoryReason: reason
       });
+      if (operation.action === "update") operation.diff = false;
       if (operation.documentName === "Item") {
         operation[INVENTORY_ATOMIC_OPTION] = true;
         operation[INVENTORY_EXPECTED_IDS_OPTION] = expectedIds;
@@ -476,6 +476,7 @@ function sanitizeInventoryDocumentOptions(options = {}) {
     "data",
     "deleteAll",
     "keepId",
+    "diff",
     "render",
     INVENTORY_ATOMIC_OPTION,
     INVENTORY_EXPECTED_IDS_OPTION,
@@ -487,34 +488,62 @@ function sanitizeInventoryDocumentOptions(options = {}) {
   return forwarded;
 }
 
-function assertCompleteBatchResults(results, operationMeta) {
+function assertCompleteBatchResults(results, operationMeta, plans, { validateLoad = true } = {}) {
   if (
     !Array.isArray(results)
-    || results.length !== operationMeta.length
+    || results.length > operationMeta.length
     || results.some(result => !Array.isArray(result))
   ) {
     throw new Error("Foundry returned an incomplete inventory operation batch.");
   }
-  for (let index = 0; index < operationMeta.length; index += 1) {
-    const result = results[index];
-    const meta = operationMeta[index];
-    if (result.length !== meta.expectedIds.length) {
-      throw new Error(
-        `Foundry ${meta.action} ${meta.documentName} inventory operation returned ${result.length}`
-        + ` of ${meta.expectedIds.length} requested Documents.`
-      );
+
+  let shortResponse = results.length < operationMeta.length;
+  if (!shortResponse) {
+    for (let index = 0; index < operationMeta.length; index += 1) {
+      const result = results[index];
+      const meta = operationMeta[index];
+      if (result.length > meta.expectedIds.length) {
+        throw new Error(
+          `Foundry ${meta.action} ${meta.documentName} inventory operation returned ${result.length}`
+          + ` of ${meta.expectedIds.length} requested Documents.`
+        );
+      }
+      if (meta.strictIds) {
+        const expectedIds = new Set(meta.expectedIds);
+        const resultIds = result.map(getItemId).filter(Boolean);
+        const uniqueResultIds = new Set(resultIds);
+        if (
+          uniqueResultIds.size !== resultIds.length
+          || resultIds.some(itemId => !expectedIds.has(itemId))
+          || (result.length === meta.expectedIds.length
+            && meta.expectedIds.some(itemId => !uniqueResultIds.has(itemId)))
+        ) {
+          throw new Error(`Foundry ${meta.action} inventory operation returned unexpected Item IDs.`);
+        }
+      }
+      if (result.length < meta.expectedIds.length) shortResponse = true;
     }
-    if (!meta.strictIds) continue;
-    const resultIds = new Set(result.map(getItemId).filter(Boolean));
-    if (meta.expectedIds.some(itemId => !resultIds.has(itemId))) {
-      throw new Error(`Foundry ${meta.action} inventory operation returned unexpected Item IDs.`);
-    }
+  }
+
+  try {
+    assertCommittedInventoryState(plans, { validateLoad });
+  } catch (error) {
+    if (!shortResponse) throw error;
+    const incompleteError = new Error(
+      "Foundry returned an incomplete inventory operation batch and did not fully persist the requested state:"
+      + ` ${error.message}`
+    );
+    incompleteError.code = "inventory-partial-batch";
+    incompleteError.cause = error;
+    throw incompleteError;
   }
 }
 
 function assertCommittedInventoryState(plans, { validateLoad = true } = {}) {
   for (const plan of plans) {
-    const currentIds = new Set(getActorItems(plan.actor).map(getItemId).filter(Boolean));
+    const currentItems = getActorItems(plan.actor);
+    const currentById = new Map(currentItems.map(item => [getItemId(item), item]));
+    const currentIds = new Set(currentById.keys());
     if (plan.deletes.some(itemId => currentIds.has(itemId))) {
       throw new Error("Foundry left deleted Items in the source inventory.");
     }
@@ -524,8 +553,34 @@ function assertCommittedInventoryState(plans, { validateLoad = true } = {}) {
     if (plan.updates.some(update => !currentIds.has(String(update._id)))) {
       throw new Error("Foundry removed an Item which should only have been updated.");
     }
+    assertCommittedItemUpdates(plan, currentById);
     assertCommittedActorUpdate(plan);
-    validateActorInventoryState(plan.actor, getActorItems(plan.actor), { validateLoad });
+    validateActorInventoryState(plan.actor, currentItems, { validateLoad });
+  }
+}
+
+function assertCommittedItemUpdates(plan, currentById) {
+  const projectedById = new Map(
+    plan.projectedItems.map(item => [getItemId(item), item])
+  );
+  for (const update of plan.updates) {
+    const itemId = String(update._id);
+    const current = toPlainObject(currentById.get(itemId));
+    const projected = projectedById.get(itemId);
+    for (const [path] of Object.entries(flattenUpdateObject(update))) {
+      if (path === "_id") continue;
+      const committedPath = parseDeletionPath(path) || path;
+      const actual = getProperty(current, committedPath);
+      const expected = getProperty(projected, committedPath);
+      if (
+        actual.exists !== expected.exists
+        || (actual.exists && !deepEqual(actual.value, expected.value))
+      ) {
+        throw new Error(
+          `Foundry did not persist Item "${itemId}" inventory field "${committedPath}".`
+        );
+      }
+    }
   }
 }
 
@@ -590,6 +645,7 @@ function appendActorRecoveryOperation(operations, plan, { operationId, reason })
     documentName: "Actor",
     ...(plan.actor.parent ? { parent: plan.actor.parent } : {}),
     updates: [cloneValue(plan.actorRecoveryUpdate)],
+    diff: false,
     render: true,
     falloutMawInventoryRecovery: true,
     falloutMawInventoryOperationId: operationId,
@@ -605,6 +661,7 @@ function appendRecoveryOperation(operations, actor, action, expectedIds, data, {
     parent: actor,
     render: true,
     ...data,
+    ...(action === "update" ? { diff: false } : {}),
     [INVENTORY_ATOMIC_OPTION]: true,
     [INVENTORY_EXPECTED_IDS_OPTION]: expectedIds,
     falloutMawInventoryRecovery: true,

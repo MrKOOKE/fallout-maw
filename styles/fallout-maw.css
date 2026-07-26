@@ -15621,6 +15621,30 @@ label.checkbox.fallout-maw-ability-change-choice {
   opacity: 0.45;
 }
 
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-ready-button.personal-trade-approval-pending,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-ready-button.personal-trade-approval-pending:hover,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-ready-button.personal-trade-approval-pending:focus-visible {
+  background: linear-gradient(180deg, rgba(255, 224, 92, 0.98), rgba(183, 132, 23, 0.98));
+  border-color: rgba(255, 225, 91, 0.98);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 248, 190, 0.68),
+    inset -2px -2px 0 rgba(83, 48, 4, 0.52),
+    0 0 11px rgba(255, 201, 52, 0.42);
+  color: #2a1a03;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-ready-button.personal-trade-approval-rejected,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-ready-button.personal-trade-approval-rejected:hover,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-ready-button.personal-trade-approval-rejected:focus-visible {
+  background: linear-gradient(180deg, rgba(236, 91, 76, 0.98), rgba(132, 31, 29, 0.98));
+  border-color: rgba(255, 112, 96, 0.98);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 190, 175, 0.48),
+    inset -2px -2px 0 rgba(65, 8, 8, 0.62),
+    0 0 11px rgba(231, 62, 48, 0.44);
+  color: #fff0e9;
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid {
   --fallout-maw-inventory-grid-step: calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-gap));
   --fallout-maw-inventory-grid-line-size: 1px;
