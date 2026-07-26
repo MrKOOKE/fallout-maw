@@ -13,6 +13,7 @@ import {
 import { invalidateLightingAnalysisCache } from "../src/stealth/lighting.mjs";
 
 const originalCanvas = globalThis.canvas;
+const originalConfig = globalThis.CONFIG;
 const originalGame = globalThis.game;
 const originalPIXI = globalThis.PIXI;
 
@@ -21,6 +22,8 @@ afterEach(() => {
   invalidateLightingAnalysisCache();
   if (originalCanvas === undefined) delete globalThis.canvas;
   else globalThis.canvas = originalCanvas;
+  if (originalConfig === undefined) delete globalThis.CONFIG;
+  else globalThis.CONFIG = originalConfig;
   if (originalGame === undefined) delete globalThis.game;
   else globalThis.game = originalGame;
   if (originalPIXI === undefined) delete globalThis.PIXI;
@@ -124,6 +127,64 @@ test("authoritative point checks apply weapon noise on gridded and gridless scen
   invalidateStealthDetectionCache();
   assert.equal(testStealthDetectionPoint(observer, origin, target, { settings }), false);
   assert.equal(testStealthDetectionPoint(observer, origin, target, { rangeBonus: 2, settings }), true);
+});
+
+test("blind observers and observers with zero sight modes have no zone even with weapon noise", () => {
+  installRectangleMock();
+  globalThis.CONFIG = {
+    specialStatusEffects: { BLIND: "blind" },
+    Canvas: {
+      detectionModes: {
+        basicSight: { type: 0 },
+        lightPerception: { type: 0 },
+        feelTremor: { type: 2 }
+      }
+    }
+  };
+  globalThis.canvas = createLinearCanvas({ cells: 7, cellSize: 100 });
+  const settings = createSettings("10");
+  const origin = { x: 0, y: 0, elevation: 0 };
+  const target = { x: 100, y: 0, elevation: 0 };
+  const rangeBonus = weaponNoiseToRangeBonus(100);
+
+  const zeroSight = createObserver("observer-zero-sight");
+  zeroSight.document.detectionModes = {
+    basicSight: { enabled: true, range: 0 },
+    lightPerception: { enabled: true, range: 0 },
+    feelTremor: { enabled: false, range: null }
+  };
+  assert.equal(buildObserverDetectionZone(zeroSight, { rangeBonus, settings }), null);
+  assert.equal(
+    testStealthDetectionPoint(zeroSight, origin, target, { rangeBonus, settings }),
+    false
+  );
+
+  const blind = createObserverWithUnlimitedSight("observer-blind");
+  blind.actor.statuses = new Set(["blind"]);
+  assert.equal(buildObserverDetectionZone(blind, { rangeBonus, settings }), null);
+  assert.equal(
+    testStealthDetectionPoint(blind, origin, target, { rangeBonus, settings }),
+    false
+  );
+});
+
+test("positive Light Perception keeps a zero-range Basic Sight observer operational", () => {
+  installRectangleMock();
+  globalThis.CONFIG = {
+    specialStatusEffects: { BLIND: "blind" },
+    Canvas: {
+      detectionModes: {
+        basicSight: { type: 0 },
+        lightPerception: { type: 0 }
+      }
+    }
+  };
+  globalThis.canvas = createLinearCanvas({ cells: 4, cellSize: 100 });
+  const observer = createObserver("observer-light-perception");
+  observer.document.detectionModes.lightPerception = { enabled: true, range: 10 };
+  const settings = createSettings("2");
+
+  assert.ok(buildObserverDetectionZone(observer, { settings })?.offsets?.length);
 });
 
 test("weapon noise adds exact unattenuated cells beyond a darkness-shaped base zone", () => {
@@ -343,7 +404,10 @@ function createObserver(id) {
     document: {
       elevation: 0,
       sight: { enabled: true, range: 0 },
-      detectionModes: { basicSight: { enabled: true, range: 0 } }
+      detectionModes: {
+        basicSight: { enabled: true, range: 0 },
+        lightPerception: { enabled: true, range: null }
+      }
     }
   };
 }

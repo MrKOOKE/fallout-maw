@@ -315,7 +315,10 @@ function createToken(id, actor, { x, y }) {
   };
   document.object = token;
   document.sight = { enabled: true, range: 0 };
-  document.detectionModes = { basicSight: { enabled: true, range: 0 } };
+  document.detectionModes = {
+    basicSight: { enabled: true, range: 0 },
+    lightPerception: { enabled: true, range: null }
+  };
   return token;
 }
 

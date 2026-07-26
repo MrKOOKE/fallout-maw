@@ -9,6 +9,13 @@ import {
 } from "../settings/factions.mjs";
 
 const STEALTH_RELATION_CACHE_LIMIT = 3000;
+const SIGHT_DETECTION_MODE_IDS = new Set([
+  "basicSight",
+  "lightPerception",
+  "seeAll",
+  "seeInvisibility"
+]);
+const SIGHT_DETECTION_TYPE = 0;
 
 const allyCache = new Map();
 let factionMatrix = null;
@@ -24,12 +31,34 @@ export function isValidStealthObserver(hiddenToken, observerToken) {
 export function isStealthObserverIncapacitated(observerToken) {
   const actor = observerToken?.actor ?? null;
   if (actorHasIncapacitatingStatus(actor)) return true;
-  return Boolean(
+  if (
     observerToken?.document?.hasStatusEffect?.("dead")
     || observerToken?.document?.hasStatusEffect?.("unconscious")
     || observerToken?.hasStatusEffect?.("dead")
     || observerToken?.hasStatusEffect?.("unconscious")
-  );
+  ) return true;
+  if (isStealthObserverBlind(observerToken)) return true;
+  return !hasOperationalStealthSight(observerToken);
+}
+
+/**
+ * Foundry only allows an enabled detection mode with a positive range to
+ * participate in visibility tests. Mirror that gate here so a token whose
+ * Basic Sight and Light Perception are both zero cannot retain a skill-based
+ * stealth zone or regain one through weapon noise.
+ */
+export function hasOperationalStealthSight(observerToken) {
+  const document = observerToken?.document ?? observerToken;
+  if (!observerToken?.actor || !document) return false;
+  if (observerToken?.hasSight === false || document.sight?.enabled === false) return false;
+
+  const modes = Object.entries(document.detectionModes ?? {});
+  if (!modes.length) return hasPositiveDetectionRange(document.sight?.range);
+  return modes.some(([modeId, mode]) => (
+    mode?.enabled !== false
+    && hasPositiveDetectionRange(mode?.range)
+    && isSightDetectionMode(modeId)
+  ));
 }
 
 export function areActorsStealthAlliesCached(hiddenActor, observerActor) {
@@ -86,4 +115,34 @@ function trimCacheMap(map, limit) {
     if (firstKey === undefined) break;
     map.delete(firstKey);
   }
+}
+
+function isStealthObserverBlind(observerToken) {
+  const document = observerToken?.document ?? observerToken;
+  const actor = observerToken?.actor ?? document?.actor ?? null;
+  const blindStatus = globalThis.CONFIG?.specialStatusEffects?.BLIND ?? "blind";
+  const statusIds = new Set([blindStatus, "blind", "blinded"].filter(Boolean));
+  for (const statusId of statusIds) {
+    if (actor?.statuses?.has?.(statusId)) return true;
+    if (document?.hasStatusEffect?.(statusId)) return true;
+    if (observerToken?.hasStatusEffect?.(statusId)) return true;
+  }
+  return Boolean(
+    observerToken?.vision?.blinded?.blind
+    || observerToken?._getVisionBlindedStates?.()?.blind
+  );
+}
+
+function isSightDetectionMode(modeId) {
+  const definition = globalThis.CONFIG?.Canvas?.detectionModes?.[modeId];
+  if (definition?.type !== undefined && definition?.type !== null) {
+    return Number(definition.type) === SIGHT_DETECTION_TYPE;
+  }
+  return SIGHT_DETECTION_MODE_IDS.has(modeId);
+}
+
+function hasPositiveDetectionRange(value) {
+  if (value === null || value === undefined) return true;
+  const range = Number(value);
+  return range === Infinity || (Number.isFinite(range) && range > 0);
 }

@@ -87,6 +87,32 @@ test("resolver adds five physical cells even when darkness makes each cell cost 
   assert.equal(rolls, 1);
 });
 
+test("weapon noise never checks blind or zero-perception observers", async () => {
+  const fixture = createNoiseFixture({
+    currentAttackerX: 100,
+    observerCount: 2
+  });
+  globalThis.CONFIG.specialStatusEffects.BLIND = "blind";
+  fixture.observers[0].actor.statuses.add("blind");
+  fixture.observers[1].document.sight.range = 0;
+  fixture.observers[1].document.detectionModes = {
+    basicSight: { enabled: true, range: 0 },
+    lightPerception: { enabled: true, range: 0 }
+  };
+  let rolls = 0;
+  configureWeaponNoiseDetection({
+    getSettings: () => createSettings(true),
+    rollStealthCheck: async () => {
+      rolls += 1;
+      return successOutcome();
+    }
+  });
+
+  assert.equal(await resolveWeaponNoiseDetection(fixture.staleAttacker, { noiseLevel: 100 }), false);
+  assert.equal(rolls, 0);
+  assert.equal(fixture.actor.statuses.has("invisible"), true);
+});
+
 test("the first failed observer reveals, pauses, and stops later checks", async () => {
   const fixture = createNoiseFixture({
     currentAttackerX: 100,

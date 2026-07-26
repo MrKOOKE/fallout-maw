@@ -12,7 +12,11 @@ import {
 } from "./detection.mjs";
 import { invalidateLightingAnalysisCache } from "./lighting.mjs";
 import { registerStealthMovementProvider } from "./movement.mjs";
-import { invalidateStealthRelationCache, isValidStealthObserver } from "./observers.mjs";
+import {
+  invalidateStealthRelationCache,
+  isStealthObserverIncapacitated,
+  isValidStealthObserver
+} from "./observers.mjs";
 import {
   calculateStealthRadius,
   canControlStealth,
@@ -239,6 +243,7 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
 }
 
 async function rollStealthCheck(sourceToken, targetToken, app = null, { animate = true } = {}) {
+  if (isStealthObserverIncapacitated(targetToken)) return undefined;
   const difficulty = computeStealthDifficulty(sourceToken, targetToken);
   if (!difficulty) return undefined;
   const outcome = await requestSkillCheck({
@@ -357,7 +362,7 @@ function updateTargetPointer(pointer) {
   const sourceToken = globalThis.canvas?.tokens?.get(targetMode.sourceTokenId);
   const hovered = getTokenAtClientPoint(pointer, sourceToken?.id);
   targetMode.hoveredToken = hovered;
-  if (!hovered || !sourceToken) {
+  if (!hovered || !sourceToken || isStealthObserverIncapacitated(hovered)) {
     targetMode.tooltip.hidden = true;
     return;
   }

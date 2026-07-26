@@ -1,6 +1,9 @@
 import { testObserverVisibilityBatch } from "../canvas/physical-los.mjs";
 import { analyzeLightingPoint } from "./lighting.mjs";
-import { isValidStealthObserver } from "./observers.mjs";
+import {
+  isStealthObserverIncapacitated,
+  isValidStealthObserver
+} from "./observers.mjs";
 import {
   clampNumber,
   evaluateStealthDetectionRange,
@@ -62,7 +65,12 @@ export function buildObserverDetectionZone(observerToken, {
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
-  if (!observerToken?.actor || !activeCanvas?.ready || activeCanvas.grid?.isGridless) return null;
+  if (
+    !observerToken?.actor
+    || isStealthObserverIncapacitated(observerToken)
+    || !activeCanvas?.ready
+    || activeCanvas.grid?.isGridless
+  ) return null;
   const baseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
   const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
   const maxRange = baseRange + normalizedRangeBonus;
@@ -137,7 +145,12 @@ export function testStealthDetectionPoint(observerToken, observerOrigin, targetP
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
-  if (!observerToken?.actor || !targetPoint || !activeCanvas?.ready) return false;
+  if (
+    !observerToken?.actor
+    || isStealthObserverIncapacitated(observerToken)
+    || !targetPoint
+    || !activeCanvas?.ready
+  ) return false;
   const origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
   let point = normalizePoint(targetPoint, origin.elevation);
   if (!activeCanvas.grid?.isGridless && activeCanvas.grid?.getOffset && activeCanvas.grid?.getCenterPoint) {
