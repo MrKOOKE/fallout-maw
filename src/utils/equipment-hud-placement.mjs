@@ -1,4 +1,5 @@
 import { getCreatureOptions } from "../settings/accessors.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
   canUseWeaponSlotForItem,
   doesItemOccupyEquipmentSlot,
@@ -77,24 +78,27 @@ export async function equipActorItemInEquipmentSlot(actor, item, slotKey = "") {
   }
 
   const storedPlacement = createStoredPlacement(placement, item);
-  await actor.updateEmbeddedDocuments("Item", [
-    ...replacementUpdates,
-    {
-      _id: item.id,
-      "system.equipped": true,
-      "system.container.parentId": ROOT_CONTAINER_ID,
-      "system.placement.mode": "equipment",
-      "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
-      "system.placement.weaponSet": "",
-      "system.placement.weaponSlot": "",
-      "system.placement.limbKey": "",
-      "system.placement.x": storedPlacement.x,
-      "system.placement.y": storedPlacement.y,
-      "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height,
-      "system.placement.rotated": storedPlacement.rotated
-    }
-  ]);
+  await executeInventoryMutation({
+    actor,
+    updates: [
+      ...replacementUpdates,
+      {
+        _id: item.id,
+        "system.equipped": true,
+        "system.container.parentId": ROOT_CONTAINER_ID,
+        "system.placement.mode": "equipment",
+        "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
+        "system.placement.weaponSet": "",
+        "system.placement.weaponSlot": "",
+        "system.placement.limbKey": "",
+        "system.placement.x": storedPlacement.x,
+        "system.placement.y": storedPlacement.y,
+        "system.placement.width": storedPlacement.width,
+        "system.placement.height": storedPlacement.height,
+        "system.placement.rotated": storedPlacement.rotated
+      }
+    ]
+  }, { reason: "equipment-hud-equip" });
   return actor.items.get(item.id) ?? null;
 }
 
@@ -118,24 +122,27 @@ export async function equipActorItemInWeaponSlot(actor, item, weaponSetKey = "",
   }
 
   const storedPlacement = createStoredPlacement(placement, item);
-  await actor.updateEmbeddedDocuments("Item", [
-    ...replacementUpdates,
-    {
-      _id: item.id,
-      "system.equipped": true,
-      "system.container.parentId": ROOT_CONTAINER_ID,
-      "system.placement.mode": "weapon",
-      "system.placement.equipmentSlot": "",
-      "system.placement.weaponSet": storedPlacement.weaponSet,
-      "system.placement.weaponSlot": storedPlacement.weaponSlot,
-      "system.placement.limbKey": storedPlacement.limbKey,
-      "system.placement.x": storedPlacement.x,
-      "system.placement.y": storedPlacement.y,
-      "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height,
-      "system.placement.rotated": storedPlacement.rotated
-    }
-  ]);
+  await executeInventoryMutation({
+    actor,
+    updates: [
+      ...replacementUpdates,
+      {
+        _id: item.id,
+        "system.equipped": true,
+        "system.container.parentId": ROOT_CONTAINER_ID,
+        "system.placement.mode": "weapon",
+        "system.placement.equipmentSlot": "",
+        "system.placement.weaponSet": storedPlacement.weaponSet,
+        "system.placement.weaponSlot": storedPlacement.weaponSlot,
+        "system.placement.limbKey": storedPlacement.limbKey,
+        "system.placement.x": storedPlacement.x,
+        "system.placement.y": storedPlacement.y,
+        "system.placement.width": storedPlacement.width,
+        "system.placement.height": storedPlacement.height,
+        "system.placement.rotated": storedPlacement.rotated
+      }
+    ]
+  }, { reason: "equipment-hud-equip" });
   return actor.items.get(item.id) ?? null;
 }
 
@@ -146,7 +153,10 @@ export async function unequipActorItemToInventory(actor, item) {
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
     return null;
   }
-  await actor.updateEmbeddedDocuments("Item", [createInventoryPlacementUpdate(item, placementContext)]);
+  await executeInventoryMutation({
+    actor,
+    updates: [createInventoryPlacementUpdate(item, placementContext)]
+  }, { reason: "equipment-hud-unequip" });
   return actor.items.get(item.id) ?? null;
 }
 

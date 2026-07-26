@@ -10,11 +10,12 @@ import {
   getLightSourceFunction,
   hasItemFunction,
   isItemBrokenByCondition,
+  createActorItemOrInstalledModuleUpdate,
   resolveActorItemOrInstalledModule
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
-import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
+import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import {
   createItemStackPartRemovalUpdate,
   getItemQuantity,
@@ -22,6 +23,11 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import {
+  planContinuousResourceSpend,
+  planIntegerResourceSpend
+} from "../inventory/resource-spend.mjs";
 
 const ACTIVE_LIGHT_SOURCES_FLAG = "activeLightSources";
 const BASE_LIGHT_FLAG = "lightSourceBaseLight";
@@ -484,9 +490,20 @@ function escapeAttribute(value) {
 
 export async function setEnergyConsumerActiveSource(consumerItem = null, sourceItem = null) {
   if (!consumerItem?.update || !hasItemFunction(consumerItem, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return false;
-  await consumerItem.update({
+  const changes = {
     "system.functions.energyConsumer.installedSource": createInstalledEnergySourceData(sourceItem)
-  });
+  };
+  const actor = consumerItem.actor
+    ?? (consumerItem.parent?.documentName === "Actor" ? consumerItem.parent : null);
+  const update = createActorItemOrInstalledModuleUpdate(actor, consumerItem, changes);
+  if (actor && update) {
+    await executeInventoryMutation({
+      actor,
+      updates: [update]
+    }, { reason: "energy-source-select" });
+  } else {
+    await consumerItem.update(changes);
+  }
   return true;
 }
 
@@ -496,23 +513,37 @@ export async function installEnergyConsumerSource(actor = null, consumerItem = n
   if (!hasItemFunction(sourceItem, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) return false;
   const consumer = getEnergyConsumerFunction(consumerItem);
   if (!energySourceMatchesConsumer(sourceItem, consumer)) return false;
+  if (sourceItem.parent === actor && sourceItem.id === consumerItem.id) return false;
 
   const returnedData = createEnergySourceItemDataFromInstalled(consumer.installedSource);
   const deleteSourceId = sourceItem.parent === actor ? sourceItem.id : "";
-  if (returnedData) await grantActorInventoryItem(actor, returnedData, { quantity: 1 });
-  await consumerItem.update({
+  const returnPlan = returnedData
+    ? planActorInventoryGrant(actor, returnedData, { quantity: 1, merge: false })
+    : { updates: [], creates: [] };
+  const consumerUpdate = createActorItemOrInstalledModuleUpdate(actor, consumerItem, {
     "system.functions.energyConsumer.installedSource": createInstalledEnergySourceData(sourceItem)
   });
+  if (!consumerUpdate) return false;
+
+  const updates = [...returnPlan.updates, consumerUpdate];
+  const deletes = [];
   if (deleteSourceId && actor.items?.get(deleteSourceId)) {
     const sourceQuantity = getItemQuantity(sourceItem);
-    if (sourceQuantity <= 1) await actor.deleteEmbeddedDocuments("Item", [deleteSourceId]);
+    if (sourceQuantity <= 1) deletes.push(deleteSourceId);
     else if (usesVirtualInventoryStacks(sourceItem)) {
       const update = createItemStackPartRemovalUpdate(sourceItem, 1, 0);
-      if (update) await actor.updateEmbeddedDocuments("Item", [update]);
+      if (!update || (update["system.quantity"] ?? 0) <= 0) deletes.push(deleteSourceId);
+      else updates.push(update);
     } else {
-      await sourceItem.update({ "system.quantity": sourceQuantity - 1 });
+      updates.push({ _id: deleteSourceId, "system.quantity": sourceQuantity - 1 });
     }
   }
+  await executeInventoryMutation({
+    actor,
+    updates,
+    deletes,
+    creates: returnPlan.creates
+  }, { reason: "energy-source-install" });
   return true;
 }
 
@@ -521,10 +552,16 @@ export async function extractEnergyConsumerSource(actor = null, consumerItem = n
   if (!hasItemFunction(consumerItem, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return false;
   const returnedData = createEnergySourceItemDataFromInstalled(getEnergyConsumerFunction(consumerItem).installedSource);
   if (!returnedData) return false;
-  await grantActorInventoryItem(actor, returnedData, { quantity: 1 });
-  await consumerItem.update({
+  const returnPlan = planActorInventoryGrant(actor, returnedData, { quantity: 1 });
+  const consumerUpdate = createActorItemOrInstalledModuleUpdate(actor, consumerItem, {
     "system.functions.energyConsumer.installedSource": createInstalledEnergySourceData(null)
   });
+  if (!consumerUpdate) return false;
+  await executeInventoryMutation({
+    actor,
+    updates: [...returnPlan.updates, consumerUpdate],
+    creates: returnPlan.creates
+  }, { reason: "energy-source-extract" });
   return true;
 }
 
@@ -621,64 +658,72 @@ async function consumeLightSourceResources(actor = null, item = null, deltaSecon
   const hours = Math.max(0, Number(deltaSeconds) || 0) / 3600;
   if (hours <= 0) return true;
 
-  const checks = [];
-  for (const cost of costs) {
-    const amount = cost.amountPerHour * hours;
-    if (amount <= 0) continue;
-    if (cost.type === "condition") {
-      checks.push(await prepareConditionConsumption(item, cost, amount));
-    } else if (cost.type === "energyConsumer") {
-      checks.push(prepareEnergyConsumption(actor, item, amount));
+  const conditionCosts = costs
+    .filter(cost => cost.type === "condition")
+    .map(cost => ({
+      key: `condition.${cost.index}`,
+      amount: cost.amountPerHour * hours
+    }));
+  const conditionPlan = conditionCosts.length
+    ? planIntegerResourceSpend({
+      current: getConditionFunction(item).value,
+      costs: conditionCosts,
+      remainders: getCachedLightSourceResourceRemainders(item)
+    })
+    : null;
+  if (conditionPlan && !conditionPlan.available) return false;
+
+  const energyCosts = costs
+    .filter(cost => cost.type === "energyConsumer")
+    .map(cost => ({ amount: cost.amountPerHour * hours }));
+  const consumer = getEnergyConsumerFunction(item);
+  const source = energyCosts.length ? getInstalledEnergySourceData(consumer) : null;
+  if (energyCosts.length && (
+    !source
+    || !hasItemFunction(source, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })
+    || !energySourceMatchesConsumer(source, consumer)
+  )) {
+    return false;
+  }
+  const reserve = source ? getEnergySourceReserveState(source) : null;
+  const cachedReserve = reserve
+    ? getCachedLightSourceReserveValue(item, consumer, reserve.value)
+    : 0;
+  const energyPlan = energyCosts.length
+    ? planContinuousResourceSpend({ current: cachedReserve, costs: energyCosts })
+    : null;
+  if (energyPlan && !energyPlan.available) return false;
+
+  const changes = {};
+  if (conditionPlan?.spent > 0) {
+    changes["system.functions.condition.value"] = conditionPlan.remaining;
+    changes[`flags.${SYSTEM_ID}.${RESOURCE_REMAINDERS_FLAG}`] = conditionPlan.remainders;
+  }
+  if (energyPlan) {
+    const persistedNext = roundReserveValueForUpdate(energyPlan.remaining);
+    if (
+      energyPlan.remaining <= EPSILON
+      || persistedNext !== roundReserveValueForUpdate(reserve.value)
+    ) {
+      changes["system.functions.energyConsumer.installedSource.reserve.value"] = persistedNext;
     }
   }
 
-  if (checks.some(check => !check.available)) return false;
-  for (const check of checks) await check.spend?.();
+  if (Object.keys(changes).length) {
+    const update = createActorItemOrInstalledModuleUpdate(actor, item, changes);
+    if (!update) return false;
+    await executeInventoryMutation({
+      actor,
+      updates: [update]
+    }, { reason: "light-source-resource-consumption" });
+  }
+  if (conditionPlan) {
+    rememberLightSourceResourceRemainders(item, conditionPlan.remainders);
+  }
+  if (energyPlan) {
+    rememberLightSourceReserveValue(item, consumer, energyPlan.remaining);
+  }
   return true;
-}
-
-async function prepareConditionConsumption(item = null, cost = {}, amount = 0) {
-  const condition = getConditionFunction(item);
-  const current = Math.max(0, toInteger(condition.value));
-  const remainders = getCachedLightSourceResourceRemainders(item);
-  const key = `condition.${cost.index}`;
-  const total = Math.max(0, Number(remainders[key]) || 0) + amount;
-  const spend = Math.floor(total + EPSILON);
-  const remainder = total - spend;
-  if (current <= 0 && total > 0) return { available: false };
-  if (spend > current) return { available: false };
-  remainders[key] = remainder > EPSILON ? remainder : 0;
-  return {
-    available: true,
-    spend: async () => {
-      rememberLightSourceResourceRemainders(item, remainders);
-      if (spend <= 0) return;
-      await item.update({
-        "system.functions.condition.value": Math.max(0, current - spend),
-        [`flags.${SYSTEM_ID}.${RESOURCE_REMAINDERS_FLAG}`]: remainders
-      });
-    }
-  };
-}
-
-function prepareEnergyConsumption(actor = null, item = null, amount = 0) {
-  const consumer = getEnergyConsumerFunction(item);
-  const source = getInstalledEnergySourceData(consumer);
-  if (!source || !hasItemFunction(source, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) return { available: false };
-  if (!energySourceMatchesConsumer(source, consumer)) return { available: false };
-  const reserve = getEnergySourceReserveState(source);
-  const cachedValue = getCachedLightSourceReserveValue(item, consumer, reserve.value);
-  if (cachedValue + EPSILON < amount) return { available: false };
-  const next = Math.max(0, cachedValue - amount);
-  return {
-    available: true,
-    spend: async () => {
-      rememberLightSourceReserveValue(item, consumer, next);
-      const persistedNext = roundReserveValueForUpdate(next);
-      if (next > EPSILON && persistedNext === roundReserveValueForUpdate(reserve.value)) return;
-      await item.update({ "system.functions.energyConsumer.installedSource.reserve.value": persistedNext });
-    }
-  };
 }
 
 function getCachedLightSourceResourceRemainders(item = null) {

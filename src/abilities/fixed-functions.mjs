@@ -159,16 +159,19 @@ import {
   getActorFactionBelongs,
   getRelationTo
 } from "../settings/factions.mjs";
-import { createThrownItemTile } from "../canvas/thrown-items.mjs";
+import { dropActorInventoryItem } from "../items/dropped-items.mjs";
 import { prepareInventoryContext, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
-  ROOT_CONTAINER_ID,
-  createStoredPlacement
+  ROOT_CONTAINER_ID
 } from "../utils/inventory-containers.mjs";
+import {
+  executeInventoryMutation,
+  expandInventoryDeleteIds
+} from "../inventory/mutation.mjs";
 import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
 import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
-import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
+import { isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { createRightClickPanGuard } from "../canvas/right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
@@ -6286,27 +6289,13 @@ async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targ
   return false;
 }
 
-async function dropDisarmedWeaponOnGround({ sourceActor, sourceWeapon, targetToken = null } = {}) {
-  const itemData = sourceWeapon?.toObject?.();
-  if (!itemData || !sourceActor) return false;
-  delete itemData._id;
-  delete itemData.id;
-  foundry.utils.setProperty(itemData, "system.equipped", false);
-  foundry.utils.setProperty(itemData, "system.container.parentId", ROOT_CONTAINER_ID);
-  foundry.utils.setProperty(itemData, "system.placement", createStoredPlacement({ mode: "inventory", x: 1, y: 1 }, itemData));
-  const point = getTokenCenterPoint(targetToken) ?? { x: 0, y: 0 };
-  const tile = await createThrownItemTile({
-    sceneId: canvas.scene?.id ?? targetToken?.parent?.id ?? "",
-    itemData,
-    point,
-    sourceActorUuid: sourceActor.uuid,
-    sourceItemUuid: sourceWeapon.uuid,
-    sourceUserId: game.user?.id ?? "",
-    combatId: game.combat?.id ?? ""
-  });
-  if (!tile && game.user?.isGM) return false;
-  await sourceActor.deleteEmbeddedDocuments("Item", [sourceWeapon.id]);
-  return true;
+async function dropDisarmedWeaponOnGround({ sourceActor, sourceWeapon } = {}) {
+  if (!sourceActor || !sourceWeapon) return false;
+  // This shared transfer waits for the responsible GM, persists the complete
+  // container subtree on the ground, and only then removes the source. If the
+  // source mutation fails, the newly-created ground entry is compensated.
+  const tile = await dropActorInventoryItem(sourceActor, sourceWeapon, { quantity: 1 });
+  return Boolean(tile);
 }
 
 async function tryTransferDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, placement = {} } = {}) {
@@ -8966,17 +8955,35 @@ async function destroyTargetPossessions(actor, percent = 100) {
   if (!destroyPercent) return;
 
   const itemUpdates = [];
-  const itemDeletes = [];
+  const requestedDeletes = [];
   for (const item of actor.items ?? []) {
-    if (item.type === "ability") continue;
+    if (!isDestroyablePossession(item)) continue;
     const quantity = Math.max(1, toInteger(item.system?.quantity ?? 1));
     const destroyQuantity = destroyPercent >= 100 ? quantity : Math.floor((quantity * destroyPercent) / 100);
     if (destroyQuantity <= 0) continue;
-    if (destroyQuantity >= quantity) itemDeletes.push(item.id);
+    if (destroyQuantity >= quantity) requestedDeletes.push(item.id);
     else itemUpdates.push({ _id: item.id, "system.quantity": quantity - destroyQuantity });
   }
-  if (itemDeletes.length) await actor.deleteEmbeddedDocuments("Item", itemDeletes, { animate: false });
-  if (itemUpdates.length) await actor.updateEmbeddedDocuments("Item", itemUpdates);
+
+  const initialDeleteClosure = new Set(expandInventoryDeleteIds(actor.items, requestedDeletes));
+  const protectedUpdates = [];
+  for (const itemId of initialDeleteClosure) {
+    const item = actor.items?.get(itemId);
+    if (!item || isDestroyablePossession(item)) continue;
+    if (String(item.system?.container?.parentId ?? "") === ROOT_CONTAINER_ID) continue;
+    protectedUpdates.push({
+      _id: item.id,
+      "system.container.parentId": ROOT_CONTAINER_ID
+    });
+  }
+  const survivingUpdates = itemUpdates.filter(update => !initialDeleteClosure.has(String(update._id)));
+  if (survivingUpdates.length || protectedUpdates.length || requestedDeletes.length) {
+    await executeInventoryMutation({
+      actor,
+      updates: [...survivingUpdates, ...protectedUpdates],
+      deletes: requestedDeletes
+    }, { reason: "deus-ex-machina-disintegrate" });
+  }
 
   const currencyUpdate = {};
   for (const key of Object.keys(actor.system?.currencies ?? {})) {
@@ -8985,6 +8992,10 @@ async function destroyTargetPossessions(actor, percent = 100) {
     currencyUpdate[`system.currencies.${key}`] = Math.max(0, amount - destroyed);
   }
   if (Object.keys(currencyUpdate).length) await actor.update(currencyUpdate);
+}
+
+function isDestroyablePossession(item) {
+  return Boolean(item?.type === "gear" && !isNaturalRaceItem(item));
 }
 
 function createRandomCurrencyAwards(totalValue = 0) {

@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
 import { actorHasAbility, findCatalogAbility, grantAbilityItemData } from "../abilities/purchase.mjs";
 import {
@@ -1274,9 +1275,14 @@ async function applyPersonalGeneratorTokenItems(document) {
     return undefined;
   }
 
-  if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates);
-  const created = plan.creates.length ? await actor.createEmbeddedDocuments("Item", plan.creates, { render: false }) : [];
-  await applyGeneratedEquipment(actor, created);
+  await executeInventoryMutation({
+    actor,
+    updates: plan.updates,
+    creates: plan.creates
+  }, {
+    render: Boolean(plan.updates.length),
+    reason: "personal-generator-items"
+  });
   await document.setFlag?.(SYSTEM_ID, "personalGeneratorItemsApplied", true);
 
   await new Promise(resolve => setTimeout(resolve, 50));
@@ -1632,34 +1638,6 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
     if (validateProjectedItems(actor, testProjected)) return { parentId, placement };
   }
   return null;
-}
-
-async function applyGeneratedEquipment(actor, createdItems = []) {
-  const updates = [];
-  const { occupiedEquipmentSlots, occupiedWeaponSlots } = getOccupiedGeneratedEquipSlots(actor);
-
-  for (const item of createdItems) {
-    if (!item?.getFlag?.(SYSTEM_ID, "personalGeneratorEquip")) continue;
-    if (["equipment", "weapon"].includes(String(item.system?.placement?.mode ?? ""))) continue;
-    const placement = findGeneratedEquipPlacement(actor, item, occupiedEquipmentSlots, occupiedWeaponSlots);
-    if (!placement) continue;
-    const storedPlacement = createStoredPlacement(placement, item);
-    updates.push({
-      _id: item.id,
-      "system.equipped": storedPlacement.mode === "equipment",
-      "system.container.parentId": ROOT_CONTAINER_ID,
-      "system.placement.mode": storedPlacement.mode,
-      "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
-      "system.placement.weaponSet": storedPlacement.weaponSet,
-      "system.placement.weaponSlot": storedPlacement.weaponSlot,
-      "system.placement.x": storedPlacement.x,
-      "system.placement.y": storedPlacement.y,
-      "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height,
-      "system.placement.rotated": storedPlacement.rotated
-    });
-  }
-  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
 }
 
 function getOccupiedGeneratedEquipSlots(actor) {

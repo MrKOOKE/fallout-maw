@@ -7,6 +7,7 @@ import {
   getEnergyConsumerFunction,
   hasItemFunction,
   isItemBrokenByCondition,
+  createActorItemOrInstalledModuleUpdate,
   resolveActorItemOrInstalledModule
 } from "../utils/item-functions.mjs";
 import {
@@ -22,6 +23,8 @@ import {
   getItemEnergyConsumptionConditions,
   isItemEnergyConsumptionConditionActive
 } from "./item-interactions.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { planContinuousResourceSpend } from "../inventory/resource-spend.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const EPSILON = 0.000001;
@@ -92,14 +95,17 @@ export async function toggleEnergyConsumption(actor = null, item = null, conditi
 
 export async function setEnergyConsumptionActive(actor = null, item = null, conditionId = "", active = false) {
   const key = String(conditionId ?? "").trim();
-  if (!actor || !item?.update || !key) return false;
+  if (!actor || !item || !key) return false;
   const condition = getEnergyConsumptionConditions(item).find(entry => entry.id === key);
   if (!condition) return false;
   if (active && !canActivateEnergyConsumption(actor, item, condition)) {
     ui.notifications?.warn?.("Нет подходящего источника энергии.");
     return false;
   }
-  await item.update({ [`system.functions.energyConsumer.activeConditions.${key}`]: Boolean(active) });
+  const updated = await updateEnergyConsumptionCarrier(actor, item, {
+    [`system.functions.energyConsumer.activeConditions.${key}`]: Boolean(active)
+  }, "energy-consumption-toggle");
+  if (!updated) return false;
   Hooks.callAll("fallout-maw.energyConsumptionChanged", actor);
   return true;
 }
@@ -239,12 +245,8 @@ async function processActorEnergyConsumptionWorldTime(actor = null, deltaSeconds
     if (!isActiveEnergyConsumptionCarrier(actor, item)) continue;
     const activeConditions = getEnergyConsumptionConditions(item).filter(condition => isEnergyConsumptionActive(item, condition.id));
     if (!activeConditions.length) continue;
-    for (const condition of activeConditions) {
-      const amount = Math.max(0, Number(condition.amountPerHour) || 0) * hours;
-      if (amount <= 0) continue;
-      const consumed = await consumeEnergyCondition(actor, item, condition, amount);
-      changed = changed || consumed.changed;
-    }
+    const consumed = await consumeEnergyConditions(actor, item, activeConditions, hours);
+    changed = changed || consumed.changed;
   }
 
   if (changed) {
@@ -252,27 +254,70 @@ async function processActorEnergyConsumptionWorldTime(actor = null, deltaSeconds
   }
 }
 
-async function consumeEnergyCondition(actor = null, item = null, condition = {}, amount = 0) {
-  if (!canActivateEnergyConsumption(actor, item, condition)) {
-    await setEnergyConsumptionActive(actor, item, condition.id, false);
-    return { changed: true };
+async function consumeEnergyConditions(actor = null, item = null, conditions = [], hours = 0) {
+  const activeConditions = Array.isArray(conditions) ? conditions : [];
+  const changes = {};
+  const validConditions = [];
+  for (const condition of activeConditions) {
+    if (canActivateEnergyConsumption(actor, item, condition)) {
+      validConditions.push(condition);
+    } else {
+      changes[`system.functions.energyConsumer.activeConditions.${condition.id}`] = false;
+    }
   }
+
+  const costs = validConditions
+    .map(condition => ({
+      condition,
+      amount: Math.max(0, Number(condition.amountPerHour) || 0) * Math.max(0, Number(hours) || 0)
+    }))
+    .filter(entry => entry.amount > 0);
+  if (!costs.length) {
+    const changed = Object.keys(changes).length > 0;
+    if (changed) {
+      const updated = await updateEnergyConsumptionCarrier(
+        actor,
+        item,
+        changes,
+        "energy-consumption-disable-invalid"
+      );
+      return { changed: updated };
+    }
+    return { changed };
+  }
+
   const source = getActiveEnergySourceItem(actor, getEnergyConsumerFunction(item));
   const reserve = getEnergySourceReserveState(source);
   const cachedValue = getCachedEnergyConsumptionReserveValue(item, source, reserve.value);
-  const spend = Math.min(cachedValue, amount);
-  const next = Math.max(0, cachedValue - spend);
-  let changed = false;
-  rememberEnergyConsumptionReserveValue(item, source, next);
-  const persistedNext = roundReserveValueForUpdate(next);
-  if (next <= EPSILON || persistedNext !== roundReserveValueForUpdate(reserve.value)) {
-    await item.update({ "system.functions.energyConsumer.installedSource.reserve.value": persistedNext });
-    changed = true;
+  const plan = planContinuousResourceSpend({
+    current: cachedValue,
+    costs,
+    allowPartial: true
+  });
+  const persistedNext = roundReserveValueForUpdate(plan.remaining);
+  if (
+    plan.remaining <= EPSILON
+    || persistedNext !== roundReserveValueForUpdate(reserve.value)
+  ) {
+    changes["system.functions.energyConsumer.installedSource.reserve.value"] = persistedNext;
   }
-  if (cachedValue + EPSILON < amount || next <= EPSILON) {
-    await setEnergyConsumptionActive(actor, item, condition.id, false);
-    changed = true;
+  if (!plan.available || plan.remaining <= EPSILON) {
+    for (const condition of activeConditions) {
+      changes[`system.functions.energyConsumer.activeConditions.${condition.id}`] = false;
+    }
   }
+
+  const changed = Object.keys(changes).length > 0;
+  if (changed) {
+    const updated = await updateEnergyConsumptionCarrier(
+      actor,
+      item,
+      changes,
+      "energy-consumption-world-time"
+    );
+    if (!updated) return { changed: false };
+  }
+  rememberEnergyConsumptionReserveValue(item, source, plan.remaining);
   return { changed };
 }
 
@@ -302,14 +347,32 @@ function roundReserveValueForUpdate(value = 0) {
 }
 
 async function disableInvalidEnergyConsumption(actor = null, item = null) {
-  let changed = false;
+  const changes = {};
   for (const condition of getEnergyConsumptionConditions(item)) {
     if (!isEnergyConsumptionActive(item, condition.id)) continue;
     if (canActivateEnergyConsumption(actor, item, condition)) continue;
-    await setEnergyConsumptionActive(actor, item, condition.id, false);
-    changed = true;
+    changes[`system.functions.energyConsumer.activeConditions.${condition.id}`] = false;
+  }
+  let changed = Object.keys(changes).length > 0;
+  if (changed) {
+    changed = await updateEnergyConsumptionCarrier(
+      actor,
+      item,
+      changes,
+      "energy-consumption-disable-invalid"
+    );
   }
   if (changed) Hooks.callAll("fallout-maw.energyConsumptionChanged", actor);
+}
+
+async function updateEnergyConsumptionCarrier(actor = null, item = null, changes = {}, reason = "") {
+  const update = createActorItemOrInstalledModuleUpdate(actor, item, changes);
+  if (!update) return false;
+  await executeInventoryMutation({
+    actor,
+    updates: [update]
+  }, { reason });
+  return true;
 }
 
 function renderEnergyConsumptionDialogContent({ actor = null, item = null, selectedConditionId = "", selectedSourceUuid = "" } = {}) {

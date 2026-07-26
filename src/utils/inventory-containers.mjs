@@ -30,7 +30,7 @@ export function getItemType(itemOrSystem = null) {
 export function isContainerItem(itemOrSystem = null) {
   return (
     getItemType(itemOrSystem) === "gear"
-    && hasItemFunction(itemOrSystem, CONTAINER_FUNCTION)
+    && hasItemFunction(itemOrSystem, CONTAINER_FUNCTION, { ignoreBroken: true })
   );
 }
 
@@ -48,6 +48,17 @@ export function isLockedStoragePlacement(placement = null) {
 
 export function isItemInLockedStorage(itemOrSystem = null) {
   return isLockedStoragePlacement(getItemSystem(itemOrSystem)?.placement ?? {});
+}
+
+/**
+ * Resolve the lock-field change required when an Item changes placement
+ * context. Manual locks in ordinary inventory are preserved; only the
+ * system-owned locked-storage transition is automatic.
+ */
+export function getItemLockedStateForPlacementTransition(itemOrSystem = null, targetPlacementMode = "") {
+  if (String(targetPlacementMode ?? "") === LOCKED_STORAGE_PLACEMENT_MODE) return true;
+  if (isItemInLockedStorage(itemOrSystem)) return false;
+  return undefined;
 }
 
 export function isButcheringStoragePlacement(placement = null) {
@@ -694,6 +705,41 @@ export function getAllContainedItems(containerOrId, items, visited = new Set(), 
   return allContents;
 }
 
+export function getItemDeletionClosureIds(ids = [], items = null) {
+  const requestedIds = Array.isArray(ids) ? ids.map(id => String(id ?? "")) : [];
+  const closure = new Set(requestedIds);
+  const queue = [...closure];
+  const childrenByParent = buildContainerChildrenMap(items);
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const parentId = queue[index];
+    for (const child of childrenByParent.get(parentId) ?? []) {
+      const childId = getItemId(child);
+      if (!childId || closure.has(childId)) continue;
+      closure.add(childId);
+      queue.push(childId);
+    }
+  }
+
+  return Array.from(closure);
+}
+
+export function getInventoryContainerIds(items = null) {
+  return new Set(
+    getItemsArray(items)
+      .filter(isContainerItem)
+      .map(getItemId)
+      .filter(Boolean)
+  );
+}
+
+export function isRootInventoryItem(itemOrData = null, items = null, containerIds = null) {
+  const parentId = String(itemOrData?.parentId ?? getItemContainerParentId(itemOrData));
+  if (!parentId) return true;
+  containerIds ??= getInventoryContainerIds(items);
+  return !containerIds.has(parentId);
+}
+
 function buildContainerChildrenMap(items) {
   const childrenByParent = new Map();
   for (const item of getItemsArray(items)) {
@@ -924,22 +970,29 @@ export function inventoryPlacementsOverlap(left, right) {
 }
 
 export function getContextInventoryItems(parentId = ROOT_CONTAINER_ID, items = null) {
+  const itemsArray = getItemsArray(items);
   if (String(parentId ?? ROOT_CONTAINER_ID) === LOCKED_STORAGE_PARENT_ID) {
-    return getItemsArray(items).filter(item => {
+    return itemsArray.filter(item => {
       if (!isInventoryManagedItem(item)) return false;
       return isItemInLockedStorage(item);
     });
   }
   if (String(parentId ?? ROOT_CONTAINER_ID) === BUTCHERING_STORAGE_PARENT_ID) {
-    return getItemsArray(items).filter(item => {
+    return itemsArray.filter(item => {
       if (!isInventoryManagedItem(item)) return false;
       return isItemInButcheringStorage(item);
     });
   }
 
-  return getItemsArray(items).filter(item => {
+  const contextParentId = String(parentId ?? ROOT_CONTAINER_ID);
+  const containerIds = contextParentId ? null : getInventoryContainerIds(itemsArray);
+  return itemsArray.filter(item => {
     if (!isInventoryManagedItem(item)) return false;
-    if (getItemContainerParentId(item) !== String(parentId ?? "")) return false;
+    if (contextParentId) {
+      if (getItemContainerParentId(item) !== contextParentId) return false;
+    } else if (!isRootInventoryItem(item, itemsArray, containerIds)) {
+      return false;
+    }
     const placement = item.system?.placement ?? {};
     return (String(placement.mode ?? "inventory") === "inventory");
   });

@@ -64,7 +64,11 @@ import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerRepairSocket } from "./apps/repair-dialog.mjs";
-import { canStackItems, registerSearchInventorySocket } from "./apps/search-inventory.mjs";
+import {
+  canStackItems,
+  registerSearchInventorySocket,
+  transferItemBetweenActors
+} from "./apps/search-inventory.mjs";
 import { initializeCraftRecipeWorldIndex } from "./apps/craft-window.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerDroppedItemHooks } from "./items/dropped-items.mjs";
@@ -121,6 +125,11 @@ import {
 import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
 import { toInteger } from "./utils/numbers.mjs";
 import { resolveWorldItemSync } from "./utils/world-items.mjs";
+import { executeInventoryMutation } from "./inventory/mutation.mjs";
+import {
+  registerInventoryRepairHooks,
+  repairWorldInventories
+} from "./inventory/migration.mjs";
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
 
@@ -192,6 +201,7 @@ Hooks.once("init", () => {
   registerTrapPlacementControlHooks();
   registerLightNetworkHooks();
   registerActorContainerHooks();
+  registerInventoryRepairHooks();
   registerStealthHooks();
   registerGlobalMapSystem();
 });
@@ -205,6 +215,8 @@ Hooks.once("ready", async () => {
   await finalizeSystemSettings();
   await finalizeSettingsPresetStartup();
   await migrateWorldConsciousnessData();
+  await syncLoadedActorNaturalRaceItems();
+  await repairWorldInventories();
   initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
   refreshSkillCheckControlButton();
@@ -238,7 +250,6 @@ Hooks.once("ready", async () => {
   syncTokenActionHud();
   syncTravelGroupHud();
   initializeCombatCarousel();
-  await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();
   await syncPeriodicDamageRegionEffects();
   await recoverFoundrySystemEventEffects();
@@ -263,8 +274,8 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
     return false;
   }
 
-  const droppedItem = resolveWorldItemSync(data.uuid);
-  if (!droppedItem) return false;
+  const droppedItem = await Item.implementation.fromDropData(data).catch(() => null);
+  if (!(droppedItem instanceof Item)) return false;
 
   const itemData = droppedItem.toObject();
   if (getItemMaxStack(itemData) > 1) {
@@ -273,14 +284,34 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
     foundry.utils.setProperty(itemData, "system.quantity", quantity);
   }
 
+  const sourceActor = droppedItem.parent?.documentName === "Actor"
+    ? droppedItem.parent
+    : null;
+  if (sourceActor && sourceActor.uuid !== actor.uuid) {
+    await transferItemBetweenActors({
+      sourceActor,
+      targetActor: actor,
+      sourceItem: droppedItem,
+      targetMode: "inventory",
+      targetParentId: ROOT_CONTAINER_ID,
+      quantity: getItemQuantity(itemData),
+      sourceStackIndex: Math.max(0, toInteger(data.stackIndex)),
+      allowLocked: true
+    });
+    return false;
+  }
+
   const dropPlan = planActorDropItem(actor, itemData);
   if (!dropPlan) {
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
     return false;
   }
 
-  if (dropPlan.updates.length) await actor.updateEmbeddedDocuments("Item", dropPlan.updates);
-  if (dropPlan.creates.length) await actor.createEmbeddedDocuments("Item", dropPlan.creates);
+  await executeInventoryMutation({
+    actor,
+    updates: dropPlan.updates,
+    creates: dropPlan.creates
+  }, { reason: "canvas-drop" });
   return false;
 });
 

@@ -17,17 +17,14 @@ import { getSkillSettings } from "../settings/accessors.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
 import { getFirstAidChargesData, getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
-import {
-  createItemStackPartRemovalUpdate,
-  getItemQuantity,
-  usesVirtualInventoryStacks
-} from "../utils/inventory-containers.mjs";
+import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getHealingResolutionActiveUseKeys } from "../abilities/active-use-keys.mjs";
 import {
   commitPreparedActiveUseOperations,
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
+import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FIRST_AID_SOCKET = `system.${SYSTEM_ID}`;
@@ -821,41 +818,14 @@ async function applyCriticalFailureDamage(actor, firstAid = {}, source = {}) {
 }
 
 async function spendFirstAidItem(item, amount = 1, updateOptions = {}) {
-  const quantity = getItemQuantity(item);
-  const charges = getFirstAidChargesData(item);
-  const cost = Math.max(1, toInteger(amount));
-  if (charges.max <= 1) {
-    if (usesVirtualInventoryStacks(item)) {
-      const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
-      const { _id, ...changes } = updateData;
-      return item.update(changes, updateOptions);
-    }
-    const next = Math.max(0, quantity - 1);
-    if (next <= 0) return item.delete(updateOptions);
-    return item.update({ "system.quantity": next }, updateOptions);
-  }
-
-  const remainingCharges = Math.max(0, charges.value - cost);
-  if (remainingCharges > 0) {
-    return item.update({ "system.functions.firstAid.charges.value": remainingCharges }, updateOptions);
-  }
-
-  const nextQuantity = Math.max(0, quantity - 1);
-  if (nextQuantity <= 0) return item.delete(updateOptions);
-  if (usesVirtualInventoryStacks(item)) {
-    const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
-    const { _id, ...changes } = updateData;
-    return item.update({
-      ...changes,
-      "system.functions.firstAid.charges.value": charges.max
-    }, updateOptions);
-  }
-  return item.update({
-    "system.quantity": nextQuantity,
-    "system.functions.firstAid.charges.value": charges.max
-  }, updateOptions);
+  return commitInventoryItemConsumption({
+    item,
+    amount,
+    charges: getFirstAidChargesData(item),
+    chargePath: "system.functions.firstAid.charges.value",
+    documentOptions: updateOptions,
+    reason: "first-aid-consume"
+  });
 }
 
 function createFirstAidDocumentOptions(chainRef = null) {

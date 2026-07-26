@@ -46,6 +46,59 @@ test("an attempt is recorded only after the resource and action-cost path comple
   assert.match(spend, /const weaponAttempted = this\.shouldSpendWeaponResourcesForAttempt\(\)/);
 });
 
+test("weapon Item resources commit through one shared inventory transaction", () => {
+  const spend = sliceBetween(
+    "async function spendWeaponResources",
+    "export function canPerformWeaponActionAgainstToken"
+  );
+  assert.match(spend, /planInventoryItemConsumption\(/);
+  assert.match(spend, /createActorItemOrInstalledModuleUpdate\(/);
+  assert.equal((spend.match(/executeInventoryMutation\(/g) ?? []).length, 1);
+  assert.doesNotMatch(spend, /\.update\(|\.delete\(|EmbeddedDocuments\("Item"/);
+  assert.match(spend, /reason:\s*"weapon-resource-spend"/);
+});
+
+test("delayed volley arming compensates its world documents when the Item transaction fails", () => {
+  const arm = sliceBetween(
+    "export async function armDelayedVolleyWeapon",
+    "export function buildWeaponExplosionDamageRequests"
+  );
+  assert.match(arm, /executeInventoryMutation\(/);
+  assert.match(arm, /rollbackDelayedThrownItemWorldDocuments\(delayedThrownItemId\)/);
+  assert.doesNotMatch(arm, /weapon\.update\(/);
+});
+
+test("a rejected or stale weapon resource spend cancels the attack before damage", () => {
+  const spend = sliceBetween(
+    "async spendCurrentAttackCosts",
+    "async executeAgainstToken"
+  );
+  assert.match(spend, /const resourcesSpent = await spendWeaponResources/);
+  assert.match(spend, /if \(!resourcesSpent\)[\s\S]*?this\.attackCanceledByReaction = true;[\s\S]*?return false;/);
+});
+
+test("quantity projectiles exist before Item spend and are tombstoned on rejection", () => {
+  const spend = sliceBetween(
+    "async spendCurrentAttackCosts",
+    "async executeAgainstToken"
+  );
+  const createTile = spend.indexOf("await createSpentQuantityItemTile");
+  const spendItems = spend.indexOf("await spendWeaponResources");
+  assert.ok(createTile >= 0 && spendItems > createTile);
+  assert.match(spend, /catch \(error\)[\s\S]*?rollbackSpentQuantityItemTile\(spentQuantityTileOperationId\)[\s\S]*?throw error;/);
+  assert.match(source, /deleteThrownItemTileByOperation\(id\)/);
+});
+
+test("late delayed-Region creation observes the shared world tombstone", () => {
+  const createRegion = sliceBetween(
+    "async function createDelayedVolleyExplosionRegionNow",
+    "function createDelayedVolleySourceContextSnapshot"
+  );
+  assert.match(createRegion, /registerDelayedThrownItemWorldOperation\(/);
+  assert.ok((createRegion.match(/isDelayedThrownItemWorldOperationCancelled\(/g) ?? []).length >= 3);
+  assert.match(createRegion, /deleteDelayedVolleyRegionIfMatching\(/);
+});
+
 test("ordinary detection resolves after outcome publication and completed damage", () => {
   const notify = sliceBetween(
     "async notifyAttackResolved",

@@ -15,7 +15,6 @@ import {
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { applyDestroyedLimbConsequences } from "../combat/damage-hub.mjs";
 import {
   ensureConstructPartSlots,
@@ -24,6 +23,7 @@ import {
   getInstalledConstructPartForSlot,
   isInstalledConstructPartItem
 } from "../utils/construct-parts.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 
 export const DROPPED_ITEMS_FLAG = "droppedItems";
 export const DROPPED_ITEMS_ACTOR_FLAG = "droppedItemsActor";
@@ -112,7 +112,14 @@ async function performActorInventoryItemDrop(payload = {}, requesterUserId = "")
     stackIndex
   });
   const tile = await addDroppedItemToScene(actor, dropped, { scene, position });
-  await removeDroppedItemFromActor(actor, item, dropped.quantity, { stackIndex });
+  try {
+    await removeDroppedItemFromActor(actor, item, dropped.quantity, { stackIndex });
+  } catch (error) {
+    await rollbackDroppedItemEntry(tile, dropped.entryId).catch(rollbackError => {
+      console.error(`${SYSTEM_ID} | Dropped item destination rollback failed`, rollbackError);
+    });
+    throw error;
+  }
   if (constructPartSlotId && !getInstalledConstructPartForSlot(actor, constructPartSlotId)) {
     await applyDestroyedLimbConsequences(actor, [getConstructPartLimbKey(constructPartSlotId)], {
       ignoreInstalledProsthesis: true
@@ -320,7 +327,12 @@ async function performDroppedItemsActorEnsure(payload = {}, requesterUserId = ""
 
   if (state.items.length) {
     const createData = buildDroppedItemCreateData(actor, state.items);
-    if (createData.length) await actor.createEmbeddedDocuments("Item", createData, { keepId: true, render: false });
+    if (createData.length) {
+      await executeInventoryMutation({
+        actor,
+        creates: createData
+      }, { reason: "materialize-dropped-items", render: false });
+    }
   }
 
   await tile.update({
@@ -336,17 +348,32 @@ function buildDroppedItemCreateData(actor, entries = []) {
   const creates = [];
   const reservedPlacements = [];
   for (const entry of entries) {
+    const entryId = String(entry?.entryId ?? "");
+    if (
+      entryId
+      && actor.items?.some?.(item => item.getFlag?.(SYSTEM_ID, "droppedEntryId") === entryId)
+    ) continue;
+    const startIndex = creates.length;
     const itemData = foundry.utils.deepClone(entry.itemData);
     const quantity = Math.max(1, toInteger(entry.quantity) || getItemQuantity(itemData));
     foundry.utils.setProperty(itemData, "system.quantity", quantity);
     if (isContainerItem(itemData)) {
       const containerCreates = buildDroppedContainerCreateData(actor, itemData, entry.containedItems ?? [], reservedPlacements);
       creates.push(...containerCreates);
+      markDroppedEntryCreates(creates, startIndex, entryId);
       continue;
     }
     creates.push(...buildDroppedStackCreateData(actor, itemData, quantity, reservedPlacements));
+    markDroppedEntryCreates(creates, startIndex, entryId);
   }
   return creates;
+}
+
+function markDroppedEntryCreates(creates, startIndex, entryId) {
+  if (!entryId) return;
+  for (let index = startIndex; index < creates.length; index += 1) {
+    foundry.utils.setProperty(creates[index], `flags.${SYSTEM_ID}.droppedEntryId`, entryId);
+  }
 }
 
 function buildDroppedStackCreateData(actor, itemData, quantity = 1, reservedPlacements = []) {
@@ -518,31 +545,37 @@ function normalizeDroppedContainedItems(containedItems = []) {
 
 async function removeDroppedItemFromActor(actor, item, quantity = 0, { stackIndex = 0 } = {}) {
   if (isContainerItem(item)) {
-    const ids = [
-      item.id,
-      ...getAllContainedItems(item.id, actor.items).map(contained => contained.id)
-    ].filter(Boolean);
-    if (ids.length) await actor.deleteEmbeddedDocuments("Item", ids);
-    return;
+    return executeInventoryMutation({
+      actor,
+      deletes: [item.id]
+    }, { reason: "drop-container" });
   }
 
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const amount = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
   if (amount >= sourceQuantity) {
-    await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    return;
+    return executeInventoryMutation({
+      actor,
+      deletes: [item.id]
+    }, { reason: "drop" });
   }
 
   if (usesVirtualInventoryStacks(item)) {
     const update = createItemStackPartRemovalUpdate(item, amount, stackIndex);
-    if (update) await actor.updateEmbeddedDocuments("Item", [update]);
-    return;
+    if (!update) return null;
+    return executeInventoryMutation({
+      actor,
+      updates: [update]
+    }, { reason: "drop-stack" });
   }
 
-  await actor.updateEmbeddedDocuments("Item", [{
-    _id: item.id,
-    "system.quantity": sourceQuantity - amount
-  }]);
+  return executeInventoryMutation({
+    actor,
+    updates: [{
+      _id: item.id,
+      "system.quantity": sourceQuantity - amount
+    }]
+  }, { reason: "drop" });
 }
 
 async function addDroppedItemToScene(actor, droppedEntry, {
@@ -618,11 +651,12 @@ async function appendDroppedItemToTile(tile, droppedEntry) {
   const state = getDroppedItemsFlag(tile);
   const actor = game.user?.isGM ? await resolveDroppedActor(state.actorUuid) : null;
   if (actor) {
-    if (isContainerItem(droppedEntry.itemData)) {
-      const createData = buildDroppedItemCreateData(actor, [droppedEntry]);
-      if (createData.length) await actor.createEmbeddedDocuments("Item", createData, { keepId: true, render: false });
-    } else {
-      await grantActorInventoryItem(actor, droppedEntry.itemData, { quantity: droppedEntry.quantity });
+    const createData = buildDroppedItemCreateData(actor, [droppedEntry]);
+    if (createData.length) {
+      await executeInventoryMutation({
+        actor,
+        creates: createData
+      }, { reason: "append-dropped-item", render: false });
     }
     await tile.update({
       name: "Выброшенные предметы",
@@ -639,6 +673,36 @@ async function appendDroppedItemToTile(tile, droppedEntry) {
     [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.updatedAt`]: Date.now()
   });
   return tile;
+}
+
+async function rollbackDroppedItemEntry(tile, entryId = "") {
+  const normalizedEntryId = String(entryId ?? "");
+  if (!tile || !normalizedEntryId) return;
+  const state = getDroppedItemsFlag(tile);
+  const actor = await resolveDroppedActor(state.actorUuid);
+  if (actor) {
+    const createdIds = actor.items.contents
+      .filter(item => item.getFlag?.(SYSTEM_ID, "droppedEntryId") === normalizedEntryId)
+      .map(item => item.id);
+    if (createdIds.length) {
+      await executeInventoryMutation({
+        actor,
+        deletes: createdIds
+      }, { reason: "rollback-drop", render: false });
+    }
+  }
+
+  const remainingItems = state.items.filter(entry => String(entry?.entryId ?? "") !== normalizedEntryId);
+  if (!state.actorUuid && !remainingItems.length) {
+    await tile.delete();
+    return;
+  }
+  if (remainingItems.length !== state.items.length) {
+    await tile.update({
+      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.items`]: remainingItems,
+      [`flags.${SYSTEM_ID}.${DROPPED_ITEMS_FLAG}.updatedAt`]: Date.now()
+    });
+  }
 }
 
 async function createDroppedItemsTile(scene, position, droppedEntry) {

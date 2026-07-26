@@ -1,11 +1,8 @@
 import { requestDamageApplication, requestDamageApplications, requestFirstAidEffect, requestFirstAidNeedChanges } from "../combat/damage-hub.mjs";
+import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
 import { addOrganismDevelopment } from "../races/organism-development.mjs";
 import { getNeedChangeChargesData, getNeedChangeFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
-import {
-  createItemStackPartRemovalUpdate,
-  getItemQuantity,
-  usesVirtualInventoryStacks
-} from "../utils/inventory-containers.mjs";
+import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export async function useNeedChangeItem({
@@ -134,41 +131,14 @@ async function applyNeedChangeDamages(actor, damages = [], source = {}) {
 }
 
 async function spendNeedChangeItem(item, amount = 1, updateOptions = {}) {
-  const quantity = getItemQuantity(item);
-  const charges = getNeedChangeChargesData(item);
-  const cost = Math.max(1, toInteger(amount));
-  if (charges.max <= 1) {
-    if (usesVirtualInventoryStacks(item)) {
-      const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
-      const { _id, ...changes } = updateData;
-      return item.update(changes, updateOptions);
-    }
-    const next = Math.max(0, quantity - 1);
-    if (next <= 0) return item.delete(updateOptions);
-    return item.update({ "system.quantity": next }, updateOptions);
-  }
-
-  const remainingCharges = Math.max(0, charges.value - cost);
-  if (remainingCharges > 0) {
-    return item.update({ "system.functions.needChange.charges.value": remainingCharges }, updateOptions);
-  }
-
-  const nextQuantity = Math.max(0, quantity - 1);
-  if (nextQuantity <= 0) return item.delete(updateOptions);
-  if (usesVirtualInventoryStacks(item)) {
-    const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(updateOptions);
-    const { _id, ...changes } = updateData;
-    return item.update({
-      ...changes,
-      "system.functions.needChange.charges.value": charges.max
-    }, updateOptions);
-  }
-  return item.update({
-    "system.quantity": nextQuantity,
-    "system.functions.needChange.charges.value": charges.max
-  }, updateOptions);
+  return commitInventoryItemConsumption({
+    item,
+    amount,
+    charges: getNeedChangeChargesData(item),
+    chargePath: "system.functions.needChange.charges.value",
+    documentOptions: updateOptions,
+    reason: "need-change-consume"
+  });
 }
 
 function createNeedChangeDocumentOptions(chainRef = null) {

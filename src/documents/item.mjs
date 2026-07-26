@@ -8,6 +8,7 @@ import {
   getContainerContents,
   getContainerInventoryGridOptions,
   getContextInventoryItems,
+  getItemDeletionClosureIds,
   getItemContainerParentId,
   getItemFootprint,
   getItemStackParts,
@@ -15,6 +16,7 @@ import {
   isContainerItem,
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
+  validateInventoryTree,
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import {
@@ -22,6 +24,11 @@ import {
   getActorRootInventoryGridOptions
 } from "../utils/actor-display-data.mjs";
 import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import {
+  INVENTORY_ATOMIC_OPTION,
+  INVENTORY_EXPECTED_IDS_OPTION
+} from "../inventory/constants.mjs";
+import { validateActorNonInventoryPlacementState } from "../inventory/repair.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
 import { handleItemDamageUpdate, prepareItemDamageUpdate } from "../combat/damage-hub.mjs";
@@ -36,6 +43,49 @@ const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 export class FalloutMaWItem extends Item {
   static TRAUMA_CREATE_OPTION = TRAUMA_CREATE_OPTION;
   static DISEASE_CREATE_OPTION = DISEASE_CREATE_OPTION;
+
+  static async deleteDocuments(ids = [], operation = {}) {
+    const actor = await getInventoryOperationActor(operation);
+    if (!actor) return super.deleteDocuments(ids, operation);
+
+    const requestedIds = operation.deleteAll
+      ? Array.from(actor.items ?? [], item => item.id)
+      : normalizeDeletionIds(ids);
+    const expectedIds = operation[INVENTORY_EXPECTED_IDS_OPTION];
+    const deletionIds = (
+      operation[INVENTORY_ATOMIC_OPTION] === true
+      && Array.isArray(expectedIds)
+    )
+      ? normalizeDeletionIds(expectedIds)
+      : getItemDeletionClosureIds(requestedIds, actor.items);
+    operation[INVENTORY_ATOMIC_OPTION] = true;
+    operation[INVENTORY_EXPECTED_IDS_OPTION] = deletionIds;
+
+    const deleted = await super.deleteDocuments(operation.deleteAll ? [] : deletionIds, operation);
+    assertAtomicInventoryOperationIds(deleted, operation, "delete");
+    return deleted;
+  }
+
+  static async _preCreateOperation(documents, operation, user) {
+    const allowed = await super._preCreateOperation(documents, operation, user);
+    assertAtomicInventoryOperationAllowed(allowed, operation, "create");
+    assertAtomicInventoryOperationIds(documents, operation, "create");
+    return allowed;
+  }
+
+  static async _preUpdateOperation(documents, operation, user) {
+    const allowed = await super._preUpdateOperation(documents, operation, user);
+    assertAtomicInventoryOperationAllowed(allowed, operation, "update");
+    assertAtomicInventoryOperationIds(documents, operation, "update");
+    return allowed;
+  }
+
+  static async _preDeleteOperation(documents, operation, user) {
+    const allowed = await super._preDeleteOperation(documents, operation, user);
+    assertAtomicInventoryOperationAllowed(allowed, operation, "delete");
+    assertAtomicInventoryOperationIds(documents, operation, "delete");
+    return allowed;
+  }
 
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
     const requestedTypes = Array.isArray(dialogOptions.types) ? dialogOptions.types : MANUALLY_CREATABLE_ITEM_TYPES;
@@ -61,16 +111,18 @@ export class FalloutMaWItem extends Item {
   }
 
   async _preCreate(data, options, user) {
-    if ((await super._preCreate(data, options, user)) === false) return false;
+    if ((await super._preCreate(data, options, user)) === false) {
+      return cancelInventoryDocumentOperation(this, options, "create");
+    }
     prepareItemDamageUpdate(this, data, options, { operation: "create" });
     this.updateSource(getCleanSlotRequirementSource(this));
     if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
       ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
-      return false;
+      return cancelInventoryDocumentOperation(this, options, "create");
     }
     if (this.type === "disease" && options?.[DISEASE_CREATE_OPTION] !== true) {
       ui.notifications?.warn?.("Болезни создаются только системой.");
-      return false;
+      return cancelInventoryDocumentOperation(this, options, "create");
     }
     if (this.type === "trauma") {
       this.updateSource({
@@ -121,10 +173,13 @@ export class FalloutMaWItem extends Item {
       });
     }
     if (this.parent?.documentName === "Actor" && usesVirtualInventoryStacks(this)) {
-      const stackParts = prepareUpdatedStackParts(this, this.toObject(), { repack: true });
+      const stackParts = prepareUpdatedStackParts(this, this.toObject(), {
+        repack: true,
+        validatePositioned: options?.[INVENTORY_ATOMIC_OPTION] !== true
+      });
       if (!stackParts) {
         ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-        return false;
+        return cancelInventoryDocumentOperation(this, options, "create");
       }
       const primaryPart = stackParts[0] ?? null;
       this.updateSource({
@@ -144,7 +199,9 @@ export class FalloutMaWItem extends Item {
   }
 
   async _preUpdate(changes, options, user) {
-    if ((await super._preUpdate(changes, options, user)) === false) return false;
+    if ((await super._preUpdate(changes, options, user)) === false) {
+      return cancelInventoryDocumentOperation(this, options, "update");
+    }
 
     const requestedSource = foundry.utils.mergeObject(this.toObject(), changes, { inplace: false });
     Object.assign(changes, getSlotRequirementDeletionUpdates(requestedSource));
@@ -173,7 +230,7 @@ export class FalloutMaWItem extends Item {
       });
       if (!stackParts) {
         ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-        return false;
+        return cancelInventoryDocumentOperation(this, options, "update");
       }
       foundry.utils.setProperty(changes, "system.stackParts", stackParts);
       const primaryPart = stackParts[0] ?? null;
@@ -185,11 +242,23 @@ export class FalloutMaWItem extends Item {
     }
 
     prepareItemDamageUpdate(this, changes, options, { operation: "update" });
+    if (
+      options?.[INVENTORY_ATOMIC_OPTION] !== true
+      && shouldValidateProjectedInventoryUpdate(this, changes)
+    ) {
+      const validation = validateProjectedActorInventoryUpdate(this, changes);
+      if (!validation.valid) {
+        warnInventoryValidationFailure(validation);
+        return false;
+      }
+    }
     return undefined;
   }
 
   async _preDelete(options, user) {
-    if ((await super._preDelete(options, user)) === false) return false;
+    if ((await super._preDelete(options, user)) === false) {
+      return cancelInventoryDocumentOperation(this, options, "delete");
+    }
     prepareItemDamageUpdate(this, this.toObject(), options, { operation: "delete" });
     return undefined;
   }
@@ -228,6 +297,122 @@ export class FalloutMaWItem extends Item {
   get totalWeight() {
     return getItemTotalWeight(this, this.actor?.items ?? []);
   }
+}
+
+async function getInventoryOperationActor(operation = {}) {
+  if (operation.parent?.documentName === "Actor") return operation.parent;
+  if (operation.parent || !operation.parentUuid) return null;
+
+  const resolveUuid = globalThis.fromUuid ?? foundry.utils.fromUuid;
+  const parent = await resolveUuid?.(operation.parentUuid);
+  if (parent?.documentName !== "Actor") return null;
+  operation.parent = parent;
+  return parent;
+}
+
+function normalizeDeletionIds(ids = []) {
+  if (!Array.isArray(ids)) throw new TypeError("Item deletion IDs must be an Array.");
+  const normalized = ids.map(id => String(id ?? ""));
+  if (normalized.some(id => !id)) throw new TypeError("Item deletion IDs must be non-empty strings.");
+  return Array.from(new Set(normalized));
+}
+
+function assertAtomicInventoryOperationAllowed(allowed, operation, action) {
+  if (operation?.[INVENTORY_ATOMIC_OPTION] !== true || allowed !== false) return;
+  throw new Error(`Atomic inventory ${action} operation was rejected.`);
+}
+
+function assertAtomicInventoryOperationIds(documents, operation, action) {
+  if (operation?.[INVENTORY_ATOMIC_OPTION] !== true) return;
+
+  const expectedIds = operation?.[INVENTORY_EXPECTED_IDS_OPTION];
+  if (
+    !Array.isArray(expectedIds)
+    || expectedIds.some(id => typeof id !== "string" || !id)
+    || new Set(expectedIds).size !== expectedIds.length
+  ) {
+    throw new TypeError(`Atomic inventory ${action} operation requires unique expected Item IDs.`);
+  }
+
+  const values = Array.isArray(documents) ? documents : Array.from(documents ?? []);
+  const actualIds = values.map(value => (
+    typeof value === "string" ? value : String(value?.id ?? value?._id ?? "")
+  ));
+  const actualIdSet = new Set(actualIds);
+  const expectedIdSet = new Set(expectedIds);
+  const isExactMatch = (
+    actualIds.length === expectedIds.length
+    && actualIdSet.size === actualIds.length
+    && actualIds.every(id => id && expectedIdSet.has(id))
+  );
+  if (isExactMatch) return;
+
+  const missing = expectedIds.filter(id => !actualIdSet.has(id));
+  const unexpected = actualIds.filter(id => !expectedIdSet.has(id));
+  const details = [
+    missing.length ? `missing: ${missing.join(", ")}` : "",
+    unexpected.length ? `unexpected: ${unexpected.join(", ")}` : "",
+    actualIdSet.size !== actualIds.length ? "duplicate result IDs" : ""
+  ].filter(Boolean).join("; ");
+  throw new Error(
+    `Atomic inventory ${action} operation changed its requested Item set`
+    + (details ? ` (${details}).` : ".")
+  );
+}
+
+function cancelInventoryDocumentOperation(item, options, action) {
+  if (options?.[INVENTORY_ATOMIC_OPTION] !== true) return false;
+  throw new Error(`Atomic inventory ${action} was rejected for Item ${item?.id ?? "(pending)"}.`);
+}
+
+function shouldValidateProjectedInventoryUpdate(item, changes = {}) {
+  if (item.parent?.documentName !== "Actor") return false;
+  const inventoryPaths = [
+    "type",
+    "system.container",
+    "system.functions.container",
+    "system.itemFunction",
+    "system.maxStack",
+    "system.placement",
+    "system.quantity",
+    "system.stackParts",
+    "system.weight"
+  ];
+  return Object.keys(foundry.utils.flattenObject(changes)).some(path => {
+    const canonicalPath = path.replaceAll(".-=", ".");
+    return inventoryPaths.some(prefix => (
+      canonicalPath === prefix || canonicalPath.startsWith(`${prefix}.`)
+    ));
+  });
+}
+
+function validateProjectedActorInventoryUpdate(item, changes = {}) {
+  const actor = item.parent;
+  const projectedItems = Array.from(actor.items ?? [], candidate => {
+    const source = candidate.toObject();
+    if (candidate.id !== item.id) return source;
+    return foundry.utils.mergeObject(source, changes, {
+      applyOperators: true,
+      inplace: false
+    });
+  });
+  const raceId = String(actor.system?.creature?.raceId ?? "");
+  const race = getCreatureOptions().races.find(entry => String(entry.id) === raceId) ?? null;
+  const treeValidation = validateInventoryTree(projectedItems, getActorInventoryGridDimensions(actor, race), {
+    rootOptions: getActorRootInventoryGridOptions(actor, "")
+  });
+  if (!treeValidation.valid) return treeValidation;
+  return validateActorNonInventoryPlacementState(actor, projectedItems, race);
+}
+
+function warnInventoryValidationFailure(validation = {}) {
+  let messageKey = "FALLOUTMAW.Messages.InventoryNoSpace";
+  if (validation.reason === "recursive") {
+    messageKey = "FALLOUTMAW.Messages.ContainerRecursiveError";
+  } else if (validation.reason === "max-load") {
+    messageKey = "FALLOUTMAW.Messages.ContainerMaxLoadExceeded";
+  }
+  ui.notifications?.warn?.(game.i18n.localize(messageKey));
 }
 
 function prepareUpdatedStackParts(item, nextSource, { repack = false, validatePositioned = true } = {}) {

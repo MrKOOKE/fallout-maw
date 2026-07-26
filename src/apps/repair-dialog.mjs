@@ -10,6 +10,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const REPAIR_SOCKET = `system.${SYSTEM_ID}`;
@@ -565,13 +566,18 @@ async function performRepair({
   const completed = result.finalValue >= maxValue;
   const finalValue = Math.min(maxValue, result.finalValue);
   const updatedTargetContext = await applyRepairToTarget(targetContext, {
+    sourceActor,
     itemId,
+    instrumentId: instrument.id,
+    instrumentToolKey: method.toolKey,
+    expectedCondition: initialValue,
     finalValue,
+    expectedSupply: toInteger(tool.supply?.value),
+    remainingSupply: result.remainingCharges,
     toolKey
   });
   if (!updatedTargetContext) return undefined;
 
-  await instrument.update({ [`system.functions.tools.${method.toolKey}.supply.value`]: result.remainingCharges });
   await postRepairResultChat(sourceActor, {
     repairItem,
     instrument,
@@ -714,17 +720,39 @@ function calculateRepairResult({ method, tool, availableCharges, valueForCheck, 
   return { condition, chargesUsed, efficiency };
 }
 
-async function applyRepairToTarget(targetContext, { itemId, finalValue, toolKey = "repair" }) {
+async function applyRepairToTarget(targetContext, {
+  sourceActor,
+  itemId,
+  instrumentId,
+  instrumentToolKey,
+  expectedCondition,
+  finalValue,
+  expectedSupply,
+  remainingSupply,
+  toolKey = "repair"
+}) {
   const actorUuid = String(targetContext?.actorUuid ?? "");
-  if (!actorUuid) {
+  const sourceActorUuid = String(sourceActor?.uuid ?? "");
+  if (!actorUuid || !sourceActorUuid) {
     ui.notifications.warn("Не удалось определить цель ремонта.");
     return null;
   }
 
   const actor = await fromUuid(actorUuid);
-  if (actor && canUseActorLocally(actor)) {
+  if (actor && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
     try {
-      return await applyRepairToActor(actor, { itemId, finalValue, toolKey });
+      return await commitRepairToActors({
+        sourceActor,
+        targetActor: actor,
+        itemId,
+        instrumentId,
+        instrumentToolKey,
+        expectedCondition,
+        finalValue,
+        expectedSupply,
+        remainingSupply,
+        contextToolKey: toolKey
+      });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Repair local apply failed`, error);
       ui.notifications.error(`Не удалось применить ремонт: ${error.message}`);
@@ -741,8 +769,14 @@ async function applyRepairToTarget(targetContext, { itemId, finalValue, toolKey 
   try {
     const result = await requestRepairSocket("applyRepair", {
       actorUuid,
+      sourceActorUuid,
       itemId,
+      instrumentId,
+      instrumentToolKey,
+      expectedCondition,
       finalValue,
+      expectedSupply,
+      remainingSupply,
       toolKey
     }, gm);
     return result?.targetContext ?? null;
@@ -753,15 +787,64 @@ async function applyRepairToTarget(targetContext, { itemId, finalValue, toolKey 
   }
 }
 
-async function applyRepairToActor(actor, { itemId, finalValue, toolKey = "repair" }) {
-  const item = actor?.items?.get(String(itemId ?? ""));
+async function commitRepairToActors({
+  sourceActor,
+  targetActor,
+  itemId,
+  instrumentId,
+  instrumentToolKey,
+  expectedCondition,
+  finalValue,
+  expectedSupply,
+  remainingSupply,
+  contextToolKey = "repair"
+}) {
+  const item = targetActor?.items?.get(String(itemId ?? ""));
   if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) throw new Error("предмет ремонта не найден");
 
   const condition = getConditionFunction(item);
   const maxValue = Math.max(0, toInteger(condition.max));
+  const currentValue = Math.min(maxValue, Math.max(0, toInteger(condition.value)));
   const nextValue = Math.min(maxValue, Math.max(0, toInteger(finalValue)));
-  await item.update({ "system.functions.condition.value": nextValue });
-  return buildTargetContext(actor, null, toolKey);
+  if (currentValue !== toInteger(expectedCondition)) {
+    throw createRepairStaleError("Состояние ремонтируемого предмета изменилось.");
+  }
+  if (nextValue < currentValue) throw new Error("Ремонт не может уменьшать состояние предмета.");
+
+  const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
+  const toolKey = String(instrumentToolKey ?? "").trim();
+  const tool = getToolFunction(instrument, toolKey);
+  const currentSupply = Math.max(0, toInteger(tool?.supply?.value));
+  const expected = Math.max(0, toInteger(expectedSupply));
+  const remaining = Math.max(0, toInteger(remainingSupply));
+  if (!instrument || instrument.type !== "gear" || !tool?.enabled) {
+    throw new Error("инструмент ремонта не найден");
+  }
+  if (currentSupply !== expected) {
+    throw createRepairStaleError("Запас инструмента изменился.");
+  }
+  if (remaining >= currentSupply) throw new Error("Ремонт должен расходовать запас инструмента.");
+
+  await executeInventoryMutation([
+    {
+      actor: targetActor,
+      updates: [{ _id: item.id, "system.functions.condition.value": nextValue }]
+    },
+    {
+      actor: sourceActor,
+      updates: [{
+        _id: instrument.id,
+        [`system.functions.tools.${toolKey}.supply.value`]: remaining
+      }]
+    }
+  ], { reason: "repair-with-tool" });
+  return buildTargetContext(targetActor, null, contextToolKey);
+}
+
+function createRepairStaleError(message) {
+  const error = new Error(message);
+  error.code = "inventory-stale";
+  return error;
 }
 
 function buildTargetContext(actor, token = null, defaultToolKey = "repair") {
@@ -874,7 +957,11 @@ async function handleRepairSocketMessage(message = {}) {
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
 
   try {
-    const result = await handleRepairSocketRequest(message.action, message.payload ?? {});
+    const result = await handleRepairSocketRequest(
+      message.action,
+      message.payload ?? {},
+      message.requesterUserId
+    );
     game.socket.emit(REPAIR_SOCKET, {
       scope: REPAIR_SOCKET_SCOPE,
       type: "response",
@@ -896,7 +983,7 @@ async function handleRepairSocketMessage(message = {}) {
   }
 }
 
-async function handleRepairSocketRequest(action, payload = {}) {
+async function handleRepairSocketRequest(action, payload = {}, requesterUserId = "") {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
   if (!actor) throw new Error("цель не найдена");
   const toolKey = String(payload.toolKey ?? "repair") || "repair";
@@ -912,16 +999,34 @@ async function handleRepairSocketRequest(action, payload = {}) {
   }
 
   if (action === "applyRepair") {
+    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? ""));
+    if (!sourceActor) throw new Error("источник инструмента не найден");
+    assertSocketActorOwner(sourceActor, requesterUserId);
     return {
-      targetContext: await applyRepairToActor(actor, {
+      targetContext: await commitRepairToActors({
+        sourceActor,
+        targetActor: actor,
         itemId: payload.itemId,
+        instrumentId: payload.instrumentId,
+        instrumentToolKey: payload.instrumentToolKey,
+        expectedCondition: payload.expectedCondition,
         finalValue: payload.finalValue,
-        toolKey
+        expectedSupply: payload.expectedSupply,
+        remainingSupply: payload.remainingSupply,
+        contextToolKey: toolKey
       })
     };
   }
 
   throw new Error(`неизвестное действие ремонта: ${action}`);
+}
+
+function assertSocketActorOwner(actor, requesterUserId) {
+  const user = game.users?.get?.(String(requesterUserId ?? ""))
+    ?? (game.users?.contents ?? []).find(entry => entry.id === requesterUserId);
+  if (!user || (!user.isGM && !actor?.testUserPermission?.(user, "OWNER"))) {
+    throw new Error("нет прав на использование инструмента");
+  }
 }
 
 async function postRepairResultChat(actor, { repairItem, instrument, method, initialValue, finalValue, maxValue, spentCharges, entries, completed }) {

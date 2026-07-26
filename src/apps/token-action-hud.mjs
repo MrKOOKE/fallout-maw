@@ -132,6 +132,8 @@ import {
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { getHudWeaponSetsForActor } from "../utils/hud-active-items.mjs";
+import { planInventoryItemConsumption } from "../inventory/consume.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import {
   ROOT_CONTAINER_ID,
   createItemStackPartAdditionUpdate,
@@ -154,7 +156,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getActorInstalledModuleItems, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
+import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
@@ -1999,18 +2001,37 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     delete itemData._id;
     foundry.utils.setProperty(itemData, "system.quantity", 1);
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
-    await weapon.update({ [`${path}.moduleSlots`]: slots });
-    if (oldItemData?.system) await returnModuleItemToActorInventory(this.actor, oldItemData);
-    const quantity = getItemQuantity(moduleItem);
-    if (usesVirtualInventoryStacks(moduleItem)) {
-      const updateData = createItemStackPartRemovalUpdate(moduleItem, 1, 0);
-      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) await moduleItem.delete();
-      else {
-        const { _id, ...changes } = updateData;
-        await moduleItem.update(changes);
+    let returnPlan = { updates: [], creates: [] };
+    try {
+      if (oldItemData?.system) {
+        returnPlan = planActorInventoryGrant(this.actor, oldItemData, {
+          quantity: 1,
+          merge: false
+        });
+        if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       }
-    } else if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
-    else await moduleItem.delete();
+    } catch (error) {
+      ui.notifications.warn(error.message);
+      return undefined;
+    }
+    const consumptionPlan = planInventoryItemConsumption({
+      item: moduleItem,
+      amount: 1,
+      stackIndex: 0
+    });
+    await executeInventoryMutation({
+      actor: this.actor,
+      updates: [
+        {
+          _id: weapon.id,
+          [`${path}.moduleSlots`]: slots
+        },
+        ...returnPlan.updates,
+        ...consumptionPlan.updates
+      ],
+      deletes: consumptionPlan.deletes,
+      creates: returnPlan.creates
+    }, { reason: "install-weapon-module" });
     this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
   }
@@ -2022,8 +2043,28 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const slot = slots[slotIndex];
     if (!slot) return undefined;
     slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
-    await weapon.update({ [`${path}.moduleSlots`]: slots });
-    await returnModuleItemToActorInventory(this.actor, itemData);
+    let returnPlan;
+    try {
+      returnPlan = planActorInventoryGrant(this.actor, itemData, {
+        quantity: 1,
+        merge: false
+      });
+      if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+    } catch (error) {
+      ui.notifications.warn(error.message);
+      return undefined;
+    }
+    await executeInventoryMutation({
+      actor: this.actor,
+      updates: [
+        {
+          _id: weapon.id,
+          [`${path}.moduleSlots`]: slots
+        },
+        ...returnPlan.updates
+      ],
+      creates: returnPlan.creates
+    }, { reason: "uninstall-weapon-module" });
     this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
   }
@@ -3249,7 +3290,10 @@ async function equipHudWeaponInSlot(actor, item, weaponSetKey = "", weaponSlotKe
     }
   ];
 
-  await actor.updateEmbeddedDocuments("Item", updates);
+  await executeInventoryMutation({
+    actor,
+    updates
+  }, { reason: "equip-hud-weapon" });
   await spendWeaponSwitchActionPoints(actor);
   return actor.items.get(item.id) ?? item;
 }
@@ -4475,12 +4519,15 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
     if (!selectedSource || selectedSource.actor || !hasItemFunction(selectedSource, ITEM_FUNCTIONS.damageSource)) {
       throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceEmpty"));
     }
-    return actor.updateEmbeddedDocuments("Item", [{
-      _id: weapon.id,
-      ...createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
-        "magazine.sourceItemUuid": selectedSource.uuid
-      })
-    }]);
+    return executeInventoryMutation({
+      actor,
+      updates: [{
+        _id: weapon.id,
+        ...createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
+          "magazine.sourceItemUuid": selectedSource.uuid
+        })
+      }]
+    }, { reason: "select-reload-source" });
   }
 
   if (String(action) === "extract") {
@@ -4538,9 +4585,11 @@ async function insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weapo
     else deletes.push(stack.id);
     remaining -= spent;
   }
-  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-  if (deletes.length) return actor.deleteEmbeddedDocuments("Item", deletes);
-  return undefined;
+  return executeInventoryMutation({
+    actor,
+    updates,
+    deletes
+  }, { reason: "insert-magazine-source" });
 }
 
 async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem) {
@@ -4558,9 +4607,11 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
     })
   }];
   updates.push(...returnPlan.updates);
-  await actor.updateEmbeddedDocuments("Item", updates);
-  if (returnPlan.creates.length) return actor.createEmbeddedDocuments("Item", returnPlan.creates);
-  return undefined;
+  return executeInventoryMutation({
+    actor,
+    updates,
+    creates: returnPlan.creates
+  }, { reason: "extract-magazine-source" });
 }
 
 function getWeaponFunctionPath(weapon, weaponFunctionId = "") {
@@ -4764,16 +4815,6 @@ function reserveMagazineSourceContainerLoad(item, sourceItem, quantity, reserved
   if (!parentId || quantity <= 0) return;
   const itemData = createActorMagazineSourceStackData(sourceItem, quantity);
   reservedPlacementContexts.push({ parentId, itemData });
-}
-
-async function returnModuleItemToActorInventory(actor, itemData) {
-  if (!actor || !itemData?.system) return null;
-  try {
-    return await grantActorInventoryItem(actor, itemData, { quantity: 1 });
-  } catch (_error) {
-    ui.notifications.warn("Нет места в инвентаре для снятого модуля.");
-    return null;
-  }
 }
 
 function getHudWeaponSets(inventory = {}) {

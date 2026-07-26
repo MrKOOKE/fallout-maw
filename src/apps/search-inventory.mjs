@@ -40,8 +40,10 @@ import {
   getItemId,
   getItemsArray,
   getItemMaxStack,
+  getItemLockedStateForPlacementTransition,
   getItemQuantity,
   getItemStackAdditionOverflowQuantity,
+  getItemStackParts,
   getItemStackPartQuantity,
   getItemTotalWeight,
   hasContainerCycle,
@@ -129,6 +131,11 @@ import {
 } from "../utils/construct-parts.mjs";
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
 import { requestActorHacking } from "./hacking-dialog.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import {
+  canMaybeStackInventoryItems,
+  canStackInventoryItems
+} from "../inventory/stacking.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
@@ -149,6 +156,8 @@ const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
 const TRADE_OFFER_DEFAULT_COLUMNS = 14;
 const TRADE_OFFER_MAX_ROWS = 60;
+const PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH = `flags.${SYSTEM_ID}.inventory.personalTradeSettlements`;
+const PERSONAL_TRADE_SETTLEMENT_LEDGER_LIMIT = 50;
 
 function getFixedTradeOfferGridColumns() {
   return TRADE_OFFER_DEFAULT_COLUMNS;
@@ -272,6 +281,10 @@ export async function requestTradeInventoryWindow({ traderActor, tradeActor } = 
 
   const session = await requestTradeSessionCreate(payload);
   const snapshot = session?.snapshot ?? null;
+  if (!snapshot) {
+    ui.notifications.warn("Trade session could not be created. Reopen trade and try again.");
+    return undefined;
+  }
   const selected = snapshot ? getTradeSnapshotSelectedActorUuids(snapshot, game.user?.id ?? "") : {
     searcher: traderActor.uuid,
     searched: tradeActor.uuid
@@ -352,6 +365,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #tradeSide = "";
   #tradeSessionSnapshot = null;
   #tradeSessionRevision = 0;
+  #personalTradeOperationId = "";
   #tradeOffers = createEmptyTradeOffers();
   #tradeCatalogEnabledCategories = new Map();
   #tradeCatalogExpandedWeaponGroups = new Map();
@@ -477,6 +491,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeKind = tradeKind === SEARCH_INVENTORY_TRADE_KIND_PERSONAL
       ? SEARCH_INVENTORY_TRADE_KIND_PERSONAL
       : SEARCH_INVENTORY_TRADE_KIND_REGULAR;
+    this.#personalTradeOperationId = this.#tradeKind === SEARCH_INVENTORY_TRADE_KIND_PERSONAL
+      ? foundry.utils.randomID()
+      : "";
     this.#tradeRole = tradeRole === TRADE_ROLE_OBSERVER ? TRADE_ROLE_OBSERVER : TRADE_ROLE_PARTICIPANT;
     this.#tradeSide = TRADE_OFFER_SIDES.includes(tradeSide) ? tradeSide : "";
     this.#tradeSessionSnapshot = null;
@@ -1690,13 +1707,19 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #canDepositCompletedTradeHub(side = "", sourceActor = null) {
-    if (!this.#isTradeMode() || !this.#tradeOffers.completed || this.#tradeRole === TRADE_ROLE_OBSERVER) return false;
+    if (
+      !this.#isTradeMode()
+      || !this.#tradeOffers.completed
+      || this.#tradeRole === TRADE_ROLE_OBSERVER
+      || !this.#tradeSessionSnapshot
+    ) return false;
     if (!TRADE_OFFER_SIDES.includes(side) || !sourceActor) return false;
     if (game.user?.isGM) return true;
     const sourceSide = this.#getTradeSideForActor(sourceActor.uuid);
-    if (!sourceSide) return false;
-    if (this.#tradeSessionSnapshot) return canUserControlTradeSessionSide(this.#tradeSessionSnapshot, sourceSide, game.user?.id ?? "");
-    return Boolean(sourceActor.testUserPermission?.(game.user, "OWNER"));
+    return Boolean(
+      sourceSide
+      && canUserControlTradeSessionSide(this.#tradeSessionSnapshot, sourceSide, game.user?.id ?? "")
+    );
   }
 
   #prepareTradeSessionActionPayload(payload = {}) {
@@ -1822,6 +1845,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         searcherActorUuid: this.#searcherActorUuid,
         searchedActorUuid: this.#searchedActorUuid,
         tradeCurrencyKey: this.#tradeCurrencyKey,
+        personalTradeOperationId: this.#personalTradeOperationId,
         offers: this.#tradeOffers
       };
       const responsibleGM = getResponsibleGM();
@@ -2755,9 +2779,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ...(this.#tradeOffers?.[side]?.items ?? []).map(entry => ({
         kind: "item",
         key: getTradeOfferEntryKey(entry, "item"),
-        quantity: Math.max(1, toInteger(entry.quantity)),
-        itemData: getTradeOfferEntryItemData(entry, null),
-        containedItems: entry.containedItems ?? []
+        quantity: Math.max(1, toInteger(entry.quantity))
       })),
       ...(this.#tradeOffers?.[side]?.currencies ?? []).map(entry => ({
         kind: "currency",
@@ -2767,23 +2789,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     ];
     const batchEntries = [];
     for (const entry of entries) {
-      const target = entry.kind === "item"
-        ? getCompletedTradeClaimTarget(targetActor, entry.itemData, entry.containedItems, { quantity: entry.quantity })
-        : null;
-      if (entry.kind === "item" && !target) {
-        ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-        break;
-      }
       batchEntries.push({
         side,
         kind: entry.kind,
         key: entry.key,
         targetActorUuid: targetActor.uuid,
         targetMode: "inventory",
-        targetParentId: String(target?.parentId ?? ROOT_CONTAINER_ID),
-        targetX: target?.placement?.x ?? null,
-        targetY: target?.placement?.y ?? null,
-        autoTargetParent: false,
+        targetParentId: ROOT_CONTAINER_ID,
+        targetX: null,
+        targetY: null,
+        autoTargetParent: entry.kind === "item",
         quantity: entry.quantity
       });
     }
@@ -2796,6 +2811,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
           entries: batchEntries
         }));
         if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: false });
+        if (result?.claimResult?.stoppedReason === "inventory-no-space") {
+          ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+        }
       } else {
         const result = await enqueueSearchInventoryOperation(() => performCompletedTradeBatchClaim({
           ...this.#prepareTradeSessionActionPayload({ offers: this.#tradeOffers }),
@@ -3185,13 +3203,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   async #deleteSearchItem(actor, item, { stackIndex = 0, stackQuantity = 0 } = {}) {
     try {
       const detachedSlotId = await prepareConstructPartDetachment(actor, item);
-      if (!usesVirtualInventoryStacks(item)) await item.delete();
-      else {
+      let plan = { updates: [], deletes: [item.id] };
+      if (usesVirtualInventoryStacks(item)) {
         const amount = Math.max(1, stackQuantity || getItemStackPartQuantity(item, stackIndex));
         const updateData = createItemStackPartRemovalUpdate(item, amount, stackIndex);
-        if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) await actor.deleteEmbeddedDocuments("Item", [item.id]);
-        else await actor.updateEmbeddedDocuments("Item", [updateData]);
+        if (updateData && (updateData["system.quantity"] ?? 0) > 0) {
+          plan = { updates: [updateData], deletes: [] };
+        }
       }
+      await executeInventoryMutation({ actor, ...plan }, { reason: "delete" });
       if (detachedSlotId) await finalizeConstructPartDetachment(actor, detachedSlotId);
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory item delete failed`, error);
@@ -4770,8 +4790,11 @@ async function migrateLegacyButcheringStorages() {
     try {
       await enqueueSearchInventoryOperation(async () => {
         const plan = createButcheringInventoryPlan(actor, []);
-        if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates, { render: false });
-        if (plan.deletes.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes, { render: false });
+        await executeInventoryMutation({
+          actor,
+          updates: plan.updates,
+          deletes: plan.deletes
+        }, { reason: "butchering-migration", render: false });
       });
     } catch (error) {
       console.warn(`${SYSTEM_ID} | Legacy butchering storage migration failed for ${actor.uuid}`, error);
@@ -4801,36 +4824,16 @@ function createButcheringRollbackUpdates(actor, updates = []) {
 }
 
 async function applyButcheringInventoryPlan(actor, plan, config) {
-  const createdIds = plan.creates.map(data => String(data._id ?? "")).filter(Boolean);
-  try {
-    if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates, { render: false });
-    if (plan.creates.length) {
-      await actor.createEmbeddedDocuments("Item", plan.creates, {
-        keepId: true,
-        render: false
-      });
-    }
-    await actor.setFlag(SYSTEM_ID, "butchering", {
-      ...config,
-      completed: true
-    });
-    if (plan.deletes.length) {
-      await actor.deleteEmbeddedDocuments("Item", plan.deletes, { render: false }).catch(error => {
-        console.warn(`${SYSTEM_ID} | Legacy butchering container cleanup failed`, error);
-      });
-    }
-  } catch (error) {
-    if (createdIds.length) {
-      const existingCreatedIds = createdIds.filter(id => actor.items?.has(id));
-      if (existingCreatedIds.length) {
-        await actor.deleteEmbeddedDocuments("Item", existingCreatedIds, { render: false }).catch(() => undefined);
-      }
-    }
-    if (plan.rollbackUpdates.length) {
-      await actor.updateEmbeddedDocuments("Item", plan.rollbackUpdates, { render: false }).catch(() => undefined);
-    }
-    throw error;
-  }
+  await executeInventoryMutation({
+    actor,
+    updates: plan.updates,
+    creates: plan.creates,
+    deletes: plan.deletes
+  }, { reason: "butchering-complete", render: false });
+  await actor.setFlag(SYSTEM_ID, "butchering", {
+    ...config,
+    completed: true
+  });
 }
 
 async function performSearchInventoryTransfer(payload = {}, requesterUserId = "") {
@@ -4870,7 +4873,9 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     item,
     quantity
   });
-  if (tradePayment) ensureTradeItemPayment(tradePayment);
+  const tradeMutationPlans = tradePayment
+    ? createTradeItemPaymentMutationPlans(tradePayment)
+    : [];
 
   const result = await transferItemBetweenActors({
     sourceActor,
@@ -4888,9 +4893,9 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetItemId: String(payload.targetItemId ?? ""),
     quantity,
     sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
-    allowButchering: isItemInButcheringStorage(item)
+    allowButchering: isItemInButcheringStorage(item),
+    mutationPlans: tradeMutationPlans
   });
-  if (tradePayment) await applyTradeItemPayment(tradePayment);
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return result;
 }
@@ -4926,7 +4931,10 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
     );
     if (!updateData) throwInventoryNoSpace();
     if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
-    await actor.updateEmbeddedDocuments("Item", [updateData]);
+    await executeInventoryMutation({
+      actor,
+      updates: [updateData]
+    }, { reason: "split-stack" });
     return actor.items.get(item.id) ?? null;
   }
   return splitActorInventoryItem(actor, item, toInteger(payload.amount));
@@ -4964,7 +4972,10 @@ async function performSearchInventoryRotate(payload = {}, requesterUserId = "") 
   const updateData = createInventoryRotationUpdate(item, resolution);
   if (!updateData) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryRotateNoSpace"));
   if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
-  await actor.updateEmbeddedDocuments("Item", [updateData]);
+  await executeInventoryMutation({
+    actor,
+    updates: [updateData]
+  }, { reason: "rotate" });
   return actor.items.get(item.id) ?? null;
 }
 
@@ -5004,7 +5015,9 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     item: sourceItem,
     quantity
   });
-  if (tradePayment) ensureTradeItemPayment(tradePayment);
+  const tradeMutationPlans = tradePayment
+    ? createTradeItemPaymentMutationPlans(tradePayment)
+    : [];
 
   const result = await stackActorInventoryItem({
     sourceActor,
@@ -5014,9 +5027,9 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     targetParentId: String(payload.targetParentId ?? ROOT_CONTAINER_ID),
     quantity,
     sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
-    targetStackIndex: Math.max(0, toInteger(payload.targetStackIndex))
+    targetStackIndex: Math.max(0, toInteger(payload.targetStackIndex)),
+    mutationPlans: tradeMutationPlans
   });
-  if (tradePayment) await applyTradeItemPayment(tradePayment);
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return result;
 }
@@ -5044,35 +5057,26 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
   if (!amount) throw new Error("No currency to transfer.");
 
   const targetAmount = Math.max(0, toInteger(targetActor.system?.currencies?.[currencyKey]));
-  await sourceActor.update({ [`system.currencies.${currencyKey}`]: available - amount });
-  await targetActor.update({ [`system.currencies.${currencyKey}`]: targetAmount + amount });
+  await executeInventoryMutation([
+    {
+      actor: sourceActor,
+      actorUpdate: { [`system.currencies.${currencyKey}`]: available - amount }
+    },
+    {
+      actor: targetActor,
+      actorUpdate: { [`system.currencies.${currencyKey}`]: targetAmount + amount }
+    }
+  ], { reason: "currency-transfer" });
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return { amount };
 }
 
 async function performTradeComplete(payload = {}, requesterUserId = "") {
-  const searcherActor = await resolveActor(payload.searcherActorUuid);
-  const searchedActor = await resolveActor(payload.searchedActorUuid);
-  if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
-  validateSearchOrTradeRequester({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, requesterUserId, searcherActor, searchedActor);
-
-  const offers = normalizeTradeOffersState(payload.offers);
-  if (!offers.searcher.ready || !offers.searched.ready) throw new Error("Trade is not confirmed by both sides.");
-  validateTradeOfferSide(searcherActor, offers.searcher);
-  validateTradeOfferSide(searchedActor, offers.searched);
-  const searchedReceived = prepareReceivedTradeOfferSide({ targetActor: searchedActor, offer: offers.searcher });
-  const searcherReceived = prepareReceivedTradeOfferSide({ targetActor: searcherActor, offer: offers.searched });
-  const completedOffers = normalizeTradeOffersState({
-    completed: true,
-    searcher: searcherReceived,
-    searched: searchedReceived
-  });
   const sessionId = String(payload.tradeSessionId ?? "");
-  await consumeTradeOfferSide({ sourceActor: searcherActor, offer: offers.searcher });
-  await consumeTradeOfferSide({ sourceActor: searchedActor, offer: offers.searched });
-  applyLocalCompletedTradeOffers(sessionId, completedOffers);
-  if (sessionId) broadcastTradeOffersState(sessionId, completedOffers);
-  return { ok: true, offers: completedOffers };
+  const session = getActiveTradeSession(sessionId);
+  if (!session) throw new Error("Trade completion requires an active server trade session.");
+  await completeTradeSession(session, requesterUserId);
+  return { ok: true, offers: normalizeTradeOffersState(session.offers) };
 }
 
 async function performPersonalTradeComplete(payload = {}, requesterUserId = "") {
@@ -5081,6 +5085,15 @@ async function performPersonalTradeComplete(payload = {}, requesterUserId = "") 
   if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
   validateSearchOrTradeRequester({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, requesterUserId, searcherActor, searchedActor);
 
+  const operationId = normalizePersonalTradeOperationId(payload.personalTradeOperationId);
+  const previousSettlement = getPersonalTradeSettlementRecord(searcherActor, operationId);
+  if (previousSettlement) {
+    if (String(previousSettlement.searchedActorUuid ?? "") !== searchedActor.uuid) {
+      throw new Error("Personal trade operation id collision.");
+    }
+    return { ok: true, droppedCount: 0, idempotent: true };
+  }
+
   const offers = normalizeTradeOffersState(payload.offers);
   validateTradeOfferSide(searcherActor, offers.searcher);
   validateTradeOfferSide(searchedActor, offers.searched);
@@ -5088,13 +5101,32 @@ async function performPersonalTradeComplete(payload = {}, requesterUserId = "") 
   const searcherReceived = prepareReceivedTradeOfferSide({ targetActor: searcherActor, offer: offers.searched });
   ensureTradeOfferSideCanBeDelivered(searchedActor, searchedReceived);
   ensureTradeOfferSideCanBeDelivered(searcherActor, searcherReceived);
-  await consumeTradeOfferSide({ sourceActor: searcherActor, offer: offers.searcher });
-  await consumeTradeOfferSide({ sourceActor: searchedActor, offer: offers.searched });
-  const searchedResult = await deliverTradeOfferSideToActor(searchedActor, searchedReceived);
-  const searcherResult = await deliverTradeOfferSideToActor(searcherActor, searcherReceived);
+  await executeTradeOfferSettlement({
+    sides: [
+      { sourceActor: searcherActor, offer: offers.searcher },
+      { sourceActor: searchedActor, offer: offers.searched }
+    ],
+    currencyDeliveries: [
+      { targetActor: searchedActor, offer: searchedReceived },
+      { targetActor: searcherActor, offer: searcherReceived }
+    ],
+    actorMutations: [{
+      actor: searcherActor,
+      actorUpdate: createPersonalTradeSettlementLedgerUpdate(
+        searcherActor,
+        operationId,
+        searchedActor.uuid
+      )
+    }],
+    reason: "personal-trade-complete"
+  });
+  const searchedResult = await deliverTradeOfferItemsToActor(searchedActor, searchedReceived);
+  const searcherResult = await deliverTradeOfferItemsToActor(searcherActor, searcherReceived);
   return {
     ok: true,
-    droppedCount: Math.max(0, toInteger(searchedResult?.droppedCount)) + Math.max(0, toInteger(searcherResult?.droppedCount))
+    droppedCount: Math.max(0, toInteger(searchedResult?.droppedCount))
+      + Math.max(0, toInteger(searcherResult?.droppedCount)),
+    idempotent: false
   };
 }
 
@@ -5110,18 +5142,8 @@ function ensureTradeOfferSideCanBeDelivered(targetActor, offer = {}) {
   }
 }
 
-async function deliverTradeOfferSideToActor(targetActor, offer = {}) {
+async function deliverTradeOfferItemsToActor(targetActor, offer = {}) {
   let droppedCount = 0;
-  const currencyUpdates = {};
-  for (const entry of offer?.currencies ?? []) {
-    const currencyKey = String(entry.currencyKey ?? "");
-    const amount = Math.max(0, toInteger(entry.amount));
-    if (!currencyKey || !amount) continue;
-    const path = `system.currencies.${currencyKey}`;
-    currencyUpdates[path] = Math.max(0, toInteger(currencyUpdates[path] ?? getActorCurrencyAmount(targetActor, currencyKey))) + amount;
-  }
-  if (Object.keys(currencyUpdates).length) await targetActor.update(currencyUpdates, { render: false });
-
   for (const entry of offer?.items ?? []) {
     const itemData = getTradeOfferEntryItemData(entry, null);
     const quantity = Math.max(1, toInteger(entry?.quantity));
@@ -5140,6 +5162,7 @@ async function deliverTradeOfferSideToActor(targetActor, offer = {}) {
         });
         continue;
       } catch (error) {
+        if (!canDropItemsForActor(targetActor)) throw error;
         console.warn(`${SYSTEM_ID} | Personal trade item could not fit, dropping to scene`, error);
       }
     }
@@ -5152,24 +5175,47 @@ async function deliverTradeOfferSideToActor(targetActor, offer = {}) {
   return { droppedCount };
 }
 
+function normalizePersonalTradeOperationId(value = "") {
+  const operationId = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(operationId)) {
+    throw new Error("Personal trade operation id is missing or invalid.");
+  }
+  return operationId;
+}
+
+function getPersonalTradeSettlementRecord(actor, operationId = "") {
+  const ledger = foundry.utils.getProperty(actor, PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH);
+  return ledger && typeof ledger === "object" ? ledger[operationId] ?? null : null;
+}
+
+function createPersonalTradeSettlementLedgerUpdate(actor, operationId = "", searchedActorUuid = "") {
+  const current = foundry.utils.getProperty(actor, PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH);
+  const ledger = current && typeof current === "object"
+    ? foundry.utils.deepClone(current)
+    : {};
+  ledger[operationId] = {
+    searchedActorUuid: String(searchedActorUuid ?? ""),
+    completedAt: Date.now()
+  };
+  const ordered = Object.entries(ledger)
+    .sort(([, left], [, right]) => toInteger(right?.completedAt) - toInteger(left?.completedAt));
+  return {
+    [PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH]: Object.fromEntries(
+      ordered.slice(0, PERSONAL_TRADE_SETTLEMENT_LEDGER_LIMIT)
+    )
+  };
+}
+
 async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "") {
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!targetActor) throw new Error("Actor not found.");
 
   const session = getActiveTradeSession(payload.sessionId);
-  if (session) {
-    ensureTradeSessionActorControl(session, targetActor.uuid, requesterUserId);
-    if (getTradeSessionActorSide(session, targetActor.uuid) !== payload.side) throw new Error("Trade recipient side mismatch.");
-  } else {
-    const searcherActor = await resolveActor(payload.searcherActorUuid);
-    const searchedActor = await resolveActor(payload.searchedActorUuid);
-    if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
-    validateSearchOrTradeRequester({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, requesterUserId, searcherActor, searchedActor);
-    const sideActorUuid = payload.side === "searcher" ? searcherActor.uuid : searchedActor.uuid;
-    if (targetActor.uuid !== sideActorUuid) throw new Error("Trade recipient side mismatch.");
-  }
+  if (!session) throw new Error("Completed trade claims require an active server trade session.");
+  ensureTradeSessionActorControl(session, targetActor.uuid, requesterUserId);
+  if (getTradeSessionActorSide(session, targetActor.uuid) !== payload.side) throw new Error("Trade recipient side mismatch.");
 
-  const offers = normalizeTradeOffersState(session?.offers ?? payload.offers);
+  const offers = normalizeTradeOffersState(session.offers);
   if (!offers.completed) throw new Error("Trade is not completed.");
   const side = String(payload.side ?? "");
   const kind = String(payload.kind ?? "");
@@ -5180,9 +5226,14 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
     const entry = findTradeOfferEntry(offers[side], "currency", key);
     const amount = Math.max(1, Math.min(Math.max(0, toInteger(entry?.amount)), toInteger(payload.quantity)));
     if (!entry || !amount) throw new Error("Trade currency not found.");
-    await targetActor.update({ [`system.currencies.${entry.currencyKey}`]: getActorCurrencyAmount(targetActor, entry.currencyKey) + amount });
+    await executeInventoryMutation({
+      actor: targetActor,
+      actorUpdate: {
+        [`system.currencies.${entry.currencyKey}`]: getActorCurrencyAmount(targetActor, entry.currencyKey) + amount
+      }
+    }, { reason: "trade-claim-currency" });
     const reduced = reduceTradeOfferEntryQuantity(offers, side, "currency", key, amount);
-    if (session) session.offers = reduced;
+    session.offers = reduced;
     return { ok: true, offers: reduced };
   }
 
@@ -5211,19 +5262,33 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
     skipProjectedValidation: !payload.autoTargetParent && String(payload.targetMode ?? "inventory") === "inventory"
   });
   const reduced = reduceTradeOfferEntryQuantity(offers, side, "item", key, quantity);
-  if (session) session.offers = reduced;
+  session.offers = reduced;
   return { ok: true, offers: reduced };
 }
 
 async function performCompletedTradeBatchClaim(payload = {}, requesterUserId = "") {
+  if (!getActiveTradeSession(payload.sessionId)) {
+    throw new Error("Completed trade claims require an active server trade session.");
+  }
   const entries = Array.isArray(payload.entries) ? payload.entries : [];
   if (!entries.length) return { ok: true, offers: normalizeTradeOffersState(payload.offers) };
   let offers = null;
+  let stoppedReason = "";
   for (const entry of entries) {
-    const result = await performCompletedTradeEntryClaim({ ...payload, ...entry, offers: offers ?? payload.offers }, requesterUserId);
-    offers = result?.offers ?? offers;
+    try {
+      const result = await performCompletedTradeEntryClaim({ ...payload, ...entry, offers: offers ?? payload.offers }, requesterUserId);
+      offers = result?.offers ?? offers;
+    } catch (error) {
+      if (!["inventory-no-space", "no-space", "max-load", "actor-load-limit"].includes(error?.code)) throw error;
+      stoppedReason = "inventory-no-space";
+      break;
+    }
   }
-  return { ok: true, offers: offers ?? normalizeTradeOffersState(payload.offers) };
+  return {
+    ok: true,
+    offers: offers ?? normalizeTradeOffersState(payload.offers),
+    stoppedReason
+  };
 }
 
 async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "") {
@@ -5234,61 +5299,33 @@ async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "
   assertSearchTransferableItem(item);
 
   const session = getActiveTradeSession(payload.sessionId);
-  if (session) {
-    if (!session.offers?.completed) throw new Error("Trade is not completed.");
-    if (!getTradeSessionActorSide(session, sourceActor.uuid)) throw new Error("Trade source actor mismatch.");
-    ensureTradeSessionActorControl(session, sourceActor.uuid, requesterUserId);
-  } else {
-    const searcherActor = await resolveActor(payload.searcherActorUuid);
-    const searchedActor = await resolveActor(payload.searchedActorUuid);
-    if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
-    validateSearchOrTradeRequester({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, requesterUserId, searcherActor, searchedActor);
-    const allowedActorUuids = getSearchOrTradeAllowedActorUuids({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, searcherActor, searchedActor, requesterUserId);
-    if (!allowedActorUuids.has(sourceActor.uuid)) throw new Error("Trade source actor mismatch.");
-    const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-    if (!requester?.isGM && !sourceActor.testUserPermission?.(requester, "OWNER")) throw new Error("No trade actor owner permission.");
-  }
+  if (!session) throw new Error("Completed trade deposits require an active server trade session.");
+  if (!session.offers?.completed) throw new Error("Trade is not completed.");
+  if (!getTradeSessionActorSide(session, sourceActor.uuid)) throw new Error("Trade source actor mismatch.");
+  ensureTradeSessionActorControl(session, sourceActor.uuid, requesterUserId);
 
-  const offers = normalizeTradeOffersState(session?.offers ?? payload.offers);
-  if (!offers.completed) throw new Error("Trade is not completed.");
   const side = String(payload.side ?? "");
   if (!TRADE_OFFER_SIDES.includes(side)) throw new Error("Invalid trade side.");
   const quantity = getTransferItemQuantity(item, payload.quantity);
-  const deposited = await depositItemIntoCompletedTradeHub(offers, side, sourceActor, item, quantity, payload.placement, {
-    sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex))
-  });
-  if (session) session.offers = deposited;
-  return { ok: true, offers: deposited };
-}
+  const depositOffer = {
+    items: [{
+      itemId: item.id,
+      sourceActorUuid: sourceActor.uuid,
+      quantity,
+      sourceStackIndex: Math.max(0, toInteger(payload.sourceStackIndex)),
+      placement: payload.placement
+    }],
+    currencies: []
+  };
+  const received = prepareReceivedTradeOfferSide({ targetActor: sourceActor, offer: depositOffer });
+  const depositedEntry = received.items.at(0);
+  if (!depositedEntry) throw new Error("Completed trade deposit could not be prepared.");
 
-async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sourceActor = null, item = null, quantity = 0, placement = null, { sourceStackIndex = 0 } = {}) {
-  const offers = normalizeTradeOffersState(offersState);
-  if (!offers.completed) throw new Error("Trade is not completed.");
-  if (!TRADE_OFFER_SIDES.includes(side) || !sourceActor || !item) throw new Error("Invalid completed trade deposit.");
-  const amount = getTransferItemQuantity(item, quantity);
-  const itemData = item.toObject();
-  foundry.utils.setProperty(itemData, "system.quantity", amount);
-  const containedItems = isContainerItem(item)
-    ? getAllContainedItems(item.id, sourceActor.items).map(contained => contained.toObject())
-    : [];
-  offers[side].items.push({
-    entryId: foundry.utils.randomID(),
-    itemId: item.id,
-    sourceActorUuid: sourceActor.uuid,
-    returnActorUuid: sourceActor.uuid,
-    quantity: amount,
-    itemData,
-    containedItems,
-    placement: normalizeTradeOfferPlacement(placement, getItemFootprint(item, sourceActor.items))
-  });
-  if (isContainerItem(item)) {
-    const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
-    await sourceActor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
-  } else {
-    if (usesVirtualInventoryStacks(item)) await removeTransferredVirtualStackQuantity(sourceActor, item, amount, sourceStackIndex, { render: false });
-    else await removeTransferredItemQuantity(sourceActor, item, amount, { render: false });
-  }
-  return offers;
+  await consumeTradeOfferSides([{ sourceActor, offer: depositOffer }]);
+  const offers = normalizeTradeOffersState(session.offers);
+  offers[side].items.push(depositedEntry);
+  session.offers = offers;
+  return { ok: true, offers };
 }
 
 function validateTradeOfferSide(actor, offer = {}) {
@@ -5395,68 +5432,261 @@ function prepareReceivedTradeOfferSide({ targetActor = null, offer } = {}) {
   return received;
 }
 
-function planTradeOfferItemConsumption(offer = {}) {
-  const deleteIdsByActor = new Map();
-  const sequentialOps = [];
+function planTradeOfferItemConsumption(sides = []) {
+  const groupedItems = new Map();
+  for (const side of sides ?? []) {
+    for (const entry of side?.offer?.items ?? []) {
+      const actor = getCachedActorByUuid(entry.sourceActorUuid);
+      if (!actor) throw new Error("Trade item source actor not found.");
+      const item = actor.items?.get(String(entry.itemId ?? ""));
+      if (!item) throw new Error("Item not found.");
+      const key = `${actor.uuid}:${item.id}`;
+      const grouped = groupedItems.get(key) ?? { actor, item, entries: [] };
+      grouped.entries.push(entry);
+      groupedItems.set(key, grouped);
+    }
+  }
 
-  const addDeleteId = (actor, itemId) => {
-    if (!actor || !itemId) return;
-    const actorUuid = String(actor.uuid ?? "");
-    if (!actorUuid) return;
-    if (!deleteIdsByActor.has(actorUuid)) deleteIdsByActor.set(actorUuid, new Set());
-    deleteIdsByActor.get(actorUuid).add(String(itemId));
+  assertTradeItemGroupsDoNotOverlap(groupedItems);
+  const plansByActor = new Map();
+  const getActorPlan = actor => {
+    const actorUuid = String(actor?.uuid ?? "");
+    if (!actorUuid) throw new Error("Trade item source actor not found.");
+    const plan = plansByActor.get(actorUuid) ?? {
+      actor,
+      updates: [],
+      deletes: [],
+      creates: [],
+      actorUpdates: []
+    };
+    plansByActor.set(actorUuid, plan);
+    return plan;
   };
 
-  for (const entry of offer?.items ?? []) {
-    const entrySourceActor = getCachedActorByUuid(entry.sourceActorUuid);
-    if (!entrySourceActor) throw new Error("Trade item source actor not found.");
-    const item = entrySourceActor.items?.get(String(entry.itemId ?? ""));
-    if (!item) throw new Error("Item not found.");
-    const quantity = getTransferItemQuantity(item, entry.quantity);
+  for (const { actor, item, entries } of groupedItems.values()) {
+    const actorPlan = getActorPlan(actor);
     if (isContainerItem(item)) {
-      const containedItems = getAllContainedItems(item.id, entrySourceActor.items);
-      addDeleteId(entrySourceActor, item.id);
-      for (const contained of containedItems) addDeleteId(entrySourceActor, contained.id);
+      if (entries.length !== 1) throw new Error("The same container cannot be offered more than once.");
+      actorPlan.deletes.push(item.id);
       continue;
     }
-    const sourceStackIndex = toInteger(entry.sourceStackIndex);
+
     const sourceQuantity = Math.max(1, getItemQuantity(item));
-    const transferQuantity = Math.max(1, Math.min(sourceQuantity, quantity));
-    if (usesVirtualInventoryStacks(item)) {
-      sequentialOps.push(renderFlag => (
-        sourceStackIndex < 0
-          ? removeTransferredItemDocumentQuantity(entrySourceActor, item, quantity, { render: renderFlag })
-          : removeTransferredVirtualStackQuantity(entrySourceActor, item, quantity, Math.max(0, sourceStackIndex), { render: renderFlag })
-      ));
+    const totalRequested = entries.reduce(
+      (total, entry) => total + Math.max(1, toInteger(entry.quantity)),
+      0
+    );
+    if (totalRequested > sourceQuantity) throw new Error("Not enough item quantity.");
+
+    if (!usesVirtualInventoryStacks(item)) {
+      const removal = createTransferredItemRemovalPlan(item, totalRequested, { virtual: false });
+      actorPlan.updates.push(...removal.updates);
+      actorPlan.deletes.push(...removal.deletes);
       continue;
     }
-    if (transferQuantity >= sourceQuantity) addDeleteId(entrySourceActor, item.id);
-    else sequentialOps.push(renderFlag => removeTransferredItemQuantity(entrySourceActor, item, quantity, { render: renderFlag }));
+
+    let projectedItem = item.toObject();
+    const requestedByStackIndex = new Map();
+    for (const entry of entries) {
+      const stackIndex = toInteger(entry.sourceStackIndex);
+      if (stackIndex < 0) continue;
+      requestedByStackIndex.set(
+        stackIndex,
+        Math.max(0, toInteger(requestedByStackIndex.get(stackIndex)))
+          + Math.max(1, toInteger(entry.quantity))
+      );
+    }
+
+    const indexedRequests = Array.from(requestedByStackIndex)
+      .sort(([left], [right]) => right - left);
+    const sourceStackParts = getItemStackParts(item);
+    for (const [stackIndex, requested] of indexedRequests) {
+      if (stackIndex >= sourceStackParts.length) throw new Error("Trade stack index is no longer valid.");
+      if (requested > getItemStackPartQuantity(item, stackIndex)) {
+        throw new Error("Not enough item quantity in the selected stack.");
+      }
+      const update = createItemStackPartRemovalUpdate(projectedItem, requested, stackIndex);
+      if (!update) throw new Error("Trade stack removal could not be planned.");
+      projectedItem = applyTradeItemPlanUpdate(projectedItem, update);
+    }
+
+    const aggregateRequested = entries
+      .filter(entry => toInteger(entry.sourceStackIndex) < 0)
+      .reduce((total, entry) => total + Math.max(1, toInteger(entry.quantity)), 0);
+    if (aggregateRequested > 0) {
+      const removal = createTransferredItemRemovalPlan(
+        projectedItem,
+        aggregateRequested,
+        { stackIndex: 0, virtual: true }
+      );
+      if (removal.deletes.length) {
+        actorPlan.deletes.push(item.id);
+        continue;
+      }
+      projectedItem = applyTradeItemPlanUpdate(projectedItem, removal.updates[0]);
+    }
+
+    const remainingQuantity = getItemQuantity(projectedItem);
+    if (remainingQuantity <= 0) actorPlan.deletes.push(item.id);
+    else {
+      const update = {
+        _id: item.id,
+        "system.quantity": remainingQuantity,
+        "system.stackParts": foundry.utils.deepClone(projectedItem.system?.stackParts ?? [])
+      };
+      const placement = projectedItem.system?.placement ?? {};
+      if (toInteger(placement.x) > 0 && toInteger(placement.y) > 0) {
+        update["system.placement.x"] = toInteger(placement.x);
+        update["system.placement.y"] = toInteger(placement.y);
+        update["system.placement.rotated"] = Boolean(placement.rotated);
+      }
+      actorPlan.updates.push(update);
+    }
   }
 
-  return { deleteIdsByActor, sequentialOps };
+  return Array.from(plansByActor.values());
 }
 
-async function executeTradeOfferItemConsumption(plan = {}, consumeRender = { render: false }) {
+function assertTradeItemGroupsDoNotOverlap(groupedItems = new Map()) {
+  const offeredKeys = new Set(groupedItems.keys());
+  for (const { actor, item } of groupedItems.values()) {
+    if (!isContainerItem(item)) continue;
+    for (const contained of getAllContainedItems(item.id, actor.items)) {
+      if (offeredKeys.has(`${actor.uuid}:${contained.id}`)) {
+        throw new Error("A contained Item cannot also be offered separately from its container.");
+      }
+    }
+  }
+}
+
+function applyTradeItemPlanUpdate(itemData = {}, update = {}) {
+  const expanded = foundry.utils.expandObject(foundry.utils.deepClone(update ?? {}));
+  return foundry.utils.mergeObject(
+    foundry.utils.deepClone(itemData),
+    expanded,
+    { inplace: true, performDeletions: true }
+  );
+}
+
+function planTradeOfferSettlement({
+  sides = [],
+  currencyDeliveries = [],
+  actorMutations = []
+} = {}) {
+  const plansByActor = new Map(
+    planTradeOfferItemConsumption(sides).map(plan => [
+      String(plan.actor?.uuid ?? ""),
+      {
+        ...plan,
+        creates: Array.isArray(plan.creates) ? plan.creates : [],
+        actorUpdates: Array.isArray(plan.actorUpdates) ? plan.actorUpdates : []
+      }
+    ])
+  );
+  const getActorPlan = actor => {
+    const actorUuid = String(actor?.uuid ?? "");
+    if (!actorUuid) throw new Error("Trade Actor not found.");
+    const plan = plansByActor.get(actorUuid) ?? {
+      actor,
+      updates: [],
+      deletes: [],
+      creates: [],
+      actorUpdates: []
+    };
+    plansByActor.set(actorUuid, plan);
+    return plan;
+  };
+
+  const currencyFlowsByActor = new Map();
+  const queueCurrencyFlow = (actor, currencyKey, field, amount) => {
+    const actorUuid = String(actor?.uuid ?? "");
+    const key = String(currencyKey ?? "");
+    const value = Math.max(0, toInteger(amount));
+    if (!actorUuid || !key || !value) return;
+    const actorFlows = currencyFlowsByActor.get(actorUuid) ?? {
+      actor,
+      currencies: new Map()
+    };
+    const flow = actorFlows.currencies.get(key) ?? { deducted: 0, added: 0 };
+    flow[field] = Math.max(0, toInteger(flow[field])) + value;
+    actorFlows.currencies.set(key, flow);
+    currencyFlowsByActor.set(actorUuid, actorFlows);
+  };
+
+  for (const { sourceActor, offer } of sides ?? []) {
+    for (const entry of offer?.currencies ?? []) {
+      const currencyKey = String(entry.currencyKey ?? "");
+      if (entry.contributions?.length) {
+        for (const contribution of entry.contributions) {
+          const contributionActor = getCachedActorByUuid(contribution.actorUuid);
+          if (!contributionActor) throw new Error("Trade currency source actor not found.");
+          queueCurrencyFlow(contributionActor, currencyKey, "deducted", contribution.amount);
+        }
+      } else {
+        if (!sourceActor) throw new Error("Trade currency source actor not found.");
+        queueCurrencyFlow(sourceActor, currencyKey, "deducted", entry.amount);
+      }
+    }
+  }
+
+  for (const { targetActor, offer } of currencyDeliveries ?? []) {
+    if (!targetActor) throw new Error("Trade recipient actor not found.");
+    for (const entry of offer?.currencies ?? []) {
+      queueCurrencyFlow(targetActor, entry.currencyKey, "added", entry.amount);
+    }
+  }
+
+  for (const { actor, currencies } of currencyFlowsByActor.values()) {
+    const updateData = {};
+    for (const [currencyKey, flow] of currencies) {
+      const available = getActorCurrencyAmount(actor, currencyKey);
+      if (available < flow.deducted) throw new Error("Not enough currency for trade.");
+      updateData[`system.currencies.${currencyKey}`] = available - flow.deducted + flow.added;
+    }
+    if (Object.keys(updateData).length) getActorPlan(actor).actorUpdates.push(updateData);
+  }
+
+  for (const mutation of actorMutations ?? []) {
+    const actorPlan = getActorPlan(mutation?.actor);
+    const updates = mutation?.actorUpdates ?? mutation?.actorUpdate;
+    for (const update of (Array.isArray(updates) ? updates : [updates]).filter(Boolean)) {
+      actorPlan.actorUpdates.push(update);
+    }
+  }
+
+  return Array.from(plansByActor.values());
+}
+
+async function executeTradeOfferSettlement({
+  sides = [],
+  currencyDeliveries = [],
+  actorMutations = [],
+  reason = "trade-settlement"
+} = {}) {
+  const plans = planTradeOfferSettlement({ sides, currencyDeliveries, actorMutations });
+  if (!plans.length) return { actorCount: 0 };
+  await executeInventoryMutation(plans, {
+    reason,
+    render: false,
+    validateLoad: false
+  });
+  return { actorCount: plans.length };
+}
+
+async function executeTradeOfferItemConsumption(plans = [], consumeRender = { render: false }) {
   const render = consumeRender?.render !== false ? consumeRender : { render: false };
-  let batchDeleteCount = 0;
-  for (const [actorUuid, deleteIds] of plan.deleteIdsByActor ?? []) {
-    const actor = getCachedActorByUuid(actorUuid);
-    if (!actor || !deleteIds?.size) continue;
-    const ids = [...deleteIds];
-    batchDeleteCount += ids.length;
-    await actor.deleteEmbeddedDocuments("Item", ids, render);
-  }
-  for (const operation of plan.sequentialOps ?? []) {
-    await operation(render.render);
-  }
-  return { batchDeleteCount, sequentialCount: plan.sequentialOps?.length ?? 0 };
+  if (!plans.length) return { actorCount: 0 };
+  await executeInventoryMutation(plans, {
+    reason: "trade-consume",
+    render: render.render
+  });
+  return { actorCount: plans.length };
 }
 
-async function consumeTradeOfferSide({ sourceActor, offer } = {}) {
+async function consumeTradeOfferSides(sides = []) {
   const consumeRender = { render: false };
-  const plan = planTradeOfferItemConsumption(offer);
-  await executeTradeOfferItemConsumption(plan, consumeRender);
+  const plans = planTradeOfferItemConsumption(sides);
+  const plansByActor = new Map(plans.map(plan => [String(plan.actor?.uuid ?? ""), plan]));
 
   const currencyUpdatesByActor = new Map();
   const queueCurrencyDeduction = (actor, currencyKey, amount) => {
@@ -5468,7 +5698,8 @@ async function consumeTradeOfferSide({ sourceActor, offer } = {}) {
     actorCurrencies.set(currencyKey, Math.max(0, toInteger(actorCurrencies.get(currencyKey))) + amount);
   };
 
-  for (const entry of offer?.currencies ?? []) {
+  for (const { sourceActor, offer } of sides ?? []) {
+    for (const entry of offer?.currencies ?? []) {
     const currencyKey = String(entry.currencyKey ?? "");
     if (entry.contributions?.length) {
       for (const contribution of entry.contributions) {
@@ -5486,7 +5717,8 @@ async function consumeTradeOfferSide({ sourceActor, offer } = {}) {
     if (!currencyKey || !amount) continue;
     const available = getActorCurrencyAmount(sourceActor, currencyKey);
     if (available < amount) throw new Error("Недостаточно валюты для обмена.");
-    queueCurrencyDeduction(sourceActor, currencyKey, amount);
+      queueCurrencyDeduction(sourceActor, currencyKey, amount);
+    }
   }
 
   for (const [actorUuid, currencyDeductions] of currencyUpdatesByActor) {
@@ -5498,8 +5730,22 @@ async function consumeTradeOfferSide({ sourceActor, offer } = {}) {
       if (available < amount) throw new Error("Not enough currency for trade.");
       updateData[`system.currencies.${currencyKey}`] = available - amount;
     }
-    if (Object.keys(updateData).length) await actor.update(updateData, consumeRender);
+    if (!Object.keys(updateData).length) continue;
+    const plan = plansByActor.get(actorUuid) ?? {
+      actor,
+      updates: [],
+      deletes: [],
+      actorUpdates: []
+    };
+    plan.actorUpdates.push(updateData);
+    plansByActor.set(actorUuid, plan);
   }
+
+  return executeTradeOfferItemConsumption(Array.from(plansByActor.values()), consumeRender);
+}
+
+async function consumeTradeOfferSide({ sourceActor, offer } = {}) {
+  return consumeTradeOfferSides([{ sourceActor, offer }]);
 }
 
 async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = {}) {
@@ -5562,10 +5808,19 @@ async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceI
   }
 
   if (!validateActorProjectedInventoryState(targetActor, { updates: displacementUpdates, creates: createData })) throwInventoryNoSpace();
-  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
-  const createdItems = await targetActor.createEmbeddedDocuments("Item", createData);
-  await removeTransferredItemQuantity(sourceActor, sourceItem, transferQuantity);
-  return createdItems;
+  const sourcePlan = createTransferredItemRemovalPlan(sourceItem, transferQuantity);
+  const mutation = await executeInventoryMutation([
+    {
+      actor: targetActor,
+      updates: displacementUpdates,
+      creates: createData
+    },
+    {
+      actor: sourceActor,
+      ...sourcePlan
+    }
+  ], { reason: "transfer" });
+  return mutation.createdDocuments;
 }
 
 function validateSearchOrTradeRequester(payload = {}, requesterUserId = "", searcherActor = null, searchedActor = null) {
@@ -5634,32 +5889,67 @@ function getTransferItemQuantity(item, quantity = 0) {
 }
 
 async function removeTransferredItemQuantity(actor, item, quantity = 0, { render = true } = {}) {
-  if (usesVirtualInventoryStacks(item)) return removeTransferredVirtualStackQuantity(actor, item, quantity, 0, { render });
-  const sourceQuantity = Math.max(1, getItemQuantity(item));
-  const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
-  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id], { render });
-  return actor.updateEmbeddedDocuments("Item", [{
-    _id: item.id,
-    "system.quantity": sourceQuantity - transferQuantity
-  }], { render });
+  const plan = createTransferredItemRemovalPlan(item, quantity);
+  return executeInventoryMutation({
+    actor,
+    ...plan
+  }, { reason: "remove", render });
 }
 
 async function removeTransferredItemDocumentQuantity(actor, item, quantity = 0, { render = true } = {}) {
-  const sourceQuantity = Math.max(1, getItemQuantity(item));
-  const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
-  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id], { render });
-  return actor.updateEmbeddedDocuments("Item", [{
-    _id: item.id,
-    "system.quantity": sourceQuantity - transferQuantity
-  }], { render });
+  const plan = createTransferredItemRemovalPlan(item, quantity, { virtual: false });
+  return executeInventoryMutation({
+    actor,
+    ...plan
+  }, { reason: "remove", render });
 }
 
 async function removeTransferredVirtualStackQuantity(actor, item, quantity = 0, stackIndex = 0, { render = true } = {}) {
+  const plan = createTransferredItemRemovalPlan(item, quantity, { stackIndex, virtual: true });
+  return executeInventoryMutation({
+    actor,
+    ...plan
+  }, { reason: "remove-stack", render });
+}
+
+function createTransferredItemRemovalPlan(item, quantity = 0, {
+  stackIndex = 0,
+  virtual = usesVirtualInventoryStacks(item)
+} = {}) {
   const sourceQuantity = Math.max(1, getItemQuantity(item));
   const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
-  const updateData = createItemStackPartRemovalUpdate(item, transferQuantity, stackIndex);
-  if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return actor.deleteEmbeddedDocuments("Item", [item.id], { render });
-  return actor.updateEmbeddedDocuments("Item", [updateData], { render });
+  if (transferQuantity >= sourceQuantity) return { updates: [], deletes: [item.id] };
+  const updateData = virtual
+    ? createItemStackPartRemovalUpdate(item, transferQuantity, stackIndex)
+    : {
+        _id: item.id,
+        "system.quantity": sourceQuantity - transferQuantity
+      };
+  if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) {
+    return { updates: [], deletes: [item.id] };
+  }
+  return { updates: [updateData], deletes: [] };
+}
+
+function createTradeItemPaymentMutationPlans({ buyerActor, sellerActor, item, currencyKey, quantity = 1, barterAdjustmentPercent = null } = {}) {
+  const price = calculateItemTradePrice(item, currencyKey, quantity, { sellerActor, buyerActor, barterAdjustmentPercent });
+  if (price <= 0 || buyerActor?.uuid === sellerActor?.uuid) return [];
+  const buyerAmount = getActorCurrencyAmount(buyerActor, currencyKey);
+  if (buyerAmount < price) {
+    const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
+    throw new Error(`Not enough currency: ${buyerActor?.name ?? ""} (${price} ${currency?.label ?? currencyKey}).`);
+  }
+  const sellerAmount = getActorCurrencyAmount(sellerActor, currencyKey);
+  return [
+    {
+      actor: buyerActor,
+      actorUpdate: { [`system.currencies.${currencyKey}`]: buyerAmount - price }
+    },
+    {
+      actor: sellerActor,
+      actorUpdate: { [`system.currencies.${currencyKey}`]: sellerAmount + price }
+    }
+  ];
 }
 
 function ensureTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, quantity = 1, barterAdjustmentPercent = null } = {}) {
@@ -5678,8 +5968,16 @@ async function applyTradeItemPayment({ buyerActor, sellerActor, item, currencyKe
   const buyerAmount = getActorCurrencyAmount(buyerActor, currencyKey);
   const sellerAmount = getActorCurrencyAmount(sellerActor, currencyKey);
   if (buyerAmount < price) throw new Error("Недостаточно валюты.");
-  await buyerActor.update({ [`system.currencies.${currencyKey}`]: buyerAmount - price });
-  await sellerActor.update({ [`system.currencies.${currencyKey}`]: sellerAmount + price });
+  await executeInventoryMutation([
+    {
+      actor: buyerActor,
+      actorUpdate: { [`system.currencies.${currencyKey}`]: buyerAmount - price }
+    },
+    {
+      actor: sellerActor,
+      actorUpdate: { [`system.currencies.${currencyKey}`]: sellerAmount + price }
+    }
+  ], { reason: "trade-payment" });
   return { price, currencyKey };
 }
 
@@ -6729,12 +7027,15 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
   );
   if (!replacementUpdates) throwInventoryNoSpace();
   if (!validateActorProjectedInventoryState(targetActor, { updates: replacementUpdates, creates: [createData] })) throwInventoryNoSpace();
-  if (replacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", replacementUpdates);
-  const created = await targetActor.createEmbeddedDocuments("Item", [createData]);
+  const mutation = await executeInventoryMutation({
+    actor: targetActor,
+    updates: replacementUpdates,
+    creates: [createData]
+  }, { reason: "trade-complete" });
   if (preferredPlacement.mode === ITEM_FUNCTIONS.constructPart) {
     await finalizeConstructPartInstallation(targetActor, preferredPlacement.limbKey);
   }
-  return created;
+  return mutation.createdDocuments;
 }
 
 async function createCompletedTradeContainerTree(targetActor, rootItemData, containedItems = [], targetParentId = ROOT_CONTAINER_ID, preferredPlacement = null) {
@@ -6760,12 +7061,15 @@ async function createCompletedTradeContainerTree(targetActor, rootItemData, cont
     getChildData: child => child,
     getChildOldId: child => String(child?._id ?? child?.id ?? "")
   });
-  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
-  const createdItems = await targetActor.createEmbeddedDocuments("Item", treeCreateData.creates, { keepId: true });
+  const mutation = await executeInventoryMutation({
+    actor: targetActor,
+    updates: displacementUpdates,
+    creates: treeCreateData.creates
+  }, { reason: "trade-complete-container" });
   if (preferredPlacement.mode === ITEM_FUNCTIONS.constructPart) {
     await finalizeConstructPartInstallation(targetActor, preferredPlacement.limbKey);
   }
-  return createdItems.find(item => item.id === treeCreateData.rootId) ?? createdItems.at(0) ?? null;
+  return mutation.createdDocuments.at(0) ?? null;
 }
 
 function buildCompletedContainerTreeValidationCreates(rootCreateData, rootItemData, containedItems = []) {
@@ -6904,7 +7208,8 @@ export async function transferItemBetweenActors({
   sourceStackIndex = 0,
   allowLocked = false,
   allowButchering = false,
-  spendWeaponSwitchCost = true
+  spendWeaponSwitchCost = true,
+  mutationPlans = []
 } = {}) {
   assertSearchTransferableItem(sourceItem, { allowLocked, allowButchering });
   const itemData = sourceItem.toObject();
@@ -6959,9 +7264,22 @@ export async function transferItemBetweenActors({
       if (sourceActor.uuid === targetActor.uuid) {
         result = await moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement, { spendWeaponSwitchCost });
       } else if (isContainerItem(sourceItem)) {
-        result = await transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId: ROOT_CONTAINER_ID, preferredPlacement });
+        result = await transferContainerTree({
+          sourceActor,
+          targetActor,
+          sourceItem,
+          targetParentId: ROOT_CONTAINER_ID,
+          preferredPlacement,
+          mutationPlans
+        });
       } else {
-        result = await createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem, sourceStackIndex, spendWeaponSwitchCost });
+        result = await createExternalPlacedItem(targetActor, itemData, preferredPlacement, {
+          sourceActor,
+          sourceItem,
+          sourceStackIndex,
+          spendWeaponSwitchCost,
+          mutationPlans
+        });
       }
     } else if (sourceActor.uuid === targetActor.uuid) {
       result = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
@@ -6980,14 +7298,22 @@ export async function transferItemBetweenActors({
         });
       }
     } else if (isContainerItem(sourceItem)) {
-      result = await transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId, preferredPlacement });
+      result = await transferContainerTree({
+        sourceActor,
+        targetActor,
+        sourceItem,
+        targetParentId,
+        preferredPlacement,
+        mutationPlans
+      });
     } else {
       result = await insertExternalItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
         sourceActor,
         sourceItem,
         targetItem,
         parentId: targetParentId,
-        sourceStackIndex
+        sourceStackIndex,
+        mutationPlans
       });
     }
   } finally {
@@ -7004,7 +7330,7 @@ async function moveOwnedItemToActorPlacement(actor, item, placement, { spendWeap
   const spendsWeaponSwitch = spendWeaponSwitchCost && resolvedPlacement.mode === "weapon";
   if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(actor)) return null;
   const updateData = createPlacementItemUpdate(item.id, getItemQuantity(item), ROOT_CONTAINER_ID, resolvedPlacement, item, {
-    equipped: resolvedPlacement.mode === "equipment"
+    equipped: isEquippedPlacementMode(resolvedPlacement.mode)
   });
   const replacementUpdates = createActorUnequipReplacementUpdates(actor, conflicts, [item.id]);
   if (!replacementUpdates) throwInventoryNoSpace();
@@ -7012,31 +7338,53 @@ async function moveOwnedItemToActorPlacement(actor, item, placement, { spendWeap
   if (!validateActorProjectedInventoryState(actor, { updates })) {
     throwInventoryNoSpace();
   }
-  const result = await actor.updateEmbeddedDocuments("Item", updates);
+  const result = await executeInventoryMutation({
+    actor,
+    updates
+  }, { reason: "move" });
   if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(actor);
   return result;
 }
 
-async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem, sourceStackIndex = 0, spendWeaponSwitchCost = true } = {}) {
+async function createExternalPlacedItem(actor, itemData, placement, {
+  sourceActor,
+  sourceItem,
+  sourceStackIndex = 0,
+  spendWeaponSwitchCost = true,
+  mutationPlans = []
+} = {}) {
   const placementResolution = resolveActorPlacementWithReplacements(actor, itemData, placement);
   if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   const { placement: resolvedPlacement, conflicts } = placementResolution;
   const spendsWeaponSwitch = spendWeaponSwitchCost && resolvedPlacement.mode === "weapon";
   if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(actor)) return null;
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, resolvedPlacement, {
-    equipped: resolvedPlacement.mode === "equipment"
+    equipped: isEquippedPlacementMode(resolvedPlacement.mode)
   });
   const replacementUpdates = createActorUnequipReplacementUpdates(actor, conflicts);
   if (!replacementUpdates) throwInventoryNoSpace();
   if (!validateActorProjectedInventoryState(actor, { updates: replacementUpdates, creates: [createData] })) {
     throwInventoryNoSpace();
   }
-  if (replacementUpdates.length) await actor.updateEmbeddedDocuments("Item", replacementUpdates);
-  const created = await actor.createEmbeddedDocuments("Item", [createData]);
-  if (usesVirtualInventoryStacks(sourceItem)) await removeTransferredVirtualStackQuantity(sourceActor, sourceItem, getItemQuantity(itemData), sourceStackIndex);
-  else await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
+  const sourcePlan = createTransferredItemRemovalPlan(
+    sourceItem,
+    getItemQuantity(itemData),
+    { stackIndex: sourceStackIndex }
+  );
+  const mutation = await executeInventoryMutation([
+    {
+      actor,
+      updates: replacementUpdates,
+      creates: [createData]
+    },
+    {
+      actor: sourceActor,
+      ...sourcePlan
+    },
+    ...mutationPlans
+  ], { reason: "transfer" });
   if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(actor);
-  return created;
+  return mutation.createdDocuments;
 }
 
 async function insertItemIntoActorInventory(actor, itemData, requestedPlacement, {
@@ -7132,9 +7480,16 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
     throwInventoryNoSpace();
   }
 
-  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-  if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes);
-  if (createData.length) return actor.createEmbeddedDocuments("Item", createData);
+  const mutation = await executeInventoryMutation({
+    actor,
+    updates,
+    deletes,
+    creates: createData
+  }, {
+    reason: sourceItem ? "move" : "insert",
+    validate: !skipProjectedValidation
+  });
+  if (createData.length) return mutation.createdDocuments;
   return null;
 }
 
@@ -7143,7 +7498,8 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   sourceItem = null,
   targetItem = null,
   parentId = ROOT_CONTAINER_ID,
-  sourceStackIndex = 0
+  sourceStackIndex = 0,
+  mutationPlans = []
 } = {}) {
   const quantity = Math.max(1, getItemQuantity(itemData));
   const preferredPlacement = createContextInventoryPlacement(
@@ -7196,16 +7552,35 @@ async function insertVirtualStackItemIntoActorInventory(actor, itemData, request
   if (sourceOwner?.uuid === actor.uuid) {
     const updates = mergeItemUpdates(targetUpdates, sourceUpdates);
     if (!validateActorProjectedInventoryState(actor, { updates, deletes: sourceDeletes, creates: createData })) throwInventoryNoSpace();
-    if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-    if (sourceDeletes.length) await actor.deleteEmbeddedDocuments("Item", sourceDeletes);
-    if (createData.length) return actor.createEmbeddedDocuments("Item", createData);
+    const mutation = await executeInventoryMutation([
+      {
+        actor,
+        updates,
+        deletes: sourceDeletes,
+        creates: createData
+      },
+      ...mutationPlans
+    ], { reason: "stack" });
+    if (createData.length) return mutation.createdDocuments;
     return target ? actor.items.get(target.id) ?? null : null;
   }
 
   if (!validateActorProjectedInventoryState(actor, { updates: targetUpdates, creates: createData })) throwInventoryNoSpace();
-  if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
-  if (createData.length) await actor.createEmbeddedDocuments("Item", createData);
-  if (sourceOwner && sourceItem) await removeTransferredVirtualStackQuantity(sourceOwner, sourceItem, quantity, sourceStackIndex);
+  const sourcePlan = sourceOwner && sourceItem
+    ? createTransferredItemRemovalPlan(sourceItem, quantity, { stackIndex: sourceStackIndex })
+    : { updates: [], deletes: [] };
+  await executeInventoryMutation([
+    {
+      actor,
+      updates: targetUpdates,
+      creates: createData
+    },
+    ...(sourceOwner && sourceItem ? [{
+      actor: sourceOwner,
+      ...sourcePlan
+    }] : []),
+    ...mutationPlans
+  ], { reason: "transfer-stack" });
   return target ? actor.items.get(target.id) ?? null : null;
 }
 
@@ -7235,7 +7610,10 @@ async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requeste
     const updateData = createItemStackPartPlacementUpdate(sourceItem, sourceStackIndex, placement);
     if (!updateData) return null;
     if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
-    await actor.updateEmbeddedDocuments("Item", [updateData], { render: false });
+    await executeInventoryMutation({
+      actor,
+      updates: [updateData]
+    }, { reason: "move", render: false });
     return actor.items.get(sourceItem.id) ?? sourceItem;
   }
 
@@ -7255,7 +7633,10 @@ async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requeste
   if (!canFitItemWeightInActorParent(actor, sourceItem, parentId, [], [sourceItem.id])) return null;
 
   const updateData = createInventoryItemUpdate(sourceItem.id, sourceQuantity, parentId, placement, sourceItem);
-  await actor.updateEmbeddedDocuments("Item", [updateData], { render: false });
+  await executeInventoryMutation({
+    actor,
+    updates: [updateData]
+  }, { reason: "move", render: false });
   return actor.items.get(sourceItem.id) ?? sourceItem;
 }
 
@@ -7264,7 +7645,8 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
   sourceItem,
   targetItem = null,
   parentId = ROOT_CONTAINER_ID,
-  sourceStackIndex = 0
+  sourceStackIndex = 0,
+  mutationPlans = []
 } = {}) {
   if (usesVirtualInventoryStacks(itemData)) {
     return insertVirtualStackItemIntoActorInventory(actor, itemData, requestedPlacement, {
@@ -7272,7 +7654,8 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
       sourceItem,
       targetItem,
       parentId,
-      sourceStackIndex
+      sourceStackIndex,
+      mutationPlans
     });
   }
 
@@ -7324,13 +7707,34 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
     throwInventoryNoSpace();
   }
 
-  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-  if (createData.length) await actor.createEmbeddedDocuments("Item", createData);
-  await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
+  const sourcePlan = createTransferredItemRemovalPlan(
+    sourceItem,
+    getItemQuantity(itemData),
+    { stackIndex: sourceStackIndex }
+  );
+  await executeInventoryMutation([
+    {
+      actor,
+      updates,
+      creates: createData
+    },
+    {
+      actor: sourceActor,
+      ...sourcePlan
+    },
+    ...mutationPlans
+  ], { reason: "transfer" });
   return null;
 }
 
-async function transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId, preferredPlacement } = {}) {
+async function transferContainerTree({
+  sourceActor,
+  targetActor,
+  sourceItem,
+  targetParentId,
+  preferredPlacement,
+  mutationPlans = []
+} = {}) {
   if (preferredPlacement.mode === "inventory" && !isActorInventoryPlacementAvailable(targetActor, targetParentId, preferredPlacement, [], [], { allowLockedDisplacement: true })) {
     throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
@@ -7351,7 +7755,7 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
   const spendsWeaponSwitch = preferredPlacement.mode === "weapon";
   if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(targetActor)) return null;
   const createData = createInventoryStackData(rootData, 1, targetParentId, preferredPlacement, {
-    equipped: preferredPlacement.mode === "equipment"
+    equipped: isEquippedPlacementMode(preferredPlacement.mode)
   });
   const displacementUpdates = preferredPlacement.mode === "inventory"
     ? getPlacementDisplacementUpdates(targetActor, rootData, preferredPlacement, targetParentId, [])
@@ -7373,11 +7777,19 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
     getChildOldId: child => child.id
   });
 
-  if (targetUpdates.length) await targetActor.updateEmbeddedDocuments("Item", targetUpdates);
-  const createdItems = await targetActor.createEmbeddedDocuments("Item", treeCreateData.creates, { keepId: true });
-  const createdRoot = createdItems.find(item => item.id === treeCreateData.rootId) ?? createdItems.at(0) ?? null;
-
-  await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id, ...containedItems.map(item => item.id)]);
+  const mutation = await executeInventoryMutation([
+    {
+      actor: targetActor,
+      updates: targetUpdates,
+      creates: treeCreateData.creates
+    },
+    {
+      actor: sourceActor,
+      deletes: [sourceItem.id]
+    },
+    ...mutationPlans
+  ], { reason: "transfer-container" });
+  const createdRoot = mutation.createdDocuments.at(0) ?? null;
   if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(targetActor);
   return createdRoot;
 }
@@ -7532,6 +7944,17 @@ function getRequestedTargetPlacement({
       y: 1
     }, excluded, [], ROOT_CONTAINER_ID, { allowReplacement: true });
   }
+  if (targetMode === "implant" || targetMode === "prosthesis") {
+    return resolveActorPlacement(targetActor, itemData, {
+      mode: targetMode,
+      equipmentSlot: "",
+      weaponSet: "",
+      weaponSlot: "",
+      limbKey: targetConstructPartSlot,
+      x: 1,
+      y: 1
+    }, excluded, [], ROOT_CONTAINER_ID);
+  }
 
   if (Number.isFinite(Number(targetX)) && Number.isFinite(Number(targetY))) {
     const placement = createInventoryPlacement(toInteger(targetX), toInteger(targetY), itemData, targetActor.items);
@@ -7618,6 +8041,21 @@ export function resolveActorPlacement(
   }
   if (placement.mode === "equipment") return resolveActorEquipmentPlacement(actor, itemData, placement, excludeItemIds, options);
   if (placement.mode === "weapon") return resolveActorWeaponPlacement(actor, itemData, placement, excludeItemIds, options);
+  if (placement.mode === "implant" || placement.mode === "prosthesis") {
+    const footprint = getItemFootprint(itemData);
+    return {
+      ...placement,
+      mode: placement.mode,
+      equipmentSlot: "",
+      weaponSet: "",
+      weaponSlot: "",
+      limbKey: String(placement.limbKey ?? ""),
+      x: 1,
+      y: 1,
+      width: footprint.width,
+      height: footprint.height
+    };
+  }
 
   const normalizedPlacement = normalizeInventoryPlacement(placement, itemData, actor.items);
   return isActorInventoryPlacementAvailable(actor, parentId, normalizedPlacement, excludeItemIds, reservedPlacements)
@@ -8046,11 +8484,12 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
     ? createContextInventoryPlacement(placement, parentId)
     : placement;
   const storedPlacement = createStoredPlacement(placementForStorage, itemData);
+  const lockedState = getItemLockedStateForPlacementTransition(itemData, storedPlacement.mode);
   foundry.utils.mergeObject(createData, {
     system: {
       quantity,
       equipped: Boolean(equipped),
-      ...(isLockedStorageParentId(parentId) ? { locked: true } : {}),
+      ...(lockedState === undefined ? {} : { locked: lockedState }),
       container: {
         parentId: getStoredInventoryParentId(parentId)
       },
@@ -8072,9 +8511,15 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
   foundry.utils.setProperty(
     createData,
     "system.stackParts",
-    usesVirtualInventoryStacks(createData) ? createItemStackPartsForQuantity(createData, quantity) : []
+    isInventoryContextPlacementMode(storedPlacement.mode) && usesVirtualInventoryStacks(createData)
+      ? createItemStackPartsForQuantity(createData, quantity)
+      : []
   );
   return createData;
+}
+
+function isEquippedPlacementMode(mode = "") {
+  return ["equipment", "implant", "prosthesis"].includes(String(mode ?? ""));
 }
 
 function resolveActorConstructPartPlacement(actor, itemData, placement = {}, excludeItemIds = []) {
@@ -8127,7 +8572,11 @@ export async function copyActorInventoryItem(actor, item, { allowLocked = false 
   foundry.utils.setProperty(data, "system.placement", createStoredPlacement(createContextInventoryPlacement(placement, parentId), data));
   foundry.utils.setProperty(data, "system.stackParts", []);
   if (!validateActorProjectedInventoryState(actor, { creates: [data] })) throwInventoryNoSpace();
-  return actor.createEmbeddedDocuments("Item", [data]);
+  const mutation = await executeInventoryMutation({
+    actor,
+    creates: [data]
+  }, { reason: "copy" });
+  return mutation.createdDocuments;
 }
 
 export async function splitActorInventoryItem(actor, item, amount, { allowLocked = false } = {}) {
@@ -8153,7 +8602,10 @@ export async function splitActorInventoryItem(actor, item, amount, { allowLocked
       createContextInventoryPlacement(placement, parentId)
     );
     if (!updateData || !validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
-    await actor.updateEmbeddedDocuments("Item", [updateData]);
+    await executeInventoryMutation({
+      actor,
+      updates: [updateData]
+    }, { reason: "split-stack" });
     return actor.items.get(item.id) ?? null;
   }
   foundry.utils.setProperty(data, "system.container.parentId", getStoredInventoryParentId(parentId));
@@ -8164,8 +8616,12 @@ export async function splitActorInventoryItem(actor, item, amount, { allowLocked
     "system.quantity": quantity - splitQuantity
   };
   if (!validateActorProjectedInventoryState(actor, { updates: [updateData], creates: [data] })) throwInventoryNoSpace();
-  await actor.updateEmbeddedDocuments("Item", [updateData]);
-  return actor.createEmbeddedDocuments("Item", [data]);
+  const mutation = await executeInventoryMutation({
+    actor,
+    updates: [updateData],
+    creates: [data]
+  }, { reason: "split" });
+  return mutation.createdDocuments;
 }
 
 export async function stackActorInventoryItem({
@@ -8176,7 +8632,8 @@ export async function stackActorInventoryItem({
   targetParentId = ROOT_CONTAINER_ID,
   quantity = 0,
   sourceStackIndex = 0,
-  targetStackIndex = null
+  targetStackIndex = null,
+  mutationPlans = []
 } = {}) {
   assertSearchTransferableItem(sourceItem, { allowButchering: isItemInButcheringStorage(sourceItem) });
   assertSearchTransferableItem(targetItem);
@@ -8185,7 +8642,13 @@ export async function stackActorInventoryItem({
     const updateData = createItemStackPartMergeUpdate(sourceItem, sourceStackIndex, targetStackIndex, quantity);
     if (!updateData) throw new Error("No stack room.");
     if (!validateActorProjectedInventoryState(targetActor, { updates: [updateData] })) throwInventoryNoSpace();
-    await targetActor.updateEmbeddedDocuments("Item", [updateData]);
+    await executeInventoryMutation([
+      {
+        actor: targetActor,
+        updates: [updateData]
+      },
+      ...mutationPlans
+    ], { reason: "stack" });
     return targetActor.items.get(targetItem.id) ?? null;
   }
   if (getItemContainerParentId(targetItem) !== targetParentId) throw new Error("Invalid stack target.");
@@ -8220,19 +8683,34 @@ export async function stackActorInventoryItem({
       });
     }
     if (!validateActorProjectedInventoryState(targetActor, { updates, deletes })) throwInventoryNoSpace();
-    await targetActor.updateEmbeddedDocuments("Item", updates);
-    if (deletes.length) await targetActor.deleteEmbeddedDocuments("Item", deletes);
+    await executeInventoryMutation([
+      {
+        actor: targetActor,
+        updates,
+        deletes
+      },
+      ...mutationPlans
+    ], { reason: "stack" });
     return targetActor.items.get(targetItem.id) ?? null;
   }
 
   if (!validateActorProjectedInventoryState(targetActor, { updates: [targetUpdate] })) throwInventoryNoSpace();
-  await targetActor.updateEmbeddedDocuments("Item", [targetUpdate]);
-  if (virtualSource) await removeTransferredVirtualStackQuantity(sourceActor, sourceItem, appliedQuantity, sourceStackIndex);
-  else if (appliedQuantity >= sourceQuantity) await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
-  else await sourceActor.updateEmbeddedDocuments("Item", [{
-    _id: sourceItem.id,
-    "system.quantity": sourceQuantity - appliedQuantity
-  }]);
+  const sourcePlan = createTransferredItemRemovalPlan(
+    sourceItem,
+    appliedQuantity,
+    { stackIndex: sourceStackIndex, virtual: virtualSource }
+  );
+  await executeInventoryMutation([
+    {
+      actor: targetActor,
+      updates: [targetUpdate]
+    },
+    {
+      actor: sourceActor,
+      ...sourcePlan
+    },
+    ...mutationPlans
+  ], { reason: "transfer-stack" });
   return targetActor.items.get(targetItem.id) ?? null;
 }
 
@@ -8332,11 +8810,12 @@ function createPlacementItemUpdate(itemId, quantity, parentId, placement, itemDa
     ? createContextInventoryPlacement(placement, parentId)
     : placement;
   const storedPlacement = createStoredPlacement(placementForStorage, itemData);
+  const lockedState = getItemLockedStateForPlacementTransition(itemData, storedPlacement.mode);
   return {
     _id: itemId,
     "system.quantity": quantity,
     "system.equipped": Boolean(equipped),
-    ...(isLockedStorageParentId(parentId) ? { "system.locked": true } : {}),
+    ...(lockedState === undefined ? {} : { "system.locked": lockedState }),
     "system.container.parentId": getStoredInventoryParentId(parentId),
     "system.placement.mode": storedPlacement.mode,
     "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
@@ -8495,76 +8974,11 @@ function projectActorInventoryState(actor, { updates = [], deletes = [], creates
 }
 
 function areStackable(sourceData, targetItem) {
-  const sourceSystem = sourceData?.system ?? {};
-  const targetSystem = targetItem?.system ?? {};
-  const creatureOptions = getCreatureOptions();
-  return (
-    sourceData?.type === targetItem?.type
-    && !isContainerItem(sourceData)
-    && !isContainerItem(targetItem)
-    && sourceData?.name === targetItem?.name
-    && sourceData?.img === targetItem?.img
-    && isItemLocked(sourceData) === isItemLocked(targetItem)
-    && Number(sourceSystem.weight) === Number(targetSystem.weight)
-    && Number(sourceSystem.price) === Number(targetSystem.price)
-    && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
-    && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
-    && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
-    && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
-    && serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, sourceSystem)) === serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, targetSystem))
-    && serializeWeaponSlotRequirement(sourceSystem, creatureOptions) === serializeWeaponSlotRequirement(targetSystem, creatureOptions)
-    && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
-  );
+  return canStackInventoryItems(sourceData, targetItem);
 }
 
 function canMaybeStackItems(sourceData, targetItem) {
-  if (!sourceData || !targetItem) return false;
-  if (sourceData?.type !== targetItem?.type) return false;
-  if (isContainerItem(sourceData) || isContainerItem(targetItem)) return false;
-  if (sourceData?.name !== targetItem?.name) return false;
-  if (sourceData?.img !== targetItem?.img) return false;
-  if (isItemLocked(sourceData) !== isItemLocked(targetItem)) return false;
-  if (getItemQuantity(targetItem) >= getItemMaxStack(targetItem)) return false;
-
-  const sourceSystem = sourceData?.system ?? {};
-  const targetSystem = targetItem?.system ?? {};
-  if (Number(sourceSystem.weight) !== Number(targetSystem.weight)) return false;
-  if (Number(sourceSystem.price) !== Number(targetSystem.price)) return false;
-  if (String(sourceSystem.priceCurrency ?? "") !== String(targetSystem.priceCurrency ?? "")) return false;
-  if (getItemMaxStack(sourceSystem) !== getItemMaxStack(targetSystem)) return false;
-
-  const sourceFootprint = getItemFootprint(sourceSystem);
-  const targetFootprint = getItemFootprint(targetSystem);
-  return sourceFootprint.width === targetFootprint.width && sourceFootprint.height === targetFootprint.height;
-}
-
-function serializeSet(set) {
-  return Array.from(set).sort().join("|");
-}
-
-function serializeWeaponSlotRequirement(system = {}, creatureOptions = getCreatureOptions()) {
-  const requirement = getWeaponSlotRequirement(system);
-  return `${requirement.mode}:${serializeSet(getValidSelectedWeaponSlotKeysForOptions(creatureOptions, system))}`;
-}
-
-function serializeItemFunctions(functions = {}) {
-  return JSON.stringify(normalizeItemFunctionsForStack(functions));
-}
-
-function normalizeItemFunctionsForStack(functions = {}) {
-  return normalizeStackComparableValue(functions);
-}
-
-function normalizeStackComparableValue(value) {
-  if (typeof value?.toObject === "function") return normalizeStackComparableValue(value.toObject(false));
-  if (value instanceof Set) return Array.from(value).sort();
-  if (Array.isArray(value)) return value.map(entry => normalizeStackComparableValue(entry));
-  if (!value || typeof value !== "object") return value ?? null;
-
-  const entries = Object.entries(value)
-    .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
-  return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
+  return canMaybeStackInventoryItems(sourceData, targetItem);
 }
 
 function validateActorLoadLimit(actor, projectedItems = []) {
@@ -8603,7 +9017,9 @@ function getActorLoadLimitExceededMessage() {
 }
 
 function throwInventoryNoSpace() {
-  throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  const error = new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  error.code = "inventory-no-space";
+  throw error;
 }
 
 export function getDropZoneParentId(zone) {
@@ -9139,6 +9555,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
   if (action === "joinTradeSession") return joinTradeSession(payload);
   const session = getActiveTradeSession(payload.sessionId);
   if (!session) throw new Error("Trade session not found.");
+  let claimResult = null;
   if (action === "selectTradeActor") {
     ensureTradeSessionParticipant(session, requesterUserId);
     selectTradeSessionActor(session, payload.side, payload.actorUuid, requesterUserId);
@@ -9191,7 +9608,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     if (!targetActor) throw new Error("Actor not found.");
     ensureTradeSessionActorControl(session, targetActor.uuid, requesterUserId);
     if (getTradeSessionActorSide(session, targetActor.uuid) !== entries[0]?.side) throw new Error("Trade recipient side mismatch.");
-    await performCompletedTradeBatchClaim({ ...payload, entries }, requesterUserId);
+    claimResult = await performCompletedTradeBatchClaim({ ...payload, entries }, requesterUserId);
   } else if (action === "reduceCompletedTradeEntry") {
     session.offers = reduceTradeOfferEntryQuantity(session.offers, payload.side, payload.kind, payload.key, payload.quantity);
   } else if (action === "setTradeCurrency") {
@@ -9221,7 +9638,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
   touchTradeSession(session);
   const snapshot = createTradeSessionSnapshot(session);
   broadcastTradeSessionSnapshot(snapshot);
-  return { snapshot, completed: Boolean(session.offers.completed) };
+  return { snapshot, completed: Boolean(session.offers.completed), claimResult };
 }
 
 function createTradeSession(payload = {}) {
@@ -9412,6 +9829,7 @@ function isTradeSessionReadyToComplete(session = {}) {
 }
 
 async function completeTradeSession(session = {}, requesterUserId = "") {
+  if (session.completed) return;
   const offers = normalizeTradeOffersState(session.offers);
   for (const side of TRADE_OFFER_SIDES) validateTradeOfferSide(getTradeSessionFirstActor(session, side), offers[side]);
   const searcherTarget = getTradeSessionFirstActor(session, "searcher");
@@ -9421,8 +9839,13 @@ async function completeTradeSession(session = {}, requesterUserId = "") {
   const searcherReceived = prepareReceivedTradeOfferSide({ targetActor: searcherTarget, offer: offers.searched });
   broadcastTradeCompletionLock(session.sessionId, true);
   try {
-    await consumeTradeOfferSide({ sourceActor: searcherTarget, offer: offers.searcher });
-    await consumeTradeOfferSide({ sourceActor: searchedTarget, offer: offers.searched });
+    await executeTradeOfferSettlement({
+      sides: [
+        { sourceActor: searcherTarget, offer: offers.searcher },
+        { sourceActor: searchedTarget, offer: offers.searched }
+      ],
+      reason: "trade-session-complete"
+    });
     session.completed = true;
     session.offers = normalizeTradeOffersState({
       completed: true,
@@ -9439,35 +9862,43 @@ async function completeTradeSession(session = {}, requesterUserId = "") {
 async function reclaimCompletedTradeSessionRemainders(session = {}) {
   let offers = normalizeTradeOffersState(session.offers);
   if (!offers.completed) return offers;
+
   for (const side of TRADE_OFFER_SIDES) {
     for (const entry of [...offers[side].items]) {
       const targetActor = getCompletedTradeRemainderReturnActor(session, side, entry);
       if (!targetActor) throw new Error("Completed trade return actor not found.");
-      const itemData = getTradeOfferEntryItemData(entry, null);
-      const quantity = Math.max(1, toInteger(entry.quantity));
-      if (!itemData || !quantity) continue;
-      foundry.utils.setProperty(itemData, "system.quantity", quantity);
-      const target = getCompletedTradeClaimTarget(targetActor, itemData, entry.containedItems ?? [], { quantity });
-      if (!target) throwInventoryNoSpace();
-      await createCompletedTradeItem(targetActor, itemData, entry.containedItems ?? [], {
-        targetMode: "inventory",
-        targetParentId: target.parentId,
-        targetX: target.placement.x,
-        targetY: target.placement.y,
-        targetItemId: ""
-      });
-      offers = reduceTradeOfferEntryQuantity(offers, side, "item", getTradeOfferEntryKey(entry, "item"), quantity);
+      ensureTradeOfferSideCanBeDelivered(targetActor, { items: [entry] });
+      await deliverTradeOfferItemsToActor(targetActor, { items: [entry] });
+      offers = reduceTradeOfferEntryQuantity(
+        offers,
+        side,
+        "item",
+        getTradeOfferEntryKey(entry, "item"),
+        Math.max(1, toInteger(entry.quantity))
+      );
+      session.offers = offers;
     }
     for (const entry of [...offers[side].currencies]) {
       const targetActor = getCompletedTradeRemainderReturnActor(session, side, entry);
       if (!targetActor) throw new Error("Completed trade return actor not found.");
       const amount = Math.max(0, toInteger(entry.amount));
       if (!entry.currencyKey || !amount) continue;
-      await targetActor.update({ [`system.currencies.${entry.currencyKey}`]: getActorCurrencyAmount(targetActor, entry.currencyKey) + amount });
-      offers = reduceTradeOfferEntryQuantity(offers, side, "currency", getTradeOfferEntryKey(entry, "currency"), amount);
+      await executeInventoryMutation({
+        actor: targetActor,
+        actorUpdate: {
+          [`system.currencies.${entry.currencyKey}`]: getActorCurrencyAmount(targetActor, entry.currencyKey) + amount
+        }
+      }, { reason: "trade-reclaim-currency", render: false });
+      offers = reduceTradeOfferEntryQuantity(
+        offers,
+        side,
+        "currency",
+        getTradeOfferEntryKey(entry, "currency"),
+        amount
+      );
+      session.offers = offers;
     }
   }
-  session.offers = offers;
   return offers;
 }
 

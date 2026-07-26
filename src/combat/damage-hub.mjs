@@ -39,6 +39,20 @@ import {
 } from "../abilities/active-use-runtime.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  getActorInventoryGridDimensions
+} from "../utils/actor-display-data.mjs";
+import {
+  LOCKED_STORAGE_PARENT_ID,
+  LOCKED_STORAGE_PLACEMENT_MODE,
+  ROOT_CONTAINER_ID,
+  createStoredPlacement,
+  findFirstAvailableResolvedInventoryPlacement,
+  getContextInventoryItems,
+  getItemFootprint
+} from "../utils/inventory-containers.mjs";
+import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import {
@@ -1898,6 +1912,14 @@ export async function deleteHealedTraumas(actor, traumaIds = []) {
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
   });
+}
+
+/**
+ * Refresh derived vital-status effects after another transactional subsystem
+ * has changed trauma Items or limb state through Foundry's batch API.
+ */
+export function synchronizeActorDamageStatusesAfterInventoryMutation(actor) {
+  return queueActorDamageStatusSync(actor);
 }
 
 export async function setLimbMissingState(actor, limbKey = "", { syncStatus = false } = {}) {
@@ -7537,34 +7559,97 @@ function isInstalledProsthesisItem(item) {
 }
 
 async function returnBrokenProsthesisToInventory(actor, prosthesis) {
-  const placement = createOverflowInventoryPlacement(prosthesis);
-  return actor.updateEmbeddedDocuments("Item", [{
+  const planned = createBrokenProsthesisInventoryPlacement(actor, prosthesis);
+  const placement = planned?.placement ?? createBrokenProsthesisLockedStoragePlacement(actor, prosthesis);
+  const update = {
     _id: prosthesis.id,
     "system.equipped": false,
-    "system.container.parentId": "",
-    "system.placement.mode": "inventory",
-    "system.placement.equipmentSlot": "",
-    "system.placement.weaponSet": "",
-    "system.placement.weaponSlot": "",
-    "system.placement.limbKey": "",
+    "system.container.parentId": ROOT_CONTAINER_ID,
+    "system.placement.mode": placement.mode,
+    "system.placement.equipmentSlot": placement.equipmentSlot,
+    "system.placement.weaponSet": placement.weaponSet,
+    "system.placement.weaponSlot": placement.weaponSlot,
+    "system.placement.limbKey": placement.limbKey,
+    "system.placement.constructPartOrder": placement.constructPartOrder,
     "system.placement.x": placement.x,
     "system.placement.y": placement.y,
     "system.placement.width": placement.width,
     "system.placement.height": placement.height,
     "system.placement.rotated": Boolean(placement.rotated),
     "system.functions.condition.value": 0
-  }]);
+  };
+  if (planned?.stackParts) update["system.stackParts"] = planned.stackParts;
+  return executeInventoryMutation({
+    actor,
+    updates: [update]
+  }, { reason: "return-broken-prosthesis" });
 }
 
-function createOverflowInventoryPlacement(item) {
-  const placement = item?.system?.placement ?? {};
-  return {
-    x: 1,
-    y: 10000,
-    width: Math.max(1, toInteger(placement.width) || 1),
-    height: Math.max(1, toInteger(placement.height) || 1),
-    rotated: Boolean(placement.rotated)
+function createBrokenProsthesisInventoryPlacement(actor, prosthesis) {
+  try {
+    const planningData = foundry.utils.deepClone(prosthesis.toObject());
+    // The document already belongs to this Actor. The grant planner is used
+    // only for its canonical packing rules, so its synthetic copy must not
+    // count the same weight for a second time.
+    foundry.utils.setProperty(planningData, "system.weight", 0);
+    const plan = planActorInventoryGrant(actor, planningData, {
+      quantity: Math.max(1, toInteger(prosthesis.system?.quantity) || 1),
+      parentId: ROOT_CONTAINER_ID,
+      merge: false
+    });
+    if (plan?.creates?.length !== 1) return null;
+    const createData = plan.creates[0];
+    return {
+      placement: createStoredPlacement(createData.system?.placement, prosthesis),
+      stackParts: foundry.utils.deepClone(createData.system?.stackParts ?? [])
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function createBrokenProsthesisLockedStoragePlacement(actor, prosthesis) {
+  const raceId = String(actor?.system?.creature?.raceId ?? "");
+  const race = getCreatureOptions().races.find(entry => String(entry.id) === raceId) ?? null;
+  const dimensions = getActorInventoryGridDimensions(actor, race);
+  const footprint = getItemFootprint(prosthesis, actor.items);
+  const columns = Math.max(1, dimensions.columns, footprint.width);
+  const contextItems = getContextInventoryItems(LOCKED_STORAGE_PARENT_ID, actor.items);
+  const options = {
+    allowOverflowRows: true,
+    placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
+    preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
   };
+  const placement = findFirstAvailableResolvedInventoryPlacement(
+    contextItems,
+    columns,
+    1,
+    prosthesis,
+    actor.items,
+    [prosthesis.id],
+    [],
+    options
+  ) ?? {
+    mode: LOCKED_STORAGE_PLACEMENT_MODE,
+    x: 1,
+    y: contextItems.reduce((bottom, item) => {
+      const stored = item.system?.placement ?? {};
+      return Math.max(
+        bottom,
+        Math.max(1, toInteger(stored.y)) + getItemFootprint(item, actor.items).height
+      );
+    }, 1),
+    rotated: Boolean(prosthesis.system?.placement?.rotated)
+  };
+  return createStoredPlacement({
+    ...placement,
+    mode: LOCKED_STORAGE_PLACEMENT_MODE,
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    limbKey: "",
+    constructPartOrder: 0
+  }, prosthesis);
 }
 
 function applyLimbDamageMultiplier(actor, amount, limbKey = "") {

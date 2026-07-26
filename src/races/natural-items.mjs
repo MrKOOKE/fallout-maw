@@ -1,15 +1,26 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { DROPPED_ITEMS_ACTOR_FLAG } from "../items/dropped-items.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { createStoredPlacement, ROOT_CONTAINER_ID } from "../utils/inventory-containers.mjs";
+import {
+  getNaturalRaceItemFlag,
+  isNaturalRaceItem,
+  isNaturalRaceWeapon,
+  NATURAL_RACE_ITEM_FLAG,
+  NATURAL_RACE_ITEM_KINDS,
+  NATURAL_RACE_WEAPON_SET_KEY
+} from "./natural-item-identity.mjs";
 
-export const NATURAL_RACE_ITEM_FLAG = "naturalRaceItem";
-export const NATURAL_RACE_WEAPON_SET_KEY = "naturalRaceWeapons";
-export const NATURAL_RACE_ITEM_KINDS = Object.freeze({
-  weapon: "weapon",
-  feature: "feature"
-});
+export {
+  getNaturalRaceItemFlag,
+  isNaturalRaceItem,
+  isNaturalRaceWeapon,
+  NATURAL_RACE_ITEM_FLAG,
+  NATURAL_RACE_ITEM_KINDS,
+  NATURAL_RACE_WEAPON_SET_KEY
+} from "./natural-item-identity.mjs";
 
 const DEFAULT_NATURAL_WEAPON_NAME = "Natural Weapon";
 const DEFAULT_NATURAL_FEATURE_NAME = "Natural Feature";
@@ -194,32 +205,21 @@ export async function syncActorNaturalRaceItems(actor) {
     const naturalItems = actor.items?.filter(item => isNaturalRaceItem(item)) ?? [];
     const { creates, deletes } = planActorNaturalRaceItemSync(naturalItems, desired);
     if (!creates.length && !deletes.length) return;
-    if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes, { allowNaturalRaceItemDelete: true });
-    if (creates.length) await actor.createEmbeddedDocuments("Item", creates.map(entry => entry.data));
+    await executeInventoryMutation({
+      actor,
+      deletes,
+      creates: creates.map(entry => entry.data)
+    }, {
+      reason: "natural-race-item-sync",
+      documentOptions: { allowNaturalRaceItemDelete: true }
+    });
   } finally {
     naturalItemSyncActors.delete(actor.uuid);
   }
 }
 
-export function isNaturalRaceItem(itemOrData, kind = "") {
-  const flag = getNaturalRaceItemFlag(itemOrData);
-  if (!flag?.kind) return false;
-  return kind ? flag.kind === kind : true;
-}
-
-export function isNaturalRaceWeapon(itemOrData) {
-  return isNaturalRaceItem(itemOrData, NATURAL_RACE_ITEM_KINDS.weapon);
-}
-
 export function isNaturalRaceFeature(itemOrData) {
   return isNaturalRaceItem(itemOrData, NATURAL_RACE_ITEM_KINDS.feature);
-}
-
-export function getNaturalRaceItemFlag(itemOrData) {
-  if (!itemOrData) return null;
-  return itemOrData.getFlag?.(SYSTEM_ID, NATURAL_RACE_ITEM_FLAG)
-    ?? itemOrData.flags?.[SYSTEM_ID]?.[NATURAL_RACE_ITEM_FLAG]
-    ?? null;
 }
 
 export function getNaturalWeaponSetContext(actor, race, currencies = []) {

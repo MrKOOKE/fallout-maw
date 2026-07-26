@@ -3,6 +3,8 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getToolSettings } from "../settings/accessors.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const HACKING_SOCKET = `system.${SYSTEM_ID}`;
@@ -11,6 +13,7 @@ const HACKING_FLAG_PATH = `flags.${SYSTEM_ID}.hacking`;
 const HACKING_SOCKET_TIMEOUT = 10000;
 const TOOL_CLASS_RANKS = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 const pendingHackingRequests = new Map();
+const hackingMutationLock = createActorOperationLock();
 let doorControlPatched = false;
 
 export function registerHackingHooks() {
@@ -454,6 +457,22 @@ async function applyHackingResultNow({
 } = {}) {
   const hackerActor = await fromUuid(hackerActorUuid);
   const target = await fromUuid(targetUuid);
+  return runWithHackingMutationLocks([hackerActor, target], () => applyHackingResultLocked({
+    hackerActor,
+    target,
+    methodId,
+    toolItemId,
+    success
+  }));
+}
+
+async function applyHackingResultLocked({
+  hackerActor,
+  target,
+  methodId,
+  toolItemId,
+  success
+}) {
   if (!hackerActor || !target || !isHackingTargetLocked(target)) throw new Error("Цель взлома недоступна.");
 
   const methods = getHackingTargetMethods(target);
@@ -473,10 +492,8 @@ async function applyHackingResultNow({
     throw new Error("Запаса инструмента недостаточно для попытки.");
   }
   const remainingSupply = currentSupply - method.toolCost;
-  await toolItem.update({
-    [`system.functions.tools.${method.toolKey}.supply.value`]: remainingSupply
-  }, { render: false });
-
+  const previousMethods = foundry.utils.deepClone(methods);
+  const previousDoorState = target.ds;
   method.attemptsRemaining = Math.max(0, method.attemptsRemaining - 1);
   const updates = isWallHackingTarget(target)
     ? {
@@ -487,7 +504,47 @@ async function applyHackingResultNow({
         "system.hacking.enabled": success ? false : true,
         "system.hacking.methods": methods
       };
-  await target.update(updates, { render: false });
+  const toolUpdate = {
+    _id: toolItem.id,
+    [`system.functions.tools.${method.toolKey}.supply.value`]: remainingSupply
+  };
+  if (isWallHackingTarget(target)) {
+    await commitWallHackingBatch([{
+      action: "update",
+      documentName: "Item",
+      parent: hackerActor,
+      updates: [toolUpdate],
+      render: false
+    }, {
+      action: "update",
+      documentName: "Wall",
+      parent: target.parent,
+      updates: [{ _id: target.id, ...updates }],
+      render: false
+    }], {
+      hackerActor,
+      target,
+      toolItem,
+      toolKey: method.toolKey,
+      previousSupply: currentSupply,
+      appliedSupply: remainingSupply,
+      previousDoorState,
+      appliedDoorState: updates.ds,
+      previousMethods,
+      appliedMethods: methods
+    });
+  } else {
+    await executeInventoryMutation([
+      {
+        actor: hackerActor,
+        updates: [toolUpdate]
+      },
+      {
+        actor: target,
+        actorUpdates: [updates]
+      }
+    ], { reason: "hacking-attempt" });
+  }
 
   const resultText = success
     ? `вскрывает замок на объекте <strong>${escapeHTML(getHackingTargetName(target))}</strong>`
@@ -499,6 +556,127 @@ async function applyHackingResultNow({
   if (success) ui.notifications.info(`${getHackingTargetName(target)}: замок вскрыт.`);
   else if (method.attemptsRemaining <= 0) ui.notifications.warn(`${getToolLabel(method.toolKey)}: попытки закончились.`);
   return { unlocked: Boolean(success), methods };
+}
+
+function runWithHackingMutationLocks(documents, operation, index = 0) {
+  const ordered = index === 0
+    ? Array.from(new Map(
+      documents
+        .filter(Boolean)
+        .map(document => [String(document.uuid ?? document.id ?? ""), document])
+        .filter(([key]) => key)
+    ).values()).sort((left, right) => (
+      String(left.uuid ?? left.id).localeCompare(String(right.uuid ?? right.id))
+    ))
+    : documents;
+  if (index >= ordered.length) return operation();
+  return hackingMutationLock.run(
+    ordered[index],
+    null,
+    () => runWithHackingMutationLocks(ordered, operation, index + 1)
+  );
+}
+
+async function commitWallHackingBatch(operations, state) {
+  try {
+    const results = await foundry.documents.modifyBatch(operations);
+    assertCompleteHackingBatch(results, operations.length);
+    if (
+      getHackingToolSupply(state.toolItem, state.toolKey) !== state.appliedSupply
+      || state.target.ds !== state.appliedDoorState
+      || !hackingMethodsEqual(getHackingTargetMethods(state.target), state.appliedMethods)
+    ) {
+      throw new Error("Foundry did not persist the complete hacking operation.");
+    }
+  } catch (error) {
+    const recoveryError = await recoverWallHackingBatch(state);
+    if (recoveryError) {
+      const aggregate = new AggregateError(
+        [error, recoveryError],
+        "Hacking failed and its previous state could not be fully restored."
+      );
+      aggregate.cause = error;
+      throw aggregate;
+    }
+    throw error;
+  }
+}
+
+async function recoverWallHackingBatch(state) {
+  const operations = [];
+  if (getHackingToolSupply(state.toolItem, state.toolKey) === state.appliedSupply) {
+    operations.push({
+      action: "update",
+      documentName: "Item",
+      parent: state.hackerActor,
+      updates: [{
+        _id: state.toolItem.id,
+        [`system.functions.tools.${state.toolKey}.supply.value`]: state.previousSupply
+      }],
+      render: false,
+      falloutMawHackingRecovery: true
+    });
+  }
+  if (
+    state.target.ds === state.appliedDoorState
+    && hackingMethodsEqual(getHackingTargetMethods(state.target), state.appliedMethods)
+  ) {
+    operations.push({
+      action: "update",
+      documentName: "Wall",
+      parent: state.target.parent,
+      updates: [{
+        _id: state.target.id,
+        ds: state.previousDoorState,
+        [`${HACKING_FLAG_PATH}.methods`]: state.previousMethods
+      }],
+      render: false,
+      falloutMawHackingRecovery: true
+    });
+  }
+  if (!operations.length) {
+    const alreadyRestored = (
+      getHackingToolSupply(state.toolItem, state.toolKey) === state.previousSupply
+      && state.target.ds === state.previousDoorState
+      && hackingMethodsEqual(getHackingTargetMethods(state.target), state.previousMethods)
+    );
+    return alreadyRestored ? null : new Error("Hacking state changed concurrently during recovery.");
+  }
+
+  try {
+    const results = await foundry.documents.modifyBatch(operations);
+    assertCompleteHackingBatch(results, operations.length);
+    if (
+      getHackingToolSupply(state.toolItem, state.toolKey) !== state.previousSupply
+      || state.target.ds !== state.previousDoorState
+      || !hackingMethodsEqual(getHackingTargetMethods(state.target), state.previousMethods)
+    ) {
+      throw new Error("Hacking recovery did not restore the previous state.");
+    }
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
+function assertCompleteHackingBatch(results, expectedLength) {
+  if (
+    !Array.isArray(results)
+    || results.length !== expectedLength
+    || results.some(result => !Array.isArray(result) || result.length !== 1)
+  ) {
+    throw new Error("Foundry returned an incomplete hacking operation batch.");
+  }
+}
+
+function getHackingToolSupply(item, toolKey) {
+  const tool = getEnabledToolFunctions(item)
+    .find(entry => String(entry.toolKey ?? "") === String(toolKey ?? ""));
+  return Math.max(0, toInteger(tool?.supply?.value));
+}
+
+function hackingMethodsEqual(left, right) {
+  return JSON.stringify(normalizeHackingMethods(left)) === JSON.stringify(normalizeHackingMethods(right));
 }
 
 function getHackingToolCandidates(actor, methods) {

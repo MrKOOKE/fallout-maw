@@ -450,6 +450,37 @@ export function resolveActorItemOrInstalledModule(actor = null, itemId = "") {
   return actor.items?.get?.(id) ?? getActorInstalledModuleItems(actor).find(item => item.id === id) ?? null;
 }
 
+/**
+ * Translate an update for either a real Actor Item or a virtual installed
+ * module into one update for the owning embedded Item document.
+ */
+export function createActorItemOrInstalledModuleUpdate(actor = null, item = null, changes = {}) {
+  const ownedItem = actor?.items?.get?.(item?.id ?? "");
+  if (ownedItem) return { _id: ownedItem.id, ...foundry.utils.deepClone(changes ?? {}) };
+
+  const parentItemId = String(item?.system?.placement?.parentItemId ?? "");
+  const moduleSlotId = String(item?.system?.placement?.moduleSlotId ?? "");
+  const hostItem = actor?.items?.get?.(parentItemId);
+  if (!hostItem || !moduleSlotId) return null;
+
+  const slots = foundry.utils.deepClone(Array.isArray(getWeaponFunction(hostItem)?.moduleSlots)
+    ? getWeaponFunction(hostItem).moduleSlots
+    : []);
+  const slotIndex = slots.findIndex(slot => String(slot?.id ?? "") === moduleSlotId);
+  if (slotIndex < 0) return null;
+
+  const currentData = foundry.utils.deepClone(getWeaponModuleSlotItemData(slots[slotIndex]) ?? item?.toObject?.() ?? item);
+  foundry.utils.mergeObject(currentData, foundry.utils.expandObject(changes ?? {}), { inplace: true });
+  slots[slotIndex] = {
+    ...slots[slotIndex],
+    itemData: currentData
+  };
+  return {
+    _id: hostItem.id,
+    "system.functions.weapon.moduleSlots": slots
+  };
+}
+
 export function getActorInstalledModuleItems(actor = null) {
   const modules = [];
   for (const hostItem of getActorItemDocuments(actor)) {

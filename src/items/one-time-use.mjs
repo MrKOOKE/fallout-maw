@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
 import {
   getCharacteristicSettings,
   getDamageTypeSettings,
@@ -9,11 +10,7 @@ import {
 } from "../settings/accessors.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
-import {
-  createItemStackPartRemovalUpdate,
-  getItemQuantity,
-  usesVirtualInventoryStacks
-} from "../utils/inventory-containers.mjs";
+import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { getOneTimeUseFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import {
   actorKnowsCraftItem,
@@ -332,16 +329,11 @@ function formatOneTimeUseChangeValue(type = "add", value = "") {
 }
 
 async function spendOneTimeUseItem(item, documentOptions = {}) {
-  const quantity = getItemQuantity(item);
-  if (usesVirtualInventoryStacks(item)) {
-    const updateData = createItemStackPartRemovalUpdate(item, 1, 0);
-    if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) return item.delete(documentOptions);
-    const { _id, ...changes } = updateData;
-    return item.update(changes, documentOptions);
-  }
-  const next = Math.max(0, quantity - 1);
-  if (next <= 0) return item.delete(documentOptions);
-  return item.update({ "system.quantity": next }, documentOptions);
+  return commitInventoryItemConsumption({
+    item,
+    documentOptions,
+    reason: "one-time-use-consume"
+  });
 }
 
 function createOneTimeUseDocumentOptions(chainRef = null) {

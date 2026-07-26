@@ -4,11 +4,6 @@ import {
   getActorRootInventoryGridOptions
 } from "./actor-display-data.mjs";
 import {
-  getValidSelectedEquipmentSlotKeysForOptions,
-  getValidSelectedWeaponSlotKeysForOptions,
-  getWeaponSlotRequirement
-} from "./equipment-slots.mjs";
-import {
   ROOT_CONTAINER_ID,
   createAnchoredItemStackPartsForQuantity,
   createItemStackPartAdditionUpdate,
@@ -20,23 +15,51 @@ import {
   getContextInventoryItems,
   getItemActorLoadWeight,
   getItemContainerParentId,
-  getItemFootprint,
+  getItemLockedStateForPlacementTransition,
   getItemMaxStack,
   getItemQuantity,
   getItemStackAdditionOverflowQuantity,
   getItemUnitWeight,
   isContainerItem,
-  isItemLocked,
   normalizeInventoryPlacement,
   usesVirtualInventoryStacks
 } from "./inventory-containers.mjs";
 import { toInteger } from "./numbers.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { canStackInventoryItems } from "../inventory/stacking.mjs";
 
 /**
  * Grant ordinary item data into an actor inventory while preserving the virtual-stack invariant.
  * Compatible virtual items remain one Item document; only overflow receives new grid placements.
  */
 export async function grantActorInventoryItem(actor, itemOrData, {
+  quantity = getItemQuantity(itemOrData),
+  parentId = ROOT_CONTAINER_ID,
+  preferredPlacement = null,
+  merge = true
+} = {}) {
+  const plan = planActorInventoryGrant(actor, itemOrData, {
+    quantity,
+    parentId,
+    preferredPlacement,
+    merge
+  });
+  if (!plan) return null;
+
+  const mutation = await executeInventoryMutation({
+    actor,
+    updates: plan.updates,
+    creates: plan.creates
+  }, { reason: "grant" });
+  if (mutation.createdDocuments.length) return mutation.createdDocuments[0];
+  return plan.targetItemId ? actor.items.get(plan.targetItemId) ?? null : null;
+}
+
+/**
+ * Create a side-effect-free grant plan which can be combined with a larger
+ * inventory mutation (module install, battery swap, treatment, loot, etc.).
+ */
+export function planActorInventoryGrant(actor, itemOrData, {
   quantity = getItemQuantity(itemOrData),
   parentId = ROOT_CONTAINER_ID,
   preferredPlacement = null,
@@ -82,10 +105,9 @@ export async function grantActorInventoryItem(actor, itemOrData, {
 
     if (target) {
       const update = createItemStackPartAdditionUpdate(target, grantQuantity, null, stackParts);
-      if (!update) return target;
+      if (!update) return { updates: [], creates: [], targetItemId: target.id };
       if (!validateActorGrantLoad(actor, { updates: [update] })) throwActorLoadLimit();
-      await actor.updateEmbeddedDocuments("Item", [update]);
-      return actor.items.get(target.id) ?? target;
+      return { updates: [update], creates: [], targetItemId: target.id };
     }
 
     const createData = createGrantedInventoryItemData(
@@ -96,8 +118,7 @@ export async function grantActorInventoryItem(actor, itemOrData, {
       stackParts
     );
     if (!validateActorGrantLoad(actor, { creates: [createData] })) throwActorLoadLimit();
-    const created = await actor.createEmbeddedDocuments("Item", [createData]);
-    return created?.[0] ?? null;
+    return { updates: [], creates: [createData], targetItemId: "" };
   }
 
   let remaining = grantQuantity;
@@ -141,34 +162,15 @@ export async function grantActorInventoryItem(actor, itemOrData, {
   }
 
   if (!validateActorGrantLoad(actor, { updates, creates })) throwActorLoadLimit();
-  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-  const created = creates.length ? await actor.createEmbeddedDocuments("Item", creates) : [];
-  if (created?.length) return created[0];
-  return updates.length ? actor.items.get(updates[0]._id) ?? null : null;
+  return {
+    updates,
+    creates,
+    targetItemId: updates[0]?._id ?? ""
+  };
 }
 
 export function areInventoryItemsStackCompatible(sourceData, targetItem) {
-  if (!sourceData || !targetItem) return false;
-  const sourceSystem = sourceData.system ?? {};
-  const targetSystem = targetItem.system ?? {};
-  const creatureOptions = getCreatureOptions();
-  return (
-    sourceData.type === targetItem.type
-    && !isContainerItem(sourceData)
-    && !isContainerItem(targetItem)
-    && sourceData.name === targetItem.name
-    && sourceData.img === targetItem.img
-    && isItemLocked(sourceData) === isItemLocked(targetItem)
-    && Number(sourceSystem.weight) === Number(targetSystem.weight)
-    && Number(sourceSystem.price) === Number(targetSystem.price)
-    && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
-    && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
-    && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
-    && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
-    && serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, sourceSystem)) === serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, targetSystem))
-    && serializeWeaponSlotRequirement(sourceSystem, creatureOptions) === serializeWeaponSlotRequirement(targetSystem, creatureOptions)
-    && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
-  );
+  return canStackInventoryItems(sourceData, targetItem);
 }
 
 function prepareGrantItemData(itemOrData, quantity, parentId) {
@@ -176,8 +178,10 @@ function prepareGrantItemData(itemOrData, quantity, parentId) {
   const itemData = foundry.utils.deepClone(source);
   delete itemData._id;
   delete itemData.id;
+  const lockedState = getItemLockedStateForPlacementTransition(itemData, "inventory");
   foundry.utils.setProperty(itemData, "system.quantity", quantity);
   foundry.utils.setProperty(itemData, "system.equipped", false);
+  if (lockedState !== undefined) foundry.utils.setProperty(itemData, "system.locked", lockedState);
   foundry.utils.setProperty(itemData, "system.container.parentId", String(parentId ?? ""));
   foundry.utils.setProperty(itemData, "system.placement.mode", "inventory");
   foundry.utils.setProperty(itemData, "system.placement.equipmentSlot", "");
@@ -259,30 +263,6 @@ function calculateActorLoad(items = []) {
       ? total
       : total + (Number(getItemActorLoadWeight(item, list)) || 0)
   ), 0).toFixed(1));
-}
-
-function serializeSet(set) {
-  return Array.from(set).sort().join("|");
-}
-
-function serializeWeaponSlotRequirement(system = {}, creatureOptions = getCreatureOptions()) {
-  const requirement = getWeaponSlotRequirement(system);
-  return `${requirement.mode}:${serializeSet(getValidSelectedWeaponSlotKeysForOptions(creatureOptions, system))}`;
-}
-
-function serializeItemFunctions(functions = {}) {
-  return JSON.stringify(normalizeStackComparableValue(functions));
-}
-
-function normalizeStackComparableValue(value) {
-  if (typeof value?.toObject === "function") return normalizeStackComparableValue(value.toObject(false));
-  if (value instanceof Set) return Array.from(value).sort();
-  if (Array.isArray(value)) return value.map(entry => normalizeStackComparableValue(entry));
-  if (!value || typeof value !== "object") return value ?? null;
-  const entries = Object.entries(value)
-    .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
-  return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
 }
 
 function throwInventoryNoSpace() {

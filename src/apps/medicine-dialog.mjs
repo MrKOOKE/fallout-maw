@@ -1,6 +1,13 @@
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
-import { applyDestroyedLimbConsequences, clearLimbLossState, deleteHealedTraumas, getActorHealingModifierPercent, requestDamageApplication, setLimbMissingState } from "../combat/damage-hub.mjs";
+import {
+  applyDestroyedLimbConsequences,
+  clearLimbLossState,
+  getActorHealingModifierPercent,
+  requestDamageApplication,
+  setLimbMissingState,
+  synchronizeActorDamageStatusesAfterInventoryMutation
+} from "../combat/damage-hub.mjs";
 import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCreatureOptions, getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
@@ -13,7 +20,14 @@ import {
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, hasToolFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
+import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
+import {
+  createItemStackPartRemovalUpdate,
+  isContainerItem,
+  usesVirtualInventoryStacks
+} from "../utils/inventory-containers.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { transferItemBetweenActors } from "./search-inventory.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MEDICINE_SOCKET = `system.${SYSTEM_ID}`;
@@ -584,14 +598,19 @@ async function performTreatment({ sourceActor, sourceToken = null, targetContext
   const completed = result.finalProgress >= maxProgress;
   const finalProgress = Math.min(maxProgress, result.finalProgress);
   const updatedTargetContext = await applyTreatmentToTarget(targetContext, {
+    sourceActor,
     treatmentType,
     treatmentId,
+    instrumentId: instrument.id,
+    toolKey,
+    expectedProgress: initialProgress,
     finalProgress,
-    completed
+    completed,
+    expectedSupply: toInteger(tool.supply?.value),
+    remainingSupply: result.remainingCharges
   });
   if (!updatedTargetContext) return undefined;
 
-  await instrument.update({ [`system.functions.tools.${toolKey}.supply.value`]: result.remainingCharges });
   await postTreatmentResultChat(sourceActor, {
     trauma,
     instrument,
@@ -805,23 +824,39 @@ async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = 
 
   const implantLimit = getActorLimbImplantLimit(targetActor, limbKey);
   if (getInstalledTargetImplants(targetActor, limbKey).length >= implantLimit) return buildTargetContext(targetActor);
+  if (sourceContainer?.uuid !== targetActor.uuid && isContainerItem(item)) {
+    await transferItemBetweenActors({
+      sourceActor: sourceContainer,
+      targetActor,
+      sourceItem: item,
+      targetMode: "implant",
+      targetConstructPartSlot: limbKey,
+      quantity: 1,
+      allowLocked: true,
+      spendWeaponSwitchCost: false
+    });
+    return buildTargetContext(targetActor);
+  }
 
-  if (sourceContainer?.uuid === targetActor.uuid) {
-    const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
-    if (quantity > 1) {
-      await targetActor.updateEmbeddedDocuments("Item", [{
-        _id: item.id,
-        "system.quantity": quantity - 1
-      }]);
-      await targetActor.createEmbeddedDocuments("Item", [createImplantItemData(item, limbKey)]);
-    } else {
-      await targetActor.updateEmbeddedDocuments("Item", [createInstallImplantUpdate(item, limbKey)]);
-    }
+  const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
+  if (sourceContainer?.uuid === targetActor.uuid && quantity <= 1) {
+    await executeInventoryMutation({
+      actor: targetActor,
+      updates: [createInstallImplantUpdate(item, limbKey)]
+    }, { reason: "implant-install" });
   } else {
-    await targetActor.createEmbeddedDocuments("Item", [createImplantItemData(item, limbKey)]);
-    const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
-    if (quantity > 1) await item.update({ "system.quantity": quantity - 1 });
-    else await item.delete();
+    const sourcePlan = createSingleInventoryItemConsumptionPlan(sourceContainer, item);
+    await executeInventoryMutation([
+      {
+        actor: sourceContainer,
+        updates: sourcePlan.updates,
+        deletes: sourcePlan.deletes
+      },
+      {
+        actor: targetActor,
+        creates: [createImplantItemData(item, limbKey)]
+      }
+    ], { reason: "implant-install" });
   }
 
   return buildTargetContext(targetActor);
@@ -834,8 +869,22 @@ async function applyImplantRemovalLocally({ sourceActor, targetActor, limbKey = 
   if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
 
   const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
-  await grantActorInventoryItem(receivingActor, createReturnedImplantItemData(item), { quantity: 1 });
-  await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
+  const returnPlan = planActorInventoryGrant(receivingActor, createReturnedImplantItemData(item), {
+    quantity: 1,
+    merge: false
+  });
+  if (!returnPlan) return buildTargetContext(targetActor);
+  await executeInventoryMutation([
+    {
+      actor: receivingActor,
+      updates: returnPlan.updates,
+      creates: returnPlan.creates
+    },
+    {
+      actor: targetActor,
+      deletes: [item.id]
+    }
+  ], { reason: "implant-remove" });
   return buildTargetContext(targetActor);
 }
 
@@ -877,6 +926,7 @@ function createInstallImplantUpdate(item, limbKey = "") {
   const placement = item.system?.placement ?? {};
   return {
     _id: item.id,
+    "system.stackParts": [],
     "system.equipped": true,
     "system.container.parentId": "",
     "system.placement.mode": "implant",
@@ -1163,28 +1213,56 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
   if (!isProsthesisItemInstallable(item)) return buildTargetContext(targetActor);
 
   const existing = getInstalledTargetProsthesis(targetActor, limbKey);
-  if (existing) {
-    await grantActorInventoryItem(targetActor, createReturnedProsthesisItemData(existing), { quantity: 1 });
-    await targetActor.deleteEmbeddedDocuments("Item", [existing.id]);
-  }
-
-  if (sourceContainer?.uuid === targetActor.uuid) {
-    const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
-    if (quantity > 1) {
-      await targetActor.updateEmbeddedDocuments("Item", [{
-        _id: item.id,
-        "system.quantity": quantity - 1
-      }]);
-      await targetActor.createEmbeddedDocuments("Item", [createProsthesisItemData(item, limbKey)]);
-    } else {
-      await targetActor.updateEmbeddedDocuments("Item", [createInstallProsthesisUpdate(item, limbKey)]);
+  if (sourceContainer?.uuid !== targetActor.uuid && isContainerItem(item)) {
+    if (existing) {
+      throw new Error("Сначала снимите установленный протез: безопасная замена контейнера требует свободного слота.");
     }
-  } else {
-    await targetActor.createEmbeddedDocuments("Item", [createProsthesisItemData(item, limbKey)]);
-    const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
-    if (quantity > 1) await item.update({ "system.quantity": quantity - 1 });
-    else await item.delete();
+    await transferItemBetweenActors({
+      sourceActor: sourceContainer,
+      targetActor,
+      sourceItem: item,
+      targetMode: "prosthesis",
+      targetConstructPartSlot: limbKey,
+      quantity: 1,
+      allowLocked: true,
+      spendWeaponSwitchCost: false
+    });
+    await clearLimbLossState(targetActor, limbKey);
+    await setLimbMissingState(targetActor, limbKey);
+    return buildTargetContext(targetActor);
   }
+  const returnPlan = existing
+    ? planActorInventoryGrant(targetActor, createReturnedProsthesisItemData(existing), {
+      quantity: 1,
+      merge: false
+    })
+    : { updates: [], creates: [] };
+  if (!returnPlan) return buildTargetContext(targetActor);
+
+  const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
+  const targetUpdates = [...returnPlan.updates];
+  const targetDeletes = existing ? [existing.id] : [];
+  const targetCreates = [...returnPlan.creates];
+  const mutationPlans = [];
+
+  if (sourceContainer?.uuid === targetActor.uuid && quantity <= 1) {
+    targetUpdates.push(createInstallProsthesisUpdate(item, limbKey));
+  } else {
+    const sourcePlan = createSingleInventoryItemConsumptionPlan(sourceContainer, item);
+    mutationPlans.push({
+      actor: sourceContainer,
+      updates: sourcePlan.updates,
+      deletes: sourcePlan.deletes
+    });
+    targetCreates.push(createProsthesisItemData(item, limbKey));
+  }
+  mutationPlans.push({
+    actor: targetActor,
+    updates: targetUpdates,
+    deletes: targetDeletes,
+    creates: targetCreates
+  });
+  await executeInventoryMutation(mutationPlans, { reason: "prosthesis-install" });
 
   await clearLimbLossState(targetActor, limbKey);
   await setLimbMissingState(targetActor, limbKey);
@@ -1198,8 +1276,22 @@ async function applyProsthesisRemovalLocally({ sourceActor, targetActor, limbKey
   if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
 
   const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
-  await grantActorInventoryItem(receivingActor, createReturnedProsthesisItemData(item), { quantity: 1 });
-  await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
+  const returnPlan = planActorInventoryGrant(receivingActor, createReturnedProsthesisItemData(item), {
+    quantity: 1,
+    merge: false
+  });
+  if (!returnPlan) return buildTargetContext(targetActor);
+  await executeInventoryMutation([
+    {
+      actor: receivingActor,
+      updates: returnPlan.updates,
+      creates: returnPlan.creates
+    },
+    {
+      actor: targetActor,
+      deletes: [item.id]
+    }
+  ], { reason: "prosthesis-remove" });
   await setLimbMissingState(targetActor, limbKey);
   await applyDestroyedLimbConsequences(targetActor, [limbKey], { ignoreInstalledProsthesis: true });
   return buildTargetContext(targetActor);
@@ -1243,6 +1335,7 @@ function createInstallProsthesisUpdate(item, limbKey = "") {
   const placement = item.system?.placement ?? {};
   return {
     _id: item.id,
+    "system.stackParts": [],
     "system.equipped": true,
     "system.container.parentId": "",
     "system.placement.mode": "prosthesis",
@@ -1312,6 +1405,25 @@ function createReturnedProsthesisItemData(item) {
   });
   foundry.utils.setProperty(itemData, "system.stackParts", []);
   return itemData;
+}
+
+function createSingleInventoryItemConsumptionPlan(actor, item) {
+  const quantity = Math.max(1, toInteger(item?.system?.quantity) || 1);
+  if (quantity <= 1) return { updates: [], deletes: [item.id] };
+  if (!usesVirtualInventoryStacks(item)) {
+    return {
+      updates: [{ _id: item.id, "system.quantity": quantity - 1 }],
+      deletes: []
+    };
+  }
+
+  const update = createItemStackPartRemovalUpdate(item, 1, 0);
+  if (!update) {
+    throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryInvalid"));
+  }
+  return (update["system.quantity"] ?? 0) > 0
+    ? { updates: [update], deletes: [] }
+    : { updates: [], deletes: [item.id] };
 }
 
 function getInstalledTargetProsthesis(actor, limbKey = "") {
@@ -1530,17 +1642,41 @@ function getTreatmentHealingMultiplier(sourceActor, targetActor = null, targetCo
   return outgoing * incoming;
 }
 
-async function applyTreatmentToTarget(targetContext, { treatmentType = "trauma", treatmentId, finalProgress, completed }) {
+async function applyTreatmentToTarget(targetContext, {
+  sourceActor,
+  treatmentType = "trauma",
+  treatmentId,
+  instrumentId,
+  toolKey,
+  expectedProgress,
+  finalProgress,
+  completed,
+  expectedSupply,
+  remainingSupply
+}) {
   const actorUuid = String(targetContext?.actorUuid ?? "");
-  if (!actorUuid) {
+  const sourceActorUuid = String(sourceActor?.uuid ?? "");
+  if (!actorUuid || !sourceActorUuid) {
     ui.notifications.warn("Не удалось определить цель лечения.");
     return null;
   }
 
   const actor = await fromUuid(actorUuid);
-  if (actor && canUseActorLocally(actor)) {
+  if (actor && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
     try {
-      return await applyTreatmentToActor(actor, { treatmentType, treatmentId, finalProgress, completed });
+      return await commitTreatmentToActors({
+        sourceActor,
+        targetActor: actor,
+        treatmentType,
+        treatmentId,
+        instrumentId,
+        toolKey,
+        expectedProgress,
+        finalProgress,
+        completed,
+        expectedSupply,
+        remainingSupply
+      });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Medicine local apply failed`, error);
       ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
@@ -1557,10 +1693,16 @@ async function applyTreatmentToTarget(targetContext, { treatmentType = "trauma",
   try {
     const result = await requestMedicineSocket("applyTreatment", {
       actorUuid,
+      sourceActorUuid,
       treatmentType,
       treatmentId,
+      instrumentId,
+      toolKey,
+      expectedProgress,
       finalProgress,
-      completed
+      completed,
+      expectedSupply,
+      remainingSupply
     }, gm);
     return result?.targetContext ?? null;
   } catch (error) {
@@ -1570,24 +1712,120 @@ async function applyTreatmentToTarget(targetContext, { treatmentType = "trauma",
   }
 }
 
-async function applyTreatmentToActor(actor, { treatmentType = "trauma", treatmentId, finalProgress, completed }) {
-  const trauma = actor?.items?.get(String(treatmentId ?? ""));
+async function commitTreatmentToActors({
+  sourceActor,
+  targetActor,
+  treatmentType = "trauma",
+  treatmentId,
+  instrumentId,
+  toolKey,
+  expectedProgress,
+  finalProgress,
+  completed,
+  expectedSupply,
+  remainingSupply
+}) {
+  const trauma = targetActor?.items?.get(String(treatmentId ?? ""));
   if (!trauma || trauma.type !== treatmentType) throw new Error("цель лечения не найдена");
 
   const maxProgress = Math.max(1, toInteger(trauma.system?.healingProgressMax));
+  const currentProgress = Math.min(maxProgress, Math.max(0, toInteger(trauma.system?.healingProgress)));
   const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
-  if (completed || nextProgress >= maxProgress) {
-    if (trauma.type === "disease") {
-      await createDiseaseImmunityEffect(actor, trauma);
-      await trauma.delete();
-    } else {
-      await deleteHealedTraumas(actor, [trauma.id]);
-    }
-  } else {
-    await trauma.update({ "system.healingProgress": nextProgress });
+  if (currentProgress !== toInteger(expectedProgress)) {
+    throw createTreatmentStaleError("Прогресс лечения изменился.");
+  }
+  if (nextProgress < currentProgress) throw new Error("Лечение не может уменьшать прогресс.");
+  const treatmentCompleted = nextProgress >= maxProgress;
+  if (Boolean(completed) !== treatmentCompleted) {
+    throw createTreatmentStaleError("Результат лечения больше не соответствует состоянию цели.");
   }
 
-  return buildTargetContext(actor);
+  const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
+  const normalizedToolKey = String(toolKey ?? "").trim();
+  const tool = getToolFunction(instrument, normalizedToolKey);
+  const currentSupply = Math.max(0, toInteger(tool?.supply?.value));
+  const expected = Math.max(0, toInteger(expectedSupply));
+  const remaining = Math.max(0, toInteger(remainingSupply));
+  if (!instrument || instrument.type !== "gear" || !tool?.enabled) {
+    throw new Error("инструмент лечения не найден");
+  }
+  if (currentSupply !== expected) {
+    throw createTreatmentStaleError("Запас инструмента изменился.");
+  }
+  if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
+
+  const targetPlan = {
+    actor: targetActor,
+    updates: [],
+    deletes: [],
+    actorUpdates: []
+  };
+  if (treatmentCompleted) {
+    targetPlan.deletes.push(trauma.id);
+    if (trauma.type === "trauma") {
+      const actorUpdate = createHealedTraumaActorUpdate(targetActor, trauma);
+      if (Object.keys(actorUpdate).length) targetPlan.actorUpdates.push(actorUpdate);
+    }
+  } else {
+    targetPlan.updates.push({
+      _id: trauma.id,
+      "system.healingProgress": nextProgress
+    });
+  }
+
+  const diseaseSnapshot = trauma.type === "disease" && treatmentCompleted
+    ? trauma.toObject()
+    : null;
+  await executeInventoryMutation([
+    targetPlan,
+    {
+      actor: sourceActor,
+      updates: [{
+        _id: instrument.id,
+        [`system.functions.tools.${normalizedToolKey}.supply.value`]: remaining
+      }]
+    }
+  ], { reason: "medicine-treatment-with-tool" });
+
+  if (trauma.type === "trauma" && treatmentCompleted) {
+    try {
+      await synchronizeActorDamageStatusesAfterInventoryMutation(targetActor);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Damage status sync failed after treatment commit`, error);
+    }
+  } else if (diseaseSnapshot) {
+    try {
+      await createDiseaseImmunityEffect(targetActor, diseaseSnapshot);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Disease immunity effect creation failed after treatment commit`, error);
+      ui.notifications.warn("Болезнь вылечена, но эффект иммунитета создать не удалось.");
+    }
+  }
+  return buildTargetContext(targetActor);
+}
+
+function createHealedTraumaActorUpdate(actor, trauma) {
+  const limbKeys = new Set();
+  const primaryLimbKey = String(trauma?.system?.limbKey ?? "").trim();
+  if (primaryLimbKey) limbKeys.add(primaryLimbKey);
+  for (const source of trauma?.system?.sources ?? []) {
+    const limbKey = String(source?.limbKey ?? "").trim();
+    if (limbKey) limbKeys.add(limbKey);
+  }
+
+  const update = {};
+  for (const limbKey of limbKeys) {
+    if (!actor?.system?.limbs?.[limbKey]) continue;
+    update[`system.limbs.${limbKey}.damageAccumulation`] =
+      foundry.data.operators.ForcedReplacement.create({});
+  }
+  return update;
+}
+
+function createTreatmentStaleError(message) {
+  const error = new Error(message);
+  error.code = "inventory-stale";
+  return error;
 }
 
 function buildTargetContext(actor, token = null) {
@@ -1826,7 +2064,11 @@ async function handleMedicineSocketMessage(message = {}) {
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
 
   try {
-    const result = await handleMedicineSocketRequest(message.action, message.payload ?? {});
+    const result = await handleMedicineSocketRequest(
+      message.action,
+      message.payload ?? {},
+      message.requesterUserId
+    );
     game.socket.emit(MEDICINE_SOCKET, {
       scope: MEDICINE_SOCKET_SCOPE,
       type: "response",
@@ -1848,7 +2090,7 @@ async function handleMedicineSocketMessage(message = {}) {
   }
 }
 
-async function handleMedicineSocketRequest(action, payload = {}) {
+async function handleMedicineSocketRequest(action, payload = {}, requesterUserId = "") {
   const actor = await fromUuid(String(payload.actorUuid ?? payload.targetActorUuid ?? ""));
   if (!actor) throw new Error("цель не найдена");
 
@@ -1863,12 +2105,22 @@ async function handleMedicineSocketRequest(action, payload = {}) {
   }
 
   if (action === "applyTreatment") {
+    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? ""));
+    if (!sourceActor) throw new Error("источник инструмента не найден");
+    assertMedicineSocketActorOwner(sourceActor, requesterUserId);
     return {
-      targetContext: await applyTreatmentToActor(actor, {
+      targetContext: await commitTreatmentToActors({
+        sourceActor,
+        targetActor: actor,
         treatmentType: payload.treatmentType ?? "trauma",
         treatmentId: payload.treatmentId ?? payload.traumaId,
+        instrumentId: payload.instrumentId,
+        toolKey: payload.toolKey,
+        expectedProgress: payload.expectedProgress,
         finalProgress: payload.finalProgress,
-        completed: payload.completed
+        completed: payload.completed,
+        expectedSupply: payload.expectedSupply,
+        remainingSupply: payload.remainingSupply
       })
     };
   }
@@ -1950,6 +2202,14 @@ async function handleMedicineSocketRequest(action, payload = {}) {
   }
 
   throw new Error(`неизвестное действие медицины: ${action}`);
+}
+
+function assertMedicineSocketActorOwner(actor, requesterUserId) {
+  const user = game.users?.get?.(String(requesterUserId ?? ""))
+    ?? (game.users?.contents ?? []).find(entry => entry.id === requesterUserId);
+  if (!user || (!user.isGM && !actor?.testUserPermission?.(user, "OWNER"))) {
+    throw new Error("нет прав на использование инструмента");
+  }
 }
 
 function getTargetLimbLabel(targetContext, limbKey = "") {

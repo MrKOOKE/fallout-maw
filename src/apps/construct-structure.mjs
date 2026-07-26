@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import {
   ITEM_FUNCTIONS,
@@ -351,8 +352,13 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     }
 
     const itemUpdates = coalesceConstructPartItemUpdates(updates);
-    if (itemUpdates.length) await this.actor.updateEmbeddedDocuments("Item", itemUpdates);
-    if (createPlans.length) await this.actor.createEmbeddedDocuments("Item", createPlans.map(plan => plan.data));
+    if (itemUpdates.length || createPlans.length) {
+      await executeInventoryMutation({
+        actor: this.actor,
+        updates: itemUpdates,
+        creates: createPlans.map(plan => plan.data)
+      }, { reason: "construct-structure-save" });
+    }
 
     await this.actor.update({
       "system.creature.typeId": "",

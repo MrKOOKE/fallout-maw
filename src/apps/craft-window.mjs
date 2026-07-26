@@ -91,6 +91,7 @@ import { actorKnowsCraftItem, hasCraftKnowledgeLayoutData } from "../items/recip
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import { getItemInteractionState } from "../items/item-interactions.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -2477,7 +2478,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (action === "unequip") return this.#unequipCraftItem(item);
       if (action === "split") return this.#splitCraftItem(item, { stackIndex, stackQuantity: selectedQuantity });
       if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(this.#actor, item, { allowLocked: true });
-      if (action === "delete" && game.user?.isGM) return item.delete();
+      if (action === "delete" && game.user?.isGM) {
+        return executeInventoryMutation({
+          actor: this.#actor,
+          deletes: [item.id]
+        }, { reason: "delete" });
+      }
       return undefined;
     });
   }
@@ -2597,7 +2603,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       return null;
     }
-    await this.#actor.updateEmbeddedDocuments("Item", [updateData]);
+    await executeInventoryMutation({
+      actor: this.#actor,
+      updates: [updateData]
+    }, { reason: "rotate" });
     return this.#actor.items.get(item.id) ?? null;
   }
 
@@ -2661,7 +2670,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           { ...placement, mode: parentId === LOCKED_STORAGE_PARENT_ID ? LOCKED_STORAGE_PLACEMENT_MODE : "inventory" }
         );
         if (!updateData) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-        const result = await this.#actor.updateEmbeddedDocuments("Item", [updateData]);
+        const result = await executeInventoryMutation({
+          actor: this.#actor,
+          updates: [updateData]
+        }, { reason: "split-stack" });
         if (this.rendered) await this.#renderPreservingWindowStack();
         return result;
       }
@@ -3386,32 +3398,52 @@ async function applyCraftOperation(operation) {
   const spendPlan = createCraftRequirementSpendPlan(actor, operation.requirements);
   const toolSpendPlan = createCraftToolRequirementSpendPlan(actor, operation.toolRequirements, operation.toolSelections);
   if (!toolSpendPlan.valid) throw new Error(toolSpendPlan.message);
+  const consumptionPlan = {
+    updates: [...spendPlan.updates, ...toolSpendPlan.updates],
+    deletes: [...spendPlan.deletes, ...toolSpendPlan.deletes]
+  };
   const outputPlan = operation.success
-    ? (operation.outputPlan ?? await createCraftOutputPlan(actor, recipe, operation.mode, operation.outputs, spendPlan, operation.recipeId))
-    : (operation.failureOutputPlan ?? await createCraftFailureOutputPlan(actor, recipe, operation.mode, operation.failureOutputs, spendPlan, operation.recipeId));
+    ? await createCraftOutputPlan(actor, recipe, operation.mode, operation.outputs, consumptionPlan, operation.recipeId)
+    : await createCraftFailureOutputPlan(actor, recipe, operation.mode, operation.failureOutputs, consumptionPlan, operation.recipeId);
   if (!outputPlan.valid) throw new Error(outputPlan.message);
 
-  await spendCraftRequirements(actor, operation.requirements, spendPlan);
-  await spendCraftToolRequirements(actor, toolSpendPlan);
-  if (outputPlan.creates?.length || outputPlan.updates?.length) {
-    await applyCraftOutputPlan(actor, outputPlan);
-  }
+  await executeInventoryMutation({
+    actor,
+    updates: [
+      ...spendPlan.updates,
+      ...toolSpendPlan.updates,
+      ...(outputPlan.updates ?? [])
+    ],
+    deletes: [
+      ...spendPlan.deletes,
+      ...toolSpendPlan.deletes
+    ],
+    creates: outputPlan.creates ?? []
+  }, { reason: operation.success ? "craft" : "craft-failure" });
 }
 
 async function spendCraftRequirements(actor, requirements = [], plan = null) {
   const spendPlan = plan ?? createCraftRequirementSpendPlan(actor, requirements);
-  if (spendPlan.updates.length) await actor.updateEmbeddedDocuments("Item", spendPlan.updates);
-  if (spendPlan.deletes.length) await actor.deleteEmbeddedDocuments("Item", spendPlan.deletes);
+  return executeInventoryMutation({
+    actor,
+    updates: spendPlan.updates,
+    deletes: spendPlan.deletes
+  }, { reason: "craft-consume" });
 }
 
 async function spendCraftToolRequirements(actor, plan = null) {
-  if (plan?.updates?.length) await actor.updateEmbeddedDocuments("Item", plan.updates);
-  if (plan?.deletes?.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes);
+  return executeInventoryMutation({
+    actor,
+    updates: plan?.updates ?? [],
+    deletes: plan?.deletes ?? []
+  }, { reason: "craft-tool-consume" });
 }
 
 function createCraftRequirementSpendPlan(actor, requirements = []) {
-  const updates = [];
-  const deletes = [];
+  const availableByItemId = new Map(
+    actor.items.contents.map(item => [item.id, Math.max(0, getItemQuantity(item))])
+  );
+  const consumedByItemId = new Map();
 
   for (const requirement of requirements) {
     let remaining = Math.max(0, toInteger(requirement.quantity));
@@ -3420,26 +3452,35 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
 
     for (const item of candidates) {
       if (remaining <= 0) break;
-      const quantity = getItemQuantity(item);
+      const quantity = Math.max(0, availableByItemId.get(item.id) ?? 0);
       if (quantity <= 0) continue;
-      if (quantity <= remaining) {
-        deletes.push(item.id);
-        remaining -= quantity;
-      } else {
-        if (usesVirtualInventoryStacks(item)) {
-          const updateData = createItemStackPartRemovalUpdate(item, remaining, 0);
-          if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) deletes.push(item.id);
-          else updates.push(updateData);
-        } else {
-          updates.push({ _id: item.id, "system.quantity": quantity - remaining });
-        }
-        remaining = 0;
-      }
+      const consumed = Math.min(quantity, remaining);
+      availableByItemId.set(item.id, quantity - consumed);
+      consumedByItemId.set(item.id, (consumedByItemId.get(item.id) ?? 0) + consumed);
+      remaining -= consumed;
     }
 
     if (remaining > 0) throw new Error("Компоненты закончились до завершения крафта.");
   }
 
+  const updates = [];
+  const deletes = [];
+  for (const [itemId, consumed] of consumedByItemId) {
+    const item = actor.items.get(itemId);
+    if (!item || consumed <= 0) continue;
+    const remaining = Math.max(0, getItemQuantity(item) - consumed);
+    if (remaining <= 0) {
+      deletes.push(itemId);
+      continue;
+    }
+    if (usesVirtualInventoryStacks(item)) {
+      const updateData = createItemStackPartRemovalUpdate(item, consumed, 0);
+      if (!updateData || (updateData["system.quantity"] ?? 0) <= 0) deletes.push(itemId);
+      else updates.push(updateData);
+    } else {
+      updates.push({ _id: itemId, "system.quantity": remaining });
+    }
+  }
   return { updates, deletes };
 }
 
@@ -3875,8 +3916,11 @@ function projectCraftInventoryState(actor, { updates = [], deletes = [], creates
 }
 
 async function applyCraftOutputPlan(actor, outputPlan = {}) {
-  if (outputPlan.updates?.length) await actor.updateEmbeddedDocuments("Item", outputPlan.updates);
-  if (outputPlan.creates?.length) await actor.createEmbeddedDocuments("Item", outputPlan.creates);
+  return executeInventoryMutation({
+    actor,
+    updates: outputPlan.updates ?? [],
+    creates: outputPlan.creates ?? []
+  }, { reason: "craft-output" });
 }
 
 function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID, toolPickerNodeId = "", toolSelections = {} } = {}) {

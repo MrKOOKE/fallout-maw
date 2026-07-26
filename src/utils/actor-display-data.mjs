@@ -12,6 +12,7 @@ import {
   getContainerContentsWeight,
   getContainerInventoryGridOptions,
   getContainerMaxLoad,
+  getInventoryContainerIds,
   getItemContainerParentId,
   getItemFootprint,
   getItemMaxStack,
@@ -24,6 +25,7 @@ import {
   BUTCHERING_STORAGE_PLACEMENT_MODE,
   isItemLocked,
   isContainerItem,
+  isRootInventoryItem,
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
   normalizeInventoryPlacement,
@@ -182,7 +184,8 @@ function prepareWeaponSetsSlice(actor, race, { includeLocked = true } = {}) {
     ? getConstructNaturalWeaponSetContext(actor, allItemData)
     : getNaturalWeaponSetContext(actor, race, currencies);
   const assignedItemIds = new Set();
-  const topLevelItems = allItemData.filter(item => !item.parentId);
+  const containerIds = getInventoryContainerIds(actor.items);
+  const topLevelItems = allItemData.filter(item => isRootInventoryItem(item, allItems, containerIds));
   for (const item of topLevelItems) {
     if (item.placement?.mode === ITEM_FUNCTIONS.constructPart) assignedItemIds.add(item.id);
   }
@@ -191,7 +194,7 @@ function prepareWeaponSetsSlice(actor, race, { includeLocked = true } = {}) {
     ...prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds),
     ...prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds)
   ];
-  return { weaponSets, naturalWeaponSet, assignedItemIds, topLevelItems, allItems, allItemData };
+  return { weaponSets, naturalWeaponSet, assignedItemIds, topLevelItems, containerIds, allItems, allItemData };
 }
 
 export function prepareInventoryContext(actor, race, { includeLocked = true } = {}) {
@@ -204,6 +207,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     naturalWeaponSet,
     assignedItemIds,
     topLevelItems,
+    containerIds,
     allItems,
     allItemData
   } = prepareWeaponSetsSlice(actor, race, { includeLocked });
@@ -259,7 +263,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
 
   const inventoryItems = allItems.filter(item => (
     !assignedItemIds.has(item.id)
-    && !getItemContainerParentId(item)
+    && isRootInventoryItem(item, allItems, containerIds)
     && !isItemInLockedStorage(item)
     && !isItemInButcheringStorage(item)
   ));

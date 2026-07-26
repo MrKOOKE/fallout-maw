@@ -147,7 +147,13 @@ export async function ensureConstructPartSlots(actorOrSource = null) {
       };
     })
     .filter(Boolean);
-  if (itemUpdates.length) await actorOrSource.updateEmbeddedDocuments("Item", itemUpdates);
+  if (itemUpdates.length) {
+    const { executeInventoryMutation } = await import("../inventory/mutation.mjs");
+    await executeInventoryMutation({
+      actor: actorOrSource,
+      updates: itemUpdates
+    }, { reason: "construct-part-slot-normalization" });
+  }
   return slots;
 }
 

@@ -6,7 +6,7 @@ import { playWeaponExplosionAnimation } from "../combat/attack-animations.mjs";
 import { buildWeaponExplosionDamageRequests, executeWeaponAttackAgainstToken } from "../combat/weapon-attack-controller.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { normalizeImagePath, prepareInventoryContext } from "../utils/actor-display-data.mjs";
-import { getItemQuantity } from "../utils/inventory-containers.mjs";
+import { getItemQuantity, isContainerItem } from "../utils/inventory-containers.mjs";
 import { grantActorInventoryItem } from "../utils/inventory-grants.mjs";
 import { getCreatureOptions, getToolSettings } from "../settings/accessors.mjs";
 import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
@@ -15,6 +15,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { analyzeLightingPoint } from "../stealth/lighting.mjs";
 import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
+import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
 import {
   isSystemEventCancelled,
   systemEventParticipant
@@ -39,6 +40,8 @@ import { shouldPauseAfterTrapDetection } from "./trap-pause-policy.mjs";
 
 const TRAP_SOCKET = `system.${SYSTEM_ID}`;
 const TRAP_SOCKET_SCOPE = "fallout-maw.traps";
+const TRAP_SOCKET_TIMEOUT_MS = 30000;
+const TRAP_SOCKET_RESULT_TTL_MS = 10 * 60 * 1000;
 const TRAP_FLAG = "trap";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_TRAP_IMAGE = "icons/svg/hazard.svg";
@@ -93,6 +96,9 @@ let trapGmFreeDoubleClickListenerRegistered = false;
 let trapVisibilityRefreshQueued = false;
 let trapDetectionRefreshTimeout = 0;
 const pendingTrapActivationKeys = new Set();
+const pendingTrapSocketRequests = new Map();
+const activeTrapSocketRequests = new Map();
+const completedTrapSocketRequests = new Map();
 
 export function registerTrapHooks() {
   registerMovementInterruptionProvider({
@@ -156,6 +162,10 @@ export function registerTrapHooks() {
 export async function startTrapPlacement({ actor = null, token = null, item = null, application = null } = {}) {
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.trap)) return false;
+  if (isContainerItem(item)) {
+    ui.notifications.warn(`${item.name}: контейнер нельзя расходовать как ловушку.`);
+    return false;
+  }
   if (isActorUnableToAct(sourceActor)) return false;
   if (!canvas?.ready || !canvas.scene) {
     ui.notifications.warn("Сцена не готова для установки ловушки.");
@@ -186,6 +196,10 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
 
 export async function startWorldTrapPlacement({ item = null, factionName = "", application = null } = {}) {
   if (!game.user?.isGM || !item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.trap, { ignoreBroken: true })) return false;
+  if (isContainerItem(item)) {
+    ui.notifications.warn(`${item.name}: контейнер нельзя использовать как шаблон ловушки.`);
+    return false;
+  }
   if (!canvas?.ready || !canvas.scene) {
     ui.notifications.warn("Сцена не готова для установки ловушки.");
     return false;
@@ -637,8 +651,10 @@ async function onTrapPlacementPointerDown(event) {
     rotation: placement.rotation,
     linkedAction
   });
-  if (!created && !game.user?.isGM) return;
-  await consumeTrapItem(currentItem);
+  if (!created) {
+    ui.notifications.warn(`${item.name}: ловушка не была создана, предмет не израсходован.`);
+    return;
+  }
   await placement.application?.render?.({ force: true });
 }
 
@@ -1475,25 +1491,32 @@ async function requestPickupTrapDocuments(tile, actor) {
   const request = {
     sceneId: tile?.parent?.id ?? canvas.scene?.id ?? "",
     tileId: tile?.id ?? "",
-    actorUuid: actor?.uuid ?? ""
+    actorUuid: actor?.uuid ?? "",
+    operationId: `pickup:${tile?.parent?.id ?? canvas.scene?.id ?? ""}:${tile?.id ?? ""}:${actor?.uuid ?? ""}`
   };
-  if (!request.sceneId || !request.tileId || !request.actorUuid) return;
+  if (!request.sceneId || !request.tileId || !request.actorUuid) return false;
   if (game.user?.isGM) {
-    await pickupTrapDocumentsNow(request);
-    return;
+    const result = await pickupTrapDocumentsNow(request, game.user.id);
+    return Boolean(result?.success);
   }
   const gm = getResponsibleGM();
   if (!gm) {
     ui.notifications.warn("Нет активного GM для забора ловушки.");
-    return;
+    return false;
   }
-  game.socket.emit(TRAP_SOCKET, {
-    scope: TRAP_SOCKET_SCOPE,
-    action: "pickupTrapDocuments",
-    gmUserId: gm.id,
-    senderUserId: game.user?.id ?? "",
-    request
-  });
+  try {
+    const result = await requestTrapSocketWithRetry(
+      "pickupTrapDocuments",
+      request,
+      gm,
+      request.operationId
+    );
+    return Boolean(result?.success);
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Trap pickup request failed`, error);
+    ui.notifications.warn("GM не подтвердил забор ловушки.");
+    return false;
+  }
 }
 
 async function requestDisarmTrapDocuments(tile, actor, { success = false, toolItemId = "", attemptsRemaining = 0 } = {}) {
@@ -1524,14 +1547,37 @@ async function requestDisarmTrapDocuments(tile, actor, { success = false, toolIt
   });
 }
 
-async function pickupTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "" } = {}) {
+async function pickupTrapDocumentsNow({
+  sceneId = "",
+  tileId = "",
+  actorUuid = ""
+} = {}, requesterUserId = "") {
   const scene = game.scenes?.get(sceneId) ?? canvas.scene;
   const tile = scene?.tiles?.get(tileId);
   const actor = actorUuid ? await fromUuid(actorUuid) : null;
+  const pickupMarker = String(tile?.uuid ?? `${scene?.uuid ?? `Scene.${sceneId}`}.Tile.${tileId}`);
+  const existingPickup = actor?.items?.find?.(
+    item => String(item.getFlag?.(SYSTEM_ID, "trapPickupTileUuid") ?? "") === pickupMarker
+  );
+  if (actor && existingPickup && !tile) {
+    return { success: true, alreadyPickedUp: true, itemId: existingPickup.id };
+  }
   const trap = getTrapFlag(tile);
-  if (!scene || !tile || !actor || !trap || !canActorPickupTrap(trap, actor)) return;
-  await restoreTrapItemToOwner(actor, trap);
+  if (!scene || !tile || !actor || !trap || !canActorPickupTrap(trap, actor)) {
+    return { success: false, reason: "missingOrForbidden" };
+  }
+  const requester = game.users?.get(String(requesterUserId ?? "")) ?? game.user;
+  if (!requester?.isGM && !actor.testUserPermission?.(requester, "OWNER")) {
+    throw new Error("The requester cannot pick up a trap for this Actor.");
+  }
+  const restored = existingPickup
+    ?? await restoreTrapItemToOwner(actor, trap, pickupMarker);
   await deleteTrapDocuments(tile);
+  return {
+    success: true,
+    alreadyPickedUp: Boolean(existingPickup),
+    itemId: String(restored?.id ?? "")
+  };
 }
 
 async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "", success = false, toolItemId = "", attemptsRemaining = 0 } = {}) {
@@ -1598,17 +1644,36 @@ async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
   });
 }
 
-async function restoreTrapItemToOwner(actor, trap) {
+async function restoreTrapItemToOwner(actor, trap, pickupMarker = "") {
+  const marker = String(pickupMarker ?? "").trim();
+  const existing = marker
+    ? actor.items?.find?.(
+      item => String(item.getFlag?.(SYSTEM_ID, "trapPickupTileUuid") ?? "") === marker
+    )
+    : null;
+  if (existing) return existing;
   const sourceItem = trap.sourceItemUuid ? await fromUuid(trap.sourceItemUuid) : null;
   const itemData = sourceItem?.parent?.uuid === actor.uuid
     ? sourceItem.toObject()
     : foundry.utils.deepClone(trap.itemData ?? {});
-  if (!itemData?.name) return;
+  if (!itemData?.name) {
+    throw new Error("The trap Item data is no longer available.");
+  }
   delete itemData._id;
   delete itemData.id;
   foundry.utils.setProperty(itemData, "system.quantity", 1);
   foundry.utils.setProperty(itemData, "system.stackParts", []);
-  await grantActorInventoryItem(actor, itemData, { quantity: 1 });
+  if (marker) {
+    foundry.utils.setProperty(itemData, `flags.${SYSTEM_ID}.trapPickupTileUuid`, marker);
+  }
+  const restored = await grantActorInventoryItem(actor, itemData, {
+    quantity: 1,
+    merge: false
+  });
+  if (!restored) {
+    throw new Error("The trap Item could not be restored to the Actor inventory.");
+  }
+  return restored;
 }
 
 function getTrapViewerActor() {
@@ -1618,39 +1683,115 @@ function getTrapViewerActor() {
 }
 
 async function requestCreateTrapDocuments(request = {}) {
-  if (game.user?.isGM) return createTrapDocumentsNow(request);
+  const serialized = serializeTrapCreateRequest({
+    ...request,
+    operationId: String(request.operationId ?? "").trim() || foundry.utils.randomID()
+  });
+  if (game.user?.isGM) return createTrapDocumentsNow(serialized, game.user.id);
   const gm = getResponsibleGM();
   if (!gm) {
     ui.notifications.warn("Нет активного GM для создания ловушки на сцене.");
     return null;
   }
-  game.socket.emit(TRAP_SOCKET, {
-    scope: TRAP_SOCKET_SCOPE,
-    action: "createTrapDocuments",
-    gmUserId: gm.id,
-    senderUserId: game.user?.id ?? "",
-    request: serializeTrapCreateRequest(request)
-  });
-  return true;
+  try {
+    const result = await requestTrapSocketWithRetry(
+      "createTrapDocuments",
+      serialized,
+      gm,
+      serialized.operationId
+    );
+    return result?.success ? result : null;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Trap placement request failed`, error);
+    ui.notifications.warn("GM не подтвердил создание ловушки.");
+    return null;
+  }
 }
 
 async function handleTrapSocketMessage(payload = {}) {
-  if (!payload || payload.scope !== TRAP_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
+  if (!payload || payload.scope !== TRAP_SOCKET_SCOPE) return;
+  if (payload.type === "response") {
+    if (payload.recipientUserId && payload.recipientUserId !== game.user?.id) return;
+    settleTrapSocketRequest(payload);
+    return;
+  }
+  if (payload.type === "request") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    const requesterUserId = String(payload.requesterUserId ?? "");
+    const requestId = String(payload.requestId ?? "");
+    if (!requesterUserId || !requestId) return;
+    const cacheKey = `${requesterUserId}:${requestId}`;
+    try {
+      const result = await runIdempotentTrapSocketRequest(cacheKey, async () => {
+        if (payload.action === "createTrapDocuments") {
+          const tile = await createTrapDocumentsNow(payload.request ?? {}, requesterUserId);
+          return serializeTrapTileResult(tile);
+        }
+        if (payload.action === "pickupTrapDocuments") {
+          return pickupTrapDocumentsNow(payload.request ?? {}, requesterUserId);
+        }
+        throw new Error(`Unsupported trap socket action: ${String(payload.action ?? "")}`);
+      });
+      emitTrapSocketResponse({
+        requestId,
+        recipientUserId: requesterUserId,
+        ok: true,
+        result
+      });
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Trap socket request failed`, error);
+      emitTrapSocketResponse({
+        requestId,
+        recipientUserId: requesterUserId,
+        ok: false,
+        error: String(error?.message ?? error)
+      });
+    }
+    return;
+  }
+
+  // Legacy fire-and-forget actions remain supported for trap activation,
+  // detection, pickup and disarm.
+  if (payload.senderUserId === game.user?.id) return;
   if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
-  if (payload.action === "createTrapDocuments") await createTrapDocumentsNow(payload.request ?? {});
-  if (payload.action === "pickupTrapDocuments") await pickupTrapDocumentsNow(payload.request ?? {});
+  if (payload.action === "createTrapDocuments") {
+    await createTrapDocumentsNow(payload.request ?? {}, payload.senderUserId ?? "");
+  }
+  if (payload.action === "pickupTrapDocuments") {
+    await pickupTrapDocumentsNow(payload.request ?? {}, payload.senderUserId ?? "");
+  }
   if (payload.action === "disarmTrapDocuments") await disarmTrapDocumentsNow(payload.request ?? {});
   if (payload.action === "activateTrapTile") await activateTrapTileNow(payload.request ?? {});
   if (payload.action === "resolveTrapDetectionStop") await resolveTrapDetectionStopNow(payload.request ?? {});
   if (payload.action === "announceTrapTriggerEnter") await announceTrapTriggerEnterNow(payload.request ?? {});
 }
 
-async function createTrapDocumentsNow(request = {}) {
+async function createTrapDocumentsNow(request = {}, requesterUserId = "") {
+  request = serializeTrapCreateRequest(request);
+  request.operationId ||= foundry.utils.randomID();
   const scene = game.scenes?.get(String(request.sceneId ?? "")) ?? canvas.scene;
   if (!scene || !isCurrentActiveGM()) return null;
+  const existing = findTrapTileByPlacementOperation(scene, request.operationId);
+  if (existing) {
+    await assertExistingTrapPlacementPermission(existing, requesterUserId);
+    if (getTrapFlag(existing)?.placementCommitted === true) return existing;
+    await deleteTrapDocuments(existing);
+  }
+
+  const sourceContext = await resolveTrapPlacementSource(request, requesterUserId);
+  if (sourceContext.item) {
+    request = serializeTrapCreateRequest({
+      ...request,
+      ownerActorUuid: sourceContext.actor.uuid,
+      sourceItemUuid: sourceContext.item.uuid,
+      itemData: sourceContext.item.toObject(),
+      trapData: getTrapFunction(sourceContext.item)
+    });
+  }
+
   return withSystemEventRoot({
     kind: "trapPlacement",
-    operationId: `trap-placement:${scene.id}:${request.sourceItemUuid || "trap"}:${foundry.utils.randomID()}`,
+    operationId: request.operationId,
     sceneUuid: String(scene.uuid ?? ""),
     combatUuid: String(game.combat?.uuid ?? "")
   }, async scope => {
@@ -1659,22 +1800,129 @@ async function createTrapDocumentsNow(request = {}) {
       sourceItemUuid: request.sourceItemUuid
     });
     let result;
+    let placementCommitted = false;
     try {
       result = await createTrapDocumentsInRoot(request, scene, scope);
+      if (result?.status === "success" && result.tile) {
+        // Make consumption the final fallible step of the cross-document
+        // commit. If it rejects, the canonical inventory executor restores the
+        // Actor and this catch removes all prepared world documents.
+        await result.tile.update({
+          [`flags.${SYSTEM_ID}.${TRAP_FLAG}.placementCommitted`]: true
+        }, trapDocumentOptions(scope, { render: false }));
+        if (sourceContext.item) {
+          await consumeTrapItem(sourceContext.item, {
+            documentOptions: trapDocumentOptions(scope)
+          });
+        }
+        placementCommitted = true;
+      }
     } catch (error) {
+      const partialTile = result?.tile
+        ?? findTrapTileByPlacementOperation(scene, request.operationId);
+      const cleanupError = partialTile
+        ? await deleteTrapDocumentsSafely(partialTile)
+        : null;
+      const reportedError = cleanupError
+        ? new AggregateError(
+          [error, cleanupError],
+          "Trap placement failed and its world documents could not be fully removed."
+        )
+        : error;
       await emitTrapItemUseResolved(scope, request, scene, participant, {
         status: "error",
         reason: "error",
-        error
+        error: reportedError
       });
-      throw error;
+      throw reportedError;
+    }
+    if (placementCommitted) {
+      try {
+        await emitTrapPlaced(scope, request, scene, result.tile, sourceContext.actor);
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Trap placed event failed after commit`, error);
+      }
+      try {
+        await processTrapInitialDetection(result.tile);
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Initial trap detection failed after commit`, error);
+      }
     }
     const normalized = result && typeof result === "object" && Object.hasOwn(result, "status")
       ? result
       : { status: "failed", reason: "placementFailed", tile: null };
-    await emitTrapItemUseResolved(scope, request, scene, participant, normalized);
+    try {
+      await emitTrapItemUseResolved(scope, request, scene, participant, normalized);
+    } catch (error) {
+      if (!placementCommitted) throw error;
+      console.error(`${SYSTEM_ID} | Trap item-use event failed after commit`, error);
+    }
     return normalized.tile ?? null;
   });
+}
+
+async function resolveTrapPlacementSource(request, requesterUserId = "") {
+  const requester = game.users?.get(String(requesterUserId ?? "")) ?? game.user;
+  const ownerActorUuid = String(request.ownerActorUuid ?? "").trim();
+  if (!ownerActorUuid) {
+    if (!requester?.isGM) {
+      throw new Error("Only a GM can place a world trap without an owning Actor.");
+    }
+    if (isContainerItem(request.itemData)) {
+      throw new Error("A container cannot be used as a world trap template.");
+    }
+    return { actor: null, item: null };
+  }
+
+  const actor = await fromUuid(ownerActorUuid);
+  const item = request.sourceItemUuid
+    ? await fromUuid(String(request.sourceItemUuid))
+    : null;
+  if (!actor || actor.documentName !== "Actor") {
+    throw new Error("The trap owner Actor no longer exists.");
+  }
+  if (!requester?.isGM && !actor.testUserPermission?.(requester, "OWNER")) {
+    throw new Error("The requester cannot place a trap for this Actor.");
+  }
+  if (
+    !item
+    || item.documentName !== "Item"
+    || (item.parent?.uuid ?? item.actor?.uuid) !== actor.uuid
+    || isContainerItem(item)
+    || !hasItemFunction(item, ITEM_FUNCTIONS.trap)
+    || getItemQuantity(item) <= 0
+  ) {
+    throw new Error("The source trap Item is missing or no longer usable.");
+  }
+  return { actor, item };
+}
+
+async function assertExistingTrapPlacementPermission(tile, requesterUserId = "") {
+  const requester = game.users?.get(String(requesterUserId ?? "")) ?? game.user;
+  if (!requester || requester.isGM) return;
+  const ownerActorUuid = String(getTrapFlag(tile)?.ownerActorUuid ?? "").trim();
+  const actor = ownerActorUuid ? await fromUuid(ownerActorUuid) : null;
+  if (!actor?.testUserPermission?.(requester, "OWNER")) {
+    throw new Error("The requester cannot resume this trap placement.");
+  }
+}
+
+function findTrapTileByPlacementOperation(scene, operationId = "") {
+  const id = String(operationId ?? "").trim();
+  if (!id) return null;
+  return scene?.tiles?.contents?.find(
+    tile => String(getTrapFlag(tile)?.placementOperationId ?? "") === id
+  ) ?? null;
+}
+
+async function deleteTrapDocumentsSafely(tile) {
+  try {
+    await deleteTrapDocuments(tile);
+    return null;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Trap placement cleanup failed`, error);
+    return error;
+  }
 }
 
 async function createTrapDocumentsInRoot(request, scene, scope) {
@@ -1763,6 +2011,8 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
           lastDisarmToolItemId: "",
           detectionRegionId: "",
           triggerRegionId: "",
+          placementOperationId: String(request.operationId ?? ""),
+          placementCommitted: false,
           recharging: false,
           rearmAt: 0,
           rechargeStartedAt: 0,
@@ -1777,12 +2027,17 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
   if (!tile) return { status: "failed", reason: "tileNotCreated", tile: null };
 
   await createTrapActivationDocuments(scene, tile, trapData, rect, clipped, request.ownerActorUuid);
+  return { status: "success", reason: "placed", tile };
+}
+
+async function emitTrapPlaced(scope, request, scene, tile, ownerActor = null) {
+  const source = trapSourceParticipant({ ownerActor, sourceItemUuid: request.sourceItemUuid });
   await scope.emit("fallout-maw.trap.placed", {
     data: {
       sceneUuid: String(scene.uuid ?? ""),
       tileUuid: String(tile.uuid ?? ""),
       tileId: String(tile.id ?? ""),
-      trapName: String(tile.name ?? itemData.name ?? ""),
+      trapName: String(tile.name ?? request.itemData?.name ?? ""),
       ownerActorUuid: String(ownerActor?.uuid ?? request.ownerActorUuid ?? ""),
       sourceItemUuid: String(request.sourceItemUuid ?? "")
     },
@@ -1791,8 +2046,6 @@ async function createTrapDocumentsInRoot(request, scene, scope) {
     occurrenceKey: `trap-placement:${scene.id}:${tile.id}:placed`,
     participants: { source, target: null, related: [] }
   });
-  await processTrapInitialDetection(tile);
-  return { status: "success", reason: "placed", tile };
 }
 
 async function createTrapActivationDocuments(scene, tile, trapData, rect, clipped = null, ownerActorUuid = "") {
@@ -2158,8 +2411,16 @@ async function deleteTrapRegions(tile) {
   const scene = tile?.parent ?? canvas.scene;
   const trap = getTrapFlag(tile);
   if (!scene || !tile || !trap) return;
-  const regionIds = [trap.detectionRegionId, trap.triggerRegionId].filter(id => scene.regions?.get(id));
-  if (regionIds.length) await scene.deleteEmbeddedDocuments("Region", regionIds);
+  const regionIds = new Set(
+    [trap.detectionRegionId, trap.triggerRegionId]
+      .filter(id => scene.regions?.get(id))
+  );
+  for (const region of scene.regions?.contents ?? []) {
+    if (String(region.getFlag?.(SYSTEM_ID, "trapRegion")?.trapTileId ?? "") === String(tile.id ?? "")) {
+      regionIds.add(region.id);
+    }
+  }
+  if (regionIds.size) await scene.deleteEmbeddedDocuments("Region", Array.from(regionIds));
 }
 
 async function markTrapDisarmed(tile, actor = null, { toolItemId = "", attemptsRemaining = null, scope = null } = {}) {
@@ -3218,12 +3479,17 @@ function getRegionRestrictionLevelId(scene) {
   return scene?._view ?? scene?.initialLevel?.id ?? scene?.firstLevel?.id ?? "";
 }
 
-async function consumeTrapItem(item) {
-  const quantity = getItemQuantity(item);
-  if (quantity <= 0) return false;
-  const nextQuantity = Math.max(0, quantity - 1);
-  if (nextQuantity <= 0) await item.delete();
-  else await item.update({ "system.quantity": nextQuantity });
+async function consumeTrapItem(item, { documentOptions = {} } = {}) {
+  if (!item || getItemQuantity(item) <= 0) {
+    throw new Error("The source trap Item is no longer available.");
+  }
+  await commitInventoryItemConsumption({
+    actor: item.parent ?? item.actor,
+    item,
+    amount: 1,
+    reason: "place-trap",
+    documentOptions
+  });
   return true;
 }
 
@@ -3238,7 +3504,8 @@ function serializeTrapCreateRequest(request = {}) {
     trapData: normalizeTrapData(request.trapData),
     placementRect: normalizeTrapPlacementRect(request.placementRect),
     rotation: normalizeTrapRotation(request.rotation),
-    linkedAction: normalizeTrapLinkedAction(request.linkedAction)
+    linkedAction: normalizeTrapLinkedAction(request.linkedAction),
+    operationId: String(request.operationId ?? "").trim()
   };
 }
 
@@ -3259,6 +3526,114 @@ function asStringArray(value) {
 function isSkillCheckSuccess(outcome) {
   const key = String(outcome?.result?.key ?? "");
   return key === "success" || key === "criticalSuccess";
+}
+
+function requestTrapSocket(action, request, gm, requestId = "") {
+  const id = String(requestId ?? "").trim() || foundry.utils.randomID();
+  const existing = pendingTrapSocketRequests.get(id);
+  if (existing?.promise) return existing.promise;
+  const requesterUserId = String(game.user?.id ?? "");
+  let entry;
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingTrapSocketRequests.delete(id);
+      const error = new Error(`GM did not answer trap request: ${String(action ?? "")}.`);
+      error.code = "socket-timeout";
+      reject(error);
+    }, TRAP_SOCKET_TIMEOUT_MS);
+    entry = { resolve, reject, timeout, promise: null };
+  });
+  entry.promise = promise;
+  pendingTrapSocketRequests.set(id, entry);
+  try {
+    game.socket.emit(TRAP_SOCKET, {
+      scope: TRAP_SOCKET_SCOPE,
+      type: "request",
+      action,
+      requestId: id,
+      requesterUserId,
+      gmUserId: gm.id,
+      request
+    });
+  } catch (error) {
+    window.clearTimeout(entry.timeout);
+    pendingTrapSocketRequests.delete(id);
+    entry.reject(error);
+  }
+  return promise;
+}
+
+async function requestTrapSocketWithRetry(action, request, gm, requestId = "") {
+  try {
+    return await requestTrapSocket(action, request, gm, requestId);
+  } catch (error) {
+    if (error?.code !== "socket-timeout") throw error;
+    return requestTrapSocket(action, request, gm, requestId);
+  }
+}
+
+function settleTrapSocketRequest(payload) {
+  const requestId = String(payload.requestId ?? "");
+  const pending = pendingTrapSocketRequests.get(requestId);
+  if (!pending) return;
+  window.clearTimeout(pending.timeout);
+  pendingTrapSocketRequests.delete(requestId);
+  if (payload.ok) pending.resolve(payload.result);
+  else pending.reject(new Error(payload.error || "Trap socket request failed."));
+}
+
+function emitTrapSocketResponse({
+  requestId = "",
+  recipientUserId = "",
+  ok = false,
+  result = null,
+  error = ""
+} = {}) {
+  game.socket.emit(TRAP_SOCKET, {
+    scope: TRAP_SOCKET_SCOPE,
+    type: "response",
+    requestId,
+    recipientUserId,
+    ok,
+    result,
+    error
+  });
+}
+
+async function runIdempotentTrapSocketRequest(key, callback) {
+  const now = Date.now();
+  const completed = completedTrapSocketRequests.get(key);
+  if (completed?.expiresAt > now) return completed.result;
+  if (completed) completedTrapSocketRequests.delete(key);
+  if (activeTrapSocketRequests.has(key)) return activeTrapSocketRequests.get(key);
+
+  const promise = Promise.resolve().then(callback);
+  activeTrapSocketRequests.set(key, promise);
+  try {
+    const result = await promise;
+    completedTrapSocketRequests.set(key, {
+      expiresAt: now + TRAP_SOCKET_RESULT_TTL_MS,
+      result
+    });
+    for (const [requestKey, entry] of completedTrapSocketRequests) {
+      if (entry?.expiresAt <= now) completedTrapSocketRequests.delete(requestKey);
+    }
+    while (completedTrapSocketRequests.size > 200) {
+      completedTrapSocketRequests.delete(completedTrapSocketRequests.keys().next().value);
+    }
+    return result;
+  } finally {
+    activeTrapSocketRequests.delete(key);
+  }
+}
+
+function serializeTrapTileResult(tile) {
+  return {
+    success: Boolean(tile?.id),
+    sceneId: String(tile?.parent?.id ?? ""),
+    tileId: String(tile?.id ?? ""),
+    tileUuid: String(tile?.uuid ?? "")
+  };
 }
 
 function getResponsibleGM() {

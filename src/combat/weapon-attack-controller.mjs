@@ -7,12 +7,17 @@ import {
   DELAYED_THROWN_ITEM_FLAG,
   DELAYED_THROWN_ITEM_REGION_FLAG,
   createThrownItemTile,
-  deleteDelayedThrownItemDocuments
+  deleteDelayedThrownItemDocuments,
+  deleteDelayedThrownItemWorldDocuments,
+  deleteThrownItemTileByOperation,
+  isDelayedThrownItemWorldOperationCancelled,
+  registerDelayedThrownItemWorldOperation
 } from "../canvas/thrown-items.mjs";
 import { getActorPostureAction, getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import {
   ITEM_FUNCTIONS,
   WEAPON_SPECIAL_PROPERTIES,
+  createActorItemOrInstalledModuleUpdate,
   createWeaponFunctionUpdateData,
   getActorInstalledModuleItems,
   getConditionFunction,
@@ -127,6 +132,9 @@ import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-e
 import { isActorInActiveCombat } from "./combat-membership.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
+import { planInventoryItemConsumption } from "../inventory/consume.mjs";
+import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -178,6 +186,7 @@ const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
 const processingDelayedVolleyRegions = new Set();
 const weaponAttackResolvedHandlers = new Map();
+const weaponResourceActorLock = createActorOperationLock();
 let activeAttack = null;
 let activeDualWeaponAttack = null;
 let activeCommandedAttack = null;
@@ -2345,70 +2354,92 @@ export function canArmDelayedVolleyWeapon(weapon = null, weaponFunctionId = "") 
 
 export async function armDelayedVolleyWeapon({ token = null, weapon = null, weaponFunctionId = "" } = {}) {
   if (!token?.actor || !weapon?.isOwner || !canArmDelayedVolleyWeapon(weapon, weaponFunctionId)) return false;
-  const delaySeconds = getVolleyExplosionDelaySeconds(weapon, weaponFunctionId);
-  const center = getTokenAimPoint(token);
-  const sceneId = token.document?.parent?.id ?? canvas.scene?.id ?? "";
-  if (!center || !sceneId) return false;
+  return weaponResourceActorLock.run(token.actor, null, async () => {
+    weapon = token.actor.items?.get?.(weapon.id);
+    if (!weapon || !canArmDelayedVolleyWeapon(weapon, weaponFunctionId)) return false;
+    const delaySeconds = getVolleyExplosionDelaySeconds(weapon, weaponFunctionId);
+    const center = getTokenAimPoint(token);
+    const sceneId = token.document?.parent?.id ?? canvas.scene?.id ?? "";
+    if (!center || !sceneId) return false;
 
-  const delayedThrownItemId = foundry.utils.randomID();
-  const explodeAtWorldTime = (Number(game.time?.worldTime) || 0) + delaySeconds;
-  const geometry = {
-    type: VOLLEY_ACTION_KEY,
-    origin: serializePoint(center),
-    end: serializePoint(center),
-    angle: 0,
-    distance: 1,
-    halfAngle: 0,
-    radiusPixels: metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId)),
-    shapePoints: []
-  };
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const rangeProfile = getWeaponRangeProfile(weapon, VOLLEY_ACTION_KEY, token, weaponFunctionId, {
-    attackDistanceMeters: 0,
-    weaponAttackId: delayedThrownItemId,
-    chanceOperationId: delayedThrownItemId,
-    weaponData
-  });
-  const damageContext = {
-    actor: token.actor,
-    actorToken: token,
-    token,
-    actionKey: VOLLEY_ACTION_KEY,
-    weaponActionKey: VOLLEY_ACTION_KEY,
-    weaponData,
-    weaponFunctionId,
-    attackDistanceMeters: 0,
-    effectiveRange: rangeProfile.effectiveRange
-  };
-  const baseDamage = getWeaponDamage(weapon, weaponFunctionId);
-  const regionRequest = buildDelayedVolleyExplosionRegionRequest({
-    sceneId,
-    delayedThrownItemId,
-    attackId: delayedThrownItemId,
-    explodeAtWorldTime,
-    weapon,
-    weaponFunctionId,
-    actionKey: VOLLEY_ACTION_KEY,
-    attackerToken: token,
-    finalGeometries: [geometry],
-    blastOutcomes: [{
-      attackDistanceMeters: damageContext.attackDistanceMeters,
-      effectiveRange: damageContext.effectiveRange,
-      baseDamage
-    }],
-    baseDamage,
-    damageContext,
-    attachmentTokenId: token.id
-  });
-  const region = await requestCreateDelayedVolleyExplosionRegion(regionRequest);
-  if (!region) return false;
-  await weapon.update({
-    [`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`]: {
-      id: delayedThrownItemId,
-      explodeAtWorldTime
+    const delayedThrownItemId = foundry.utils.randomID();
+    const explodeAtWorldTime = (Number(game.time?.worldTime) || 0) + delaySeconds;
+    const geometry = {
+      type: VOLLEY_ACTION_KEY,
+      origin: serializePoint(center),
+      end: serializePoint(center),
+      angle: 0,
+      distance: 1,
+      halfAngle: 0,
+      radiusPixels: metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId)),
+      shapePoints: []
+    };
+    const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+    const rangeProfile = getWeaponRangeProfile(weapon, VOLLEY_ACTION_KEY, token, weaponFunctionId, {
+      attackDistanceMeters: 0,
+      weaponAttackId: delayedThrownItemId,
+      chanceOperationId: delayedThrownItemId,
+      weaponData
+    });
+    const damageContext = {
+      actor: token.actor,
+      actorToken: token,
+      token,
+      actionKey: VOLLEY_ACTION_KEY,
+      weaponActionKey: VOLLEY_ACTION_KEY,
+      weaponData,
+      weaponFunctionId,
+      attackDistanceMeters: 0,
+      effectiveRange: rangeProfile.effectiveRange
+    };
+    const baseDamage = getWeaponDamage(weapon, weaponFunctionId);
+    const regionRequest = buildDelayedVolleyExplosionRegionRequest({
+      sceneId,
+      delayedThrownItemId,
+      attackId: delayedThrownItemId,
+      explodeAtWorldTime,
+      weapon,
+      weaponFunctionId,
+      actionKey: VOLLEY_ACTION_KEY,
+      attackerToken: token,
+      finalGeometries: [geometry],
+      blastOutcomes: [{
+        attackDistanceMeters: damageContext.attackDistanceMeters,
+        effectiveRange: damageContext.effectiveRange,
+        baseDamage
+      }],
+      baseDamage,
+      damageContext,
+      attachmentTokenId: token.id
+    });
+    const region = await requestCreateDelayedVolleyExplosionRegion(regionRequest);
+    if (!region) {
+      await rollbackDelayedThrownItemWorldDocuments(delayedThrownItemId);
+      return false;
     }
+    try {
+      await executeInventoryMutation({
+        actor: token.actor,
+        updates: [{
+          _id: weapon.id,
+          [`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`]: {
+            id: delayedThrownItemId,
+            explodeAtWorldTime
+          }
+        }]
+      }, { reason: "arm-delayed-volley-weapon" });
+      const armedId = String(
+        token.actor.items?.get?.(weapon.id)?.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG)?.id ?? ""
+      ).trim();
+      if (armedId !== delayedThrownItemId) {
+        throw new Error("Delayed volley Item marker was not committed.");
+      }
+    } catch (error) {
+      await rollbackDelayedThrownItemWorldDocuments(delayedThrownItemId);
+      throw error;
+    }
+    return true;
   });
-  return true;
 }
 
 export function buildWeaponExplosionDamageRequests({
@@ -3176,6 +3207,7 @@ class WeaponAttackController {
     point = null,
     createSpentQuantityTile = true,
     delayedThrownItemId = "",
+    delayedThrownItemData = null,
     actionContext = null
   } = {}) {
     this.spentQuantityItemData = null;
@@ -3200,19 +3232,61 @@ class WeaponAttackController {
     }
     const weaponAttempted = this.shouldSpendWeaponResourcesForAttempt();
     if (weaponAttempted) {
-      if (!(await this.spendWeaponActionModifierCosts(attackCount))) return false;
       const modifierState = this.getWeaponActionModifierState();
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId, { modifierState });
       this.spentQuantityItemData = spentQuantityItemData;
-      await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts, { modifierState });
-      if (createSpentQuantityTile) {
-        await createSpentQuantityItemTile({
+      const spentQuantityTileOperationId = createSpentQuantityTile && spentQuantityItemData
+        ? `weapon-resource:${this.attackId}:${foundry.utils.randomID()}`
+        : "";
+      if (spentQuantityTileOperationId) {
+        if (delayedThrownItemId) {
+          foundry.utils.setProperty(
+            spentQuantityItemData,
+            `flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`,
+            {
+              id: delayedThrownItemId,
+              explodeAtWorldTime: Number(delayedThrownItemData?.explodeAtWorldTime) || 0
+            }
+          );
+        }
+        const tile = await createSpentQuantityItemTile({
           itemData: spentQuantityItemData,
           point,
           token: this.token,
           sourceItemUuid: this.weapon.uuid,
-          delayedThrownItemId
+          delayedThrownItemId,
+          operationId: spentQuantityTileOperationId
         });
+        if (!tile) {
+          this.attackCanceledByReaction = true;
+          return false;
+        }
+      }
+
+      try {
+        if (!(await this.spendWeaponActionModifierCosts(attackCount))) {
+          await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
+          this.attackCanceledByReaction = true;
+          return false;
+        }
+        const resourcesSpent = await spendWeaponResources(
+          this.weapon,
+          attackCount,
+          this.weaponFunctionId,
+          this.pendingCriticalFailureResourceCosts,
+          {
+            modifierState,
+            chainRef: this.chainRef
+          }
+        );
+        if (!resourcesSpent) {
+          await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
+          this.attackCanceledByReaction = true;
+          return false;
+        }
+      } catch (error) {
+        await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
+        throw error;
       }
     }
     this.reportedActionPointCostApplied ??= actionPointCostApplied;
@@ -4926,7 +5000,6 @@ class WeaponAttackController {
     this.targets = getPotentialTargets(this.token, this.geometry, { includeAttacker: true, includeDead: true });
 
     const delayedThrownItemId = delayedExplosion ? (existingDelayedThrownItemId || foundry.utils.randomID()) : "";
-    const sourceItemUuid = this.weapon.uuid;
     const landingPoint = getAttackLandingPoint(finalGeometries, this.pointer);
     const delayedDamageContext = delayedExplosion ? this.createWeaponDamageContext(actionContext) : null;
     const delayedRegionRequest = delayedExplosion
@@ -4946,38 +5019,56 @@ class WeaponAttackController {
       })
       : null;
 
-    await this.spendCurrentAttackCosts({
-      attackCount: totalAttackCount,
-      point: landingPoint,
-      createSpentQuantityTile: false,
-      actionContext
-    });
+    const createsNewDelayedRegion = delayedExplosion && !existingDelayedThrownItemId;
+    if (createsNewDelayedRegion) {
+      const region = await requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest);
+      if (!region) {
+        await rollbackDelayedThrownItemWorldDocuments(delayedThrownItemId);
+        this.attackCanceledByReaction = true;
+        await checkBatch?.publish({ forceBatch: true });
+        this.releaseInteractiveControl();
+        this.completeProcessingCycle();
+        return;
+      }
+    }
+
+    let costsSpent = false;
+    try {
+      costsSpent = await this.spendCurrentAttackCosts({
+        attackCount: totalAttackCount,
+        point: landingPoint,
+        createSpentQuantityTile: delayedExplosion,
+        delayedThrownItemId,
+        delayedThrownItemData: delayedRegionRequest,
+        actionContext
+      });
+    } catch (error) {
+      if (createsNewDelayedRegion) {
+        await rollbackDelayedThrownItemWorldDocuments(delayedThrownItemId);
+      }
+      throw error;
+    }
+    if (!costsSpent) {
+      if (createsNewDelayedRegion) {
+        await rollbackDelayedThrownItemWorldDocuments(delayedThrownItemId);
+      }
+      await checkBatch?.publish({ forceBatch: true });
+      this.releaseInteractiveControl();
+      this.completeProcessingCycle();
+      return;
+    }
     await checkBatch?.publish({ forceBatch: true });
 
     const playEffects = this.shouldPlayWeaponAnimationForAttempt();
     if (delayedExplosion) {
       if (playEffects) await this.playVolleyAttackEffects(finalGeometries, { includeExplosion: false });
       this.releaseInteractiveControl();
-      if (this.spentQuantityItemData) {
-        foundry.utils.setProperty(
-          this.spentQuantityItemData,
-          `flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`,
-          {
-            id: delayedThrownItemId,
-            explodeAtWorldTime: delayedRegionRequest.explodeAtWorldTime
-          }
-        );
+      if (existingDelayedThrownItemId) {
+        const region = await requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest);
+        if (!region) {
+          ui.notifications.warn("GM не подтвердил перемещение области отложенного взрыва.");
+        }
       }
-      await Promise.all([
-        createSpentQuantityItemTile({
-          itemData: this.spentQuantityItemData,
-          point: landingPoint,
-          token: this.token,
-          sourceItemUuid,
-          delayedThrownItemId
-        }),
-        requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest)
-      ]);
       await this.finalizeWeaponNoiseDetection();
       this.completeProcessingCycle();
       return;
@@ -6563,6 +6654,11 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
   const attachmentTokenId = String(regionData.attachmentTokenId ?? "").trim();
   const explodeAtWorldTime = Number(regionData.explodeAtWorldTime);
   if (!explosions.length || !delayedThrownItemId || !Number.isFinite(explodeAtWorldTime)) return null;
+  registerDelayedThrownItemWorldOperation(
+    delayedThrownItemId,
+    regionData?.source?.attackerUuid
+  );
+  if (isDelayedThrownItemWorldOperationCancelled(delayedThrownItemId)) return null;
 
   const levelId = getRegionRestrictionLevelId(scene);
   const shapes = explosions.map(explosion => ({
@@ -6583,7 +6679,12 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
       hidden: false,
       attachment: { token: attachmentTokenId || null }
     }]);
-    return updated?.[0] ?? existing;
+    const region = updated?.[0] ?? existing;
+    if (isDelayedThrownItemWorldOperationCancelled(delayedThrownItemId)) {
+      await deleteDelayedVolleyRegionIfMatching(scene, region, delayedThrownItemId);
+      return null;
+    }
+    return region;
   }
 
   const created = await scene.createEmbeddedDocuments("Region", [{
@@ -6609,7 +6710,22 @@ async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
       }
     }
   }]);
-  return created?.[0] ?? null;
+  const region = created?.[0] ?? null;
+  if (isDelayedThrownItemWorldOperationCancelled(delayedThrownItemId)) {
+    await deleteDelayedVolleyRegionIfMatching(scene, region, delayedThrownItemId);
+    return null;
+  }
+  return region;
+}
+
+async function deleteDelayedVolleyRegionIfMatching(scene = null, region = null, delayedThrownItemId = "") {
+  const regionId = String(region?.id ?? "").trim();
+  const id = String(delayedThrownItemId ?? "").trim();
+  if (!scene || !regionId || !id) return false;
+  const current = scene.regions?.get?.(regionId) ?? region;
+  if (String(current?.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG)?.id ?? "") !== id) return false;
+  await scene.deleteEmbeddedDocuments("Region", [regionId]);
+  return true;
 }
 
 function createDelayedVolleySourceContextSnapshot(actor, effectKey = "", {
@@ -7586,67 +7702,154 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   return cost;
 }
 
-async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = [], { modifierState = null } = {}) {
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const updateData = {};
-  let deleteWeapon = false;
-  let magazineValue = Math.max(0, toInteger(weaponData?.magazine?.value));
-  let energyConsumerItem = null;
-  let energyValue = null;
+async function spendWeaponResources(
+  weapon,
+  multiplier = 1,
+  weaponFunctionId = "",
+  extraCosts = [],
+  {
+    modifierState = null,
+    chainRef = null
+  } = {}
+) {
+  const actor = getWeaponOwnerActor(weapon);
+  if (!actor || !weapon?.id) {
+    throw new TypeError("Weapon resource spending requires an Actor-owned Item.");
+  }
+
+  return weaponResourceActorLock.run(actor, null, async () => {
+    const currentWeapon = actor.items?.get?.(weapon.id);
+    if (!currentWeapon) return false;
+
+    const missing = getMissingWeaponResourceCost(
+      currentWeapon,
+      multiplier,
+      weaponFunctionId,
+      { modifierState }
+    );
+    if (missing) {
+      ui.notifications.warn(`${currentWeapon.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
+      return false;
+    }
+
+    const weaponData = getWeaponAttackData(currentWeapon, weaponFunctionId);
+    const costs = collectWeaponResourceSpendTotals(weaponData, multiplier, extraCosts, { modifierState });
+    const updates = [];
+    const deletes = [];
+    let workingWeapon = currentWeapon;
+
+    const energyAmount = costs.get("energyConsumer") ?? 0;
+    if (energyAmount > 0) {
+      const state = getWeaponEnergyResourceState(currentWeapon, weaponFunctionId);
+      if (state.item) {
+        const energyUpdate = createActorItemOrInstalledModuleUpdate(actor, state.item, {
+          "system.functions.energyConsumer.installedSource.reserve.value": Math.max(0, state.current - energyAmount)
+        });
+        if (!energyUpdate) {
+          throw new Error("Unable to persist the weapon energy consumer resource update.");
+        }
+        updates.push(energyUpdate);
+        if (String(energyUpdate._id ?? "") === String(currentWeapon.id)) {
+          workingWeapon = createWeaponResourceSnapshot(currentWeapon, energyUpdate);
+        }
+      }
+    }
+
+    const magazineAmount = costs.get("magazine") ?? 0;
+    if (magazineAmount > 0) {
+      const currentMagazine = Math.max(0, toInteger(getWeaponAttackData(workingWeapon, weaponFunctionId)?.magazine?.value));
+      const magazineUpdate = createWeaponFunctionUpdateData(workingWeapon, weaponFunctionId, {
+        "magazine.value": Math.max(0, currentMagazine - magazineAmount)
+      });
+      if (Object.keys(magazineUpdate).length) {
+        updates.push({ _id: currentWeapon.id, ...magazineUpdate });
+        workingWeapon = createWeaponResourceSnapshot(workingWeapon, {
+          _id: currentWeapon.id,
+          ...magazineUpdate
+        });
+      }
+    }
+
+    const conditionAmount = costs.get("condition") ?? 0;
+    if (conditionAmount > 0) {
+      updates.push({
+        _id: currentWeapon.id,
+        "system.functions.condition.value": Math.max(
+          0,
+          toInteger(currentWeapon.system?.functions?.condition?.value) - conditionAmount
+        )
+      });
+    }
+
+    const quantityAmount = costs.get("quantity") ?? 0;
+    if (quantityAmount > 0) {
+      const consumption = planInventoryItemConsumption({
+        item: currentWeapon,
+        amount: quantityAmount
+      });
+      updates.push(...consumption.updates);
+      deletes.push(...consumption.deletes);
+      if (!consumption.deletes.length && currentWeapon.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG)?.id) {
+        updates.push({
+          _id: currentWeapon.id,
+          [`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`]: globalThis._del
+        });
+      }
+    }
+
+    if (!updates.length && !deletes.length) return true;
+    const mutation = await executeInventoryMutation({
+      actor,
+      updates,
+      deletes
+    }, {
+      reason: "weapon-resource-spend",
+      documentOptions: chainRef
+        ? {
+          chainRef,
+          falloutMawSystemEventChainRef: chainRef
+        }
+        : {}
+    });
+    const touchedWeapon = mutation.plans?.some(plan => (
+      plan.actor === actor
+      && plan.touchedExistingIds?.has?.(String(currentWeapon.id))
+    ));
+    if (!touchedWeapon) {
+      throw new Error("Weapon resource state changed before the inventory transaction could commit.");
+    }
+    return true;
+  });
+}
+
+function collectWeaponResourceSpendTotals(weaponData = {}, multiplier = 1, extraCosts = [], { modifierState = null } = {}) {
   const costs = [
     ...getWeaponResourceCosts(weaponData, { modifierState }).map(cost => ({
       type: cost.type,
       amount: Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)))
     })),
     ...(extraCosts ?? []).map(cost => ({
-      type: cost.type,
-      amount: Math.max(0, toInteger(cost.amount))
+      type: cost?.type,
+      amount: Math.max(0, toInteger(cost?.amount))
     }))
   ];
+  const totals = new Map();
   for (const cost of costs) {
-    const amount = Math.max(0, toInteger(cost.amount));
-    if (!amount) continue;
-    if (cost.type === "magazine") {
-      magazineValue = Math.max(0, magazineValue - amount);
-      Object.assign(updateData, createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
-        "magazine.value": magazineValue
-      }));
-    } else if (cost.type === "condition") {
-      const current = Object.hasOwn(updateData, "system.functions.condition.value")
-        ? toInteger(updateData["system.functions.condition.value"])
-        : toInteger(weapon.system?.functions?.condition?.value);
-      updateData["system.functions.condition.value"] = Math.max(0, current - amount);
-    } else if (cost.type === "energyConsumer") {
-      if (energyValue === null) {
-        const state = getWeaponEnergyResourceState(weapon, weaponFunctionId);
-        energyConsumerItem = state.item;
-        energyValue = state.current;
-      }
-      energyValue = Math.max(0, energyValue - amount);
-    } else if (cost.type === "quantity") {
-      const current = Object.hasOwn(updateData, "system.quantity")
-        ? toInteger(updateData["system.quantity"])
-        : toInteger(weapon.system?.quantity);
-      const next = Math.max(0, current - amount);
-      if (next <= 0) deleteWeapon = true;
-      else {
-        updateData["system.quantity"] = next;
-        if (weapon.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG)?.id) {
-          updateData[`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`] = globalThis._del;
-        }
-      }
-    }
+    const type = String(cost?.type ?? "").trim();
+    const amount = Math.max(0, toInteger(cost?.amount));
+    if (!type || !amount) continue;
+    totals.set(type, (totals.get(type) ?? 0) + amount);
   }
-  if (energyConsumerItem === weapon) {
-    updateData["system.functions.energyConsumer.installedSource.reserve.value"] = energyValue;
-  }
-  if (Object.keys(updateData).length) await weapon.update(updateData);
-  if (energyConsumerItem && energyConsumerItem !== weapon) {
-    await energyConsumerItem.update({
-      "system.functions.energyConsumer.installedSource.reserve.value": energyValue
-    });
-  }
-  if (deleteWeapon && weapon.id) await weapon.delete();
+  return totals;
+}
+
+function createWeaponResourceSnapshot(weapon = null, update = {}) {
+  const snapshot = foundry.utils.deepClone(weapon?.toObject?.() ?? weapon ?? {});
+  const expanded = foundry.utils.expandObject(
+    Object.fromEntries(Object.entries(update ?? {}).filter(([path]) => path !== "_id"))
+  );
+  foundry.utils.mergeObject(snapshot, expanded, { inplace: true });
+  return snapshot;
 }
 
 export function canPerformWeaponActionAgainstToken({
@@ -7713,7 +7916,14 @@ function getWeaponQuantityResourceCost(weapon, multiplier = 1, weaponFunctionId 
   }, 0);
 }
 
-async function createSpentQuantityItemTile({ itemData = null, point = null, token = null, sourceItemUuid = "", delayedThrownItemId = "" } = {}) {
+async function createSpentQuantityItemTile({
+  itemData = null,
+  point = null,
+  token = null,
+  sourceItemUuid = "",
+  delayedThrownItemId = "",
+  operationId = ""
+} = {}) {
   if (!itemData || !point) return null;
   return createThrownItemTile({
     sceneId: canvas.scene?.id ?? "",
@@ -7721,8 +7931,34 @@ async function createSpentQuantityItemTile({ itemData = null, point = null, toke
     point,
     sourceActorUuid: token?.actor?.uuid ?? "",
     sourceItemUuid,
-    delayedThrownItemId
+    delayedThrownItemId,
+    operationId
   });
+}
+
+async function rollbackSpentQuantityItemTile(operationId = "") {
+  const id = String(operationId ?? "").trim();
+  if (!id) return true;
+  const cleaned = await deleteThrownItemTileByOperation(id);
+  if (!cleaned) {
+    console.error(`${SYSTEM_ID} | Thrown Item Tile rollback was not confirmed for operation ${id}.`);
+  }
+  return cleaned;
+}
+
+async function rollbackDelayedThrownItemWorldDocuments(delayedThrownItemId = "") {
+  const id = String(delayedThrownItemId ?? "").trim();
+  if (!id) return true;
+  try {
+    const cleaned = await deleteDelayedThrownItemWorldDocuments(id);
+    if (!cleaned) {
+      console.error(`${SYSTEM_ID} | Delayed thrown Item world rollback was not confirmed for ${id}.`);
+    }
+    return cleaned;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Delayed thrown Item world rollback failed for ${id}.`, error);
+    return false;
+  }
 }
 
 function getAttackLandingPoint(trajectories = [], fallback = null) {
