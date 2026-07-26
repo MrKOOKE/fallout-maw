@@ -25,6 +25,38 @@ export const ABILITY_ACTION_TYPES = Object.freeze({
   movementRoute: "movementRoute"
 });
 
+export const ABILITY_CONSTRUCT_TYPES = Object.freeze({
+  temporaryEffect: "temporaryEffect",
+  resourceChange: "resourceChange"
+});
+
+export const ABILITY_TRIAL_SUBJECTS = Object.freeze({
+  source: "source",
+  targets: "targets"
+});
+
+export const ABILITY_TRIAL_SELECTION_MODES = Object.freeze({
+  best: "best",
+  worst: "worst"
+});
+
+export const ABILITY_TRIAL_LINK_RECIPIENTS = Object.freeze({
+  source: "source",
+  subjects: "subjects"
+});
+
+export const ABILITY_TRIAL_LINK_MODES = Object.freeze({
+  once: "once",
+  perSubject: "perSubject"
+});
+
+export const ABILITY_TRIAL_RESULT_KEYS = Object.freeze([
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+]);
+
 /** Formula context used by constructor actions which operate on a route. */
 export const ABILITY_ACTION_ROUTE_EVALUATION_MODES = Object.freeze({
   source: "source",
@@ -137,6 +169,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   weaponSkill: "weaponSkill",
   engagedSkill: "engagedSkill",
   weaponProficiency: "weaponProficiency",
+  trial: "trial",
   aura: "aura",
   limitedChanges: "limitedChanges",
   limitedEffectCopies: "limitedEffectCopies",
@@ -263,7 +296,8 @@ export function normalizeEventReactionProgressRequired(value = 1) {
 
 export const ABILITY_AURA_MODES = Object.freeze({
   applyToTargets: "applyToTargets",
-  selfWhenPresent: "selfWhenPresent"
+  selfWhenPresent: "selfWhenPresent",
+  triggerConditions: "triggerConditions"
 });
 
 export const ABILITY_AURA_TARGET_GROUPS = Object.freeze(["ally", "enemy", "neutral"]);
@@ -483,7 +517,8 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
       formula: String(system.formula ?? value?.formula ?? "").trim(),
       acquisition: normalizeAbilityAcquisition(system.acquisition ?? value?.acquisition),
       acquisitionRequirements: normalizeAbilityAcquisitionConditions(system.acquisitionRequirements ?? value?.acquisitionRequirements),
-      functions: normalizeAbilityFunctions(system.functions ?? value?.functions)
+      functions: normalizeAbilityFunctions(system.functions ?? value?.functions),
+      constructs: normalizeAbilityConstructs(system.constructs ?? value?.constructs)
     }
   };
 }
@@ -491,6 +526,67 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
 export function normalizeAbilityFunctions(value = []) {
   return (Array.isArray(value) ? value : Object.values(value ?? {}))
     .map((entry, index) => normalizeAbilityFunction(entry, index));
+}
+
+export function normalizeAbilityConstructs(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(entry => normalizeAbilityConstruct(entry));
+}
+
+export function normalizeAbilityConstruct(value = {}) {
+  const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(value?.type)
+    ? value.type
+    : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+  const resources = Array.isArray(value?.resources) ? value.resources : Object.values(value?.resources ?? {});
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    type,
+    name: String(value?.name ?? "").trim(),
+    durationSeconds: type === ABILITY_CONSTRUCT_TYPES.temporaryEffect
+      ? Math.max(0, toInteger(value?.durationSeconds ?? value?.duration ?? 0))
+      : 0,
+    changes: type === ABILITY_CONSTRUCT_TYPES.temporaryEffect
+      ? normalizeAbilityChanges(value?.changes)
+      : [],
+    resources: type === ABILITY_CONSTRUCT_TYPES.resourceChange
+      ? resources.map(row => normalizeAbilityConstructResource(row))
+      : []
+  };
+}
+
+export function normalizeAbilityConstructResource(value = {}) {
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    resourceKey: String(value?.resourceKey ?? "").trim(),
+    formula: normalizeFormulaText(value?.formula ?? value?.value, "0")
+  };
+}
+
+function normalizeAbilityTrialEntry(value = {}) {
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    kind: "skill",
+    key: String(value?.key ?? "").trim()
+  };
+}
+
+function normalizeAbilityTrialLink(value = {}) {
+  const recipient = Object.values(ABILITY_TRIAL_LINK_RECIPIENTS).includes(value?.recipient)
+    ? value.recipient
+    : ABILITY_TRIAL_LINK_RECIPIENTS.subjects;
+  const mode = Object.values(ABILITY_TRIAL_LINK_MODES).includes(value?.mode)
+    ? value.mode
+    : recipient === ABILITY_TRIAL_LINK_RECIPIENTS.source
+      ? ABILITY_TRIAL_LINK_MODES.once
+      : ABILITY_TRIAL_LINK_MODES.perSubject;
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    constructId: String(value?.constructId ?? "").trim(),
+    recipient,
+    mode: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.subjects
+      ? ABILITY_TRIAL_LINK_MODES.perSubject
+      : mode
+  };
 }
 
 export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChanges, options = {}) {
@@ -570,7 +666,8 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
       formula: normalized.system.formula,
       acquisition: foundry.utils.deepClone(normalized.system.acquisition),
       acquisitionRequirements: foundry.utils.deepClone(normalized.system.acquisitionRequirements),
-      functions: foundry.utils.deepClone(normalized.system.functions)
+      functions: foundry.utils.deepClone(normalized.system.functions),
+      constructs: foundry.utils.deepClone(normalized.system.constructs)
     },
     flags: {
       "fallout-maw": {
@@ -691,6 +788,42 @@ function normalizeAbilityFunction(value = {}, index = 0) {
     penalties,
     sort: index
   };
+}
+
+export function createAbilityConstruct(type = ABILITY_CONSTRUCT_TYPES.temporaryEffect) {
+  return normalizeAbilityConstruct({
+    id: foundry.utils.randomID(),
+    type,
+    name: "",
+    durationSeconds: type === ABILITY_CONSTRUCT_TYPES.temporaryEffect ? 6 : 0,
+    changes: [],
+    resources: []
+  });
+}
+
+export function createAbilityConstructResource() {
+  return normalizeAbilityConstructResource({
+    id: foundry.utils.randomID(),
+    resourceKey: "reactionPoints",
+    formula: "0"
+  });
+}
+
+export function createAbilityTrialEntry() {
+  return normalizeAbilityTrialEntry({
+    id: foundry.utils.randomID(),
+    kind: "skill",
+    key: ""
+  });
+}
+
+export function createAbilityTrialLink() {
+  return normalizeAbilityTrialLink({
+    id: foundry.utils.randomID(),
+    constructId: "",
+    recipient: ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+    mode: ABILITY_TRIAL_LINK_MODES.perSubject
+  });
 }
 
 function roundAbilityDecimal(value) {
@@ -1330,6 +1463,32 @@ export function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.trial) {
+    const entries = Array.isArray(value?.trialEntries)
+      ? value.trialEntries
+      : Object.values(value?.trialEntries ?? {});
+    const links = Array.isArray(value?.trialLinks)
+      ? value.trialLinks
+      : Object.values(value?.trialLinks ?? {});
+    const resultKeys = normalizeStringList(value?.trialResultKeys)
+      .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
+    return {
+      id,
+      groupId: "",
+      type,
+      trialSubject: Object.values(ABILITY_TRIAL_SUBJECTS).includes(value?.trialSubject)
+        ? value.trialSubject
+        : ABILITY_TRIAL_SUBJECTS.targets,
+      trialEntries: entries.map(entry => normalizeAbilityTrialEntry(entry)),
+      trialSelectionMode: Object.values(ABILITY_TRIAL_SELECTION_MODES).includes(value?.trialSelectionMode)
+        ? value.trialSelectionMode
+        : ABILITY_TRIAL_SELECTION_MODES.best,
+      trialDifficultyFormula: normalizeFormulaText(value?.trialDifficultyFormula ?? value?.difficultyFormula, "0"),
+      trialResultKeys: resultKeys.length ? resultKeys : ["criticalFailure", "failure"],
+      trialLinks: links.map(link => normalizeAbilityTrialLink(link))
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.aura) {
     const auraMode = normalizeAuraMode(value?.auraMode);
     return {
@@ -1345,7 +1504,12 @@ export function normalizeAbilityCondition(value = {}) {
       auraCombatOnly: normalizeBoolean(value?.auraCombatOnly, false),
       auraCombatantsOnly: normalizeBoolean(value?.auraCombatantsOnly, false),
       auraIgnoreIncapacitated: normalizeBoolean(value?.auraIgnoreIncapacitated, true),
-      auraIgnoreHidden: normalizeBoolean(value?.auraIgnoreHidden, true)
+      auraAllowUnconscious: normalizeBoolean(value?.auraAllowUnconscious, false),
+      auraAllowDead: normalizeBoolean(value?.auraAllowDead, false),
+      auraIgnoreHidden: normalizeBoolean(value?.auraIgnoreHidden, true),
+      auraTriggerOnCreate: normalizeBoolean(value?.auraTriggerOnCreate, true),
+      auraTriggerOnEnter: normalizeBoolean(value?.auraTriggerOnEnter, true),
+      auraRepeatSeconds: Math.max(1, toInteger(value?.auraRepeatSeconds ?? 6))
     };
   }
 

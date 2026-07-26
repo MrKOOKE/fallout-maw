@@ -42,6 +42,7 @@ import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 import {
   abilityAuraConditionApplies,
   getAuraGeneratedEffectFlag,
+  isAuraTriggerCondition,
   isAuraDistributionCondition
 } from "./aura-conditions.mjs";
 import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
@@ -192,6 +193,10 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
     if (!condition?.type) continue;
     // These rows describe what happens after a function is actually used;
     // they are metadata and never participate in AND/OR condition truth.
+    if (
+      isAuraTriggerCondition(condition)
+      || condition.type === ABILITY_CONDITION_TYPES.trial
+    ) continue;
     if ([
       ABILITY_CONDITION_TYPES.triggerCost,
       ABILITY_CONDITION_TYPES.accumulation,
@@ -214,6 +219,10 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 }
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
+  if (
+    isAuraTriggerCondition(condition)
+    || condition.type === ABILITY_CONDITION_TYPES.trial
+  ) return true;
   if ([
     ABILITY_CONDITION_TYPES.triggerCost,
     ABILITY_CONDITION_TYPES.accumulation,

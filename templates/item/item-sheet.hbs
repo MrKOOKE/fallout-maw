@@ -1656,10 +1656,10 @@
     {{/if}}
 
     {{#if canConfigureActions}}
-    {{#if actions.length}}
+    {{#if hasOrdinaryActions}}
     <fieldset class="fallout-maw-fieldset">
       <legend>{{localize "FALLOUTMAW.Ability.Actions.Title"}}</legend>
-      {{#each actions}}
+      {{#each ordinaryActions}}
       <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-action-row data-action-index="{{index}}">
         <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.id" value="{{id}}">
         {{#if isPending}}
@@ -2274,9 +2274,22 @@
                   <label><span>Только в бою</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatOnly">{{#each auraCombatOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                   <label><span>Блокирование стенами</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraWallsBlock">{{#each auraWallsBlockChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                   <label><span>Только участники боя</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatantsOnly">{{#each auraCombatantsOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{#unless showAuraTriggerTiming}}
                   <label><span>Игнорировать мертвых и без сознания</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreIncapacitated">{{#each auraIgnoreIncapacitatedChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{/unless}}
+                  {{#if showAuraTriggerTiming}}
+                  <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreIncapacitated" value="true">
+                  <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraAllowUnconscious" {{#if auraAllowUnconscious}}checked{{/if}}><span>Работает при состоянии «Без сознания»</span></label>
+                  <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraAllowDead" {{#if auraAllowDead}}checked{{/if}}><span>Работает при состоянии «Мёртв»</span></label>
+                  <label><span>Сработать при создании ауры</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraTriggerOnCreate">{{#each auraTriggerOnCreateChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Сработать при входе цели</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraTriggerOnEnter">{{#each auraTriggerOnEnterChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Повторять для цели, сек</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraRepeatSeconds" value="{{auraRepeatSeconds}}" min="1" step="1"></label>
+                  {{/if}}
                   <label><span>Игнорировать скрытых</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreHidden">{{#each auraIgnoreHiddenChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                 </div>
+                {{#if showAuraTriggerTiming}}
+                <p class="fallout-maw-hint">Экземпляр активного эффекта является самой аурой. После его удаления проверки прекращаются.</p>
+                {{/if}}
               </div>
               {{/if}}
               {{#if isLimitedChanges}}
@@ -2420,6 +2433,7 @@
       </div>
     </div>
     {{/if}}
+
   </section>
   {{else}}
   <section class="fallout-maw-panel">
@@ -2677,10 +2691,10 @@
     </label>
     {{/if}}
 
-    {{#if actions.length}}
+    {{#if hasOrdinaryActions}}
     <fieldset class="fallout-maw-fieldset">
       <legend>{{localize "FALLOUTMAW.Ability.Actions.Title"}}</legend>
-      {{#each actions}}
+      {{#each ordinaryActions}}
       <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-action-row data-action-index="{{index}}">
         <input type="hidden" name="{{functionPath}}.{{functionIndex}}.actions.{{index}}.id" value="{{id}}">
         {{#if isPending}}
@@ -3271,6 +3285,91 @@
                 </div>
               </div>
               {{/if}}
+              {{#if isTrial}}
+              <div class="fallout-maw-ability-action-section fallout-maw-trial-condition">
+                <div class="fallout-maw-list-grid three-columns">
+                  <label><span>Кого испытывать</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.trialSubject">{{#each trialSubjectChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Как выбрать проверку</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.trialSelectionMode">{{#each trialSelectionModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Сложность</span><input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.trialDifficultyFormula" value="{{trialDifficultyFormula}}" data-formula-autocomplete="all"></label>
+                </div>
+                <div class="fallout-maw-item-use-category-field">
+                  <div class="fallout-maw-item-use-category-header"><span>Проверяемые навыки</span><button type="button" data-add-ability-trial-entry><i class="fa-solid fa-plus"></i> Добавить навык</button></div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each trialEntryRows}}
+                    <div class="fallout-maw-item-use-category-row" data-ability-trial-entry-row data-trial-entry-index="{{index}}">
+                      <input type="hidden" name="{{basePath}}.id" value="{{id}}"><input type="hidden" name="{{basePath}}.kind" value="skill">
+                      <select name="{{basePath}}.key">{{#each skillChoices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-trial-entry title="Удалить навык"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}<span class="fallout-maw-empty-list">Добавьте хотя бы один навык.</span>{{/each}}
+                  </div>
+                </div>
+                <div class="fallout-maw-ability-action-section">
+                  <div class="fallout-maw-aura-condition-caption">Результаты, при которых испытание считается подходящим</div>
+                  <div class="fallout-maw-list-grid two-columns">{{#each trialResultChoices}}<label class="checkbox"><input type="checkbox" name="{{name}}" value="{{value}}" data-ability-trial-result-key {{#if checked}}checked{{/if}}><span>{{label}}</span></label>{{/each}}</div>
+                </div>
+                <div class="fallout-maw-item-use-category-field">
+                  <div class="fallout-maw-item-use-category-header">
+                    <span>Последствия при подходящем результате</span>
+                    <div class="fallout-maw-inline-controls">
+                      <button type="button" data-add-ability-trial-link data-construct-type="temporaryEffect"><i class="fa-solid fa-plus"></i> Временный эффект</button>
+                      <button type="button" data-add-ability-trial-link data-construct-type="resourceChange"><i class="fa-solid fa-plus"></i> Изменение ресурса</button>
+                    </div>
+                  </div>
+                  {{#each trialLinkRows}}
+                  <fieldset class="fallout-maw-fieldset fallout-maw-trial-outcome" data-ability-trial-link-row data-trial-link-index="{{index}}">
+                    <input type="hidden" name="{{basePath}}.id" value="{{id}}">
+                    <input type="hidden" name="{{basePath}}.constructId" value="{{constructId}}">
+                    <div class="fallout-maw-ability-condition-card-header">
+                      <strong>{{#if construct}}{{construct.typeLabel}}{{else}}Повреждённое последствие{{/if}}</strong>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-trial-link title="Удалить последствие"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <div class="fallout-maw-trial-recipient-row">
+                      <label><span>Кому применить</span><select name="{{basePath}}.recipient" data-ability-trial-link-recipient>{{#each recipientChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label><span>Кратность</span><select name="{{basePath}}.mode">{{#each modeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                    </div>
+                    {{#if construct}}
+                    {{#with construct}}
+                    <div class="fallout-maw-ability-construct" data-ability-construct-row data-construct-index="{{index}}">
+                      <input type="hidden" name="{{basePath}}.id" value="{{id}}">
+                      <input type="hidden" name="{{basePath}}.type" value="{{type}}">
+                      <label class="fallout-maw-grow-field"><span>Название последствия</span><input type="text" name="{{basePath}}.name" value="{{name}}" placeholder="{{typeLabel}}"></label>
+                      {{#if isTemporaryEffect}}
+                      <label class="fallout-maw-construct-duration"><span>Длительность эффекта, сек</span><input type="number" min="1" step="1" name="{{basePath}}.durationSeconds" value="{{durationSeconds}}"></label>
+                      <div class="fallout-maw-item-use-category-header"><span>Изменения активного эффекта</span><button type="button" data-add-ability-construct-change><i class="fa-solid fa-plus"></i> Добавить ключ</button></div>
+                      {{#if changes.length}}<div class="fallout-maw-trauma-effect-row fallout-maw-grid-header"><span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span></div>{{/if}}
+                      {{#each changes}}
+                      <div class="fallout-maw-trauma-effect-row" data-ability-construct-change-row data-change-index="{{index}}">
+                        <input type="hidden" name="{{basePath}}.id" value="{{id}}"><input type="hidden" name="{{basePath}}.phase" value="initial">
+                        <input type="text" name="{{basePath}}.key" value="{{key}}" data-effect-key-autocomplete>
+                        <select name="{{basePath}}.type">{{#each typeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                        <input type="text" name="{{basePath}}.value" value="{{value}}" data-formula-autocomplete="all">
+                        <input type="number" name="{{basePath}}.priority" value="{{priority}}" step="1">
+                        <button type="button" class="fallout-maw-icon-button" data-delete-ability-construct-change title="Удалить ключ"><i class="fa-solid fa-trash"></i></button>
+                      </div>
+                      {{else}}<p class="fallout-maw-empty-list">Изменения эффекта не настроены.</p>{{/each}}
+                      {{/if}}
+                      {{#if isResourceChange}}
+                      <div class="fallout-maw-item-use-category-header"><span>Изменения ресурсов</span><button type="button" data-add-ability-construct-resource><i class="fa-solid fa-plus"></i> Добавить ресурс</button></div>
+                      {{#each resources}}
+                      <div class="fallout-maw-construct-resource-row" data-ability-construct-resource-row data-resource-index="{{index}}">
+                        <input type="hidden" name="{{basePath}}.id" value="{{id}}">
+                        <label><span>Ресурс</span><select name="{{basePath}}.resourceKey">{{#each resourceChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                        <label><span>Формула изменения</span><input type="text" name="{{basePath}}.formula" value="{{formula}}" data-formula-autocomplete="all"></label>
+                        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-construct-resource title="Удалить ресурс"><i class="fa-solid fa-trash"></i></button>
+                      </div>
+                      {{else}}<p class="fallout-maw-empty-list">Изменения ресурсов не настроены.</p>{{/each}}
+                      {{/if}}
+                    </div>
+                    {{/with}}
+                    {{else}}
+                    <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> Данные последствия не найдены. Удалите эту строку и создайте последствие заново.</p>
+                    {{/if}}
+                  </fieldset>
+                  {{else}}<p class="fallout-maw-empty-list">Последствия не настроены.</p>{{/each}}
+                </div>
+              </div>
+              {{/if}}
               {{#if isAura}}
               <div class="fallout-maw-aura-condition">
                 <label><span>Режим наложения</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraMode" data-ability-aura-mode>{{#each auraModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
@@ -3295,9 +3394,22 @@
                   <label><span>Только в бою</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatOnly">{{#each auraCombatOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                   <label><span>Блокирование стенами</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraWallsBlock">{{#each auraWallsBlockChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                   <label><span>Только участники боя</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatantsOnly">{{#each auraCombatantsOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{#unless showAuraTriggerTiming}}
                   <label><span>Игнорировать мертвых и без сознания</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreIncapacitated">{{#each auraIgnoreIncapacitatedChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{/unless}}
+                  {{#if showAuraTriggerTiming}}
+                  <input type="hidden" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreIncapacitated" value="true">
+                  <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraAllowUnconscious" {{#if auraAllowUnconscious}}checked{{/if}}><span>Работает при состоянии «Без сознания»</span></label>
+                  <label class="checkbox"><input type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraAllowDead" {{#if auraAllowDead}}checked{{/if}}><span>Работает при состоянии «Мёртв»</span></label>
+                  <label><span>Сработать при создании ауры</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraTriggerOnCreate">{{#each auraTriggerOnCreateChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Сработать при входе цели</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraTriggerOnEnter">{{#each auraTriggerOnEnterChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Повторять для цели, сек</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraRepeatSeconds" value="{{auraRepeatSeconds}}" min="1" step="1"></label>
+                  {{/if}}
                   <label><span>Игнорировать скрытых</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreHidden">{{#each auraIgnoreHiddenChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                 </div>
+                {{#if showAuraTriggerTiming}}
+                <p class="fallout-maw-hint">Экземпляр активного эффекта является самой аурой. После его удаления проверки прекращаются.</p>
+                {{/if}}
               </div>
               {{/if}}
               {{#if isLimitedChanges}}
@@ -3441,12 +3553,14 @@
       </div>
     </div>
     {{/if}}
+
   </section>
   {{else}}
   <section class="fallout-maw-panel">
     <p class="fallout-maw-empty-list">Функции не настроены.</p>
   </section>
   {{/each}}
+
   {{/if}}
 
   {{#if hasActorContainerFunction}}

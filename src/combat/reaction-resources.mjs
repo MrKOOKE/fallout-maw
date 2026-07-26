@@ -295,6 +295,40 @@ export async function restoreActorReactionResource(actor) {
   }, { [REACTION_UPDATE_OPTION]: true });
 }
 
+/**
+ * Add reaction points through the canonical reaction-point Active Effect.
+ * Raising the effect's bonus raises both the prepared maximum and the current
+ * amount without a second raw Actor update.
+ */
+export async function grantActorReactionPoints(actor, amount = 0) {
+  const granted = Math.max(0, toInteger(amount));
+  if (!actor?.isOwner || !granted) return 0;
+  const existing = actor.effects?.find(effect => (
+    effect.getFlag(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG)?.source === "abilityGrant"
+  )) ?? null;
+  const current = existing?.system?.changes
+    ?.filter(change => String(change?.key ?? "") === `system.resources.${REACTION_RESOURCE_KEY}.bonus`)
+    .reduce((total, change) => total + Math.max(0, toInteger(change?.value)), 0) ?? 0;
+  const data = buildReactionPointEffectData(actor, current + granted);
+  data.name = "Очки реакции от способностей";
+  data.flags[SYSTEM_ID][REACTION_POINTS_EFFECT_FLAG] = { source: "abilityGrant" };
+  if (existing) {
+    await existing.update({
+      name: data.name,
+      img: data.img,
+      "system.changes": data.system.changes,
+      flags: data.flags,
+      ...CLEAR_EFFECT_DURATION_UPDATE
+    }, { animate: false, falloutMawActiveAuraRuntime: true });
+  } else {
+    await actor.createEmbeddedDocuments("ActiveEffect", [data], {
+      animate: false,
+      falloutMawActiveAuraRuntime: true
+    });
+  }
+  return granted;
+}
+
 export function getNormalActionPointValue(actor) {
   return Math.max(0, toInteger(actor?.system?.resources?.[ACTION_RESOURCE_KEY]?.value));
 }
@@ -511,10 +545,12 @@ async function createOrUpdateReactionDodgeEffect(actor, amount) {
   await actor.createEmbeddedDocuments("ActiveEffect", [data], { animate: false });
 }
 
-async function createOrUpdateReactionPointEffect(actor, amount) {
+async function createOrUpdateReactionPointEffect(actor, amount, operationOptions = {}) {
   const value = Math.max(0, toInteger(amount));
   if (!value) return;
-  const existing = actor.effects?.find(effect => effect.getFlag(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG)) ?? null;
+  const existing = actor.effects?.find(effect => (
+    effect.getFlag(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG) === true
+  )) ?? null;
   const data = buildReactionPointEffectData(actor, value);
   if (existing) {
     await existing.update({
@@ -523,10 +559,10 @@ async function createOrUpdateReactionPointEffect(actor, amount) {
       "system.changes": data.system.changes,
       flags: data.flags,
       ...CLEAR_EFFECT_DURATION_UPDATE
-    }, { animate: false });
+    }, { animate: false, ...operationOptions });
     return;
   }
-  await actor.createEmbeddedDocuments("ActiveEffect", [data], { animate: false });
+  await actor.createEmbeddedDocuments("ActiveEffect", [data], { animate: false, ...operationOptions });
 }
 
 async function deleteReactionPointEffects(actor) {

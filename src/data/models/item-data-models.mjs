@@ -125,7 +125,8 @@ export class AbilityDataModel extends BaseItemDataModel {
         difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 })
       }),
       acquisitionRequirements: new ArrayField(abilityAcquisitionRequirementField(), { required: true, initial: [] }),
-      functions: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
+      functions: new ArrayField(abilityFunctionField(), { required: true, initial: [] }),
+      constructs: new ArrayField(abilityConstructField(), { required: true, initial: [] })
     };
   }
 }
@@ -166,6 +167,26 @@ function abilityFunctionField() {
       percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
       equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
     })
+  });
+}
+
+function abilityConstructField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    type: new StringField({
+      required: true,
+      blank: false,
+      choices: ["temporaryEffect", "resourceChange"],
+      initial: "temporaryEffect"
+    }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
+    resources: new ArrayField(new SchemaField({
+      id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+      resourceKey: new StringField({ required: true, blank: true, initial: "" }),
+      formula: new StringField({ required: true, blank: true, initial: "0" })
+    }), { required: true, initial: [] })
   });
 }
 
@@ -272,9 +293,38 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "aura", "limitedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "trial", "aura", "limitedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
     }),
+    trialSubject: new StringField({
+      required: true,
+      blank: false,
+      choices: ["source", "targets"],
+      initial: "targets"
+    }),
+    trialEntries: new ArrayField(new SchemaField({
+      id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+      kind: new StringField({ required: true, blank: false, choices: ["skill"], initial: "skill" }),
+      key: new StringField({ required: true, blank: true, initial: "" })
+    }), { required: true, initial: [] }),
+    trialSelectionMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["best", "worst"],
+      initial: "best"
+    }),
+    trialDifficultyFormula: new StringField({ required: true, blank: true, initial: "0" }),
+    trialResultKeys: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      choices: ["criticalFailure", "failure", "success", "criticalSuccess"]
+    }), { required: true, initial: ["criticalFailure", "failure"] }),
+    trialLinks: new ArrayField(new SchemaField({
+      id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+      constructId: new StringField({ required: true, blank: true, initial: "" }),
+      recipient: new StringField({ required: true, blank: false, choices: ["source", "subjects"], initial: "subjects" }),
+      mode: new StringField({ required: true, blank: false, choices: ["once", "perSubject"], initial: "perSubject" })
+    }), { required: true, initial: [] }),
     accumulation: new SchemaField({
       name: new StringField({ required: true, blank: true, initial: "" }),
       valueSource: new StringField({
@@ -413,7 +463,7 @@ function abilityConditionField() {
     auraMode: new StringField({
       required: true,
       blank: false,
-      choices: ["applyToTargets", "selfWhenPresent"],
+      choices: ["applyToTargets", "selfWhenPresent", "triggerConditions"],
       initial: "applyToTargets"
     }),
     auraTargetGroups: new ArrayField(new StringField({
@@ -428,7 +478,12 @@ function abilityConditionField() {
     auraCombatOnly: new BooleanField({ required: true, initial: false }),
     auraCombatantsOnly: new BooleanField({ required: true, initial: false }),
     auraIgnoreIncapacitated: new BooleanField({ required: true, initial: true }),
+    auraAllowUnconscious: new BooleanField({ required: true, initial: false }),
+    auraAllowDead: new BooleanField({ required: true, initial: false }),
     auraIgnoreHidden: new BooleanField({ required: true, initial: true }),
+    auraTriggerOnCreate: new BooleanField({ required: true, initial: true }),
+    auraTriggerOnEnter: new BooleanField({ required: true, initial: true }),
+    auraRepeatSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     limitFormula: new StringField({ required: true, blank: true, initial: "1" }),
     usesSpent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),

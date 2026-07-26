@@ -23,6 +23,15 @@ export function findAuraDistributionConditions(conditions = []) {
   return (conditions ?? []).filter(isAuraDistributionCondition);
 }
 
+export function isAuraTriggerCondition(condition = {}) {
+  if (!isAuraCondition(condition)) return false;
+  return condition.auraMode === ABILITY_AURA_MODES.triggerConditions;
+}
+
+export function findAuraTriggerConditions(conditions = []) {
+  return (conditions ?? []).filter(isAuraTriggerCondition);
+}
+
 export function abilityAuraConditionApplies(actor, condition = {}, context = {}) {
   if (String(context?.satisfiedAuraConditionId ?? "") === String(condition?.id ?? "")) return true;
   if (isAuraDistributionCondition(condition)) return false;
@@ -72,10 +81,22 @@ export function resolveAbilityAuraState(actor, condition = {}, context = {}) {
 export function getAuraGeneratedTargetTokens(actor, condition = {}, context = {}) {
   const state = resolveAbilityAuraState(actor, condition, context);
   if (!state.sourceToken) return [];
-  if (condition.auraMode === ABILITY_AURA_MODES.applyToTargets) {
+  if (
+    condition.auraMode === ABILITY_AURA_MODES.applyToTargets
+    || condition.auraMode === ABILITY_AURA_MODES.triggerConditions
+  ) {
     return state.primarySatisfied ? state.primaryTargets : [];
   }
   return [];
+}
+
+export function auraTriggerTargetMatches(actor, condition = {}, targetToken = null, context = {}) {
+  if (!isAuraTriggerCondition(condition) || !targetToken?.actor) return false;
+  const sourceToken = resolveActorToken(actor, context);
+  if (!sourceToken || !auraSourceAllowed(actor, sourceToken, condition)) return false;
+  if (targetToken.id === sourceToken.id && condition.auraIncludeSelf === false) return false;
+  if (!auraTargetAllowed(sourceToken, targetToken, condition)) return false;
+  return auraTargetRelationMatches(sourceToken.actor, targetToken.actor, condition.auraTargetGroups);
 }
 
 export function getAuraGeneratedEffectFlag(effect = null) {
@@ -98,14 +119,14 @@ function collectAuraTargets(sourceToken, condition = {}, { targetGroups = [], in
 
 function auraSourceAllowed(actor, sourceToken, condition = {}) {
   if (condition.auraCombatOnly && !activeCombatForScene(getTokenScene(sourceToken))) return false;
-  if (condition.auraIgnoreIncapacitated !== false && isActorIncapacitated(actor)) return false;
+  if (auraIncapacitationBlocks(actor, condition)) return false;
   if (condition.auraIgnoreHidden !== false && sourceToken.document?.hidden) return false;
   return true;
 }
 
 function auraTargetAllowed(sourceToken, targetToken, condition = {}) {
   if (condition.auraIgnoreHidden !== false && targetToken.document?.hidden) return false;
-  if (condition.auraIgnoreIncapacitated !== false && isActorIncapacitated(targetToken.actor)) return false;
+  if (auraIncapacitationBlocks(targetToken.actor, condition)) return false;
   if (condition.auraCombatantsOnly && !isTokenCombatant(targetToken)) return false;
   if (!isTokenInAuraRadius(sourceToken, targetToken, condition)) return false;
   if (condition.auraWallsBlock !== false && !hasAuraLineOfSight(sourceToken, targetToken)) return false;
@@ -195,8 +216,11 @@ function isTokenCombatant(token) {
   }) ?? false;
 }
 
-function isActorIncapacitated(actor) {
-  return Boolean(actor?.statuses?.has?.("dead") || actor?.statuses?.has?.("unconscious"));
+function auraIncapacitationBlocks(actor, condition = {}) {
+  if (condition.auraIgnoreIncapacitated === false) return false;
+  if (actor?.statuses?.has?.("dead")) return condition.auraAllowDead !== true;
+  if (actor?.statuses?.has?.("unconscious")) return condition.auraAllowUnconscious !== true;
+  return false;
 }
 
 function getTokenScene(token) {

@@ -11,6 +11,8 @@ import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { getDamageTypeSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
+  ABILITY_AURA_MODES,
+  ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
   getAbilityFunctionTriggerCostRows
 } from "../settings/abilities.mjs";
@@ -727,6 +729,7 @@ export function buildEffectTooltipHTML(effect, actor = null) {
   const triggerCosts = getEffectTriggerCostRows(effect, sourceContext);
   const triggerCostLines = formatEffectTriggerCostRows(triggerCosts, actor);
   const duration = getEffectDurationLabel(effect);
+  const triggeredAura = getEffectTriggeredAuraSummary(effect, actor);
   const limitedUses = getEffectLimitedUseStates(effect, actor, sourceContext);
   const summaryRows = [
     duration ? {
@@ -736,6 +739,10 @@ export function buildEffectTooltipHTML(effect, actor = null) {
     limitedUses.length ? {
       label: localize("FALLOUTMAW.Effects.RemainingUses"),
       value: limitedUses.map(state => `${state.usesRemaining} / ${state.usesMax}`).join(" · ")
+    } : null,
+    triggeredAura ? {
+      label: "Аура",
+      value: triggeredAura
     } : null
   ].filter(Boolean);
   const description = String(effect.description ?? "").trim();
@@ -766,6 +773,37 @@ export function buildEffectTooltipHTML(effect, actor = null) {
       </section>` : ""}
     </article>
   `;
+}
+
+function getEffectTriggeredAuraSummary(effect, actor = null) {
+  const activeApplication = effect?.getFlag?.(SYSTEM_ID, "activeApplication")
+    ?? effect?.flags?.[SYSTEM_ID]?.activeApplication
+    ?? null;
+  const abilityFunction = activeApplication?.functionData;
+  const aura = abilityFunction?.conditions?.find(condition => (
+    condition?.type === ABILITY_CONDITION_TYPES.aura
+    && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+  ));
+  if (!aura) return "";
+
+  const targetLabels = {
+    ally: "союзники",
+    enemy: "враги",
+    neutral: "нейтралы"
+  };
+  const targets = (aura.auraTargetGroups ?? [])
+    .map(key => targetLabels[String(key ?? "")])
+    .filter(Boolean)
+    .join(", ");
+  const radius = formatActorFormulaForDisplay(aura.auraRadiusMeters, actor, {
+    includeValues: Boolean(actor)
+  });
+  const repeatSeconds = Math.max(1, Math.trunc(Number(aura.auraRepeatSeconds) || 6));
+  return [
+    targets || null,
+    radius ? `радиус ${radius} м` : null,
+    `не чаще раза в ${repeatSeconds} с`
+  ].filter(Boolean).join(" · ");
 }
 
 function getEffectTriggerCostRows(effect, sourceContext = {}) {

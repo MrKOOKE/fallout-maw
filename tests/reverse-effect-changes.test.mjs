@@ -62,6 +62,7 @@ const {
 } = await import("../src/utils/active-effect-changes.mjs");
 const {
   abilityConditionApplies,
+  abilityConditionsApply,
   applyPreparedSourceContextualAbilityChanges,
   getConditionalFunctionChanges,
   getContextualAbilityChangeValue,
@@ -324,6 +325,18 @@ test("engaged-skill condition is contextual and matches the skill actually used 
     allowContextual: true,
     skillKey: "repair"
   }), penalties);
+});
+
+test("an aura which triggers conditions is metadata and never gates its owning function", () => {
+  const triggeredAura = {
+    id: "action-aura",
+    type: "aura",
+    auraMode: "triggerConditions",
+    auraTargetGroups: ["enemy"],
+    auraRadiusMeters: "5"
+  };
+  assert.equal(abilityConditionApplies({}, triggeredAura, {}), true);
+  assert.equal(abilityConditionsApply({}, [triggeredAura], {}), true);
 });
 
 test("reverse keys round-trip without becoming ordinary actor overrides", () => {

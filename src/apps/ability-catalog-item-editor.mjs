@@ -26,6 +26,7 @@ import {
   ABILITY_CHANGE_VALUE_SOURCES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
+  ABILITY_CONSTRUCT_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
@@ -36,13 +37,23 @@ import {
   ABILITY_HEALTH_TARGETS,
   ABILITY_POSTURE_ACTIONS,
   ABILITY_POSTURE_SUBJECTS,
+  ABILITY_TRIAL_LINK_MODES,
+  ABILITY_TRIAL_LINK_RECIPIENTS,
+  ABILITY_TRIAL_RESULT_KEYS,
+  ABILITY_TRIAL_SELECTION_MODES,
+  ABILITY_TRIAL_SUBJECTS,
   LOCKED_FEATURES_CATEGORY_ID,
   createAbilityAcquisitionCondition,
   createAbilityAction,
   createAbilityChange,
   createAbilityCondition,
+  createAbilityConstruct,
+  createAbilityConstructResource,
   createAbilityFunction,
+  createAbilityTrialEntry,
+  createAbilityTrialLink,
   normalizeAbilityEntry,
+  normalizeAbilityConstructs,
   normalizeCommandBasicsSettings,
   normalizeCounterAttackSettings,
   normalizeOversightSettings,
@@ -186,6 +197,16 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addFunctionCondition: this.#onAddFunctionCondition,
       addFunctionConditionAlternative: this.#onAddFunctionConditionAlternative,
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
+      addConditionTrialEntry: this.#onAddConditionTrialEntry,
+      deleteConditionTrialEntry: this.#onDeleteConditionTrialEntry,
+      addConditionTrialLink: this.#onAddConditionTrialLink,
+      deleteConditionTrialLink: this.#onDeleteConditionTrialLink,
+      addAbilityConstruct: this.#onAddAbilityConstruct,
+      deleteAbilityConstruct: this.#onDeleteAbilityConstruct,
+      addAbilityConstructChange: this.#onAddAbilityConstructChange,
+      deleteAbilityConstructChange: this.#onDeleteAbilityConstructChange,
+      addAbilityConstructResource: this.#onAddAbilityConstructResource,
+      deleteAbilityConstructResource: this.#onDeleteAbilityConstructResource,
       addActiveApplicationCost: this.#onAddActiveApplicationCost,
       deleteActiveApplicationCost: this.#onDeleteActiveApplicationCost,
       addConditionTriggerCost: this.#onAddConditionTriggerCost,
@@ -247,6 +268,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const descriptionHTML = isDetailsTab ? await TextEditor.enrichHTML(this.ability.description ?? "", {
       secrets: game.user?.isGM ?? false
     }) : "";
+    const abilityConstructs = isFunctionsTab
+      ? normalizeAbilityConstructs(this.ability.system?.constructs)
+      : [];
     return {
       ...(await super._prepareContext(options)),
       ability: this.ability,
@@ -284,7 +308,11 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
         label: skill.label,
         selected: skill.key === this.ability.system?.acquisition?.skillKey || (!this.ability.system?.acquisition?.skillKey && index === 0)
       })) : [],
-      functions: isFunctionsTab ? normalizeAbilityFunctions(this.ability.system?.functions ?? []).map(prepareFunctionForDisplay) : []
+      functions: isFunctionsTab
+        ? normalizeAbilityFunctions(this.ability.system?.functions ?? [])
+          .map(entry => prepareFunctionForDisplay(entry, { constructs: abilityConstructs }))
+        : [],
+      constructs: abilityConstructs.map(prepareAbilityConstructForDisplay)
     };
   }
 
@@ -314,6 +342,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='conditionAuraMode']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='conditionTrialLinkRecipient']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='conditionAttackDistanceMode']")?.forEach(select => {
@@ -451,7 +482,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       const condition = this.ability.system.functions?.[functionIndex]?.conditions?.[conditionIndex];
       if (condition) condition.limbKey = ABILITY_HEALTH_LIMB_ALL;
     }
-    if (event.currentTarget?.dataset?.field === "conditionAuraMode" && event.currentTarget.value === ABILITY_AURA_MODES.selfWhenPresent) {
+    if (
+      event.currentTarget?.dataset?.field === "conditionAuraMode"
+      && event.currentTarget.value !== ABILITY_AURA_MODES.applyToTargets
+    ) {
       const { condition } = this.#getConditionForTarget(event.currentTarget);
       if (condition) condition.auraIncludeSelf = false;
     }
@@ -564,8 +598,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     const functionRow = target.closest("[data-ability-function-row]");
+    const actionRow = target.closest("[data-ability-action-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
-    const actionIndex = getRowIndex(functionRow, "[data-ability-action-row]", target.closest("[data-ability-action-row]"));
+    const actionIndex = Number(actionRow?.dataset.actionIndex ?? -1);
     if (functionIndex >= 0 && actionIndex >= 0) this.ability.system.functions?.[functionIndex]?.actions?.splice(actionIndex, 1);
     return this.#persist({ render: true, sync: false });
   }
@@ -576,7 +611,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionRow = target.closest("[data-ability-function-row]");
     const actionRow = target.closest("[data-ability-action-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
-    const actionIndex = getRowIndex(functionRow, "[data-ability-action-row]", actionRow);
+    const actionIndex = Number(actionRow?.dataset.actionIndex ?? -1);
     const action = this.ability.system.functions?.[functionIndex]?.actions?.[actionIndex];
     if (!action || action.attackActionKeys?.includes(ABILITY_ATTACK_ACTION_ALL)) return undefined;
     const nextKey = ABILITY_ATTACKING_WEAPON_ACTION_KEYS.find(key => !action.attackActionKeys.includes(key));
@@ -591,7 +626,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionRow = target.closest("[data-ability-function-row]");
     const actionRow = target.closest("[data-ability-action-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
-    const actionIndex = getRowIndex(functionRow, "[data-ability-action-row]", actionRow);
+    const actionIndex = Number(actionRow?.dataset.actionIndex ?? -1);
     const choiceIndex = Number(target.closest("[data-ability-attack-choice-row]")?.dataset.choiceIndex ?? -1);
     const choices = this.ability.system.functions?.[functionIndex]?.actions?.[actionIndex]?.attackActionKeys;
     if (Array.isArray(choices) && choices.length > 1 && choiceIndex >= 0) choices.splice(choiceIndex, 1);
@@ -673,6 +708,160 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
           delete change.accumulatorExchange;
         }
       }
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionTrialEntry(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial) {
+      return this.#persist({ render: true, sync: false });
+    }
+    condition.trialEntries ??= [];
+    condition.trialEntries.push(createAbilityTrialEntry());
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionTrialEntry(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const entryIndex = Number(target.closest("[data-trial-entry-row]")?.dataset.trialEntryIndex ?? -1);
+    if (condition?.type === ABILITY_CONDITION_TYPES.trial && entryIndex >= 0) {
+      condition.trialEntries?.splice(entryIndex, 1);
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionTrialLink(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const requested = String(target?.dataset?.constructType ?? "");
+    const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
+      ? requested
+      : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+    const construct = createAbilityConstruct(type);
+    this.ability.system.constructs ??= [];
+    this.ability.system.constructs.push(construct);
+    condition.trialLinks ??= [];
+    const link = createAbilityTrialLink();
+    link.constructId = construct.id;
+    condition.trialLinks.push(link);
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionTrialLink(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const linkIndex = Number(target.closest("[data-trial-link-row]")?.dataset.trialLinkIndex ?? -1);
+    if (condition?.type === ABILITY_CONDITION_TYPES.trial && linkIndex >= 0) {
+      const [removed] = condition.trialLinks?.splice(linkIndex, 1) ?? [];
+      const constructId = String(removed?.constructId ?? "");
+      if (constructId && !isAbilityConstructLinked(this.ability, constructId)) {
+        this.ability.system.constructs = (this.ability.system.constructs ?? [])
+          .filter(construct => String(construct?.id ?? "") !== constructId);
+      }
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAbilityConstruct(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const requested = String(target?.dataset?.constructType ?? "");
+    const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
+      ? requested
+      : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+    this.ability.system.constructs ??= [];
+    this.ability.system.constructs.push(createAbilityConstruct(type));
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAbilityConstruct(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const constructRow = target.closest("[data-ability-construct-row]");
+    const constructIndex = getRowIndex(this.form, "[data-ability-construct-row]", constructRow);
+    if (constructIndex < 0) return this.#persist({ render: true, sync: false });
+    const removedId = String(this.ability.system.constructs?.[constructIndex]?.id ?? "");
+    this.ability.system.constructs?.splice(constructIndex, 1);
+    for (const abilityFunction of this.ability.system.functions ?? []) {
+      for (const condition of abilityFunction.conditions ?? []) {
+        if (condition?.type !== ABILITY_CONDITION_TYPES.trial) continue;
+        condition.trialLinks = (condition.trialLinks ?? [])
+          .filter(link => String(link?.constructId ?? "") !== removedId);
+      }
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAbilityConstructChange(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const constructIndex = getRowIndex(
+      this.form,
+      "[data-ability-construct-row]",
+      target.closest("[data-ability-construct-row]")
+    );
+    const construct = this.ability.system.constructs?.[constructIndex];
+    if (construct?.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect) {
+      construct.changes ??= [];
+      construct.changes.push(createAbilityChange());
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAbilityConstructChange(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const constructRow = target.closest("[data-ability-construct-row]");
+    const constructIndex = getRowIndex(this.form, "[data-ability-construct-row]", constructRow);
+    const changeIndex = getRowIndex(
+      constructRow,
+      "[data-ability-construct-change-row]",
+      target.closest("[data-ability-construct-change-row]")
+    );
+    if (constructIndex >= 0 && changeIndex >= 0) {
+      this.ability.system.constructs?.[constructIndex]?.changes?.splice(changeIndex, 1);
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAbilityConstructResource(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const constructIndex = getRowIndex(
+      this.form,
+      "[data-ability-construct-row]",
+      target.closest("[data-ability-construct-row]")
+    );
+    const construct = this.ability.system.constructs?.[constructIndex];
+    if (construct?.type === ABILITY_CONSTRUCT_TYPES.resourceChange) {
+      construct.resources ??= [];
+      construct.resources.push(createAbilityConstructResource());
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAbilityConstructResource(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const constructRow = target.closest("[data-ability-construct-row]");
+    const constructIndex = getRowIndex(this.form, "[data-ability-construct-row]", constructRow);
+    const resourceIndex = getRowIndex(
+      constructRow,
+      "[data-ability-construct-resource-row]",
+      target.closest("[data-ability-construct-resource-row]")
+    );
+    if (constructIndex >= 0 && resourceIndex >= 0) {
+      this.ability.system.constructs?.[constructIndex]?.resources?.splice(resourceIndex, 1);
     }
     return this.#persist({ render: true, sync: false });
   }
@@ -1274,7 +1463,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
         acquisitionRequirements: acquisitionRequirementsRoot ? readAcquisitionRequirements(acquisitionRequirementsRoot) : this.ability.system?.acquisitionRequirements,
         functions: this.#activeTab === "functions"
           ? readAbilityFunctions(this.form, this.ability.system?.functions)
-          : this.ability.system?.functions
+          : this.ability.system?.functions,
+        constructs: this.#activeTab === "functions"
+          ? readAbilityConstructs(this.form)
+          : this.ability.system?.constructs
       }
     });
   }
@@ -1304,26 +1496,28 @@ function readAbilityFunctions(root, previousValue = []) {
 }
 
 function readAbilityActions(row) {
-  return Array.from(row.querySelectorAll("[data-ability-action-row]") ?? []).map(actionRow => ({
-    id: actionRow.dataset.actionId || foundry.utils.randomID(),
-    type: actionRow.querySelector("[data-field='action.type']")?.value ?? "",
-    attackActionKeys: Array.from(actionRow.querySelectorAll("[data-field='action.attackActionKey']") ?? [])
-      .map(input => String(input.value ?? "").trim())
-      .filter(Boolean),
-    executorMode: actionRow.querySelector("[data-field='action.executorMode']")?.value,
-    targetMode: actionRow.querySelector("[data-field='action.targetMode']")?.value,
-    actionPointCostMode: actionRow.querySelector("[data-field='action.actionPointCostMode']")?.value,
-    actionPointPayer: actionRow.querySelector("[data-field='action.actionPointPayer']")?.value,
-    fixedActionPointCost: actionRow.querySelector("[data-field='action.fixedActionPointCost']")?.value,
-    actualActionPointCostPercent: actionRow.querySelector("[data-field='action.actualActionPointCostPercent']")?.value,
-    routeBudgetMode: actionRow.querySelector("[data-field='action.routeBudgetMode']")?.value,
-    routeBudgetFormula: actionRow.querySelector("[data-field='action.routeBudgetFormula']")?.value,
-    routeBudgetEvaluation: actionRow.querySelector("[data-field='action.routeBudgetEvaluation']")?.value,
-    routeExecutionMode: actionRow.querySelector("[data-field='action.routeExecutionMode']")?.value,
-    routeMovementAction: actionRow.querySelector("[data-field='action.routeMovementAction']")?.value,
-    routeAutoRotate: actionRow.querySelector("[data-field='action.routeAutoRotate']")?.checked,
-    routeShowRuler: actionRow.querySelector("[data-field='action.routeShowRuler']")?.checked
-  }));
+  return Array.from(row.querySelectorAll("[data-ability-action-row]") ?? [])
+    .sort((left, right) => (
+      Number(left.dataset.actionIndex ?? 0) - Number(right.dataset.actionIndex ?? 0)
+    ))
+    .map(actionRow => ({
+        id: actionRow.dataset.actionId || foundry.utils.randomID(),
+        type: actionRow.querySelector("[data-field='action.type']")?.value ?? "",
+        attackActionKeys: readFieldValues(actionRow, "[data-field='action.attackActionKey']"),
+        executorMode: actionRow.querySelector("[data-field='action.executorMode']")?.value,
+        targetMode: actionRow.querySelector("[data-field='action.targetMode']")?.value,
+        actionPointCostMode: actionRow.querySelector("[data-field='action.actionPointCostMode']")?.value,
+        actionPointPayer: actionRow.querySelector("[data-field='action.actionPointPayer']")?.value,
+        fixedActionPointCost: actionRow.querySelector("[data-field='action.fixedActionPointCost']")?.value,
+        actualActionPointCostPercent: actionRow.querySelector("[data-field='action.actualActionPointCostPercent']")?.value,
+        routeBudgetMode: actionRow.querySelector("[data-field='action.routeBudgetMode']")?.value,
+        routeBudgetFormula: actionRow.querySelector("[data-field='action.routeBudgetFormula']")?.value,
+        routeBudgetEvaluation: actionRow.querySelector("[data-field='action.routeBudgetEvaluation']")?.value,
+        routeExecutionMode: actionRow.querySelector("[data-field='action.routeExecutionMode']")?.value,
+        routeMovementAction: actionRow.querySelector("[data-field='action.routeMovementAction']")?.value,
+        routeAutoRotate: actionRow.querySelector("[data-field='action.routeAutoRotate']")?.checked,
+        routeShowRuler: actionRow.querySelector("[data-field='action.routeShowRuler']")?.checked
+      }));
 }
 
 function readActiveApplicationSettings(row, previousValue = {}) {
@@ -1783,6 +1977,24 @@ function readAbilityConditions(root) {
       id: row.dataset.conditionId || foundry.utils.randomID(),
       groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
       type: row.querySelector("[data-field='conditionType']")?.value || "",
+      trialSubject: row.querySelector("[data-field='conditionTrialSubject']")?.value ?? ABILITY_TRIAL_SUBJECTS.targets,
+      trialEntries: Array.from(row.querySelectorAll("[data-trial-entry-row]") ?? []).map(entryRow => ({
+        id: entryRow.dataset.trialEntryId || foundry.utils.randomID(),
+        kind: entryRow.querySelector("[data-field='conditionTrialEntryKind']")?.value ?? "skill",
+        key: entryRow.querySelector("[data-field='conditionTrialEntryKey']")?.value ?? ""
+      })),
+      trialSelectionMode: row.querySelector("[data-field='conditionTrialSelectionMode']")?.value
+        ?? ABILITY_TRIAL_SELECTION_MODES.best,
+      trialDifficultyFormula: row.querySelector("[data-field='conditionTrialDifficultyFormula']")?.value ?? "0",
+      trialResultKeys: readCheckedFieldValues(row, "[data-field='conditionTrialResultKey']"),
+      trialLinks: Array.from(row.querySelectorAll("[data-trial-link-row]") ?? []).map(linkRow => ({
+        id: linkRow.dataset.trialLinkId || foundry.utils.randomID(),
+        constructId: linkRow.querySelector("[data-field='conditionTrialLinkConstructId']")?.value ?? "",
+        recipient: linkRow.querySelector("[data-field='conditionTrialLinkRecipient']")?.value
+          ?? ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+        mode: linkRow.querySelector("[data-field='conditionTrialLinkMode']")?.value
+          ?? ABILITY_TRIAL_LINK_MODES.perSubject
+      })),
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
       progressRequired: row.querySelector("[data-field='conditionEventProgressRequired']")?.value ?? 1,
       combatOnly: Boolean(row.querySelector("[data-field='conditionCombatOnly']")?.checked),
@@ -1841,7 +2053,12 @@ function readAbilityConditions(root) {
       auraCombatOnly: readBooleanField(row.querySelector("[data-field='conditionAuraCombatOnly']"), false),
       auraCombatantsOnly: readBooleanField(row.querySelector("[data-field='conditionAuraCombatantsOnly']"), false),
       auraIgnoreIncapacitated: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreIncapacitated']"), true),
+      auraAllowUnconscious: readBooleanField(row.querySelector("[data-field='conditionAuraAllowUnconscious']"), false),
+      auraAllowDead: readBooleanField(row.querySelector("[data-field='conditionAuraAllowDead']"), false),
       auraIgnoreHidden: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreHidden']"), true),
+      auraTriggerOnCreate: readBooleanField(row.querySelector("[data-field='conditionAuraTriggerOnCreate']"), true),
+      auraTriggerOnEnter: readBooleanField(row.querySelector("[data-field='conditionAuraTriggerOnEnter']"), true),
+      auraRepeatSeconds: row.querySelector("[data-field='conditionAuraRepeatSeconds']")?.value ?? 6,
       limit: row.querySelector("[data-field='conditionLimitLegacy']")?.value ?? 1,
       limitFormula: row.querySelector("[data-field='conditionLimitFormula']")?.value
         ?? row.querySelector("[data-field='conditionLimit']")?.value
@@ -1865,6 +2082,46 @@ function readAbilityConditions(root) {
       durationSeconds: readConditionDurationSeconds(row)
     };
   });
+}
+
+function readAbilityConstructs(root) {
+  const seen = new Set();
+  return Array.from(root?.querySelectorAll("[data-ability-construct-row]") ?? []).map(constructRow => {
+    const type = constructRow.querySelector("[data-field='constructType']")?.value
+      ?? ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+    return {
+      id: constructRow.dataset.constructId || foundry.utils.randomID(),
+      type,
+      name: constructRow.querySelector("[data-field='constructName']")?.value ?? "",
+      durationSeconds: constructRow.querySelector("[data-field='constructDurationSeconds']")?.value ?? 0,
+      changes: Array.from(constructRow.querySelectorAll("[data-ability-construct-change-row]") ?? [])
+        .map(changeRow => ({
+          id: changeRow.dataset.changeId || foundry.utils.randomID(),
+          key: changeRow.querySelector("[data-field='constructChangeKey']")?.value ?? "",
+          type: changeRow.querySelector("[data-field='constructChangeType']")?.value ?? ABILITY_CHANGE_TYPES.add,
+          value: changeRow.querySelector("[data-field='constructChangeValue']")?.value ?? "0",
+          phase: "initial",
+          priority: changeRow.querySelector("[data-field='constructChangePriority']")?.value ?? null
+        })),
+      resources: Array.from(constructRow.querySelectorAll("[data-ability-construct-resource-row]") ?? [])
+        .map(resourceRow => ({
+          id: resourceRow.dataset.resourceId || foundry.utils.randomID(),
+          resourceKey: resourceRow.querySelector("[data-field='constructResourceKey']")?.value ?? "",
+          formula: resourceRow.querySelector("[data-field='constructResourceFormula']")?.value ?? "0"
+        }))
+    };
+  }).filter(construct => {
+    if (seen.has(construct.id)) return false;
+    seen.add(construct.id);
+    return true;
+  });
+}
+
+function readCheckedFieldValues(root, selector) {
+  return Array.from(root?.querySelectorAll(selector) ?? [])
+    .filter(input => input.checked)
+    .map(input => String(input.value ?? "").trim())
+    .filter(Boolean);
 }
 
 function readTriggerCostRows(conditionRow) {
@@ -1918,7 +2175,7 @@ function readBooleanField(element, fallback = false) {
   return String(readFieldValue(element, fallback ? "true" : "false")) === "true";
 }
 
-function prepareFunctionForDisplay(entry) {
+function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
   const isAcquisitionChanges = normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = normalized.type === ABILITY_FUNCTION_TYPES.effectChanges;
@@ -2041,9 +2298,11 @@ function prepareFunctionForDisplay(entry) {
       && (!hasToggleableCondition || condition?.type === ABILITY_CONDITION_TYPES.toggleable),
     allowTriggerCost: isEffectChanges
       && (!hasTriggerCostCondition || condition?.type === ABILITY_CONDITION_TYPES.triggerCost),
-    eventReactionMode: hasEventReaction
+    eventReactionMode: hasEventReaction,
+    constructs
   }));
   const hasRuntimeConditions = normalized.conditions.some(condition => isRuntimeCondition(condition.type));
+  const preparedActions = normalized.actions.map((action, index) => prepareAbilityActionForDisplay(action, index));
   return {
     ...normalized,
     isAcquisitionChanges,
@@ -2094,7 +2353,9 @@ function prepareFunctionForDisplay(entry) {
     changes: normalized.changes.map((change, index) => (
       prepareChangeForDisplay(change, index, normalized.conditions)
     )),
-    actions: normalized.actions.map(prepareAbilityActionForDisplay),
+    actions: preparedActions,
+    ordinaryActions: preparedActions,
+    hasOrdinaryActions: Boolean(preparedActions.length),
     conditions,
     conditionGroups: buildConditionDisplayGroups(conditions),
     penalties: normalized.penalties.map(prepareChangeForDisplay),
@@ -2630,7 +2891,8 @@ function prepareConditionForDisplay(condition, {
   allowAccumulation = false,
   allowToggleable = false,
   allowTriggerCost = false,
-  eventReactionMode = false
+  eventReactionMode = false,
+  constructs = []
 } = {}) {
   const type = String(condition?.type ?? "");
   const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
@@ -2658,6 +2920,7 @@ function prepareConditionForDisplay(condition, {
   const isEngagedSkill = type === ABILITY_CONDITION_TYPES.engagedSkill;
   const isSkillCondition = isWeaponSkill || isEngagedSkill;
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
+  const isTrial = type === ABILITY_CONDITION_TYPES.trial;
   const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isLimitedUses = type === ABILITY_CONDITION_TYPES.limitedUses;
@@ -2697,7 +2960,7 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isTrial && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
     isAccumulation,
@@ -2769,6 +3032,13 @@ function prepareConditionForDisplay(condition, {
     isSkillCondition,
     skillConditionLabel: isEngagedSkill ? "Задействованные навыки" : "Задействованные оружием навыки",
     isWeaponProficiency,
+    isTrial,
+    trialSubjectChoices: buildTrialSubjectChoices(condition?.trialSubject),
+    trialEntryRows: buildTrialEntryRows(condition?.trialEntries),
+    trialSelectionModeChoices: buildTrialSelectionModeChoices(condition?.trialSelectionMode),
+    trialResultChoices: buildTrialResultChoices(condition?.trialResultKeys),
+    trialLinkRows: buildTrialLinkRows(condition?.trialLinks, constructs),
+    hasTrialConstructs: Boolean(constructs.length),
     isAura,
     isLimitedChanges,
     isLimitedEffectCopies,
@@ -2777,7 +3047,7 @@ function prepareConditionForDisplay(condition, {
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTrial && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -2837,7 +3107,8 @@ function prepareConditionForDisplay(condition, {
     canAddProficiency: Boolean(getFirstUnusedProficiencyKey(condition?.proficiencyKeys)),
     auraModeChoices: buildAuraModeChoices(condition?.auraMode),
     auraTargetGroupsLabel: getAuraTargetGroupsLabel(condition?.auraMode),
-    showAuraIncludeSelf: condition?.auraMode !== ABILITY_AURA_MODES.selfWhenPresent,
+    showAuraIncludeSelf: condition?.auraMode === ABILITY_AURA_MODES.applyToTargets,
+    showAuraTriggerTiming: condition?.auraMode === ABILITY_AURA_MODES.triggerConditions,
     auraTargetGroupRows: buildAuraTargetGroupRows(condition?.auraTargetGroups),
     canAddAuraTargetGroup: normalizeConditionValues(condition?.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group)).length < ABILITY_AURA_TARGET_GROUPS.length,
     auraRadiusMeters: normalizeFormulaText(condition?.auraRadiusMeters, "0"),
@@ -2846,7 +3117,12 @@ function prepareConditionForDisplay(condition, {
     auraCombatOnlyChoices: buildBooleanChoices(Boolean(condition?.auraCombatOnly)),
     auraCombatantsOnlyChoices: buildBooleanChoices(Boolean(condition?.auraCombatantsOnly)),
     auraIgnoreIncapacitatedChoices: buildBooleanChoices(condition?.auraIgnoreIncapacitated !== false),
+    auraAllowUnconsciousChoices: buildBooleanChoices(condition?.auraAllowUnconscious === true),
+    auraAllowDeadChoices: buildBooleanChoices(condition?.auraAllowDead === true),
     auraIgnoreHiddenChoices: buildBooleanChoices(condition?.auraIgnoreHidden !== false),
+    auraTriggerOnCreateChoices: buildBooleanChoices(condition?.auraTriggerOnCreate !== false),
+    auraTriggerOnEnterChoices: buildBooleanChoices(condition?.auraTriggerOnEnter !== false),
+    auraRepeatSeconds: Math.max(1, toInteger(condition?.auraRepeatSeconds ?? 6)),
     itemCategoryRows: buildItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedItemUseCategory(condition?.itemCategories))
   };
@@ -2998,6 +3274,7 @@ function buildConditionTypeChoices(selected = "", {
     { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
     { value: ABILITY_CONDITION_TYPES.engagedSkill, label: "Задействованный навык", selected: selected === ABILITY_CONDITION_TYPES.engagedSkill },
     { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
+    { value: ABILITY_CONDITION_TYPES.trial, label: "Испытание", selected: selected === ABILITY_CONDITION_TYPES.trial },
     { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
   if (allowToggleable || selected === ABILITY_CONDITION_TYPES.toggleable) {
@@ -3304,6 +3581,123 @@ function buildEventReactionResourceChoices(selected = "") {
   }));
 }
 
+function prepareAbilityConstructForDisplay(construct, index) {
+  const normalized = normalizeAbilityConstructs([construct])[0]
+    ?? createAbilityConstruct(ABILITY_CONSTRUCT_TYPES.temporaryEffect);
+  const isTemporaryEffect = normalized.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+  const isResourceChange = normalized.type === ABILITY_CONSTRUCT_TYPES.resourceChange;
+  return {
+    ...normalized,
+    index,
+    isTemporaryEffect,
+    isResourceChange,
+    typeLabel: isTemporaryEffect ? "Временный эффект" : "Изменение ресурса",
+    changes: normalized.changes.map((change, changeIndex) => (
+      prepareChangeForDisplay(change, changeIndex, [])
+    )),
+    resources: normalized.resources.map((resource, resourceIndex) => ({
+      ...resource,
+      index: resourceIndex,
+      resourceChoices: buildEventReactionResourceChoices(resource.resourceKey)
+    }))
+  };
+}
+
+function buildTrialSubjectChoices(selected = ABILITY_TRIAL_SUBJECTS.targets) {
+  return [
+    { value: ABILITY_TRIAL_SUBJECTS.targets, label: "Цели функции" },
+    { value: ABILITY_TRIAL_SUBJECTS.source, label: "Владелец способности" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildTrialEntryRows(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {})).map((entry, index) => ({
+    ...entry,
+    index,
+    skillChoices: buildSkillChoices(entry?.key, getSkillSettings())
+  }));
+}
+
+function buildTrialSelectionModeChoices(selected = ABILITY_TRIAL_SELECTION_MODES.best) {
+  return [
+    { value: ABILITY_TRIAL_SELECTION_MODES.best, label: "Лучшее текущее значение" },
+    { value: ABILITY_TRIAL_SELECTION_MODES.worst, label: "Худшее текущее значение" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildTrialResultChoices(value = []) {
+  const selected = new Set(normalizeConditionValues(value));
+  const labels = {
+    criticalFailure: "Критический провал",
+    failure: "Провал",
+    success: "Успех",
+    criticalSuccess: "Критический успех"
+  };
+  return ABILITY_TRIAL_RESULT_KEYS.map(resultKey => ({
+    value: resultKey,
+    label: labels[resultKey] ?? resultKey,
+    checked: selected.has(resultKey)
+  }));
+}
+
+function buildTrialLinkRows(value = [], constructs = []) {
+  const normalizedConstructs = normalizeAbilityConstructs(constructs);
+  return (Array.isArray(value) ? value : Object.values(value ?? {})).map((link, index) => {
+    const recipient = Object.values(ABILITY_TRIAL_LINK_RECIPIENTS).includes(link?.recipient)
+      ? link.recipient
+      : ABILITY_TRIAL_LINK_RECIPIENTS.subjects;
+    const constructId = String(link?.constructId ?? "");
+    const constructIndex = normalizedConstructs.findIndex(construct => construct.id === constructId);
+    const construct = constructIndex >= 0
+      ? prepareAbilityConstructForDisplay(normalizedConstructs[constructIndex], constructIndex)
+      : null;
+    const constructChoices = normalizedConstructs.map(construct => ({
+      value: construct.id,
+      label: construct.name || (
+        construct.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect
+          ? "Безымянный временный эффект"
+          : "Безымянное изменение ресурса"
+      ),
+      selected: construct.id === constructId
+    }));
+    if (constructId && !constructChoices.some(choice => choice.value === constructId)) {
+      constructChoices.push({
+        value: constructId,
+        label: `${constructId} — конструкт не найден`,
+        selected: true
+      });
+    }
+    return {
+      ...link,
+      index,
+      construct,
+      hasConstruct: Boolean(construct),
+      constructChoices,
+      recipientChoices: [
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: "Прошедшие результат испытания" },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: "Владелец способности" }
+      ].map(choice => ({ ...choice, selected: choice.value === recipient })),
+      modeChoices: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.subjects
+        ? [{ value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "Каждому подходящему участнику", selected: true }]
+        : [
+            { value: ABILITY_TRIAL_LINK_MODES.once, label: "Один раз за испытание" },
+            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "За каждого подходящего участника" }
+          ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
+    };
+  });
+}
+
+function isAbilityConstructLinked(ability, constructId) {
+  const id = String(constructId ?? "");
+  if (!id) return false;
+  return (ability?.system?.functions ?? []).some(abilityFunction => (
+    (abilityFunction?.conditions ?? []).some(condition => (
+      condition?.type === ABILITY_CONDITION_TYPES.trial
+      && (condition?.trialLinks ?? []).some(link => String(link?.constructId ?? "") === id)
+    ))
+  ));
+}
+
 function getEventReactionResourceDefinitions() {
   const resources = getResourceSettings().map(resource => ({
     key: String(resource?.key ?? "").trim(),
@@ -3361,6 +3755,7 @@ function isRuntimeCondition(type = "") {
 
 function buildAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
   return [
+    { value: ABILITY_AURA_MODES.triggerConditions, label: "Запускать условия по целям" },
     { value: ABILITY_AURA_MODES.applyToTargets, label: "Обычный" },
     { value: ABILITY_AURA_MODES.selfWhenPresent, label: "Сбор внешних условий для наложения на себя" }
   ].map(choice => ({
@@ -3370,6 +3765,7 @@ function buildAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
 }
 
 function getAuraTargetGroupsLabel(mode = "") {
+  if (mode === ABILITY_AURA_MODES.triggerConditions) return "Цели условий ауры";
   return mode === ABILITY_AURA_MODES.selfWhenPresent
     ? "Цели для сбора условий"
     : "Цели воздействия";

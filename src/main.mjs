@@ -75,6 +75,7 @@ import { registerDroppedItemHooks } from "./items/dropped-items.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
+import { initializeActiveEffectAuras, registerActiveEffectAuraHooks } from "./abilities/active-effect-auras.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerLimitedUseHooks, registerLimitedUseSocket } from "./abilities/limited-uses.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
@@ -175,6 +176,7 @@ Hooks.once("init", () => {
   registerCombatEndResolutionHooks();
   registerActiveActionHooks();
   registerAbilityEffectHooks();
+  registerActiveEffectAuraHooks();
   registerAbilityCooldownHooks();
   registerLimitedUseHooks();
   registerAbilityItemUseHooks();
@@ -251,6 +253,7 @@ Hooks.once("ready", async () => {
   syncTravelGroupHud();
   initializeCombatCarousel();
   await syncLoadedActorAbilityEffects();
+  await initializeActiveEffectAuras();
   await syncPeriodicDamageRegionEffects();
   await recoverFoundrySystemEventEffects();
   await armFoundryVisionTracking();

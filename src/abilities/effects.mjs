@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
+  ABILITY_AURA_MODES,
   ABILITY_FUNCTION_TYPES,
   getAbilityFunctionTriggerCostRows,
   getAbilitySourceId,
@@ -62,6 +63,7 @@ import {
 } from "./environment-conditions.mjs";
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
+const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const ACTOR_EFFECT_SYNC_DELAY_MS = 40;
@@ -130,6 +132,8 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("updateActor", (actor, changes, options = {}) => {
     if (options?.falloutMawDamageBarrierDepletion === true) return;
+    if (options?.falloutMawActiveAuraRuntime === true) return;
+    if (options?.falloutMawTrialRuntime === true) return;
     if (!isAbilityEffectSyncRelevant(changes)) return;
     queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
@@ -157,13 +161,25 @@ export function registerAbilityEffectHooks() {
     queueIlluminationConditionEffectSync(tokenDocument);
     queueAuraStateSync();
   });
-  Hooks.on("createActiveEffect", effect => {
+  Hooks.on("createActiveEffect", (effect, options = {}) => {
+    if (
+      options?.falloutMawActiveAuraRuntime === true
+      || options?.falloutMawTrialRuntime === true
+      || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
+      || isExecutingActiveApplicationAuraEffect(effect)
+    ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
   });
   Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
     if (options?.falloutMawLimitedUses === true) return;
     if (options?.falloutMawDamageBarrierCommit === true) return;
+    if (
+      options?.falloutMawActiveAuraRuntime === true
+      || options?.falloutMawTrialRuntime === true
+      || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
+      || isExecutingActiveApplicationAuraEffect(effect)
+    ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
     const expiredLimitedCopy = Boolean(
@@ -177,6 +193,12 @@ export function registerAbilityEffectHooks() {
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (options?.falloutMawDamageBarrierCommit === true) return;
+    if (
+      options?.falloutMawActiveAuraRuntime === true
+      || options?.falloutMawTrialRuntime === true
+      || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
+      || isExecutingActiveApplicationAuraEffect(effect)
+    ) return;
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
     const limitedCopy = Boolean(effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY));
     if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
@@ -421,6 +443,21 @@ export async function syncLoadedActorAbilityEffects() {
   }
   for (const { actor, context } of actors.values()) await syncActorAbilityEffects(actor, context);
   await syncAuraGeneratedEffects();
+}
+
+function isExecutingActiveApplicationAuraEffect(effect = null) {
+  const flag = effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)
+    ?? effect?.flags?.[SYSTEM_ID]?.[ACTIVE_APPLICATION_EFFECT_FLAG_KEY]
+    ?? null;
+  if (!flag?.functionData) return false;
+  const abilityFunction = normalizeAbilityFunctions([flag?.functionData])[0];
+  return Boolean(
+    abilityFunction?.type === ABILITY_FUNCTION_TYPES.activeApplication
+    && abilityFunction.conditions?.some(condition => (
+      condition?.type === ABILITY_CONDITION_TYPES.aura
+      && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+    ))
+  );
 }
 
 function isCoverEffect(effect = null) {
@@ -1130,6 +1167,7 @@ function hasRuntimeConditions(conditions = []) {
     && condition.type !== ABILITY_CONDITION_TYPES.duration
     && condition.type !== ABILITY_CONDITION_TYPES.triggerCost
     && condition.type !== ABILITY_CONDITION_TYPES.accumulation
+    && condition.type !== ABILITY_CONDITION_TYPES.trial
   ));
 }
 

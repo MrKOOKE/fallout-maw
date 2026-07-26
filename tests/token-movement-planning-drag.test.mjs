@@ -109,6 +109,35 @@ test("effect tooltip displays universal barrier points without treating them as 
   assert.doesNotMatch(html, /<span>\+58<\/span>/);
 });
 
+test("effect tooltip exposes a condition-triggering aura stored by the Active Effect", () => {
+  const html = buildEffectTooltipHTML({
+    name: "Блокада",
+    img: "icons/svg/aura.svg",
+    duration: { label: "18 с" },
+    system: { changes: [] },
+    flags: {
+      "fallout-maw": {
+        activeApplication: {
+          functionData: {
+            type: "activeApplication",
+            conditions: [{
+              type: "aura",
+              auraMode: "triggerConditions",
+              auraTargetGroups: ["enemy", "neutral"],
+              auraRadiusMeters: "4+resilience/20",
+              auraRepeatSeconds: 6
+            }]
+          }
+        }
+      }
+    }
+  });
+
+  assert.match(html, /Аура/);
+  assert.match(html, /враги, нейтралы/);
+  assert.match(html, /не чаще раза в 6 с/);
+});
+
 function createToken(id = "executor") {
   const document = {
     id,

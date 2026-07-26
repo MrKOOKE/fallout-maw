@@ -3,6 +3,7 @@ import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
+  ABILITY_AURA_MODES,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
@@ -10,6 +11,7 @@ import {
   getAbilityFunctionEffectDurationSeconds,
   getAbilitySourceId,
   normalizeActiveApplicationSettings,
+  normalizeAbilityConstructs,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
@@ -53,6 +55,7 @@ import {
   getAbilityTargetExecutorAvailability,
   prepareAbilityFunctionActions
 } from "./ability-actions.mjs";
+import { executeAbilityTrials } from "./trial-runtime.mjs";
 import {
   ATTACKING_WEAPON_ACTION_KEYS,
   getActionBlockEffectKey,
@@ -582,6 +585,8 @@ export function registerFixedAbilityFunctionHooks() {
     if (
       !options?.falloutMawDocumentMigration
       && !options?.falloutMawConsciousnessStateSync
+      && !options?.falloutMawActiveAuraRuntime
+      && !options?.falloutMawTrialRuntime
     ) queueActiveApplicationEffectSync(actor);
   });
   registerDisarmReactionProvider();
@@ -1774,6 +1779,21 @@ async function executeActiveApplicationUse(scope, {
       }
       return { used: false, appliedCount: actionResult.executed, reason: "actionFailed" };
     }
+    const trialsAreDrivenByAura = abilityFunction.conditions?.some(condition => (
+      condition?.type === ABILITY_CONDITION_TYPES.aura
+      && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+    ));
+    if (!trialsAreDrivenByAura && !requiresRemoteAuthority) {
+      await executeAbilityTrials({
+        abilityFunction,
+        constructs: normalizeAbilityConstructs(abilityItem.system?.constructs),
+        sourceActor: actor,
+        sourceToken,
+        targets: allowed.map(entry => entry.target),
+        sourceItemUuid: String(abilityItem.uuid ?? ""),
+        title: getAbilityDisplayName(abilityItem)
+      });
+    }
     await createAbilityChatMessage(actor, abilityItem, "Применено.");
     for (const entry of allowed) {
       await emitActiveApplicationResolved(scope, entry, {
@@ -2236,6 +2256,11 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
         .map(change => prepareEffectChangeForApplication(targetActor, change))
         .filter(change => change.key && change.value !== "");
   }
+  const createsRuntimeAuraEffect = abilityFunction.conditions?.some(condition => (
+    condition?.type === ABILITY_CONDITION_TYPES.aura
+    && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+  ));
+  const effectPlans = plans.filter(plan => plan.changes?.length || createsRuntimeAuraEffect);
   const effectCopyOptions = getActiveApplicationEffectCopyOptions(sourceActor);
   const effectCopyFlag = buildLimitedEffectCopyFlag({
     sourceActor,
@@ -2243,7 +2268,10 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     abilityFunction
   }, effectCopyOptions);
   const reservations = [];
-  for (const plan of plans.filter(entry => entry.changes?.length)) {
+  // The Active Effect is also the runtime document for executing auras. An
+  // aura-only application therefore still reserves a copy and creates an
+  // effect even when it has no ordinary change rows.
+  for (const plan of effectPlans) {
     const reservation = reserveLimitedEffectCopySlot({
       recipientActor: plan.target.actor,
       sourceActor,
@@ -2258,11 +2286,10 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   }
   const createdEffects = [];
   try {
-    for (const plan of plans) {
+    for (const plan of effectPlans) {
       const target = plan.target;
       const targetActor = target.actor;
       const changes = plan.changes;
-      if (!changes.length) continue;
       const signature = JSON.stringify(changes);
       const created = await targetActor.createEmbeddedDocuments("ActiveEffect", [{
         type: "base",
@@ -2286,7 +2313,10 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
               abilitySourceId: getAbilitySourceId(abilityItem),
               sourceItemUuid: String(abilityItem?.uuid ?? ""),
               sourceActorUuid: sourceActor.uuid,
+              sourceTokenUuid: String((sourceToken?.document ?? sourceToken)?.uuid ?? ""),
+              targetTokenUuid: String((target?.token?.document ?? target?.token)?.uuid ?? ""),
               functionData: foundry.utils.deepClone(selectedFunction),
+              constructData: foundry.utils.deepClone(abilityItem.system?.constructs ?? []),
               signature,
               changeEvaluation: settings.changeEvaluation,
               changeSnapshot: settings.changeEvaluation === "source"
@@ -2735,23 +2765,38 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     if (!payment.ok) return false;
   }
 
-  if (durationSeconds <= 0) return true;
-
   const sourceToken = sourceTokenDocument.object ?? sourceTokenDocument;
   try {
-    return await applyActiveApplicationEffectsDirect(
-      sourceActor,
-      abilityItem,
-      abilityFunction,
-      durationSeconds,
-      resolvedTargets,
-      {
-        chainRef: payload?.chainRef ?? null,
+    const applied = durationSeconds <= 0 || await applyActiveApplicationEffectsDirect(
+        sourceActor,
+        abilityItem,
+        abilityFunction,
+        durationSeconds,
+        resolvedTargets,
+        {
+          chainRef: payload?.chainRef ?? null,
+          sourceToken,
+          selectedChanges,
+          costContext: payload?.costContext ?? null
+        }
+      );
+    if (!applied) return false;
+    const trialsAreDrivenByAura = abilityFunction.conditions?.some(condition => (
+      condition?.type === ABILITY_CONDITION_TYPES.aura
+      && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+    ));
+    if (!trialsAreDrivenByAura) {
+      await executeAbilityTrials({
+        abilityFunction,
+        constructs: normalizeAbilityConstructs(abilityItem.system?.constructs),
+        sourceActor,
         sourceToken,
-        selectedChanges,
-        costContext: payload?.costContext ?? null
-      }
-    );
+        targets: resolvedTargets,
+        sourceItemUuid: String(abilityItem.uuid ?? ""),
+        title: getAbilityDisplayName(abilityItem)
+      });
+    }
+    return true;
   } catch (error) {
     if (payment?.ok) {
       await rollbackActiveApplicationPaymentPlan({

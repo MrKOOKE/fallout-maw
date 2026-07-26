@@ -19,8 +19,12 @@ const {
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_ROUTE_BUDGET_MODES,
   ABILITY_ACTION_TYPES,
+  ABILITY_CONDITION_TYPES,
+  ABILITY_CONSTRUCT_TYPES,
   createAbilityAction,
-  normalizeAbilityAction
+  normalizeAbilityAction,
+  normalizeAbilityCondition,
+  normalizeAbilityConstructs
 } = await import("../src/settings/abilities.mjs");
 const {
   resolveNativeMovementPath,
@@ -294,6 +298,50 @@ test("the Item data schema persists every movement-route constructor field", () 
   ]) {
     assert.match(source, new RegExp(`\\b${field}: new `));
   }
+});
+
+test("Trial conditions retain skill selection and links to independent constructs", () => {
+  const trial = normalizeAbilityCondition({
+    id: "trial",
+    type: ABILITY_CONDITION_TYPES.trial,
+    trialSubject: "targets",
+    trialEntries: [
+      { id: "science", kind: "skill", key: "science" },
+      { id: "resilience", kind: "skill", key: "resilience" }
+    ],
+    trialSelectionMode: "best",
+    trialDifficultyFormula: "50+resilience",
+    trialResultKeys: ["failure", "criticalFailure", "unknown"],
+    trialLinks: [{
+      id: "penalty-link",
+      constructId: "penalty",
+      recipient: "subjects",
+      mode: "once"
+    }]
+  });
+  const constructs = normalizeAbilityConstructs([{
+    id: "penalty",
+    type: ABILITY_CONSTRUCT_TYPES.temporaryEffect,
+    name: "Штраф",
+    durationSeconds: 6,
+    changes: [{
+      id: "ap",
+      key: "system.resources.actionPoints.bonus",
+      type: "add",
+      value: "-5"
+    }]
+  }]);
+
+  assert.deepEqual(trial.trialEntries.map(entry => entry.key), ["science", "resilience"]);
+  assert.deepEqual(trial.trialResultKeys, ["failure", "criticalFailure"]);
+  assert.deepEqual(trial.trialLinks[0], {
+    id: "penalty-link",
+    constructId: "penalty",
+    recipient: "subjects",
+    mode: "perSubject"
+  });
+  assert.equal(constructs[0].durationSeconds, 6);
+  assert.equal(constructs[0].changes[0].key, "system.resources.actionPoints.bonus");
 });
 
 test("command abilities are delivered by a one-off builder macro, not a startup migration", () => {
