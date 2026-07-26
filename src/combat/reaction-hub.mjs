@@ -4,7 +4,10 @@ import { getEventParticipantActorUuid } from "../events/event-reaction-schema.mj
 import { getCombatSettings } from "../settings/accessors.mjs";
 import { escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { canActorSpendEnergy } from "./energy-resource.mjs";
-import { actorHasIncapacitatingStatus } from "./incapacitation.mjs";
+import {
+  actorHasIncapacitatingStatus,
+  actorStatusAllowsReaction
+} from "./incapacitation.mjs";
 
 export { actorHasIncapacitatingStatus } from "./incapacitation.mjs";
 
@@ -285,7 +288,7 @@ async function resolveReactionRequestOffers(request = {}) {
       const offerId = String(offer?.offerId ?? offer?.reactionId ?? provider.id).trim();
       if (!actorUuid || !offerId) continue;
       const actor = await fromUuid(actorUuid);
-      if (!canActorReact(actor)) continue;
+      if (!canActorReact(actor, offer)) continue;
       if (!canAffordReactionOffer(actor, offer)) continue;
       offers.push({
         ...offer,
@@ -435,7 +438,7 @@ async function presentAndExecuteReactionOpportunities(opportunities = []) {
 
 async function executeReactionOffer({ offer = {}, response = {}, opportunity = {} } = {}) {
   const actor = await fromUuid(offer.actorUuid);
-  if (!canActorReact(actor) || !canAffordReactionOffer(actor, offer)) {
+  if (!canActorReact(actor, offer) || !canAffordReactionOffer(actor, offer)) {
     return createReactionHubResult({ status: REACTION_RESULT.failed, reason: "unableToAct" });
   }
   const provider = reactionProviders.get(offer.providerId);
@@ -914,8 +917,8 @@ function preventReactionLockedTokenUpdate(tokenDocument, changes = {}, options =
   return false;
 }
 
-function canActorReact(actor) {
-  return !isActorUnableToAct(actor);
+function canActorReact(actor, statusPolicy = {}) {
+  return actorStatusAllowsReaction(actor, statusPolicy);
 }
 
 function getResponsibleGM() {

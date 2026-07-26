@@ -1483,9 +1483,30 @@
             <input type="text" data-field="changeValue" value="{{value}}" data-formula-autocomplete="all">
             <input type="number" data-field="changePriority" value="{{priority}}" step="1">
             <div class="fallout-maw-inline-controls">
+              {{#if accumulatorExchangeSettings.enabled}}
+              <button type="button" class="fallout-maw-icon-button" data-action="disableFunctionChangeAccumulator" title="Отключить обмен накопления"><i class="fa-solid fa-coins"></i></button>
+              {{else}}
+              {{#if accumulatorExchangeSettings.hasAccumulators}}
+              <button type="button" class="fallout-maw-icon-button" data-action="enableFunctionChangeAccumulator" title="Брать значение из накопления"><i class="fa-solid fa-coins"></i></button>
+              {{/if}}
+              {{/if}}
               <button type="button" class="fallout-maw-icon-button" data-action="deleteFunctionChange" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
             </div>
           </div>
+          {{#if accumulatorExchangeSettings.enabled}}
+          <div class="fallout-maw-fixed-settings-row">
+            <input type="hidden" data-field="changeValueSource" value="accumulation">
+            <label>
+              <span>Накопление-источник</span>
+              <select data-field="changeAccumulatorConditionId">
+                {{#each accumulatorExchangeSettings.conditionChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <p class="fallout-maw-hint">Значение строки — изменение ключа за 1 накопленное очко. Вставьте <code>{group}</code> в ключ, чтобы создать отдельное изменение для каждой группы; без него используется общая сумма очков.</p>
+          </div>
+          {{/if}}
         </div>
         {{else}}
         <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
@@ -1639,10 +1660,72 @@
             {{/if}}
             <div class="fallout-maw-ability-condition-fields">
 
+              {{#if isAccumulation}}
+              <div class="fallout-maw-fixed-settings-row">
+                <label>
+                  <span>Название пула</span>
+                  <input type="text" data-field="conditionAccumulationName" value="{{accumulationSettings.name}}" placeholder="Например: Адаптивное сопротивление">
+                </label>
+                <label>
+                  <span>Число из события</span>
+                  <select data-field="conditionAccumulationValueSource">
+                    {{#each accumulationSettings.valueSourceChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label>
+                  <span>Конвертировать в очки, %</span>
+                  <input type="number" data-field="conditionAccumulationPercent" value="{{accumulationSettings.percent}}" min="0" step="0.01">
+                </label>
+                <label>
+                  <span>Разделять очки по</span>
+                  <select data-field="conditionAccumulationGroupBy">
+                    {{#each accumulationSettings.groupByChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label>
+                  <span>Общий максимум, 0 — без ограничения</span>
+                  <input type="number" data-field="conditionAccumulationTotalCap" value="{{accumulationSettings.totalCap}}" min="0" step="1">
+                </label>
+                <label>
+                  <span>Максимум одной группы, 0 — без ограничения</span>
+                  <input type="number" data-field="conditionAccumulationBucketCap" value="{{accumulationSettings.bucketCap}}" min="0" step="1">
+                </label>
+                <label>
+                  <span>Округление очков</span>
+                  <select data-field="conditionAccumulationRounding">
+                    {{#each accumulationSettings.roundingChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label>
+                  <span>Таймер эффекта</span>
+                  <select data-field="conditionAccumulationDurationPolicy">
+                    {{#each accumulationSettings.durationPolicyChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <p class="fallout-maw-hint">Это условие создаёт пул очков из подходящих событий. Длительность задаётся отдельным условием «Длительность». Само накопление не меняет ключи — подключите его к нужной строке изменения кнопкой с монетами.</p>
+              </div>
+              {{/if}}
+
               {{#if isEventReaction}}
               <div class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
                 <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.CombatOnly'}}" type="checkbox" data-field="conditionCombatOnly" {{checked combatOnly}}>
+              </div>
+              <div class="fallout-maw-checkbox-row">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AllowUnconscious"}}</span>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.AllowUnconscious'}}" type="checkbox" data-field="conditionAllowUnconscious" {{checked allowUnconscious}}>
+              </div>
+              <div class="fallout-maw-checkbox-row">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AllowDead"}}</span>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.AllowDead'}}" type="checkbox" data-field="conditionAllowDead" {{checked allowDead}}>
               </div>
               <label class="fallout-maw-event-reaction-mode">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>

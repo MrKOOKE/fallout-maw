@@ -5,6 +5,9 @@ import {
   normalizeAbilityFunctions,
   normalizeEventReactionProgressRequired
 } from "../settings/abilities.mjs";
+import {
+  getSystemEventNumericValue
+} from "./event-values.mjs";
 
 export { normalizeEventReactionProgressRequired } from "../settings/abilities.mjs";
 
@@ -93,7 +96,7 @@ export function getEventReactionProgressIncrement(condition = {}, envelope = {})
   if (key === "fallout-maw.research.progressed") {
     amount = positiveNumber(delta.progress);
   } else if (key === "fallout-maw.damage.resolved") {
-    amount = firstPositive(-finiteNumber(delta.health), Math.abs(finiteNumber(result.healthDelta)), result.amount);
+    amount = getSystemEventNumericValue("damageActualHealthLoss", envelope);
   } else if (key === "fallout-maw.healing.resolved") {
     amount = firstPositive(delta.health, Math.abs(finiteNumber(result.healthDelta)), result.amount);
   } else if (key === "fallout-maw.combat.resource.spent") {

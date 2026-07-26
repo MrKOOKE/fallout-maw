@@ -23,9 +23,13 @@ import {
 import { createFoundryEventReactionRuntime } from "./foundry-event-reactions.mjs";
 import { serializeLegacyReactionContext } from "./legacy-reaction-context.mjs";
 import {
+  collectEventReactionKeysFromItem,
   eventReactionIndexHasKey,
   registerEventReactionSubscriptionIndexHooks
 } from "./event-reaction-index.mjs";
+import {
+  getActorEventReactionSourceItems
+} from "./event-reaction-scanner.mjs";
 import {
   collectAbilityWeaponAttackOptions,
   executeAbilityWeaponAttackOption,
@@ -126,10 +130,14 @@ async function interceptEventReactions({ event, scope } = {}) {
   const descriptor = getSystemEventDescriptor(event?.key);
   if (!descriptor?.selectable || !descriptor.capabilities.includes("react")) return undefined;
 
-  // Demand-driven: skip hub/scan when no scene ability subscribes to this event key.
+  // Demand-driven: skip the hub when neither the active-scene index nor an
+  // off-scene semantic-event participant subscribes to this event key.
   const managed = event?.data?.reactionHubManaged === true;
   const indexed = managed ? true : await eventReactionIndexHasKey(event.key);
-  if (!managed && !indexed) {
+  const participantIndexed = !managed && !indexed
+    ? await eventParticipantHasReactionKey(event)
+    : false;
+  if (!managed && !indexed && !participantIndexed) {
     return undefined;
   }
 
@@ -152,7 +160,8 @@ async function interceptEventReactions({ event, scope } = {}) {
     damageHubOperation: event?.data?.inDamageHubOperation || damageHubOperationRef ? "current" : "",
     damageHubOperationRef,
     logicalWorldTime: Number(event?.occurredAt?.worldTime) || null,
-    falloutMawSemanticReactionAdapted: true
+    falloutMawSemanticReactionAdapted: true,
+    eventReactionParticipantIndexed: participantIndexed
   };
 
   pushReactionBudgetConsumer(event.rootId, scope?.consumeReactionBudget);
@@ -164,6 +173,22 @@ async function interceptEventReactions({ event, scope } = {}) {
   }
   if (managed) managedReactionResults.set(event.eventId, result);
   return reactionResultDirective(result, descriptor.capabilities);
+}
+
+async function eventParticipantHasReactionKey(event = {}) {
+  const eventKey = String(event?.key ?? "").trim();
+  const actorUuids = new Set([
+    event?.source?.actorUuid,
+    event?.target?.actorUuid
+  ].map(value => String(value ?? "").trim()).filter(Boolean));
+  for (const actorUuid of actorUuids) {
+    const actor = await fromUuid(actorUuid);
+    if (!actor) continue;
+    for (const item of getActorEventReactionSourceItems(actor)) {
+      if (collectEventReactionKeysFromItem(item).includes(eventKey)) return true;
+    }
+  }
+  return false;
 }
 
 async function adaptLegacyReactionEvent(eventKey, context = {}) {

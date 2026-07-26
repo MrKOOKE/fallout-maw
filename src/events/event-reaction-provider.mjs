@@ -1,5 +1,5 @@
 import {
-  collectActiveSceneReactorActors,
+  collectEventReactionReactorActors,
   collectEventReactionCandidates,
   findEventReactionFunction,
   getMatchingEventReactionSubscriptionIds,
@@ -14,6 +14,7 @@ import {
   ABILITY_EVENT_REACTION_MODES,
   getAbilityFunctionTriggerCostRows,
   getAbilityFunctionEffectDurationSeconds,
+  isAccumulatingAbilityFunction,
   normalizeEventReactionMode
 } from "../settings/abilities.mjs";
 import { getEventReactionSubscriptions } from "./event-reaction-schema.mjs";
@@ -23,7 +24,11 @@ import {
   releaseLimitedEffectCopyReservation,
   reserveLimitedEffectCopySlot
 } from "../abilities/limited-effect-copies.mjs";
-import { hasEventReactionEffectInstance } from "./reaction-effects.mjs";
+import {
+  hasAbilityFunctionEventEffectOutput,
+  hasEventReactionEffectInstance
+} from "./reaction-effects.mjs";
+import { actorStatusAllowsReaction } from "../combat/incapacitation.mjs";
 
 export const GENERIC_EVENT_REACTION_PROVIDER_ID = "fallout-maw.genericEventReaction";
 const REACTION_SUCCESS = "success";
@@ -31,7 +36,7 @@ const REACTION_FAILED = "failed";
 
 export function createGenericEventReactionProvider({
   id = GENERIC_EVENT_REACTION_PROVIDER_ID,
-  getReactorActors = () => collectActiveSceneReactorActors(),
+  getReactorActors = null,
   resolveUuid = uuid => globalThis.fromUuid?.(uuid) ?? null,
   getItems = undefined,
   normalizeFunctions = undefined,
@@ -61,6 +66,8 @@ export function createGenericEventReactionProvider({
   const registeredRootCleanups = new Set();
   const itemLookupOptions = getItems ? { getItems } : {};
   const functionLookupOptions = normalizeFunctions ? { normalizeFunctions } : {};
+  const collectReactorActors = getReactorActors
+    ?? (envelope => collectEventReactionReactorActors(envelope, { resolveUuid }));
 
   function resolveOfferSource(actor, sourceItemUuid = "") {
     const uuid = String(sourceItemUuid ?? "").trim();
@@ -72,10 +79,10 @@ export function createGenericEventReactionProvider({
   async function collect({ eventKey = "", context = {}, semanticEvent = null } = {}) {
     const envelope = getReactionEnvelope(eventKey, { ...context, semanticEvent: semanticEvent ?? context?.semanticEvent });
     if (!envelope.key || !envelope.rootId || !canReactToEvent(envelope)) return [];
-    if (!(await hasEventKey(envelope.key))) {
+    if (!(await hasEventKey(envelope.key)) && context?.eventReactionParticipantIndexed !== true) {
       return [];
     }
-    const reactors = await getReactorActors(envelope);
+    const reactors = await collectReactorActors(envelope);
     const candidates = await collectEventReactionCandidates({
       envelope,
       reactors,
@@ -110,7 +117,11 @@ export function createGenericEventReactionProvider({
       }
       const progressConditionIds = normalizeConditionIds(progress?.readyConditionIds);
       if (!progress?.ready || !progressConditionIds.length) continue;
-      if (!canOfferToActor(actor, envelope)) continue;
+      const readyIds = new Set(progressConditionIds);
+      const readySubscriptions = getEventReactionSubscriptions(abilityFunction?.conditions)
+        .filter(condition => readyIds.has(String(condition?.id ?? "")));
+      const statusPolicy = getEventReactionStatusPolicy(readySubscriptions);
+      if (!canOfferToActor(actor, envelope, statusPolicy)) continue;
       // The persistent counter still receives nested events after the function
       // has spent its single offer for this root.
       if (consumedChances.has(candidate.chanceKey)) continue;
@@ -136,19 +147,19 @@ export function createGenericEventReactionProvider({
       if (!quote.valid || !quote.affordable) continue;
       const variants = await collectActionVariants(actor, abilityFunction, envelope, actionRuntime);
       if (!variants.length) continue;
-      const readyIds = new Set(progressConditionIds);
-      const readySubscriptions = getEventReactionSubscriptions(abilityFunction?.conditions)
-        .filter(condition => readyIds.has(String(condition?.id ?? "")));
       const reactionMode = normalizeEventReactionMode(
         readySubscriptions[0]?.reactionMode,
         readySubscriptions[0]?.autoApply
       );
       const autoApply = reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto;
+      const passiveAutomatic = autoApply && isAccumulatingAbilityFunction(abilityFunction);
       offers.push({
         ...candidate,
         energyCost: 0,
         reactionMode,
         autoApply,
+        passiveAutomatic,
+        ...statusPolicy,
         progressConditionIds,
         actionVariants: autoApply ? variants : undefined,
         costFingerprint: quote.fingerprint,
@@ -172,7 +183,7 @@ export function createGenericEventReactionProvider({
   async function execute({ eventKey = "", context = {}, semanticEvent = null, offer = {} } = {}) {
     const envelope = getReactionEnvelope(eventKey, { ...context, semanticEvent: semanticEvent ?? context?.semanticEvent });
     const actor = await safeResolve(offer.actorUuid, resolveUuid);
-    if (!actor || !canOfferToActor(actor, envelope) || !canReactToEvent(envelope)) return failedResult("invalidReactor");
+    if (!actor || !canReactToEvent(envelope)) return failedResult("invalidReactor");
     let sourceItem = resolveOfferSource(actor, offer.sourceItemUuid);
     if (!sourceItem) return failedResult("invalidSourceItem");
     let abilityFunction = findEventReactionFunction(sourceItem, offer.functionId, functionLookupOptions);
@@ -189,6 +200,11 @@ export function createGenericEventReactionProvider({
       offeredProgressConditionIds
     );
     if (!currentProgressConditionIds.length) return failedResult("conditionsChanged");
+    if (!canOfferToActor(
+      actor,
+      envelope,
+      getEventReactionStatusPolicyByIds(abilityFunction, currentProgressConditionIds)
+    )) return failedResult("invalidReactor");
     if (!(await progressManager.isReady({
       item: sourceItem,
       abilityFunction,
@@ -217,16 +233,22 @@ export function createGenericEventReactionProvider({
       offeredProgressConditionIds
     );
     if (!currentProgressConditionIds.length) return failedResult("conditionsChanged");
+    if (!canOfferToActor(
+      actor,
+      envelope,
+      getEventReactionStatusPolicyByIds(abilityFunction, currentProgressConditionIds)
+    )) return failedResult("invalidReactor");
     if (!(await progressManager.isReady({
       item: sourceItem,
       abilityFunction,
       conditionIds: currentProgressConditionIds
     }))) return failedResult("progressNotReady");
-    const existingEffectInstance = abilityFunction?.changes?.length
+    const hasEffectOutput = hasAbilityFunctionEventEffectOutput(abilityFunction);
+    const existingEffectInstance = hasEffectOutput
       ? hasEventReactionEffectInstance({ actor, sourceItem, abilityFunction, envelope })
       : false;
     if (
-      abilityFunction?.changes?.length
+      hasEffectOutput
       && !existingEffectInstance
       && !hasLimitedEffectCopyCapacity({
         recipientActor: actor,
@@ -245,7 +267,7 @@ export function createGenericEventReactionProvider({
         baseRows
       )
       : [];
-    const copyReservation = abilityFunction?.changes?.length && !existingEffectInstance
+    const copyReservation = hasEffectOutput && !existingEffectInstance
       ? reserveLimitedEffectCopySlot({
         recipientActor: actor,
         sourceActor: actor,
@@ -267,7 +289,7 @@ export function createGenericEventReactionProvider({
       damageHubOperation: context?.damageHubOperation,
       logicalWorldTime: context?.logicalWorldTime,
       afterSpend: async (_quote, executionContext) => {
-        const effect = abilityFunction.changes?.length
+        const effect = hasEffectOutput
           ? await effectManager.apply({
             actor,
             sourceItem,
@@ -277,7 +299,7 @@ export function createGenericEventReactionProvider({
             copyReservation
           })
           : null;
-        if (abilityFunction.changes?.length && !effect) {
+        if (hasEffectOutput && !effect) {
           throw new Error("Event Reaction effect copy could not be created.");
         }
         try {
@@ -403,8 +425,7 @@ export function createGenericEventReactionProvider({
 async function collectActionVariants(actor, abilityFunction, envelope, actionRuntime) {
   const actions = abilityFunction?.actions ?? [];
   if (!actions.length) {
-    const hasEffect = (abilityFunction?.changes ?? [])
-      .some(change => String(change?.key ?? "").trim() && String(change?.value ?? "") !== "");
+    const hasEffect = hasAbilityFunctionEventEffectOutput(abilityFunction);
     return hasEffect ? [{ action: null, option: null }] : [];
   }
   if (!actionRuntime?.collectOptions || !actionRuntime?.selectOption || !actionRuntime?.execute) return [];
@@ -513,10 +534,21 @@ function normalizeConditionIds(value = []) {
     .filter(Boolean)));
 }
 
-function defaultCanOfferToActor(actor) {
-  if (!actor) return false;
-  const defeated = globalThis.CONFIG?.specialStatusEffects?.DEFEATED;
-  return !["dead", "unconscious", "stunned", defeated]
-    .filter(Boolean)
-    .some(status => actor.statuses?.has?.(status));
+function getEventReactionStatusPolicyByIds(abilityFunction, conditionIds = []) {
+  const ids = new Set(normalizeConditionIds(conditionIds));
+  return getEventReactionStatusPolicy(
+    getEventReactionSubscriptions(abilityFunction?.conditions)
+      .filter(condition => ids.has(String(condition?.id ?? "")))
+  );
+}
+
+function getEventReactionStatusPolicy(subscriptions = []) {
+  return {
+    allowUnconscious: subscriptions.some(condition => condition?.allowUnconscious === true),
+    allowDead: subscriptions.some(condition => condition?.allowDead === true)
+  };
+}
+
+function defaultCanOfferToActor(actor, _envelope = {}, statusPolicy = {}) {
+  return actorStatusAllowsReaction(actor, statusPolicy);
 }

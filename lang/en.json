@@ -411,6 +411,8 @@
           }
         },
         "CombatOnly": "Triggers only in combat?",
+        "AllowUnconscious": "Works while unconscious",
+        "AllowDead": "Works while dead",
         "AutoApply": "Automatic application?",
         "ReactionMode": "Reaction mode",
         "ReactionModes": {
@@ -1539,6 +1541,7 @@
       "InventoryHeight": "Height in Inventory",
       "InventoryWidth": "Width in Inventory",
       "MaxStack": "Max Stack",
+      "MitigationLimbSet": "Limb set",
       "MitigationMode": "Mode",
       "MitigationModeDefense": "Defense",
       "MitigationModeResistance": "Resistance",
@@ -1812,8 +1815,8 @@
       "ChangeMultiply": "Percent",
       "ChangeOverride": "Override",
       "Create": "Create Effect",
-      "DamageDefenseBonuses": "Damage defense bonus",
-      "DamageResistanceBonuses": "Damage resistance bonus",
+      "DamageDefenseBonuses": "Damage defense",
+      "DamageResistanceBonuses": "Damage resistance",
       "CombatGroup": "Combat",
       "CombatAdvantage": "Advantage",
       "CombatDisadvantage": "Disadvantage",

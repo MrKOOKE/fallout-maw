@@ -1,4 +1,5 @@
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { stripEffectTooltipBonusWords } from "../utils/effect-tooltip-labels.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   evaluateActorEffectChangeBaseNumber,
@@ -928,7 +929,7 @@ function getLimbLabel(key, actor = null) {
 
 function getChangeKeyLabel(key) {
   const token = getEffectKeyTokenMap().get(key);
-  return token?.label || key;
+  return token?.label ? stripEffectTooltipBonusWords(token.label) : key;
 }
 
 function getEffectKeyTokenMap() {

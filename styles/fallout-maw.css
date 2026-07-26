@@ -1899,6 +1899,12 @@ body #prosemirror-dropdown {
   grid-column: 1 / -1;
 }
 
+.fallout-maw-fixed-settings-row > .fallout-maw-hint,
+.fallout-maw-fixed-settings-row > .hint {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
 .fallout-maw-fixed-progress-inputs,
 .fallout-maw-split-number-field-control {
   align-items: center;
@@ -5656,33 +5662,9 @@ body #prosemirror-dropdown {
   margin-bottom: 0.75rem;
 }
 
-.fallout-maw-mitigation-limb-set-list,
 .fallout-maw-mitigation-table-list {
   display: grid;
   gap: 0.5rem;
-}
-
-.fallout-maw-mitigation-limb-set-list {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  margin-bottom: 0.75rem;
-}
-
-.fallout-maw-mitigation-limb-set-choice {
-  align-items: flex-start;
-  display: inline-flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-height: 3rem;
-  min-width: 0;
-  text-align: left;
-}
-
-.fallout-maw-mitigation-limb-set-choice strong,
-.fallout-maw-mitigation-limb-set-choice span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
 }
 
 .fallout-maw-mitigation-table h3 {

@@ -410,6 +410,8 @@
           }
         },
         "CombatOnly": "Срабатывает только в бою?",
+        "AllowUnconscious": "Работает при потере сознания",
+        "AllowDead": "Работает после смерти",
         "AutoApply": "Автоматическое применение?",
         "ReactionMode": "Режим реагирования",
         "ReactionModes": {
@@ -1551,6 +1553,7 @@
       "InventoryHeight": "Размер по вертикали",
       "InventoryWidth": "Размер по горизонтали",
       "MaxStack": "Максимум в стаке",
+      "MitigationLimbSet": "Набор частей тела",
       "MitigationMode": "Режим",
       "MitigationModeDefense": "Защита",
       "MitigationModeResistance": "Сопротивление",
@@ -1872,8 +1875,8 @@
       "ChangeMultiply": "Процент",
       "ChangeOverride": "Перезапись",
       "Create": "Создать эффект",
-      "DamageDefenseBonuses": "Бонус защиты от урона",
-      "DamageResistanceBonuses": "Бонус сопротивлений урону",
+      "DamageDefenseBonuses": "Защита от урона",
+      "DamageResistanceBonuses": "Сопротивление урону",
       "CombatGroup": "Бой",
       "CombatAdvantage": "Преимущество",
       "CombatDisadvantage": "Помеха",

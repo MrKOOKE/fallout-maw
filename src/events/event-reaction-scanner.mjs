@@ -3,10 +3,15 @@ import {
   ABILITY_EVENT_SUBJECTS,
   ABILITY_FUNCTION_TYPES,
   ABILITY_POSTURE_SUBJECTS,
+  isAccumulatingAbilityFunction,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { hasLimitedEffectCopyCapacity } from "../abilities/limited-effect-copies.mjs";
-import { hasEventReactionEffectInstance } from "./reaction-effects.mjs";
+import {
+  canAccumulateEventReactionEffect,
+  hasAbilityFunctionEventEffectOutput,
+  hasEventReactionEffectInstance
+} from "./reaction-effects.mjs";
 import {
   eventReactionSubscriptionMatches,
   getEventEnvelopeSkillKey,
@@ -30,6 +35,25 @@ export function collectActiveSceneReactorActors({ scene = globalThis.canvas?.sce
     const actor = candidate?.actor ?? token?.actor ?? null;
     const actorUuid = String(actor?.uuid ?? "").trim();
     if (actorUuid && !actors.has(actorUuid)) actors.set(actorUuid, actor);
+  }
+  return Array.from(actors.values());
+}
+
+/** Include semantic-event participants before scanning the active scene. */
+export async function collectEventReactionReactorActors(envelope = {}, {
+  resolveUuid = defaultResolveUuid,
+  scene = globalThis.canvas?.scene,
+  tokens = null
+} = {}) {
+  const actors = new Map();
+  const participants = await resolveEventReactionParticipants(envelope, resolveUuid);
+  for (const actor of [participants.sourceActor, participants.targetActor]) {
+    const uuid = String(actor?.uuid ?? "").trim();
+    if (uuid) actors.set(uuid, actor);
+  }
+  for (const actor of collectActiveSceneReactorActors({ scene, tokens })) {
+    const uuid = String(actor?.uuid ?? "").trim();
+    if (uuid && !actors.has(uuid)) actors.set(uuid, actor);
   }
   return Array.from(actors.values());
 }
@@ -88,8 +112,14 @@ export async function collectEventReactionCandidates({
     seenActors.add(actorUuid);
     for (const item of getActorEventReactionSourceItems(reactor, { getItems })) {
       for (const abilityFunction of getEventReactionItemFunctions(item, { normalizeFunctions })) {
+        if (!canAccumulateEventReactionEffect({
+          actor: reactor,
+          sourceItem: item,
+          abilityFunction,
+          envelope
+        })) continue;
         if (
-          abilityFunction?.changes?.length
+          hasAbilityFunctionEventEffectOutput(abilityFunction)
           && !hasEventReactionEffectInstance({
             actor: reactor,
             sourceItem: item,
@@ -312,7 +342,9 @@ export function buildEventReactionCandidate({
   const triggerActorUuid = getEventParticipantActorUuid(envelope?.source);
   // One accept/decline for this function across the whole root, including
   // nested events and their participants.
-  const chanceKey = [rootId, actorUuid, sourceItemUuid, functionId].join("|");
+  const chanceKey = isAccumulatingAbilityFunction(abilityFunction)
+    ? [rootId, String(envelope?.eventId ?? ""), actorUuid, sourceItemUuid, functionId].join("|")
+    : [rootId, actorUuid, sourceItemUuid, functionId].join("|");
   return {
     actorUuid,
     sourceItemUuid,

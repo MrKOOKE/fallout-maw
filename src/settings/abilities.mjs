@@ -120,6 +120,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
 export const ABILITY_CONDITION_TYPES = Object.freeze({
   toggleable: "toggleable",
   eventReaction: "eventReaction",
+  accumulation: "accumulation",
   triggerCost: "triggerCost",
   triggerChance: "triggerChance",
   timeOfDay: "timeOfDay",
@@ -170,6 +171,79 @@ export const ABILITY_EVENT_REACTION_MODES = Object.freeze({
   standard: "standard",
   isolatedAuto: "isolatedAuto"
 });
+
+export const ABILITY_ACCUMULATION_VALUE_SOURCES = Object.freeze({
+  damageIncoming: "damageIncoming",
+  damageAfterMitigation: "damageAfterMitigation",
+  damageActualHealthLoss: "damageActualHealthLoss",
+  damageLimbLoss: "damageLimbLoss",
+  damageItemConditionLoss: "damageItemConditionLoss"
+});
+
+export const ABILITY_ACCUMULATION_GROUP_SOURCES = Object.freeze({
+  none: "none",
+  damageType: "damageType"
+});
+
+export const ABILITY_ACCUMULATION_ROUNDING_MODES = Object.freeze({
+  floorTotal: "floorTotal",
+  roundTotal: "roundTotal",
+  ceilTotal: "ceilTotal"
+});
+
+export const ABILITY_ACCUMULATION_DURATION_POLICIES = Object.freeze({
+  fromFirst: "fromFirst",
+  refresh: "refresh"
+});
+
+export const ABILITY_CHANGE_VALUE_SOURCES = Object.freeze({
+  formula: "formula",
+  accumulation: "accumulation"
+});
+
+export const ABILITY_ACCUMULATOR_EXCHANGE_MODES = Object.freeze({
+  invested: "invested"
+});
+
+export function normalizeAbilityAccumulation(value = {}) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const valueSource = Object.values(ABILITY_ACCUMULATION_VALUE_SOURCES).includes(source.valueSource)
+    ? source.valueSource
+    : ABILITY_ACCUMULATION_VALUE_SOURCES.damageActualHealthLoss;
+  const groupBy = Object.values(ABILITY_ACCUMULATION_GROUP_SOURCES).includes(source.groupBy)
+    ? source.groupBy
+    : ABILITY_ACCUMULATION_GROUP_SOURCES.damageType;
+  const rounding = Object.values(ABILITY_ACCUMULATION_ROUNDING_MODES).includes(source.rounding)
+    ? source.rounding
+    : ABILITY_ACCUMULATION_ROUNDING_MODES.floorTotal;
+  const durationPolicy = Object.values(ABILITY_ACCUMULATION_DURATION_POLICIES).includes(source.durationPolicy)
+    ? source.durationPolicy
+    : ABILITY_ACCUMULATION_DURATION_POLICIES.fromFirst;
+  const percent = Number(source.percent);
+  return {
+    name: String(source.name ?? "").trim(),
+    valueSource,
+    percent: Number.isFinite(percent) ? Math.max(0, roundAbilityDecimal(percent)) : 10,
+    groupBy,
+    totalCap: Math.max(0, toInteger(source.totalCap ?? 50)),
+    bucketCap: Math.max(0, toInteger(source.bucketCap)),
+    rounding,
+    durationPolicy
+  };
+}
+
+export function getAbilityAccumulationConditions(abilityFunction = {}) {
+  return (Array.isArray(abilityFunction?.conditions)
+    ? abilityFunction.conditions
+    : Object.values(abilityFunction?.conditions ?? {}))
+    .filter(condition => condition?.type === ABILITY_CONDITION_TYPES.accumulation)
+    .map(condition => normalizeAbilityCondition(condition));
+}
+
+export function isAccumulatingAbilityFunction(abilityFunction = {}) {
+  return abilityFunction?.type === ABILITY_FUNCTION_TYPES.effectChanges
+    && getAbilityAccumulationConditions(abilityFunction).length > 0;
+}
 
 export function normalizeEventReactionMode(value = "", legacyAutoApply = false) {
   const normalized = String(value ?? "").trim();
@@ -617,6 +691,10 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   };
 }
 
+function roundAbilityDecimal(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
+}
+
 export function normalizeAbilityActions(value = []) {
   return (Array.isArray(value) ? value : Object.values(value ?? {}))
     .map(entry => normalizeAbilityAction(entry));
@@ -930,9 +1008,9 @@ export function normalizeEventReactionCost(value = {}) {
   };
 }
 
-function normalizeAbilityChange(value = {}) {
+export function normalizeAbilityChange(value = {}) {
   const type = Object.values(ABILITY_CHANGE_TYPES).includes(value?.type) ? value.type : ABILITY_CHANGE_TYPES.add;
-  return {
+  const normalized = {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     key: String(value?.key ?? "").trim(),
     type,
@@ -941,6 +1019,20 @@ function normalizeAbilityChange(value = {}) {
     priority: value?.priority === "" || value?.priority === null || value?.priority === undefined
       ? null
       : toInteger(value.priority)
+  };
+  if (value?.valueSource !== ABILITY_CHANGE_VALUE_SOURCES.accumulation) return normalized;
+  const exchange = value?.accumulatorExchange && typeof value.accumulatorExchange === "object"
+    ? value.accumulatorExchange
+    : {};
+  return {
+    ...normalized,
+    valueSource: ABILITY_CHANGE_VALUE_SOURCES.accumulation,
+    accumulatorExchange: {
+      conditionId: String(exchange.conditionId ?? value?.accumulationConditionId ?? "").trim(),
+      mode: Object.values(ABILITY_ACCUMULATOR_EXCHANGE_MODES).includes(exchange.mode)
+        ? exchange.mode
+        : ABILITY_ACCUMULATOR_EXCHANGE_MODES.invested
+    }
   };
 }
 
@@ -1020,7 +1112,7 @@ function normalizeAcquisitionAbilityIds(value) {
   return abilityIds;
 }
 
-function normalizeAbilityCondition(value = {}) {
+export function normalizeAbilityCondition(value = {}) {
   const legacyEnabled = Boolean(value?.enabled);
   const rawType = String(value?.type ?? "").trim();
   const type = Object.values(ABILITY_CONDITION_TYPES).includes(rawType)
@@ -1050,6 +1142,8 @@ function normalizeAbilityCondition(value = {}) {
       eventKey: String(value?.eventKey ?? value?.key ?? "").trim(),
       progressRequired: normalizeEventReactionProgressRequired(value?.progressRequired),
       combatOnly: normalizeBoolean(value?.combatOnly, false),
+      allowUnconscious: normalizeBoolean(value?.allowUnconscious, false),
+      allowDead: normalizeBoolean(value?.allowDead, false),
       reactionMode,
       // Kept as a serialized compatibility mirror for already saved data.
       autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
@@ -1057,6 +1151,17 @@ function normalizeAbilityCondition(value = {}) {
       skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey),
       expectedResultKeys: normalizeConditionKeyList(value?.expectedResultKeys, value?.expectedResultKey),
       eventFilters: normalizeEventReactionDepthFilterMap(value?.eventFilters)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.accumulation) {
+    return {
+      id,
+      // An accumulator describes persistent function state and is never an
+      // alternative boolean branch.
+      groupId: "",
+      type,
+      accumulation: normalizeAbilityAccumulation(value?.accumulation)
     };
   }
 

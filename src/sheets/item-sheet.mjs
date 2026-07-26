@@ -2,6 +2,10 @@ import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.m
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { activateAdvancementPureValuesControls } from "../apps/advancement-pure-values-control.mjs";
+import {
+  prepareAbilityAccumulationForDisplay,
+  prepareAbilityAccumulatorExchangeForDisplay
+} from "../apps/ability-accumulation-ui.mjs";
 import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
@@ -12,7 +16,7 @@ import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWe
 import {
   buildDamageMitigationLimbSetChoices,
   buildDamageMitigationTables,
-  getSelectedDamageMitigationLimbSetIds
+  resolveDamageMitigationEditorLimbSetId
 } from "../utils/damage-mitigation-display.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
@@ -58,6 +62,7 @@ import {
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_ATTACK_DISTANCE_MODES,
   ABILITY_ATTACK_DISTANCE_SIDES,
+  ABILITY_CHANGE_VALUE_SOURCES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -229,6 +234,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #functionPickerActive = false;
   #fixedAbilityFunctionPickerActive = false;
   #mitigationFillDrag = null;
+  #activeMitigationLimbSetId = "";
   #craftMode = CRAFT_MODE_CREATE;
   #craftRecipeId = DEFAULT_CRAFT_RECIPE_ID;
   #craftSelection = null;
@@ -525,6 +531,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     );
     this.#activeWeaponFunctionTab = resolveActiveWeaponFunctionTab(this.#activeWeaponFunctionTab, weaponFunctionSections);
     for (const section of weaponFunctionSections) section.active = section.tabId === this.#activeWeaponFunctionTab;
+    const damageMitigationLimbSetChoices = buildDamageMitigationLimbSetChoices(item, creatureOptions);
+    this.#activeMitigationLimbSetId = resolveDamageMitigationEditorLimbSetId(
+      this.#activeMitigationLimbSetId,
+      damageMitigationLimbSetChoices
+    );
+    const damageMitigationLimbSetEditorChoices = damageMitigationLimbSetChoices.map(choice => ({
+      ...choice,
+      active: choice.id === this.#activeMitigationLimbSetId
+    }));
 
     return foundry.utils.mergeObject(context, {
       item,
@@ -669,8 +684,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       })),
       damageMitigationModeChoices: buildDamageMitigationModeChoices(item),
       damageMitigationUsesConstructPart: hasConstructPartFunction,
-      damageMitigationLimbSetChoices: buildDamageMitigationLimbSetChoices(item, creatureOptions),
-      damageMitigationTables: buildDamageMitigationTables(item, creatureOptions, damageTypeSettings),
+      damageMitigationLimbSetChoices,
+      damageMitigationLimbSetEditorChoices,
+      showDamageMitigationLimbSetSelector: damageMitigationLimbSetEditorChoices.length > 1,
+      damageMitigationTables: buildDamageMitigationTables(item, creatureOptions, damageTypeSettings, {
+        limbSetId: this.#activeMitigationLimbSetId
+      }),
       craft,
       totalWeight: item.totalWeight
     }, { inplace: false });
@@ -993,6 +1012,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-ability-change]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityChange(event));
     });
+    this.element?.querySelectorAll("[data-enable-ability-change-accumulator]").forEach(button => {
+      button.addEventListener("click", event => this.#onEnableAbilityChangeAccumulator(event));
+    });
+    this.element?.querySelectorAll("[data-disable-ability-change-accumulator]").forEach(button => {
+      button.addEventListener("click", event => this.#onDisableAbilityChangeAccumulator(event));
+    });
     this.element?.querySelectorAll("[data-add-ability-action]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityAction(event));
     });
@@ -1271,9 +1296,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-mitigation-fill-handle]").forEach(handle => {
       handle.addEventListener("pointerdown", event => this.#onMitigationFillStart(event));
     });
-    this.element?.querySelectorAll("[data-mitigation-limb-set-choice]").forEach(button => {
-      button.addEventListener("click", event => this.#onMitigationLimbSetChoice(event));
-    });
+    this.#addHandledFormChangeListener(
+      this.element?.querySelector("[data-mitigation-limb-set-select]"),
+      event => this.#onMitigationLimbSetSelect(event)
+    );
     this.#activateCraftEditor();
     this.#restoreScrollPositions();
   }
@@ -2816,6 +2842,44 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
+  #onEnableAbilityChangeAccumulator(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionRow = event.currentTarget?.closest?.("[data-ability-function-row]");
+    const changeRow = event.currentTarget?.closest?.("[data-ability-change-row]");
+    const functionIndex = Number(functionRow?.dataset.functionIndex ?? -1);
+    const changeIndex = Number(changeRow?.dataset.changeIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const abilityFunction = functions[functionIndex];
+    const change = abilityFunction?.changes?.[changeIndex];
+    const accumulator = abilityFunction?.conditions
+      ?.find(condition => condition?.type === ABILITY_CONDITION_TYPES.accumulation);
+    if (!change || !accumulator) return undefined;
+    change.valueSource = ABILITY_CHANGE_VALUE_SOURCES.accumulation;
+    change.accumulatorExchange = {
+      conditionId: String(accumulator.id ?? ""),
+      mode: "invested"
+    };
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDisableAbilityChangeAccumulator(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionRow = event.currentTarget?.closest?.("[data-ability-function-row]");
+    const changeRow = event.currentTarget?.closest?.("[data-ability-change-row]");
+    const functionIndex = Number(functionRow?.dataset.functionIndex ?? -1);
+    const changeIndex = Number(changeRow?.dataset.changeIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const change = functions[functionIndex]?.changes?.[changeIndex];
+    if (!change) return undefined;
+    delete change.valueSource;
+    delete change.accumulatorExchange;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
   #onAddAbilityAction(event) {
     event.preventDefault();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
@@ -2903,7 +2967,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]?.conditions?.[conditionIndex]) return undefined;
-    functions[functionIndex].conditions.splice(conditionIndex, 1);
+    const abilityFunction = functions[functionIndex];
+    const removed = abilityFunction.conditions[conditionIndex];
+    abilityFunction.conditions.splice(conditionIndex, 1);
+    if (removed?.type === ABILITY_CONDITION_TYPES.accumulation) {
+      for (const change of abilityFunction.changes ?? []) {
+        if (change?.accumulatorExchange?.conditionId !== removed.id) continue;
+        delete change.valueSource;
+        delete change.accumulatorExchange;
+      }
+    }
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -5034,24 +5107,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return picker.render({ force: true });
   }
 
-  #onMitigationLimbSetChoice(event) {
+  #onMitigationLimbSetSelect(event) {
     event.preventDefault();
-    const groupId = String(event.currentTarget?.dataset?.mitigationLimbSetChoice ?? "");
-    if (!groupId) return undefined;
-
     const choices = buildDamageMitigationLimbSetChoices(this.item, getCreatureOptions());
-    const validIds = new Set(choices.map(choice => choice.id));
-    if (!validIds.has(groupId)) return undefined;
-
-    const selected = new Set(getSelectedDamageMitigationLimbSetIds(this.item, choices));
-    if (selected.has(groupId)) {
-      if (selected.size <= 1) return undefined;
-      selected.delete(groupId);
-    } else {
-      selected.add(groupId);
-    }
-
-    return this.item.update({ "system.functions.damageMitigation.limbSetIds": Array.from(selected) });
+    const limbSetId = resolveDamageMitigationEditorLimbSetId(event.currentTarget?.value, choices);
+    if (!limbSetId || limbSetId === this.#activeMitigationLimbSetId) return undefined;
+    this.#activeMitigationLimbSetId = limbSetId;
+    return this.render({ force: true });
   }
 
   #onMitigationFillStart(event) {
@@ -6316,6 +6378,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges || isActiveApplication,
     allowEventReaction: isEffectChanges,
+    allowAccumulation: isEffectChanges,
     allowTriggerCost: isEffectChanges
       && (!hasTriggerCostCondition || condition?.type === ABILITY_CONDITION_TYPES.triggerCost),
     allowToggleable: item?.type === "ability"
@@ -6376,7 +6439,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(entry?.penalties?.length),
     typeLabel: getAbilityFunctionTypeLabel(entry, fixedKey),
-    changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
+    changes: (entry?.changes ?? []).map((change, index) => (
+      prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath, entry?.conditions)
+    )),
     actions: (entry?.actions ?? []).map((action, index) => prepareItemAbilityActionForDisplay(action, index, functionIndex, functionPath)),
     conditions,
     conditionGroups: buildAbilityConditionDisplayGroups(conditions),
@@ -6563,14 +6628,15 @@ function normalizeAbilityTriggerCostRows(costs = []) {
   });
 }
 
-function prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath = "system.functions") {
+function prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath = "system.functions", conditions = []) {
   return {
     ...change,
     functionPath,
     functionIndex,
     index,
     priority: change?.priority ?? "",
-    typeChoices: buildAbilityChangeTypeChoices(change?.type)
+    typeChoices: buildAbilityChangeTypeChoices(change?.type),
+    accumulatorExchangeSettings: prepareAbilityAccumulatorExchangeForDisplay(change, conditions)
   };
 }
 
@@ -6923,6 +6989,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   changeCount = 0,
   allowLimitedChanges = false,
   allowEventReaction = false,
+  allowAccumulation = false,
   allowTriggerCost = false,
   allowToggleable = false,
   eventReactionMode = false,
@@ -6933,6 +7000,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const type = String(condition?.type ?? "");
   const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
+  const isAccumulation = type === ABILITY_CONDITION_TYPES.accumulation;
   const isTriggerCost = type === ABILITY_CONDITION_TYPES.triggerCost;
   const isTriggerChance = type === ABILITY_CONDITION_TYPES.triggerChance;
   const isEventReactionFilter = isEventReactionFilterType(type);
@@ -6941,7 +7009,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
   const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -7004,9 +7072,13 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
+    isAccumulation,
+    accumulationSettings: isAccumulation
+      ? prepareAbilityAccumulationForDisplay(condition?.accumulation)
+      : null,
     isTriggerCost,
     isTriggerChance,
     isEventReactionFilter,
@@ -7020,6 +7092,8 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     eventProgressCurrent,
     eventProgressRequired,
     combatOnly: Boolean(condition?.combatOnly),
+    allowUnconscious: Boolean(condition?.allowUnconscious),
+    allowDead: Boolean(condition?.allowDead),
     autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
     trackingTargetRows: buildAbilityEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
@@ -7081,7 +7155,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -7103,7 +7177,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     durationAmount: duration.amount,
     durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: getAbilityConditionTypeLabel(type),
-    typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowTriggerCost, allowToggleable, eventReactionMode }),
+    typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowAccumulation, allowTriggerCost, allowToggleable, eventReactionMode }),
     eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
@@ -7187,7 +7261,10 @@ function buildAbilityConditionDisplayGroups(conditions = []) {
 }
 
 function getAbilityConditionTypeLabel(type) {
-  return buildAbilityConditionTypeChoices(type, { allowLimitedChanges: true }).find(choice => choice.value === type)?.label ?? type;
+  return buildAbilityConditionTypeChoices(type, {
+    allowLimitedChanges: true,
+    allowAccumulation: true
+  }).find(choice => choice.value === type)?.label ?? type;
 }
 
 function buildAbilityChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
@@ -7225,6 +7302,7 @@ function buildAbilityAttackDistanceSideChoices(selected = ABILITY_ATTACK_DISTANC
 function buildAbilityConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
+  allowAccumulation = false,
   allowTriggerCost = false,
   allowToggleable = false,
   eventReactionMode = false
@@ -7260,6 +7338,13 @@ function buildAbilityConditionTypeChoices(selected = "", {
       value: ABILITY_CONDITION_TYPES.eventReaction,
       label: localizeAbilityEventReactionUi("ConditionLabel", "Event reaction"),
       selected: selected === ABILITY_CONDITION_TYPES.eventReaction
+    });
+  }
+  if (allowAccumulation || selected === ABILITY_CONDITION_TYPES.accumulation) {
+    choices.splice(1, 0, {
+      value: ABILITY_CONDITION_TYPES.accumulation,
+      label: "Накопление",
+      selected: selected === ABILITY_CONDITION_TYPES.accumulation
     });
   }
   if (allowTriggerCost || selected === ABILITY_CONDITION_TYPES.triggerCost) {
@@ -7316,6 +7401,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
       !choice.value
       || choice.value === ABILITY_CONDITION_TYPES.toggleable
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
+      || choice.value === ABILITY_CONDITION_TYPES.accumulation
       || choice.value === ABILITY_CONDITION_TYPES.triggerCost
       || choice.value === ABILITY_CONDITION_TYPES.duration
       || choice.value === ABILITY_CONDITION_TYPES.limitedEffectCopies
@@ -7326,6 +7412,7 @@ function buildAbilityConditionTypeChoices(selected = "", {
       && choice.value
       && choice.value !== ABILITY_CONDITION_TYPES.toggleable
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
+      && choice.value !== ABILITY_CONDITION_TYPES.accumulation
       && choice.value !== ABILITY_CONDITION_TYPES.triggerCost
       && choice.value !== ABILITY_CONDITION_TYPES.duration
       && choice.value !== ABILITY_CONDITION_TYPES.limitedEffectCopies

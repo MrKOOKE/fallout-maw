@@ -246,7 +246,22 @@ function abilityChangeField() {
     }),
     value: new StringField({ required: true, blank: true, initial: "0" }),
     phase: new StringField({ required: true, blank: false, initial: "initial" }),
-    priority: new NumberField({ required: false, nullable: true, integer: true, initial: null })
+    priority: new NumberField({ required: false, nullable: true, integer: true, initial: null }),
+    valueSource: new StringField({
+      required: true,
+      blank: true,
+      choices: ["", "accumulation"],
+      initial: ""
+    }),
+    accumulatorExchange: new SchemaField({
+      conditionId: new StringField({ required: true, blank: true, initial: "" }),
+      mode: new StringField({
+        required: true,
+        blank: false,
+        choices: ["invested"],
+        initial: "invested"
+      })
+    })
   });
 }
 
@@ -257,8 +272,38 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "toggleable", "eventReaction", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "aura", "limitedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
+      choices: ["", "toggleable", "eventReaction", "accumulation", "triggerCost", "triggerChance", "timeOfDay", "illumination", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "attackDistance", "weaponAction", "weaponSkill", "engagedSkill", "weaponProficiency", "aura", "limitedChanges", "limitedEffectCopies", "limitedUses", "cooldown", "duration", "energyConsumption", "itemUse"],
       initial: ""
+    }),
+    accumulation: new SchemaField({
+      name: new StringField({ required: true, blank: true, initial: "" }),
+      valueSource: new StringField({
+        required: true,
+        blank: false,
+        choices: ["damageIncoming", "damageAfterMitigation", "damageActualHealthLoss", "damageLimbLoss", "damageItemConditionLoss"],
+        initial: "damageActualHealthLoss"
+      }),
+      percent: new NumberField({ required: true, min: 0, initial: 10 }),
+      groupBy: new StringField({
+        required: true,
+        blank: false,
+        choices: ["none", "damageType"],
+        initial: "damageType"
+      }),
+      totalCap: new NumberField({ required: true, integer: true, min: 0, initial: 50 }),
+      bucketCap: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      rounding: new StringField({
+        required: true,
+        blank: false,
+        choices: ["floorTotal", "roundTotal", "ceilTotal"],
+        initial: "floorTotal"
+      }),
+      durationPolicy: new StringField({
+        required: true,
+        blank: false,
+        choices: ["fromFirst", "refresh"],
+        initial: "fromFirst"
+      })
     }),
     costs: new ArrayField(new SchemaField({
       id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
@@ -270,6 +315,8 @@ function abilityConditionField() {
     eventKey: new StringField({ required: true, blank: true, initial: "" }),
     progressRequired: new NumberField({ required: true, min: 0.01, initial: 1 }),
     combatOnly: new BooleanField({ required: true, initial: false }),
+    allowUnconscious: new BooleanField({ required: true, initial: false }),
+    allowDead: new BooleanField({ required: true, initial: false }),
     reactionMode: new StringField({
       required: true,
       blank: true,

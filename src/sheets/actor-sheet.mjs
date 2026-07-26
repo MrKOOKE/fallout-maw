@@ -5729,7 +5729,7 @@ function renderDamageMitigationTooltipTables(tables = []) {
     <div class="tooltip-mitigation-table-list">
       ${tables.map(table => `
         <section class="tooltip-mitigation-table">
-          ${tables.length > 1 ? `<h5>${escapeHTML(table.raceNames)}</h5>` : ""}
+          ${tables.length > 1 ? `<h5>${escapeHTML(table.limbSetLabel)}</h5>` : ""}
           <div class="tooltip-mitigation-matrix" style="--fallout-maw-mitigation-columns: ${Math.max(1, toInteger(table.columns))};">
             <span class="tooltip-mitigation-cell tooltip-mitigation-header"></span>
             ${table.limbs.map(limb => `

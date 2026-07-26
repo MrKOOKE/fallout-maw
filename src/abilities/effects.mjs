@@ -4,6 +4,7 @@ import {
   ABILITY_FUNCTION_TYPES,
   getAbilityFunctionTriggerCostRows,
   getAbilitySourceId,
+  isAccumulatingAbilityFunction,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -98,15 +99,18 @@ export function registerAbilityEffectHooks() {
         aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)
       });
     }
+    if (item?.type === "ability" || item?.type === "gear") {
+      void reconcileEventReactionAccumulatorEffects(item);
+    }
   });
   Hooks.on("deleteItem", item => {
     if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (item?.type === "ability") {
-      void deleteAbilityEffects(item.parent, item.id);
+      void deleteAbilityEffects(item.parent, item.id, item.uuid);
       queueAuraStateSync();
       return;
     }
-    if (item?.type === "gear") void deleteItemFreeSettingsEffects(item.parent, item.id);
+    if (item?.type === "gear") void deleteItemFreeSettingsEffects(item.parent, item.id, item.uuid);
     if (isEquipmentItem(item)) queueActorAbilityEffectSync(item.parent, {}, { aura: item?.type === "gear" });
     else if (item?.type === "gear") queueAuraStateSync();
   });
@@ -1083,6 +1087,7 @@ function hasRuntimeConditions(conditions = []) {
     && condition.type !== ABILITY_CONDITION_TYPES.cooldown
     && condition.type !== ABILITY_CONDITION_TYPES.duration
     && condition.type !== ABILITY_CONDITION_TYPES.triggerCost
+    && condition.type !== ABILITY_CONDITION_TYPES.accumulation
   ));
 }
 
@@ -1131,10 +1136,13 @@ function hasApplicableAbilityChanges(changes = []) {
   ));
 }
 
-async function deleteAbilityEffects(actor, abilityItemId = "") {
+async function deleteAbilityEffects(actor, abilityItemId = "", sourceItemUuid = "") {
   if (!actor || !game.user?.isActiveGM || !abilityItemId) return;
   const effects = actor.effects
-    .filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === abilityItemId);
+    .filter(effect => (
+      effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === abilityItemId
+      || eventReactionAccumulatorBelongsToSource(effect, sourceItemUuid)
+    ));
   await deleteAbilitySyncEffects(actor, effects, ABILITY_EFFECT_FLAG_KEY);
 }
 
@@ -1175,11 +1183,62 @@ function isAuraTokenPositionUpdate(changes = {}) {
   return paths.some(path => ["x", "y", "elevation"].includes(path));
 }
 
-async function deleteItemFreeSettingsEffects(actor, itemId = "") {
+async function deleteItemFreeSettingsEffects(actor, itemId = "", sourceItemUuid = "") {
   if (!actor || !game.user?.isActiveGM || !itemId) return;
   const effects = actor.effects
-    .filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === itemId);
+    .filter(effect => (
+      effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === itemId
+      || eventReactionAccumulatorBelongsToSource(effect, sourceItemUuid)
+    ));
   await deleteAbilitySyncEffects(actor, effects, ITEM_EFFECT_FLAG_KEY);
+}
+
+async function reconcileEventReactionAccumulatorEffects(item = null) {
+  const actor = item?.parent;
+  if (!actor || !game.user?.isActiveGM || !item?.uuid) return;
+  const functions = item.type === "ability"
+    ? item.system?.functions ?? []
+    : item.type === "gear"
+      ? item.system?.functions?.freeSettings?.entries ?? []
+      : [];
+  const currentFunctions = new Map(normalizeAbilityFunctions(functions)
+    .filter(isAccumulatingAbilityFunction)
+    .map(abilityFunction => [String(abilityFunction?.id ?? "").trim(), abilityFunction])
+    .filter(([functionId]) => functionId));
+  const obsoleteIds = Array.from(actor.effects ?? [])
+    .filter(effect => eventReactionAccumulatorBelongsToSource(effect, item.uuid))
+    .filter(effect => {
+      const flag = effect.getFlag?.(SYSTEM_ID, "eventReaction")
+        ?? effect?.flags?.[SYSTEM_ID]?.eventReaction;
+      const functionId = String(flag?.functionId ?? "").trim();
+      const current = currentFunctions.get(functionId);
+      if (!current) return true;
+      return JSON.stringify({
+        changes: current.changes ?? [],
+        conditions: current.conditions ?? []
+      }) !== JSON.stringify({
+        changes: flag?.functionData?.changes ?? [],
+        conditions: flag?.functionData?.conditions ?? []
+      });
+    })
+    .map(effect => String(effect?.id ?? "").trim())
+    .filter(Boolean);
+  if (obsoleteIds.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", obsoleteIds, {
+      animate: false,
+      falloutMawEventReactionCleanup: true
+    });
+  }
+}
+
+function eventReactionAccumulatorBelongsToSource(effect = null, sourceItemUuid = "") {
+  const uuid = String(sourceItemUuid ?? "").trim();
+  if (!uuid) return false;
+  const flag = effect?.getFlag?.(SYSTEM_ID, "eventReaction")
+    ?? effect?.flags?.[SYSTEM_ID]?.eventReaction;
+  const effectSourceUuid = String(flag?.sourceItemUuid ?? "").trim();
+  return flag?.scope === "accumulator"
+    && (effectSourceUuid === uuid || effectSourceUuid.startsWith(`${uuid}.`));
 }
 
 function isEquipmentItem(item) {

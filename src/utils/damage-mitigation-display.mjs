@@ -13,20 +13,30 @@ export function buildDamageMitigationLimbSetChoices(itemOrSystem, creatureOption
   if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) return [];
   const limbSets = getUniqueLimbSets(creatureOptions);
   const selectedIds = new Set(getSelectedDamageMitigationLimbSetIds(itemOrSystem, limbSets));
-  let selectedIndex = 0;
 
   return limbSets.map(group => {
     const selected = selectedIds.has(group.id);
     return {
       ...group,
       selected,
-      selectedIndex: selected ? selectedIndex++ : null,
       limbsShortLabel: group.limbs.map(limb => getLimbShortLabel(limb.label || limb.key)).join(", ")
     };
   });
 }
 
-export function buildDamageMitigationTables(itemOrSystem, creatureOptions = {}, damageTypeSettings = [], { actorRaceId = "" } = {}) {
+export function resolveDamageMitigationEditorLimbSetId(requestedId = "", limbSetChoices = []) {
+  const requested = String(requestedId ?? "").trim();
+  return limbSetChoices.some(choice => choice.id === requested)
+    ? requested
+    : String(limbSetChoices[0]?.id ?? "");
+}
+
+export function buildDamageMitigationTables(
+  itemOrSystem,
+  creatureOptions = {},
+  damageTypeSettings = [],
+  { actorRaceId = "", limbSetId = "" } = {}
+) {
   if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) {
     return [buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings)];
   }
@@ -39,9 +49,14 @@ export function buildDamageMitigationTables(itemOrSystem, creatureOptions = {}, 
   const actorGroup = actorRaceId
     ? limbSets.find(group => group.races.some(race => race.id === actorRaceId))
     : null;
+  const editorGroup = limbSetId
+    ? limbSets.find(group => group.id === limbSetId)
+    : null;
   const groups = actorGroup && selectedIds.has(actorGroup.id)
     ? [actorGroup]
-    : limbSets.filter(group => selectedIds.has(group.id));
+    : editorGroup
+      ? [editorGroup]
+      : limbSets.filter(group => selectedIds.has(group.id));
 
   return groups.map(group => buildDamageMitigationTableForGroup(group, entries, damageTypeSettings));
 }
@@ -73,7 +88,7 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
 
   return {
     id: group.id,
-    raceNames: group.raceNames,
+    limbSetLabel: limbs.map(limb => limb.shortLabel).join(", "),
     limbs,
     columns: Math.max(1, limbs.length),
     rows: visibleDamageTypes.map((damageType, rowIndex) => ({
@@ -103,7 +118,6 @@ function buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSetting
   const label = String(part.partType ?? "").trim() || String(itemOrSystem?.name ?? "").trim() || "Деталь";
   const group = {
     id: CONSTRUCT_PART_MITIGATION_LIMB_KEY,
-    raceNames: "Деталь конструкта",
     limbs: [{
       key: CONSTRUCT_PART_MITIGATION_LIMB_KEY,
       label,

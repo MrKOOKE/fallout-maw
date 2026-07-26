@@ -23,6 +23,7 @@ import {
   ABILITY_AURA_TARGET_GROUPS,
   ABILITY_ATTACK_DISTANCE_MODES,
   ABILITY_ATTACK_DISTANCE_SIDES,
+  ABILITY_CHANGE_VALUE_SOURCES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -129,6 +130,10 @@ import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { activateAdvancementPureValuesControls } from "./advancement-pure-values-control.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { pickCatalogAbilities, resolveCatalogAbilityEntries } from "./ability-catalog-picker.mjs";
+import {
+  prepareAbilityAccumulationForDisplay,
+  prepareAbilityAccumulatorExchangeForDisplay
+} from "./ability-accumulation-ui.mjs";
 import { findCatalogAbility } from "../abilities/purchase.mjs";
 
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
@@ -172,6 +177,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteFunction: this.#onDeleteFunction,
       addFunctionChange: this.#onAddFunctionChange,
       deleteFunctionChange: this.#onDeleteFunctionChange,
+      enableFunctionChangeAccumulator: this.#onEnableFunctionChangeAccumulator,
+      disableFunctionChangeAccumulator: this.#onDisableFunctionChangeAccumulator,
       addFunctionAction: this.#onAddFunctionAction,
       deleteFunctionAction: this.#onDeleteFunctionAction,
       addFunctionAttackChoice: this.#onAddFunctionAttackChoice,
@@ -505,6 +512,42 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  static #onEnableFunctionChangeAccumulator(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const changeRow = target.closest("[data-ability-change-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const changeIndex = getRowIndex(functionRow, "[data-ability-change-row]", changeRow);
+    const abilityFunction = this.ability.system.functions?.[functionIndex];
+    const change = abilityFunction?.changes?.[changeIndex];
+    const accumulator = abilityFunction?.conditions
+      ?.find(condition => condition?.type === ABILITY_CONDITION_TYPES.accumulation);
+    if (change && accumulator) {
+      change.valueSource = ABILITY_CHANGE_VALUE_SOURCES.accumulation;
+      change.accumulatorExchange = {
+        conditionId: String(accumulator.id ?? ""),
+        mode: "invested"
+      };
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDisableFunctionChangeAccumulator(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const changeRow = target.closest("[data-ability-change-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const changeIndex = getRowIndex(functionRow, "[data-ability-change-row]", changeRow);
+    const change = this.ability.system.functions?.[functionIndex]?.changes?.[changeIndex];
+    if (change) {
+      delete change.valueSource;
+      delete change.accumulatorExchange;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
   static #onAddFunctionAction(event, target) {
     event.preventDefault();
     this.#syncFromForm();
@@ -620,7 +663,16 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
     const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
     if (functionIndex >= 0 && conditionIndex >= 0) {
-      this.ability.system.functions[functionIndex]?.conditions?.splice(conditionIndex, 1);
+      const abilityFunction = this.ability.system.functions[functionIndex];
+      const removed = abilityFunction?.conditions?.[conditionIndex];
+      abilityFunction?.conditions?.splice(conditionIndex, 1);
+      if (removed?.type === ABILITY_CONDITION_TYPES.accumulation) {
+        for (const change of abilityFunction?.changes ?? []) {
+          if (change?.accumulatorExchange?.conditionId !== removed.id) continue;
+          delete change.valueSource;
+          delete change.accumulatorExchange;
+        }
+      }
     }
     return this.#persist({ render: true, sync: false });
   }
@@ -1703,14 +1755,24 @@ function readToTheEndAdvantageSkills(row) {
 }
 
 function readAbilityChanges(root, selector) {
-  return Array.from(root?.querySelectorAll(selector) ?? []).map(changeRow => ({
-    id: changeRow.dataset.changeId || foundry.utils.randomID(),
-    key: changeRow.querySelector("[data-field='changeKey']")?.value ?? "",
-    type: changeRow.querySelector("[data-field='changeType']")?.value ?? ABILITY_CHANGE_TYPES.add,
-    value: changeRow.querySelector("[data-field='changeValue']")?.value ?? "0",
-    phase: "initial",
-    priority: changeRow.querySelector("[data-field='changePriority']")?.value ?? null
-  }));
+  return Array.from(root?.querySelectorAll(selector) ?? []).map(changeRow => {
+    const valueSource = changeRow.querySelector("[data-field='changeValueSource']")?.value ?? "";
+    return {
+      id: changeRow.dataset.changeId || foundry.utils.randomID(),
+      key: changeRow.querySelector("[data-field='changeKey']")?.value ?? "",
+      type: changeRow.querySelector("[data-field='changeType']")?.value ?? ABILITY_CHANGE_TYPES.add,
+      value: changeRow.querySelector("[data-field='changeValue']")?.value ?? "0",
+      phase: "initial",
+      priority: changeRow.querySelector("[data-field='changePriority']")?.value ?? null,
+      ...(valueSource === ABILITY_CHANGE_VALUE_SOURCES.accumulation ? {
+        valueSource,
+        accumulatorExchange: {
+          conditionId: changeRow.querySelector("[data-field='changeAccumulatorConditionId']")?.value ?? "",
+          mode: "invested"
+        }
+      } : {})
+    };
+  });
 }
 
 function readAbilityConditions(root) {
@@ -1724,8 +1786,20 @@ function readAbilityConditions(root) {
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
       progressRequired: row.querySelector("[data-field='conditionEventProgressRequired']")?.value ?? 1,
       combatOnly: Boolean(row.querySelector("[data-field='conditionCombatOnly']")?.checked),
+      allowUnconscious: Boolean(row.querySelector("[data-field='conditionAllowUnconscious']")?.checked),
+      allowDead: Boolean(row.querySelector("[data-field='conditionAllowDead']")?.checked),
       reactionMode,
       autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
+      accumulation: {
+        name: row.querySelector("[data-field='conditionAccumulationName']")?.value ?? "",
+        valueSource: row.querySelector("[data-field='conditionAccumulationValueSource']")?.value,
+        percent: row.querySelector("[data-field='conditionAccumulationPercent']")?.value,
+        groupBy: row.querySelector("[data-field='conditionAccumulationGroupBy']")?.value,
+        totalCap: row.querySelector("[data-field='conditionAccumulationTotalCap']")?.value,
+        bucketCap: row.querySelector("[data-field='conditionAccumulationBucketCap']")?.value,
+        rounding: row.querySelector("[data-field='conditionAccumulationRounding']")?.value,
+        durationPolicy: row.querySelector("[data-field='conditionAccumulationDurationPolicy']")?.value
+      },
       trackingTargets: readFieldValues(row, "[data-field='conditionTrackingTarget']"),
       eventSubject: row.querySelector("[data-field='conditionEventSubject']")?.value ?? ABILITY_EVENT_SUBJECTS.reactor,
       chanceFormula: row.querySelector("[data-field='conditionChanceFormula']")?.value ?? "100",
@@ -1962,6 +2036,7 @@ function prepareFunctionForDisplay(entry) {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges || isActiveApplication,
     allowEventReaction: isEffectChanges,
+    allowAccumulation: isEffectChanges,
     allowToggleable: isEffectChanges
       && (!hasToggleableCondition || condition?.type === ABILITY_CONDITION_TYPES.toggleable),
     allowTriggerCost: isEffectChanges
@@ -2016,7 +2091,9 @@ function prepareFunctionForDisplay(entry) {
     hasEventReaction,
     hasUnsupportedEventReactionPenalties: hasEventReaction && Boolean(normalized.penalties.length),
     typeLabel: getAbilityFunctionTypeLabel(normalized, fixedKey),
-    changes: normalized.changes.map(prepareChangeForDisplay),
+    changes: normalized.changes.map((change, index) => (
+      prepareChangeForDisplay(change, index, normalized.conditions)
+    )),
     actions: normalized.actions.map(prepareAbilityActionForDisplay),
     conditions,
     conditionGroups: buildConditionDisplayGroups(conditions),
@@ -2223,12 +2300,13 @@ function normalizeTriggerCostRows(costs = []) {
   return normalizeEventReactionSettings({ costs }).costs;
 }
 
-function prepareChangeForDisplay(change, index) {
+function prepareChangeForDisplay(change, index, conditions = []) {
   return {
     ...change,
     index,
     priority: change.priority ?? "",
-    typeChoices: buildChangeTypeChoices(change.type)
+    typeChoices: buildChangeTypeChoices(change.type),
+    accumulatorExchangeSettings: prepareAbilityAccumulatorExchangeForDisplay(change, conditions)
   };
 }
 
@@ -2549,6 +2627,7 @@ function prepareConditionForDisplay(condition, {
   changeCount = 0,
   allowLimitedChanges = false,
   allowEventReaction = false,
+  allowAccumulation = false,
   allowToggleable = false,
   allowTriggerCost = false,
   eventReactionMode = false
@@ -2556,6 +2635,7 @@ function prepareConditionForDisplay(condition, {
   const type = String(condition?.type ?? "");
   const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
   const isEventReaction = type === ABILITY_CONDITION_TYPES.eventReaction;
+  const isAccumulation = type === ABILITY_CONDITION_TYPES.accumulation;
   const isTriggerCost = type === ABILITY_CONDITION_TYPES.triggerCost;
   const isTriggerChance = type === ABILITY_CONDITION_TYPES.triggerChance;
   const isEventReactionFilter = isEventReactionFilterType(type);
@@ -2564,7 +2644,7 @@ function prepareConditionForDisplay(condition, {
   const isTimeOfDay = type === ABILITY_CONDITION_TYPES.timeOfDay;
   const isIllumination = type === ABILITY_CONDITION_TYPES.illumination;
   const isUnsupportedEventCondition = eventReactionMode
-    && ((!isToggleable && !isEventReaction && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies) || (isEventReaction && !allowEventReaction));
+    && ((!isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isEventReactionFilter && !isDuration && !isLimitedEffectCopies) || (isEventReaction && !allowEventReaction));
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
@@ -2617,9 +2697,13 @@ function prepareConditionForDisplay(condition, {
   return {
     ...condition,
     healthTarget,
-    isPending: !isToggleable && !isEventReaction && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    isPending: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isTriggerChance && !isTimeOfDay && !isIllumination && !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isAttackDistance && !isWeaponAction && !isSkillCondition && !isWeaponProficiency && !isAura && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     isToggleable,
     isEventReaction,
+    isAccumulation,
+    accumulationSettings: isAccumulation
+      ? prepareAbilityAccumulationForDisplay(condition?.accumulation)
+      : null,
     isTriggerCost,
     isTriggerChance,
     isEventReactionFilter,
@@ -2632,6 +2716,8 @@ function prepareConditionForDisplay(condition, {
     eventProgressLabel: showEventProgress ? getEventReactionProgressLabel(condition?.eventKey) : "",
     eventProgressRequired: normalizeEventReactionProgressRequired(condition?.progressRequired),
     combatOnly: Boolean(condition?.combatOnly),
+    allowUnconscious: Boolean(condition?.allowUnconscious),
+    allowDead: Boolean(condition?.allowDead),
     autoApply: reactionMode === ABILITY_EVENT_REACTION_MODES.isolatedAuto,
     trackingTargetRows: buildEventTrackingTargetRows(trackingTargets),
     canAddTrackingTarget: trackingTargets.length < ABILITY_EVENT_TRACKING_TARGETS.length,
@@ -2691,7 +2777,7 @@ function prepareConditionForDisplay(condition, {
     isDuration,
     isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isToggleable && !isEventReaction && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
+    canAddAlternative: !isToggleable && !isEventReaction && !isAccumulation && !isTriggerCost && !isUnsupportedEventCondition && !isLimitedChanges && !isLimitedEffectCopies && !isLimitedUses && !isCooldown && !isDuration && !isEnergyConsumption && !isItemUse,
     toggleName: String(condition?.name ?? "").trim(),
     toggleCooldownAmount: condition?.cooldownSeconds === null || condition?.cooldownSeconds === undefined
       ? ""
@@ -2713,7 +2799,7 @@ function prepareConditionForDisplay(condition, {
     durationAmount: duration.amount,
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
-    typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowToggleable, allowTriggerCost, eventReactionMode }),
+    typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges, allowEventReaction, allowAccumulation, allowToggleable, allowTriggerCost, eventReactionMode }),
     eventPathLevels: eventDisplay.pathLevels ?? [],
     selectedEvent: eventDisplay.selectedEvent,
     isUnsupportedEventKey: eventDisplay.isUnsupported,
@@ -2823,7 +2909,10 @@ function prepareAcquisitionRequirementForDisplay(requirement, { characteristicSe
 }
 
 function getConditionTypeLabel(type) {
-  return buildConditionTypeChoices(type, { allowLimitedChanges: true }).find(choice => choice.value === type)?.label ?? type;
+  return buildConditionTypeChoices(type, {
+    allowLimitedChanges: true,
+    allowAccumulation: true
+  }).find(choice => choice.value === type)?.label ?? type;
 }
 
 function getAcquisitionRequirementTypeLabel(type) {
@@ -2887,6 +2976,7 @@ function buildAttackDistanceSideChoices(selected = ABILITY_ATTACK_DISTANCE_SIDES
 function buildConditionTypeChoices(selected = "", {
   allowLimitedChanges = true,
   allowEventReaction = false,
+  allowAccumulation = false,
   allowToggleable = false,
   allowTriggerCost = false,
   eventReactionMode = false
@@ -2922,6 +3012,13 @@ function buildConditionTypeChoices(selected = "", {
       value: ABILITY_CONDITION_TYPES.eventReaction,
       label: localizeEventReactionUi("ConditionLabel", "Event reaction"),
       selected: selected === ABILITY_CONDITION_TYPES.eventReaction
+    });
+  }
+  if (allowAccumulation || selected === ABILITY_CONDITION_TYPES.accumulation) {
+    choices.splice(1, 0, {
+      value: ABILITY_CONDITION_TYPES.accumulation,
+      label: "Накопление",
+      selected: selected === ABILITY_CONDITION_TYPES.accumulation
     });
   }
   if (allowTriggerCost || selected === ABILITY_CONDITION_TYPES.triggerCost) {
@@ -2978,6 +3075,7 @@ function buildConditionTypeChoices(selected = "", {
       !choice.value
       || choice.value === ABILITY_CONDITION_TYPES.toggleable
       || choice.value === ABILITY_CONDITION_TYPES.eventReaction
+      || choice.value === ABILITY_CONDITION_TYPES.accumulation
       || choice.value === ABILITY_CONDITION_TYPES.triggerCost
       || choice.value === ABILITY_CONDITION_TYPES.duration
       || choice.value === ABILITY_CONDITION_TYPES.limitedEffectCopies
@@ -2988,6 +3086,7 @@ function buildConditionTypeChoices(selected = "", {
       && choice.value
       && choice.value !== ABILITY_CONDITION_TYPES.toggleable
       && choice.value !== ABILITY_CONDITION_TYPES.eventReaction
+      && choice.value !== ABILITY_CONDITION_TYPES.accumulation
       && choice.value !== ABILITY_CONDITION_TYPES.triggerCost
       && choice.value !== ABILITY_CONDITION_TYPES.duration
       && choice.value !== ABILITY_CONDITION_TYPES.limitedEffectCopies

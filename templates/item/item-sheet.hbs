@@ -1616,9 +1616,31 @@
             <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
             <input type="number" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
             <div class="fallout-maw-inline-controls">
+              {{#if accumulatorExchangeSettings.enabled}}
+              <button type="button" class="fallout-maw-icon-button" data-disable-ability-change-accumulator title="Отключить обмен накопления"><i class="fa-solid fa-coins"></i></button>
+              {{else}}
+              {{#if accumulatorExchangeSettings.hasAccumulators}}
+              <button type="button" class="fallout-maw-icon-button" data-enable-ability-change-accumulator title="Брать значение из накопления"><i class="fa-solid fa-coins"></i></button>
+              {{/if}}
+              {{/if}}
               <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
             </div>
           </div>
+          {{#if accumulatorExchangeSettings.enabled}}
+          <div class="fallout-maw-fixed-settings-row">
+            <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.valueSource" value="accumulation">
+            <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.accumulatorExchange.mode" value="invested">
+            <label>
+              <span>Накопление-источник</span>
+              <select name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.accumulatorExchange.conditionId">
+                {{#each accumulatorExchangeSettings.conditionChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <p class="fallout-maw-hint">Значение строки — изменение ключа за 1 накопленное очко. Вставьте <code>{group}</code> в ключ, чтобы создать отдельное изменение для каждой группы; без него используется общая сумма очков.</p>
+          </div>
+          {{/if}}
         </div>
         {{else}}
         <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
@@ -1758,10 +1780,63 @@
             <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedCondition"}}</p>
             {{/if}}
             <div class="fallout-maw-ability-condition-fields" data-ability-trigger-cost-ui>
+              {{#if isAccumulation}}
+              <div class="fallout-maw-fixed-settings-row">
+                <label>
+                  <span>Название пула</span>
+                  <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.name" value="{{accumulationSettings.name}}" placeholder="Например: Адаптивное сопротивление">
+                </label>
+                <label>
+                  <span>Число из события</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.valueSource">
+                    {{#each accumulationSettings.valueSourceChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label><span>Конвертировать в очки, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.percent" value="{{accumulationSettings.percent}}" min="0" step="0.01"></label>
+                <label>
+                  <span>Разделять очки по</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.groupBy">
+                    {{#each accumulationSettings.groupByChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label><span>Общий максимум, 0 — без ограничения</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.totalCap" value="{{accumulationSettings.totalCap}}" min="0" step="1"></label>
+                <label><span>Максимум одной группы, 0 — без ограничения</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.bucketCap" value="{{accumulationSettings.bucketCap}}" min="0" step="1"></label>
+                <label>
+                  <span>Округление очков</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.rounding">
+                    {{#each accumulationSettings.roundingChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label>
+                  <span>Таймер эффекта</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.durationPolicy">
+                    {{#each accumulationSettings.durationPolicyChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <p class="fallout-maw-hint">Это условие создаёт пул очков из подходящих событий. Длительность задаётся отдельным условием «Длительность». Само накопление не меняет ключи — подключите его к нужной строке изменения кнопкой с монетами.</p>
+              </div>
+              {{/if}}
+
               {{#if isEventReaction}}
               <div class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
                 <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.CombatOnly'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
+              </div>
+              <div class="fallout-maw-checkbox-row">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AllowUnconscious"}}</span>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.AllowUnconscious'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.allowUnconscious" {{checked allowUnconscious}}>
+              </div>
+              <div class="fallout-maw-checkbox-row">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AllowDead"}}</span>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.AllowDead'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.allowDead" {{checked allowDead}}>
               </div>
               <label class="fallout-maw-event-reaction-mode">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
@@ -2565,9 +2640,31 @@
           <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
           <input type="number" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
           <div class="fallout-maw-inline-controls">
+            {{#if accumulatorExchangeSettings.enabled}}
+            <button type="button" class="fallout-maw-icon-button" data-disable-ability-change-accumulator title="Отключить обмен накопления"><i class="fa-solid fa-coins"></i></button>
+            {{else}}
+            {{#if accumulatorExchangeSettings.hasAccumulators}}
+            <button type="button" class="fallout-maw-icon-button" data-enable-ability-change-accumulator title="Брать значение из накопления"><i class="fa-solid fa-coins"></i></button>
+            {{/if}}
+            {{/if}}
             <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
+        {{#if accumulatorExchangeSettings.enabled}}
+        <div class="fallout-maw-fixed-settings-row">
+          <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.valueSource" value="accumulation">
+          <input type="hidden" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.accumulatorExchange.mode" value="invested">
+          <label>
+            <span>Накопление-источник</span>
+            <select name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.accumulatorExchange.conditionId">
+              {{#each accumulatorExchangeSettings.conditionChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <p class="fallout-maw-hint">Значение строки — изменение ключа за 1 накопленное очко. Вставьте <code>{group}</code> в ключ, чтобы создать отдельное изменение для каждой группы; без него используется общая сумма очков.</p>
+        </div>
+        {{/if}}
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
@@ -2704,6 +2801,51 @@
             <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "FALLOUTMAW.Events.Reaction.UnsupportedCondition"}}</p>
             {{/if}}
             <div class="fallout-maw-ability-condition-fields" data-ability-trigger-cost-ui>
+              {{#if isAccumulation}}
+              <div class="fallout-maw-fixed-settings-row">
+                <label>
+                  <span>Название пула</span>
+                  <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.name" value="{{accumulationSettings.name}}" placeholder="Например: Адаптивное сопротивление">
+                </label>
+                <label>
+                  <span>Число из события</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.valueSource">
+                    {{#each accumulationSettings.valueSourceChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label><span>Конвертировать в очки, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.percent" value="{{accumulationSettings.percent}}" min="0" step="0.01"></label>
+                <label>
+                  <span>Разделять очки по</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.groupBy">
+                    {{#each accumulationSettings.groupByChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label><span>Общий максимум, 0 — без ограничения</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.totalCap" value="{{accumulationSettings.totalCap}}" min="0" step="1"></label>
+                <label><span>Максимум одной группы, 0 — без ограничения</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.bucketCap" value="{{accumulationSettings.bucketCap}}" min="0" step="1"></label>
+                <label>
+                  <span>Округление очков</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.rounding">
+                    {{#each accumulationSettings.roundingChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <label>
+                  <span>Таймер эффекта</span>
+                  <select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.accumulation.durationPolicy">
+                    {{#each accumulationSettings.durationPolicyChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+                <p class="fallout-maw-hint">Это условие создаёт пул очков из подходящих событий. Длительность задаётся отдельным условием «Длительность». Само накопление не меняет ключи — подключите его к нужной строке изменения кнопкой с монетами.</p>
+              </div>
+              {{/if}}
+
               {{#if isTriggerCost}}
               <div class="fallout-maw-event-reaction-settings fallout-maw-trigger-cost-settings">
                 <div class="fallout-maw-event-reaction-costs">
@@ -2745,6 +2887,14 @@
               <div class="fallout-maw-checkbox-row fallout-maw-event-reaction-combat-only">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.CombatOnly"}}</span>
                 <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.CombatOnly'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.combatOnly" data-ability-event-reaction-combat-only {{checked combatOnly}}>
+              </div>
+              <div class="fallout-maw-checkbox-row">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AllowUnconscious"}}</span>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.AllowUnconscious'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.allowUnconscious" {{checked allowUnconscious}}>
+              </div>
+              <div class="fallout-maw-checkbox-row">
+                <span>{{localize "FALLOUTMAW.Events.Reaction.AllowDead"}}</span>
+                <input aria-label="{{localize 'FALLOUTMAW.Events.Reaction.AllowDead'}}" type="checkbox" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.allowDead" {{checked allowDead}}>
               </div>
               <label class="fallout-maw-event-reaction-mode">
                 <span>{{localize "FALLOUTMAW.Events.Reaction.ReactionMode"}}</span>
@@ -3383,28 +3533,28 @@
           {{/each}}
         </select>
       </label>
+      {{#if showDamageMitigationLimbSetSelector}}
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MitigationLimbSet"}}</span>
+        <select data-mitigation-limb-set-select>
+          {{#each damageMitigationLimbSetEditorChoices}}
+          <option value="{{id}}" {{#if active}}selected{{/if}}>{{limbsShortLabel}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{/if}}
     </div>
     {{#unless damageMitigationUsesConstructPart}}
     <div class="fallout-maw-hidden-controls">
       {{#each damageMitigationLimbSetChoices}}
-      {{#if selected}}
-      <input type="hidden" name="system.functions.damageMitigation.limbSetIds.{{selectedIndex}}" value="{{id}}">
-      {{/if}}
-      {{/each}}
-    </div>
-    <div class="fallout-maw-mitigation-limb-set-list">
-      {{#each damageMitigationLimbSetChoices}}
-      <button type="button" class="fallout-maw-mitigation-limb-set-choice {{#if selected}}active{{/if}}" data-mitigation-limb-set-choice="{{id}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
-        <strong>{{raceNames}}</strong>
-        <span>{{limbsShortLabel}}</span>
-      </button>
+      <input type="hidden" name="system.functions.damageMitigation.limbSetIds.{{@index}}" value="{{id}}">
       {{/each}}
     </div>
     {{/unless}}
     <div class="fallout-maw-mitigation-table-list">
       {{#each damageMitigationTables}}
       <section class="fallout-maw-mitigation-table">
-        <h3>{{raceNames}}</h3>
+        <h3>{{limbSetLabel}}</h3>
         <div class="fallout-maw-mitigation-matrix" style="--fallout-maw-mitigation-columns: {{columns}};">
           <div class="fallout-maw-mitigation-cell fallout-maw-grid-header"></div>
           {{#each limbs}}

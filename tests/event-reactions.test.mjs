@@ -18,6 +18,7 @@ const {
 } = await import("../src/events/event-reaction-schema.mjs");
 const {
   collectActiveSceneReactorActors,
+  collectEventReactionReactorActors,
   collectEventReactionCandidates,
   evaluateEventReactionSecondaryConditions
 } = await import("../src/events/event-reaction-scanner.mjs");
@@ -29,14 +30,26 @@ const {
   spendActorResourceCostVector
 } = await import("../src/events/reaction-costs.mjs");
 const {
+  buildAccumulatorEffectChanges,
   buildEventReactionEffectData,
+  buildNextAccumulatorState,
   createEventReactionEffectManager,
-  getEventReactionEffectFlag
+  getEventReactionEffectFlag,
+  hasAbilityFunctionEventEffectOutput
 } = await import("../src/events/reaction-effects.mjs");
 const {
   createGenericEventReactionProvider,
   buildEventReactionCostLines
 } = await import("../src/events/event-reaction-provider.mjs");
+const {
+  getSystemEventGroupKey,
+  getSystemEventNumericValue
+} = await import("../src/events/event-values.mjs");
+const {
+  normalizeAbilityAccumulation,
+  normalizeAbilityCondition
+} = await import("../src/settings/abilities.mjs");
+const { actorStatusAllowsReaction } = await import("../src/combat/incapacitation.mjs");
 const {
   ABILITY_OVERLOAD_EFFECT_FLAG_KEY,
   ABILITY_OVERLOAD_REACTION_COST_ID,
@@ -112,6 +125,43 @@ test("combat-only reactions require an active combat when requested", () => {
   assert.equal(eventReactionCombatAllows({ combatOnly: true }, { inCombat: false }), false);
 });
 
+test("event reaction status permissions default off and remain independent", () => {
+  const normalizedDefault = normalizeAbilityCondition({
+    id: "event-default-status-policy",
+    type: "eventReaction"
+  });
+  assert.equal(normalizedDefault.allowUnconscious, false);
+  assert.equal(normalizedDefault.allowDead, false);
+
+  const normalizedEnabled = normalizeAbilityCondition({
+    id: "event-enabled-status-policy",
+    type: "eventReaction",
+    allowUnconscious: true,
+    allowDead: true
+  });
+  assert.equal(normalizedEnabled.allowUnconscious, true);
+  assert.equal(normalizedEnabled.allowDead, true);
+
+  assert.equal(actorStatusAllowsReaction({ statuses: new Set() }), true);
+  assert.equal(actorStatusAllowsReaction({ statuses: new Set(["unconscious"]) }), false);
+  assert.equal(actorStatusAllowsReaction(
+    { statuses: new Set(["unconscious"]) },
+    { allowUnconscious: true }
+  ), true);
+  assert.equal(actorStatusAllowsReaction(
+    { statuses: new Set(["dead"]) },
+    { allowUnconscious: true }
+  ), false);
+  assert.equal(actorStatusAllowsReaction(
+    { statuses: new Set(["dead"]) },
+    { allowDead: true }
+  ), true);
+  assert.equal(actorStatusAllowsReaction(
+    { statuses: new Set(["stunned"]) },
+    { allowUnconscious: true, allowDead: true }
+  ), false);
+});
+
 test("event subscription requires an exact stable event key", () => {
   const envelope = {
     key: EVENT_KEY,
@@ -177,6 +227,20 @@ test("active-scene reactor pool includes hidden tokens and deduplicates actors",
     ]
   });
   assert.deepEqual(actors.map(actor => actor.uuid), ["Actor.A", "Actor.B"]);
+});
+
+test("reactor pool includes off-scene semantic-event participants", async () => {
+  const sceneActor = { uuid: "Actor.Scene" };
+  const targetActor = { uuid: "Actor.Target" };
+  const actors = await collectEventReactionReactorActors({
+    source: {},
+    target: { actorUuid: targetActor.uuid }
+  }, {
+    resolveUuid: uuid => uuid === targetActor.uuid ? targetActor : null,
+    scene: { id: "scene" },
+    tokens: [{ actor: sceneActor }]
+  });
+  assert.deepEqual(actors.map(actor => actor.uuid).sort(), ["Actor.Scene", "Actor.Target"]);
 });
 
 test("scanner supports owned abilities, active gear, tracking OR subscriptions, and unique actors", async () => {
@@ -480,6 +544,304 @@ test("managed effects use native v14 duration, stack timed effects per root, and
     timed.map(effect => getEventReactionEffectFlag(effect).rootId).sort(),
     ["root-c", "root-d"]
   );
+});
+
+test("accumulating event effect keeps one timer and grants typed resistance to all limbs", async () => {
+  let worldTime = 100;
+  let nextId = 1;
+  let updateCount = 0;
+  const actor = { uuid: "Actor.C", effects: [] };
+  const manager = createEventReactionEffectManager({
+    worldTime: () => worldTime,
+    createEffects: async (subject, entries) => {
+      const created = entries.map(data => createEffectDocument(`accumulator-${nextId++}`, data));
+      subject.effects.push(...created);
+      return created;
+    },
+    updateEffect: async (effect, data) => {
+      updateCount += 1;
+      Object.assign(effect, structuredClone(data));
+      return effect;
+    },
+    deleteEffects: async (subject, ids) => {
+      subject.effects = subject.effects.filter(effect => !ids.includes(effect.id));
+    }
+  });
+  const sourceItem = {
+    uuid: "Actor.C.Item.adaptation",
+    name: "Adaptation",
+    img: "adaptation.webp",
+    system: {}
+  };
+  const abilityFunction = accumulatingDamageFunction();
+
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-1", damageTypeKey: "firearm", healthLoss: 100 })
+  });
+  assert.equal(actor.effects.length, 1);
+  assert.equal(actor.effects[0].start.time, 100);
+  assert.equal(actor.effects[0].duration.value, 86400);
+  assert.deepEqual(actor.effects[0].system.changes, [{
+    key: "system.damageResistanceBonuses.all.firearm",
+    type: "add",
+    value: "10",
+    phase: "initial",
+    priority: 0
+  }]);
+
+  worldTime = 200;
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-2", damageTypeKey: "firearm", healthLoss: 50 })
+  });
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-3", damageTypeKey: "piercing", healthLoss: 100 })
+  });
+  assert.equal(actor.effects.length, 1);
+  assert.equal(actor.effects[0].start.time, 100);
+  assert.equal(actor.effects[0].duration.value, 86400);
+  assert.deepEqual(
+    Object.fromEntries(actor.effects[0].system.changes.map(change => [change.key, change.value])),
+    {
+      "system.damageResistanceBonuses.all.firearm": "15",
+      "system.damageResistanceBonuses.all.piercing": "10"
+    }
+  );
+
+  const updatesBeforeDuplicate = updateCount;
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-3", damageTypeKey: "piercing", healthLoss: 100 })
+  });
+  assert.equal(updateCount, updatesBeforeDuplicate);
+
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-4", damageTypeKey: "slashing", healthLoss: 1000 })
+  });
+  const accumulated = getEventReactionEffectFlag(actor.effects[0])
+    .accumulators["adaptive-accumulation"];
+  assert.deepEqual(accumulated.buckets, { firearm: 15, piercing: 10, slashing: 25 });
+  assert.equal(accumulated.total, 50);
+  assert.equal(actor.effects[0].start.time, 100);
+
+  const updatesAtCap = updateCount;
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-5", damageTypeKey: "firearm", healthLoss: 100 })
+  });
+  assert.equal(updateCount, updatesAtCap);
+
+  worldTime = 86501;
+  await manager.apply({
+    actor,
+    sourceItem,
+    abilityFunction,
+    envelope: damageEnvelope({ eventId: "damage-6", damageTypeKey: "laser", healthLoss: 20 })
+  });
+  assert.equal(actor.effects.length, 1);
+  assert.equal(actor.effects[0].start.time, 86501);
+  assert.deepEqual(
+    getEventReactionEffectFlag(actor.effects[0]).accumulators["adaptive-accumulation"].buckets,
+    { laser: 2 }
+  );
+});
+
+test("accumulator retains fractions per damage type before rounding", () => {
+  const abilityFunction = accumulatingDamageFunction();
+  let state = {};
+  for (let index = 0; index < 10; index += 1) {
+    const envelope = damageEnvelope({
+      eventId: `fraction-${index}`,
+      damageTypeKey: "firearm",
+      healthLoss: 1
+    });
+    const next = buildNextAccumulatorState(state, {
+      settings: abilityFunction.conditions
+        .find(condition => condition.type === "accumulation").accumulation,
+      groupKey: "firearm",
+      contribution: 0.1
+    }, envelope);
+    assert.equal(next.changed, true);
+    state = next.state;
+  }
+  assert.equal(state.rawBuckets.firearm, 1);
+  assert.equal(state.buckets.firearm, 1);
+  assert.equal(state.total, 1);
+  assert.equal(hasAbilityFunctionEventEffectOutput(abilityFunction), true);
+});
+
+test("accumulator exchange supports grouped templates, aggregate keys, and per-point rates", () => {
+  const states = {
+    pool: {
+      buckets: { firearm: 2, piercing: 3 },
+      total: 5
+    }
+  };
+  const changes = buildAccumulatorEffectChanges(states, [{
+    key: "system.grouped.{group}",
+    type: "add",
+    value: "0.5",
+    phase: "initial",
+    priority: 2,
+    valueSource: "accumulation",
+    accumulatorExchange: { conditionId: "pool", mode: "invested" }
+  }, {
+    key: "system.aggregate",
+    type: "multiply",
+    value: "2",
+    phase: "initial",
+    priority: 1,
+    valueSource: "accumulation",
+    accumulatorExchange: { conditionId: "pool", mode: "invested" }
+  }]);
+
+  assert.deepEqual(changes, [{
+    key: "system.aggregate",
+    type: "multiply",
+    value: "10",
+    phase: "initial",
+    priority: 1
+  }, {
+    key: "system.grouped.firearm",
+    type: "add",
+    value: "1",
+    phase: "initial",
+    priority: 2
+  }, {
+    key: "system.grouped.piercing",
+    type: "add",
+    value: "1.5",
+    phase: "initial",
+    priority: 2
+  }]);
+});
+
+test("accumulator settings normalize safely and actual health loss does not count overkill fallback", () => {
+  assert.deepEqual(normalizeAbilityAccumulation({
+    percent: "10",
+    totalCap: "50",
+    bucketCap: "-2"
+  }), {
+    name: "",
+    valueSource: "damageActualHealthLoss",
+    percent: 10,
+    groupBy: "damageType",
+    totalCap: 50,
+    bucketCap: 0,
+    rounding: "floorTotal",
+    durationPolicy: "fromFirst"
+  });
+  assert.equal(getSystemEventNumericValue("damageActualHealthLoss", {
+    data: { result: { amount: 100, healthDelta: 0 } },
+    delta: { health: 0 }
+  }), 0);
+  assert.equal(getSystemEventGroupKey("none", {}), "all");
+});
+
+test("parallel damage roots cannot lose accumulator buckets or create duplicate effects", async () => {
+  let nextId = 1;
+  const actor = { uuid: "Actor.Concurrent", effects: [] };
+  const manager = createEventReactionEffectManager({
+    worldTime: () => 10,
+    createEffects: async (subject, entries) => {
+      await new Promise(resolve => setTimeout(resolve, 2));
+      const created = entries.map(data => createEffectDocument(`parallel-${nextId++}`, data));
+      subject.effects.push(...created);
+      return created;
+    },
+    updateEffect: async (effect, data) => {
+      await new Promise(resolve => setTimeout(resolve, 2));
+      Object.assign(effect, structuredClone(data));
+      return effect;
+    },
+    deleteEffects: async (subject, ids) => {
+      subject.effects = subject.effects.filter(effect => !ids.includes(effect.id));
+    }
+  });
+  const sourceItem = { uuid: "Actor.Concurrent.Item.adaptation", name: "Adaptation", system: {} };
+  const abilityFunction = accumulatingDamageFunction();
+  await Promise.all([
+    manager.apply({
+      actor,
+      sourceItem,
+      abilityFunction,
+      envelope: damageEnvelope({ rootId: "parallel-a", eventId: "parallel-fire", damageTypeKey: "firearm", healthLoss: 100 })
+    }),
+    manager.apply({
+      actor,
+      sourceItem,
+      abilityFunction,
+      envelope: damageEnvelope({ rootId: "parallel-b", eventId: "parallel-cut", damageTypeKey: "slashing", healthLoss: 100 })
+    })
+  ]);
+  assert.equal(actor.effects.length, 1);
+  assert.deepEqual(getEventReactionEffectFlag(actor.effects[0]).accumulators["adaptive-accumulation"].buckets, {
+    firearm: 10,
+    slashing: 10
+  });
+});
+
+test("accumulating reaction receives a separate opportunity for each typed event in one root", async () => {
+  const actor = { uuid: "Actor.C", items: [], effects: [] };
+  const abilityFunction = accumulatingDamageFunction({ eventKey: EVENT_KEY });
+  const item = createSourceItem(actor, {
+    id: "adaptation",
+    uuid: "Actor.C.Item.adaptation",
+    type: "ability",
+    functions: [abilityFunction]
+  });
+  actor.items = [item];
+  const docs = new Map([[actor.uuid, actor], [item.uuid, item]]);
+  const provider = createGenericEventReactionProvider({
+    getReactorActors: () => [actor],
+    resolveUuid: uuid => docs.get(uuid) ?? null,
+    costRegistry: createResourceCostRegistry({
+      getResourceDefinitions: () => [],
+      evaluateFormula: () => 0
+    }),
+    effectManager: {
+      apply: async () => ({}),
+      cleanupRoot: async () => 0,
+      cleanupOrphans: async () => 0
+    },
+    canOfferToActor: (_actor, _envelope, policy) => policy.allowUnconscious && !policy.allowDead,
+    conditionEvaluator: () => true,
+    normalizeFunctions: functions => functions,
+    hasEventKey: async () => false
+  });
+  const firstEnvelope = damageEnvelope({ rootId: "mixed", eventId: "mixed-fire", damageTypeKey: "firearm", healthLoss: 10, key: EVENT_KEY });
+  const secondEnvelope = damageEnvelope({ rootId: "mixed", eventId: "mixed-cut", damageTypeKey: "slashing", healthLoss: 10, key: EVENT_KEY });
+  const firstOffers = await provider.collect({
+    eventKey: EVENT_KEY,
+    context: { envelope: firstEnvelope, eventReactionParticipantIndexed: true }
+  });
+  assert.equal(firstOffers.length, 1);
+  assert.equal(firstOffers[0].passiveAutomatic, true);
+  assert.equal(firstOffers[0].allowUnconscious, true);
+  assert.equal(firstOffers[0].allowDead, false);
+  assert.equal((await provider.collect({
+    eventKey: EVENT_KEY,
+    context: { envelope: firstEnvelope, eventReactionParticipantIndexed: true }
+  })).length, 0);
+  assert.equal((await provider.collect({
+    eventKey: EVENT_KEY,
+    context: { envelope: secondEnvelope, eventReactionParticipantIndexed: true }
+  })).length, 1);
 });
 
 test("ability overload adds energy cost rows for any use of the same ability", () => {
@@ -852,4 +1214,78 @@ function createEffectDocument(id, data) {
       return this.flags?.[scope]?.[key];
     }
   };
+}
+
+function accumulatingDamageFunction({ eventKey = "fallout-maw.damage.resolved" } = {}) {
+  return {
+    id: "adaptive-resistance",
+    type: "effectChanges",
+    changes: [{
+      id: "adaptive-change",
+      key: "system.damageResistanceBonuses.all.{group}",
+      type: "add",
+      value: "1",
+      phase: "initial",
+      priority: 0,
+      valueSource: "accumulation",
+      accumulatorExchange: {
+        conditionId: "adaptive-accumulation",
+        mode: "invested"
+      }
+    }],
+    penalties: [],
+    actions: [],
+    conditions: [{
+      id: "adaptive-event",
+      groupId: "",
+      type: "eventReaction",
+      eventKey,
+      combatOnly: false,
+      allowUnconscious: true,
+      allowDead: false,
+      trackingTargets: ["owner"],
+      reactionMode: "isolatedAuto"
+    }, {
+      id: "adaptive-accumulation",
+      groupId: "",
+      type: "accumulation",
+      accumulation: {
+        name: "Adaptive resistance",
+        valueSource: "damageActualHealthLoss",
+        percent: 10,
+        groupBy: "damageType",
+        totalCap: 50,
+        bucketCap: 0,
+        rounding: "floorTotal",
+        durationPolicy: "fromFirst"
+      }
+    }, {
+      id: "adaptive-duration",
+      groupId: "",
+      type: "duration",
+      durationSeconds: 86400
+    }]
+  };
+}
+
+function damageEnvelope({
+  key = "fallout-maw.damage.resolved",
+  rootId = "damage-root",
+  eventId = "damage-event",
+  damageTypeKey = "firearm",
+  healthLoss = 0
+} = {}) {
+  return eventEnvelope({
+    key,
+    rootId,
+    eventId,
+    target: { actorUuid: "Actor.C" },
+    data: {
+      amount: healthLoss,
+      damageTypeKey,
+      result: { amount: healthLoss, healthDelta: -healthLoss }
+    },
+    delta: { health: -healthLoss },
+    outcome: { success: true, cancelled: false }
+  });
 }
