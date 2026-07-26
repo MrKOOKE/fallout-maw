@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "ce2b2f2997571ac19ad805f006d0470ab0b9716a54440724d24305316dfbe782",
-  "updatedAt": "2026-07-26T10:23:21.674Z",
+  "revision": "08ed0808a2916993d4e1bc664ed61fba75087ac7872e39e894118ab5dc9b0b77",
+  "updatedAt": "2026-07-26T10:57:23.120Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -4939,6 +4939,123 @@
           {
             "abilities": [
               {
+                "description": "<p>Стоимость активации: 80 энергии.<br>Перегрузка: 20 энергии на пол часа.</p><p>После активации все Враги в радиусе [[5+energy/10]]м пройдут проверку Стойкости со Сл [[50+energy]] и в случае провала будут оглушены.</p>",
+                "id": "Kps3fGukwsCHGqIc",
+                "img": "icons/svg/aura.svg",
+                "name": "Импульс",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "energy"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "IRy6vgv6xU4QCiKR",
+                      "skillKey": "energy",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Контроль энергии",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 80 энергии.<br>Перегрузка: 40 энергии на час.</p><p>После активации вы можете выбрать до [[1+energy/100]] целей в радиусе [[3+energy/10]]м и на протяжение следующих 30 секунд будет действовать</p><ul><li><p>Барьер от всех типов урона: [[30+energy/5]]</p></li></ul>",
+                "id": "e5sMNVTmOdW5me8f",
+                "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
+                "name": "Каменная кожа",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "energy"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3Jyy2M5BPmc1CcOn",
+                      "skillKey": "energy",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Контроль энергии",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "80",
+                            "id": "JnfN6UXQLFqxeFEv",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 3600,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": false,
+                        "includeSelf": true,
+                        "name": "",
+                        "radiusFormula": "3+ene/10",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1+ene/100",
+                        "targetMode": "others",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": true
+                      },
+                      "changes": [
+                        {
+                          "id": "MS2vDnSHBm6VPUOX",
+                          "key": "system.damageBarriers.all",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "30+ene/5"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 30,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "ERMJnxMSBn4unESy",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "ehjtELgMq69pMspA",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
                 "description": "<p>После активации, в открывшемся окне вы можете изменить ваши характеристики. <br>Общий объем изменений равен [[2+energy/40]].<br><br>Каждое уменьшение характеристики увеличивает максимальный объем энергии на 20.<br>Каждое увеличение характеристики уменьшает максимальный объем энергии на 20.</p><p>После подтверждения создается эффект длительностью в 24 часа. По его источению ваше перераспределение сбрасывается и вы можете вновь активировать способность.</p>",
                 "id": "nyUgh2jqjwMVLJgK",
                 "img": "systems/fallout-maw/assets/icons/1-7/oblechenie.webp",
@@ -4990,7 +5107,34 @@
                 "visible": true
               },
               {
-                "description": "<p>Стоимость активации: 30 энергии.<br>Перегрузка: 60 энергии на пол часа.</p><p>После активации  вы можете выбрать себя или соседа и на следующие 30 секунд</p><ul><li><p>+[[5+energy/10]] ко всем сопротивлениям</p></li><li><p>+[[20+energy/5]] заживления </p></li></ul>",
+                "description": "<p>Стоимость активации: 60 энергии.<br>Перегрузка: 40 энергии на час.</p><p>После активации вы можете выбрать до [[1+energy/50]] целей в радиусе [[10+energy/10]]м и те пройдут проверку стокойсти со Сл [[50+energy]] и в случае:</p><p>Провала:</p><ul><li><p>Получат [[50+energy/3]] Огненного урона в ключевую часть тела</p></li></ul><p>Успеха:</p><ul><li><p>Получат [[25+energy/10]] Огненного урона</p></li></ul>",
+                "id": "BFvrKZ5N5hOpOGk7",
+                "img": "icons/svg/aura.svg",
+                "name": "Самовозгорание",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "energy"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "Oh89NSfOmp1Ia5AS",
+                      "skillKey": "energy",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Контроль энергии",
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 30 энергии.<br>Перегрузка: 60 энергии на пол часа.</p><p>После активации вы можете выбрать себя или соседа и на следующие 30 секунд будет действовать.</p><ul><li><p>+[[20+energy/5]] заживления</p></li></ul>",
                 "id": "WmPzmYYDRGybdtsq",
                 "img": "icons/svg/aura.svg",
                 "name": "Сила земли",
@@ -5223,10 +5367,10 @@
                 "visible": true
               },
               {
-                "description": "<p>Сопротивелние ко всем видам урона: +10</p>",
+                "description": "<p>Сопротивелние ко всем видам урона: +[[5+resilience/20]]</p>",
                 "id": "Ddvgs7mYk9MxyL9c",
                 "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
-                "name": "Непробиваемый",
+                "name": "Крепкая плоть",
                 "system": {
                   "acquisition": {
                     "difficulty": 110,

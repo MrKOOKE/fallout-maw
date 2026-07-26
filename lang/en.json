@@ -850,6 +850,14 @@
           "Label": "Damage · Resolved",
           "Description": "Damage · Resolved. Emitted after the workflow commits or reaches its terminal result."
         },
+        "DamageBarrierAbsorbed": {
+          "Label": "Damage · Barrier · Absorbed",
+          "Description": "A barrier absorbed some or all damage remaining after mitigation."
+        },
+        "DamageBarrierDepleted": {
+          "Label": "Damage · Barrier · Depleted",
+          "Description": "One or more barrier keys were completely depleted."
+        },
         "HealingResolved": {
           "Label": "Healing · Resolved",
           "Description": "Healing · Resolved. Emitted after the workflow commits or reaches its terminal result."
@@ -1817,6 +1825,8 @@
       "Create": "Create Effect",
       "DamageDefenseBonuses": "Damage defense",
       "DamageResistanceBonuses": "Damage resistance",
+      "DamageBarriers": "Barrier",
+      "DamageBarrierAll": "Against all damage types",
       "CombatGroup": "Combat",
       "CombatAdvantage": "Advantage",
       "CombatDisadvantage": "Disadvantage",

@@ -372,6 +372,7 @@ async function handleCombatEndFinish({
       scope: "limb",
       applyMitigation: false,
       processDamageTypeSettings: false,
+      bypassBarrier: true,
       source: {
         attackerUuid: attacker.uuid,
         combatEndResolution: true,

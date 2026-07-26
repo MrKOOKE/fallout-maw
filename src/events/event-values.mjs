@@ -21,7 +21,13 @@ export function getSystemEventNumericValue(valueSource = "", envelope = {}) {
     return positiveNumber(data.amount);
   }
   if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageAfterMitigation) {
-    return positiveNumber(result.amount);
+    return positiveNumber(result.preBarrierAmount ?? result.amount);
+  }
+  if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageBarrierAbsorbed) {
+    return positiveNumber(result.barrierAbsorbed);
+  }
+  if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageAfterBarrier) {
+    return positiveNumber(result.amountAfterBarrier ?? result.amount);
   }
   if (source === ABILITY_ACCUMULATION_VALUE_SOURCES.damageActualHealthLoss) {
     if (Object.hasOwn(delta, "health")) return positiveNumber(-finiteNumber(delta.health));

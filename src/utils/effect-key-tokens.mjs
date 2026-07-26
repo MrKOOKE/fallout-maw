@@ -4,6 +4,10 @@ import {
   DODGE_LOSS_MODIFIER_EFFECT_KEY,
   DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
 } from "../combat/dodge-effect-keys.mjs";
+import {
+  DAMAGE_BARRIER_ALL_EFFECT_KEY,
+  getDamageBarrierEffectKey
+} from "../combat/damage-barriers.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -131,6 +135,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
     }),
     ...buildDamageMitigationEffectKeyTokens(),
+    ...buildDamageBarrierEffectKeyTokens(),
     ...buildLimbMaxBonusEffectKeyTokens(),
     ...buildImplantLimitEffectKeyTokens(),
     createEffectKeyToken({
@@ -969,6 +974,35 @@ export function buildDamageMitigationEffectKeyTokens() {
         }));
       }
     }
+  }
+
+  return tokens.filter(Boolean);
+}
+
+export function buildDamageBarrierEffectKeyTokens() {
+  const group = localizeOrFallback("FALLOUTMAW.Effects.DamageBarriers", "Барьер");
+  const allDamageTypes = localizeOrFallback("FALLOUTMAW.Effects.DamageBarrierAll", "От всех видов урона");
+  const tokens = [
+    createEffectKeyToken({
+      code: "barrier:all",
+      key: "all",
+      label: `${group}: ${allDamageTypes}`,
+      path: DAMAGE_BARRIER_ALL_EFFECT_KEY,
+      group
+    })
+  ];
+
+  for (const damageType of getDamageTypeSettings()) {
+    const key = String(damageType?.key ?? "").trim();
+    if (!key || key === "all" || key.includes(".")) continue;
+    const label = String(damageType?.label ?? key).trim() || key;
+    tokens.push(createEffectKeyToken({
+      code: `barrier:${key}`,
+      key,
+      label: `${group}: ${label}`,
+      path: getDamageBarrierEffectKey(key),
+      group
+    }));
   }
 
   return tokens.filter(Boolean);

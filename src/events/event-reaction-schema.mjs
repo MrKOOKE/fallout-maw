@@ -214,6 +214,8 @@ const DAMAGE_WORKFLOW_EVENTS = new Set([
   "fallout-maw.damage.beforeApply",
   "fallout-maw.healing.beforeApply",
   "fallout-maw.damage.resolved",
+  "fallout-maw.damage.barrier.absorbed",
+  "fallout-maw.damage.barrier.depleted",
   "fallout-maw.healing.resolved"
 ]);
 

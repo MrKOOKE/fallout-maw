@@ -321,13 +321,13 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
     return captures;
   }
 
-  if (data?.applyMitigation !== false) {
-    captures.push(...captureActorLimitedUseCandidates(targetActor, getDamageResolutionActiveUseKeys({
-      actor: targetActor,
-      limbKey: data?.limbKey,
-      damageTypeKey: data?.damageTypeKey
-    }), [targetContext], false));
-  }
+  captures.push(...captureActorLimitedUseCandidates(targetActor, getDamageResolutionActiveUseKeys({
+    actor: targetActor,
+    limbKey: data?.limbKey,
+    damageTypeKey: data?.damageTypeKey,
+    includeMitigation: data?.applyMitigation !== false,
+    includeBarriers: data?.bypassBarrier !== true
+  }), [targetContext], false));
 
   if (sourceActor && actionKey) {
     const sourceContext = buildConditionContext({
@@ -548,12 +548,14 @@ async function consumeLimitedUsesForDamageEvent({ event } = {}) {
     return [];
   }
 
-  if (data?.applyMitigation === false) return [];
   const keys = getDamageResolutionActiveUseKeys({
     actor: targetActor,
     limbKey: data?.limbKey,
-    damageTypeKey: data?.damageTypeKey
+    damageTypeKey: data?.damageTypeKey,
+    includeMitigation: data?.applyMitigation !== false,
+    includeBarriers: data?.bypassBarrier !== true
   });
+  if (!keys.size) return [];
   await queuePendingRootUse(rootId, targetActor, keys, {
     operationId,
     conditionContexts: [context],

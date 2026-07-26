@@ -111,6 +111,7 @@ async function spendHealthCost(actor, amount, context = {}) {
     scope: "health",
     applyMitigation: false,
     processDamageTypeSettings: false,
+    bypassBarrier: true,
     source: {
       kind: "abilityTriggerCost",
       unmitigated: true,

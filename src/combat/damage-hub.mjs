@@ -27,9 +27,15 @@ import {
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import {
+  evaluateActorEffectChangeBaseNumber,
   evaluateActorEffectChangeNumber,
   getActorSuppressedTraumaDiseaseIds
 } from "../utils/active-effect-changes.mjs";
+import {
+  absorbDamageWithBarrier,
+  commitDamageBarrierLedger,
+  createDamageBarrierLedger
+} from "./damage-barriers.mjs";
 import { getContextualAbilityChangeValue, getContextualAbilityChangeValues } from "../abilities/evaluation.mjs";
 import { getUnconsciousnessResistanceActiveUseKeys } from "../abilities/active-use-keys.mjs";
 import {
@@ -541,7 +547,10 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
   batch = false
 } = {}) {
   const normalized = (Array.isArray(requests) ? requests : [requests])
-    .map(normalizeDamageRequest)
+    .map((request, index) => ({
+      ...normalizeDamageRequest(request),
+      damageEventIndex: index
+    }))
     .filter(request => request.actorUuid);
   if (!normalized.length) return single ? undefined : [];
   const inheritedChainRef = normalized.find(request => request.source?.chainRef)?.source?.chainRef ?? null;
@@ -671,19 +680,30 @@ async function emitDamageResolvedSystemEvent(scope, request, result = {}, {
 } = {}) {
   const actor = result?.actor ?? await fromUuid(request.actorUuid);
   const after = getDamageEventActorSnapshot(actor, request);
+  const barrierResult = getDamageRequestBarrierResult(result, index);
+  const serializedResult = serializeDamageEventResult({
+    ...result,
+    ...barrierResult
+  });
   const resolvedKey = request.mode === MODE_HEALING
     ? "fallout-maw.healing.resolved"
     : "fallout-maw.damage.resolved";
-  return scope.emit(resolvedKey, {
+  const eventDelta = barrierResult.hasApplicationBreakdown
+    ? {
+      health: -Math.max(0, Number(barrierResult.actualHealthDelta) || 0),
+      limb: -Math.max(0, Number(barrierResult.actualLimbDelta) || 0)
+    }
+    : getDamageEventDelta(before, after);
+  const emitted = await scope.emit(resolvedKey, {
     data: {
       ...serializeDamageEventRequest(request),
-      result: serializeDamageEventResult(result),
+      result: serializedResult,
       inDamageHubOperation: true,
       damageHubOperationRef: getCurrentDamageHubOperationRef()
     },
     before,
     after,
-    delta: getDamageEventDelta(before, after),
+    delta: eventDelta,
     outcome: {
       success: !result?.failed && !cancelled,
       cancelled: Boolean(cancelled || result?.cancelled),
@@ -694,6 +714,37 @@ async function emitDamageResolvedSystemEvent(scope, request, result = {}, {
     occurrenceKey: `${occurrenceBase}:resolved`,
     participants: getDamageEventParticipants(request, actor)
   });
+  if (request.mode === MODE_DAMAGE && serializedResult.barrierAbsorbed > 0) {
+    const payload = {
+      data: {
+        ...serializeDamageEventRequest(request),
+        result: serializedResult,
+        barriers: barrierResult.depleted,
+        inDamageHubOperation: true,
+        damageHubOperationRef: getCurrentDamageHubOperationRef()
+      },
+      before,
+      after,
+      delta: eventDelta,
+      outcome: {
+        success: true,
+        depleted: barrierResult.depleted.length > 0
+      },
+      reason: barrierResult.depleted.length ? "depleted" : "absorbed"
+    };
+    const participants = getDamageEventParticipants(request, actor);
+    await scope.emit("fallout-maw.damage.barrier.absorbed", payload, {
+      occurrenceKey: `${occurrenceBase}:barrier:absorbed`,
+      participants
+    });
+    if (barrierResult.depleted.length) {
+      await scope.emit("fallout-maw.damage.barrier.depleted", payload, {
+        occurrenceKey: `${occurrenceBase}:barrier:depleted`,
+        participants
+      });
+    }
+  }
+  return emitted;
 }
 
 function serializeDamageEventRequest(request = {}) {
@@ -707,6 +758,7 @@ function serializeDamageEventRequest(request = {}) {
     scope: String(request.scope ?? ""),
     applyMitigation: request.applyMitigation !== false,
     processDamageTypeSettings: request.processDamageTypeSettings !== false,
+    bypassBarrier: request.bypassBarrier === true,
     source: serializeDamageEventSource(request.source)
   };
 }
@@ -727,6 +779,10 @@ function serializeDamageEventResult(result = {}) {
     actorUuid: String(result?.actor?.uuid ?? result?.actorUuid ?? ""),
     amount: Math.max(0, Number(result?.amount) || 0),
     potentialAmount: Math.max(0, Number(result?.potentialAmount) || 0),
+    preBarrierAmount: Math.max(0, Number(result?.preBarrierAmount) || 0),
+    barrierAbsorbed: Math.max(0, Number(result?.barrierAbsorbed) || 0),
+    amountAfterBarrier: Math.max(0, Number(result?.amountAfterBarrier ?? result?.amount) || 0),
+    barrierDepletedCount: Array.isArray(result?.barrierDepleted) ? result.barrierDepleted.length : 0,
     preventedAmount: Math.max(0, Number(result?.preventedAmount) || 0),
     healthDelta: Number(result?.healthDelta) || 0,
     resourceHealthDelta: Number(result?.resourceHealthDelta) || 0,
@@ -738,6 +794,66 @@ function serializeDamageEventResult(result = {}) {
     damageTypeKey: String(result?.damageTypeKey ?? ""),
     cancelled: Boolean(result?.cancelled),
     failed: Boolean(result?.failed)
+  };
+}
+
+function getDamageRequestBarrierResult(result = {}, eventIndex = 0) {
+  const hasApplicationBreakdown = Array.isArray(result?.damageApplications);
+  const applications = hasApplicationBreakdown
+    ? result.damageApplications.filter(entry => Number(entry?.damageEventIndex) === Number(eventIndex))
+    : [];
+  if (!applications.length) {
+    if (hasApplicationBreakdown) {
+      return {
+        preBarrierAmount: 0,
+        barrierAbsorbed: 0,
+        amountAfterBarrier: 0,
+        actualHealthDelta: 0,
+        actualLimbDelta: 0,
+        healthDelta: 0,
+        limbDelta: 0,
+        hasApplicationBreakdown: true,
+        depleted: [],
+        barrierDepleted: []
+      };
+    }
+    return {
+      preBarrierAmount: Math.max(0, Number(result?.preBarrierAmount) || 0),
+      barrierAbsorbed: Math.max(0, Number(result?.barrierAbsorbed) || 0),
+      amountAfterBarrier: Math.max(0, Number(result?.amountAfterBarrier ?? result?.amount) || 0),
+      actualHealthDelta: Math.max(0, Number(result?.healthDelta) || 0),
+      actualLimbDelta: Math.max(0, Number(result?.limbDelta) || 0),
+      hasApplicationBreakdown: false,
+      depleted: Array.isArray(result?.barrierDepleted) ? result.barrierDepleted : [],
+      barrierDepleted: Array.isArray(result?.barrierDepleted) ? result.barrierDepleted : []
+    };
+  }
+  const depleted = applications.flatMap(entry => entry?.barrierDepleted ?? []);
+  return {
+    preBarrierAmount: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.preBarrierAmount) || 0)
+    ), 0),
+    barrierAbsorbed: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.barrierAbsorbed) || 0)
+    ), 0),
+    amountAfterBarrier: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.amountAfterBarrier ?? entry?.amount) || 0)
+    ), 0),
+    actualHealthDelta: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.actualHealthDelta) || 0)
+    ), 0),
+    actualLimbDelta: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.actualLimbDelta) || 0)
+    ), 0),
+    healthDelta: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.actualHealthDelta) || 0)
+    ), 0),
+    limbDelta: applications.reduce((sum, entry) => (
+      sum + Math.max(0, Number(entry?.actualLimbDelta) || 0)
+    ), 0),
+    hasApplicationBreakdown: true,
+    depleted,
+    barrierDepleted: depleted
   };
 }
 
@@ -908,6 +1024,10 @@ function serializeDamageCycleSocketResults(results = []) {
   return results.flat(Infinity).filter(Boolean).map(result => ({
     actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
     amount: roundDamageAmount(result.amount),
+    preBarrierAmount: roundDamageAmount(result.preBarrierAmount),
+    barrierAbsorbed: roundDamageAmount(result.barrierAbsorbed),
+    amountAfterBarrier: roundDamageAmount(result.amountAfterBarrier ?? result.amount),
+    barrierDepletedCount: Array.isArray(result.barrierDepleted) ? result.barrierDepleted.length : 0,
     healthDelta: roundDamageAmount(result.healthDelta),
     resourceHealthDelta: roundDamageAmount(result.resourceHealthDelta),
     limbDelta: roundDamageAmount(result.limbDelta),
@@ -958,7 +1078,11 @@ export async function applyDamageApplication(request = {}, options = {}) {
   ), { operationRef });
 }
 
-async function applyDamageApplicationNow(request = {}, { createSummary = true } = {}) {
+async function applyDamageApplicationNow(request = {}, {
+  createSummary = true,
+  damageBarrierLedger: suppliedDamageBarrierLedger = null,
+  damageBarrierCommit: suppliedDamageBarrierCommit = null
+} = {}) {
   const data = normalizeDamageRequest(request);
   const actor = await fromUuid(data.actorUuid);
   if (!actor) return undefined;
@@ -974,6 +1098,20 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope, limbKey: data.limbKey };
   }
 
+  const ownsDamageBarrierLedger = mode === MODE_DAMAGE && !suppliedDamageBarrierLedger;
+  const damageBarrierLedger = suppliedDamageBarrierLedger
+    ?? (mode === MODE_DAMAGE ? createActorDamageBarrierLedger(actor) : null);
+  let damageBarrierCommitted = false;
+  const commitOwnedDamageBarrier = async () => {
+    if (typeof suppliedDamageBarrierCommit === "function") {
+      await suppliedDamageBarrierCommit();
+      return;
+    }
+    if (!ownsDamageBarrierLedger || !damageBarrierLedger || damageBarrierCommitted) return;
+    await commitDamageBarrierLedger(actor, damageBarrierLedger);
+    damageBarrierCommitted = true;
+  };
+  try {
   const requestedAmount = mode === MODE_HEALING
     ? applyHealingModifierPercent(data.amount, getActorHealingModifierPercent(actor, "incoming", {
       chanceOperationId: getActiveUseOperationId(data?.source, getCurrentDamageHubOperationRef())
@@ -986,7 +1124,9 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       createSummary,
       damageType,
       periodic,
-      scope
+      scope,
+      damageBarrierLedger,
+      damageBarrierCommit: commitOwnedDamageBarrier
     });
   }
 
@@ -999,7 +1139,7 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     })
     : { amount: requestedAmount, display: null };
   const mitigatedAmount = mitigationResult.amount;
-  const effectiveAmount = mode === MODE_DAMAGE && data.processDamageTypeSettings
+  const effectiveAmountBeforeBarrier = mode === MODE_DAMAGE && data.processDamageTypeSettings
     ? hasInstalledProsthesis(actor, data.limbKey)
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
@@ -1008,7 +1148,51 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     ? buildDamageMitigationDisplay(data.amount, mitigatedAmount)
     : null;
   if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
-  if (effectiveAmount <= 0) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
+  if (effectiveAmountBeforeBarrier <= 0) {
+    return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
+  }
+
+  const barrierApplication = mode === MODE_DAMAGE
+    ? absorbDamageWithBarrier(damageBarrierLedger, {
+      amount: effectiveAmountBeforeBarrier,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      bypassBarrier: data.bypassBarrier
+    })
+    : {
+      incoming: effectiveAmountBeforeBarrier,
+      absorbed: 0,
+      remaining: effectiveAmountBeforeBarrier,
+      depleted: []
+    };
+  const effectiveAmount = barrierApplication.remaining;
+  await commitOwnedDamageBarrier();
+  if (effectiveAmount <= 0) {
+    if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
+      await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
+      await applyResistanceOverheats(actor, [mitigationResult.resistanceOverheat]);
+    }
+    const result = {
+      actor,
+      amount: 0,
+      potentialAmount: effectiveAmountBeforeBarrier,
+      preBarrierAmount: effectiveAmountBeforeBarrier,
+      barrierAbsorbed: barrierApplication.absorbed,
+      amountAfterBarrier: 0,
+      barrierDepleted: barrierApplication.depleted,
+      healthDelta: 0,
+      limbDelta: 0,
+      mode,
+      scope,
+      limbKey: data.limbKey,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      source: data.source
+    };
+    if (createSummary) {
+      await publishDamageSummaryMessage([result]);
+      notifyDamageApplied([result]);
+    }
+    return result;
+  }
 
   const needIncrease = damageType?.settings?.needIncrease;
   if (mode === MODE_DAMAGE && !needIncrease?.preventHealthDamage) {
@@ -1027,7 +1211,11 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       return {
         actor,
         amount: 0,
-        potentialAmount: effectiveAmount,
+        potentialAmount: effectiveAmountBeforeBarrier,
+        preBarrierAmount: effectiveAmountBeforeBarrier,
+        barrierAbsorbed: barrierApplication.absorbed,
+        amountAfterBarrier: effectiveAmount,
+        barrierDepleted: barrierApplication.depleted,
         preventedAmount: effectiveAmount,
         lethalDamagePrevented: true,
         healthDelta: 0,
@@ -1052,7 +1240,27 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       settings: needIncrease
     });
     if (needIncrease.preventHealthDamage) {
-      return { actor, amount: 0, potentialAmount: effectiveAmount, healthDelta: 0, limbDelta: 0, mode, scope };
+      const result = {
+        actor,
+        amount: 0,
+        potentialAmount: effectiveAmountBeforeBarrier,
+        preBarrierAmount: effectiveAmountBeforeBarrier,
+        barrierAbsorbed: barrierApplication.absorbed,
+        amountAfterBarrier: 0,
+        barrierDepleted: barrierApplication.depleted,
+        healthDelta: 0,
+        limbDelta: 0,
+        mode,
+        scope,
+        limbKey: data.limbKey,
+        damageTypeKey: damageType?.key ?? data.damageTypeKey,
+        source: data.source
+      };
+      if (createSummary && result.barrierAbsorbed > 0) {
+        await publishDamageSummaryMessage([result]);
+        notifyDamageApplied([result]);
+      }
+      return result;
     }
   }
 
@@ -1063,6 +1271,10 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     mode,
     scope
   }, damageType);
+  result.preBarrierAmount = effectiveAmountBeforeBarrier;
+  result.barrierAbsorbed = barrierApplication.absorbed;
+  result.amountAfterBarrier = effectiveAmount;
+  result.barrierDepleted = barrierApplication.depleted;
   if (mode === MODE_DAMAGE && data.processDamageTypeSettings && result.healthDelta > 0) {
     await createResourceLimitEffect(actor, {
       damageType,
@@ -1102,6 +1314,9 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     notifyDamageApplied([result]);
   }
   return result;
+  } finally {
+    await commitOwnedDamageBarrier();
+  }
 }
 
 async function applyItemConditionDamageApplicationNow(actor, data = {}, { createSummary = false } = {}) {
@@ -1153,7 +1368,14 @@ async function applyItemConditionDamageApplicationNow(actor, data = {}, { create
   return result;
 }
 
-async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { createSummary = true, damageType = null, periodic = {}, scope = SCOPE_HEALTH } = {}) {
+async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, {
+  createSummary = true,
+  damageType = null,
+  periodic = {},
+  scope = SCOPE_HEALTH,
+  damageBarrierLedger = null,
+  damageBarrierCommit = null
+} = {}) {
   const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
   const source = markPeriodicDamageSplitSource(data.source);
   const immediateResult = immediateAmount > 0
@@ -1162,7 +1384,7 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { create
       amount: immediateAmount,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       source
-    }, { createSummary: false })
+    }, { createSummary: false, damageBarrierLedger, damageBarrierCommit })
     : { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode: MODE_DAMAGE, scope, createdTraumas: [] };
 
   if (delayedAmount > 0 && !immediateResult?.lethalDamagePrevented) await createPeriodicDamageEffect(actor, {
@@ -1177,7 +1399,8 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { create
 
   const result = {
     ...immediateResult,
-    amount: immediateAmount,
+    amount: Math.max(0, Number(immediateResult?.amount) || 0),
+    potentialAmount: Math.max(0, Number(immediateResult?.potentialAmount) || immediateAmount),
     delayedAmount
   };
   if (createSummary) {
@@ -1220,6 +1443,13 @@ export function estimateDamageApplication(request = {}) {
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
+  const preBarrierAmount = effectiveAmount;
+  const barrierApplication = absorbDamageWithBarrier(createActorDamageBarrierLedger(actor), {
+    amount: effectiveAmount,
+    damageTypeKey: damageType?.key ?? data.damageTypeKey,
+    bypassBarrier: data.bypassBarrier
+  });
+  effectiveAmount = barrierApplication.remaining;
 
   const needIncrease = damageType?.settings?.needIncrease;
   if (data.processDamageTypeSettings && needIncrease?.enabled && needIncrease.preventHealthDamage) effectiveAmount = 0;
@@ -1245,6 +1475,9 @@ export function estimateDamageApplication(request = {}) {
     });
   return {
     amount: Math.max(0, roundDamageAmount(data.amount)),
+    preBarrierAmount: Math.max(0, roundDamageAmount(preBarrierAmount)),
+    barrierAbsorbed: Math.max(0, roundDamageAmount(barrierApplication.absorbed)),
+    amountAfterBarrier: Math.max(0, roundDamageAmount(barrierApplication.remaining)),
     healthDamage: Math.max(0, roundDamageAmount(result.healthDelta)),
     limbDamage: Math.max(0, roundDamageAmount(result.limbDelta)),
     partDamage: Math.max(0, roundDamageAmount(result.limbDelta)),
@@ -1270,11 +1503,24 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
+  const hasBarrierEligibleDamage = requests.some(request => {
+    const data = normalizeDamageRequest(request);
+    return data.mode === MODE_DAMAGE && data.scope !== SCOPE_ITEM_CONDITION;
+  });
+  const damageBarrierLedger = hasBarrierEligibleDamage ? createActorDamageBarrierLedger(actor) : null;
+  let damageBarrierCommitted = false;
+  const commitDamageBarrier = async () => {
+    if (!damageBarrierLedger || damageBarrierCommitted) return;
+    await commitDamageBarrierLedger(actor, damageBarrierLedger);
+    damageBarrierCommitted = true;
+  };
+  try {
   let results = [];
   const resourceHealthBefore = calculateAggregateHealth(actor).value;
 
   const batchRequests = [];
   const singleResults = [];
+  const damageApplications = [];
   const mitigationDisplays = [];
   const resistanceOverheats = [];
   const pendingPeriodicDamageEffects = [];
@@ -1282,7 +1528,10 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
-      singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
+      singleResults.push(await applyDamageApplicationNow(data, {
+        createSummary: false,
+        damageBarrierLedger
+      }));
       continue;
     }
     if (data.scope === SCOPE_ITEM_CONDITION) {
@@ -1290,17 +1539,36 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       continue;
     }
 
-    const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
+    const entry = await prepareDamageBatchEntry(actor, data, {
+      equipmentConditionDamageState,
+      pendingPeriodicDamageEffects,
+      damageBarrierLedger
+    });
     if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
     if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
+    if (entry) damageApplications.push(entry);
     if (entry?.amount > 0) batchRequests.push(entry);
+  }
+  await commitDamageBarrier();
+  for (const entry of damageApplications) {
+    if (!entry?.needIncreaseApplication) continue;
+    await applyNeedIncrease(actor, entry.needIncreaseApplication);
   }
 
   const mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
   if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
 
   const batchPotentialAmount = batchRequests.reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.amount)), 0);
-  const batchSource = selectBatchFinishingBlowSource(batchRequests)?.source ?? {};
+  const batchPreBarrierAmount = damageApplications
+    .reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.preBarrierAmount ?? entry.amount)), 0);
+  const batchAmountAfterBarrier = damageApplications
+    .reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.amountAfterBarrier ?? entry.amount)), 0);
+  const batchBarrierAbsorbed = damageApplications
+    .reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.barrierAbsorbed)), 0);
+  const batchBarrierDepleted = damageApplications.flatMap(entry => entry.barrierDepleted ?? []);
+  const batchSource = selectBatchFinishingBlowSource(batchRequests)?.source
+    ?? damageApplications.find(entry => entry?.source)?.source
+    ?? {};
   const batchEstimate = batchRequests.length ? estimateDamageEntriesBatch(actor, batchRequests) : null;
   const batchPrevented = batchEstimate
     ? await preventLethalDamageIfApplicable(actor, batchEstimate, {
@@ -1324,7 +1592,37 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     }
     : batchRequests.length
       ? await applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks })
-      : undefined;
+      : batchBarrierAbsorbed > 0
+        ? {
+          actor,
+          amount: 0,
+          healthDelta: 0,
+          limbDelta: 0,
+          mode: MODE_DAMAGE,
+          scope: SCOPE_HEALTH_AND_LIMB,
+          source: batchSource
+        }
+        : undefined;
+  if (batchResult && (batchPreBarrierAmount > 0 || batchBarrierAbsorbed > 0)) {
+    batchResult.preBarrierAmount = batchPreBarrierAmount;
+    batchResult.barrierAbsorbed = batchBarrierAbsorbed;
+    batchResult.amountAfterBarrier = batchAmountAfterBarrier;
+    batchResult.barrierDepleted = batchBarrierDepleted;
+    batchResult.damageApplications = damageApplications.map(entry => ({
+      damageEventIndex: entry.damageEventIndex,
+      damageTypeKey: entry.damageTypeKey,
+      preBarrierAmount: entry.preBarrierAmount,
+      barrierAbsorbed: entry.barrierAbsorbed,
+      amountAfterBarrier: entry.amount,
+      actualHealthDelta: batchResult.applicationDeltas
+        ?.filter(delta => Number(delta?.damageEventIndex) === Number(entry.damageEventIndex))
+        .reduce((sum, delta) => sum + Math.max(0, Number(delta?.healthDelta) || 0), 0) ?? 0,
+      actualLimbDelta: batchResult.applicationDeltas
+        ?.filter(delta => Number(delta?.damageEventIndex) === Number(entry.damageEventIndex))
+        .reduce((sum, delta) => sum + Math.max(0, Number(delta?.limbDelta) || 0), 0) ?? 0,
+      barrierDepleted: entry.barrierDepleted
+    }));
+  }
   if (!batchPrevented) {
     await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
     await applyResistanceOverheats(actor, resistanceOverheats);
@@ -1359,9 +1657,16 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     notifyDamageApplied(results);
   }
   return results;
+  } finally {
+    await commitDamageBarrier();
+  }
 }
 
-async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null, pendingPeriodicDamageEffects = null } = {}) {
+async function prepareDamageBatchEntry(actor, data = {}, {
+  equipmentConditionDamageState = null,
+  pendingPeriodicDamageEffects = null,
+  damageBarrierLedger = null
+} = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
@@ -1382,7 +1687,7 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
       amount: immediateAmount,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       source: markPeriodicDamageSplitSource(data.source)
-    }, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
+    }, { equipmentConditionDamageState, pendingPeriodicDamageEffects, damageBarrierLedger });
   }
 
   const mitigationResult = data.applyMitigation
@@ -1395,7 +1700,7 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
     })
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
-  const effectiveAmount = data.processDamageTypeSettings
+  const effectiveAmountBeforeBarrier = data.processDamageTypeSettings
     ? hasInstalledProsthesis(actor, data.limbKey)
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
@@ -1403,7 +1708,7 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
   const damageMitigationDisplay = data.applyMitigation
     ? buildDamageMitigationDisplay(data.amount, mitigatedAmount)
     : null;
-  if (effectiveAmount <= 0) {
+  if (effectiveAmountBeforeBarrier <= 0) {
     return damageMitigationDisplay
       ? {
         ...data,
@@ -1417,18 +1722,44 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
       : null;
   }
 
-  const needIncrease = damageType?.settings?.needIncrease;
-  if (data.processDamageTypeSettings && needIncrease?.enabled) {
-    await applyNeedIncrease(actor, {
-      amount: effectiveAmount,
-      settings: needIncrease
-    });
-    if (needIncrease.preventHealthDamage) return null;
+  const barrierApplication = absorbDamageWithBarrier(damageBarrierLedger, {
+    amount: effectiveAmountBeforeBarrier,
+    damageTypeKey: damageType?.key ?? data.damageTypeKey,
+    bypassBarrier: data.bypassBarrier
+  });
+  const effectiveAmount = barrierApplication.remaining;
+  if (effectiveAmount <= 0) {
+    return {
+      ...data,
+      amount: 0,
+      preBarrierAmount: effectiveAmountBeforeBarrier,
+      barrierAbsorbed: barrierApplication.absorbed,
+      amountAfterBarrier: 0,
+      barrierDepleted: barrierApplication.depleted,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      damageType,
+      scope,
+      damageMitigationDisplay,
+      resistanceOverheat: mitigationResult.resistanceOverheat
+    };
   }
+
+  const needIncrease = damageType?.settings?.needIncrease;
+  const needIncreaseApplication = data.processDamageTypeSettings && needIncrease?.enabled
+    ? { amount: effectiveAmount, settings: needIncrease }
+    : null;
+  const amountAfterNeed = needIncreaseApplication && needIncrease.preventHealthDamage
+    ? 0
+    : effectiveAmount;
 
   return {
     ...data,
-    amount: effectiveAmount,
+    amount: amountAfterNeed,
+    preBarrierAmount: effectiveAmountBeforeBarrier,
+    barrierAbsorbed: barrierApplication.absorbed,
+    amountAfterBarrier: effectiveAmount,
+    barrierDepleted: barrierApplication.depleted,
+    needIncreaseApplication,
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
     damageType,
     scope,
@@ -5005,6 +5336,8 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
         damageAccumulation
       });
     actualHealthDelta += result.healthDelta;
+    entry.actualHealthDelta = Math.max(0, Number(result.healthDelta) || 0);
+    entry.actualLimbDelta = Math.max(0, Number(result.limbDelta) || 0);
     if (result.shockCheck) shockChecks.push(result.shockCheck);
   }
 
@@ -5074,6 +5407,11 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
   const finishingBlowSource = selectBatchFinishingBlowSource(normalizedEntries);
   const totalLimbDelta = Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0);
   const sourceDamageEntries = buildBatchSourceDamageEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
+  const applicationDeltas = normalizedEntries.map(entry => ({
+    damageEventIndex: entry.damageEventIndex,
+    healthDelta: Math.max(0, Number(entry.actualHealthDelta) || 0),
+    limbDelta: Math.max(0, Number(entry.actualLimbDelta) || 0)
+  }));
   const finishingBlow = actualHealthDelta > 0 && finishingBlowSource
     ? await applyFinishingBlowIfEligible(actor, finishingBlowSource)
     : null;
@@ -5091,6 +5429,7 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     bleedingEntries,
     createdTraumas,
     sourceDamageEntries,
+    applicationDeltas,
     source: finishingBlowSource?.source ?? {},
     finishingBlow
   };
@@ -5303,11 +5642,13 @@ async function publishDamageSummaryMessage(results = []) {
         damageSummary: {
           totalHealthDamage: context.totalHealthDamage,
           totalLimbDamage: context.totalLimbDamage,
+          totalBarrierAbsorbed: context.totalBarrierAbsorbed,
           victims: context.victims.map(victim => ({
             actorUuid: victim.actorUuid,
             name: victim.name,
             healthDamage: victim.healthDamage,
             limbDamage: victim.limbDamage,
+            barrierAbsorbed: victim.barrierAbsorbed,
             limbs: victim.limbs.map(limb => ({
               key: limb.key,
               label: limb.label,
@@ -5340,12 +5681,14 @@ function buildDamageSummaryViewContext(results = []) {
 
     const healthDelta = roundDamageAmount(result.healthDelta);
     const limbDelta = roundDamageAmount(result.limbDelta);
+    const barrierAbsorbed = roundDamageAmount(result.barrierAbsorbed);
     const createdTraumas = Array.isArray(result.createdTraumas) ? result.createdTraumas.filter(Boolean) : [];
-    if (healthDelta <= 0 && limbDelta <= 0 && !createdTraumas.length) continue;
+    if (healthDelta <= 0 && limbDelta <= 0 && barrierAbsorbed <= 0 && !createdTraumas.length) continue;
 
     const victim = getDamageSummaryVictim(victims, actor);
     victim.healthDamage += healthDelta;
     victim.limbDamage += limbDelta;
+    victim.barrierAbsorbed += barrierAbsorbed;
 
     for (const entry of result.healthDeltasByType ?? []) {
       const damageTypeKey = String(entry?.damageTypeKey ?? "untyped");
@@ -5374,6 +5717,7 @@ function buildDamageSummaryViewContext(results = []) {
       img: getActorDamageSummaryImage(victim.actor),
       healthDamage: roundDamageAmount(victim.healthDamage),
       limbDamage: roundDamageAmount(victim.limbDamage),
+      barrierAbsorbed: roundDamageAmount(victim.barrierAbsorbed),
       limbs: Array.from(victim.limbs.values())
         .map(limb => ({
           key: limb.key,
@@ -5390,18 +5734,28 @@ function buildDamageSummaryViewContext(results = []) {
           summary: trauma.summary
         }))
     }))
-    .filter(victim => victim.healthDamage > 0 || victim.limbDamage > 0 || victim.traumas.length > 0)
-    .sort((left, right) => (right.healthDamage + right.limbDamage) - (left.healthDamage + left.limbDamage));
+    .filter(victim => (
+      victim.healthDamage > 0
+      || victim.limbDamage > 0
+      || victim.barrierAbsorbed > 0
+      || victim.traumas.length > 0
+    ))
+    .sort((left, right) => (
+      (right.healthDamage + right.limbDamage + right.barrierAbsorbed)
+      - (left.healthDamage + left.limbDamage + left.barrierAbsorbed)
+    ));
 
   return {
     primaryActor: victims.values().next().value?.actor ?? null,
     totalHealthDamage: rows.reduce((sum, victim) => sum + victim.healthDamage, 0),
     totalLimbDamage: rows.reduce((sum, victim) => sum + victim.limbDamage, 0),
+    totalBarrierAbsorbed: rows.reduce((sum, victim) => sum + victim.barrierAbsorbed, 0),
     victims: rows,
     labels: {
       kicker: "Итог цикла",
       title: "Сводка урона",
       totalDamage: "Урон",
+      barrierAbsorbed: "Поглощено барьером",
       limbs: "Поврежденные конечности",
       noLimbDamage: "Конечности не повреждены",
       traumas: "Полученные травмы"
@@ -5416,6 +5770,7 @@ function getDamageSummaryVictim(victims, actor) {
     actor,
     healthDamage: 0,
     limbDamage: 0,
+    barrierAbsorbed: 0,
     limbs: new Map(),
     traumas: new Map(),
     damageByType: new Map()
@@ -6631,9 +6986,21 @@ function normalizeDamageRequest(request = {}) {
     scope: normalizeScope(request.scope, limbKey, request.itemId ?? request.targetItemId ?? source.targetItemId),
     applyMitigation: request.applyMitigation !== false,
     processDamageTypeSettings: request.processDamageTypeSettings !== false,
+    bypassBarrier: request.bypassBarrier === true || source.bypassBarrier === true,
+    damageEventIndex: Number.isInteger(Number(request.damageEventIndex))
+      ? Number(request.damageEventIndex)
+      : -1,
     source,
     requesterUserId: String(request.requesterUserId ?? "")
   };
+}
+
+function createActorDamageBarrierLedger(actor) {
+  return createDamageBarrierLedger(actor, {
+    evaluateChange: (targetActor, change) => evaluateActorEffectChangeBaseNumber(targetActor, change, {
+      fallback: 0
+    })
+  });
 }
 
 function replaceDamageAccumulation(value = {}) {

@@ -26,6 +26,10 @@ import {
   getSkillCheckActionEffectKeys,
   isSkillCheckActionEffectKey
 } from "../rolls/skill-check-action-effects.mjs";
+import {
+  DAMAGE_BARRIER_ALL_EFFECT_KEY,
+  getDamageBarrierEffectKey
+} from "../combat/damage-barriers.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -85,6 +89,7 @@ const ACTION_COST_KEY_PATTERN = /^system\.costs\.actions\.[^.]+$/;
 const ACTION_PENETRATION_KEY_PATTERN = /^system\.penetration\.actions\.[^.]+$/;
 const COMBAT_ACTION_EDGE_KEY_PATTERN = /^system\.combat\.actions\.[^.]+\.(?:advantage|disadvantage)$/;
 const DAMAGE_MITIGATION_KEY_PATTERN = /^system\.damage(?:Defense|Resistance)Bonuses\.[^.]+\.[^.]+$/;
+const DAMAGE_BARRIER_KEY_PATTERN = /^system\.damageBarriers\.[^.]+$/;
 const POSTURE_WEAPON_ACTION_COST_KEY_PATTERN = /^system\.postures\.[^.]+\.weaponActionCost$/;
 const POSTURE_MOVEMENT_COST_KEY_PATTERN = /^system\.postures\.[^.]+\.movementMultiplier$/;
 
@@ -197,18 +202,29 @@ function isCriticalSuccessContext(context = {}) {
 }
 
 /** Effect keys read while resolving one incoming damage application. */
-export function getDamageResolutionActiveUseKeys({ actor = null, limbKey = "", damageTypeKey = "" } = {}) {
+export function getDamageResolutionActiveUseKeys({
+  actor = null,
+  limbKey = "",
+  damageTypeKey = "",
+  includeMitigation = true,
+  includeBarriers = true
+} = {}) {
   const limb = String(limbKey ?? "").trim()
     || Object.keys(actor?.system?.limbs ?? {}).find(key => key && key !== "all")
     || "";
   const damageType = String(damageTypeKey ?? "").trim();
-  if (!limb || !damageType) return new Set();
   const keys = new Set();
-  for (const root of ["damageDefenseBonuses", "damageResistanceBonuses"]) {
-    keys.add(`system.${root}.all.all`);
-    keys.add(`system.${root}.all.${damageType}`);
-    keys.add(`system.${root}.${limb}.all`);
-    keys.add(`system.${root}.${limb}.${damageType}`);
+  if (includeBarriers) {
+    keys.add(DAMAGE_BARRIER_ALL_EFFECT_KEY);
+    if (damageType) keys.add(getDamageBarrierEffectKey(damageType));
+  }
+  if (includeMitigation && limb && damageType) {
+    for (const root of ["damageDefenseBonuses", "damageResistanceBonuses"]) {
+      keys.add(`system.${root}.all.all`);
+      keys.add(`system.${root}.all.${damageType}`);
+      keys.add(`system.${root}.${limb}.all`);
+      keys.add(`system.${root}.${limb}.${damageType}`);
+    }
   }
   return keys;
 }
@@ -254,6 +270,7 @@ export function isActiveUseEffectKey(key = "") {
     || ACTION_PENETRATION_KEY_PATTERN.test(sourcePath)
     || COMBAT_ACTION_EDGE_KEY_PATTERN.test(sourcePath)
     || DAMAGE_MITIGATION_KEY_PATTERN.test(sourcePath)
+    || DAMAGE_BARRIER_KEY_PATTERN.test(sourcePath)
     || POSTURE_WEAPON_ACTION_COST_KEY_PATTERN.test(sourcePath)
     || POSTURE_MOVEMENT_COST_KEY_PATTERN.test(sourcePath);
 }

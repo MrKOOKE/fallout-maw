@@ -175,6 +175,8 @@ export const ABILITY_EVENT_REACTION_MODES = Object.freeze({
 export const ABILITY_ACCUMULATION_VALUE_SOURCES = Object.freeze({
   damageIncoming: "damageIncoming",
   damageAfterMitigation: "damageAfterMitigation",
+  damageBarrierAbsorbed: "damageBarrierAbsorbed",
+  damageAfterBarrier: "damageAfterBarrier",
   damageActualHealthLoss: "damageActualHealthLoss",
   damageLimbLoss: "damageLimbLoss",
   damageItemConditionLoss: "damageItemConditionLoss"

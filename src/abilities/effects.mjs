@@ -25,6 +25,12 @@ import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 import { hasEventReactionCondition } from "../events/event-reaction-schema.mjs";
 import {
+  clearManagedBarrierProjectionDepletion,
+  getActorBarrierDepletions,
+  isManagedBarrierProjectionDepleted,
+  pruneManagedBarrierProjectionDepletions
+} from "./barrier-depletion.mjs";
+import {
   syncTimedTriggerCostEffects,
   withoutTimedTriggerCostFunctions
 } from "./trigger-cost-effects.mjs";
@@ -122,7 +128,8 @@ export function registerAbilityEffectHooks() {
     actorIlluminationLevelCache.delete(actorUuid);
     pendingIlluminationActors.delete(actorUuid);
   });
-  Hooks.on("updateActor", (actor, changes) => {
+  Hooks.on("updateActor", (actor, changes, options = {}) => {
+    if (options?.falloutMawDamageBarrierDepletion === true) return;
     if (!isAbilityEffectSyncRelevant(changes)) return;
     queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
@@ -156,6 +163,7 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
     if (options?.falloutMawLimitedUses === true) return;
+    if (options?.falloutMawDamageBarrierCommit === true) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
     const expiredLimitedCopy = Boolean(
@@ -166,8 +174,9 @@ export function registerAbilityEffectHooks() {
     if (!managed && !expiredLimitedCopy) return;
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
-  Hooks.on("deleteActiveEffect", effect => {
+  Hooks.on("deleteActiveEffect", (effect, options = {}) => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
+    if (options?.falloutMawDamageBarrierCommit === true) return;
     const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
     const limitedCopy = Boolean(effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY));
     if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
@@ -507,6 +516,10 @@ export async function syncActorAbilityEffects(actor, context = {}) {
         return data?.itemId && !activeItemFreeSettingsItemIds.has(data.itemId);
       });
     await deleteAbilitySyncEffects(actor, staleItemEffects, ITEM_EFFECT_FLAG_KEY);
+    await pruneManagedBarrierProjectionDepletions(actor, record => (
+      (record?.kind === "ability" && !activeAbilityItemIds.has(String(record?.sourceId ?? "")))
+      || (record?.kind === "item" && !activeItemFreeSettingsItemIds.has(String(record?.sourceId ?? "")))
+    ));
   } finally {
     processingActors.delete(actor.uuid);
   }
@@ -517,6 +530,7 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
   const operationOptions = getAbilityEffectOperationOptions(item);
   const { changes, pureChangeIndexes } = buildAbilityEffectProjection(actor, item, context);
   if (!changes.length) {
+    await clearManagedBarrierProjectionDepletion(actor, `ability:${item.id}`);
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
     return;
   }
@@ -530,6 +544,8 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
     showIcon,
     ...(pureChangeIndexes.length ? { pureChangeIndexes } : {})
   });
+  if (isManagedBarrierProjectionDepleted(actor, `ability:${item.id}`, signature)) return;
+  await clearManagedBarrierProjectionDepletion(actor, `ability:${item.id}`);
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
   if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
@@ -566,6 +582,7 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
   const operationOptions = getItemFreeSettingsEffectOperationOptions(item);
   const { changes, pureChangeIndexes } = buildItemFreeSettingsEffectProjection(actor, item, context);
   if (!changes.length) {
+    await clearManagedBarrierProjectionDepletion(actor, `item:${item.id}`);
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
     return;
   }
@@ -577,6 +594,8 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
     showIcon,
     ...(pureChangeIndexes.length ? { pureChangeIndexes } : {})
   });
+  if (isManagedBarrierProjectionDepleted(actor, `item:${item.id}`, signature)) return;
+  await clearManagedBarrierProjectionDepletion(actor, `item:${item.id}`);
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
   if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
@@ -905,18 +924,37 @@ function buildAuraTriggerCostData(sourceActor, source, entry) {
 function collectAuraEffectActors(desired = new Map()) {
   const actors = new Map();
   for (const actor of game.actors ?? []) {
-    if (actor?.effects?.some(effect => getAuraGeneratedEffectFlag(effect))) actors.set(actor.uuid, actor);
+    const hasAuraDepletion = Object.values(getActorBarrierDepletions(actor))
+      .some(record => record?.kind === "aura");
+    if (hasAuraDepletion || actor?.effects?.some(effect => getAuraGeneratedEffectFlag(effect))) {
+      actors.set(actor.uuid, actor);
+    }
   }
   for (const token of canvas?.tokens?.placeables ?? []) {
     const actor = token?.actor;
     if (!actor?.uuid) continue;
-    if (desired.has(actor.uuid) || actor.effects?.some(effect => getAuraGeneratedEffectFlag(effect))) actors.set(actor.uuid, actor);
+    const hasAuraDepletion = Object.values(getActorBarrierDepletions(actor))
+      .some(record => record?.kind === "aura");
+    if (
+      desired.has(actor.uuid)
+      || hasAuraDepletion
+      || actor.effects?.some(effect => getAuraGeneratedEffectFlag(effect))
+    ) actors.set(actor.uuid, actor);
   }
   return actors;
 }
 
 async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
   if (!actor) return;
+  await pruneManagedBarrierProjectionDepletions(actor, (record, identity) => {
+    if (record?.kind !== "aura") return false;
+    const key = identity.slice("aura:".length);
+    const signature = String(
+      desired.get(key)?.flags?.[SYSTEM_ID]?.[AURA_GENERATED_EFFECT_FLAG_KEY]?.signature
+      ?? ""
+    );
+    return !signature || signature !== String(record?.signature ?? "");
+  });
   const existing = actor.effects.filter(effect => getAuraGeneratedEffectFlag(effect));
   const deletions = [];
   const existingByKey = new Map();
@@ -938,7 +976,11 @@ async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
 
   const creations = [];
   for (const [key, data] of desired.entries()) {
-    if (!existingByKey.has(key)) creations.push(data);
+    const signature = String(data?.flags?.[SYSTEM_ID]?.[AURA_GENERATED_EFFECT_FLAG_KEY]?.signature ?? "");
+    if (
+      !existingByKey.has(key)
+      && !isManagedBarrierProjectionDepleted(actor, `aura:${key}`, signature)
+    ) creations.push(data);
   }
   if (creations.length) await actor.createEmbeddedDocuments("ActiveEffect", creations, { animate: false });
 }

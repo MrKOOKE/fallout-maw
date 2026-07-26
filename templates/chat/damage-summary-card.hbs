@@ -13,10 +13,18 @@
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-damage-summary-victim-body">
           <strong class="fallout-maw-damage-summary-victim-name">{{name}}</strong>
+          {{#if healthDamage}}
           <div class="fallout-maw-damage-summary-damage-row">
             <span>{{../labels.totalDamage}}:</span>
             <b>-{{healthDamage}}</b>
           </div>
+          {{/if}}
+          {{#if barrierAbsorbed}}
+          <div class="fallout-maw-damage-summary-damage-row">
+            <span>{{../labels.barrierAbsorbed}}:</span>
+            <b>{{barrierAbsorbed}}</b>
+          </div>
+          {{/if}}
         </div>
       </div>
 

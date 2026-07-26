@@ -61,6 +61,7 @@ import {
 } from "../utils/active-effect-changes.mjs";
 import {
   buildCombatEffectKeyTokens,
+  buildDamageBarrierEffectKeyTokens,
   buildReverseInteractionEffectKeyTokens,
   buildStealthAttackBonusEffectKeyTokens,
   buildSkillCheckActionEffectKeyTokens
@@ -9001,6 +9002,9 @@ function buildEffectPathLabelMap({
   );
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
+  for (const token of buildDamageBarrierEffectKeyTokens()) {
+    if (token?.path && token?.label) map.set(token.path, token.label);
+  }
   for (const token of buildCombatEffectKeyTokens()) {
     if (token?.path && token?.label) map.set(token.path, token.label);
   }

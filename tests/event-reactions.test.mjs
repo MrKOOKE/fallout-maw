@@ -750,6 +750,15 @@ test("accumulator settings normalize safely and actual health loss does not coun
     data: { result: { amount: 100, healthDelta: 0 } },
     delta: { health: 0 }
   }), 0);
+  assert.equal(getSystemEventNumericValue("damageAfterMitigation", {
+    data: { result: { amount: 4, preBarrierAmount: 12, barrierAbsorbed: 8 } }
+  }), 12);
+  assert.equal(getSystemEventNumericValue("damageBarrierAbsorbed", {
+    data: { result: { barrierAbsorbed: 8 } }
+  }), 8);
+  assert.equal(getSystemEventNumericValue("damageAfterBarrier", {
+    data: { result: { amountAfterBarrier: 4 } }
+  }), 4);
   assert.equal(getSystemEventGroupKey("none", {}), "all");
 });
 

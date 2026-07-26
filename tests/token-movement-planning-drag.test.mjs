@@ -65,19 +65,49 @@ globalThis.foundry = {
     }
   },
   utils: {
-    randomID: () => "test-id"
+    randomID: () => "test-id",
+    deepClone: value => structuredClone(value),
+    escapeHTML: value => String(value),
+    cleanHTML: value => String(value)
   }
 };
 
 globalThis.game = {
-  user: { id: "test-user" }
+  user: { id: "test-user" },
+  i18n: {
+    has: () => false,
+    localize: key => String(key),
+    format: (key, data = {}) => `${key}:${JSON.stringify(data)}`
+  }
 };
 
 const {
   clearAbilityRoutePreviewBudget,
   setAbilityRoutePreviewBudget
 } = await import("../src/canvas/ability-route-preview-state.mjs");
-const { FalloutMaWToken } = await import("../src/canvas/token.mjs");
+const {
+  FalloutMaWToken,
+  buildEffectTooltipHTML
+} = await import("../src/canvas/token.mjs");
+
+test("effect tooltip displays universal barrier points without treating them as an actor bonus", () => {
+  const html = buildEffectTooltipHTML({
+    name: "Каменная кожа",
+    img: "icons/svg/aura.svg",
+    flags: {},
+    system: {
+      changes: [{
+        key: "system.damageBarriers.all",
+        type: "add",
+        value: "58"
+      }]
+    }
+  });
+
+  assert.match(html, /Барьер: От всех видов урона/);
+  assert.match(html, /<span>58<\/span>/);
+  assert.doesNotMatch(html, /<span>\+58<\/span>/);
+});
 
 function createToken(id = "executor") {
   const document = {

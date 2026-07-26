@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
+import { isDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import {
   getCoverBonusPercentEffectKey,
@@ -155,6 +156,7 @@ export function expandActorEffectChangeKeys(actor, change = {}) {
 }
 
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
+  if (isDamageBarrierEffectKey(change?.key)) return null;
   const prepared = prepareActorEffectChangeValue(actor, change, options);
   if (!prepared) return null;
   if (isReverseEffectKey(prepared.key)) return null;

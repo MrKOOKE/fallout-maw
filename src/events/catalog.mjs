@@ -248,6 +248,8 @@ const EVENT_DEFINITIONS = Object.freeze([
   ["damage.beforeApply", "damage", "pre", "workflow", ["source", "target"]],
   ["healing.beforeApply", "damage", "pre", "workflow", ["healer", "patient"]],
   ["damage.resolved", "damage", "post", "workflow", ["source", "target"]],
+  ["damage.barrier.absorbed", "damage", "post", "workflow", ["source", "target"]],
+  ["damage.barrier.depleted", "damage", "post", "workflow", ["source", "target"]],
   ["healing.resolved", "damage", "post", "workflow", ["healer", "patient"]],
   ["damage.batch.resolved", "damage", "post", "workflow", ["source", "target"]],
   ["damage.periodicTick.resolved", "damage", "post", "workflow", ["source", "target"]],

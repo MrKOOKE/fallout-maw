@@ -6,6 +6,7 @@ import {
   isReverseEffectKey,
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
+import { parseDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
 import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { getDamageTypeSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
@@ -825,6 +826,18 @@ function formatEffectChange(change, actor = null, effect = null) {
 
   const key = String(change?.key ?? "");
   if (key.startsWith(`${DAMAGE_EFFECT_CHANGE_ROOT}.`)) return "";
+  const damageBarrier = parseDamageBarrierEffectKey(key);
+  if (damageBarrier) {
+    const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
+      fallback: Number(change?.value),
+      stage: getEffectChangePreparationStage(change, actor)
+    });
+    const remaining = Number.isFinite(value)
+      ? Math.max(0, Math.floor(value))
+      : stringifyChangeValue(change?.value);
+    const path = getDamageBarrierLabel(damageBarrier);
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(remaining)}</span>`;
+  }
   const path = getChangeKeyLabel(key);
   if (isDodgeAmountModifierEffectKey(key)) {
     const value = evaluateActorEffectChangeBaseNumber(actor, { ...change, effect }, {
@@ -918,6 +931,18 @@ function formatTickDamage(data) {
 function getDamageTypeLabel(key) {
   const damageType = getDamageTypeSettings().find(entry => entry.key === key);
   return String(damageType?.label || key || "");
+}
+
+function getDamageBarrierLabel(barrier = {}) {
+  const groupKey = "FALLOUTMAW.Effects.DamageBarriers";
+  const localizedGroup = localize(groupKey);
+  const group = localizedGroup === groupKey ? "Барьер" : localizedGroup;
+  if (barrier.kind !== "all") return `${group}: ${getDamageTypeLabel(barrier.damageTypeKey)}`;
+
+  const allKey = "FALLOUTMAW.Effects.DamageBarrierAll";
+  const localizedAll = localize(allKey);
+  const all = localizedAll === allKey ? "От всех видов урона" : localizedAll;
+  return `${group}: ${all}`;
 }
 
 function getLimbLabel(key, actor = null) {

@@ -15,7 +15,7 @@ import {
   serializeSystemEventPayload
 } from "../src/events/catalog.mjs";
 
-const EXPECTED_EVENT_COUNT = 209;
+const EXPECTED_EVENT_COUNT = 211;
 const EVENT_KEY_PATTERN = /^fallout-maw\.[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+$/;
 const REACTION_UI_PATHS = Object.freeze([
   "ConditionLabel",
