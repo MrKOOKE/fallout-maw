@@ -4,6 +4,11 @@ import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./atta
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import {
+  createPelletImpactProjectiles,
+  distributePelletImpactDamage,
+  getPelletProjectileCount
+} from "./pellet-impact.mjs";
+import {
   DELAYED_THROWN_ITEM_FLAG,
   DELAYED_THROWN_ITEM_REGION_FLAG,
   createThrownItemTile,
@@ -1844,7 +1849,10 @@ class CommandedWeaponAttackController {
       || hasWeaponSpecialProperty(entry.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, entry.weaponFunctionId)
     ) return new Map();
     const attackCount = getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId);
-    const projectileCount = getBurstProjectileCount(attackCount, getWeaponPelletCount(entry.weapon, entry.weaponFunctionId));
+    const projectileCount = getBurstProjectileCount(
+      attackCount,
+      getWeaponProjectileCountPerAttack(entry.weapon, entry.weaponFunctionId)
+    );
     return buildBurstTargetRanges(entry.token, entry.geometry, entry.targets, projectileCount);
   }
 
@@ -2920,6 +2928,7 @@ export function buildWeaponExplosionDamageRequests({
   radiusPixels = 0,
   baseDamage = 0,
   pelletCount = 1,
+  concentratedPelletImpact = false,
   damageTypes = [],
   penetrationPower = 0,
   source = {},
@@ -2937,11 +2946,16 @@ export function buildWeaponExplosionDamageRequests({
   const pelletDamages = distributeIntegerAmount(damageAmount, Array(Math.max(1, toInteger(pelletCount))).fill(1));
   const normalizedTypes = normalizeExplosionDamageTypes(damageTypes);
   const requests = [];
+  const concentratedLimbKey = concentratedPelletImpact
+    ? selectRandomLimbKey(actor)
+    : "";
 
   for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
     const pelletDamage = pelletDamages[pelletIndex] ?? 0;
     if (pelletDamage <= 0) continue;
-    const limbKey = selectRandomLimbKey(actor);
+    const limbKey = concentratedPelletImpact
+      ? concentratedLimbKey
+      : selectRandomLimbKey(actor);
     if (!limbKey) continue;
     const typeAmounts = distributeIntegerAmount(pelletDamage, normalizedTypes.map(entry => entry.weight));
     for (let typeIndex = 0; typeIndex < normalizedTypes.length; typeIndex += 1) {
@@ -2957,7 +2971,11 @@ export function buildWeaponExplosionDamageRequests({
           ...source,
           targetTokenUuid: source.targetTokenUuid ?? targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
           penetrationPower,
-          pelletIndex
+          pelletIndex,
+          ...(concentratedPelletImpact ? {
+            pelletImpactCount: pelletDamages.length,
+            pelletImpactIndex: pelletIndex
+          } : {})
         }
       });
     }
@@ -4487,7 +4505,6 @@ class WeaponAttackController {
     this.refresh(true);
     const actionContext = this.createWeaponActionContext();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
       this.token.actor,
@@ -4499,13 +4516,13 @@ class WeaponAttackController {
     if (this.captureOnly) return this.captureAttackSelection({ mode: "current" });
     const originalTarget = this.trajectoryAimTarget;
     if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
-      return this.performConeTargetsAttack({ attackCount, pelletCount, actionContext });
+      return this.performConeTargetsAttack({ attackCount, actionContext });
     }
     if (this.actionKey === "burst") {
       this.beginProcessingCycle();
       if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
       if (originalTarget) await this.commitWeaponAttack(originalTarget);
-      return this.performBurstAttack({ attackCount, pelletCount, actionContext });
+      return this.performBurstAttack({ attackCount, actionContext });
     }
 
     this.beginProcessingCycle();
@@ -4519,7 +4536,9 @@ class WeaponAttackController {
     const damageRequests = [];
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+    const collectCheckMessages = forceBatchCheckMessage
+      || getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId) > 1
+      || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext(),
       actor: this.token.actor,
       actionKey: this.actionKey
@@ -4664,7 +4683,7 @@ class WeaponAttackController {
     this.completeProcessingCycle();
   }
 
-  async performConeTargetsAttack({ attackCount = 1, pelletCount = 1, actionContext = null } = {}) {
+  async performConeTargetsAttack({ attackCount = 1, actionContext = null } = {}) {
     this.beginProcessingCycle();
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
@@ -4676,7 +4695,13 @@ class WeaponAttackController {
     const trajectories = [];
     const damageRequests = [];
     const damageResults = [];
-    const forceBatchCheckMessage = totalAttackCount > 1 || this.targets.length > 1 || pelletCount > 1;
+    const projectileCountPerAttack = getWeaponProjectileCountPerAttack(
+      this.weapon,
+      this.weaponFunctionId
+    );
+    const forceBatchCheckMessage = totalAttackCount > 1
+      || this.targets.length > 1
+      || projectileCountPerAttack > 1;
     const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext(),
       actor: this.token.actor,
@@ -4692,29 +4717,40 @@ class WeaponAttackController {
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       if (this.attackCanceledByReaction) break;
-      const shotCount = Math.max(1, toInteger(pelletCount));
-      const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(shotCount).fill(1));
+      const projectiles = createWeaponPelletImpactProjectiles(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponDamage()
+      );
       const animationTrajectory = buildConeAnimationTrajectory(this.geometry);
       if (animationTrajectory) trajectories.push({ ...animationTrajectory, delayGroup: attackIndex });
       attempted = true;
 
       for (const target of this.targets) {
         if (this.attackCanceledByReaction) break;
-        for (const [pelletIndex, damageAmount] of pelletDamages.entries()) {
+        for (const [projectileIndex, projectile] of projectiles.entries()) {
           if (this.attackCanceledByReaction) break;
-          if (damageAmount <= 0) continue;
-          const totalPelletCount = totalAttackCount * pelletDamages.length;
+          if (projectile.damageAmount <= 0) continue;
+          const totalProjectileCount = totalAttackCount * projectiles.length;
           const request = await this.resolveAttackAgainstTarget(target, {
-            damageAmount,
-            damageShareIndex: pelletIndex,
-            damageShareCount: pelletDamages.length,
+            damageAmount: projectile.damageAmount,
+            damageShareIndex: projectileIndex,
+            damageShareCount: projectiles.length,
+            pelletImpactCount: projectile.pelletImpactCount,
             burstAttackIndex: attackIndex,
             penetrationStep: 0,
             checkBatch,
             allOrNothingContext: this.createAllOrNothingAttackContext({
-              mode: pelletDamages.length > 1 ? "pellet" : "",
-              index: (attackIndex * pelletDamages.length) + pelletIndex,
-              count: totalPelletCount
+              mode: projectiles.length > 1
+                ? "pellet"
+                : (
+                  totalAttackCount > 1
+                  && hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
+                    ? "burst"
+                    : ""
+                ),
+              index: (attackIndex * projectiles.length) + projectileIndex,
+              count: totalProjectileCount
             })
           });
           if (request) damageRequests.push(...request);
@@ -4892,7 +4928,7 @@ class WeaponAttackController {
     };
   }
 
-  async performBurstAttack({ attackCount = 1, pelletCount = 1, actionContext = null } = {}) {
+  async performBurstAttack({ attackCount = 1, actionContext = null } = {}) {
     this.beginProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
@@ -4903,7 +4939,9 @@ class WeaponAttackController {
     const damageRequests = [];
     const damageResults = [];
     const forceBatchCheckMessage = totalAttackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+    const collectCheckMessages = forceBatchCheckMessage
+      || getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId) > 1
+      || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext(),
       actor: this.token.actor,
       actionKey: this.actionKey
@@ -4914,7 +4952,10 @@ class WeaponAttackController {
         title: this.weapon.name
       })
       : null;
-    const projectileCount = getBurstProjectileCount(totalAttackCount, pelletCount);
+    const projectileCount = getBurstProjectileCount(
+      totalAttackCount,
+      getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId)
+    );
     const burstRanges = this.getBurstTargetRanges(this.targets);
     const primaryShots = buildBurstPrimaryShotsForRanges(this.token, this.geometry, projectileCount, this.targets, burstRanges);
     const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, projectileCount, { primaryShots });
@@ -4923,11 +4964,16 @@ class WeaponAttackController {
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       if (this.attackCanceledByReaction) break;
-      const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(Math.max(1, toInteger(pelletCount))).fill(1));
+      const projectiles = createWeaponPelletImpactProjectiles(
+        this.weapon,
+        this.weaponFunctionId,
+        this.getWeaponDamage()
+      );
 
-      for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
+      for (let shotIndex = 0; shotIndex < projectiles.length; shotIndex += 1) {
         if (this.attackCanceledByReaction) break;
-        const projectileIndex = (attackIndex * pelletDamages.length) + pelletIndex;
+        const projectile = projectiles[shotIndex];
+        const projectileIndex = (attackIndex * projectiles.length) + shotIndex;
         const target = assignments[projectileIndex] ?? null;
         const primaryTrajectory = primaryShots[projectileIndex]?.trajectory ?? buildRandomTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry));
         const trajectory = primaryTrajectory;
@@ -4939,9 +4985,10 @@ class WeaponAttackController {
         const result = await this.resolveAttackTrajectory({
           checkBatch,
           trajectory,
-          baseDamage: pelletDamages[pelletIndex] ?? 0,
-          damageShareIndex: pelletIndex,
-          damageShareCount: pelletDamages.length,
+          baseDamage: projectile?.damageAmount ?? 0,
+          damageShareIndex: shotIndex,
+          damageShareCount: projectiles.length,
+          pelletImpactCount: projectile?.pelletImpactCount ?? 1,
           burstAttackIndex: attackIndex,
           allOrNothingContext: this.createAllOrNothingAttackContext({
             mode: "burst",
@@ -5059,10 +5106,18 @@ class WeaponAttackController {
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
     const aimPoint = selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target);
     const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, aimPoint);
-    const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
-    const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(pelletCount).fill(1));
-    const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
-    const checkBatch = (duplicatePlan.cycles > 1 || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+    const projectiles = createWeaponPelletImpactProjectiles(
+      this.weapon,
+      this.weaponFunctionId,
+      this.getWeaponDamage()
+    );
+    const trajectories = buildAimedAttackTrajectories(
+      this.token,
+      geometry,
+      centerTrajectory,
+      projectiles.length
+    );
+    const checkBatch = (duplicatePlan.cycles > 1 || projectiles.length > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
       ...this.createWeaponDamageContext({ targetToken: target }),
       actor: this.token.actor,
       actionKey: this.actionKey
@@ -5081,12 +5136,14 @@ class WeaponAttackController {
     for (let cycleIndex = 0; cycleIndex < duplicatePlan.cycles; cycleIndex += 1) {
       for (const [index, trajectory] of trajectories.entries()) {
         if (this.attackCanceledByReaction) break;
+        const projectile = projectiles[index];
         const result = await this.resolveAimedPelletTrajectory(target, { ...trajectory }, targetSelection, {
           forceAimed: index === 0,
           checkBatch,
-          baseDamage: pelletDamages[index] ?? 0,
+          baseDamage: projectile?.damageAmount ?? 0,
           damageShareIndex: index,
           damageShareCount: trajectories.length,
+          pelletImpactCount: projectile?.pelletImpactCount ?? 1,
           allOrNothingContext: this.createAllOrNothingAttackContext({
             mode: trajectories.length > 1 || duplicatePlan.cycles > 1 ? "pellet" : "",
             index: (cycleIndex * trajectories.length) + index,
@@ -5139,6 +5196,7 @@ class WeaponAttackController {
     baseDamage = null,
     damageShareIndex = 0,
     damageShareCount = 1,
+    pelletImpactCount = 1,
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
@@ -5151,6 +5209,7 @@ class WeaponAttackController {
         baseDamage,
         damageShareIndex,
         damageShareCount,
+        pelletImpactCount,
         checkBatch,
         allOrNothingContext
       });
@@ -5162,6 +5221,7 @@ class WeaponAttackController {
       baseDamage,
       damageShareIndex,
       damageShareCount,
+      pelletImpactCount,
       allOrNothingContext
     });
   }
@@ -5445,6 +5505,7 @@ class WeaponAttackController {
     baseDamage = null,
     damageShareIndex = 0,
     damageShareCount = 1,
+    pelletImpactCount = 1,
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
@@ -5484,6 +5545,7 @@ class WeaponAttackController {
         damageAmount: getPenetratedDamageAmount(baseDamage, 0),
         damageShareIndex,
         damageShareCount,
+        pelletImpactCount,
         difficultyBonus: blockerBonus,
         penetrationStep: 0,
         checkBatch,
@@ -5494,6 +5556,7 @@ class WeaponAttackController {
         damageAmount: getPenetratedDamageAmount(baseDamage, 0),
         damageShareIndex,
         damageShareCount,
+        pelletImpactCount,
         difficultyBonus: blockerBonus,
         penetrationStep: 0,
         checkBatch,
@@ -5522,6 +5585,7 @@ class WeaponAttackController {
         damageAmount,
         damageShareIndex,
         damageShareCount,
+        pelletImpactCount,
         difficultyBonus: passthroughStep * 20,
         penetrationStep: passthroughStep,
         checkBatch,
@@ -5558,25 +5622,37 @@ class WeaponAttackController {
 
   async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0, attackIndex = 0, attackCount = 1, burstAttackIndex = 0 } = {}) {
     const damageRequests = [];
-    const trajectories = buildAttackTrajectories(this.token, this.geometry, this.targets, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
-    const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), trajectories.map(() => 1));
-    const totalPelletCount = Math.max(1, toInteger(attackCount)) * Math.max(1, trajectories.length);
+    const projectiles = createWeaponPelletImpactProjectiles(
+      this.weapon,
+      this.weaponFunctionId,
+      this.getWeaponDamage()
+    );
+    const trajectories = buildAttackTrajectories(
+      this.token,
+      this.geometry,
+      this.targets,
+      projectiles.length
+    );
+    const totalProjectileCount = Math.max(1, toInteger(attackCount))
+      * Math.max(1, trajectories.length);
     let attempted = false;
 
     for (const [index, trajectory] of trajectories.entries()) {
       if (this.attackCanceledByReaction) break;
+      const projectile = projectiles[index];
       const result = await this.resolveAttackTrajectory({
         checkBatch,
         trajectory,
-        baseDamage: pelletDamages[index] ?? 0,
+        baseDamage: projectile?.damageAmount ?? 0,
         damageShareIndex: index,
         damageShareCount: trajectories.length,
+        pelletImpactCount: projectile?.pelletImpactCount ?? 1,
         difficultyBonus,
         burstAttackIndex,
         allOrNothingContext: this.createAllOrNothingAttackContext({
           mode: trajectories.length > 1 ? "pellet" : "",
           index: (Math.max(0, toInteger(attackIndex)) * trajectories.length) + index,
-          count: totalPelletCount
+          count: totalProjectileCount
         })
       });
       damageRequests.push(...result.damageRequests);
@@ -5592,6 +5668,7 @@ class WeaponAttackController {
     baseDamage = null,
     damageShareIndex = 0,
     damageShareCount = 1,
+    pelletImpactCount = 1,
     difficultyBonus = 0,
     burstAttackIndex = 0,
     allOrNothingContext = null
@@ -5614,6 +5691,7 @@ class WeaponAttackController {
         damageAmount,
         damageShareIndex,
         damageShareCount,
+        pelletImpactCount,
         difficultyBonus: Math.max(0, toInteger(difficultyBonus)) + (penetrationsUsed * 20),
         burstAttackIndex,
         penetrationStep: penetrationsUsed,
@@ -5659,6 +5737,7 @@ class WeaponAttackController {
     damageAmount = 0,
     damageShareIndex = 0,
     damageShareCount = 1,
+    pelletImpactCount = 1,
     difficultyBonus = 0,
     burstAttackIndex = 0,
     penetrationStep = 0,
@@ -5730,36 +5809,54 @@ class WeaponAttackController {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
-    const damageContext = this.createWeaponDamageContext({
-      targetToken: target,
-      damageShareIndex,
-      damageShareCount,
-      reflectionCount: Math.max(0, toInteger(reflectionCount))
-    });
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
-    damageAmount = applyRicochetDamageBonus(this.weapon, damageAmount, damageContext);
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
-    await this.notifyAttackCheckResolved(outcome, checkBatch);
-    return buildWeaponDamageRequests(this.weapon, {
-      attackerActor: this.token.actor,
-      attackerToken: this.token,
-      actor: target.actor,
-      targetToken: target,
-      limbKey,
-      amount: damageAmount,
-      source: {
-        attackId: this.attackId,
-        weaponUuid: this.weapon.uuid,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
-        actionKey: this.actionKey,
-        attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id,
-        criticalSuccess: isCriticalSuccessAttack(outcome),
-        penetrationStep,
+    const impactCount = Math.max(1, toInteger(pelletImpactCount));
+    const impactDamages = distributePelletImpactDamage(damageAmount, impactCount);
+    const requests = [];
+    for (const [impactIndex, impactDamage] of impactDamages.entries()) {
+      const resolvedShareIndex = impactCount > 1 ? impactIndex : damageShareIndex;
+      const resolvedShareCount = impactCount > 1 ? impactCount : damageShareCount;
+      const damageContext = this.createWeaponDamageContext({
+        targetToken: target,
+        damageShareIndex: resolvedShareIndex,
+        damageShareCount: resolvedShareCount,
         reflectionCount: Math.max(0, toInteger(reflectionCount))
-      }
-    }, this.weaponFunctionId);
+      });
+      let resolvedDamage = applyContextualDamageToAmount(this.weapon, impactDamage, damageContext);
+      resolvedDamage = applyRicochetDamageBonus(this.weapon, resolvedDamage, damageContext);
+      resolvedDamage = getCriticalDamageAmount(
+        this.weapon,
+        resolvedDamage,
+        outcome,
+        this.weaponFunctionId,
+        damageContext
+      );
+      requests.push(...buildWeaponDamageRequests(this.weapon, {
+        attackerActor: this.token.actor,
+        attackerToken: this.token,
+        actor: target.actor,
+        targetToken: target,
+        limbKey,
+        amount: resolvedDamage,
+        source: {
+          attackId: this.attackId,
+          weaponUuid: this.weapon.uuid,
+          weaponFunctionId: this.weaponFunctionId,
+          weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
+          actionKey: this.actionKey,
+          attackerUuid: this.token.actor.uuid,
+          tokenId: this.token.id,
+          criticalSuccess: isCriticalSuccessAttack(outcome),
+          penetrationStep,
+          reflectionCount: Math.max(0, toInteger(reflectionCount)),
+          ...(impactCount > 1 ? {
+            pelletImpactCount: impactCount,
+            pelletImpactIndex: impactIndex
+          } : {})
+        }
+      }, this.weaponFunctionId));
+    }
+    await this.notifyAttackCheckResolved(outcome, checkBatch);
+    return requests;
   }
 
   async performVolleyAttack() {
@@ -6044,6 +6141,10 @@ class WeaponAttackController {
         ? Math.max(0, Number(blastOutcome.baseDamage))
         : this.getWeaponDamage(distanceContext),
       pelletCount: getWeaponPelletCount(this.weapon, this.weaponFunctionId),
+      concentratedPelletImpact: hasConcentratedPelletImpact(
+        this.weapon,
+        this.weaponFunctionId
+      ),
       damageTypes: getWeaponDamageTypeEntries(this.weapon, this.weaponFunctionId),
       penetrationPower: getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
         ...targetDamageContext,
@@ -6085,6 +6186,7 @@ class WeaponAttackController {
     damageAmount = 0,
     damageShareIndex = 0,
     damageShareCount = 1,
+    pelletImpactCount = 1,
     difficultyBonus = 0,
     penetrationStep = 0,
     checkBatch = null,
@@ -6143,32 +6245,50 @@ class WeaponAttackController {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
-    const damageContext = this.createWeaponDamageContext({
-      targetToken: target,
-      limbKey,
-      damageShareIndex,
-      damageShareCount
-    });
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
+    const impactCount = Math.max(1, toInteger(pelletImpactCount));
+    const impactDamages = distributePelletImpactDamage(damageAmount, impactCount);
+    const requests = [];
+    for (const [impactIndex, impactDamage] of impactDamages.entries()) {
+      const resolvedShareIndex = impactCount > 1 ? impactIndex : damageShareIndex;
+      const resolvedShareCount = impactCount > 1 ? impactCount : damageShareCount;
+      const damageContext = this.createWeaponDamageContext({
+        targetToken: target,
+        limbKey,
+        damageShareIndex: resolvedShareIndex,
+        damageShareCount: resolvedShareCount
+      });
+      let resolvedDamage = applyContextualDamageToAmount(this.weapon, impactDamage, damageContext);
+      resolvedDamage = getCriticalDamageAmount(
+        this.weapon,
+        resolvedDamage,
+        outcome,
+        this.weaponFunctionId,
+        damageContext
+      );
+      requests.push(...buildWeaponDamageRequests(this.weapon, {
+        attackerActor: this.token.actor,
+        attackerToken: this.token,
+        actor: target.actor,
+        targetToken: target,
+        limbKey,
+        amount: resolvedDamage,
+        source: {
+          attackId: this.attackId,
+          weaponUuid: this.weapon.uuid,
+          actionKey: this.actionKey,
+          attackerUuid: this.token.actor.uuid,
+          tokenId: this.token.id,
+          criticalSuccess: isCriticalSuccessAttack(outcome),
+          penetrationStep,
+          ...(impactCount > 1 ? {
+            pelletImpactCount: impactCount,
+            pelletImpactIndex: impactIndex
+          } : {})
+        }
+      }, this.weaponFunctionId));
+    }
     await this.notifyAttackCheckResolved(outcome, checkBatch);
-    return buildWeaponDamageRequests(this.weapon, {
-      attackerActor: this.token.actor,
-      attackerToken: this.token,
-      actor: target.actor,
-      targetToken: target,
-      limbKey,
-      amount: damageAmount,
-      source: {
-        attackId: this.attackId,
-        weaponUuid: this.weapon.uuid,
-        actionKey: this.actionKey,
-        attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id,
-        criticalSuccess: isCriticalSuccessAttack(outcome),
-        penetrationStep
-      }
-    }, this.weaponFunctionId);
+    return requests;
   }
 
   async resolveAimedWeaponAttackAgainstTarget(target, targetSelection, {
@@ -6176,6 +6296,7 @@ class WeaponAttackController {
     damageAmount = 0,
     damageShareIndex = 0,
     damageShareCount = 1,
+    pelletImpactCount = 1,
     difficultyBonus = 0,
     penetrationStep = 0,
     checkBatch = null,
@@ -6237,33 +6358,52 @@ class WeaponAttackController {
       return null;
     }
 
-    const damageContext = this.createWeaponDamageContext({
-      targetToken: target,
-      damageShareIndex,
-      damageShareCount
-    });
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
+    const impactCount = Math.max(1, toInteger(pelletImpactCount));
+    const resolvedImpacts = distributePelletImpactDamage(damageAmount, impactCount)
+      .map((impactDamage, impactIndex) => {
+        const resolvedShareIndex = impactCount > 1 ? impactIndex : damageShareIndex;
+        const resolvedShareCount = impactCount > 1 ? impactCount : damageShareCount;
+        const damageContext = this.createWeaponDamageContext({
+          targetToken: target,
+          damageShareIndex: resolvedShareIndex,
+          damageShareCount: resolvedShareCount
+        });
+        let resolvedDamage = applyContextualDamageToAmount(this.weapon, impactDamage, damageContext);
+        resolvedDamage = getCriticalDamageAmount(
+          this.weapon,
+          resolvedDamage,
+          outcome,
+          this.weaponFunctionId,
+          damageContext
+        );
+        return { impactIndex, resolvedDamage };
+      });
     await this.notifyAttackCheckResolved(outcome, checkBatch);
-    const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
-      attackerActor: this.token.actor,
-      attackerToken: this.token,
-      actor: target.actor,
-      targetToken: target,
-      targetItem: targetWeapon,
-      limbKey: holdingLimbKey,
-      amount: damageAmount,
-      source: {
-        attackId: this.attackId,
-        weaponUuid: this.weapon.uuid,
-        actionKey: this.actionKey,
-        attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id,
-        criticalSuccess: isCriticalSuccessAttack(outcome),
-        targetItemId: targetWeapon.id,
-        penetrationStep
-      }
-    }, this.weaponFunctionId);
+    const weaponDamageRequests = resolvedImpacts.flatMap(({ impactIndex, resolvedDamage }) => (
+      buildWeaponConditionDamageRequests(this.weapon, {
+        attackerActor: this.token.actor,
+        attackerToken: this.token,
+        actor: target.actor,
+        targetToken: target,
+        targetItem: targetWeapon,
+        limbKey: holdingLimbKey,
+        amount: resolvedDamage,
+        source: {
+          attackId: this.attackId,
+          weaponUuid: this.weapon.uuid,
+          actionKey: this.actionKey,
+          attackerUuid: this.token.actor.uuid,
+          tokenId: this.token.id,
+          criticalSuccess: isCriticalSuccessAttack(outcome),
+          targetItemId: targetWeapon.id,
+          penetrationStep,
+          ...(impactCount > 1 ? {
+            pelletImpactCount: impactCount,
+            pelletImpactIndex: impactIndex
+          } : {})
+        }
+      }, this.weaponFunctionId)
+    ));
     if (!weaponDamageRequests.length) return [];
 
     const requests = [...weaponDamageRequests];
@@ -6275,25 +6415,31 @@ class WeaponAttackController {
     });
     const limbPenetrationStep = penetrationStep + 1;
     if (penetratesWeapon && limbPenetrationStep <= targetPenetrationPower) {
-      requests.push(...buildWeaponDamageRequests(this.weapon, {
-        attackerActor: this.token.actor,
-        attackerToken: this.token,
-        actor: target.actor,
-        targetToken: target,
-        penetrationPower: targetPenetrationPower,
-        limbKey: holdingLimbKey,
-        amount: getPenetratedDamageAmount(damageAmount, limbPenetrationStep),
-        source: {
-          attackId: this.attackId,
-          weaponUuid: this.weapon.uuid,
-          actionKey: this.actionKey,
-          attackerUuid: this.token.actor.uuid,
-          tokenId: this.token.id,
-          criticalSuccess: isCriticalSuccessAttack(outcome),
-          aimedThroughItemId: targetWeapon.id,
-          penetrationStep: limbPenetrationStep
-        }
-      }, this.weaponFunctionId));
+      for (const { impactIndex, resolvedDamage } of resolvedImpacts) {
+        requests.push(...buildWeaponDamageRequests(this.weapon, {
+          attackerActor: this.token.actor,
+          attackerToken: this.token,
+          actor: target.actor,
+          targetToken: target,
+          penetrationPower: targetPenetrationPower,
+          limbKey: holdingLimbKey,
+          amount: getPenetratedDamageAmount(resolvedDamage, limbPenetrationStep),
+          source: {
+            attackId: this.attackId,
+            weaponUuid: this.weapon.uuid,
+            actionKey: this.actionKey,
+            attackerUuid: this.token.actor.uuid,
+            tokenId: this.token.id,
+            criticalSuccess: isCriticalSuccessAttack(outcome),
+            aimedThroughItemId: targetWeapon.id,
+            penetrationStep: limbPenetrationStep,
+            ...(impactCount > 1 ? {
+              pelletImpactCount: impactCount,
+              pelletImpactIndex: impactIndex
+            } : {})
+          }
+        }, this.weaponFunctionId));
+      }
     }
     return requests;
   }
@@ -6591,7 +6737,10 @@ class WeaponAttackController {
       || hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
     ) return new Map();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    const projectileCount = getBurstProjectileCount(attackCount, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
+    const projectileCount = getBurstProjectileCount(
+      attackCount,
+      getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId)
+    );
     return buildBurstTargetRanges(this.token, this.geometry, targets, projectileCount);
   }
 
@@ -7974,6 +8123,10 @@ async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0)
           radiusPixels: geometry.radiusPixels,
           baseDamage: hasCriticalDamageSnapshot ? explosion.damageBaseAmount : explosion.damageAmount,
           pelletCount: explosion.pelletCount,
+          concentratedPelletImpact: hasWeaponSpecialPropertyData(
+            source.weaponData,
+            WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact
+          ),
           damageTypes: explosion.damageTypes,
           penetrationPower: getDelayedVolleyTargetPenetrationPower({
             explosion,
@@ -8419,6 +8572,28 @@ function getWeaponPelletCount(weapon, weaponFunctionId = "") {
     minimum: 1,
     context: "pellets"
   }) || 1);
+}
+
+function hasConcentratedPelletImpact(weapon, weaponFunctionId = "") {
+  return hasWeaponSpecialProperty(
+    weapon,
+    WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact,
+    weaponFunctionId
+  );
+}
+
+function getWeaponProjectileCountPerAttack(weapon, weaponFunctionId = "") {
+  return getPelletProjectileCount(getWeaponPelletCount(weapon, weaponFunctionId), {
+    concentrated: hasConcentratedPelletImpact(weapon, weaponFunctionId)
+  });
+}
+
+function createWeaponPelletImpactProjectiles(weapon, weaponFunctionId = "", damageAmount = 0) {
+  return createPelletImpactProjectiles({
+    damageAmount,
+    pelletCount: getWeaponPelletCount(weapon, weaponFunctionId),
+    concentrated: hasConcentratedPelletImpact(weapon, weaponFunctionId)
+  });
 }
 
 function getBurstProjectileCount(attackCount = 1, pelletCount = 1) {

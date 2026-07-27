@@ -10482,6 +10482,10 @@ function buildWeaponSpecialPropertyChoices(selected, properties = []) {
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
     },
     {
+      value: WEAPON_SPECIAL_PROPERTIES.concentratedPelletImpact,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialConcentratedPelletImpact")
+    },
+    {
       value: WEAPON_SPECIAL_PROPERTIES.attackPower,
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
     }

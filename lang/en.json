@@ -1724,6 +1724,7 @@
       "WeaponAddSpecialProperty": "Add Property",
       "WeaponNoSpecialProperties": "No special properties configured.",
       "WeaponSpecialHitAllConeTargets": "Hits everyone in the attack cone",
+      "WeaponSpecialConcentratedPelletImpact": "Concentrated Pellet Impact",
       "WeaponSpecialPropertyChoose": "Choose property",
       "WeaponSpecialAttackPower": "Attack Power",
       "TooltipBreakdownTitle": "Value Calculation",

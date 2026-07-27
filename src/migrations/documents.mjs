@@ -370,6 +370,7 @@ function migrateWeaponSpecialProperty(property) {
 function migrateWeaponSpecialPropertyType(type) {
   const key = String(type ?? "").trim();
   if (key === "hitAllConeTargets") return key;
+  if (key === "concentratedPelletImpact") return key;
   if (key === "attackPower") return key;
   return "pending";
 }

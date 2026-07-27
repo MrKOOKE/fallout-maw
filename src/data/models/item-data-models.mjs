@@ -9,6 +9,7 @@ const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
 const WEAPON_SPECIAL_PROPERTY_PENDING = "pending";
 const WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
+const WEAPON_SPECIAL_PROPERTY_CONCENTRATED_PELLET_IMPACT = "concentratedPelletImpact";
 const WEAPON_SPECIAL_PROPERTY_ATTACK_POWER = "attackPower";
 const WEAPON_SPECIAL_PROPERTY_CRITICAL_DAMAGE = "criticalDamage";
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
@@ -1065,6 +1066,7 @@ function weaponSpecialPropertyField() {
   return new TypedSchemaField({
     [WEAPON_SPECIAL_PROPERTY_PENDING]: {},
     [WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS]: {},
+    [WEAPON_SPECIAL_PROPERTY_CONCENTRATED_PELLET_IMPACT]: {},
     [WEAPON_SPECIAL_PROPERTY_ATTACK_POWER]: {
       attackPower: weaponAttackPowerField()
     },

@@ -1784,6 +1784,7 @@
       "WeaponAddSpecialProperty": "Добавить свойство",
       "WeaponNoSpecialProperties": "Особые свойства не заданы.",
       "WeaponSpecialHitAllConeTargets": "Поражает всех в конусе атаки",
+      "WeaponSpecialConcentratedPelletImpact": "Дробное воздействие",
       "WeaponSpecialPropertyChoose": "Выберите свойство",
       "WeaponSpecialAttackPower": "Сила атаки",
       "TooltipBreakdownTitle": "Расчёт значения",
