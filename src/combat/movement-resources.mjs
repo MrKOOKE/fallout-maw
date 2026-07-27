@@ -53,9 +53,7 @@ export function getCombatMovementResourceState(actor) {
   const limited = getResourceLimitState(actor).resources;
   const movementAvailable = action.ownTurn ? movementValue : 0;
   const limitedMovement = Math.min(movementAvailable, Math.max(0, toInteger(limited[MOVEMENT_RESOURCE_KEY]?.amount)));
-  const limitedAction = action.ownTurn
-    ? Math.min(action.value, Math.max(0, toInteger(limited[ACTION_RESOURCE_KEY]?.amount)))
-    : 0;
+  const limitedAction = action.ownTurn ? Math.max(0, toInteger(action.limited)) : 0;
   return {
     movement: {
       key: MOVEMENT_RESOURCE_KEY,
@@ -70,7 +68,7 @@ export function getCombatMovementResourceState(actor) {
       label: action.label,
       current: action.current,
       limited: limitedAction,
-      value: Math.max(0, action.value - limitedAction),
+      value: action.value,
       max: action.max
     },
     total: Math.max(0, movementAvailable - limitedMovement) + Math.max(0, action.value - limitedAction)

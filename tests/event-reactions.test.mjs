@@ -167,7 +167,7 @@ test("event reaction status permissions default off and remain independent", () 
   assert.equal(actorStatusAllowsReaction(
     { statuses: new Set(["stunned"]) },
     { allowUnconscious: true, allowDead: true }
-  ), false);
+  ), true);
 });
 
 test("event subscription requires an exact stable event key", () => {

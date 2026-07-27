@@ -8,6 +8,7 @@ import {
   isCombatResourceCostActive
 } from "../combat/resource-cost-policy.mjs";
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
+import { getActorResourceLimitAmount } from "../combat/resource-limits.mjs";
 import {
   ACTION_RESOURCE_KEY,
   getStrictActionPointState
@@ -175,7 +176,12 @@ function createActorResourceAdapter() {
       if (!isCombatResourceCostActive(actor, definition?.key)) return 0;
       const resource = actor?.system?.resources?.[definition?.key];
       if (!resource) throw new Error(`Missing resource '${definition?.key ?? ""}'.`);
-      return Math.max(0, Math.trunc(Number(resource.value) || 0) - Math.trunc(Number(resource.min) || 0));
+      return Math.max(
+        0,
+        Math.trunc(Number(resource.value) || 0)
+          - Math.trunc(Number(resource.min) || 0)
+          - getActorResourceLimitAmount(actor, definition.key)
+      );
     },
     async spend() {
       // The Foundry integration spends ordinary resources in one Actor update via spendVector.
@@ -216,7 +222,7 @@ function createStrictActionPointAdapter() {
       if (!isCombatResourceCostActive(actor, ACTION_RESOURCE_KEY)) return 0;
       const state = getStrictActionPointState(actor);
       if (!state) throw new Error(`Missing resource '${ACTION_RESOURCE_KEY}'.`);
-      return state.current;
+      return state.value;
     },
     async spend() {
       // The Foundry integration commits strict ОД together with the other

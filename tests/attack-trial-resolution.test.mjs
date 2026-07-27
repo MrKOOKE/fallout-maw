@@ -89,7 +89,7 @@ function batchResponder(resultForActor, calls = []) {
   };
 }
 
-test("difficulty uses source resource aliases and nested source, target, and subject data", async () => {
+test("difficulty preserves source skill aliases and exposes resources through their real keys", async () => {
   const source = actor("Actor.source", { energy: 60, skills: { energy: 5 } });
   const target = actor("Actor.target", { energy: 15, skills: { energy: 90 } });
 
@@ -104,24 +104,24 @@ test("difficulty uses source resource aliases and nested source, target, and sub
     targetActor: target,
     subjectActor: target
   });
-  assert.equal(data.formulaVariables.energy, 60);
-  assert.equal(data.formulaVariables.ene, 60);
-  assert.equal(data.skillSettings.some(entry => entry.key === "energy"), false);
-  assert.equal(data.formulaReferences["source.resources.energy.value"], 60);
-  assert.equal(data.formulaReferences["target.resources.energy.value"], 15);
-  assert.equal(data.formulaReferences["subject.resources.energy.value"], 15);
+  assert.equal(data.formulaVariables.ene, 5);
+  assert.equal(data.formulaVariables.power, 60);
+  assert.equal(data.skillSettings.some(entry => entry.key === "energy"), true);
+  assert.equal(data.formulaReferences["source.resources.power.value"], 60);
+  assert.equal(data.formulaReferences["target.resources.power.value"], 15);
+  assert.equal(data.formulaReferences["subject.resources.power.value"], 15);
 
   const difficulty = await evaluateAttackTrialDifficulty({
-    formula: "50 + ene + energy + @source.resources.energy.value + @target.energy + @subject.resources.energy.value",
+    formula: "50 + ene + energy + power + @source.resources.power.value + @target.resources.power.value + @subject.resources.power.value",
     sourceActor: source,
     targetActor: target,
     subjectActor: target
   }, formulaDependencies());
-  assert.equal(difficulty, 260);
+  assert.equal(difficulty, 210);
 });
 
 test("target trials choose best or worst skill and route fixed result branches", async () => {
-  const source = actor("Actor.source", { energy: 40 });
+  const source = actor("Actor.source", { energy: 400, skills: { energy: 40 } });
   const first = actor("Actor.first", {
     energy: 5,
     skills: { endurance: 30, athletics: 70 }
@@ -141,7 +141,7 @@ test("target trials choose best or worst skill and route fixed result branches",
       trial({
         id: "best",
         selectionMode: "best",
-        difficultyFormula: "50 + energy + @subject.energy",
+        difficultyFormula: "50 + energy + @subject.resources.power.value",
         entries: [
           { id: "endurance", kind: "skill", key: "endurance" },
           { id: "athletics", kind: "skill", key: "athletics" }

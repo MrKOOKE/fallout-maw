@@ -4,6 +4,7 @@ import {
   isActorInActiveCombat
 } from "./combat-membership.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
+import { getActorResourceLimitAmount } from "./resource-limits.mjs";
 
 export const ACTION_RESOURCE_KEY = "actionPoints";
 export { getActorActiveCombat, isActorInActiveCombat };
@@ -11,9 +12,13 @@ export { getActorActiveCombat, isActorInActiveCombat };
 export function getStrictActionPointState(actor) {
   const resource = actor?.system?.resources?.[ACTION_RESOURCE_KEY];
   if (!resource) return null;
+  const current = Math.max(0, toInteger(resource.value));
+  const limited = Math.min(current, getActorResourceLimitAmount(actor, ACTION_RESOURCE_KEY));
   return {
     key: ACTION_RESOURCE_KEY,
-    current: Math.max(0, toInteger(resource.value)),
+    current,
+    limited,
+    value: Math.max(0, current - limited),
     max: Math.max(0, toInteger(resource.max))
   };
 }
@@ -22,9 +27,9 @@ export function canSpendStrictActionPoints(actor, amount = 0, { label = "" } = {
   if (!isActorInActiveCombat(actor)) return true;
   const cost = Math.max(0, toInteger(amount));
   const state = getStrictActionPointState(actor);
-  if (state && cost <= state.current) return true;
+  if (state && cost <= state.value) return true;
   globalThis.ui?.notifications?.warn?.(
-    `${actor?.name ?? ""}: не хватает ОД${label ? ` для ${label}` : ""} (${cost} > ${state?.current ?? 0}).`
+    `${actor?.name ?? ""}: не хватает доступных ОД${label ? ` для ${label}` : ""} (${cost} > ${state?.value ?? 0}).`
   );
   return false;
 }
@@ -39,7 +44,7 @@ export async function spendStrictActionPointsWithReceipt(actor, amount = 0, cont
   if (!isActorInActiveCombat(actor)) return { spent: 0, receipt: null, events: [] };
   const cost = Math.max(0, toInteger(amount));
   const state = getStrictActionPointState(actor);
-  if (!actor?.isOwner || cost <= 0 || !state || cost > state.current) {
+  if (!actor?.isOwner || cost <= 0 || !state || cost > state.value) {
     return { spent: 0, receipt: null, events: [] };
   }
   const next = state.current - cost;

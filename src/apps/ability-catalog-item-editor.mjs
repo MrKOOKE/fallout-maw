@@ -889,7 +889,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
-  static #onConditionTrialLinkTypeChange(event) {
+  #onConditionTrialLinkTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
     this.#syncFromForm();
     const target = event.currentTarget;
     const selectedType = String(target?.value ?? "");
@@ -2804,20 +2806,32 @@ function readAbilityConditions(root) {
         resultKeys: readCheckedFieldValues(branchRow, "[data-field='conditionTrialBranchResultKey']"),
         flow: branchRow.querySelector("[data-field='conditionTrialBranchFlow']")?.value
           ?? ABILITY_TRIAL_BRANCH_FLOWS.continue,
-        links: Array.from(branchRow.querySelectorAll("[data-trial-link-row]") ?? []).map(linkRow => ({
-          id: linkRow.dataset.trialLinkId || foundry.utils.randomID(),
-          kind: linkRow.querySelector("[data-field='conditionTrialLinkKind']")?.value
-            ?? ABILITY_TRIAL_LINK_KINDS.construct,
-          constructId: linkRow.querySelector("[data-field='conditionTrialLinkConstructId']")?.value ?? "",
-          percentFormula: linkRow.querySelector("[data-field='conditionTrialLinkPercentFormula']")?.value
-            ?? "100",
-          durationPercentFormula: linkRow.querySelector("[data-field='conditionTrialLinkDurationPercentFormula']")?.value
-            ?? "100",
-          recipient: linkRow.querySelector("[data-field='conditionTrialLinkRecipient']")?.value
-            ?? ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
-          mode: linkRow.querySelector("[data-field='conditionTrialLinkMode']")?.value
-            ?? ABILITY_TRIAL_LINK_MODES.perSubject
-        }))
+        links: Array.from(branchRow.querySelectorAll("[data-trial-link-row]") ?? []).map(linkRow => {
+          const selectedType = String(
+            linkRow.querySelector("[data-field='conditionTrialLinkType']")?.value ?? ""
+          );
+          const kind = [
+            ABILITY_TRIAL_LINK_KINDS.primaryChanges,
+            ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent
+          ].includes(selectedType)
+            ? selectedType
+            : Object.values(ABILITY_CONSTRUCT_TYPES).includes(selectedType)
+              ? ABILITY_TRIAL_LINK_KINDS.construct
+              : ABILITY_TRIAL_LINK_KINDS.pending;
+          return {
+            id: linkRow.dataset.trialLinkId || foundry.utils.randomID(),
+            kind,
+            constructId: linkRow.querySelector("[data-field='conditionTrialLinkConstructId']")?.value ?? "",
+            percentFormula: linkRow.querySelector("[data-field='conditionTrialLinkPercentFormula']")?.value
+              ?? "100",
+            durationPercentFormula: linkRow.querySelector("[data-field='conditionTrialLinkDurationPercentFormula']")?.value
+              ?? "100",
+            recipient: linkRow.querySelector("[data-field='conditionTrialLinkRecipient']")?.value
+              ?? ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+            mode: linkRow.querySelector("[data-field='conditionTrialLinkMode']")?.value
+              ?? ABILITY_TRIAL_LINK_MODES.perSubject
+          };
+        })
       })),
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
       progressRequired: row.querySelector("[data-field='conditionEventProgressRequired']")?.value ?? 1,

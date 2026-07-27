@@ -1240,7 +1240,7 @@ function findFreshOption(actor, option) {
 function canAffordConfiguredActionPointCost(actor, amount) {
   if (!isActorInActiveCombat(actor) || amount <= 0) return true;
   const state = getStrictActionPointState(actor);
-  return Boolean(state && amount <= state.current);
+  return Boolean(state && amount <= state.value);
 }
 
 async function handleAbilityActionAttackQuery(data = {}, { user: sender = null } = {}) {

@@ -198,10 +198,9 @@ export async function resolveAttackTrialResolution({
 }
 
 /**
- * Evaluate a trial difficulty against the source actor's normal aliases.
- * Bare resource names such as `energy` and `ene` resolve from the source actor. Explicit
- * nested references are also available as `@source...`, `@target...` and
- * `@subject...`.
+ * Evaluate a trial difficulty against the source actor's normal formula aliases.
+ * Explicit nested references are also available as `@source...`, `@target...`
+ * and `@subject...`.
  */
 export async function evaluateAttackTrialDifficulty({
   formula = "0",
@@ -266,10 +265,6 @@ export function buildAttackTrialFormulaData({
       .map(key => String(key).trim().toLowerCase())
       .filter(Boolean)
   );
-  if (sourceActor?.system?.resources?.[ENERGY_RESOURCE_KEY]) {
-    reservedResourceAliases.add("energy");
-    reservedResourceAliases.add("ene");
-  }
 
   const formulaReferences = {
     ...(source.formulaReferences && typeof source.formulaReferences === "object"
@@ -282,10 +277,9 @@ export function buildAttackTrialFormulaData({
 
   return {
     ...source,
-    // Resource names intentionally win collisions with characteristic and
-    // skill aliases. In the stock configuration `energy`/`ene` identify a
-    // skill, while attacks use both spellings for the energy resource. The skill remains
-    // available through its explicit @skills.energy.value reference.
+    // Real resource keys win collisions, while configured skill aliases retain
+    // their normal meaning. In the stock configuration `energy`/`ene` are the
+    // Контроль энергии skill and the energy resource is `power`/`pow`.
     characteristicSettings: excludeCollidingFormulaSettings(
       source.characteristicSettings,
       reservedResourceAliases
@@ -571,11 +565,6 @@ function addBareSourceResourceAliases(target, actor) {
     const value = readIndicatorValue(resource);
     if (!normalized || value === null || Object.hasOwn(target, normalized)) continue;
     target[normalized] = value;
-  }
-  const energy = readIndicatorValue(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]);
-  if (energy !== null) {
-    target.energy = energy;
-    target.ene = energy;
   }
 }
 

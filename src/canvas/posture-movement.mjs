@@ -9,6 +9,7 @@ import { prepareActorEffectChangeForApplication } from "../utils/active-effect-c
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 import { deferActorPosture, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "../combat/combat-membership.mjs";
+import { getActorResourceLimitAmount } from "../combat/resource-limits.mjs";
 import {
   getActorPostureAction,
   isPostureEffectApplicableToActor,
@@ -517,7 +518,11 @@ function getPostureChangeResourceState(actor) {
   if (!movement || !action) return null;
 
   const movementValue = Math.max(0, toInteger(movement.value));
-  const movementAvailable = action.ownTurn ? movementValue : 0;
+  const movementLimited = Math.min(
+    movementValue,
+    getActorResourceLimitAmount(actor, MOVEMENT_RESOURCE_KEY)
+  );
+  const movementAvailable = action.ownTurn ? Math.max(0, movementValue - movementLimited) : 0;
   return {
     movement: {
       current: movementValue,

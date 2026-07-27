@@ -315,7 +315,8 @@ async function evaluateAuraEntry(entry, { reason = "time", worldTime = getWorldT
       sourceEffect: entry.effect,
       sourceItemUuid: String(entry.flag?.sourceItemUuid ?? entry.effect.origin ?? ""),
       title: entry.effect.name,
-      worldTime
+      worldTime,
+      operationId: `ability-aura:${String(entry.effect?.uuid ?? entry.effect?.id ?? "")}:${worldTime}`
     });
   }
 }

@@ -306,6 +306,48 @@ test("combat-only rows are re-evaluated after waiting for the actor lock", async
   assert.equal(actor.system.resources.actionPoints.value, 1);
 });
 
+test("ability cost preflight sees only the unstunned portions of ОД, ОР and ОП", async () => {
+  const actor = {
+    uuid: "Actor.StunnedCosts",
+    isOwner: true,
+    effects: [],
+    system: {
+      combat: { stun: 50 },
+      resources: {
+        actionPoints: { value: 10, min: 0, max: 10 },
+        reactionPoints: { value: 10, min: 0, max: 10 },
+        movementPoints: { value: 10, min: 0, max: 10 }
+      }
+    }
+  };
+  const combat = { started: true, combatants: [{ actor }] };
+  globalThis.game = { combat, combats: [combat] };
+  const registry = createFoundryReactionCostRegistry({
+    resourceSettings: [
+      { key: "actionPoints", label: "ОД" },
+      { key: "reactionPoints", label: "ОР" },
+      { key: "movementPoints", label: "ОП" }
+    ],
+    evaluateCostFormula: formula => Number(formula),
+    logger: { warn() {}, error() {} }
+  });
+
+  const quote = await registry.quote(actor, [
+    { id: "ap", resourceKey: "actionPoints", formula: "6" },
+    { id: "rp", resourceKey: "reactionPoints", formula: "1" },
+    { id: "mp", resourceKey: "movementPoints", formula: "1" }
+  ]);
+
+  assert.equal(quote.affordable, false);
+  assert.deepEqual(
+    Object.fromEntries(quote.costs.map(cost => [cost.resourceKey, cost.available])),
+    { actionPoints: 5, movementPoints: 5, reactionPoints: 5 }
+  );
+  assert.equal(actor.system.resources.actionPoints.value, 10);
+  assert.equal(actor.system.resources.reactionPoints.value, 10);
+  assert.equal(actor.system.resources.movementPoints.value, 10);
+});
+
 test("interactive ability paths quote costs before opening target or change pickers", async () => {
   const fixedSource = await readFile(new URL("../src/abilities/fixed-functions.mjs", import.meta.url), "utf8");
   const activeStart = fixedSource.indexOf("async function useActiveApplicationAbilityFunction");

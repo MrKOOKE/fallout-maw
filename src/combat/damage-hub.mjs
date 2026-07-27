@@ -85,6 +85,10 @@ import {
   hasConsciousnessDepletionTransition,
   isConsciousnessUnconscious
 } from "./consciousness.mjs";
+export {
+  getResourceBlockState,
+  getResourceLimitState
+} from "./resource-limits.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 export const DAMAGE_APPLIED_HOOK = "fallout-maw.damageApplied";
@@ -3866,26 +3870,6 @@ function getActorApplicableEffects(actor) {
   if (typeof actor?.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
   return Array.from(actor?.effects ?? []);
 }
-
-export function getResourceLimitState(actor) {
-  const resources = {};
-  for (const effect of actor?.effects ?? []) {
-    if (effect.disabled) continue;
-    const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-    if (data?.kind !== "resourceLimit" && data?.kind !== "resourceBlock") continue;
-    const color = String(data.color ?? "#3f8cff");
-    for (const [key, amount] of Object.entries(data.resources ?? {})) {
-      const value = Math.max(0, toInteger(amount));
-      if (!value) continue;
-      resources[key] ??= { amount: 0, color };
-      resources[key].amount += value;
-      resources[key].color = color;
-    }
-  }
-  return { resources };
-}
-
-export const getResourceBlockState = getResourceLimitState;
 
 async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {}, worldTime = null } = {}) {
   if (!canCreateLimbTimedDamageEffect(actor, limbKey)) return [];

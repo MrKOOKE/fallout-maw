@@ -22,6 +22,10 @@ const itemModels = fs.readFileSync(new URL(
   "../src/data/models/item-data-models.mjs",
   import.meta.url
 ), "utf8");
+const stylesheet = fs.readFileSync(new URL(
+  "../styles/fallout-maw.css",
+  import.meta.url
+), "utf8");
 
 test("ordinary Trial schema persists grouped outcomes, flow and nested consequence links", () => {
   assert.match(itemModels, /trialBranches: new ArrayField\(abilityTrialBranchField\(\)/);
@@ -83,10 +87,11 @@ test("both editor pipelines read, mutate and clean nested ordinary Trial branche
   assert.match(catalogEditor, /trialBranches: Array\.from\(row\.querySelectorAll\("\[data-trial-branch-row\]"\)/);
   assert.match(catalogEditor, /branch\.links \?\?= \[\]/);
   assert.match(catalogEditor, /condition\.trialRoutesPrimaryChanges = true/);
-  assert.match(catalogEditor, /conditionTrialLinkKind/);
   assert.match(catalogEditor, /conditionTrialLinkPercentFormula/);
   assert.match(catalogEditor, /conditionTrialLinkDurationPercentFormula/);
   assert.match(catalogEditor, /conditionTrialLinkType/);
+  assert.match(catalogEditor, /const selectedType = String\([\s\S]*conditionTrialLinkType/);
+  assert.doesNotMatch(catalogTemplate, /conditionTrialLinkKind/);
   assert.match(catalogEditor, /condition\?\.trialBranches \?\? \[\]\)\.some\(branch/);
   assert.match(itemSheet, /buildItemTrialBranchRows\(condition\?\.trialBranches/);
   assert.match(itemSheet, /branch\.links \?\?= \[\]/);
@@ -97,6 +102,38 @@ test("both editor pipelines read, mutate and clean nested ordinary Trial branche
   assert.match(itemSheet, /durationPercentFormula/);
   assert.match(itemSheet, /data-ability-trial-branch-result-key/);
   assert.match(itemSheet, /condition\?\.trialBranches \?\? \[\]\)\.some\(branch/);
+});
+
+test("the catalog consequence selector calls an instance handler that can access editor state", () => {
+  assert.match(
+    catalogEditor,
+    /select\.addEventListener\("change", event => this\.#onConditionTrialLinkTypeChange\(event\)\)/
+  );
+  assert.match(catalogEditor, /\n  #onConditionTrialLinkTypeChange\(event\) \{/);
+  assert.doesNotMatch(catalogEditor, /static #onConditionTrialLinkTypeChange/);
+});
+
+test("issued abilities rerender after choosing a consequence and keep its delete control on the same row", () => {
+  const handler = sourceBetween(
+    itemSheet,
+    "async #onAbilityTrialLinkTypeChange",
+    "#onDeleteAbilityTrialLink"
+  );
+  assert.match(handler, /await this\.#submitCurrentForm/);
+  assert.match(handler, /return this\.render\(\)/);
+  assert.equal(
+    itemTemplate.split("fallout-maw-trial-link-type-row").length - 1,
+    2,
+    "Expected the dedicated consequence header row in both Item sheet function render paths"
+  );
+  assert.equal(
+    catalogTemplate.split("fallout-maw-trial-link-type-row").length - 1,
+    1
+  );
+  assert.match(
+    stylesheet,
+    /\.fallout-maw-trial-link-type-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+2\.5rem;/s
+  );
 });
 
 test("both display builders expose the selected consequence type to their templates", () => {

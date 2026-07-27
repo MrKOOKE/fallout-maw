@@ -31,6 +31,7 @@ import {
   getSkillCheckActionId,
   SKILL_CHECK_ACTION_EFFECT_FIELDS
 } from "./skill-check-action-effects.mjs";
+import { groupSkillCheckOutcomesByActor } from "./skill-check-presentation.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -367,9 +368,10 @@ export async function requestSkillCheckBatch({
     const presentableOutcomes = pendingChecks
       .filter(pending => pending.terminalContext.success && pending.terminalContext.value && !pending.presentationError)
       .map(pending => pending.terminalContext.value);
-    const message = createMessage
-      ? await publishSkillCheckMessageSafely(() => publishSkillCheckBatchMessage(presentableOutcomes, { requester, title }))
-      : undefined;
+    const messages = createMessage
+      ? await publishSkillCheckMessageSafely(() => publishSkillCheckOutcomeMessages(presentableOutcomes, { requester, title }))
+      : [];
+    const message = messages?.[0];
 
     for (const pending of pendingChecks) {
       await finalizePendingCheck(pending);
@@ -400,7 +402,7 @@ export async function requestSkillCheckBatch({
     });
 
     if (operationError) throw operationError;
-    return { outcomes, message };
+    return { outcomes, message, messages: messages ?? [] };
   });
 }
 
@@ -446,9 +448,8 @@ export function createSkillCheckBatchCollector({ requester = "", title = "" } = 
       try {
         if (createMessage) {
           const normalizedOutcomes = outcomes.filter(Boolean);
-          message = normalizedOutcomes.length === 1 && !forceBatch
-            ? await publishSkillCheckMessage(normalizedOutcomes[0], { requester })
-            : await publishSkillCheckBatchMessage(normalizedOutcomes, { requester, title });
+          const messages = await publishSkillCheckOutcomeMessages(normalizedOutcomes, { requester, title });
+          message = messages[0];
         }
       } catch (error) {
         firstError = error;
@@ -534,6 +535,20 @@ async function publishSkillCheckMessageSafely(publisher) {
     ui.notifications.warn("Проверка выполнена, но карточка проверки навыка не была создана.");
     return undefined;
   }
+}
+
+async function publishSkillCheckOutcomeMessages(outcomes = [], { requester = "", title = "" } = {}) {
+  const messages = [];
+  const actorGroups = groupSkillCheckOutcomesByActor(outcomes);
+
+  for (const actorOutcomes of actorGroups) {
+    const message = actorOutcomes.length > 1
+      ? await publishSkillCheckBatchMessage(actorOutcomes, { requester, title })
+      : await publishSkillCheckMessage(actorOutcomes[0], { requester });
+    if (message) messages.push(message);
+  }
+
+  return messages;
 }
 
 async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", title = "" } = {}) {

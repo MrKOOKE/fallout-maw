@@ -1,4 +1,4 @@
-export const UNABLE_TO_ACT_STATUSES = Object.freeze(["dead", "unconscious", "stunned"]);
+export const UNABLE_TO_ACT_STATUSES = Object.freeze(["dead", "unconscious"]);
 
 export function actorHasIncapacitatingStatus(actor = null) {
   if (!actor) return false;
@@ -18,7 +18,6 @@ export function actorStatusAllowsReaction(actor = null, {
   const hasStatus = status => Boolean(status && actor.statuses?.has?.(status));
   const isDead = hasStatus("dead") || hasStatus(defeatedStatus);
   if (isDead) return Boolean(allowDead);
-  if (hasStatus("stunned")) return false;
   if (hasStatus("unconscious")) return Boolean(allowUnconscious);
   return true;
 }

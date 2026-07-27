@@ -7156,6 +7156,10 @@ label.fallout-maw-mitigation-cell {
   align-items: center;
 }
 
+.fallout-maw-trial-link-type-row {
+  grid-template-columns: minmax(0, 1fr) 2.5rem;
+}
+
 .fallout-maw-attack-hit-trial-list,
 .fallout-maw-attack-hit-outcomes,
 .fallout-maw-attack-hit-outcome-body {

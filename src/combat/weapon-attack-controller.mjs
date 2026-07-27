@@ -150,6 +150,7 @@ import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { getActorAvailableEnergy } from "./energy-resource.mjs";
 import { isCombatResourceCostActive } from "./resource-cost-policy.mjs";
+import { getActorResourceLimitAmount } from "./resource-limits.mjs";
 import {
   getAbilityAttackActionKey,
   getAbilityAttackFunction,
@@ -2182,7 +2183,7 @@ async function spendCommandedActionPointCosts(actionPointCosts = new Map(), chai
       const cost = Math.max(0, toInteger(amount));
       if (cost <= 0 || !isActorInActiveCombat(actor)) continue;
       const before = getStrictActionPointState(actor);
-      if (!before || before.current < cost) throw new Error("Action point state changed before spend.");
+      if (!before || before.value < cost) throw new Error("Action point state changed before spend.");
       await spendStrictActionPoints(actor, cost, {
         source: "abilityAction",
         actionKey: "commandedAttack",
@@ -8543,12 +8544,17 @@ function getActorAttackResourceAvailable(actor = null, resourceKey = "") {
   if (!actor || !key || !isCombatResourceCostActive(actor, key)) return 0;
   if (key === "actionPoints") {
     const strict = getStrictActionPointState(actor);
-    return Math.max(0, toInteger(strict?.current));
+    return Math.max(0, toInteger(strict?.value));
   }
   if (key === "power") return Math.max(0, toInteger(getActorAvailableEnergy(actor)));
   const resource = actor.system?.resources?.[key];
   if (!resource) return 0;
-  return Math.max(0, toInteger(resource.value) - toInteger(resource.min));
+  return Math.max(
+    0,
+    toInteger(resource.value)
+      - toInteger(resource.min)
+      - getActorResourceLimitAmount(actor, key)
+  );
 }
 
 function getActorAttackResourceLabel(resourceKey = "") {
@@ -8628,7 +8634,7 @@ function canSpendCombinedWeaponActionPointCosts(
   const dynamicCost = Math.max(0, toInteger(actionCost));
   const strictCost = Math.max(0, toInteger(strictActorCost));
   const strictState = getStrictActionPointState(actor);
-  if (strictCost > Math.max(0, toInteger(strictState?.current))) {
+  if (strictCost > Math.max(0, toInteger(strictState?.value))) {
     if (notify) canSpendStrictActionPoints(actor, strictCost, { label });
     return false;
   }

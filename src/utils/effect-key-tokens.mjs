@@ -10,6 +10,7 @@ import {
 } from "../combat/damage-barriers.mjs";
 import { PERIODIC_HEALING_EFFECT_KEY } from "../combat/periodic-healing.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
+import { STUN_EFFECT_KEY } from "../combat/resource-limits.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
@@ -739,6 +740,13 @@ export function buildCombatEffectKeyTokens() {
       key: "unconsciousnessResistance",
       label: "Сопротивление к потере сознания",
       path: "system.combat.unconsciousnessResistance",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "stun",
+      key: "stun",
+      label: "Оглушение, %",
+      path: STUN_EFFECT_KEY,
       group: "Бой"
     }),
     createEffectKeyToken({

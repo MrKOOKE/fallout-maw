@@ -2807,11 +2807,10 @@
                         </div>
                         {{#each links}}
                         <fieldset class="fallout-maw-fieldset fallout-maw-trial-outcome" data-trial-link-row data-trial-link-id="{{id}}" data-trial-link-index="{{index}}">
-                          <input type="hidden" data-field="conditionTrialLinkKind" value="{{kind}}">
                           <input type="hidden" data-field="conditionTrialLinkConstructId" value="{{constructId}}">
                           {{#unless isPrimaryChangesPercent}}<input type="hidden" data-field="conditionTrialLinkPercentFormula" value="{{percentFormula}}">{{/unless}}
                           {{#unless usesPrimaryDurationPercent}}<input type="hidden" data-field="conditionTrialLinkDurationPercentFormula" value="{{durationPercentFormula}}">{{/unless}}
-                          <div class="fallout-maw-settings-row">
+                          <div class="fallout-maw-settings-row fallout-maw-trial-link-type-row">
                             <select data-field="conditionTrialLinkType">
                               {{#each typeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                             </select>

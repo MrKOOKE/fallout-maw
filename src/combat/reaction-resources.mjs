@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
+import { getActorResourceLimitAmount } from "./resource-limits.mjs";
 import {
   ACTION_RESOURCE_KEY,
   canSpendStrictActionPoints,
@@ -67,7 +68,7 @@ const CLEAR_EFFECT_DURATION_UPDATE = Object.freeze({
   "duration.expiry": null,
   "duration.expired": false
 });
-const INCAPACITATING_COMBATANT_STATUSES = new Set(["dead", "unconscious", "stunned"]);
+const INCAPACITATING_COMBATANT_STATUSES = new Set(["dead", "unconscious"]);
 
 let advancingDefeatedTurnKey = "";
 
@@ -270,7 +271,7 @@ export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERS
   if (!actor?.isOwner) return;
   await callActorTurnEndHandlers({ actor, combat: game.combat, conversionMode });
   if (conversionMode !== TURN_CONVERSION_MODES.skip) {
-    const remainingActionPoints = getNormalActionPointValue(actor);
+    const remainingActionPoints = getAvailableNormalActionPointValue(actor);
     if (remainingActionPoints > 0) {
       if (conversionMode === TURN_CONVERSION_MODES.reaction) {
         await convertActionPointsToReactionPoints(actor, remainingActionPoints);
@@ -333,6 +334,13 @@ export function getNormalActionPointValue(actor) {
   return Math.max(0, toInteger(actor?.system?.resources?.[ACTION_RESOURCE_KEY]?.value));
 }
 
+export function getAvailableNormalActionPointValue(actor) {
+  return Math.max(
+    0,
+    getNormalActionPointValue(actor) - getActorResourceLimitAmount(actor, ACTION_RESOURCE_KEY)
+  );
+}
+
 export function getReactionPointValue(actor) {
   return Math.max(0, toInteger(actor?.system?.resources?.[REACTION_RESOURCE_KEY]?.value));
 }
@@ -380,12 +388,17 @@ export function getCombatActionPointState(actor) {
   const onceValue = getOneTimeActionPointTotal(actor);
   const combat = getActorActiveCombat(actor);
   const ownTurn = !combat || isActorCurrentCombatant(actor, combat);
+  const key = ownTurn ? ACTION_RESOURCE_KEY : REACTION_RESOURCE_KEY;
+  const current = ownTurn ? actionValue : reactionValue;
+  const total = ownTurn ? actionValue + onceValue : reactionValue;
+  const limited = Math.min(total, getActorResourceLimitAmount(actor, key));
   return {
     ownTurn,
-    key: ownTurn ? ACTION_RESOURCE_KEY : REACTION_RESOURCE_KEY,
+    key,
     label: ownTurn ? "ОД" : "ОР",
-    current: ownTurn ? actionValue : reactionValue,
-    value: ownTurn ? actionValue + onceValue : reactionValue,
+    current,
+    limited,
+    value: Math.max(0, total - limited),
     normal: actionValue,
     once: onceValue,
     max: ownTurn
@@ -692,7 +705,7 @@ function getCombatActionPointOperationOptions(context = {}) {
 }
 
 export async function promptEndTurnConversion(actor) {
-  const remaining = getNormalActionPointValue(actor);
+  const remaining = getAvailableNormalActionPointValue(actor);
   if (remaining <= 0) return TURN_CONVERSION_MODES.none;
 
   const { DialogV2 } = foundry.applications.api;

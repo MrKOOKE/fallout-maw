@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "2e49097a0582e56a548f645b69f7840d6cbdff0b02a75b8d1b6dfc6c7225e8c0",
-  "updatedAt": "2026-07-27T10:48:36.910Z",
+  "revision": "5124b08925f62648c2f7176e38d7da1db8bd55bac3116143f0b814e837899f97",
+  "updatedAt": "2026-07-27T11:50:24.081Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -5016,7 +5016,7 @@
           {
             "abilities": [
               {
-                "description": "<p>Стоимость активации: 80 энергии.<br>Перегрузка: 20 энергии на пол часа.</p><p>После активации все Враги в радиусе [[5+energy/10]]м пройдут проверку Стойкости со Сл [[50+energy]] и в случае провала будут оглушены.</p>",
+                "description": "<p>Стоимость активации: 80 энергии.<br>Перегрузка: 20 энергии на 30 минут.</p><p>После активации все Враги в радиусе [[5+energy/10]]м пройдут проверку Стойкости со Сл [[50+energy]] и в случае:</p><ul><li><p>Провала: 60% оглушение на 12 секуннд.</p></li><li><p>Успеха: 30% оглушение на 6 секунд.</p></li></ul>",
                 "id": "Kps3fGukwsCHGqIc",
                 "img": "icons/svg/aura.svg",
                 "name": "Импульс",
@@ -5044,7 +5044,16 @@
                       "actions": [],
                       "activeSettings": {
                         "changeEvaluation": "source",
-                        "costs": [],
+                        "costs": [
+                          {
+                            "formula": "80",
+                            "id": "QBx1uToBK1J12nhi",
+                            "overloadAmount": 20,
+                            "overloadDurationSeconds": 1800,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
                         "excludeSelf": true,
                         "includeSelf": false,
                         "name": "",
@@ -5061,11 +5070,11 @@
                       "changes": [
                         {
                           "id": "YYjrcbh4lZ42DEcp",
-                          "key": "system.resources.dodge.bonus",
+                          "key": "system.combat.stun",
                           "phase": "initial",
                           "priority": null,
                           "type": "add",
-                          "value": "-30"
+                          "value": "60"
                         }
                       ],
                       "conditions": [
@@ -5088,11 +5097,41 @@
                             {
                               "flow": "continue",
                               "id": "4visPgHJWVInuKso",
-                              "links": [],
+                              "links": [
+                                {
+                                  "constructId": "",
+                                  "durationPercentFormula": "100",
+                                  "id": "ohwhDtXBGjnt320H",
+                                  "kind": "primaryChanges",
+                                  "mode": "perSubject",
+                                  "percentFormula": "100",
+                                  "recipient": "subjects"
+                                }
+                              ],
                               "name": "Ветка 1",
                               "resultKeys": [
                                 "criticalFailure",
                                 "failure"
+                              ]
+                            },
+                            {
+                              "flow": "continue",
+                              "id": "j4vuwf9odzmTGB3f",
+                              "links": [
+                                {
+                                  "constructId": "",
+                                  "durationPercentFormula": "50",
+                                  "id": "mWc3AbpmUYqnPj99",
+                                  "kind": "primaryChangesPercent",
+                                  "mode": "perSubject",
+                                  "percentFormula": "50",
+                                  "recipient": "subjects"
+                                }
+                              ],
+                              "name": "Ветка 2",
+                              "resultKeys": [
+                                "success",
+                                "criticalSuccess"
                               ]
                             }
                           ],
@@ -5104,6 +5143,7 @@
                               "kind": "skill"
                             }
                           ],
+                          "trialRoutesPrimaryChanges": true,
                           "trialSelectionMode": "best",
                           "trialSubject": "targets",
                           "type": "trial"
@@ -5923,7 +5963,17 @@
                             {
                               "flow": "continue",
                               "id": "blockade-trial-legacy-branch",
-                              "links": [],
+                              "links": [
+                                {
+                                  "constructId": "",
+                                  "durationPercentFormula": "100",
+                                  "id": "BAU4XBzdgRt5isW9",
+                                  "kind": "primaryChanges",
+                                  "mode": "perSubject",
+                                  "percentFormula": "100",
+                                  "recipient": "subjects"
+                                }
+                              ],
                               "name": "Подходящий результат",
                               "resultKeys": [
                                 "criticalFailure",
@@ -5944,6 +5994,7 @@
                               "kind": "skill"
                             }
                           ],
+                          "trialRoutesPrimaryChanges": true,
                           "trialSelectionMode": "best",
                           "trialSubject": "targets",
                           "type": "trial"
@@ -57910,7 +57961,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "success",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },

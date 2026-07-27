@@ -20,7 +20,10 @@ function createActor(uuid = "Actor.A", value = 10) {
     uuid,
     name: "Актёр",
     isOwner: true,
-    system: { resources: { actionPoints: { value, max: 10 } } },
+    system: {
+      combat: { stun: 0 },
+      resources: { actionPoints: { value, max: 10 } }
+    },
     updates: [],
     async update(changes) {
       this.updates.push(changes);
@@ -113,6 +116,66 @@ test("cancelled strict AP refund reports that nothing was restored", async () =>
 
   assert.equal(restored, 0);
   assert.equal(actor.system.resources.actionPoints.value, 7);
+});
+
+test("stun makes ОД unavailable without spending them", async () => {
+  const actor = createActor("Actor.Stunned", 10);
+  actor.system.combat.stun = 60;
+  globalThis.ui = { notifications: { warn() {} } };
+  globalThis.game = { combat: { started: true, combatants: [{ actor }] } };
+
+  assert.equal(canSpendStrictActionPoints(actor, 5), false);
+  assert.equal(canSpendStrictActionPoints(actor, 4), true);
+  await spendStrictActionPoints(actor, 4, { suppressResourceNotification: true });
+  assert.equal(actor.system.resources.actionPoints.value, 6);
+  assert.equal(canSpendStrictActionPoints(actor, 1), false);
+});
+
+test("stun makes ОР and ОП unavailable through their normal spending states", async () => {
+  installFoundryImportGlobals();
+  const {
+    canSpendCombatActionPoints,
+    getCombatActionPointState,
+    spendCombatActionPoints
+  } = await import("../src/combat/reaction-resources.mjs");
+  const { getCombatMovementResourceState } = await import("../src/combat/movement-resources.mjs");
+  const actor = createActor("Actor.StunnedResources", 10);
+  actor.effects = [];
+  actor.system.combat.stun = 50;
+  actor.system.resources.reactionPoints = { value: 8, min: 0, max: 10 };
+  actor.system.resources.movementPoints = { value: 10, min: 0, max: 10 };
+  actor.update = async changes => {
+    actor.updates.push(changes);
+    for (const [path, value] of Object.entries(changes)) {
+      const match = /^system\.resources\.([^.]+)\.(value|spent)$/.exec(path);
+      if (match) actor.system.resources[match[1]][match[2]] = value;
+    }
+  };
+
+  const other = createActor("Actor.Other", 10);
+  const combat = {
+    started: true,
+    combatants: [{ actor }, { actor: other }],
+    combatant: { actor: other }
+  };
+  globalThis.game = {
+    combat,
+    combats: [combat],
+    settings: { get: () => ({ turnOrder: { scheme: "normal" } }) }
+  };
+  globalThis.ui = { notifications: { warn() {} } };
+
+  assert.equal(getCombatActionPointState(actor).value, 3);
+  assert.equal(canSpendCombatActionPoints(actor, 4), false);
+  await spendCombatActionPoints(actor, 3, { suppressResourceNotification: true });
+  assert.equal(actor.system.resources.reactionPoints.value, 5);
+
+  combat.combatant = { actor };
+  const movement = getCombatMovementResourceState(actor);
+  assert.equal(movement.movement.current, 10);
+  assert.equal(movement.movement.value, 5);
+  assert.equal(movement.action.current, 10);
+  assert.equal(movement.action.value, 5);
 });
 
 test("cancelled dynamic AP update does not create a spend receipt", async () => {

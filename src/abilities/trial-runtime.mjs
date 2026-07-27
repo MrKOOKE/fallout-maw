@@ -40,6 +40,7 @@ export async function executeAbilityTrials({
   sourceItemUuid = "",
   title = "",
   worldTime = Number(game.time?.worldTime) || 0,
+  operationId = "",
   requestSkillCheckBatchFn = requestSkillCheckBatch,
   executeTrialLinksFn = executeAbilityTrialLinks,
   requestDamageApplicationsFn = null
@@ -50,6 +51,7 @@ export async function executeAbilityTrials({
   if (!trials.length || !sourceActor) return { attempted: 0, matched: 0 };
 
   const normalizedConstructs = normalizeAbilityConstructs(constructs);
+  const trialRunId = String(operationId ?? "").trim() || foundry.utils.randomID();
   let attempted = 0;
   let matched = 0;
   let stoppedAll = false;
@@ -79,7 +81,7 @@ export async function executeAbilityTrials({
       requester: "abilityTrial",
       title: title || sourceEffect?.name || "Испытание",
       options: {
-        operationId: `ability-trial:${String(sourceEffect?.id ?? sourceItemUuid)}:${trial.id}:${worldTime}`
+        operationId: `ability-trial:${String(sourceEffect?.id ?? sourceItemUuid)}:${trial.id}:${trialRunId}`
       },
       source: { itemUuid: String(sourceItemUuid ?? "") }
     });
@@ -467,10 +469,15 @@ async function applyTemporaryConstruct({
       .filter(change => change?.key && String(change?.value ?? "") !== "");
     if (!changes.length) continue;
     const sourceEffectUuid = String(sourceEffect?.uuid ?? sourceItemUuid ?? "");
-    const existing = actor.effects?.find(effect => {
-      const flag = effect.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY);
-      return flag?.sourceEffectUuid === sourceEffectUuid && flag?.constructId === construct.id;
-    }) ?? null;
+    // One manual activation is a new application and must reproduce all of
+    // its consequences even while an older copy is still active. Only a
+    // recurring aura reuses its own projected consequence between ticks.
+    const existing = sourceEffect
+      ? actor.effects?.find(effect => {
+        const flag = effect.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY);
+        return flag?.sourceEffectUuid === sourceEffectUuid && flag?.constructId === construct.id;
+      }) ?? null
+      : null;
     const data = {
       type: "base",
       name: construct.name || title || sourceEffect?.name || "Испытание",

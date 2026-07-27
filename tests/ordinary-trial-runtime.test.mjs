@@ -212,7 +212,7 @@ test("ordinary Trial formula damage is committed through Damage Hub with its typ
       name: "Огонь",
       damage: {
         amountMode: "formula",
-        formula: "50+energy/3",
+        formula: "50+power/3",
         damageTypeKey: "fire",
         limbMode: "randomCritical"
       }
@@ -288,6 +288,73 @@ test("a failed ordinary Trial applies the primary -30 change for the function du
     type: "add",
     value: -30
   }]);
+});
+
+test("repeated manual activations rerun Trials and create independent consequence copies", async () => {
+  const source = actor("Actor.source");
+  const target = actor("Actor.target");
+  const operationIds = [];
+  let existingUpdates = 0;
+  const abilityFunction = {
+    id: "repeatable-impulse",
+    type: "activeApplication",
+    activeSettings: { changeEvaluation: "target" },
+    changes: [{
+      id: "stun",
+      key: "system.combat.stun",
+      type: "add",
+      value: "60"
+    }],
+    conditions: [{
+      id: "duration",
+      type: "duration",
+      durationSeconds: 12
+    }, trial("repeatable-trial", [branch("failure", ["failure"], "continue", [{
+      id: "primary",
+      kind: "primaryChanges",
+      recipient: "subjects",
+      mode: "perSubject"
+    }])])]
+  };
+  const requestSkillCheckBatchFn = async ({ entries, options }) => {
+    operationIds.push(options.operationId);
+    return {
+      outcomes: [{ actor: entries[0].actor, result: { key: "failure" } }]
+    };
+  };
+
+  await executeAbilityTrials({
+    abilityFunction,
+    sourceActor: source,
+    targets: [{ actor: target }],
+    sourceItemUuid: "Item.repeatable-impulse",
+    requestSkillCheckBatchFn
+  });
+
+  const firstFlag = target.createdEffects[0].flags["fallout-maw"].trialConstructEffect;
+  target.effects.push({
+    getFlag: (_scope, key) => key === "trialConstructEffect" ? firstFlag : null,
+    async update() {
+      existingUpdates += 1;
+    }
+  });
+
+  await executeAbilityTrials({
+    abilityFunction,
+    sourceActor: source,
+    targets: [{ actor: target }],
+    sourceItemUuid: "Item.repeatable-impulse",
+    requestSkillCheckBatchFn
+  });
+
+  assert.equal(operationIds.length, 2);
+  assert.notEqual(operationIds[0], operationIds[1]);
+  assert.equal(target.createdEffects.length, 2);
+  assert.equal(existingUpdates, 0);
+  assert.deepEqual(
+    target.createdEffects.map(effect => effect.system.changes[0].value),
+    [60, 60]
+  );
 });
 
 test("a percentage primary consequence scales additive and multiplicative changes", async () => {

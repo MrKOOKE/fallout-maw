@@ -3188,7 +3188,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
-  #onAbilityTrialLinkTypeChange(event) {
+  async #onAbilityTrialLinkTypeChange(event) {
     const selectedType = String(event.currentTarget?.value ?? "");
     const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
     const branchIndex = Number(
@@ -3228,10 +3228,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       && !isAbilityConstructLinkedInFunctions(functions, previousConstructId)
       ? constructs.filter(construct => String(construct?.id ?? "") !== previousConstructId)
       : constructs;
-    return this.#submitCurrentForm({
+    await this.#submitCurrentForm({
       [functionPath]: functions,
       "system.constructs": nextConstructs
     });
+    return this.render();
   }
 
   #onDeleteAbilityTrialLink(event) {

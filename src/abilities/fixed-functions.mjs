@@ -1811,7 +1811,8 @@ async function executeActiveApplicationUse(scope, {
         sourceToken,
         targets: allowed.map(entry => entry.target),
         sourceItemUuid: String(abilityItem.uuid ?? ""),
-        title: getAbilityDisplayName(abilityItem)
+        title: getAbilityDisplayName(abilityItem),
+        operationId: `${scope.rootId}:${paymentContext.occurrenceId}`
       });
     }
     await createAbilityChatMessage(actor, abilityItem, "Применено.");
@@ -2835,7 +2836,11 @@ async function processActiveApplicationEffectOperation(payload = {}) {
         sourceToken,
         targets: resolvedTargets,
         sourceItemUuid: String(abilityItem.uuid ?? ""),
-        title: getAbilityDisplayName(abilityItem)
+        title: getAbilityDisplayName(abilityItem),
+        operationId: [
+          String(payload?.costContext?.rootId ?? payload?.chainRef?.rootId ?? "").trim(),
+          String(payload?.costContext?.occurrenceId ?? "").trim()
+        ].filter(Boolean).join(":")
       });
     }
     return true;
