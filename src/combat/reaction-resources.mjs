@@ -429,6 +429,268 @@ export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
   return notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
 }
 
+/**
+ * Spend dynamic combat action points and return a refundable delta receipt.
+ *
+ * Unlike strict ОД, an ordinary action may draw from ОР outside the actor's
+ * turn or from normal plus one-time ОД during its turn. The receipt preserves
+ * that split so a surrounding weapon transaction can compensate its own
+ * spend without converting one-time points into permanent points.
+ */
+export async function spendCombatActionPointsWithReceipt(actor, amount = 0, context = {}) {
+  if (!isActorInActiveCombat(actor)) return emptyCombatActionPointTransaction();
+  const cost = Math.max(0, toInteger(amount));
+  const state = getCombatActionPointState(actor);
+  if (!actor?.isOwner || cost <= 0 || !state || cost > state.value) {
+    return emptyCombatActionPointTransaction();
+  }
+
+  if (!state.ownTurn) {
+    const resource = actor.system?.resources?.[REACTION_RESOURCE_KEY];
+    const before = Math.max(0, toInteger(resource?.value));
+    const maximum = Math.max(0, toInteger(resource?.max));
+    const next = Math.max(0, before - cost);
+    await actor.update({
+      [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
+      [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+    }, { [REACTION_UPDATE_OPTION]: true });
+    const applied = getDirectCombatResourceValue(actor, REACTION_RESOURCE_KEY);
+    const observedSpend = Math.min(cost, Math.max(0, before - applied));
+    if (applied !== next) {
+      if (observedSpend > 0) {
+        await refundCombatActionPointReceipt(actor, createCombatActionPointReceipt(actor, {
+          mode: "reaction",
+          resourceKey: REACTION_RESOURCE_KEY,
+          amount: observedSpend,
+          reactionSpent: observedSpend
+        }), context);
+      }
+      return emptyCombatActionPointTransaction();
+    }
+    const receipt = createCombatActionPointReceipt(actor, {
+      mode: "reaction",
+      resourceKey: REACTION_RESOURCE_KEY,
+      amount: cost,
+      reactionSpent: cost
+    });
+    return {
+      spent: cost,
+      receipt,
+      events: context?.suppressResourceNotification
+        ? []
+        : await notifyCombatActionPointReceipt(actor, receipt, context)
+    };
+  }
+
+  const normalBefore = getNormalActionPointValue(actor);
+  const onceBefore = getOneTimeActionPointTotal(actor);
+  const normalSpend = Math.min(cost, normalBefore);
+  const onceSpend = cost - normalSpend;
+  const onceRestores = planOneTimeActionPointRestores(actor, onceSpend);
+  let observedNormalSpend = 0;
+  let observedOnceSpend = 0;
+  try {
+    if (normalSpend > 0) {
+      const next = normalBefore - normalSpend;
+      await actor.update({
+        [`system.resources.${ACTION_RESOURCE_KEY}.value`]: next
+      });
+      const applied = getDirectCombatResourceValue(actor, ACTION_RESOURCE_KEY);
+      observedNormalSpend = Math.min(normalSpend, Math.max(0, normalBefore - applied));
+      if (applied !== next) {
+        const error = new Error("Combat action-point Actor update was cancelled or altered.");
+        error.cancelled = true;
+        throw error;
+      }
+    }
+    if (onceSpend > 0) {
+      await spendOneTimeActionPoints(actor, onceSpend);
+      const onceAfter = getOneTimeActionPointTotal(actor);
+      observedOnceSpend = Math.min(onceSpend, Math.max(0, onceBefore - onceAfter));
+      if (onceAfter !== onceBefore - onceSpend) {
+        const error = new Error("One-time action-point update was cancelled or altered.");
+        error.cancelled = true;
+        throw error;
+      }
+    }
+  } catch (error) {
+    const partialAmount = observedNormalSpend + observedOnceSpend;
+    if (partialAmount > 0) {
+      try {
+        const restored = await refundCombatActionPointReceipt(actor, createCombatActionPointReceipt(actor, {
+          mode: "action",
+          resourceKey: ACTION_RESOURCE_KEY,
+          amount: partialAmount,
+          normalSpent: observedNormalSpend,
+          onceSpent: observedOnceSpend,
+          onceRestores: trimOneTimeActionPointRestores(onceRestores, observedOnceSpend)
+        }), context);
+        if (restored < partialAmount) {
+          throw new Error(`Only ${restored} of ${partialAmount} combat action points were rolled back.`);
+        }
+      } catch (rollbackError) {
+        error.rollbackError ??= rollbackError;
+      }
+    }
+    if (error.cancelled && !error.rollbackError) return emptyCombatActionPointTransaction();
+    throw error;
+  }
+
+  const receipt = createCombatActionPointReceipt(actor, {
+    mode: "action",
+    resourceKey: ACTION_RESOURCE_KEY,
+    amount: cost,
+    normalSpent: normalSpend,
+    onceSpent: onceSpend,
+    onceRestores
+  });
+  return {
+    spent: cost,
+    receipt,
+    events: context?.suppressResourceNotification
+      ? []
+      : await notifyCombatActionPointReceipt(actor, receipt, context)
+  };
+}
+
+/** Refund only the dynamic combat-point delta represented by a receipt. */
+export async function refundCombatActionPointReceipt(actor, receipt = null, context = {}) {
+  const amount = Math.max(0, toInteger(receipt?.amount));
+  if (
+    !actor?.isOwner
+    || !amount
+    || String(receipt?.actorUuid ?? "") !== String(actor?.uuid ?? "")
+  ) return 0;
+
+  if (receipt.mode === "reaction" && receipt.resourceKey === REACTION_RESOURCE_KEY) {
+    const resource = actor.system?.resources?.[REACTION_RESOURCE_KEY];
+    if (!resource) return 0;
+    const before = Math.max(0, toInteger(resource.value));
+    const maximum = Math.max(0, toInteger(resource.max));
+    const next = Math.min(maximum, before + Math.max(0, toInteger(receipt.reactionSpent)));
+    const requested = next - before;
+    if (requested <= 0) return 0;
+    await actor.update({
+      [`system.resources.${REACTION_RESOURCE_KEY}.value`]: next,
+      [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+    }, {
+      [REACTION_UPDATE_OPTION]: true,
+      falloutMawCombatActionPointRefund: true,
+      ...getCombatActionPointOperationOptions(context)
+    });
+    return Math.min(requested, Math.max(0, getDirectCombatResourceValue(actor, REACTION_RESOURCE_KEY) - before));
+  }
+
+  if (receipt.mode !== "action" || receipt.resourceKey !== ACTION_RESOURCE_KEY) return 0;
+  let restored = 0;
+  const normalAmount = Math.max(0, toInteger(receipt.normalSpent));
+  if (normalAmount > 0) {
+    const resource = actor.system?.resources?.[ACTION_RESOURCE_KEY];
+    if (resource) {
+      const before = Math.max(0, toInteger(resource.value));
+      const maximum = Math.max(0, toInteger(resource.max));
+      const next = Math.min(maximum, before + normalAmount);
+      const requested = next - before;
+      if (requested > 0) {
+        await actor.update({
+          [`system.resources.${ACTION_RESOURCE_KEY}.value`]: next,
+          [`system.resources.${ACTION_RESOURCE_KEY}.spent`]: Math.max(0, maximum - next)
+        }, {
+          falloutMawCombatActionPointRefund: true,
+          ...getCombatActionPointOperationOptions(context)
+        });
+        restored += Math.min(
+          requested,
+          Math.max(0, getDirectCombatResourceValue(actor, ACTION_RESOURCE_KEY) - before)
+        );
+      }
+    }
+  }
+
+  const onceAmount = Math.max(0, toInteger(receipt.onceSpent));
+  if (onceAmount > 0) {
+    const before = getOneTimeActionPointTotal(actor);
+    const restores = trimOneTimeActionPointRestores(receipt.onceRestores, onceAmount);
+    for (const entry of restores) {
+      await addOneTimeActionPointEffect(actor, entry.amount, { source: entry.source });
+    }
+    const after = getOneTimeActionPointTotal(actor);
+    restored += Math.min(onceAmount, Math.max(0, after - before));
+  }
+  return Math.min(amount, restored);
+}
+
+/** Publish the deferred resource-spent event of one committed receipt. */
+export function notifyCombatActionPointReceipt(actor, receipt = null, context = {}) {
+  const amount = Math.max(0, toInteger(receipt?.amount));
+  const resourceKey = receipt?.resourceKey === REACTION_RESOURCE_KEY
+    ? REACTION_RESOURCE_KEY
+    : ACTION_RESOURCE_KEY;
+  if (!amount || String(receipt?.actorUuid ?? "") !== String(actor?.uuid ?? "")) return [];
+  return notifyCombatResourcesSpent(actor, { [resourceKey]: amount }, context);
+}
+
+function emptyCombatActionPointTransaction() {
+  return { spent: 0, receipt: null, events: [] };
+}
+
+function createCombatActionPointReceipt(actor, data = {}) {
+  return Object.freeze({
+    actorUuid: String(actor?.uuid ?? ""),
+    mode: String(data.mode ?? ""),
+    resourceKey: String(data.resourceKey ?? ""),
+    amount: Math.max(0, toInteger(data.amount)),
+    normalSpent: Math.max(0, toInteger(data.normalSpent)),
+    onceSpent: Math.max(0, toInteger(data.onceSpent)),
+    reactionSpent: Math.max(0, toInteger(data.reactionSpent)),
+    onceRestores: Object.freeze((data.onceRestores ?? []).map(entry => Object.freeze({
+      amount: Math.max(0, toInteger(entry?.amount)),
+      source: String(entry?.source ?? "")
+    })).filter(entry => entry.amount > 0))
+  });
+}
+
+function planOneTimeActionPointRestores(actor, amount = 0) {
+  let remaining = Math.max(0, toInteger(amount));
+  const restores = [];
+  for (const entry of getOneTimeActionPointEntries(actor)) {
+    if (remaining <= 0) break;
+    const spend = Math.min(remaining, Math.max(0, toInteger(entry.value)));
+    remaining -= spend;
+    if (spend <= 0) continue;
+    const flag = entry.effect?.getFlag?.(SYSTEM_ID, ONE_TIME_ACTION_EFFECT_FLAG);
+    restores.push({
+      amount: spend,
+      source: String(flag?.source ?? "")
+    });
+  }
+  return restores;
+}
+
+function trimOneTimeActionPointRestores(entries = [], amount = 0) {
+  let remaining = Math.max(0, toInteger(amount));
+  const result = [];
+  for (const entry of entries ?? []) {
+    if (remaining <= 0) break;
+    const restored = Math.min(remaining, Math.max(0, toInteger(entry?.amount)));
+    remaining -= restored;
+    if (restored > 0) result.push({ amount: restored, source: String(entry?.source ?? "") });
+  }
+  if (remaining > 0) result.push({ amount: remaining, source: "weaponActionRollback" });
+  return result;
+}
+
+function getDirectCombatResourceValue(actor, resourceKey = "") {
+  return Math.max(0, toInteger(actor?.system?.resources?.[resourceKey]?.value));
+}
+
+function getCombatActionPointOperationOptions(context = {}) {
+  return context?.chainRef ? {
+    chainRef: context.chainRef,
+    falloutMawSystemEventChainRef: context.chainRef
+  } : {};
+}
+
 export async function promptEndTurnConversion(actor) {
   const remaining = getNormalActionPointValue(actor);
   if (remaining <= 0) return TURN_CONVERSION_MODES.none;

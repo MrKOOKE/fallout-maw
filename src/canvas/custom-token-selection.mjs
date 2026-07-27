@@ -1,10 +1,11 @@
-import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+import { canTokenPhysicallySeeTarget } from "./physical-los.mjs";
 import { createRightClickPanGuard } from "./right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "./target-selection-lifecycle.mjs";
 
 export function requestCustomTokenSelection({
   rows = [],
   limit = 1,
+  allowRepeated = false,
   title = "Выбор целей",
   noneWarning = "Нет подходящих целей.",
   instructions = "",
@@ -25,15 +26,16 @@ export function requestCustomTokenSelection({
   return new Promise(resolve => {
     const layer = getCustomTokenSelectionLayer();
     const graphics = new PIXI.Graphics();
-    const selected = new Set();
+    const selected = [];
     layer.addChild(graphics);
-    drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
+    drawCustomTokenSelectionRows(graphics, normalizedRows, new Set(selected));
 
     const targetSelectionSession = startCanvasTargetSelectionSession({
       kind: "tokens",
       rows: normalizedRows,
       selectable,
       limit: selectionLimit,
+      allowRepeated: Boolean(allowRepeated),
       title,
       instructions
     });
@@ -57,24 +59,18 @@ export function requestCustomTokenSelection({
       });
       resolve(value);
     };
-    const getSelection = () => {
-      const seen = new Set();
-      return normalizedRows.filter(row => {
-        if (!selected.has(row.selectionId) || seen.has(row.selectionId)) return false;
-        seen.add(row.selectionId);
-        return true;
-      });
-    };
+    const rowsById = new Map(normalizedRows.map(row => [row.selectionId, row]));
+    const getSelection = () => selected.map(selectionId => rowsById.get(selectionId)).filter(Boolean);
     const confirm = () => {
       const selection = getSelection();
       if (!selection.length) return;
       finish(selection);
     };
     const undoLastSelection = () => {
-      const selectionId = Array.from(selected).at(-1);
+      const selectionId = selected.at(-1);
       if (!selectionId) return false;
-      selected.delete(selectionId);
-      drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
+      selected.pop();
+      drawCustomTokenSelectionRows(graphics, normalizedRows, new Set(selected));
       return true;
     };
     const onKeyDown = event => {
@@ -109,11 +105,12 @@ export function requestCustomTokenSelection({
         if (row.reason) ui.notifications.warn(`${getRowLabel(row)}: ${row.reason}`);
         return;
       }
-      if (selected.has(row.selectionId)) selected.delete(row.selectionId);
-      else if (selected.size < selectionLimit) selected.add(row.selectionId);
-      drawCustomTokenSelectionRows(graphics, normalizedRows, selected);
+      const selectedIndex = selected.indexOf(row.selectionId);
+      if (!allowRepeated && selectedIndex >= 0) selected.splice(selectedIndex, 1);
+      else if (selected.length < selectionLimit) selected.push(row.selectionId);
+      drawCustomTokenSelectionRows(graphics, normalizedRows, new Set(selected));
       // Filling the last slot is the commit click — same as commanded attacks.
-      if (selected.size >= selectionLimit) confirm();
+      if (selected.length >= selectionLimit) confirm();
     };
 
     window.addEventListener("keydown", onKeyDown, { capture: true });

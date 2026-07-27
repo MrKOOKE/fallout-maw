@@ -203,6 +203,7 @@ export class FalloutMaWItem extends Item {
       return cancelInventoryDocumentOperation(this, options, "update");
     }
 
+    preserveLockedAbilityAttackFunctionTypes(this, changes);
     const requestedSource = foundry.utils.mergeObject(this.toObject(), changes, { inplace: false });
     Object.assign(changes, getSlotRequirementDeletionUpdates(requestedSource));
     if (isContainerItem(requestedSource)) {
@@ -297,6 +298,49 @@ export class FalloutMaWItem extends Item {
   get totalWeight() {
     return getItemTotalWeight(this, this.actor?.items ?? []);
   }
+}
+
+/**
+ * An attacking action is a constructor with its own persistent data shape.
+ * Once added, its function type can only disappear together with the whole
+ * function row; changing the type in-place would silently discard that shape.
+ */
+function preserveLockedAbilityAttackFunctionTypes(item, changes = {}) {
+  if (item?.type !== "ability") return;
+  const touched = Object.keys(foundry.utils.flattenObject(changes ?? {}))
+    .some(path => path === "system.functions" || path.startsWith("system.functions."));
+  if (!touched) return;
+
+  const currentFunctions = Array.isArray(item?._source?.system?.functions)
+    ? item._source.system.functions
+    : Object.values(item?._source?.system?.functions ?? {});
+  const lockedById = new Map(currentFunctions
+    .filter(entry => String(entry?.type ?? "") === "attackAction")
+    .map(entry => [String(entry?.id ?? ""), entry])
+    .filter(([id]) => id));
+  if (!lockedById.size) return;
+
+  const requestedSource = foundry.utils.mergeObject(item.toObject(), changes, {
+    applyOperators: true,
+    inplace: false
+  });
+  const requestedFunctions = Array.isArray(requestedSource?.system?.functions)
+    ? requestedSource.system.functions
+    : Object.values(requestedSource?.system?.functions ?? {});
+  let restored = false;
+  for (const entry of requestedFunctions) {
+    const current = lockedById.get(String(entry?.id ?? ""));
+    if (!current || String(entry?.type ?? "") === "attackAction") continue;
+    entry.type = "attackAction";
+    entry.attackSettings = foundry.utils.deepClone(current.attackSettings ?? {});
+    restored = true;
+  }
+  if (!restored) return;
+
+  for (const key of Object.keys(changes)) {
+    if (key === "system.functions" || key.startsWith("system.functions.")) delete changes[key];
+  }
+  foundry.utils.setProperty(changes, "system.functions", requestedFunctions);
 }
 
 async function getInventoryOperationActor(operation = {}) {

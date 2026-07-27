@@ -5,6 +5,15 @@ import {
   normalizeTimeOfDayText
 } from "../abilities/environment-conditions.mjs";
 import { hasAdvancementPureValueFunctionChanges } from "../advancement/pure-value-keys.mjs";
+import {
+  createAttackActionSettings,
+  normalizeAttackActionSettings
+} from "../abilities/attack-action-settings.mjs";
+
+export {
+  createAttackActionSettings,
+  normalizeAttackActionSettings
+};
 
 export const LOCKED_FEATURES_CATEGORY_ID = "features";
 export const GENERAL_ABILITY_CATEGORY_ID = "general";
@@ -14,6 +23,7 @@ export const ABILITY_CATALOG_DRAG_TYPE = "fallout-maw-ability-catalog-entry";
 export const ABILITY_FUNCTION_TYPES = Object.freeze({
   effectChanges: "effectChanges",
   activeApplication: "activeApplication",
+  attackAction: "attackAction",
   acquisitionChanges: "acquisitionChanges",
   characteristicBonus: "characteristicBonus",
   skillBonus: "skillBonus",
@@ -27,7 +37,21 @@ export const ABILITY_ACTION_TYPES = Object.freeze({
 
 export const ABILITY_CONSTRUCT_TYPES = Object.freeze({
   temporaryEffect: "temporaryEffect",
-  resourceChange: "resourceChange"
+  resourceChange: "resourceChange",
+  damage: "damage"
+});
+
+export const ABILITY_DAMAGE_AMOUNT_MODES = Object.freeze({
+  base: "base",
+  formula: "formula",
+  percent: "percent"
+});
+
+export const ABILITY_DAMAGE_LIMB_MODES = Object.freeze({
+  random: "random",
+  randomCritical: "randomCritical",
+  selected: "selected",
+  healthOnly: "healthOnly"
 });
 
 export const ABILITY_TRIAL_SUBJECTS = Object.freeze({
@@ -42,7 +66,8 @@ export const ABILITY_TRIAL_SELECTION_MODES = Object.freeze({
 
 export const ABILITY_TRIAL_LINK_RECIPIENTS = Object.freeze({
   source: "source",
-  subjects: "subjects"
+  subjects: "subjects",
+  targets: "targets"
 });
 
 export const ABILITY_TRIAL_LINK_MODES = Object.freeze({
@@ -538,6 +563,15 @@ export function normalizeAbilityConstruct(value = {}) {
     ? value.type
     : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
   const resources = Array.isArray(value?.resources) ? value.resources : Object.values(value?.resources ?? {});
+  const damageSource = value?.damage && typeof value.damage === "object"
+    ? value.damage
+    : value;
+  const damageAmountMode = Object.values(ABILITY_DAMAGE_AMOUNT_MODES).includes(damageSource?.amountMode)
+    ? damageSource.amountMode
+    : ABILITY_DAMAGE_AMOUNT_MODES.base;
+  const damageLimbMode = Object.values(ABILITY_DAMAGE_LIMB_MODES).includes(damageSource?.limbMode)
+    ? damageSource.limbMode
+    : ABILITY_DAMAGE_LIMB_MODES.random;
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
@@ -550,7 +584,18 @@ export function normalizeAbilityConstruct(value = {}) {
       : [],
     resources: type === ABILITY_CONSTRUCT_TYPES.resourceChange
       ? resources.map(row => normalizeAbilityConstructResource(row))
-      : []
+      : [],
+    damage: type === ABILITY_CONSTRUCT_TYPES.damage
+      ? {
+        amountMode: damageAmountMode,
+        formula: normalizeFormulaText(damageSource?.formula, "0"),
+        limbMode: damageLimbMode
+      }
+      : {
+        amountMode: ABILITY_DAMAGE_AMOUNT_MODES.base,
+        formula: "0",
+        limbMode: ABILITY_DAMAGE_LIMB_MODES.random
+      }
   };
 }
 
@@ -596,6 +641,7 @@ export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChange
     fixedKey: options?.fixedKey,
     fixedSettings: options?.fixedSettings,
     activeSettings: options?.activeSettings,
+    attackSettings: options?.attackSettings,
     reactionSettings: options?.reactionSettings,
     changes: [],
     actions: [],
@@ -747,6 +793,9 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   const activeSettings = type === ABILITY_FUNCTION_TYPES.activeApplication
     ? normalizeActiveApplicationSettings(value?.activeSettings ?? value?.settings)
     : {};
+  const attackSettings = type === ABILITY_FUNCTION_TYPES.attackAction
+    ? normalizeAttackActionSettings(value?.attackSettings ?? value?.settings)
+    : null;
   const changes = isLegacy
     ? legacyFunctionToChanges(value)
     : normalizeAbilityChanges(value?.changes ?? value?.effects);
@@ -777,6 +826,7 @@ function normalizeAbilityFunction(value = {}, index = 0) {
       ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
       : {},
     activeSettings,
+    ...(attackSettings ? { attackSettings } : {}),
     // Legacy storage is intentionally cleared after its rows have been migrated
     // into the standalone triggerCost condition above.
     reactionSettings: { durationSeconds: 0, costs: [] },
@@ -797,7 +847,12 @@ export function createAbilityConstruct(type = ABILITY_CONSTRUCT_TYPES.temporaryE
     name: "",
     durationSeconds: type === ABILITY_CONSTRUCT_TYPES.temporaryEffect ? 6 : 0,
     changes: [],
-    resources: []
+    resources: [],
+    damage: {
+      amountMode: ABILITY_DAMAGE_AMOUNT_MODES.base,
+      formula: "0",
+      limbMode: ABILITY_DAMAGE_LIMB_MODES.random
+    }
   });
 }
 

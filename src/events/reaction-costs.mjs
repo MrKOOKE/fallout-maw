@@ -285,6 +285,8 @@ export function normalizeCostRows(rows = []) {
 
 export async function spendActorResourceCostVector(actor, costs = [], {
   spendHealth = null,
+  restoreHealth = null,
+  afterSpend = null,
   healthResourceKey = HEALTH_RESOURCE_KEY,
   updateOptions = {},
   context = {}
@@ -298,6 +300,7 @@ export async function spendActorResourceCostVector(actor, costs = [], {
   vector.delete(healthResourceKey);
   const updates = {};
   const rollbackUpdates = {};
+  const expectedResources = [];
   const paidCosts = [];
   for (const [resourceKey, amount] of vector) {
     if (amount <= 0) continue;
@@ -308,29 +311,57 @@ export async function spendActorResourceCostVector(actor, costs = [], {
     const next = current - amount;
     if (next < minimum) throw new Error(`Insufficient trigger-cost resource '${resourceKey}'.`);
     updates[`system.resources.${resourceKey}.value`] = next;
-    updates[`system.resources.${resourceKey}.spent`] = Math.max(0, Math.trunc(Number(resource.max) || 0) - next);
+    const nextSpent = Math.max(0, Math.trunc(Number(resource.max) || 0) - next);
+    updates[`system.resources.${resourceKey}.spent`] = nextSpent;
     rollbackUpdates[`system.resources.${resourceKey}.value`] = current;
     if (resource.spent !== undefined) {
       rollbackUpdates[`system.resources.${resourceKey}.spent`] = resource.spent;
     }
+    expectedResources.push({
+      resourceKey,
+      current,
+      spent: resource.spent,
+      next,
+      nextSpent
+    });
     paidCosts.push({ resourceKey, amount });
   }
   let ordinaryCommitted = false;
-  if (Object.keys(updates).length) {
-    await actor.update(updates, {
-      [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
-      falloutMawTriggerCost: true,
-      ...updateOptions
-    });
-    ordinaryCommitted = true;
-  }
+  let healthCommitted = false;
   try {
+    if (Object.keys(updates).length) {
+      await actor.update(updates, {
+        [STRICT_REACTION_RESOURCE_UPDATE_OPTION]: true,
+        falloutMawTriggerCost: true,
+        ...updateOptions
+      });
+      ordinaryCommitted = expectedResources.some(entry => (
+        getActorResourceField(actor, entry.resourceKey, "value") !== entry.current
+      ));
+      if (!doesActorResourceVectorMatch(actor, expectedResources, { expected: "next" })) {
+        const error = new Error("Trigger-cost Actor update was cancelled or altered.");
+        error.reason = REACTION_COST_FAILURES.spendFailed;
+        throw error;
+      }
+      ordinaryCommitted = true;
+    }
     if (healthCost > 0) {
       if (typeof spendHealth !== "function") throw new Error("Trigger health-cost adapter is unavailable.");
       await spendHealth(actor, healthCost, context);
+      healthCommitted = true;
       paidCosts.push({ resourceKey: healthResourceKey, amount: healthCost });
     }
+    if (typeof afterSpend === "function") {
+      await afterSpend({ actor, costs: paidCosts, context });
+    }
   } catch (error) {
+    if (healthCommitted && typeof restoreHealth === "function") {
+      try {
+        await restoreHealth(actor, healthCost, context);
+      } catch (rollbackError) {
+        error.rollbackError ??= rollbackError;
+      }
+    }
     if (ordinaryCommitted) {
       try {
         await actor.update(rollbackUpdates, {
@@ -338,13 +369,31 @@ export async function spendActorResourceCostVector(actor, costs = [], {
           falloutMawTriggerCostRollback: true,
           ...updateOptions
         });
+        if (!doesActorResourceVectorMatch(actor, expectedResources, { expected: "current" })) {
+          throw new Error("Trigger-cost Actor rollback was cancelled or altered.");
+        }
       } catch (rollbackError) {
-        error.rollbackError = rollbackError;
+        error.rollbackError ??= rollbackError;
       }
     }
     throw error;
   }
   return { costs: paidCosts };
+}
+
+function doesActorResourceVectorMatch(actor, entries = [], { expected = "next" } = {}) {
+  return entries.every(entry => {
+    const expectedValue = expected === "current" ? entry.current : entry.next;
+    if (getActorResourceField(actor, entry.resourceKey, "value") !== expectedValue) return false;
+    const expectedSpent = expected === "current" ? entry.spent : entry.nextSpent;
+    if (expectedSpent === undefined) return true;
+    return getActorResourceField(actor, entry.resourceKey, "spent") === expectedSpent;
+  });
+}
+
+function getActorResourceField(actor, resourceKey = "", field = "value") {
+  const number = Number(actor?.system?.resources?.[resourceKey]?.[field]);
+  return Number.isFinite(number) ? Math.trunc(number) : undefined;
 }
 
 export function applyReactionHealthCost(request, context = {}, {

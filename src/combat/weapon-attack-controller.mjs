@@ -26,12 +26,11 @@ import {
   getEnergyConsumerFunction,
   getWeaponAttackPowerState,
   getWeaponFunctionById,
-  getWeaponFunctionModuleSlots,
   hasItemFunction,
   hasWeaponSpecialPropertyData,
   parseModuleWeaponFunctionId
 } from "../utils/item-functions.mjs";
-import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_ACTION_EXECUTOR_MODES,
   ABILITY_ACTION_POINT_COST_MODES,
@@ -39,8 +38,12 @@ import {
   ABILITY_ACTION_TYPES,
   ABILITY_ATTACK_ACTION_ALL,
   ABILITY_ATTACKING_WEAPON_ACTION_KEYS,
+  ABILITY_CONSTRUCT_TYPES,
+  ABILITY_DAMAGE_AMOUNT_MODES,
+  ABILITY_DAMAGE_LIMB_MODES,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
+  normalizeAbilityConstructs,
   normalizeAbilityFunctions,
   normalizeActiveApplicationSettings
 } from "../settings/abilities.mjs";
@@ -50,7 +53,10 @@ import {
   canSpendStrictActionPoints,
   getCombatActionPointState,
   getStrictActionPointState,
+  notifyCombatActionPointReceipt,
+  refundCombatActionPointReceipt,
   spendCombatActionPoints,
+  spendCombatActionPointsWithReceipt,
   spendStrictActionPoints
 } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -109,7 +115,8 @@ import {
 } from "../abilities/aura-conditions.mjs";
 import { getKnockbackMaximumStrength, resolveKnockback } from "./active-actions.mjs";
 import { getWeaponSkillDamageBonuses } from "./weapon-skill-damage.mjs";
-import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import { buildActorFormulaData, evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import { evaluateFormula } from "../formulas/evaluation.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
   clearAttackAutoCoverSync,
@@ -118,8 +125,13 @@ import {
 } from "../canvas/cover.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, requestReactionEvent } from "./reaction-hub.mjs";
 import {
+  createAttackActionDirectionModifier,
+  createAttackActionTargetedModifier,
   createCounterSniperAttackModifier,
   getWeaponAttackModifierAccuracyModifier,
+  getWeaponAttackModifierCriticalChanceModifier,
+  getWeaponAttackModifierDamagePercentModifier,
+  getWeaponAttackModifierDifficultyBonus,
   isWhirlwindAttackModifier,
   normalizeWeaponAttackModifier
 } from "./weapon-attack-modifiers.mjs";
@@ -130,14 +142,41 @@ import { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
+import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
+import { getActorAvailableEnergy } from "./energy-resource.mjs";
+import { isCombatResourceCostActive } from "./resource-cost-policy.mjs";
+import {
+  getAbilityAttackActionKey,
+  getAbilityAttackFunction,
+  getAbilityAttackSettings,
+  getAttackSourceModuleSlots,
+  getAttackSourceRawData,
+  isAttackSource,
+  projectAbilityAttackData,
+  resolveAttackSource
+} from "./attack-source.mjs";
+import {
+  notifyAbilityTriggerCostFailure,
+  payActorResourceCosts,
+  payAbilityFunctionResourceCosts,
+  quoteActorResourceCosts,
+  quoteAbilityFunctionResourceCosts
+} from "../abilities/trigger-cost-runtime.mjs";
+import {
+  buildAttackTrialFormulaData,
+  createAttackTrialResolutionState,
+  resolveAttackTrialResolution
+} from "./attack-trial-resolution.mjs";
+import { applyAttackTrialOutcomeConsequences } from "./attack-trial-consequences.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
+const { DialogV2 } = foundry.applications.api;
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
 export const WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK = "fallout-maw.weaponAttackDamageResolved";
@@ -502,13 +541,15 @@ export function startWeaponAttack({
   onDestroy = null,
   chainRef = null,
   damageHubOperationRef = "",
+  abilityTrialSession = null,
   skipActionPointCost = false,
+  skipBaseWeaponResourceCosts = false,
   ignoreReactionLock = false,
   finishAfterAttack = false,
   suppressGenericEventReactions = false
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return undefined;
-  if (!token?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return undefined;
+  if (!token?.actor || !weapon || !isAttackSource(weapon, weaponFunctionId)) return undefined;
   if (isActorUnableToAct(token.actor)) return undefined;
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return undefined;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
@@ -522,7 +563,9 @@ export function startWeaponAttack({
     onDestroy,
     chainRef,
     damageHubOperationRef,
+    abilityTrialSession,
     skipActionPointCost,
+    skipBaseWeaponResourceCosts,
     ignoreReactionLock,
     finishAfterAttack,
     suppressGenericEventReactions
@@ -580,6 +623,405 @@ export function startWeaponAttackAndWait(options = {}) {
   });
 }
 
+/**
+ * Execute one top-level ability attack function.
+ *
+ * Resource rows are quoted before interactive targeting and committed exactly
+ * once when the user confirms the attack. The weapon controller then skips the
+ * already-paid base vector while still processing critical-failure surcharges.
+ */
+export async function startAbilityAttackActionAndWait({
+  token = null,
+  item = null,
+  functionId = "",
+  chainRef = null,
+  onInteractionCancelled = null
+} = {}) {
+  const sourceToken = token?.object ?? token;
+  const abilityFunction = getAbilityAttackFunction(item, functionId);
+  const settings = getAbilityAttackSettings(item, functionId);
+  if (!sourceToken?.actor || !abilityFunction || !settings) return false;
+  if (item?.parent?.uuid !== sourceToken.actor.uuid || isActorUnableToAct(sourceToken.actor)) return false;
+
+  const actionKey = getAbilityAttackActionKey(settings);
+  const abilityTrialSession = createAbilityAttackTrialSession({
+    abilityFunction,
+    settings,
+    sourceActor: sourceToken.actor,
+    sourceToken
+  });
+  const costRows = getAbilityAttackResourceCostRows(item, abilityFunction.id);
+  const costContext = {
+    rootId: `ability-attack:${item.id}:${abilityFunction.id}:${foundry.utils.randomID()}`,
+    occurrenceId: `ability-attack:${item.id}:${abilityFunction.id}`,
+    chainRef
+  };
+  let quote;
+  try {
+    quote = await quoteAbilityFunctionResourceCosts({
+      actor: sourceToken.actor,
+      sourceItem: item,
+      abilityFunction,
+      costRows,
+      context: costContext
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Ability attack cost preflight failed", error);
+    quote = { ok: false, reason: "spendFailed", error };
+  }
+  if (!quote?.ok) {
+    notifyAbilityTriggerCostFailure(quote);
+    return false;
+  }
+
+  const payCosts = async () => {
+    let payment;
+    try {
+      payment = await payAbilityFunctionResourceCosts({
+        actor: sourceToken.actor,
+        sourceItem: item,
+        abilityFunction,
+        costRows,
+        expectedFingerprint: quote.fingerprint,
+        context: costContext
+      });
+    } catch (error) {
+      console.error("Fallout MaW | Ability attack resource payment failed", error);
+      payment = { ok: false, reason: "spendFailed", error };
+    }
+    if (payment?.ok) return true;
+    notifyAbilityTriggerCostFailure(payment);
+    return false;
+  };
+
+  const label = String(settings.name ?? "").trim() || String(item.name ?? "Атакующее действие");
+  if (settings.targeting.mode === "selectedTargets") {
+    return executeAbilityAttackTargetSequence({
+      token: sourceToken,
+      item,
+      abilityFunction,
+      settings,
+      actionKey,
+      label,
+      chainRef,
+      abilityTrialSession,
+      payCosts,
+      onInteractionCancelled
+    });
+  }
+
+  const attackModifier = settings.targeting.mode === "cone"
+    ? await requestAbilityAttackDirectionModifier(settings, label)
+    : null;
+  if (attackModifier === false) {
+    onInteractionCancelled?.();
+    return false;
+  }
+  return startWeaponAttackAndWait({
+    token: sourceToken,
+    weapon: item,
+    actionKey,
+    weaponFunctionId: abilityFunction.id,
+    attackModifier,
+    chainRef,
+    abilityTrialSession,
+    skipActionPointCost: true,
+    skipBaseWeaponResourceCosts: true,
+    onBeforeExecute: payCosts
+  });
+}
+
+async function executeAbilityAttackTargetSequence({
+  token = null,
+  item = null,
+  abilityFunction = null,
+  settings = {},
+  actionKey = "",
+  label = "Атакующее действие",
+  chainRef = null,
+  abilityTrialSession = null,
+  payCosts = null,
+  onInteractionCancelled = null
+} = {}) {
+  const limit = Math.max(1, Math.floor(evaluateAbilityAttackFormula(
+    settings.targeting?.targetLimitFormula ?? settings.sequence?.count,
+    token?.actor,
+    {
+      fallback: Math.max(1, toInteger(settings.sequence?.count) || 1),
+      minimum: 1,
+      context: "ability attack target limit"
+    }
+  )));
+  const difficultyStep = Math.max(0, toInteger(settings.sequence?.difficultyPerAttack));
+  const allowRepeatedTargets = settings.targeting?.allowRepeatedTargets !== false;
+  const maxRangeMeters = Math.max(0, evaluateAbilityAttackFormula(
+    settings.maxRangeMeters,
+    token?.actor,
+    {
+      fallback: 0,
+      minimum: 0,
+      context: "ability attack selected-target range"
+    }
+  ));
+  const targetRows = collectAbilityAttackTargetSelectionRows({
+    token,
+    item,
+    abilityFunction,
+    actionKey,
+    maxRangeMeters
+  });
+  const selectedRows = await requestCustomTokenSelection({
+    rows: targetRows,
+    limit,
+    allowRepeated: allowRepeatedTargets,
+    title: label,
+    noneWarning: `${label}: нет доступных целей в пределах ${formatAbilityAttackRange(maxRangeMeters)}.`,
+    instructions: `${label}: выберите до ${limit} целей в пределах ${formatAbilityAttackRange(maxRangeMeters)}. Enter подтверждает неполный выбор, ПКМ снимает последнюю цель, Esc отменяет.`,
+    getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? ""),
+    getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? "Цель")
+  });
+  if (!selectedRows.length) {
+    onInteractionCancelled?.();
+    return false;
+  }
+
+  const selections = [];
+  for (const [index, row] of selectedRows.entries()) {
+    const selectedLimbKey = settings.targeting?.aimed
+      ? await requestAbilityAttackSelectedLimb(row.token, {
+        label,
+        index,
+        count: selectedRows.length
+      })
+      : "";
+    if (settings.targeting?.aimed && !selectedLimbKey) {
+      onInteractionCancelled?.();
+      return false;
+    }
+    selections.push({
+      token: row.token,
+      targetUuid: String(row.token?.document?.uuid ?? row.token?.uuid ?? ""),
+      selectedLimbKey,
+      attackModifier: createAttackActionTargetedModifier({
+        aimed: settings.targeting?.aimed,
+        label,
+        difficultyBonus: difficultyStep * index
+      })
+    });
+  }
+
+  if (!selections.length) {
+    onInteractionCancelled?.();
+    return false;
+  }
+  if (typeof payCosts !== "function" || !(await payCosts())) return false;
+  prepareAbilityAttackTrialSessionTargets(abilityTrialSession, selections);
+
+  const results = [];
+  for (const [selectionIndex, selection] of selections.entries()) {
+    results.push(await executeWeaponAttackAgainstToken({
+      attackerToken: token,
+      targetToken: selection.token,
+      weapon: item,
+      actionKey,
+      weaponFunctionId: abilityFunction.id,
+      attackModifier: selection.attackModifier,
+      selectedLimbKey: selection.selectedLimbKey,
+      strictTargetResolution: true,
+      skipActionPointCost: true,
+      skipBaseWeaponResourceCosts: true,
+      abilityTrialSession: prepareAbilityAttackTrialSessionLane(
+        abilityTrialSession,
+        selection,
+        selectionIndex
+      ),
+      chainRef
+    }));
+  }
+  return results.some(Boolean);
+}
+
+function collectAbilityAttackTargetSelectionRows({
+  token = null,
+  item = null,
+  abilityFunction = null,
+  actionKey = "",
+  maxRangeMeters = 0
+} = {}) {
+  const reachable = new Set(collectValidWeaponAttackTargets({
+    attackerToken: token,
+    weapon: item,
+    actionKey,
+    weaponFunctionId: abilityFunction?.id
+  }));
+  return (canvas.tokens?.placeables ?? [])
+    .filter(target => (
+      target?.actor
+      && target.visible !== false
+      && target.renderable !== false
+      && !isSameAttackToken(token, target)
+    ))
+    .map(target => {
+      const distanceMeters = measureTokenDistanceMeters(token, target);
+      const inRange = distanceMeters <= maxRangeMeters + 1e-6;
+      const selectable = inRange && reachable.has(target);
+      return {
+        token: target,
+        actorUuid: String(target.actor?.uuid ?? ""),
+        selectable,
+        reason: selectable
+          ? ""
+          : (!inRange
+            ? `вне дистанции ${formatAbilityAttackRange(maxRangeMeters)}`
+            : "цель недоступна для атаки")
+      };
+    });
+}
+
+async function requestAbilityAttackSelectedLimb(targetToken = null, {
+  label = "Атакующее действие",
+  index = 0,
+  count = 1
+} = {}) {
+  const limbs = Object.entries(targetToken?.actor?.system?.limbs ?? {})
+    .filter(([key, limb]) => key && limb && typeof limb === "object" && !isLimbDestroyed(targetToken.actor, key))
+    .map(([key, limb]) => ({
+      key,
+      label: String(limb.label ?? key)
+    }));
+  if (!limbs.length) {
+    ui.notifications.warn(`${label}: у цели ${targetToken?.name ?? targetToken?.actor?.name ?? ""} нет доступных частей тела.`);
+    return "";
+  }
+  const result = await DialogV2.input({
+    window: { title: `${label}: цель ${index + 1} / ${count}` },
+    content: `
+      <label class="form-group">
+        <span>Часть тела цели ${escapeAttackDialogText(targetToken?.name ?? targetToken?.actor?.name ?? "")}</span>
+        <select name="limbKey">
+          ${limbs.map(limb => `<option value="${escapeAttackDialogText(limb.key)}">${escapeAttackDialogText(limb.label)}</option>`).join("")}
+        </select>
+      </label>
+    `,
+    ok: {
+      label: "Выбрать",
+      icon: "fa-solid fa-crosshairs",
+      callback: (_event, button) => String(button.form?.elements?.limbKey?.value ?? "")
+    },
+    buttons: [{
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    rejectClose: false,
+    modal: true,
+    position: { width: 420 }
+  });
+  const limbKey = String(result ?? "");
+  return limbs.some(limb => limb.key === limbKey) ? limbKey : "";
+}
+
+function formatAbilityAttackRange(value = 0) {
+  const number = Math.max(0, Number(value) || 0);
+  return `${Number.isInteger(number) ? number : number.toFixed(2)} м`;
+}
+
+async function requestAbilityAttackDirectionModifier(settings = {}, label = "Атакующее действие") {
+  const directions = [
+    { key: "thrust", label: "Колющий", data: settings.targeting?.directions?.thrust },
+    { key: "swing", label: "Рубящий", data: settings.targeting?.directions?.swing }
+  ].filter(entry => entry.data?.enabled);
+  if (!directions.length) return null;
+  let selected = directions[0];
+  if (directions.length > 1) {
+    const choice = await DialogV2.wait({
+      window: { title: label },
+      content: "<p>Выберите вариант атаки.</p>",
+      buttons: directions.map((entry, index) => ({
+        action: entry.key,
+        label: entry.label,
+        default: index === 0
+      })),
+      rejectClose: false,
+      modal: true,
+      position: { width: 360 }
+    });
+    if (!choice) return false;
+    selected = directions.find(entry => entry.key === choice);
+    if (!selected) return false;
+  }
+  return createAttackActionDirectionModifier({
+    label: `${label}: ${selected.label}`,
+    accuracyModifier: selected.data.accuracyModifier,
+    criticalChanceModifier: selected.data.criticalChanceModifier,
+    damagePercentModifier: selected.data.damagePercentModifier
+  });
+}
+
+function getAbilityAttackResourceCostRows(item = null, functionId = "") {
+  return (getWeaponAttackData(item, functionId)?.resourceCosts ?? [])
+    .filter(cost => String(cost?.type ?? "") === "actorResource")
+    .map((cost, index) => ({
+      id: String(cost?.id ?? "").trim() || `attack-cost-${index + 1}`,
+      resourceKey: String(cost?.resourceKey ?? "").trim(),
+      formula: String(cost?.formula ?? "0").trim() || "0",
+      overloadAmount: Math.max(0, toInteger(cost?.overloadAmount)),
+      overloadDurationSeconds: Math.max(0, toInteger(cost?.overloadDurationSeconds))
+    }));
+}
+
+function createAbilityAttackTrialSession({
+  abilityFunction = null,
+  settings = {},
+  sourceActor = null,
+  sourceToken = null
+} = {}) {
+  return {
+    abilityFunction,
+    settings,
+    sourceActor,
+    sourceToken,
+    operationId: `ability-attack-trials:${String(abilityFunction?.id ?? "")}:${foundry.utils.randomID()}`,
+    state: createAttackTrialResolutionState(),
+    appliedOutcomeKeys: new Set(),
+    notifiedOutcomeKeys: new Set(),
+    targetUuids: [],
+    targetLaneKeys: new Map()
+  };
+}
+
+function getSharedAbilityAttackTrialSession(session = null) {
+  return session?.shared ?? session ?? null;
+}
+
+function prepareAbilityAttackTrialSessionTargets(session = null, selections = []) {
+  const shared = getSharedAbilityAttackTrialSession(session);
+  if (!shared) return null;
+  shared.targetUuids = (selections ?? [])
+    .map(selection => String(selection?.targetUuid ?? "").trim())
+    .filter(Boolean);
+  return shared;
+}
+
+function prepareAbilityAttackTrialSessionLane(session = null, selection = {}, index = 0) {
+  const shared = getSharedAbilityAttackTrialSession(session);
+  if (!shared) return null;
+  const targetUuid = String(selection?.targetUuid ?? "").trim();
+  return {
+    shared,
+    laneKey: `selection:${Math.max(0, toInteger(index))}:${targetUuid}`,
+    targetUuid
+  };
+}
+
+function escapeAttackDialogText(value = "") {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 export function startDualWeaponAttack({
   token = null,
   attacks = [],
@@ -599,7 +1041,7 @@ export function startDualWeaponAttack({
   if (new Set(entries.map(entry => entry.weapon?.id ?? "")).size !== 2) return undefined;
 
   for (const entry of entries) {
-    if (!entry.weapon || !hasItemFunction(entry.weapon, ITEM_FUNCTIONS.weapon)) return undefined;
+    if (!entry.weapon || !isAttackSource(entry.weapon, entry.weaponFunctionId)) return undefined;
     if (!getWeaponAttackData(entry.weapon, entry.weaponFunctionId)?.enabled) return undefined;
     if (!hasWeaponAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)) return undefined;
     if (isWeaponActionBlocked(actor, entry.actionKey)) return undefined;
@@ -747,7 +1189,7 @@ export function startCommandedWeaponAttacks({
   if (!entries.length) return undefined;
 
   for (const entry of entries) {
-    if (!entry.weapon || !hasItemFunction(entry.weapon, ITEM_FUNCTIONS.weapon)) return undefined;
+    if (!entry.weapon || !isAttackSource(entry.weapon, entry.weaponFunctionId)) return undefined;
     if (isActorUnableToAct(entry.token.actor)) return undefined;
     if (!getWeaponAttackData(entry.weapon, entry.weaponFunctionId)?.enabled) return undefined;
     if (!hasWeaponAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)) return undefined;
@@ -955,7 +1397,7 @@ function normalizeCommandedWeaponAttackEntries(attacks = []) {
 
 function validateCommandedWeaponAttackEntries(entries = []) {
   for (const entry of entries) {
-    if (!entry.weapon || !hasItemFunction(entry.weapon, ITEM_FUNCTIONS.weapon)) return false;
+    if (!entry.weapon || !isAttackSource(entry.weapon, entry.weaponFunctionId)) return false;
     if (isActorUnableToAct(entry.token.actor)) return false;
     if (!getWeaponAttackData(entry.weapon, entry.weaponFunctionId)?.enabled) return false;
     if (!hasWeaponAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)) return false;
@@ -970,7 +1412,10 @@ function validateCommandedWeaponAttackEntries(entries = []) {
 function captureCommandedWeaponAttackSelection(entry = {}, {
   label = "Команда",
   index = 0,
-  count = 1
+  count = 1,
+  attackModifier = null,
+  skipBaseWeaponResourceCosts = false,
+  treatDestroyAsCancelled = false
 } = {}) {
   if (activeAttack && !cancelWeaponAttack()) {
     return Promise.resolve({ selection: null, cancelled: false });
@@ -988,9 +1433,10 @@ function captureCommandedWeaponAttackSelection(entry = {}, {
       entry.weapon,
       entry.actionKey,
       entry.weaponFunctionId,
-      null,
+      attackModifier,
       {
         skipActionPointCost: true,
+        skipBaseWeaponResourceCosts,
         captureOnly: true,
         ignoreReactionLock: true,
         onCapture: selection => {
@@ -999,7 +1445,7 @@ function captureCommandedWeaponAttackSelection(entry = {}, {
         },
         onDestroy: ({ controller: destroyed }) => queueMicrotask(() => {
           if (!captured) finish({
-            cancelled: Boolean(destroyed?.targetSelectionOutcome?.cancelled)
+            cancelled: Boolean(treatDestroyAsCancelled || destroyed?.targetSelectionOutcome?.cancelled)
           });
         })
       }
@@ -1677,7 +2123,7 @@ async function processCommandedWeaponAttackSelections(selections = [], {
   const actionPointCosts = new Map();
   for (const selection of resolved) {
     if (selection.weapon?.parent?.uuid !== selection.token.actor.uuid) return { ok: false, reason: "wrongWeaponOwner" };
-    if (!hasItemFunction(selection.weapon, ITEM_FUNCTIONS.weapon)) return { ok: false, reason: "invalidWeapon" };
+    if (!isAttackSource(selection.weapon, selection.weaponFunctionId)) return { ok: false, reason: "invalidWeapon" };
     if (isActorUnableToAct(selection.token.actor)) return { ok: false, reason: "unableToAct" };
     if (!getWeaponAttackData(selection.weapon, selection.weaponFunctionId)?.enabled) return { ok: false, reason: "disabledWeapon" };
     if (!hasWeaponAction(selection.weapon, selection.actionKey, selection.weaponFunctionId)) return { ok: false, reason: "missingAction" };
@@ -2010,7 +2456,7 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
     const weapon = selection?.weapon ?? null;
     const actionKey = String(selection?.actionKey ?? "");
     const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
-    if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
+    if (!weapon || !isAttackSource(weapon, weaponFunctionId)) return false;
     if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return false;
     if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
     if (isWeaponActionBlocked(actor, actionKey)) {
@@ -2026,6 +2472,9 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
 
 async function executeCapturedWeaponAttack(selection = {}, {
   skipActionPointCost = true,
+  skipBaseWeaponResourceCosts = false,
+  attackModifier = null,
+  abilityTrialSession = null,
   reportedActionPointCost = null,
   reactionCoordinator = null,
   chainRef = null,
@@ -2038,11 +2487,13 @@ async function executeCapturedWeaponAttack(selection = {}, {
   const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
   if (!token?.actor || !weapon || !actionKey) return false;
 
-  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
+  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
     skipActionPointCost,
+    skipBaseWeaponResourceCosts,
     reportedActionPointCost,
     reactionCoordinator,
     chainRef,
+    abilityTrialSession,
     deferWeaponNoiseDetection,
     finishAfterAttack: true
   });
@@ -2072,6 +2523,14 @@ async function executeCapturedWeaponAttack(selection = {}, {
       controller.refresh(true);
       await controller.performPushAttack(selection.selectedStrength);
       return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
+    }
+    if (
+      controller.targetedAction
+      && !controller.requiresLimbSelection
+      && !controller.requiresDirectionSelection
+    ) {
+      controller.selectedTarget = selectedTarget;
+      controller.targetedAction = false;
     }
     controller.refresh(true);
     await controller.performCurrentAttack();
@@ -2105,13 +2564,17 @@ export async function executeWeaponAttackAgainstToken({
   chainRef = null,
   damageHubOperationRef = "",
   onBeforeExecute = null,
+  abilityTrialSession = null,
+  selectedLimbKey = "",
   skipActionPointCost = false,
+  skipBaseWeaponResourceCosts = false,
+  strictTargetResolution = false,
   ignoreReactionLock = false,
   suspendActiveAttack = false,
   suppressGenericEventReactions = false
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return false;
-  if (!attackerToken?.actor || !targetToken?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
+  if (!attackerToken?.actor || !targetToken?.actor || !weapon || !isAttackSource(weapon, weaponFunctionId)) return false;
   if (isActorUnableToAct(attackerToken.actor)) return false;
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return false;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
@@ -2128,7 +2591,9 @@ export async function executeWeaponAttackAgainstToken({
     chainRef,
     damageHubOperationRef,
     onBeforeExecute,
+    abilityTrialSession,
     skipActionPointCost,
+    skipBaseWeaponResourceCosts,
     ignoreReactionLock,
     finishAfterAttack: true,
     suppressGenericEventReactions
@@ -2142,6 +2607,9 @@ export async function executeWeaponAttackAgainstToken({
   }
   try {
     activeAttack = controller;
+    if (strictTargetResolution) {
+      return await controller.executeStrictlyAgainstToken(targetToken, { selectedLimbKey });
+    }
     controller.attachPreview();
     return await controller.executeAgainstToken(targetToken);
   } finally {
@@ -2164,7 +2632,7 @@ export function collectValidWeaponAttackTargets({
   stopOnFirst = false
 } = {}) {
   if (!attackerToken?.actor || !weapon || !actionKey) return [];
-  if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return [];
+  if (!isAttackSource(weapon, weaponFunctionId)) return [];
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return [];
   const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId, null, {
     skipActionPointCost: true,
@@ -2231,7 +2699,7 @@ export async function startConstrainedAimedAttackSelection({
 } = {}) {
   const normalizedActionKey = ["aimedShot", "aimedMeleeAttack"].includes(actionKey) ? actionKey : "";
   if (!attackerToken?.actor || !targetToken?.actor || !weapon || isActorUnableToAct(attackerToken.actor)) return false;
-  if (!normalizedActionKey || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
+  if (!normalizedActionKey || !isAttackSource(weapon, weaponFunctionId) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
   if (isWeaponActionBlocked(attackerToken.actor, normalizedActionKey)) return false;
   if (isWeaponPlacementDisabled(attackerToken.actor, weapon)) return false;
   const suspendedAttack = activeAttack;
@@ -2322,7 +2790,7 @@ export function canPerformAimedAttackAgainstToken({
   const attacker = attackerToken?.object ?? attackerToken;
   const target = targetToken?.object ?? targetToken;
   if (!attacker?.actor || !target?.actor || !weapon || isActorUnableToAct(attacker.actor)) return false;
-  if (!normalizedActionKey || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
+  if (!normalizedActionKey || !isAttackSource(weapon, weaponFunctionId) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
   if (isWeaponPlacementDisabled(attacker.actor, weapon)) return false;
   if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId), weaponFunctionId)) return false;
   const origin = getTokenAimPoint(attacker);
@@ -2334,7 +2802,7 @@ export function canPerformAimedAttackAgainstToken({
 
 export function getDelayedVolleyWeaponState(weapon = null, weaponFunctionId = "") {
   const flag = weapon?.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG) ?? {};
-  const delaySeconds = weapon && hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)
+  const delaySeconds = weapon && isAttackSource(weapon, weaponFunctionId)
     ? getVolleyExplosionDelaySeconds(weapon, weaponFunctionId)
     : 0;
   const id = String(flag.id ?? "").trim();
@@ -2522,7 +2990,9 @@ class WeaponAttackController {
     this.onDestroy = typeof options.onDestroy === "function" ? options.onDestroy : null;
     this.chainRef = options.chainRef ?? null;
     this.damageHubOperationRef = String(options.damageHubOperationRef ?? "").trim();
+    this.abilityTrialSession = options.abilityTrialSession ?? null;
     this.skipActionPointCost = Boolean(options.skipActionPointCost);
+    this.skipBaseWeaponResourceCosts = Boolean(options.skipBaseWeaponResourceCosts);
     this.reportedActionPointCost = options.reportedActionPointCost === null
       || options.reportedActionPointCost === undefined
       ? null
@@ -2827,6 +3297,7 @@ class WeaponAttackController {
       ...(this.processing || this.attackCommitted ? { chanceOperationId: this.attackId } : {}),
       weaponActionKey: this.actionKey,
       weaponData,
+      attackModifier: this.attackModifier,
       weaponActionModifierState: this.getWeaponActionModifierState(),
       suppressGenericEventReactions: this.suppressGenericEventReactions,
       ...getPostureAttackEdgeModifiers({
@@ -2914,7 +3385,7 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         mode: direction.mode,
         limbKey,
-        difficultyBonus: rangeDifficultyBonus,
+        difficultyBonus: rangeDifficultyBonus + this.getAttackModifierDifficultyBonus(),
         weaponFunctionId: this.weaponFunctionId,
         accuracyBonus: getWeaponAttackModifierAccuracyModifier(this.attackModifier),
         context: previewContext
@@ -2932,7 +3403,7 @@ class WeaponAttackController {
         this.weapon,
         target.actor,
         resolvedLimbKey,
-        getAimedTargetBlockerBonus(blockerCount) + rangeDifficultyBonus,
+        getAimedTargetBlockerBonus(blockerCount) + rangeDifficultyBonus + this.getAttackModifierDifficultyBonus(),
         this.weaponFunctionId,
         this.actionKey,
         {
@@ -2945,6 +3416,7 @@ class WeaponAttackController {
     }
     return getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
       difficultyBonus: rangeDifficultyBonus
+        + this.getAttackModifierDifficultyBonus()
         + getBurstShotDifficultyBonus(
           this.weapon,
           this.actionKey,
@@ -2999,10 +3471,196 @@ class WeaponAttackController {
     return getWeaponDamagePercentBase(this.weapon, this.weaponFunctionId);
   }
 
+  getAbilityTrialSettings() {
+    return getAbilityAttackSettings(this.weapon, this.weaponFunctionId);
+  }
+
+  usesAbilityTrialResolution() {
+    return Boolean(this.getAbilityTrialSettings());
+  }
+
+  registerAbilityTrialTargets(targets = []) {
+    const shared = getSharedAbilityAttackTrialSession(this.abilityTrialSession);
+    if (!shared) return [];
+    shared.targetObjects ??= new Map();
+    for (const target of targets ?? []) {
+      const token = target?.object ?? target;
+      const uuid = String(token?.document?.uuid ?? token?.uuid ?? "").trim();
+      if (!uuid || !token?.actor) continue;
+      shared.targetObjects.set(uuid, token);
+      if (!shared.targetUuids.includes(uuid)) shared.targetUuids.push(uuid);
+    }
+    return Array.from(shared.targetObjects.values());
+  }
+
+  async getAbilityTrialTargets(fallbackTarget = null) {
+    const shared = getSharedAbilityAttackTrialSession(this.abilityTrialSession);
+    if (!shared) return fallbackTarget ? [fallbackTarget] : [];
+    this.registerAbilityTrialTargets(fallbackTarget ? [fallbackTarget] : []);
+    shared.targetObjects ??= new Map();
+    for (const uuid of shared.targetUuids ?? []) {
+      if (shared.targetObjects.has(uuid)) continue;
+      const document = typeof fromUuid === "function" ? await fromUuid(uuid) : null;
+      const token = document?.object ?? document ?? null;
+      if (token?.actor) shared.targetObjects.set(uuid, token);
+    }
+    return Array.from(shared.targetObjects.values());
+  }
+
+  async resolveAbilityTrialAttackAgainstTarget(target, {
+    selectedLimbKey = "",
+    penetrationStep = 0,
+    reflectionCount = 0
+  } = {}) {
+    const settings = this.getAbilityTrialSettings();
+    if (!settings || !target?.actor) return null;
+    if (await this.resolveTargetReactions(target)) return null;
+
+    if (!getSharedAbilityAttackTrialSession(this.abilityTrialSession)) {
+      this.abilityTrialSession = createAbilityAttackTrialSession({
+        abilityFunction: getAbilityAttackFunction(this.weapon, this.weaponFunctionId),
+        settings,
+        sourceActor: this.token?.actor ?? null,
+        sourceToken: this.token
+      });
+    }
+    const shared = getSharedAbilityAttackTrialSession(this.abilityTrialSession);
+    this.registerAbilityTrialTargets([target]);
+    const laneKey = String(
+      this.abilityTrialSession?.laneKey
+      ?? target?.document?.uuid
+      ?? target?.uuid
+      ?? target.actor.uuid
+      ?? ""
+    ).trim();
+    const resolution = await resolveAttackTrialResolution({
+      attackSettings: settings,
+      sourceActor: this.token.actor,
+      sourceToken: this.token,
+      targets: [{
+        actor: target.actor,
+        token: target,
+        laneKey
+      }],
+      state: shared.state,
+      title: String(settings.name ?? "").trim() || String(this.weapon?.name ?? "Атакующее действие"),
+      operationId: shared.operationId || this.attackId,
+      chainRef: this.chainRef,
+      source: {
+        itemUuid: this.weapon?.uuid ?? "",
+        weaponUuid: this.weapon?.uuid ?? "",
+        weaponFunctionId: this.weaponFunctionId,
+        actionKey: this.actionKey,
+        attackId: this.attackId
+      },
+      requester: "abilityAttackTrial",
+      animate: false,
+      createMessage: true
+    });
+    this.attackCheckCount += Math.max(0, toInteger(resolution.attempted));
+
+    shared.notifiedOutcomeKeys ??= new Set();
+    for (const entry of resolution.outcomes) {
+      if (entry.cached || !entry.check) continue;
+      const notificationKey = [
+        entry.trialId,
+        entry.subject,
+        entry.sourceMode,
+        entry.laneKey,
+        entry.actor?.uuid,
+        entry.resultKey
+      ].join(":");
+      if (shared.notifiedOutcomeKeys.has(notificationKey)) continue;
+      shared.notifiedOutcomeKeys.add(notificationKey);
+      await this.notifyAttackCheckResolved(entry.check);
+    }
+
+    const allTargetTokens = await this.getAbilityTrialTargets(target);
+    const targets = allTargetTokens.map(token => ({
+      actor: token.actor,
+      token
+    }));
+    const constructs = normalizeAbilityConstructs(this.weapon?.system?.constructs ?? []);
+    const damageRequests = [];
+    for (const entry of resolution.outcomes) {
+      damageRequests.push(...await applyAttackTrialOutcomeConsequences({
+        entry,
+        constructs,
+        sourceActor: this.token.actor,
+        sourceToken: this.token,
+        targets,
+        sourceItemUuid: this.weapon?.uuid ?? "",
+        title: String(settings.name ?? "").trim() || String(this.weapon?.name ?? "Атакующее действие"),
+        deduplicationSet: shared.appliedOutcomeKeys,
+        getBaseDamage: recipient => {
+          const recipientToken = recipient?.token?.object ?? recipient?.token ?? null;
+          return this.getWeaponDamage({ targetToken: recipientToken });
+        },
+        getSelectedLimbKey: recipient => {
+          if (recipient?.actor === target.actor && selectedLimbKey) return selectedLimbKey;
+          return selectRandomLimbKey(recipient?.actor, { includeDestroyed: true });
+        },
+        buildDamageRequests: ({
+          recipient,
+          amount,
+          limbKey,
+          scope,
+          entry: resolvedEntry
+        }) => {
+          const recipientToken = recipient?.token?.object
+            ?? recipient?.token
+            ?? (recipient?.actor === target.actor ? target : null);
+          const damageContext = this.createWeaponDamageContext({
+            targetToken: recipientToken,
+            limbKey,
+            damageShareCount: 1,
+            reflectionCount: Math.max(0, toInteger(reflectionCount))
+          });
+          let resolvedAmount = applyContextualDamageToAmount(this.weapon, amount, damageContext);
+          resolvedAmount = applyRicochetDamageBonus(this.weapon, resolvedAmount, damageContext);
+          resolvedAmount = getCriticalDamageAmount(
+            this.weapon,
+            resolvedAmount,
+            resolvedEntry.check,
+            this.weaponFunctionId,
+            damageContext
+          );
+          return buildWeaponDamageRequests(this.weapon, {
+            attackerActor: this.token.actor,
+            attackerToken: this.token,
+            actor: recipient.actor,
+            targetToken: recipientToken,
+            limbKey,
+            amount: resolvedAmount,
+            scope,
+            source: {
+              attackId: this.attackId,
+              weaponUuid: this.weapon.uuid,
+              weaponFunctionId: this.weaponFunctionId,
+              weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
+              actionKey: this.actionKey,
+              attackerUuid: this.token.actor.uuid,
+              tokenId: this.token.id,
+              criticalSuccess: isCriticalSuccessAttack(resolvedEntry.check),
+              penetrationStep: Math.max(0, toInteger(penetrationStep)),
+              reflectionCount: Math.max(0, toInteger(reflectionCount)),
+              abilityTrialId: resolvedEntry.trialId,
+              abilityTrialOutcomeId: resolvedEntry.outcomeId
+            }
+          }, this.weaponFunctionId);
+        }
+      }));
+    }
+    return damageRequests;
+  }
+
   hasRequiredWeaponResources(multiplier = 1) {
     const attackCount = Math.max(1, toInteger(multiplier));
     const modifierState = this.getWeaponActionModifierState();
-    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId, { modifierState })) return false;
+    if (
+      !this.skipBaseWeaponResourceCosts
+      && !hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId, { modifierState })
+    ) return false;
     return modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount }));
   }
 
@@ -3088,7 +3746,7 @@ class WeaponAttackController {
     const actor = this.token?.actor ?? null;
     const weapon = actor?.items?.get?.(this.weapon?.id) ?? null;
     if (!actor || !weapon || isActorUnableToAct(actor)) return false;
-    if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
+    if (!isAttackSource(weapon, this.weaponFunctionId)) return false;
     if (!getWeaponAttackData(weapon, this.weaponFunctionId)?.enabled) return false;
     if (!hasWeaponAction(weapon, this.actionKey, this.weaponFunctionId)) return false;
     if (getWeaponActionBlockState(actor, this.actionKey).blocked) return false;
@@ -3098,7 +3756,10 @@ class WeaponAttackController {
     this.weaponActionModifierState = null;
     const attackCount = getActionAttackCount(weapon, this.actionKey, this.weaponFunctionId);
     const modifierState = this.getWeaponActionModifierState();
-    if (getMissingWeaponResourceCost(weapon, attackCount, this.weaponFunctionId, { modifierState })) return false;
+    if (
+      !this.skipBaseWeaponResourceCosts
+      && getMissingWeaponResourceCost(weapon, attackCount, this.weaponFunctionId, { modifierState })
+    ) return false;
     if (!modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount, silent: true }))) return false;
     if (!this.skipActionPointCost && !canSpendRequiredWeaponActionPoints(
       actor,
@@ -3222,14 +3883,55 @@ class WeaponAttackController {
         chanceOperationId: this.attackId
       })
       : 0;
-    if (actionPointCostApplied && actionPointCost > 0) {
-      const state = getCombatActionPointState(this.token.actor);
-      if (state && actionPointCost > state.value) {
-        canSpendCombatActionPoints(this.token.actor, actionPointCost, { label: "действия" });
-        this.attackCanceledByReaction = true;
-        return false;
-      }
+    const actorResourceActionPointCost = this.skipBaseWeaponResourceCosts
+      ? 0
+      : getWeaponActorResourceCostTotal(this.weapon, "actionPoints", {
+        modifierState: this.getWeaponActionModifierState(),
+        weaponFunctionId: this.weaponFunctionId
+      });
+    if (
+      actionPointCostApplied
+      && !canSpendCombinedWeaponActionPointCosts(
+        this.token.actor,
+        actionPointCost,
+        actorResourceActionPointCost,
+        { notify: true, label: "действия" }
+      )
+    ) {
+      this.attackCanceledByReaction = true;
+      return false;
     }
+    this.reportedActionPointCostApplied ??= actionPointCostApplied;
+    let committedActionPointSpend = null;
+    let actionPointSpendStarted = false;
+    const commitActionPointSpend = async () => {
+      if (actionPointSpendStarted) {
+        throw new Error("Weapon action-point transaction was invoked more than once.");
+      }
+      actionPointSpendStarted = true;
+      committedActionPointSpend = await commitWeaponActionPointSpend(
+        this.token.actor,
+        this.weapon,
+        this.actionKey,
+        this.weaponFunctionId,
+        {
+          emitActionResolved: !this.attackCanceledByReaction,
+          spendActionPoints: !this.skipActionPointCost,
+          actionPointCostApplied: this.reportedActionPointCostApplied,
+          attackId: this.attackId,
+          actorToken: this.token,
+          context: resolvedActionContext,
+          chainRef: this.chainRef,
+          damageHubOperationRef: this.damageHubOperationRef,
+          resolvedCost: actionPointCost
+        }
+      );
+      return committedActionPointSpend;
+    };
+    const rollbackActionPointSpend = async committed => {
+      await rollbackCommittedWeaponActionPointSpend(this.token.actor, committed);
+      committedActionPointSpend = null;
+    };
     const weaponAttempted = this.shouldSpendWeaponResourcesForAttempt();
     if (weaponAttempted) {
       const modifierState = this.getWeaponActionModifierState();
@@ -3276,7 +3978,10 @@ class WeaponAttackController {
           this.pendingCriticalFailureResourceCosts,
           {
             modifierState,
-            chainRef: this.chainRef
+            chainRef: this.chainRef,
+            skipBaseCosts: this.skipBaseWeaponResourceCosts,
+            beforeItemCommit: commitActionPointSpend,
+            rollbackBeforeItemCommit: rollbackActionPointSpend
           }
         );
         if (!resourcesSpent) {
@@ -3288,19 +3993,16 @@ class WeaponAttackController {
         await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
         throw error;
       }
+    } else {
+      await commitActionPointSpend();
     }
-    this.reportedActionPointCostApplied ??= actionPointCostApplied;
-    const spentActionPointCost = await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
-      emitActionResolved: !this.attackCanceledByReaction,
-      spendActionPoints: !this.skipActionPointCost,
-      actionPointCostApplied: this.reportedActionPointCostApplied,
-      attackId: this.attackId,
-      actorToken: this.token,
-      context: resolvedActionContext,
-      chainRef: this.chainRef,
-      damageHubOperationRef: this.damageHubOperationRef,
-      resolvedCost: actionPointCost
-    });
+    const spentActionPointCost = await finalizeCommittedWeaponActionPointSpend(
+      this.token.actor,
+      this.weapon,
+      this.actionKey,
+      this.weaponFunctionId,
+      committedActionPointSpend
+    );
     this.reportedActionPointCost ??= Math.max(0, toInteger(spentActionPointCost));
     this.weaponNoiseAttempted = weaponAttempted;
     this.interruptForIncapacitation();
@@ -3326,6 +4028,11 @@ class WeaponAttackController {
     this.selectedTarget = targetToken;
     this.lockedGeometry = serializeGeometry(this.geometry);
     this.selectedLimbKey = this.requiresLimbSelection ? selectRandomWeightedLimbKey(targetToken.actor) : "";
+    if (!this.requiresLimbSelection && !this.requiresDirectionSelection) {
+      this.targetedAction = false;
+      await this.performCurrentAttack();
+      return true;
+    }
     if (this.requiresDirectionSelection) {
       this.aimedMode = "direction";
       const directions = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId);
@@ -3339,6 +4046,69 @@ class WeaponAttackController {
     if (!this.selectedLimbKey) return false;
     await this.performAimedAttack(this.selectedLimbKey);
     return true;
+  }
+
+  async executeStrictlyAgainstToken(targetToken, { selectedLimbKey = "" } = {}) {
+    this.pointer = getTokenAimPoint(targetToken);
+    if (!this.pointer || !this.rebuildGeometryAndTargets()) return false;
+    if (!this.targets.includes(targetToken)) return false;
+
+    this.selectedTarget = targetToken;
+    this.lockedGeometry = serializeGeometry(this.geometry);
+    this.selectedLimbKey = String(selectedLimbKey ?? "");
+    return this.performStrictSelectedTargetAttack(targetToken, {
+      selectedLimbKey: this.selectedLimbKey
+    });
+  }
+
+  async performStrictSelectedTargetAttack(targetToken, { selectedLimbKey = "" } = {}) {
+    if (this.processing || !targetToken?.actor || !this.geometry) return false;
+    const actionContext = this.createWeaponActionContext({ targetToken });
+    if (!this.hasRequiredWeaponResources(1)) return false;
+    if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
+      this.token.actor,
+      this.weapon,
+      this.actionKey,
+      this.weaponFunctionId,
+      actionContext
+    )) return false;
+
+    this.beginProcessingCycle();
+    if (!(await this.runBeforeExecute())) {
+      this.completeProcessingCycle();
+      return false;
+    }
+    await this.commitWeaponAttack(targetToken, { limbKey: selectedLimbKey });
+    this.pendingCriticalFailureResourceCosts = [];
+
+    const aimPoint = selectTargetTrajectoryAimPoint(this.token, targetToken, this.geometry)
+      ?? getTokenAimPoint(targetToken);
+    const trajectory = aimPoint
+      ? buildTrajectoryThroughPoint(this.token, this.geometry, aimPoint)
+      : null;
+    const damageRequests = await this.resolveAbilityTrialAttackAgainstTarget(targetToken, {
+      selectedLimbKey
+    });
+    const attempted = damageRequests !== null;
+    if (attempted) {
+      await this.spendCurrentAttackCosts({
+        attackCount: 1,
+        point: getAttackLandingPoint(trajectory ? [trajectory] : [], aimPoint),
+        actionContext
+      });
+    }
+    await this.playAttackAnimationsIfNeeded(trajectory ? [trajectory] : [], { attempted });
+    this.releaseInteractiveControl();
+    const damageResults = !this.attackCanceledByReaction && damageRequests?.length
+      ? flattenDamageResults(await applyQueuedDamageRequests(this.stampAttackDamageSources(damageRequests)))
+      : [];
+    await this.notifyAttackResolved({
+      attempted,
+      damageResults,
+      killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults)
+    });
+    this.completeProcessingCycle();
+    return attempted;
   }
 
   destroy() {
@@ -3422,6 +4192,14 @@ class WeaponAttackController {
 
   async prepareDuplicateAttackPlan({ attackCount = 1 } = {}) {
     const baseAttackCount = Math.max(1, toInteger(attackCount));
+    if (getAbilityAttackSettings(this.weapon, this.weaponFunctionId)) {
+      return {
+        baseAttackCount,
+        duplicateCount: 0,
+        cycles: 1,
+        totalAttackCount: baseAttackCount
+      };
+    }
     const requests = [];
     Hooks.callAll(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, {
       actor: this.token?.actor ?? null,
@@ -3869,6 +4647,7 @@ class WeaponAttackController {
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
     const totalAttackCount = duplicatePlan.totalAttackCount;
+    this.registerAbilityTrialTargets(this.targets);
 
     const trajectories = [];
     const damageRequests = [];
@@ -4185,6 +4964,16 @@ class WeaponAttackController {
     this.selectedTarget = this.hoveredTarget;
     this.lockedGeometry = serializeGeometry(this.geometry);
     this.selectedLimbKey = "";
+    if (!this.requiresLimbSelection && !this.requiresDirectionSelection) {
+      if (this.captureOnly) {
+        void this.runInteractiveAttackOperation(() => this.captureAttackSelection({ mode: "current" }));
+        return undefined;
+      }
+      this.targetedAction = false;
+      this.refresh(true);
+      void this.runInteractiveAttackOperation(() => this.performCurrentAttack());
+      return undefined;
+    }
     this.aimedMode = this.requiresLimbSelection ? "limb" : "direction";
     this.refresh(true);
     this.refreshAimedLimbMenu();
@@ -4548,6 +5337,12 @@ class WeaponAttackController {
   }
 
   async resolveDirectedAttackAgainstTarget(target, { limbKey = "", mode = "thrust", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
+    if (this.usesAbilityTrialResolution()) {
+      return this.resolveAbilityTrialAttackAgainstTarget(target, {
+        selectedLimbKey: limbKey,
+        penetrationStep
+      });
+    }
     if (await this.resolveTargetReactions(target)) return null;
     const attackContext = this.createWeaponAttackSkillCheckContext(target);
     this.dodgeExposure.record(target.actor, attackContext);
@@ -4565,7 +5360,16 @@ class WeaponAttackController {
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus()),
+        difficulty: getDirectedAttackDifficulty(
+          target.actor,
+          resolvedLimbKey,
+          Boolean(limbKey),
+          difficultyBonus
+            + rangeDifficultyBonus
+            + requirementDifficultyBonus
+            + this.getWatchOutDifficultyBonus()
+            + this.getAttackModifierDifficultyBonus()
+        ),
         situationalModifier: this.getAccuracyModifier(getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId, attackContext)),
         ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId, attackContext),
         ...attackContext
@@ -4838,6 +5642,12 @@ class WeaponAttackController {
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
+    if (this.usesAbilityTrialResolution()) {
+      return this.resolveAbilityTrialAttackAgainstTarget(target, {
+        penetrationStep,
+        reflectionCount
+      });
+    }
     if (await this.resolveTargetReactions(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor, { includeDestroyed: true });
     const normalizedBurstAttackIndex = Math.max(0, toInteger(burstAttackIndex));
@@ -4870,7 +5680,13 @@ class WeaponAttackController {
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + burstDifficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
+        difficulty: getDodgeDifficulty(target.actor)
+          + difficultyBonus
+          + burstDifficultyBonus
+          + rangeDifficultyBonus
+          + requirementDifficultyBonus
+          + this.getWatchOutDifficultyBonus()
+          + this.getAttackModifierDifficultyBonus(),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, attackContext))
           + getRicochetAccuracyBonus(attackContext.weaponActionModifierState, reflectionCount),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, attackContext),
@@ -4986,10 +5802,11 @@ class WeaponAttackController {
           includeAttacker: true,
           includeDead: true
         });
+        this.registerAbilityTrialTargets(blastTargets);
         const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
         if (regionRequest) regionRequests.push(regionRequest);
         for (const target of blastTargets) {
-          const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
+          const result = await this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
           damageRequests.push(...(result ?? []));
         }
       }
@@ -5092,6 +5909,16 @@ class WeaponAttackController {
       attackDistanceMeters,
       effectiveRange: rangeProfile.effectiveRange
     });
+    if (this.usesAbilityTrialResolution()) {
+      return {
+        outcome: null,
+        center: geometry.end,
+        critical: false,
+        attackDistanceMeters,
+        effectiveRange: attackContext.effectiveRange,
+        baseDamage: this.getWeaponDamage()
+      };
+    }
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
       weaponData,
       attackDistanceMeters,
@@ -5175,7 +6002,10 @@ class WeaponAttackController {
     await Promise.all(animationTasks);
   }
 
-  resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
+  async resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
+    if (this.usesAbilityTrialResolution()) {
+      return this.resolveAbilityTrialAttackAgainstTarget(target);
+    }
     const distanceContext = normalizeAttackDistanceContext(blastOutcome);
     const targetDamageContext = this.createWeaponDamageContext({
       ...distanceContext,
@@ -5236,6 +6066,12 @@ class WeaponAttackController {
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
+    if (this.usesAbilityTrialResolution()) {
+      return this.resolveAbilityTrialAttackAgainstTarget(target, {
+        selectedLimbKey: limbKey,
+        penetrationStep
+      });
+    }
     if (await this.resolveTargetReactions(target)) return null;
     const attackContext = this.createWeaponAttackSkillCheckContext(target);
     this.dodgeExposure.record(target.actor, attackContext);
@@ -5255,7 +6091,11 @@ class WeaponAttackController {
         difficulty: getAimedAttackDifficulty(
           target.actor,
           limbKey,
-          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
+          difficultyBonus
+            + rangeDifficultyBonus
+            + requirementDifficultyBonus
+            + this.getWatchOutDifficultyBonus()
+            + this.getAttackModifierDifficultyBonus(),
           {
             innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
             ignoreCover: this.ignoreAimedObstructions
@@ -5317,6 +6157,12 @@ class WeaponAttackController {
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
+    if (this.usesAbilityTrialResolution()) {
+      return this.resolveAbilityTrialAttackAgainstTarget(target, {
+        selectedLimbKey: String(targetSelection?.limbKey ?? "").trim(),
+        penetrationStep
+      });
+    }
     if (await this.resolveTargetReactions(target)) return null;
     const targetWeapon = targetSelection?.item ?? null;
     const holdingLimbKey = String(targetSelection?.limbKey ?? "").trim();
@@ -5338,7 +6184,11 @@ class WeaponAttackController {
         difficulty: getAimedAttackDifficulty(
           target.actor,
           holdingLimbKey,
-          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
+          difficultyBonus
+            + rangeDifficultyBonus
+            + requirementDifficultyBonus
+            + this.getWatchOutDifficultyBonus()
+            + this.getAttackModifierDifficultyBonus(),
           {
             innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
             ignoreCover: this.ignoreAimedObstructions
@@ -5566,6 +6416,10 @@ class WeaponAttackController {
 
   getAccuracyModifier(baseModifier = 0) {
     return toInteger(baseModifier) + getWeaponAttackModifierAccuracyModifier(this.attackModifier);
+  }
+
+  getAttackModifierDifficultyBonus() {
+    return getWeaponAttackModifierDifficultyBonus(this.attackModifier);
   }
 
   syncAttackAutoCover(states = null) {
@@ -6129,9 +6983,13 @@ class WeaponAttackController {
 
 export function getWeaponAttackData(weapon, weaponFunctionId = "") {
   const id = weaponFunctionId || ITEM_FUNCTIONS.weapon;
+  const attackSource = resolveAttackSource(weapon, id);
+  if (attackSource?.kind === "abilityAttack") {
+    return applyWeaponAttackPowerModifiers(projectAbilityAttackData(attackSource.settings));
+  }
   return applyWeaponAttackPowerModifiers(applyWeaponModuleModifiers(
     applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, id) ?? {}),
-    { moduleSlots: getWeaponFunctionModuleSlots(weapon, id) }
+    { moduleSlots: getAttackSourceModuleSlots(weapon, id) }
   ));
 }
 
@@ -6183,22 +7041,42 @@ function applyWeaponAttackPowerModifiers(weaponData = {}) {
 function applyWeaponAttackPowerResourceCosts(weaponData = {}, resourceCosts = [], multiplier = 0) {
   const costs = Array.isArray(weaponData.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
   if (String(weaponData?.damageMode ?? "manual") === "source"
-    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    && !costs.some(cost => getWeaponResourceCostIdentity(cost) === "magazine")) {
     costs.push({ type: "magazine", amount: 1 });
   }
 
   for (const cost of resourceCosts ?? []) {
     const type = String(cost?.type ?? "").trim();
+    const resourceKey = type === "actorResource"
+      ? String(cost?.resourceKey ?? "").trim()
+      : "";
     const delta = toInteger(cost?.amount) * Math.max(0, toInteger(multiplier));
-    if (!type || !delta) continue;
-    let target = costs.find(entry => String(entry?.type ?? "") === type);
+    const identity = getWeaponResourceCostIdentity({ type, resourceKey });
+    if (!identity || !delta || (type === "actorResource" && !resourceKey)) continue;
+    let target = costs.find(entry => getWeaponResourceCostIdentity(entry) === identity);
     if (!target) {
-      target = { type, amount: 0 };
+      target = type === "actorResource"
+        ? { type, resourceKey, formula: "0", amount: 0 }
+        : { type, amount: 0 };
       costs.push(target);
     }
-    target.amount = Math.max(0, toInteger(target.amount) + delta);
+    if (type === "actorResource") {
+      target.resourceKey = resourceKey;
+      target.formula = addFormulaTexts(target.formula, String(delta));
+      target.amount = 0;
+    } else {
+      target.amount = Math.max(0, toInteger(target.amount) + delta);
+    }
   }
   weaponData.resourceCosts = costs;
+}
+
+function getWeaponResourceCostIdentity(cost = {}) {
+  const type = String(cost?.type ?? "").trim();
+  if (!type) return "";
+  if (type !== "actorResource") return type;
+  const resourceKey = String(cost?.resourceKey ?? "").trim();
+  return resourceKey ? `${type}:${resourceKey}` : "";
 }
 
 function addFormulaNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
@@ -6243,13 +7121,7 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
 }
 
 function getWeaponAttackSourceData(weapon, weaponFunctionId = "") {
-  const id = String(weaponFunctionId || ITEM_FUNCTIONS.weapon);
-  if (!id || id === ITEM_FUNCTIONS.weapon) return weapon.system?._source?.functions?.weapon ?? {};
-  const sourceAdditionalWeapons = weapon.system?._source?.functions?.additionalWeapons ?? [];
-  if (Array.isArray(sourceAdditionalWeapons)) {
-    return sourceAdditionalWeapons.find(entry => String(entry?.id ?? "") === id) ?? {};
-  }
-  return sourceAdditionalWeapons?.[id] ?? {};
+  return getAttackSourceRawData(weapon, weaponFunctionId);
 }
 
 export function hasWeaponAction(weapon, actionKey, weaponFunctionId = "") {
@@ -7479,6 +8351,10 @@ function isSameOptionalPoint(current, previous) {
 }
 
 export function getActionAttackCount(weapon, actionKey, weaponFunctionId = "") {
+  const abilitySettings = getAbilityAttackSettings(weapon, weaponFunctionId);
+  if (actionKey === VOLLEY_ACTION_KEY && abilitySettings?.targeting?.mode === "area") {
+    return Math.max(1, toInteger(abilitySettings.sequence?.count) || 1);
+  }
   if (actionKey !== "burst") return 1;
   return Math.max(1, evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.burst?.count, {
     minimum: 1,
@@ -7506,7 +8382,10 @@ function getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "",
 }
 
 function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponFunctionId = "", actor = null, context = {}) {
-  if (actionKey !== "burst") return 0;
+  const abilitySettings = getAbilityAttackSettings(weapon, weaponFunctionId);
+  const isSequencedAbilityArea = actionKey === VOLLEY_ACTION_KEY
+    && abilitySettings?.targeting?.mode === "area";
+  if (actionKey !== "burst" && !isSequencedAbilityArea) return 0;
   return Math.max(0, toInteger(attackIndex)) * getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId, actor, context);
 }
 
@@ -7532,7 +8411,23 @@ export function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctio
 export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const costs = getWeaponResourceCosts(weaponData, { modifierState });
+  const actor = getWeaponOwnerActor(weapon);
+  const actorResourceTotals = getWeaponActorResourceCostTotals(weapon, { costs });
+  for (const [resourceKey, required] of actorResourceTotals) {
+    if (required <= 0) continue;
+    const current = getActorAttackResourceAvailable(actor, resourceKey);
+    if (current < required) {
+      return {
+        type: "actorResource",
+        resourceKey,
+        label: getActorAttackResourceLabel(resourceKey),
+        current,
+        required
+      };
+    }
+  }
   for (const cost of costs) {
+    if (cost.type === "actorResource") continue;
     const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
     if (!amount) continue;
     if (cost.type === "magazine") {
@@ -7575,6 +8470,72 @@ export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunct
   return null;
 }
 
+function evaluateWeaponActorResourceCostAmount(weapon = null, cost = {}) {
+  return Math.max(0, Math.trunc(evaluateWeaponFormula(weapon, cost?.formula ?? cost?.amount, {
+    fallback: 0,
+    minimum: 0,
+    context: `${weapon?.name ?? "weapon"} actor resource cost`
+  }) || 0));
+}
+
+function getWeaponActorResourceCostTotals(
+  weapon = null,
+  {
+    costs = null,
+    modifierState = null,
+    weaponFunctionId = ""
+  } = {}
+) {
+  const actor = getWeaponOwnerActor(weapon);
+  const preparedCosts = Array.isArray(costs)
+    ? costs
+    : getWeaponResourceCosts(getWeaponAttackData(weapon, weaponFunctionId), { modifierState });
+  const totals = new Map();
+  for (const cost of preparedCosts) {
+    if (String(cost?.type ?? "") !== "actorResource") continue;
+    const resourceKey = String(cost?.resourceKey ?? "").trim();
+    if (!resourceKey || !isCombatResourceCostActive(actor, resourceKey)) continue;
+    const amount = evaluateWeaponActorResourceCostAmount(weapon, cost);
+    totals.set(resourceKey, (totals.get(resourceKey) ?? 0) + amount);
+  }
+  return totals;
+}
+
+function getWeaponActorResourceCostTotal(
+  weapon = null,
+  resourceKey = "",
+  {
+    modifierState = null,
+    weaponFunctionId = ""
+  } = {}
+) {
+  return getWeaponActorResourceCostTotals(weapon, {
+    modifierState,
+    weaponFunctionId
+  }).get(String(resourceKey ?? "").trim()) ?? 0;
+}
+
+function getActorAttackResourceAvailable(actor = null, resourceKey = "") {
+  const key = String(resourceKey ?? "").trim();
+  if (!actor || !key || !isCombatResourceCostActive(actor, key)) return 0;
+  if (key === "actionPoints") {
+    const strict = getStrictActionPointState(actor);
+    return Math.max(0, toInteger(strict?.current));
+  }
+  if (key === "power") return Math.max(0, toInteger(getActorAvailableEnergy(actor)));
+  const resource = actor.system?.resources?.[key];
+  if (!resource) return 0;
+  return Math.max(0, toInteger(resource.value) - toInteger(resource.min));
+}
+
+function getActorAttackResourceLabel(resourceKey = "") {
+  const key = String(resourceKey ?? "").trim();
+  if (key === "reactionPoints") {
+    return game.i18n.localize("FALLOUTMAW.EventReaction.Resource.ReactionPoints");
+  }
+  return getResourceSettings().find(entry => String(entry?.key ?? "") === key)?.label ?? key;
+}
+
 export function isCombatActionPointSpendingActive(actor = null) {
   return isActorInActiveCombat(actor);
 }
@@ -7613,20 +8574,78 @@ export function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctio
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "", context = {}) {
   if (!isCombatActionPointSpendingActive(actor)) return true;
-  const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, context);
-  if (cost <= 0) return true;
-  return canSpendCombatActionPoints(actor, cost, { label: "действия" });
+  const actionCost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, context);
+  const strictActorCost = getWeaponActorResourceCostTotal(weapon, "actionPoints", {
+    modifierState: context?.weaponActionModifierState ?? null,
+    weaponFunctionId
+  });
+  return canSpendCombinedWeaponActionPointCosts(actor, actionCost, strictActorCost, {
+    notify: true,
+    label: "действия"
+  });
 }
 
 function canSpendRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "", context = {}) {
   if (!isCombatActionPointSpendingActive(actor)) return true;
-  const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, context);
-  if (cost <= 0) return true;
-  const state = getCombatActionPointState(actor);
-  return !state || cost <= state.value;
+  const actionCost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, context);
+  const strictActorCost = getWeaponActorResourceCostTotal(weapon, "actionPoints", {
+    modifierState: context?.weaponActionModifierState ?? null,
+    weaponFunctionId
+  });
+  return canSpendCombinedWeaponActionPointCosts(actor, actionCost, strictActorCost);
+}
+
+function canSpendCombinedWeaponActionPointCosts(
+  actor = null,
+  actionCost = 0,
+  strictActorCost = 0,
+  { notify = false, label = "" } = {}
+) {
+  if (!isCombatActionPointSpendingActive(actor)) return true;
+  const dynamicCost = Math.max(0, toInteger(actionCost));
+  const strictCost = Math.max(0, toInteger(strictActorCost));
+  const strictState = getStrictActionPointState(actor);
+  if (strictCost > Math.max(0, toInteger(strictState?.current))) {
+    if (notify) canSpendStrictActionPoints(actor, strictCost, { label });
+    return false;
+  }
+
+  const dynamicState = getCombatActionPointState(actor);
+  if (!dynamicState) return dynamicCost <= 0;
+  const dynamicAvailable = dynamicState.ownTurn
+    ? Math.max(0, dynamicState.value - strictCost)
+    : dynamicState.value;
+  if (dynamicCost <= dynamicAvailable) return true;
+  if (notify) canSpendCombatActionPoints(actor, dynamicCost + (dynamicState.ownTurn ? strictCost : 0), { label });
+  return false;
 }
 
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "", {
+  emitActionResolved = true,
+  spendActionPoints = true,
+  actionPointCostApplied = null,
+  attackId = "",
+  actorToken = null,
+  context = null,
+  chainRef = null,
+  damageHubOperationRef = "",
+  resolvedCost = null
+} = {}) {
+  const committed = await commitWeaponActionPointSpend(actor, weapon, actionKey, weaponFunctionId, {
+    emitActionResolved,
+    spendActionPoints,
+    actionPointCostApplied,
+    attackId,
+    actorToken,
+    context,
+    chainRef,
+    damageHubOperationRef,
+    resolvedCost
+  });
+  return finalizeCommittedWeaponActionPointSpend(actor, weapon, actionKey, weaponFunctionId, committed);
+}
+
+async function commitWeaponActionPointSpend(actor, weapon, actionKey, weaponFunctionId = "", {
   emitActionResolved = true,
   spendActionPoints = true,
   actionPointCostApplied = null,
@@ -7667,25 +8686,66 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
       ? Math.max(0, configuredCost)
       : getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId, resolvedContext)
     : 0;
+  let transaction = { spent: 0, receipt: null, events: [] };
   if (spendActionPoints && isCombatActionPointSpendingActive(actor)) {
     if (cost > 0) {
-      const state = getCombatActionPointState(actor);
-      if (state && cost <= state.value) {
-        await spendCombatActionPoints(actor, cost, {
-          source: "weaponAction",
-          actionKey,
-          chainRef,
-          damageHubOperationRef
-        });
+      transaction = await spendCombatActionPointsWithReceipt(actor, cost, {
+        source: "weaponAction",
+        actionKey,
+        chainRef,
+        damageHubOperationRef,
+        suppressResourceNotification: true
+      });
+      if (transaction.spent !== cost || !transaction.receipt) {
+        const error = new Error("Weapon action-point spend was cancelled or became unaffordable.");
+        error.reason = "spendFailed";
+        throw error;
       }
     }
   }
-  if (emitActionResolved && actionKey === "reload") {
+  return {
+    cost,
+    receipt: transaction.receipt,
+    resolvedContext,
+    emitActionResolved
+  };
+}
+
+async function rollbackCommittedWeaponActionPointSpend(actor, committed = null) {
+  const receipt = committed?.receipt;
+  if (!receipt) return 0;
+  const restored = await refundCombatActionPointReceipt(actor, receipt, {
+    chainRef: committed?.resolvedContext?.chainRef
+  });
+  if (restored < Math.max(0, toInteger(receipt.amount))) {
+    throw new Error(`Only ${restored} of ${receipt.amount} weapon action points were rolled back.`);
+  }
+  return restored;
+}
+
+async function finalizeCommittedWeaponActionPointSpend(
+  actor,
+  weapon,
+  actionKey,
+  weaponFunctionId = "",
+  committed = null
+) {
+  const cost = Math.max(0, Number(committed?.cost) || 0);
+  const resolvedContext = committed?.resolvedContext ?? {};
+  if (committed?.receipt) {
+    await notifyCombatActionPointReceipt(actor, committed.receipt, {
+      source: "weaponAction",
+      actionKey,
+      chainRef: resolvedContext.chainRef,
+      damageHubOperationRef: resolvedContext.damageHubOperationRef
+    });
+  }
+  if (committed?.emitActionResolved && actionKey === "reload") {
     await publishWeaponAttackResolved({
       ...resolvedContext,
       attackerUuid: actor?.uuid ?? "",
       actorUuid: actor?.uuid ?? "",
-      tokenUuid: actorToken?.document?.uuid ?? actorToken?.uuid ?? "",
+      tokenUuid: resolvedContext.actorToken?.document?.uuid ?? resolvedContext.actorToken?.uuid ?? "",
       weaponUuid: weapon?.uuid ?? "",
       actionPointCost: cost,
       targetActorUuids: [],
@@ -7696,7 +8756,7 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
       damageResults: [],
       senderUserId: game.user?.id ?? ""
     });
-  } else if (emitActionResolved) {
+  } else if (committed?.emitActionResolved) {
     Hooks.callAll("fallout-maw.weaponActionResolved", resolvedContext);
   }
   return cost;
@@ -7709,7 +8769,10 @@ async function spendWeaponResources(
   extraCosts = [],
   {
     modifierState = null,
-    chainRef = null
+    chainRef = null,
+    skipBaseCosts = false,
+    beforeItemCommit = null,
+    rollbackBeforeItemCommit = null
   } = {}
 ) {
   const actor = getWeaponOwnerActor(weapon);
@@ -7721,24 +8784,30 @@ async function spendWeaponResources(
     const currentWeapon = actor.items?.get?.(weapon.id);
     if (!currentWeapon) return false;
 
-    const missing = getMissingWeaponResourceCost(
+    const weaponData = getWeaponAttackData(currentWeapon, weaponFunctionId);
+    const {
+      itemTotals,
+      actorCostRows
+    } = collectWeaponResourceSpendTotals(weaponData, multiplier, extraCosts, {
+      modifierState,
+      skipBaseCosts
+    });
+    const missing = getMissingCollectedWeaponItemResourceCost(
       currentWeapon,
-      multiplier,
-      weaponFunctionId,
-      { modifierState }
+      weaponData,
+      itemTotals,
+      weaponFunctionId
     );
     if (missing) {
       ui.notifications.warn(`${currentWeapon.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
       return false;
     }
 
-    const weaponData = getWeaponAttackData(currentWeapon, weaponFunctionId);
-    const costs = collectWeaponResourceSpendTotals(weaponData, multiplier, extraCosts, { modifierState });
     const updates = [];
     const deletes = [];
     let workingWeapon = currentWeapon;
 
-    const energyAmount = costs.get("energyConsumer") ?? 0;
+    const energyAmount = itemTotals.get("energyConsumer") ?? 0;
     if (energyAmount > 0) {
       const state = getWeaponEnergyResourceState(currentWeapon, weaponFunctionId);
       if (state.item) {
@@ -7755,7 +8824,7 @@ async function spendWeaponResources(
       }
     }
 
-    const magazineAmount = costs.get("magazine") ?? 0;
+    const magazineAmount = itemTotals.get("magazine") ?? 0;
     if (magazineAmount > 0) {
       const currentMagazine = Math.max(0, toInteger(getWeaponAttackData(workingWeapon, weaponFunctionId)?.magazine?.value));
       const magazineUpdate = createWeaponFunctionUpdateData(workingWeapon, weaponFunctionId, {
@@ -7770,7 +8839,7 @@ async function spendWeaponResources(
       }
     }
 
-    const conditionAmount = costs.get("condition") ?? 0;
+    const conditionAmount = itemTotals.get("condition") ?? 0;
     if (conditionAmount > 0) {
       updates.push({
         _id: currentWeapon.id,
@@ -7781,7 +8850,7 @@ async function spendWeaponResources(
       });
     }
 
-    const quantityAmount = costs.get("quantity") ?? 0;
+    const quantityAmount = itemTotals.get("quantity") ?? 0;
     if (quantityAmount > 0) {
       const consumption = planInventoryItemConsumption({
         item: currentWeapon,
@@ -7797,50 +8866,185 @@ async function spendWeaponResources(
       }
     }
 
-    if (!updates.length && !deletes.length) return true;
-    const mutation = await executeInventoryMutation({
-      actor,
-      updates,
-      deletes
-    }, {
-      reason: "weapon-resource-spend",
-      documentOptions: chainRef
-        ? {
-          chainRef,
-          falloutMawSystemEventChainRef: chainRef
+    const commitItemCosts = async () => {
+      if (!updates.length && !deletes.length) return true;
+      const mutation = await executeInventoryMutation({
+        actor,
+        updates,
+        deletes
+      }, {
+        reason: "weapon-resource-spend",
+        documentOptions: chainRef
+          ? {
+            chainRef,
+            falloutMawSystemEventChainRef: chainRef
+          }
+          : {}
+      });
+      const touchedWeapon = mutation.plans?.some(plan => (
+        plan.actor === actor
+        && plan.touchedExistingIds?.has?.(String(currentWeapon.id))
+      ));
+      if (!touchedWeapon) {
+        throw new Error("Weapon resource state changed before the inventory transaction could commit.");
+      }
+      return true;
+    };
+
+    const commitRemainingCosts = async () => {
+      let beforeItemReceipt = null;
+      try {
+        if (typeof beforeItemCommit === "function") {
+          beforeItemReceipt = await beforeItemCommit();
+          if (beforeItemReceipt === false) {
+            throw new Error("The action-point transaction was not committed.");
+          }
         }
-        : {}
+        return await commitItemCosts();
+      } catch (error) {
+        if (beforeItemReceipt && typeof rollbackBeforeItemCommit === "function") {
+          try {
+            await rollbackBeforeItemCommit(beforeItemReceipt);
+          } catch (rollbackError) {
+            error.rollbackError ??= rollbackError;
+          }
+        }
+        throw error;
+      }
+    };
+
+    if (!actorCostRows.length) return commitRemainingCosts();
+
+    const identity = [
+      "weapon-resource",
+      currentWeapon.uuid ?? currentWeapon.id,
+      weaponFunctionId,
+      chainRef ?? foundry.utils.randomID()
+    ].filter(Boolean).join(":");
+    const costContext = {
+      identity,
+      rootId: identity,
+      occurrenceId: identity,
+      sourceItemUuid: String(currentWeapon.uuid ?? ""),
+      functionId: String(weaponFunctionId ?? ""),
+      chainRef
+    };
+    const quote = await quoteActorResourceCosts({
+      actor,
+      costRows: actorCostRows,
+      context: costContext
     });
-    const touchedWeapon = mutation.plans?.some(plan => (
-      plan.actor === actor
-      && plan.touchedExistingIds?.has?.(String(currentWeapon.id))
-    ));
-    if (!touchedWeapon) {
-      throw new Error("Weapon resource state changed before the inventory transaction could commit.");
+    if (!quote?.ok) {
+      notifyAbilityTriggerCostFailure(quote);
+      return false;
+    }
+    const payment = await payActorResourceCosts({
+      actor,
+      costRows: actorCostRows,
+      expectedFingerprint: quote.fingerprint,
+      context: {
+        ...costContext,
+        afterVectorSpend: commitRemainingCosts
+      }
+    });
+    if (!payment?.ok) {
+      notifyAbilityTriggerCostFailure(payment);
+      return false;
     }
     return true;
   });
 }
 
-function collectWeaponResourceSpendTotals(weaponData = {}, multiplier = 1, extraCosts = [], { modifierState = null } = {}) {
-  const costs = [
-    ...getWeaponResourceCosts(weaponData, { modifierState }).map(cost => ({
-      type: cost.type,
-      amount: Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)))
-    })),
-    ...(extraCosts ?? []).map(cost => ({
-      type: cost?.type,
-      amount: Math.max(0, toInteger(cost?.amount))
-    }))
-  ];
-  const totals = new Map();
-  for (const cost of costs) {
+function collectWeaponResourceSpendTotals(
+  weaponData = {},
+  multiplier = 1,
+  extraCosts = [],
+  {
+    modifierState = null,
+    skipBaseCosts = false
+  } = {}
+) {
+  const itemTotals = new Map();
+  const actorCostRows = [];
+  const baseMultiplier = Math.max(1, toInteger(multiplier));
+  const baseCosts = skipBaseCosts ? [] : getWeaponResourceCosts(weaponData, { modifierState });
+  for (const [index, cost] of baseCosts.entries()) {
+    const type = String(cost?.type ?? "").trim();
+    if (!type) continue;
+    if (type === "actorResource") {
+      actorCostRows.push({
+        id: String(cost?.id ?? "").trim() || `weapon-actor-cost-${index + 1}`,
+        resourceKey: String(cost?.resourceKey ?? "").trim(),
+        formula: String(cost?.formula ?? cost?.amount ?? "0").trim() || "0"
+      });
+      continue;
+    }
+    const amount = Math.max(0, toInteger(cost?.amount) * baseMultiplier);
+    if (amount > 0) itemTotals.set(type, (itemTotals.get(type) ?? 0) + amount);
+  }
+  for (const [index, cost] of (extraCosts ?? []).entries()) {
     const type = String(cost?.type ?? "").trim();
     const amount = Math.max(0, toInteger(cost?.amount));
-    if (!type || !amount) continue;
-    totals.set(type, (totals.get(type) ?? 0) + amount);
+    if (!type || amount <= 0) continue;
+    if (type === "actorResource") {
+      actorCostRows.push({
+        id: `weapon-extra-actor-cost-${index + 1}`,
+        resourceKey: String(cost?.resourceKey ?? "").trim(),
+        formula: String(amount)
+      });
+      continue;
+    }
+    itemTotals.set(type, (itemTotals.get(type) ?? 0) + amount);
   }
-  return totals;
+  return { itemTotals, actorCostRows };
+}
+
+function getMissingCollectedWeaponItemResourceCost(
+  weapon,
+  weaponData = {},
+  itemTotals = new Map(),
+  weaponFunctionId = ""
+) {
+  for (const [type, required] of itemTotals) {
+    if (required <= 0) continue;
+    if (type === "magazine") {
+      const current = toInteger(weaponData?.magazine?.value);
+      if (current < required) return {
+        type,
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"),
+        current,
+        required
+      };
+    }
+    if (type === "condition") {
+      const current = toInteger(weapon.system?.functions?.condition?.value);
+      if (current < required) return {
+        type,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
+        current,
+        required
+      };
+    }
+    if (type === "energyConsumer") {
+      const state = getWeaponEnergyResourceState(weapon, weaponFunctionId);
+      if (state.current < required) return {
+        type,
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy"),
+        current: state.current,
+        required
+      };
+    }
+    if (type === "quantity") {
+      const current = toInteger(weapon.system?.quantity);
+      if (current < required) return {
+        type,
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity"),
+        current,
+        required
+      };
+    }
+  }
+  return null;
 }
 
 function createWeaponResourceSnapshot(weapon = null, update = {}) {
@@ -7862,7 +9066,7 @@ export function canPerformWeaponActionAgainstToken({
   const attacker = attackerToken?.object ?? attackerToken;
   const target = targetToken?.object ?? targetToken;
   if (!attacker?.actor || !target?.actor || !weapon || isActorUnableToAct(attacker.actor)) return false;
-  if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
+  if (!isAttackSource(weapon, weaponFunctionId) || !hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
   if (isWeaponActionBlocked(attacker.actor, actionKey) || isWeaponPlacementDisabled(attacker.actor, weapon)) return false;
   if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return false;
   const origin = getTokenAimPoint(attacker);
@@ -8039,7 +9243,8 @@ function getActionAttackConeRadians(weapon, actionKey, weaponFunctionId = "") {
   const hasActionCone = Object.hasOwn(sourceActionData, "attackConeDegrees");
   const actionCone = Number(weaponData?.[actionKey]?.attackConeDegrees);
   const fallbackCone = Number(weaponData.attackConeDegrees);
-  const degrees = hasActionCone && Number.isFinite(actionCone)
+  const useActionCone = !getAbilityAttackSettings(weapon, weaponFunctionId) && hasActionCone;
+  const degrees = useActionCone && Number.isFinite(actionCone)
     ? actionCone
     : (Number.isFinite(fallbackCone) && fallbackCone > 0 ? fallbackCone : DEFAULT_WEAPON_ATTACK_CONE_DEGREES);
   return Math.max(0, (Number(degrees) || 0) * (Math.PI / 180));
@@ -8071,10 +9276,15 @@ function getWeaponRangeProfile(weapon, actionKey, attackerToken = null, weaponFu
   const weaponData = context?.weaponData ?? getWeaponAttackData(weapon, weaponFunctionId);
   const baseEffectiveRange = resolveBaseWeaponEffectiveRange(
     weaponData?.effectiveRange,
-    value => evaluateActorFormula(value, actor, {
-      minimum: 0,
-      context: "effective range"
-    })
+    value => weapon?.type === "ability"
+      ? evaluateAbilityAttackFormula(value, actor, {
+        minimum: 0,
+        context: "effective range"
+      })
+      : evaluateActorFormula(value, actor, {
+        minimum: 0,
+        context: "effective range"
+      })
   );
   const conditionEffectiveRange = applyWeaponEffectiveRangeBonuses(baseEffectiveRange, {
     nearBonusMeters: Number(actor?.system?.combat?.effectiveRangeNearBonus) || 0,
@@ -9178,7 +10388,8 @@ function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
   const damagePercent = attackPowerDamagePercent
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
     + contextualDamage.damagePercent
-    + skillDamageBonuses.percent;
+    + skillDamageBonuses.percent
+    + getWeaponAttackModifierDamagePercentModifier(context?.attackModifier);
   const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100)
     + flatDamage
     + skillDamageBonuses.flat;
@@ -9186,9 +10397,8 @@ function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
 }
 
 function getWeaponDamagePercentBase(weapon, weaponFunctionId = "") {
-  const actor = getWeaponOwnerActor(weapon);
   const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
-  return evaluateActorFormula(weaponData?.damage, actor, {
+  return evaluateWeaponFormula(weapon, weaponData?.damage, {
     minimum: 0,
     context: `${weapon?.name ?? "weapon"} damage`
   });
@@ -9400,10 +10610,15 @@ function getVolleyRegionDamageEntries(volley = {}, weapon = null) {
   return entries
     .map(entry => ({
       damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
-      amount: evaluateActorFormula(entry?.amount, actor, {
-        minimum: 0,
-        context: "volley region damage"
-      })
+      amount: weapon?.type === "ability"
+        ? evaluateAbilityAttackFormula(entry?.amount, actor, {
+          minimum: 0,
+          context: "volley region damage"
+        })
+        : evaluateActorFormula(entry?.amount, actor, {
+          minimum: 0,
+          context: "volley region damage"
+        })
     }))
     .filter(entry => entry.damageTypeKey && entry.amount > 0);
 }
@@ -9598,6 +10813,7 @@ function buildWeaponDamageRequests(weapon, {
   penetrationPower = null,
   limbKey = "",
   amount = 0,
+  scope = "healthAndLimb",
   source = {}
 } = {}, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
@@ -9640,7 +10856,7 @@ function buildWeaponDamageRequests(weapon, {
       limbKey,
       amount: amounts[index] ?? 0,
       damageTypeKey: entry.key,
-      scope: "healthAndLimb",
+      scope,
       source: requestSource
     }))
     .filter(request => request.amount > 0);
@@ -9837,6 +11053,7 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "", context 
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
     + getContextualCombatValue(actor, "criticalChance", context)
+    + getWeaponAttackModifierCriticalChanceModifier(context?.attackModifier)
     + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
   return {
@@ -9889,14 +11106,22 @@ function applyCriticalDamageSnapshot(amount, snapshot = {}) {
 
 function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const availableTypes = new Set(getWeaponResourceCosts(weaponData).map(cost => String(cost?.type ?? "")).filter(Boolean));
+  const availableCosts = new Set(
+    getWeaponResourceCosts(weaponData)
+      .map(getWeaponResourceCostIdentity)
+      .filter(Boolean)
+  );
   return (weaponData?.[actionKey]?.criticalFailureConsequences ?? [])
     .filter(consequence => String(consequence?.type ?? "") === "extraResourceCost")
     .map(consequence => ({
       type: String(consequence?.resourceType ?? ""),
+      resourceKey: String(consequence?.resourceKey ?? "").trim(),
       amount: Math.max(0, toInteger(consequence?.amount))
     }))
-    .filter(consequence => consequence.amount > 0 && availableTypes.has(consequence.type));
+    .filter(consequence => (
+      consequence.amount > 0
+      && availableCosts.has(getWeaponResourceCostIdentity(consequence))
+    ));
 }
 
 function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponFunctionId = "", context = {}) {
@@ -10125,7 +11350,36 @@ function getWeaponOwnerActor(weapon) {
 }
 
 function evaluateWeaponFormula(weapon, formula, options = {}) {
-  return evaluateActorFormula(formula, getWeaponOwnerActor(weapon), options);
+  const actor = getWeaponOwnerActor(weapon);
+  if (weapon?.type === "ability") return evaluateAbilityAttackFormula(formula, actor, options);
+  return evaluateActorFormula(formula, actor, options);
+}
+
+function evaluateAbilityAttackFormula(formula, actor = null, {
+  fallback = 0,
+  minimum = 0,
+  context = "",
+  targetActor = null,
+  subjectActor = null
+} = {}) {
+  const text = String(formula ?? "").trim();
+  const fallbackValue = Number.isFinite(Number(fallback)) ? Math.trunc(Number(fallback)) : 0;
+  if (!text) return Math.max(minimum, fallbackValue);
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return Math.max(minimum, Math.trunc(direct));
+  try {
+    const data = buildAttackTrialFormulaData({
+      baseData: buildActorFormulaData(actor),
+      sourceActor: actor,
+      targetActor,
+      subjectActor
+    });
+    return Math.max(minimum, evaluateFormula(text, data));
+  } catch (error) {
+    const label = context ? ` (${context})` : "";
+    console.warn(`Fallout MaW | Ability attack formula evaluation failed${label}: ${error.message}`);
+    return Math.max(minimum, fallbackValue);
+  }
 }
 
 function normalizeFormulaText(value, fallback = "0") {
@@ -10219,10 +11473,16 @@ function getWeaponPenetrationPower(weapon, weaponFunctionId = "", context = {}) 
 
 function getWeaponPenetrationBaseValue(weapon, weaponFunctionId = "", { actor = null, actionKey = "" } = {}) {
   const sourceActor = actor ?? getWeaponOwnerActor(weapon);
-  const base = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.penetration, sourceActor, {
-    minimum: 0,
-    context: "weapon penetration"
-  });
+  const formula = getWeaponAttackData(weapon, weaponFunctionId)?.penetration;
+  const base = weapon?.type === "ability"
+    ? evaluateAbilityAttackFormula(formula, sourceActor, {
+      minimum: 0,
+      context: "weapon penetration"
+    })
+    : evaluateActorFormula(formula, sourceActor, {
+      minimum: 0,
+      context: "weapon penetration"
+    });
   const modifier = collectActionPenetrationModifier(sourceActor, actionKey);
   let value = base;
   if (modifier.override !== null && modifier.override !== undefined && modifier.override !== "") value = Number(modifier.override);

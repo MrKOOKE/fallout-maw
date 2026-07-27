@@ -83,6 +83,7 @@ import {
   executeWeaponAttackAgainstToken,
   getActionAttackCount,
   getWeaponActionModifierEnergyCost,
+  startAbilityAttackActionAndWait,
   startCommandedWeaponAttacks,
   startForcedAimedAttackSelection,
   startWeaponAttack,
@@ -690,8 +691,14 @@ export function isActiveApplicationAbilityFunction(abilityFunction = {}) {
   return abilityFunction?.type === ABILITY_FUNCTION_TYPES.activeApplication;
 }
 
+export function isAttackActionAbilityFunction(abilityFunction = {}) {
+  return abilityFunction?.type === ABILITY_FUNCTION_TYPES.attackAction;
+}
+
 export function isActiveAbilityFunction(abilityFunction = {}) {
-  return isFixedAbilityFunctionActive(abilityFunction) || isActiveApplicationAbilityFunction(abilityFunction);
+  return isFixedAbilityFunctionActive(abilityFunction)
+    || isActiveApplicationAbilityFunction(abilityFunction)
+    || isAttackActionAbilityFunction(abilityFunction);
 }
 
 export function isFixedAbilityFunctionToggleable(abilityFunction = {}) {
@@ -1256,13 +1263,21 @@ export async function useAbilityFunctionItem({
         ...buildAbilityUseEventData(actor, item, abilityFunction),
         status
       }),
-      operation: () => useFixedAbilityFunctionItem({
-        actor,
-        item,
-        application,
-        functionId: abilityFunction.id,
-        onInteractionCancelled
-      })
+      operation: () => isAttackActionAbilityFunction(abilityFunction)
+        ? startAbilityAttackActionAndWait({
+          token: sourceToken,
+          item,
+          functionId: abilityFunction.id,
+          chainRef: scope.chainRef,
+          onInteractionCancelled
+        })
+        : useFixedAbilityFunctionItem({
+          actor,
+          item,
+          application,
+          functionId: abilityFunction.id,
+          onInteractionCancelled
+        })
     });
     return workflow.success && Boolean(workflow.value);
   });

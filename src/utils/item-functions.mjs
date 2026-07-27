@@ -354,6 +354,7 @@ function normalizeWeaponAttackPowerResourceCosts(source = []) {
   return (Array.isArray(source) ? source : Object.values(source ?? {}))
     .map(entry => ({
       type: String(entry?.type ?? "").trim(),
+      resourceKey: String(entry?.resourceKey ?? "").trim(),
       amount: toWholeNumber(entry?.amount, 0)
     }))
     .filter(entry => entry.type);

@@ -6388,6 +6388,7 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     breakdown: stats.breakdowns?.noiseLevel
   })]);
   rows.push(...getWeaponResourceCostRows(data, baseData, {
+    actor,
     baseMode,
     resourceCostMultipliers: stats.resourceCostMultipliers,
     breakdowns: stats.breakdowns?.resourceCosts
@@ -7003,15 +7004,13 @@ function buildWeaponTooltipValueBreakdowns({
 
 function buildWeaponResourceCostAttributions(item, actor, baseData = {}, data = {}, fixedModifiers = {}) {
   const breakdowns = new Map();
-  for (const cost of data?.resourceCosts ?? []) {
-    const type = String(cost?.type ?? "").trim();
-    if (!type || breakdowns.has(type)) continue;
-    const rawAmount = Math.max(0, toInteger(cost?.amount));
-    const baseAmount = Math.max(0, toInteger(
-      (baseData?.resourceCosts ?? []).find(entry => String(entry?.type ?? "") === type)?.amount
-    ));
+  const preparedCosts = collectWeaponTooltipResourceCosts(data?.resourceCosts, actor);
+  const baseCosts = collectWeaponTooltipResourceCosts(baseData?.resourceCosts, actor);
+  for (const [identity, cost] of preparedCosts) {
+    const { type, resourceKey, amount: rawAmount } = cost;
+    const baseAmount = baseCosts.get(identity)?.amount ?? 0;
     const breakdown = {
-      title: getWeaponResourceTypeLabel(type),
+      title: getWeaponResourceCostLabel(type, resourceKey),
       actorName: actor?.name,
       img: item?.img,
       base: { name: item?.name, img: item?.img, value: baseAmount },
@@ -7052,7 +7051,7 @@ function buildWeaponResourceCostAttributions(item, actor, baseData = {}, data = 
     const expected = Math.max(0, Math.ceil(rawAmount * aggregateMultiplier));
     if (Math.ceil(breakdown.total) !== expected) reconcileBreakdownTotal(breakdown, expected, item);
     else breakdown.total = expected;
-    breakdowns.set(type, breakdown);
+    breakdowns.set(identity, breakdown);
   }
   return breakdowns;
 }
@@ -7942,20 +7941,32 @@ function applyWeaponAttackPowerTooltipModifiers(data = {}) {
 
 function applyWeaponAttackPowerTooltipResourceCosts(data = {}, resourceCosts = [], multiplier = 0) {
   const costs = Array.isArray(data.resourceCosts) ? foundry.utils.deepClone(data.resourceCosts) : [];
-  if (isSourceDamageMode(data) && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+  if (isSourceDamageMode(data) && !costs.some(cost => getWeaponTooltipResourceCostIdentity(cost) === "magazine")) {
     costs.push({ type: "magazine", amount: 1 });
   }
 
   for (const cost of resourceCosts ?? []) {
     const type = String(cost?.type ?? "").trim();
+    const resourceKey = type === "actorResource"
+      ? String(cost?.resourceKey ?? "").trim()
+      : "";
     const delta = toInteger(cost?.amount) * Math.max(0, toInteger(multiplier));
-    if (!type || !delta) continue;
-    let target = costs.find(entry => String(entry?.type ?? "") === type);
+    const identity = getWeaponTooltipResourceCostIdentity({ type, resourceKey });
+    if (!identity || !delta || (type === "actorResource" && !resourceKey)) continue;
+    let target = costs.find(entry => getWeaponTooltipResourceCostIdentity(entry) === identity);
     if (!target) {
-      target = { type, amount: 0 };
+      target = type === "actorResource"
+        ? { type, resourceKey, formula: "0", amount: 0 }
+        : { type, amount: 0 };
       costs.push(target);
     }
-    target.amount = Math.max(0, toInteger(target.amount) + delta);
+    if (type === "actorResource") {
+      target.resourceKey = resourceKey;
+      target.formula = addFormulaTexts(target.formula, String(delta));
+      target.amount = 0;
+    } else {
+      target.amount = Math.max(0, toInteger(target.amount) + delta);
+    }
   }
   data.resourceCosts = costs;
 }
@@ -8045,28 +8056,64 @@ function getConditionRecoveryMethodRows(condition = {}) {
 }
 
 function getWeaponResourceCostRows(data = {}, baseData = {}, {
+  actor = null,
   baseMode = false,
   resourceCostMultipliers = {},
   breakdowns = new Map()
 } = {}) {
-  return (data.resourceCosts ?? [])
-    .filter(cost => !(String(cost?.type ?? "") === "magazine" && Math.max(0, toInteger(cost?.amount)) <= 1))
-    .map((cost, index) => {
-      const costType = String(cost?.type ?? "").trim();
-      const rawAmount = Math.max(0, toInteger(cost?.amount));
+  const preparedCosts = collectWeaponTooltipResourceCosts(data.resourceCosts, actor);
+  const baseCosts = collectWeaponTooltipResourceCosts(baseData.resourceCosts, actor);
+  return Array.from(preparedCosts.values())
+    .filter(cost => !(cost.type === "magazine" && cost.amount <= 1))
+    .map(cost => {
+      const { identity, type: costType, resourceKey, amount: rawAmount } = cost;
       const multiplier = baseMode ? 1 : Math.max(0, Number(resourceCostMultipliers?.[costType]) || 1);
       const amount = Math.max(0, Math.ceil(rawAmount * multiplier));
-      const baseAmount = Math.max(0, toInteger(
-        (baseData.resourceCosts ?? []).find(entry => String(entry?.type ?? "") === costType)?.amount ?? 0
-      ));
-      const type = getWeaponResourceTypeLabel(costType);
+      const baseAmount = baseCosts.get(identity)?.amount ?? 0;
+      const type = getWeaponResourceCostLabel(costType, resourceKey);
       return [type, renderChangedNumber(amount, baseAmount, {
         baseMode,
         higherIsBetter: false,
-        breakdown: breakdowns?.get?.(costType)
+        breakdown: breakdowns?.get?.(identity)
       })];
     })
     .filter(([type]) => Boolean(type));
+}
+
+function collectWeaponTooltipResourceCosts(costs = [], actor = null) {
+  const totals = new Map();
+  for (const cost of Array.isArray(costs) ? costs : Object.values(costs ?? {})) {
+    const identity = getWeaponTooltipResourceCostIdentity(cost);
+    if (!identity) continue;
+    const type = String(cost?.type ?? "").trim();
+    const resourceKey = type === "actorResource"
+      ? String(cost?.resourceKey ?? "").trim()
+      : "";
+    const amount = type === "actorResource"
+      ? Math.max(0, Math.trunc(evaluateTooltipFormula(cost?.formula ?? cost?.amount, actor)))
+      : Math.max(0, toInteger(cost?.amount));
+    const current = totals.get(identity) ?? { identity, type, resourceKey, amount: 0 };
+    current.amount += amount;
+    totals.set(identity, current);
+  }
+  return totals;
+}
+
+function getWeaponTooltipResourceCostIdentity(cost = {}) {
+  const type = String(cost?.type ?? "").trim();
+  if (!type) return "";
+  if (type !== "actorResource") return type;
+  const resourceKey = String(cost?.resourceKey ?? "").trim();
+  return resourceKey ? `${type}:${resourceKey}` : "";
+}
+
+function getWeaponResourceCostLabel(type = "", resourceKey = "") {
+  if (type !== "actorResource") return getWeaponResourceTypeLabel(type);
+  const key = String(resourceKey ?? "").trim();
+  return getResourceSettings().find(resource => String(resource?.key ?? "") === key)?.label
+    ?? (key === "reactionPoints"
+      ? game.i18n.localize("FALLOUTMAW.EventReaction.Resource.ReactionPoints")
+      : key || getWeaponResourceTypeLabel(type));
 }
 
 function getWeaponResourceTypeLabel(type = "") {

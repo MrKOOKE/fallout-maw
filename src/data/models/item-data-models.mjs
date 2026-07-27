@@ -137,13 +137,14 @@ function abilityFunctionField() {
     type: new StringField({
       required: true,
       blank: false,
-      choices: ["effectChanges", "activeApplication", "acquisitionChanges", "characteristicBonus", "skillBonus", "fixed"],
+      choices: ["effectChanges", "activeApplication", "attackAction", "acquisitionChanges", "characteristicBonus", "skillBonus", "fixed"],
       initial: "effectChanges"
     }),
     includeInPureValues: new BooleanField({ required: true, initial: false }),
     fixedKey: new StringField({ required: true, blank: true, initial: "" }),
     fixedSettings: new ObjectField({ required: true, initial: {} }),
     activeSettings: new ObjectField({ required: true, initial: {} }),
+    attackSettings: attackActionSettingsField({ required: false }),
     reactionSettings: new SchemaField({
       durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       costs: new ArrayField(new SchemaField({
@@ -170,13 +171,105 @@ function abilityFunctionField() {
   });
 }
 
+function attackActionSettingsField(options = {}) {
+  return new SchemaField({
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    damage: new StringField({ required: true, blank: true, initial: "0" }),
+    pellets: new StringField({ required: true, blank: true, initial: "1" }),
+    damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
+    damageTypes: new ArrayField(weaponDamageTypeField(), {
+      required: true,
+      initial: [{ key: "firearm", percent: 100 }]
+    }),
+    attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+    attackSoundPath: new StringField({ required: true, blank: true, initial: "" }),
+    attackSoundVolume: new NumberField({ required: true, min: 0, max: 1, initial: 1 }),
+    attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    proficiencyKey: new StringField({ required: true, blank: true, initial: "pistol" }),
+    skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
+    accuracyBonus: new StringField({ required: true, blank: true, initial: "0" }),
+    criticalChanceModifier: new StringField({ required: true, blank: true, initial: "0" }),
+    criticalDamagePercent: new StringField({ required: true, blank: true, initial: "150" }),
+    maxRangeMeters: new StringField({ required: true, blank: true, initial: "0" }),
+    effectiveRange: new SchemaField({
+      value: new StringField({ required: true, blank: true, initial: "0" }),
+      max: new StringField({ required: true, blank: true, initial: "0" })
+    }),
+    penetration: new StringField({ required: true, blank: true, initial: "0" }),
+    noiseLevel: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+    targeting: new SchemaField({
+      mode: new StringField({
+        required: true,
+        blank: false,
+        // `targets` remains readable for documents created before the
+        // selected-targets mode received its unambiguous persisted key.
+        choices: ["cone", "selectedTargets", "targets", "area"],
+        initial: "cone"
+      }),
+      aimed: new BooleanField({ required: true, initial: false }),
+      allowRepeatedTargets: new BooleanField({ required: true, initial: true }),
+      targetLimitFormula: new StringField({ required: true, blank: true, initial: "1" }),
+      attackConeDegrees: new NumberField({
+        required: true,
+        min: 0,
+        initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES
+      }),
+      directions: new SchemaField({
+        thrust: attackActionDirectionSettingsField(),
+        swing: attackActionDirectionSettingsField()
+      })
+    }),
+    sequence: new SchemaField({
+      count: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      difficultyPerAttack: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    }),
+    area: new SchemaField({
+      damageRadius: new StringField({ required: true, blank: true, initial: "0" }),
+      regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
+      regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+      regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
+      regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
+      regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
+      explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+      explosionSoundPath: new StringField({ required: true, blank: true, initial: "" })
+    }),
+    hitResolution: new ObjectField({ required: true, initial: { trials: [] } }),
+    resourceCosts: new ArrayField(attackActionResourceCostField(), { required: true, initial: [] }),
+    specialProperties: new ArrayField(weaponSpecialPropertyField(), { required: true, initial: [] }),
+    requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
+    criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), {
+      required: true,
+      initial: []
+    })
+  }, options);
+}
+
+function attackActionDirectionSettingsField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    accuracyModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    damagePercentModifier: new NumberField({ required: true, integer: true, initial: 0 })
+  });
+}
+
+function attackActionResourceCostField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    resourceKey: new StringField({ required: true, blank: true, initial: "" }),
+    formula: new StringField({ required: true, blank: true, initial: "0" }),
+    overloadAmount: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    overloadDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
+}
+
 function abilityConstructField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
     type: new StringField({
       required: true,
       blank: false,
-      choices: ["temporaryEffect", "resourceChange"],
+      choices: ["temporaryEffect", "resourceChange", "damage"],
       initial: "temporaryEffect"
     }),
     name: new StringField({ required: true, blank: true, initial: "" }),
@@ -186,7 +279,22 @@ function abilityConstructField() {
       id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
       resourceKey: new StringField({ required: true, blank: true, initial: "" }),
       formula: new StringField({ required: true, blank: true, initial: "0" })
-    }), { required: true, initial: [] })
+    }), { required: true, initial: [] }),
+    damage: new SchemaField({
+      amountMode: new StringField({
+        required: true,
+        blank: false,
+        choices: ["base", "formula", "percent"],
+        initial: "base"
+      }),
+      formula: new StringField({ required: true, blank: true, initial: "0" }),
+      limbMode: new StringField({
+        required: true,
+        blank: false,
+        choices: ["random", "randomCritical", "selected", "healthOnly"],
+        initial: "random"
+      })
+    })
   });
 }
 
@@ -322,7 +430,7 @@ function abilityConditionField() {
     trialLinks: new ArrayField(new SchemaField({
       id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
       constructId: new StringField({ required: true, blank: true, initial: "" }),
-      recipient: new StringField({ required: true, blank: false, choices: ["source", "subjects"], initial: "subjects" }),
+      recipient: new StringField({ required: true, blank: false, choices: ["source", "subjects", "targets"], initial: "subjects" }),
       mode: new StringField({ required: true, blank: false, choices: ["once", "perSubject"], initial: "perSubject" })
     }), { required: true, initial: [] }),
     accumulation: new SchemaField({
@@ -981,6 +1089,7 @@ function weaponAttackPowerPerLevelField() {
 function weaponAttackPowerResourceCostField() {
   return new SchemaField({
     type: new StringField({ required: true, blank: false, initial: "magazine" }),
+    resourceKey: new StringField({ required: true, blank: true, initial: "" }),
     amount: new NumberField({ required: true, integer: true, initial: 0 })
   });
 }
@@ -1042,8 +1151,10 @@ function weaponPushActionSettingsField() {
 
 function weaponCriticalFailureConsequenceField() {
   return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
     type: new StringField({ required: true, blank: false, initial: "extraResourceCost" }),
     resourceType: new StringField({ required: true, blank: true, initial: "" }),
+    resourceKey: new StringField({ required: true, blank: true, initial: "" }),
     amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
@@ -1140,7 +1251,10 @@ function craftLinkField() {
 
 function weaponResourceCostField() {
   return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
     type: new StringField({ required: true, blank: false, initial: "magazine" }),
+    resourceKey: new StringField({ required: true, blank: true, initial: "" }),
+    formula: new StringField({ required: true, blank: true, initial: "0" }),
     amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }

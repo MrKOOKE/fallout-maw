@@ -34,6 +34,7 @@ import {
   normalizeWeaponAttackPowerData,
   hasItemFunction
 } from "../utils/item-functions.mjs";
+import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   computeContainerSpecialGridBaseAnchorSeed,
@@ -66,6 +67,7 @@ import {
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_CONSTRUCT_TYPES,
+  ABILITY_DAMAGE_AMOUNT_MODES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
@@ -88,8 +90,10 @@ import {
   createAbilityFunction,
   createAbilityTrialEntry,
   createAbilityTrialLink,
+  createAttackActionSettings,
   normalizeActiveApplicationSettings,
   normalizeActiveApplicationCost,
+  normalizeAttackActionSettings,
   preserveMissingActiveApplicationTargetSettings,
   normalizeEventReactionMode,
   normalizeAllOrNothingSettings,
@@ -154,6 +158,7 @@ import {
   normalizeEventReactionProgressRequired
 } from "../events/event-reaction-progress.mjs";
 import { REACTION_POINTS_RESOURCE_KEY } from "../events/reaction-costs.mjs";
+import { createAttackActionTrial } from "../abilities/attack-action-settings.mjs";
 import {
   SYSTEM_EVENT_PHASES,
   SYSTEM_EVENT_ROLES,
@@ -203,6 +208,12 @@ const { ItemSheetV2 } = foundry.applications.sheets;
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
+const ATTACK_HIT_OUTCOME_KEYS = Object.freeze([
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+]);
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
@@ -483,6 +494,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       {
         value: ABILITY_FUNCTION_TYPES.activeApplication,
         label: "Активное применение"
+      },
+      {
+        value: ABILITY_FUNCTION_TYPES.attackAction,
+        label: "Атакующее действие"
       },
       {
         value: ABILITY_FUNCTION_TYPES.effectChanges,
@@ -784,6 +799,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedAdvancementPureValueCheckboxes(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
     normalizeSubmittedToggleableConditions(form, submitData);
+    normalizeWeaponSpecialPropertiesInSubmitData(submitData, this.item);
+    normalizeSubmittedAttackActionFunctions(form, submitData, this.item);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
@@ -804,7 +821,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   _processFormData(event, form, formData) {
     const submitData = super._processFormData(event, form, formData);
-    normalizeWeaponSpecialPropertiesInSubmitData(submitData);
+    normalizeWeaponSpecialPropertiesInSubmitData(submitData, this.item);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedAbilityActionCheckboxes(form, submitData);
     normalizeSubmittedAbilityTrialConditions(form, submitData);
@@ -812,6 +829,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedTriggerCostConditions(form, submitData);
     normalizeSubmittedEventReactionFunctions(form, submitData);
     normalizeSubmittedToggleableConditions(form, submitData);
+    normalizeSubmittedAttackActionFunctions(form, submitData, this.item);
     normalizeSubmittedActiveApplicationFunctions(form, submitData, this.item);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidCheckboxes(form, submitData);
@@ -1108,6 +1126,33 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-active-application-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteActiveApplicationCost(event));
     });
+    this.element?.querySelectorAll("[data-add-attack-hit-trial]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAttackHitTrial(event));
+    });
+    this.element?.querySelectorAll("[data-delete-attack-hit-trial]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAttackHitTrial(event));
+    });
+    this.element?.querySelectorAll("[data-move-attack-hit-trial-up]").forEach(button => {
+      button.addEventListener("click", event => this.#onMoveAttackHitTrial(event, -1));
+    });
+    this.element?.querySelectorAll("[data-move-attack-hit-trial-down]").forEach(button => {
+      button.addEventListener("click", event => this.#onMoveAttackHitTrial(event, 1));
+    });
+    this.element?.querySelectorAll("[data-add-attack-hit-trial-entry]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAttackHitTrialEntry(event));
+    });
+    this.element?.querySelectorAll("[data-delete-attack-hit-trial-entry]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAttackHitTrialEntry(event));
+    });
+    this.element?.querySelectorAll("[data-add-attack-hit-outcome-link]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAttackHitOutcomeLink(event));
+    });
+    this.element?.querySelectorAll("[data-delete-attack-hit-outcome-link]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAttackHitOutcomeLink(event));
+    });
+    this.element?.querySelectorAll("[data-attack-action-structure-change]").forEach(select => {
+      this.#addHandledFormChangeListener(select, () => this.#submitCurrentForm());
+    });
     this.element?.querySelectorAll("[data-add-ability-event-tracking-target]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityEventTrackingTarget(event));
     });
@@ -1236,6 +1281,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-add-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponResourceCost(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-resource-cost-type]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onWeaponResourceCostTypeChange(event));
     });
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
@@ -2754,11 +2802,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopImmediatePropagation?.();
     const input = event.currentTarget;
     const section = input.closest("[data-weapon-function-section]");
-    const action = input.closest("[data-weapon-action-settings]");
+    const isAttackAction = isAttackActionSettingsSection(section);
     const path = getWeaponFunctionPath(section);
-    const actionKey = String(action?.dataset.weaponActionSettings ?? "");
     const mode = String(input.dataset.weaponAttackModeEnabled ?? "");
-    if (!path || !actionKey || !mode) return undefined;
+    if (!path || !mode) return undefined;
+    if (isAttackAction) {
+      return this.item.update({
+        [`${path}.targeting.directions.${mode}.enabled`]: input.checked
+      });
+    }
+
+    const action = input.closest("[data-weapon-action-settings]");
+    const actionKey = String(action?.dataset.weaponActionSettings ?? "");
+    if (!actionKey) return undefined;
 
     const modeInputs = Array.from(action.querySelectorAll("[data-weapon-attack-mode-enabled]"));
     const enabledInputs = modeInputs.filter(entry => entry.checked);
@@ -3239,6 +3295,152 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     settings.costs.splice(costIndex, 1);
     abilityFunction.activeSettings = settings;
     return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #getAttackHitResolutionForEvent(event) {
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    const functionIndex = Number(
+      event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1
+    );
+    const abilityFunction = functions[functionIndex];
+    if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.attackAction) {
+      return { functionPath, functions, functionIndex, abilityFunction: null, settings: null };
+    }
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    return { functionPath, functions, functionIndex, abilityFunction, settings };
+  }
+
+  #onAddAttackHitTrial(event) {
+    event.preventDefault();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    if (!context.settings) return undefined;
+    context.settings.hitResolution.trials.push(createAttackActionTrial({
+      entries: [{
+        id: foundry.utils.randomID(),
+        kind: "skill",
+        key: getSkillSettings().at(0)?.key ?? ""
+      }]
+    }));
+    context.abilityFunction.attackSettings = context.settings;
+    return this.#submitCurrentForm({ [context.functionPath]: context.functions });
+  }
+
+  #onDeleteAttackHitTrial(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    const trialIndex = getItemAttackHitTrialIndex(event.currentTarget);
+    if (!context.settings || trialIndex < 0) return undefined;
+    const [removed] = context.settings.hitResolution.trials.splice(trialIndex, 1);
+    context.abilityFunction.attackSettings = context.settings;
+    const constructs = this.#getSubmittedAbilityConstructs();
+    const removedIds = new Set(collectItemAttackTrialConstructIds(removed));
+    const nextConstructs = constructs.filter(construct => (
+      !removedIds.has(String(construct?.id ?? ""))
+      || isAbilityConstructLinkedInFunctions(context.functions, construct?.id)
+    ));
+    return this.#submitCurrentForm({
+      [context.functionPath]: context.functions,
+      "system.constructs": nextConstructs
+    });
+  }
+
+  #onMoveAttackHitTrial(event, offset) {
+    event.preventDefault();
+    event.stopPropagation();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    const trialIndex = getItemAttackHitTrialIndex(event.currentTarget);
+    const nextIndex = trialIndex + offset;
+    if (
+      !context.settings
+      || trialIndex < 0
+      || nextIndex < 0
+      || nextIndex >= context.settings.hitResolution.trials.length
+    ) return undefined;
+    const [trial] = context.settings.hitResolution.trials.splice(trialIndex, 1);
+    context.settings.hitResolution.trials.splice(nextIndex, 0, trial);
+    context.abilityFunction.attackSettings = context.settings;
+    return this.#submitCurrentForm({ [context.functionPath]: context.functions });
+  }
+
+  #onAddAttackHitTrialEntry(event) {
+    event.preventDefault();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    const trialIndex = getItemAttackHitTrialIndex(event.currentTarget);
+    if (!context.settings || trialIndex < 0) return undefined;
+    context.settings.hitResolution.trials[trialIndex]?.entries.push({
+      id: foundry.utils.randomID(),
+      kind: "skill",
+      key: getSkillSettings().at(0)?.key ?? ""
+    });
+    context.abilityFunction.attackSettings = context.settings;
+    return this.#submitCurrentForm({ [context.functionPath]: context.functions });
+  }
+
+  #onDeleteAttackHitTrialEntry(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    const trialIndex = getItemAttackHitTrialIndex(event.currentTarget);
+    const entryIndex = Number(
+      event.currentTarget?.closest?.("[data-attack-hit-trial-entry-row]")?.dataset.entryIndex ?? -1
+    );
+    if (!context.settings || trialIndex < 0 || entryIndex < 0) return undefined;
+    context.settings.hitResolution.trials[trialIndex]?.entries.splice(entryIndex, 1);
+    context.abilityFunction.attackSettings = context.settings;
+    return this.#submitCurrentForm({ [context.functionPath]: context.functions });
+  }
+
+  #onAddAttackHitOutcomeLink(event) {
+    event.preventDefault();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    const trialIndex = getItemAttackHitTrialIndex(event.currentTarget);
+    const outcomeKey = getItemAttackHitOutcomeKey(event.currentTarget);
+    if (!context.settings || trialIndex < 0 || !outcomeKey) return undefined;
+    const requested = String(event.currentTarget?.dataset.constructType ?? "");
+    const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
+      ? requested
+      : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+    const constructs = this.#getSubmittedAbilityConstructs();
+    const construct = createAbilityConstruct(type);
+    constructs.push(construct);
+    const outcome = context.settings.hitResolution.trials[trialIndex]?.outcomes?.[outcomeKey];
+    outcome?.links.push({
+      id: foundry.utils.randomID(),
+      constructId: construct.id,
+      recipient: ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+      mode: ABILITY_TRIAL_LINK_MODES.perSubject
+    });
+    context.abilityFunction.attackSettings = context.settings;
+    return this.#submitCurrentForm({
+      [context.functionPath]: context.functions,
+      "system.constructs": constructs
+    });
+  }
+
+  #onDeleteAttackHitOutcomeLink(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const context = this.#getAttackHitResolutionForEvent(event);
+    const trialIndex = getItemAttackHitTrialIndex(event.currentTarget);
+    const outcomeKey = getItemAttackHitOutcomeKey(event.currentTarget);
+    const linkIndex = Number(
+      event.currentTarget?.closest?.("[data-attack-hit-outcome-link-row]")?.dataset.linkIndex ?? -1
+    );
+    if (!context.settings || trialIndex < 0 || !outcomeKey || linkIndex < 0) return undefined;
+    const outcome = context.settings.hitResolution.trials[trialIndex]?.outcomes?.[outcomeKey];
+    const [removed] = outcome?.links.splice(linkIndex, 1) ?? [];
+    context.abilityFunction.attackSettings = context.settings;
+    const constructs = this.#getSubmittedAbilityConstructs();
+    const removedId = String(removed?.constructId ?? "");
+    const nextConstructs = removedId && !isAbilityConstructLinkedInFunctions(context.functions, removedId)
+      ? constructs.filter(construct => String(construct?.id ?? "") !== removedId)
+      : constructs;
+    return this.#submitCurrentForm({
+      [context.functionPath]: context.functions,
+      "system.constructs": nextConstructs
+    });
   }
 
   #onAddAbilityEventTrackingTarget(event) {
@@ -4328,15 +4530,41 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onAddWeaponResourceCost(event) {
     event.preventDefault();
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    if (isAttackActionSettingsSection(section)) {
+      const settings = normalizeAttackActionSettings(weaponData);
+      const resourceKey = getAbilityEventReactionResourceDefinitions().at(0)?.key ?? REACTION_POINTS_RESOURCE_KEY;
+      return this.item.update({
+        [`${path}.resourceCosts`]: [
+          ...settings.resourceCosts,
+          {
+            id: foundry.utils.randomID(),
+            resourceKey,
+            formula: "0",
+            overloadAmount: 0,
+            overloadDurationSeconds: 0
+          }
+        ]
+      });
+    }
+
     const costs = [...(weaponData?.resourceCosts ?? [])];
     const type = getDefaultNewWeaponResourceCostType(
       weaponData,
       hasItemFunction(this.item, ITEM_FUNCTIONS.condition, { ignoreBroken: true }),
       hasItemFunction(this.item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })
     );
-    costs.push({ type, amount: 0 });
+    costs.push(type === "actorResource"
+      ? {
+          id: foundry.utils.randomID(),
+          type,
+          resourceKey: getAbilityEventReactionResourceDefinitions().at(0)?.key ?? REACTION_POINTS_RESOURCE_KEY,
+          formula: "0",
+          amount: 0
+        }
+      : { id: foundry.utils.randomID(), type, amount: 0 });
     return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
 
@@ -4344,12 +4572,73 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const index = Number(event.currentTarget?.dataset?.deleteWeaponResourceCost);
     if (!Number.isInteger(index) || index < 0) return undefined;
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
     const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
-    if (isLockedWeaponMagazineResourceCost(weaponData, costs, index)) return undefined;
-    costs.splice(index, 1);
-    return this.item.update({ [`${path}.resourceCosts`]: costs });
+    if (!isAttackActionSettingsSection(section) && isLockedWeaponMagazineResourceCost(weaponData, costs, index)) return undefined;
+    const previousCosts = foundry.utils.deepClone(costs);
+    const [removed] = costs.splice(index, 1);
+    if (isAttackActionSettingsSection(section)) {
+      const settings = normalizeAttackActionSettings(weaponData);
+      settings.resourceCosts = costs;
+      const removedResourceKey = String(removed?.resourceKey ?? "").trim();
+      const resourceStillUsed = removedResourceKey && settings.resourceCosts
+        .some(cost => String(cost?.resourceKey ?? "").trim() === removedResourceKey);
+      if (removedResourceKey && !resourceStillUsed) {
+        settings.specialProperties = settings.specialProperties.map(property => {
+          if (getWeaponSpecialPropertyType(property) !== WEAPON_SPECIAL_PROPERTIES.attackPower) return property;
+          return {
+            ...property,
+            attackPower: {
+              ...property.attackPower,
+              resourceCosts: (property.attackPower?.resourceCosts ?? [])
+                .filter(cost => String(cost?.resourceKey ?? "").trim() !== removedResourceKey)
+            }
+          };
+        });
+        settings.criticalFailureConsequences = settings.criticalFailureConsequences
+          .filter(consequence => String(consequence?.resourceKey ?? "").trim() !== removedResourceKey);
+      }
+      return this.item.update({ [path]: settings });
+    }
+    const reconciled = foundry.utils.deepClone(weaponData);
+    reconciled.resourceCosts = costs;
+    reconcileWeaponResourceCostReferences(reconciled, previousCosts);
+    return this.item.update(buildWeaponResourceReferenceUpdate(path, reconciled));
+  }
+
+  #onWeaponResourceCostTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const index = Number(event.currentTarget?.dataset?.weaponResourceCostType);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const section = getWeaponFunctionSection(event.currentTarget);
+    if (isAttackActionSettingsSection(section)) return undefined;
+    const path = getWeaponFunctionPath(section);
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const costs = [...(weaponData?.resourceCosts ?? [])];
+    const previousCosts = foundry.utils.deepClone(costs);
+    const current = costs[index] ?? {};
+    const type = String(event.currentTarget?.value ?? "").trim() || "magazine";
+    costs[index] = {
+      ...current,
+      id: String(current?.id ?? "").trim() || foundry.utils.randomID(),
+      type,
+      ...(type === "actorResource"
+        ? {
+            resourceKey: String(current?.resourceKey ?? "").trim()
+              || getAbilityEventReactionResourceDefinitions().at(0)?.key
+              || REACTION_POINTS_RESOURCE_KEY,
+            formula: String(current?.formula ?? "0").trim() || "0"
+          }
+        : {})
+    };
+    const reconciled = foundry.utils.deepClone(weaponData);
+    reconciled.resourceCosts = costs;
+    reconcileWeaponResourceCostReferences(reconciled, previousCosts);
+    return this.item.update(buildWeaponResourceReferenceUpdate(path, reconciled));
   }
 
   #onAddWeaponModuleSlot(event) {
@@ -4707,8 +4996,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onAddWeaponSpecialProperty(event) {
     event.preventDefault();
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
-    const properties = normalizeWeaponSpecialProperties(foundry.utils.getProperty(this.item, path)?.specialProperties ?? []);
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const source = foundry.utils.getProperty(this.item, path) ?? {};
+    const properties = isAttackActionSettingsSection(section)
+      ? foundry.utils.deepClone(normalizeAttackActionSettings(source).specialProperties)
+      : normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
     properties.push(createDefaultWeaponSpecialPropertyData());
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -4725,9 +5018,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const index = Number(event.currentTarget?.dataset?.weaponSpecialPropertyType);
     if (!Number.isInteger(index) || index < 0) return undefined;
     const type = String(event.currentTarget?.value ?? "").trim();
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
-    const properties = normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
+    const properties = isAttackActionSettingsSection(section)
+      ? foundry.utils.deepClone(normalizeAttackActionSettings(weaponData).specialProperties)
+      : normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
     properties[index] = createDefaultWeaponSpecialPropertyData(type, properties[index]);
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -4736,8 +5032,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const index = Number(event.currentTarget?.dataset?.deleteWeaponSpecialProperty);
     if (!Number.isInteger(index) || index < 0) return undefined;
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
-    const properties = normalizeWeaponSpecialProperties(foundry.utils.getProperty(this.item, path)?.specialProperties ?? []);
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const source = foundry.utils.getProperty(this.item, path) ?? {};
+    const properties = isAttackActionSettingsSection(section)
+      ? foundry.utils.deepClone(normalizeAttackActionSettings(source).specialProperties)
+      : normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
     properties.splice(index, 1);
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -4785,14 +5085,34 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    if (isAttackActionSettingsSection(section)) {
+      const settings = normalizeAttackActionSettings(weaponData);
+      const resourceKey = String(settings.resourceCosts.at(0)?.resourceKey ?? "").trim();
+      if (!resourceKey) return undefined;
+      settings.criticalFailureConsequences.push({
+        id: foundry.utils.randomID(),
+        type: "extraResourceCost",
+        resourceType: "actorResource",
+        resourceKey,
+        amount: 0
+      });
+      return this.item.update({
+        [`${path}.criticalFailureConsequences`]: settings.criticalFailureConsequences
+      });
+    }
+
     const actionKey = String(event.currentTarget?.dataset?.addWeaponCriticalFailureConsequence ?? "");
     if (!actionKey) return undefined;
-    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
     const actionData = weaponData?.[actionKey] ?? {};
     const consequences = [...(actionData.criticalFailureConsequences ?? [])];
+    const firstResourceCost = (weaponData?.resourceCosts ?? [])
+      .find(cost => getWeaponResourceCostRowIdentity(cost)) ?? null;
     consequences.push({
+      id: foundry.utils.randomID(),
       type: "extraResourceCost",
-      resourceType: getAvailableWeaponResourceTypes(weaponData).at(0) ?? "",
+      resourceType: String(firstResourceCost?.type ?? ""),
+      resourceKey: String(firstResourceCost?.resourceKey ?? ""),
       amount: 0
     });
     return this.item.update({ [`${path}.${actionKey}.criticalFailureConsequences`]: consequences });
@@ -4802,9 +5122,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
-    const actionKey = String(event.currentTarget?.dataset?.weaponActionKey ?? "");
     const index = Number(event.currentTarget?.dataset?.deleteWeaponCriticalFailureConsequence);
-    if (!actionKey || !Number.isInteger(index) || index < 0) return undefined;
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    if (isAttackActionSettingsSection(section)) {
+      const settings = normalizeAttackActionSettings(foundry.utils.getProperty(this.item, path) ?? {});
+      settings.criticalFailureConsequences.splice(index, 1);
+      return this.item.update({
+        [`${path}.criticalFailureConsequences`]: settings.criticalFailureConsequences
+      });
+    }
+
+    const actionKey = String(event.currentTarget?.dataset?.weaponActionKey ?? "");
+    if (!actionKey) return undefined;
     const actionData = foundry.utils.getProperty(this.item, `${path}.${actionKey}`) ?? {};
     const consequences = [...(actionData.criticalFailureConsequences ?? [])];
     consequences.splice(index, 1);
@@ -5247,7 +5576,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       ?? damageTypes.at(0)?.key
       ?? "firearm";
     entries.push({ damageTypeKey, amount: "0" });
-    return this.item.update({ [`${path}.volley.regionDamageEntries`]: entries });
+    const areaKey = isAttackActionSettingsSection(section) ? "area" : "volley";
+    return this.item.update({ [`${path}.${areaKey}.regionDamageEntries`]: entries });
   }
 
   #onDeleteVolleyRegionDamage(event) {
@@ -5258,7 +5588,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!Number.isInteger(index) || index < 0) return undefined;
     const entries = readVolleyRegionDamageRows(section);
     entries.splice(index, 1);
-    return this.item.update({ [`${path}.volley.regionDamageEntries`]: entries });
+    const areaKey = isAttackActionSettingsSection(section) ? "area" : "volley";
+    return this.item.update({ [`${path}.${areaKey}.regionDamageEntries`]: entries });
   }
 
   async #onBrowseWeaponAttackSound(event) {
@@ -6472,6 +6803,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = type === ABILITY_FUNCTION_TYPES.effectChanges;
   const isActiveApplication = type === ABILITY_FUNCTION_TYPES.activeApplication;
+  const isAttackAction = type === ABILITY_FUNCTION_TYPES.attackAction;
   const abilityConstructs = item?.type === "ability"
     ? normalizeAbilityConstructs(item.system?.constructs)
     : [];
@@ -6479,6 +6811,13 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedKey = String(entry?.fixedKey ?? "");
   const activeApplicationSettings = isActiveApplication
     ? prepareActiveApplicationSettingsForDisplay(entry?.activeSettings)
+    : null;
+  const attackActionSettings = isAttackAction
+    ? prepareAttackActionSettingsForDisplay(
+        entry?.attackSettings,
+        `${functionPath}.${functionIndex}.attackSettings`,
+        abilityConstructs
+      )
     : null;
   const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     ? prepareDeusExMachinaSettingsForDisplay(entry?.fixedSettings, entry, item)
@@ -6615,12 +6954,14 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     isAcquisitionChanges,
     isEffectChanges,
     isActiveApplication,
+    isAttackAction,
     isFixed,
     canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
     canConfigureActions: isEffectChanges || isActiveApplication,
     showPureValuesToggle: isEffectChanges && hasAdvancementPureValueFunctionChanges(entry),
     fixedKey,
     activeApplicationSettings,
+    attackActionSettings,
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
@@ -6864,6 +7205,7 @@ function getAbilityFunctionTypeLabel(entry = {}, fixedKey = "") {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
   if (type === ABILITY_FUNCTION_TYPES.fixed) return getFixedAbilityFunctionLabel(fixedKey);
   if (type === ABILITY_FUNCTION_TYPES.activeApplication) return "Активное применение";
+  if (type === ABILITY_FUNCTION_TYPES.attackAction) return "Атакующее действие";
   if (type === ABILITY_FUNCTION_TYPES.acquisitionChanges) return "Разовое изменение при приобретении";
   return "Свободная настройка";
 }
@@ -7897,13 +8239,18 @@ function prepareItemAbilityConstructForDisplay(construct, index) {
   const basePath = `system.constructs.${index}`;
   const isTemporaryEffect = normalized.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect;
   const isResourceChange = normalized.type === ABILITY_CONSTRUCT_TYPES.resourceChange;
+  const isDamage = normalized.type === ABILITY_CONSTRUCT_TYPES.damage;
+  const damageAmountMode = normalized.damage?.amountMode ?? ABILITY_DAMAGE_AMOUNT_MODES.base;
   return {
     ...normalized,
     index,
     basePath,
     isTemporaryEffect,
     isResourceChange,
-    typeLabel: isTemporaryEffect ? "Временный эффект" : "Изменение ресурса",
+    isDamage,
+    typeLabel: isTemporaryEffect
+      ? "Временный эффект"
+      : (isResourceChange ? "Изменение ресурса" : "Урон"),
     changes: normalized.changes.map((change, changeIndex) => ({
       ...change,
       index: changeIndex,
@@ -7916,7 +8263,15 @@ function prepareItemAbilityConstructForDisplay(construct, index) {
       index: resourceIndex,
       basePath: `${basePath}.resources.${resourceIndex}`,
       resourceChoices: buildAbilityEventReactionResourceChoices(resource.resourceKey)
-    }))
+    })),
+    damage: {
+      ...normalized.damage,
+      isBase: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.base,
+      isFormula: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.formula,
+      isPercent: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.percent,
+      amountModeChoices: buildItemAttackDamageAmountModeChoices(damageAmountMode),
+      limbModeChoices: buildItemAttackDamageLimbModeChoices(normalized.damage?.limbMode)
+    }
   };
 }
 
@@ -8029,7 +8384,28 @@ function isAbilityConstructLinkedInFunctions(functions = [], constructId = "") {
       condition?.type === ABILITY_CONDITION_TYPES.trial
       && (condition?.trialLinks ?? []).some(link => String(link?.constructId ?? "") === id)
     ))
+    || (abilityFunction?.attackSettings?.hitResolution?.trials ?? []).some(trial => (
+      ATTACK_HIT_OUTCOME_KEYS.some(resultKey => (
+        (trial?.outcomes?.[resultKey]?.links ?? [])
+          .some(link => String(link?.constructId ?? "") === id)
+      ))
+    ))
   ));
+}
+
+function getItemAttackHitTrialIndex(target) {
+  return Number(target?.closest?.("[data-attack-hit-trial-row]")?.dataset?.trialIndex ?? -1);
+}
+
+function getItemAttackHitOutcomeKey(target) {
+  const key = String(target?.closest?.("[data-attack-hit-outcome-row]")?.dataset?.outcomeKey ?? "");
+  return ATTACK_HIT_OUTCOME_KEYS.includes(key) ? key : "";
+}
+
+function collectItemAttackTrialConstructIds(trial = null) {
+  return ATTACK_HIT_OUTCOME_KEYS.flatMap(resultKey => (
+    trial?.outcomes?.[resultKey]?.links ?? []
+  )).map(link => String(link?.constructId ?? "")).filter(Boolean);
 }
 
 function getAbilityEventReactionResourceDefinitions() {
@@ -8522,24 +8898,54 @@ function getUniqueConstructPartNeedId(baseId = "", existingIds = []) {
   return `${baseId}${index}`;
 }
 
-function normalizeWeaponSpecialPropertiesInSubmitData(submitData = {}) {
+function normalizeWeaponSpecialPropertiesInSubmitData(submitData = {}, currentItem = null) {
   const functions = submitData?.system?.functions;
   if (!functions || typeof functions !== "object") return;
-  normalizeSubmittedWeaponFunctionSpecialProperties(functions.weapon);
+  const currentFunctions = currentItem?.system?.functions ?? {};
+  normalizeSubmittedWeaponFunctionData(functions.weapon, currentFunctions.weapon);
 
   const additionalWeapons = functions.additionalWeapons;
   if (Array.isArray(additionalWeapons)) {
-    additionalWeapons.forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+    additionalWeapons.forEach((weaponData, index) => normalizeSubmittedWeaponFunctionData(
+      weaponData,
+      findMatchingSubmittedWeaponFunction(currentFunctions.additionalWeapons, weaponData, index)
+    ));
   } else {
-    Object.values(additionalWeapons ?? {}).forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+    Object.entries(additionalWeapons ?? {}).forEach(([key, weaponData], index) => normalizeSubmittedWeaponFunctionData(
+      weaponData,
+      findMatchingSubmittedWeaponFunction(currentFunctions.additionalWeapons, weaponData, index, key)
+    ));
   }
 
   const moduleAdditionalWeapons = functions.module?.additionalWeapons;
   if (Array.isArray(moduleAdditionalWeapons)) {
-    moduleAdditionalWeapons.forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+    moduleAdditionalWeapons.forEach((weaponData, index) => normalizeSubmittedWeaponFunctionData(
+      weaponData,
+      findMatchingSubmittedWeaponFunction(currentFunctions.module?.additionalWeapons, weaponData, index)
+    ));
   } else {
-    Object.values(moduleAdditionalWeapons ?? {}).forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+    Object.entries(moduleAdditionalWeapons ?? {}).forEach(([key, weaponData], index) => normalizeSubmittedWeaponFunctionData(
+      weaponData,
+      findMatchingSubmittedWeaponFunction(currentFunctions.module?.additionalWeapons, weaponData, index, key)
+    ));
   }
+}
+
+function normalizeSubmittedWeaponFunctionData(weaponData = null, previousData = null) {
+  if (!weaponData || typeof weaponData !== "object") return;
+  if (Object.hasOwn(weaponData, "resourceCosts")) {
+    reconcileWeaponResourceCostReferences(weaponData, previousData?.resourceCosts ?? []);
+  }
+  normalizeSubmittedWeaponFunctionSpecialProperties(weaponData);
+}
+
+function findMatchingSubmittedWeaponFunction(collection = [], weaponData = {}, index = -1, key = "") {
+  const entries = Array.isArray(collection) ? collection : Object.values(collection ?? {});
+  const id = String(weaponData?.id ?? key ?? "").trim();
+  return entries.find(entry => id && String(entry?.id ?? "") === id)
+    ?? (key && !Array.isArray(collection) ? collection?.[key] : null)
+    ?? entries[index]
+    ?? null;
 }
 
 function normalizeSubmittedAbilityItemUseConditions(form = null, submitData = {}) {
@@ -8712,6 +9118,84 @@ function normalizeSubmittedAbilityTrialConditions(form = null, submitData = {}) 
       .map(input => String(input.value ?? "").trim())
       .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
     foundry.utils.setProperty(submitData, `${conditionPath}.trialResultKeys`, resultKeys);
+  }
+}
+
+function normalizeSubmittedAttackActionFunctions(form = null, submitData = {}, currentItem = null) {
+  for (const row of form?.querySelectorAll?.("[data-ability-function-row][data-function-type='attackAction']") ?? []) {
+    const functionPath = String(row.dataset.functionPath ?? "");
+    const functionIndex = Number(row.dataset.functionIndex ?? -1);
+    if (!functionPath || functionIndex < 0) continue;
+    const settingsPath = `${functionPath}.${functionIndex}.attackSettings`;
+    foundry.utils.setProperty(
+      submitData,
+      `${functionPath}.${functionIndex}.type`,
+      ABILITY_FUNCTION_TYPES.attackAction
+    );
+    const functionId = String(row.dataset.functionId ?? "").trim();
+    const currentFunctionSource = currentItem
+      ? foundry.utils.getProperty(currentItem, functionPath) ?? []
+      : [];
+    const currentFunctions = Array.isArray(currentFunctionSource)
+      ? currentFunctionSource
+      : Object.values(currentFunctionSource);
+    const indexedFunction = currentFunctions[functionIndex];
+    const currentFunction = currentFunctions.find(entry => functionId && String(entry?.id ?? "") === functionId)
+      ?? (indexedFunction?.type === ABILITY_FUNCTION_TYPES.attackAction ? indexedFunction : null);
+    const currentSettings = normalizeAttackActionSettings(currentFunction?.attackSettings);
+    const submittedSettings = foundry.utils.getProperty(submitData, settingsPath) ?? {};
+    const mergedSettings = foundry.utils.mergeObject(
+      foundry.utils.deepClone(currentSettings),
+      submittedSettings,
+      { inplace: true, overwrite: true, recursive: true }
+    );
+
+    const aimed = row.querySelector("[data-attack-targeting-aimed]");
+    if (aimed) mergedSettings.targeting.aimed = Boolean(aimed.checked);
+    const allowRepeatedTargets = row.querySelector("[data-attack-allow-repeated-targets]");
+    if (allowRepeatedTargets) {
+      mergedSettings.targeting.allowRepeatedTargets = Boolean(allowRepeatedTargets.checked);
+    }
+    for (const input of row.querySelectorAll("[data-weapon-attack-mode-enabled]") ?? []) {
+      const direction = String(input.dataset.weaponAttackModeEnabled ?? "");
+      if (!["thrust", "swing"].includes(direction)) continue;
+      mergedSettings.targeting.directions[direction].enabled = Boolean(input.checked);
+    }
+
+    const costRows = Array.from(row.querySelectorAll("[data-attack-resource-cost-row]") ?? []);
+    if (costRows.length || row.querySelector("[data-attack-resource-cost-list]")) {
+      mergedSettings.resourceCosts = costRows.map(costRow => ({
+        id: String(costRow.querySelector("[data-attack-resource-cost-id]")?.value ?? "").trim()
+          || foundry.utils.randomID(),
+        resourceKey: String(costRow.querySelector("[data-attack-resource-cost-key]")?.value ?? "").trim(),
+        formula: String(costRow.querySelector("[data-attack-resource-cost-formula]")?.value ?? "0").trim() || "0",
+        overloadAmount: Math.max(
+          0,
+          toInteger(costRow.querySelector("[data-attack-resource-cost-overload-amount]")?.value)
+        ),
+        overloadDurationSeconds: abilityDurationPartsToSeconds(
+          costRow.querySelector("[data-attack-resource-cost-overload-duration-amount]")?.value,
+          costRow.querySelector("[data-attack-resource-cost-overload-duration-unit]")?.value
+        )
+      }));
+    }
+
+    const criticalRows = Array.from(row.querySelectorAll("[data-attack-critical-failure-row]") ?? []);
+    if (criticalRows.length || row.querySelector("[data-attack-critical-failure-list]")) {
+      mergedSettings.criticalFailureConsequences = criticalRows.map(criticalRow => ({
+        id: String(criticalRow.querySelector("[data-attack-critical-failure-id]")?.value ?? "").trim()
+          || foundry.utils.randomID(),
+        type: "extraResourceCost",
+        resourceType: "actorResource",
+        resourceKey: String(criticalRow.querySelector("[data-attack-critical-failure-resource]")?.value ?? "").trim(),
+        amount: Math.max(0, Number(criticalRow.querySelector("[data-attack-critical-failure-amount]")?.value) || 0)
+      }));
+    }
+
+    reconcileWeaponResourceCostReferences(mergedSettings, currentSettings.resourceCosts, {
+      defaultType: "actorResource"
+    });
+    foundry.utils.setProperty(submitData, settingsPath, normalizeAttackActionSettings(mergedSettings));
   }
 }
 
@@ -9039,6 +9523,18 @@ function normalizeSubmittedWeaponFunctionSpecialProperties(weaponData = null) {
   weaponData.specialProperties = normalizeWeaponSpecialProperties(weaponData.specialProperties);
 }
 
+function buildWeaponResourceReferenceUpdate(path = "", weaponData = {}) {
+  const update = {
+    [`${path}.resourceCosts`]: weaponData.resourceCosts ?? [],
+    [`${path}.specialProperties`]: weaponData.specialProperties ?? []
+  };
+  for (const [key, value] of Object.entries(weaponData ?? {})) {
+    if (!Array.isArray(value?.criticalFailureConsequences)) continue;
+    update[`${path}.${key}.criticalFailureConsequences`] = value.criticalFailureConsequences;
+  }
+  return update;
+}
+
 function buildWeaponFunctionSections(
   item,
   damageTypeSettings,
@@ -9192,6 +9688,273 @@ function buildWeaponFunctionSection({
   };
 }
 
+function prepareAttackActionSettingsForDisplay(source = {}, path = "", constructs = []) {
+  const settings = normalizeAttackActionSettings(source ?? createAttackActionSettings());
+  const mode = String(settings.targeting?.mode ?? "cone");
+  const attackSoundVolume = normalizeAttackSoundVolume(settings.attackSoundVolume);
+  const area = settings.area ?? {};
+  return {
+    ...settings,
+    path,
+    attackSoundVolume,
+    attackSoundVolumePercent: formatAttackSoundVolumePercent(attackSoundVolume),
+    damageTypeRows: buildWeaponDamageTypeRowsForData(settings, getDamageTypeSettings()),
+    skillChoices: buildWeaponSkillChoicesForData(settings, getSkillSettings()),
+    proficiencyChoices: buildWeaponProficiencyChoicesForData(settings, getProficiencySettings()),
+    resourceCosts: buildAttackActionResourceCostRows(settings.resourceCosts),
+    hitResolution: {
+      trials: buildItemAttackHitTrialRows(
+        settings.hitResolution?.trials,
+        constructs,
+        path
+      )
+    },
+    specialProperties: buildAttackActionSpecialPropertyRows(settings),
+    requirements: buildWeaponRequirementRowsForData(
+      settings,
+      getCharacteristicSettings(),
+      getSkillSettings()
+    ),
+    criticalFailureConsequences: buildAttackActionCriticalFailureRows(
+      settings.criticalFailureConsequences,
+      settings.resourceCosts
+    ),
+    targetModeChoices: [
+      { value: "cone", label: "Конус" },
+      { value: "selectedTargets", label: "Выбранные цели" },
+      { value: "area", label: "Область" }
+    ].map(choice => ({ ...choice, selected: choice.value === mode })),
+    isConeMode: mode === "cone",
+    isTargetsMode: mode === "selectedTargets",
+    isAreaMode: mode === "area",
+    targeting: {
+      ...settings.targeting,
+      directions: {
+        thrust: {
+          ...settings.targeting?.directions?.thrust,
+          enabled: Boolean(settings.targeting?.directions?.thrust?.enabled)
+        },
+        swing: {
+          ...settings.targeting?.directions?.swing,
+          enabled: Boolean(settings.targeting?.directions?.swing?.enabled)
+        }
+      }
+    },
+    area: {
+      ...area,
+      regionDamageRows: buildVolleyRegionDamageRowsForData(
+        area.regionDamageEntries,
+        getDamageTypeSettings()
+      )
+    }
+  };
+}
+
+function buildAttackActionResourceCostRows(costs = []) {
+  const rows = Array.isArray(costs) ? costs : Object.values(costs ?? {});
+  return rows.map((cost, index) => {
+    const overloadDuration = splitAbilityDurationSeconds(cost?.overloadDurationSeconds);
+    return {
+      index,
+      id: String(cost?.id ?? "").trim(),
+      resourceKey: String(cost?.resourceKey ?? "").trim(),
+      formula: String(cost?.formula ?? "0").trim() || "0",
+      overloadAmount: Math.max(0, toInteger(cost?.overloadAmount)),
+      overloadDurationAmount: cost?.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
+      overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+      resourceChoices: buildAbilityEventReactionResourceChoices(cost?.resourceKey)
+    };
+  });
+}
+
+function buildItemAttackHitTrialRows(value = [], constructs = [], path = "") {
+  const trials = Array.isArray(value) ? value : Object.values(value ?? {});
+  return trials.map((trial, index) => {
+    const basePath = `${path}.hitResolution.trials.${index}`;
+    const subject = trial?.subject === "source" ? "source" : "targets";
+    return {
+      ...trial,
+      index,
+      number: index + 1,
+      basePath,
+      isSource: subject === "source",
+      canMoveUp: index > 0,
+      canMoveDown: index < trials.length - 1,
+      subjectChoices: [
+        { value: "source", label: "Применяющий" },
+        { value: "targets", label: "Цели" }
+      ].map(choice => ({ ...choice, selected: choice.value === subject })),
+      sourceModeChoices: [
+        { value: "once", label: "Один раз за применение" },
+        { value: "perTarget", label: "Отдельно для каждой цели" }
+      ].map(choice => ({ ...choice, selected: choice.value === trial?.sourceMode })),
+      selectionModeChoices: [
+        { value: "best", label: "Лучшее текущее значение" },
+        { value: "worst", label: "Худшее текущее значение" }
+      ].map(choice => ({ ...choice, selected: choice.value === trial?.selectionMode })),
+      entries: (trial?.entries ?? []).map((entry, entryIndex) => ({
+        ...entry,
+        index: entryIndex,
+        basePath: `${basePath}.entries.${entryIndex}`,
+        skillChoices: buildWeaponSkillChoicesForData(
+          { skillKey: entry?.key },
+          getSkillSettings()
+        )
+      })),
+      outcomes: ATTACK_HIT_OUTCOME_KEYS.map(resultKey => (
+        buildItemAttackHitOutcomeRow(
+          trial?.outcomes?.[resultKey],
+          resultKey,
+          constructs,
+          `${basePath}.outcomes.${resultKey}`
+        )
+      ))
+    };
+  });
+}
+
+function buildItemAttackHitOutcomeRow(
+  outcome = {},
+  resultKey = "failure",
+  constructs = [],
+  basePath = ""
+) {
+  const labels = {
+    criticalFailure: "Критический провал",
+    failure: "Провал",
+    success: "Успех",
+    criticalSuccess: "Критический успех"
+  };
+  return {
+    ...outcome,
+    resultKey,
+    label: labels[resultKey] ?? resultKey,
+    basePath,
+    consequenceCount: outcome?.links?.length ?? 0,
+    flowChoices: [
+      { value: "continue", label: "Продолжить цепочку" },
+      { value: "stopSubject", label: "Остановить для этого участника" },
+      { value: "stopAll", label: "Остановить всю атаку" }
+    ].map(choice => ({ ...choice, selected: choice.value === outcome?.flow })),
+    links: buildItemAttackHitOutcomeLinkRows(outcome?.links, constructs, `${basePath}.links`)
+  };
+}
+
+function buildItemAttackHitOutcomeLinkRows(value = [], constructs = [], basePath = "") {
+  const normalizedConstructs = normalizeAbilityConstructs(constructs);
+  return (Array.isArray(value) ? value : Object.values(value ?? {})).map((link, index) => {
+    const constructId = String(link?.constructId ?? "");
+    const constructIndex = normalizedConstructs.findIndex(construct => construct.id === constructId);
+    const construct = constructIndex >= 0
+      ? prepareItemAbilityConstructForDisplay(normalizedConstructs[constructIndex], constructIndex)
+      : null;
+    return {
+      ...link,
+      index,
+      basePath: `${basePath}.${index}`,
+      construct,
+      hasConstruct: Boolean(construct),
+      recipientChoices: [
+        { value: "subjects", label: "Проходившие это испытание" },
+        { value: "source", label: "Применяющий" },
+        { value: "targets", label: "Все цели атаки" }
+      ].map(choice => ({ ...choice, selected: choice.value === link?.recipient })),
+      modeChoices: [
+        { value: "perSubject", label: "Отдельно каждому участнику" },
+        { value: "once", label: "Один раз" }
+      ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
+    };
+  });
+}
+
+function buildItemAttackDamageAmountModeChoices(selected = "base") {
+  return [
+    { value: "base", label: "Базовый урон оружия" },
+    { value: "formula", label: "Своя формула урона" },
+    { value: "percent", label: "Процент базового урона" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildItemAttackDamageLimbModeChoices(selected = "random") {
+  return [
+    { value: "random", label: "Случайная часть тела" },
+    { value: "randomCritical", label: "Случайная ключевая конечность" },
+    { value: "selected", label: "Выбранная часть тела" },
+    { value: "healthOnly", label: "Только общее здоровье" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildAttackActionSpecialPropertyRows(settings = {}) {
+  const properties = Array.isArray(settings?.specialProperties)
+    ? settings.specialProperties
+    : Object.values(settings?.specialProperties ?? {});
+  return properties.map((property, index) => {
+    const type = getWeaponSpecialPropertyType(property);
+    const normalizedPower = normalizeWeaponAttackPowerData(property?.attackPower);
+    return {
+      index,
+      type,
+      choices: buildWeaponSpecialPropertyChoices(property, properties),
+      isAttackPower: type === WEAPON_SPECIAL_PROPERTIES.attackPower,
+      attackPower: {
+        level: normalizedPower.level,
+        perLevel: normalizedPower.perLevel,
+        resourceCostRows: buildAttackActionAttackPowerResourceCostRows(
+          settings.resourceCosts,
+          property?.attackPower?.resourceCosts
+        )
+      }
+    };
+  });
+}
+
+function buildAttackActionAttackPowerResourceCostRows(baseCosts = [], configuredCosts = []) {
+  const formulas = new Map();
+  for (const cost of Array.isArray(baseCosts) ? baseCosts : Object.values(baseCosts ?? {})) {
+    const resourceKey = String(cost?.resourceKey ?? "").trim();
+    if (!resourceKey) continue;
+    const formula = String(cost?.formula ?? "0").trim() || "0";
+    formulas.set(resourceKey, [...(formulas.get(resourceKey) ?? []), formula]);
+  }
+  const configured = new Map(
+    (Array.isArray(configuredCosts) ? configuredCosts : Object.values(configuredCosts ?? {}))
+      .map(cost => [String(cost?.resourceKey ?? "").trim(), Number(cost?.amount) || 0])
+      .filter(([resourceKey]) => resourceKey)
+  );
+  return Array.from(new Set([...formulas.keys(), ...configured.keys()])).map((resourceKey, index) => ({
+    index,
+    type: "actorResource",
+    resourceKey,
+    label: getAbilityEventReactionResourceDefinitions()
+      .find(resource => resource.key === resourceKey)?.label ?? resourceKey,
+    base: (formulas.get(resourceKey) ?? ["0"]).join(" + "),
+    amount: configured.get(resourceKey) ?? 0
+  }));
+}
+
+function buildAttackActionCriticalFailureRows(consequences = [], resourceCosts = []) {
+  const rows = Array.isArray(consequences) ? consequences : Object.values(consequences ?? {});
+  const configuredKeys = Array.from(new Set(
+    (Array.isArray(resourceCosts) ? resourceCosts : Object.values(resourceCosts ?? {}))
+      .map(cost => String(cost?.resourceKey ?? "").trim())
+      .filter(Boolean)
+  ));
+  return rows.map((consequence, index) => ({
+    index,
+    id: String(consequence?.id ?? "").trim(),
+    amount: Math.max(0, Number(consequence?.amount) || 0),
+    resourceChoices: Array.from(new Set([
+      ...configuredKeys,
+      String(consequence?.resourceKey ?? "").trim()
+    ])).filter(Boolean).map(resourceKey => ({
+      value: resourceKey,
+      label: getAbilityEventReactionResourceDefinitions()
+        .find(resource => resource.key === resourceKey)?.label ?? resourceKey,
+      selected: resourceKey === String(consequence?.resourceKey ?? "").trim()
+    }))
+  }));
+}
+
 function getWeaponFormData(weaponData = {}, sourceWeaponData = {}) {
   // Form controls must submit persisted values, not derived source or module totals.
   const formData = foundry.utils.deepClone(weaponData ?? {});
@@ -9278,11 +10041,19 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction, ha
   let lockedMagazineUsed = false;
   const rows = costs.map((cost, index) => {
     const type = String(cost?.type ?? "magazine");
+    const isActorResource = type === "actorResource";
     const locked = isSourceDamageMode(weaponData) && type === "magazine" && !lockedMagazineUsed;
     if (type === "magazine") lockedMagazineUsed = true;
     return {
       index,
+      id: String(cost?.id ?? ""),
       amount: Number(cost.amount) || 0,
+      formula: String(cost?.formula ?? "0").trim() || "0",
+      resourceKey: String(cost?.resourceKey ?? "").trim(),
+      resourceChoices: isActorResource
+        ? buildAbilityEventReactionResourceChoices(cost?.resourceKey)
+        : [],
+      isActorResource,
       locked,
       type,
       typeChoices: buildWeaponResourceTypeChoices(type, hasConditionFunction, hasEnergyConsumerFunction)
@@ -9291,7 +10062,12 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction, ha
   if (isSourceDamageMode(weaponData) && !lockedMagazineUsed) {
     rows.push({
       index: costs.length,
+      id: "",
       amount: 1,
+      formula: "0",
+      resourceKey: "",
+      resourceChoices: [],
+      isActorResource: false,
       locked: true,
       type: "magazine",
       typeChoices: buildWeaponResourceTypeChoices("magazine", hasConditionFunction, hasEnergyConsumerFunction)
@@ -9317,7 +10093,7 @@ function getDefaultNewWeaponResourceCostType(
   if (hasConditionFunction && !used.has("condition")) return "condition";
   if (!used.has("quantity")) return "quantity";
   if (!used.has("magazine")) return "magazine";
-  return hasConditionFunction ? "condition" : "quantity";
+  return "actorResource";
 }
 
 function buildWeaponSpecialPropertyRowsForData(weaponData) {
@@ -9371,22 +10147,40 @@ function buildWeaponAttackPowerSettingsForData(weaponData = {}, property = {}) {
 }
 
 function buildWeaponAttackPowerResourceCostRows(weaponData = {}, configuredCosts = []) {
-  const configured = new Map((configuredCosts ?? []).map(cost => [String(cost?.type ?? ""), toInteger(cost?.amount)]));
+  const configured = new Map((configuredCosts ?? [])
+    .map(cost => [
+      getWeaponResourceCostRowIdentity(cost),
+      {
+        type: String(cost?.type ?? "").trim(),
+        resourceKey: String(cost?.resourceKey ?? "").trim(),
+        amount: toInteger(cost?.amount)
+      }
+    ])
+    .filter(([identity]) => identity));
   const baseCosts = getWeaponAttackPowerBaseResourceCosts(weaponData);
-  const types = new Set([
-    ...baseCosts.map(cost => cost.type),
+  const identities = new Set([
+    ...baseCosts.map(cost => cost.identity),
     ...configured.keys()
   ]);
-  return Array.from(types)
+  const resourceLabels = new Map(
+    getAbilityEventReactionResourceDefinitions().map(resource => [resource.key, resource.label])
+  );
+  return Array.from(identities)
     .filter(Boolean)
-    .map((type, index) => {
-      const base = baseCosts.find(cost => cost.type === type)?.amount ?? 0;
+    .map((identity, index) => {
+      const baseCost = baseCosts.find(cost => cost.identity === identity) ?? null;
+      const configuredCost = configured.get(identity) ?? null;
+      const type = baseCost?.type ?? configuredCost?.type ?? "";
+      const resourceKey = baseCost?.resourceKey ?? configuredCost?.resourceKey ?? "";
       return {
         index,
         type,
-        label: getWeaponResourceTypeLabel(type),
-        base,
-        amount: configured.get(type) ?? 0
+        resourceKey,
+        label: type === "actorResource"
+          ? (resourceLabels.get(resourceKey) ?? (resourceKey || getWeaponResourceTypeLabel(type)))
+          : getWeaponResourceTypeLabel(type),
+        base: baseCost?.base ?? 0,
+        amount: configuredCost?.amount ?? 0
       };
     });
 }
@@ -9398,11 +10192,46 @@ function getWeaponAttackPowerBaseResourceCosts(weaponData = {}) {
   const totals = new Map();
   for (const cost of costs) {
     const type = String(cost?.type ?? "").trim();
-    if (!type) continue;
-    totals.set(type, (totals.get(type) ?? 0) + Math.max(0, toInteger(cost?.amount)));
+    const resourceKey = String(cost?.resourceKey ?? "").trim();
+    const identity = getWeaponResourceCostRowIdentity({ type, resourceKey });
+    if (!identity) continue;
+    const current = totals.get(identity) ?? {
+      identity,
+      type,
+      resourceKey,
+      amount: 0,
+      formulas: []
+    };
+    if (type === "actorResource") {
+      current.formulas.push(String(cost?.formula ?? cost?.amount ?? "0").trim() || "0");
+    } else {
+      current.amount += Math.max(0, toInteger(cost?.amount));
+    }
+    totals.set(identity, current);
   }
-  if (isSourceDamageMode(weaponData) && !totals.has("magazine")) totals.set("magazine", 1);
-  return Array.from(totals, ([type, amount]) => ({ type, amount }));
+  if (isSourceDamageMode(weaponData) && !totals.has("magazine")) {
+    totals.set("magazine", {
+      identity: "magazine",
+      type: "magazine",
+      resourceKey: "",
+      amount: 1,
+      formulas: []
+    });
+  }
+  return Array.from(totals.values()).map(entry => ({
+    ...entry,
+    base: entry.type === "actorResource"
+      ? entry.formulas.map(formula => `(${formula})`).join(" + ") || "0"
+      : entry.amount
+  }));
+}
+
+function getWeaponResourceCostRowIdentity(cost = {}) {
+  const type = String(cost?.type ?? "").trim();
+  if (!type) return "";
+  if (type !== "actorResource") return type;
+  const resourceKey = String(cost?.resourceKey ?? "").trim();
+  return resourceKey ? `${type}:${resourceKey}` : "";
 }
 
 function buildWeaponRequirementRowsForData(weaponData, characteristicSettings = [], skillSettings = []) {
@@ -9460,26 +10289,45 @@ function getWeaponResourceTypeLabel(type = "") {
   if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
   if (type === "energyConsumer") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy");
   if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
+  if (type === "actorResource") return "Ресурс персонажа";
   return String(type || "-");
 }
 
 function buildWeaponCriticalFailureConsequenceRows(actionData = {}, weaponData = {}) {
   const resourceTypes = getAvailableWeaponResourceTypes(weaponData);
-  return (actionData?.criticalFailureConsequences ?? []).map((consequence, index) => ({
-    index,
-    type: String(consequence?.type ?? "extraResourceCost"),
-    amount: Number(consequence?.amount) || 0,
-    typeChoices: [{
-      value: "extraResourceCost",
-      label: game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalFailureExtraResourceCost"),
-      selected: true
-    }],
-    resourceChoices: resourceTypes.map(type => ({
-      value: type,
-      label: getWeaponResourceTypeLabel(type),
-      selected: type === String(consequence?.resourceType ?? "")
-    }))
-  }));
+  const resourceLabels = new Map(
+    getAbilityEventReactionResourceDefinitions().map(resource => [resource.key, resource.label])
+  );
+  const actorResourceKeys = Array.from(new Set((weaponData?.resourceCosts ?? [])
+    .filter(cost => String(cost?.type ?? "") === "actorResource")
+    .map(cost => String(cost?.resourceKey ?? "").trim())
+    .filter(Boolean)));
+  return (actionData?.criticalFailureConsequences ?? []).map((consequence, index) => {
+    const resourceType = String(consequence?.resourceType ?? "");
+    const resourceKey = String(consequence?.resourceKey ?? "").trim();
+    return {
+      index,
+      id: String(consequence?.id ?? ""),
+      type: String(consequence?.type ?? "extraResourceCost"),
+      amount: Number(consequence?.amount) || 0,
+      isActorResource: resourceType === "actorResource",
+      typeChoices: [{
+        value: "extraResourceCost",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalFailureExtraResourceCost"),
+        selected: true
+      }],
+      resourceChoices: resourceTypes.map(type => ({
+        value: type,
+        label: getWeaponResourceTypeLabel(type),
+        selected: type === resourceType
+      })),
+      actorResourceChoices: actorResourceKeys.map(key => ({
+        value: key,
+        label: resourceLabels.get(key) ?? key,
+        selected: key === resourceKey
+      }))
+    };
+  });
 }
 
 function buildWeaponDamageTypeChoices(item, damageTypeSettings) {
@@ -9884,7 +10732,8 @@ function hasWeaponResourceCostData(weaponData, type) {
 function buildWeaponResourceTypeChoices(selected, hasConditionFunction, hasEnergyConsumerFunction) {
   const choices = [
     { value: "magazine", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine") },
-    { value: "quantity", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity") }
+    { value: "quantity", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity") },
+    { value: "actorResource", label: "Ресурс персонажа" }
   ];
   if (hasEnergyConsumerFunction) {
     choices.push({ value: "energyConsumer", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy") });
@@ -11898,6 +12747,10 @@ function roundPathNumber(value) {
 
 function getWeaponFunctionSection(element) {
   return element?.closest?.("[data-weapon-function-section]") ?? null;
+}
+
+function isAttackActionSettingsSection(section) {
+  return Boolean(section?.hasAttribute?.("data-attack-action-settings"));
 }
 
 function getWeaponFunctionPath(section) {

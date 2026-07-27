@@ -568,11 +568,11 @@ test("right click unwinds canvas selections before cancelling their workflow", (
     import.meta.url
   ), "utf8");
 
-  assert.match(tokenSelection, /const undoLastSelection = \(\) => \{[\s\S]*?Array\.from\(selected\)\.at\(-1\)[\s\S]*?selected\.delete\(selectionId\)[\s\S]*?drawCustomTokenSelectionRows/);
+  assert.match(tokenSelection, /const undoLastSelection = \(\) => \{[\s\S]*?selected\.at\(-1\)[\s\S]*?selected\.pop\(\)[\s\S]*?drawCustomTokenSelectionRows/);
   assert.match(tokenSelection, /createRightClickPanGuard\(/);
   assert.match(tokenSelection, /if \(undoLastSelection\(\)\) return;\s*finish\(\[\]\)/);
-  assert.match(tokenSelection, /else if \(selected\.size < selectionLimit\) selected\.add\(row\.selectionId\);/);
-  assert.match(tokenSelection, /if \(selected\.size >= selectionLimit\) confirm\(\)/);
+  assert.match(tokenSelection, /else if \(selected\.length < selectionLimit\) selected\.push\(row\.selectionId\);/);
+  assert.match(tokenSelection, /if \(selected\.length >= selectionLimit\) confirm\(\)/);
   assert.match(movementRoutes, /tokenObject\.planAbilityMovement\(\{/);
   assert.match(movementRoutes, /document\.addEventListener\("pointerdown", onPointerDown, \{ capture: true \}/);
   assert.match(movementRoutes, /tokenObject\._addDragWaypoint\(point/);
@@ -970,4 +970,25 @@ test("commanded constructor attacks select a GM rendering every exact token scen
   assert.doesNotMatch(authorityValidator, /game\.users\?\.get\(String\(senderUserId/);
   assert.match(authorityValidator, /attackTargetTokenUuids[\s\S]*?selection\?\.targetUuid/);
   assert.match(authorityValidator, /\[sourceTokenDocument, \.\.\.targetTokenDocuments, \.\.\.attackTargetTokenDocuments\][\s\S]*?requirePlaceables: true/);
+});
+
+test("damage constructs preserve amount and key-limb policies", () => {
+  const [construct] = normalizeAbilityConstructs([{
+    type: ABILITY_CONSTRUCT_TYPES.damage,
+    name: "Огненный провал",
+    damage: {
+      amountMode: "formula",
+      formula: "50+energy/3",
+      limbMode: "randomCritical"
+    }
+  }]);
+
+  assert.equal(construct.type, "damage");
+  assert.deepEqual(construct.damage, {
+    amountMode: "formula",
+    formula: "50+energy/3",
+    limbMode: "randomCritical"
+  });
+  assert.deepEqual(construct.changes, []);
+  assert.deepEqual(construct.resources, []);
 });

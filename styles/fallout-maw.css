@@ -5170,7 +5170,17 @@ body #prosemirror-dropdown {
 }
 
 .fallout-maw-weapon-resource-costs .fallout-maw-settings-row {
-  grid-template-columns: minmax(140px, 1fr) minmax(90px, 120px) 2.5rem;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(140px, 1fr) minmax(100px, 0.8fr) 2.5rem;
+}
+
+.fallout-maw-attack-resource-costs .fallout-maw-settings-row {
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, 1fr) 2.5rem;
+}
+
+.fallout-maw-stacked-controls {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .fallout-maw-weapon-special-properties .fallout-maw-settings-row {
@@ -7144,6 +7154,40 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-trial-outcome > .fallout-maw-ability-condition-card-header {
   align-items: center;
+}
+
+.fallout-maw-attack-hit-trial-list,
+.fallout-maw-attack-hit-outcomes,
+.fallout-maw-attack-hit-outcome-body {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.fallout-maw-attack-hit-trial {
+  border: 1px solid rgba(218, 207, 147, 0.28);
+  border-left: 3px solid rgba(235, 190, 80, 0.58);
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.7rem;
+}
+
+.fallout-maw-attack-hit-outcome {
+  background: rgba(8, 7, 12, 0.3);
+  border: 1px solid rgba(218, 207, 147, 0.2);
+}
+
+.fallout-maw-attack-hit-outcome > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  padding: 0.55rem 0.7rem;
+}
+
+.fallout-maw-attack-hit-outcome-body {
+  border-top: 1px solid rgba(218, 207, 147, 0.16);
+  padding: 0.65rem;
 }
 
 .fallout-maw-ability-construct .fallout-maw-ability-condition-card-header {

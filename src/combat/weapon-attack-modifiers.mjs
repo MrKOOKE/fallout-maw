@@ -4,7 +4,9 @@ export const WEAPON_ATTACK_MODIFIER_KEYS = Object.freeze({
   whirlwind: "whirlwind",
   lunge: "lunge",
   counterSniper: "counterSniper",
-  forced: "forced"
+  forced: "forced",
+  attackActionTargeted: "attackActionTargeted",
+  attackActionDirection: "attackActionDirection"
 });
 
 const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
@@ -35,6 +37,30 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
     label: "Реакция",
     finishAfterAttack: true,
     preventCancel: true
+  }),
+  [WEAPON_ATTACK_MODIFIER_KEYS.attackActionTargeted]: Object.freeze({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.attackActionTargeted,
+    label: "Атакующее действие",
+    targetedAction: true,
+    requiresLimbSelection: false,
+    requiresDirectionSelection: false,
+    finishAfterAttack: true,
+    difficultyBonus: 0,
+    accuracyModifier: 0,
+    criticalChanceModifier: 0,
+    damagePercentModifier: 0
+  }),
+  [WEAPON_ATTACK_MODIFIER_KEYS.attackActionDirection]: Object.freeze({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.attackActionDirection,
+    label: "Атакующее действие",
+    targetedAction: false,
+    requiresLimbSelection: false,
+    requiresDirectionSelection: false,
+    finishAfterAttack: true,
+    difficultyBonus: 0,
+    accuracyModifier: 0,
+    criticalChanceModifier: 0,
+    damagePercentModifier: 0
   })
 });
 
@@ -79,6 +105,36 @@ export function createForcedAttackModifier({ onDestroy = null, label = "Реак
   });
 }
 
+export function createAttackActionTargetedModifier({
+  aimed = false,
+  label = "Атакующее действие",
+  difficultyBonus = 0
+} = {}) {
+  return normalizeWeaponAttackModifier({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.attackActionTargeted,
+    label,
+    targetedAction: true,
+    requiresLimbSelection: Boolean(aimed),
+    requiresDirectionSelection: false,
+    difficultyBonus
+  });
+}
+
+export function createAttackActionDirectionModifier({
+  label = "Атакующее действие",
+  accuracyModifier = 0,
+  criticalChanceModifier = 0,
+  damagePercentModifier = 0
+} = {}) {
+  return normalizeWeaponAttackModifier({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.attackActionDirection,
+    label,
+    accuracyModifier,
+    criticalChanceModifier,
+    damagePercentModifier
+  });
+}
+
 export function normalizeWeaponAttackModifier(value = null) {
   if (!value) return null;
   const key = String(typeof value === "string" ? value : value.key ?? "").trim();
@@ -88,7 +144,22 @@ export function normalizeWeaponAttackModifier(value = null) {
     ...definition,
     ...(typeof value === "object" ? value : {}),
     key,
-    accuracyModifier: toInteger(typeof value === "object" ? value.accuracyModifier ?? definition.accuracyModifier : definition.accuracyModifier)
+    difficultyBonus: Math.max(0, toInteger(
+      typeof value === "object"
+        ? value.difficultyBonus ?? definition.difficultyBonus
+        : definition.difficultyBonus
+    )),
+    accuracyModifier: toInteger(typeof value === "object" ? value.accuracyModifier ?? definition.accuracyModifier : definition.accuracyModifier),
+    criticalChanceModifier: toInteger(
+      typeof value === "object"
+        ? value.criticalChanceModifier ?? definition.criticalChanceModifier
+        : definition.criticalChanceModifier
+    ),
+    damagePercentModifier: toInteger(
+      typeof value === "object"
+        ? value.damagePercentModifier ?? definition.damagePercentModifier
+        : definition.damagePercentModifier
+    )
   };
 }
 
@@ -98,4 +169,16 @@ export function isWhirlwindAttackModifier(attackModifier = null) {
 
 export function getWeaponAttackModifierAccuracyModifier(attackModifier = null) {
   return toInteger(attackModifier?.accuracyModifier);
+}
+
+export function getWeaponAttackModifierDifficultyBonus(attackModifier = null) {
+  return Math.max(0, toInteger(attackModifier?.difficultyBonus));
+}
+
+export function getWeaponAttackModifierCriticalChanceModifier(attackModifier = null) {
+  return toInteger(attackModifier?.criticalChanceModifier);
+}
+
+export function getWeaponAttackModifierDamagePercentModifier(attackModifier = null) {
+  return toInteger(attackModifier?.damagePercentModifier);
 }

@@ -39,6 +39,64 @@ export function configureAbilityTriggerCostRuntime({ costRegistry = null } = {})
   return resourceCostRegistry;
 }
 
+/** Quote a plain actor-owned resource vector through the shared registry. */
+export async function quoteActorResourceCosts({
+  actor = null,
+  costRows: rows = [],
+  context = {}
+} = {}) {
+  if (!actor) return failedPayment("invalidTriggerSource");
+  const normalizedRows = namespaceCostRows(
+    (Array.isArray(rows) ? rows : Object.values(rows ?? {})).map(row => ({ ...row })),
+    String(context?.identity ?? actor.uuid ?? actor.id ?? "actor-resource")
+  );
+  if (!normalizedRows.length) return successfulPayment({ charged: false, fingerprint: "", quote: null });
+  const registry = resourceCostRegistry;
+  if (!registry?.quote) return failedPayment("costRegistryUnavailable");
+  const quote = await registry.quote(actor, normalizedRows, {
+    ...context,
+    actorLockScope: String(context?.actorLockScope ?? context?.rootId ?? context?.occurrenceId ?? "").trim()
+  });
+  if (!quote?.valid || !quote?.affordable) {
+    return failedPayment(quote?.reason || "spendFailed", {
+      quote,
+      fingerprint: String(quote?.fingerprint ?? "")
+    });
+  }
+  return successfulPayment({
+    charged: quote.costs?.some(cost => Number(cost?.amount) > 0) === true,
+    fingerprint: String(quote.fingerprint ?? ""),
+    quote
+  });
+}
+
+/** Commit a previously quoted plain actor-owned resource vector. */
+export async function payActorResourceCosts({
+  actor = null,
+  costRows: rows = [],
+  expectedFingerprint = "",
+  context = {}
+} = {}) {
+  if (!actor) return failedPayment("invalidTriggerSource");
+  const normalizedRows = namespaceCostRows(
+    (Array.isArray(rows) ? rows : Object.values(rows ?? {})).map(row => ({ ...row })),
+    String(context?.identity ?? actor.uuid ?? actor.id ?? "actor-resource")
+  );
+  if (!normalizedRows.length) return successfulPayment({ charged: false });
+  const registry = resourceCostRegistry;
+  if (!registry?.execute) return failedPayment("costRegistryUnavailable");
+  const execution = await registry.execute(actor, normalizedRows, {
+    ...context,
+    actorLockScope: String(context?.actorLockScope ?? context?.rootId ?? context?.occurrenceId ?? "").trim(),
+    expectedFingerprint: String(expectedFingerprint ?? "")
+  });
+  if (!execution?.ok) return failedPayment(execution?.reason || "spendFailed", { execution });
+  return successfulPayment({
+    charged: execution.quote?.costs?.some(cost => Number(cost?.amount) > 0) === true,
+    execution
+  });
+}
+
 /** Register the GM-authoritative commit gate for consumable skill modifiers. */
 export function registerAbilityTriggerCostInterceptors({ registerInterceptor = null } = {}) {
   if (skillCheckInterceptorRegistered) return;

@@ -70,10 +70,11 @@ export async function executeAbilityTrials({
     }
     if (!matchedSubjects.length) continue;
     matched += matchedSubjects.length;
-    await executeTrialLinks({
+    await executeAbilityTrialLinks({
       trial,
       constructs: normalizedConstructs,
       matchedSubjects,
+      targets,
       sourceActor,
       sourceEffect,
       sourceItemUuid,
@@ -123,24 +124,29 @@ function buildTrialCheckEntries(trial, subjects, sourceActor, sourceToken) {
   return entries;
 }
 
-async function executeTrialLinks({
+export async function executeAbilityTrialLinks({
   trial,
+  links = trial?.trialLinks ?? [],
   constructs,
   matchedSubjects,
+  targets = [],
   sourceActor,
   sourceEffect,
   sourceItemUuid,
   title,
-  worldTime
+  worldTime,
+  onDamage = null
 }) {
   const constructsById = new Map(constructs.map(construct => [construct.id, construct]));
   const resourceGrants = new Map();
-  for (const link of trial.trialLinks ?? []) {
+  for (const link of links ?? []) {
     const construct = constructsById.get(String(link?.constructId ?? ""));
     if (!construct) continue;
     const recipients = link.recipient === ABILITY_TRIAL_LINK_RECIPIENTS.source
       ? [{ actor: sourceActor, token: null }]
-      : matchedSubjects;
+      : link.recipient === ABILITY_TRIAL_LINK_RECIPIENTS.targets
+        ? uniqueActorTargets(targets)
+        : matchedSubjects;
     const multiplier = link.recipient === ABILITY_TRIAL_LINK_RECIPIENTS.source
       && link.mode === ABILITY_TRIAL_LINK_MODES.perSubject
       ? matchedSubjects.length
@@ -156,6 +162,11 @@ async function executeTrialLinks({
       });
     } else if (construct.type === ABILITY_CONSTRUCT_TYPES.resourceChange) {
       collectResourceConstructGrants(resourceGrants, construct, recipients, multiplier);
+    } else if (
+      construct.type === ABILITY_CONSTRUCT_TYPES.damage
+      && typeof onDamage === "function"
+    ) {
+      await onDamage({ construct, recipients: uniqueActorTargets(recipients), multiplier, link });
     }
   }
   await commitResourceGrants(resourceGrants);

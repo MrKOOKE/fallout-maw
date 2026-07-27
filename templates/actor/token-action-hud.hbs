@@ -181,6 +181,12 @@
               <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../../fallbackIcon}}'">
               <span>{{name}}</span>
             </button>
+            {{#if hasAttackPowerControl}}
+            <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile fallout-maw-token-hud-attack-power-tile" data-action="setWeaponAttackPower" data-item-id="{{id}}" data-weapon-function-id="{{functionId}}" aria-label="{{localize 'FALLOUTMAW.Item.WeaponSpecialAttackPower'}}">
+              <strong class="fallout-maw-token-hud-attack-power-readout">{{attackPowerLabel}}</strong>
+              <span>{{localize "FALLOUTMAW.Item.WeaponSpecialAttackPower"}}</span>
+            </button>
+            {{/if}}
             {{/each}}
           </div>
         </details>

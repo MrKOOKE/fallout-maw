@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "69cdc28223a3e88150280a8f9988a956d173cb7b7297ebb45eddcc01b63d4557",
-  "updatedAt": "2026-07-26T18:24:28.184Z",
+  "revision": "74e6cf250eaa84796bf3dc18cc261928348dbe1106a98d30f0b9ccf7b05e00d0",
+  "updatedAt": "2026-07-27T07:53:53.839Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -5207,41 +5207,214 @@
                     }
                   ],
                   "category": "Контроль энергии",
-                  "constructs": [],
+                  "constructs": [
+                    {
+                      "changes": [],
+                      "damage": {
+                        "amountMode": "base",
+                        "formula": "0",
+                        "limbMode": "randomCritical"
+                      },
+                      "durationSeconds": 0,
+                      "id": "dltU0CuJ7DggAjL1",
+                      "name": "",
+                      "resources": [],
+                      "type": "damage"
+                    },
+                    {
+                      "changes": [],
+                      "damage": {
+                        "amountMode": "base",
+                        "formula": "0",
+                        "limbMode": "randomCritical"
+                      },
+                      "durationSeconds": 0,
+                      "id": "JAX9mc9Sb3NJujKC",
+                      "name": "",
+                      "resources": [],
+                      "type": "damage"
+                    },
+                    {
+                      "changes": [],
+                      "damage": {
+                        "amountMode": "percent",
+                        "formula": "50",
+                        "limbMode": "random"
+                      },
+                      "durationSeconds": 0,
+                      "id": "KLXMdFumS96HuB2x",
+                      "name": "",
+                      "resources": [],
+                      "type": "damage"
+                    },
+                    {
+                      "changes": [],
+                      "damage": {
+                        "amountMode": "percent",
+                        "formula": "90",
+                        "limbMode": "random"
+                      },
+                      "durationSeconds": 0,
+                      "id": "6HEzVwodLuiGsAxl",
+                      "name": "",
+                      "resources": [],
+                      "type": "damage"
+                    }
+                  ],
                   "cost": 3000,
                   "formula": "",
                   "functions": [
                     {
                       "actions": [],
-                      "activeSettings": {
-                        "changeEvaluation": "target",
-                        "costs": [
+                      "activeSettings": {},
+                      "attackSettings": {
+                        "accuracyBonus": "0",
+                        "area": {
+                          "damageRadius": "0",
+                          "explosionAnimationKey": "",
+                          "explosionSoundPath": "",
+                          "regionDamageEntries": [],
+                          "regionDelaySeconds": "0",
+                          "regionDurationSeconds": "0",
+                          "regionRadius": "0",
+                          "regionRadiusDeltaMeters": "0"
+                        },
+                        "attackAnimationDelayMs": 0,
+                        "attackAnimationKey": "",
+                        "attackSoundPath": "",
+                        "attackSoundVolume": 1,
+                        "criticalChanceModifier": "0",
+                        "criticalDamagePercent": "150",
+                        "criticalFailureConsequences": [],
+                        "damage": "50+ene/3",
+                        "damageTypeKey": "fire",
+                        "damageTypes": [
                           {
-                            "formula": "1",
-                            "id": "Hjfe99wFaaG3WRHs",
-                            "overloadAmount": 0,
-                            "overloadDurationSeconds": 0,
-                            "payer": "source",
-                            "resourceKey": "reactionPoints"
+                            "key": "fire",
+                            "percent": 100
                           }
                         ],
-                        "excludeSelf": true,
-                        "includeSelf": false,
+                        "effectiveRange": {
+                          "max": "0",
+                          "value": "0"
+                        },
+                        "hitResolution": {
+                          "trials": [
+                            {
+                              "difficultyFormula": "50+ene",
+                              "entries": [
+                                {
+                                  "id": "lU7eBkeMYY9LqX8s",
+                                  "key": "resilience",
+                                  "kind": "skill"
+                                }
+                              ],
+                              "id": "a20DBMAO6mDzcryE",
+                              "outcomes": {
+                                "criticalFailure": {
+                                  "flow": "continue",
+                                  "id": "r8Q4kNnC0QGTeEzW",
+                                  "links": [
+                                    {
+                                      "constructId": "dltU0CuJ7DggAjL1",
+                                      "id": "nJavGvkPCCOKvbYu",
+                                      "mode": "perSubject",
+                                      "recipient": "subjects"
+                                    }
+                                  ]
+                                },
+                                "criticalSuccess": {
+                                  "flow": "continue",
+                                  "id": "9v0srxFYVcXN1CsR",
+                                  "links": [
+                                    {
+                                      "constructId": "6HEzVwodLuiGsAxl",
+                                      "id": "5UzbEbsxdcYFwR4i",
+                                      "mode": "perSubject",
+                                      "recipient": "subjects"
+                                    }
+                                  ]
+                                },
+                                "failure": {
+                                  "flow": "continue",
+                                  "id": "UkPqNVA8K8Cg90pG",
+                                  "links": [
+                                    {
+                                      "constructId": "JAX9mc9Sb3NJujKC",
+                                      "id": "9iF6roIp1DVWAFFS",
+                                      "mode": "perSubject",
+                                      "recipient": "subjects"
+                                    }
+                                  ]
+                                },
+                                "success": {
+                                  "flow": "continue",
+                                  "id": "ViNIhCbqulCFSnBe",
+                                  "links": [
+                                    {
+                                      "constructId": "KLXMdFumS96HuB2x",
+                                      "id": "d5Xze8O00rWxSezQ",
+                                      "mode": "perSubject",
+                                      "recipient": "subjects"
+                                    }
+                                  ]
+                                }
+                              },
+                              "selectionMode": "best",
+                              "sourceMode": "once",
+                              "subject": "targets"
+                            }
+                          ]
+                        },
+                        "maxRangeMeters": "10+ene/10",
                         "name": "",
-                        "radiusFormula": "",
-                        "targetGroups": [
-                          "ally"
+                        "noiseLevel": 1,
+                        "pellets": "1",
+                        "penetration": "0",
+                        "proficiencyKey": "natural",
+                        "requirements": [],
+                        "resourceCosts": [
+                          {
+                            "formula": "60",
+                            "id": "sDH9VN6nLf5lpbaR",
+                            "overloadAmount": 40,
+                            "overloadDurationSeconds": 3600,
+                            "resourceKey": "power"
+                          }
                         ],
-                        "targetLimit": "1",
-                        "targetMode": "others",
-                        "targetSelectionMode": "manual",
-                        "wallsBlock": false
+                        "sequence": {
+                          "count": 1,
+                          "difficultyPerAttack": 0
+                        },
+                        "skillKey": "rangedCombat",
+                        "specialProperties": [],
+                        "targeting": {
+                          "aimed": false,
+                          "allowRepeatedTargets": true,
+                          "attackConeDegrees": 3,
+                          "directions": {
+                            "swing": {
+                              "accuracyModifier": 0,
+                              "criticalChanceModifier": 0,
+                              "damagePercentModifier": 0,
+                              "enabled": false
+                            },
+                            "thrust": {
+                              "accuracyModifier": 0,
+                              "criticalChanceModifier": 0,
+                              "damagePercentModifier": 0,
+                              "enabled": false
+                            }
+                          },
+                          "mode": "targets",
+                          "targetLimitFormula": "1+ene/50"
+                        }
                       },
                       "changes": [],
                       "conditions": [],
                       "fixedKey": "",
                       "fixedSettings": {},
-                      "id": "YjQ8gWZdcx5gKKxm",
+                      "id": "pvjjzuPxJ8ahzog0",
                       "includeInPureValues": false,
                       "penalties": [],
                       "reactionSettings": {
@@ -5249,7 +5422,7 @@
                         "durationSeconds": 0
                       },
                       "sort": 0,
-                      "type": "activeApplication"
+                      "type": "attackAction"
                     }
                   ]
                 },
@@ -5595,6 +5768,11 @@
                           "value": "-5"
                         }
                       ],
+                      "damage": {
+                        "amountMode": "base",
+                        "formula": "0",
+                        "limbMode": "random"
+                      },
                       "durationSeconds": 6,
                       "id": "blockade-failed-trial-penalty",
                       "name": "Блокада: провал испытания",
@@ -5603,6 +5781,11 @@
                     },
                     {
                       "changes": [],
+                      "damage": {
+                        "amountMode": "base",
+                        "formula": "0",
+                        "limbMode": "random"
+                      },
                       "durationSeconds": 0,
                       "id": "blockade-reaction-points-reward",
                       "name": "Блокада: очки реакции владельцу",
@@ -5713,20 +5896,7 @@
                               "kind": "skill"
                             }
                           ],
-                          "trialLinks": [
-                            {
-                              "constructId": "blockade-failed-trial-penalty",
-                              "id": "blockade-trial-penalty-link",
-                              "mode": "perSubject",
-                              "recipient": "subjects"
-                            },
-                            {
-                              "constructId": "blockade-reaction-points-reward",
-                              "id": "blockade-trial-reward-link",
-                              "mode": "perSubject",
-                              "recipient": "source"
-                            }
-                          ],
+                          "trialLinks": [],
                           "trialResultKeys": [
                             "criticalFailure",
                             "failure"
@@ -57591,7 +57761,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "failure",
+        "resultMode": "standard",
         "skillModifier": 0
       }
     },

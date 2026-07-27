@@ -62,6 +62,12 @@ import {
   startDualWeaponAttack,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
+import {
+  createAbilityAttackUpdateData,
+  getAbilityAttackSettings,
+  getAttackSourceModuleSlots,
+  projectAbilityAttackData
+} from "../combat/attack-source.mjs";
 import { startTrapInteractionMode, startTrapPlacement } from "../canvas/traps.mjs";
 import {
   openActorContainerPassengerSheet,
@@ -2818,6 +2824,19 @@ function prepareAbilityItemButtons(item, fallbackIcon) {
       });
       continue;
     }
+    if (abilityFunction.type === ABILITY_FUNCTION_TYPES.attackAction) {
+      const attackPowerState = getWeaponAttackPowerState(abilityFunction.attackSettings);
+      descriptors.push({
+        functionId: abilityFunction.id,
+        customName: String(abilityFunction.attackSettings?.name ?? "").trim(),
+        isAttackAction: true,
+        hasAttackPowerControl: attackPowerState.active,
+        attackPowerLabel: `${attackPowerState.value}/${attackPowerState.max}`,
+        toggleable: false,
+        toggled: false
+      });
+      continue;
+    }
     for (const condition of abilityFunction.conditions ?? []) {
       if (condition?.type !== ABILITY_CONDITION_TYPES.toggleable) continue;
       if (!toggleEntries.has(`${abilityFunction.id}:${condition.id}`)) continue;
@@ -2844,7 +2863,7 @@ function prepareAbilityItemButtons(item, fallbackIcon) {
   }
   return descriptors.map((descriptor, index) => ({
     id: item.id,
-    name: descriptor.customName || (index ? `${item.name} ${index + 1}` : item.name),
+    name: descriptor.customName || (descriptor.isAttackAction || !index ? item.name : `${item.name} ${index + 1}`),
     img: image,
     category,
     active: true,
@@ -3781,9 +3800,11 @@ function hasWeaponResourceCostData(weaponData = {}, type = "") {
 async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null } = {}) {
   if (!actor?.isOwner || !weapon) return false;
   const functionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
-  const weaponData = getWeaponFunctionById(weapon, functionId);
-  if (!weaponData || !hasWeaponSpecialPropertyData(weaponData, WEAPON_SPECIAL_PROPERTIES.attackPower)) return false;
-  const properties = Array.isArray(weaponData.specialProperties) ? weaponData.specialProperties : [];
+  const abilitySettings = getAbilityAttackSettings(weapon, functionId);
+  const storedData = abilitySettings ?? getWeaponFunctionById(weapon, functionId);
+  if (!storedData || !hasWeaponSpecialPropertyData(storedData, WEAPON_SPECIAL_PROPERTIES.attackPower)) return false;
+  const weaponData = abilitySettings ? projectAbilityAttackData(abilitySettings) : storedData;
+  const properties = Array.isArray(storedData.specialProperties) ? storedData.specialProperties : [];
   const propertyIndex = properties.findIndex(property => getWeaponSpecialPropertyType(property) === WEAPON_SPECIAL_PROPERTIES.attackPower);
   if (propertyIndex < 0) return false;
   const state = getWeaponAttackPowerState(weaponData);
@@ -3836,9 +3857,9 @@ async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weapon
   const nextProperty = foundry.utils.deepClone(nextProperties[propertyIndex] ?? {});
   foundry.utils.setProperty(nextProperty, "attackPower.level.value", nextLevel);
   nextProperties[propertyIndex] = nextProperty;
-  const updateData = createWeaponFunctionUpdateData(weapon, functionId, {
-    specialProperties: nextProperties
-  });
+  const updateData = abilitySettings
+    ? createAbilityAttackUpdateData(weapon, functionId, { specialProperties: nextProperties })
+    : createWeaponFunctionUpdateData(weapon, functionId, { specialProperties: nextProperties });
   if (!Object.keys(updateData).length) return false;
   await weapon.update(updateData);
   await application?.render({ force: true });
@@ -3908,12 +3929,12 @@ function buildWeaponAttackPowerPreviewRows(context = {}, nextLevel = 1) {
 
   for (const type of changedKeys) {
     if (!type.startsWith("resourceCost:")) continue;
-    const resourceType = type.slice("resourceCost:".length);
+    const resourceIdentity = type.slice("resourceCost:".length);
     push(
       type,
-      getWeaponAttackPowerResourceCostPreviewLabel(resourceType),
-      current.resourceCosts?.[resourceType] ?? 0,
-      next.resourceCosts?.[resourceType] ?? 0,
+      getWeaponAttackPowerResourceCostPreviewLabel(resourceIdentity),
+      current.resourceCosts?.[resourceIdentity] ?? 0,
+      next.resourceCosts?.[resourceIdentity] ?? 0,
       { higherIsBetter: false }
     );
   }
@@ -3927,7 +3948,7 @@ function getWeaponAttackPowerDialogDataForLevel({ weapon = null, weaponData = {}
   rawData.specialProperties = properties;
   return applyWeaponAttackPowerDialogModifiers(applyWeaponModuleModifiers(
     applyDamageSourceWeaponDialogModifiers(rawData),
-    { moduleSlots: getWeaponFunctionModuleSlots(weapon, functionId) }
+    { moduleSlots: getAttackSourceModuleSlots(weapon, functionId) }
   ));
 }
 
@@ -3985,19 +4006,31 @@ function applyWeaponAttackPowerDialogModifiers(weaponData = {}) {
 function applyWeaponAttackPowerDialogResourceCosts(weaponData = {}, resourceCosts = [], multiplier = 0) {
   const costs = Array.isArray(weaponData.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
   if (String(weaponData?.damageMode ?? "manual") === "source"
-    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    && !costs.some(cost => getWeaponAttackPowerPreviewResourceCostIdentity(cost) === "magazine")) {
     costs.push({ type: "magazine", amount: 1 });
   }
   for (const cost of resourceCosts ?? []) {
     const type = String(cost?.type ?? "").trim();
+    const resourceKey = type === "actorResource"
+      ? String(cost?.resourceKey ?? "").trim()
+      : "";
     const delta = toInteger(cost?.amount) * Math.max(0, toInteger(multiplier));
-    if (!type || !delta) continue;
-    let target = costs.find(entry => String(entry?.type ?? "") === type);
+    const identity = getWeaponAttackPowerPreviewResourceCostIdentity({ type, resourceKey });
+    if (!identity || !delta || (type === "actorResource" && !resourceKey)) continue;
+    let target = costs.find(entry => getWeaponAttackPowerPreviewResourceCostIdentity(entry) === identity);
     if (!target) {
-      target = { type, amount: 0 };
+      target = type === "actorResource"
+        ? { type, resourceKey, formula: "0", amount: 0 }
+        : { type, amount: 0 };
       costs.push(target);
     }
-    target.amount = Math.max(0, toInteger(target.amount) + delta);
+    if (type === "actorResource") {
+      target.resourceKey = resourceKey;
+      target.formula = addFormulaTexts(target.formula, String(delta));
+      target.amount = 0;
+    } else {
+      target.amount = Math.max(0, toInteger(target.amount) + delta);
+    }
   }
   weaponData.resourceCosts = costs;
 }
@@ -4024,10 +4057,7 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
   );
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
-  const resourceCosts = Object.fromEntries(getWeaponAttackPowerPreviewResourceCosts(weaponData).map(cost => [
-    String(cost?.type ?? "").trim(),
-    Math.max(0, toInteger(cost?.amount))
-  ]).filter(([type]) => type));
+  const resourceCosts = getWeaponAttackPowerPreviewResourceCostTotals(actor, weaponData);
   const effectiveRange = applyWeaponEffectiveRangeBonuses(
     resolveBaseWeaponEffectiveRange(
       weaponData.effectiveRange,
@@ -4069,10 +4099,34 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
 function getWeaponAttackPowerPreviewResourceCosts(weaponData = {}) {
   const costs = Array.isArray(weaponData.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
   if (String(weaponData?.damageMode ?? "manual") === "source"
-    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    && !costs.some(cost => getWeaponAttackPowerPreviewResourceCostIdentity(cost) === "magazine")) {
     costs.push({ type: "magazine", amount: 1 });
   }
   return costs;
+}
+
+function getWeaponAttackPowerPreviewResourceCostTotals(actor = null, weaponData = {}) {
+  const totals = {};
+  for (const cost of getWeaponAttackPowerPreviewResourceCosts(weaponData)) {
+    const identity = getWeaponAttackPowerPreviewResourceCostIdentity(cost);
+    if (!identity) continue;
+    const amount = String(cost?.type ?? "") === "actorResource"
+      ? Math.max(0, Math.trunc(evaluateDialogFormula(cost?.formula ?? cost?.amount, actor, {
+        fallback: 0,
+        minimum: 0
+      })))
+      : Math.max(0, toInteger(cost?.amount));
+    totals[identity] = (totals[identity] ?? 0) + amount;
+  }
+  return totals;
+}
+
+function getWeaponAttackPowerPreviewResourceCostIdentity(cost = {}) {
+  const type = String(cost?.type ?? "").trim();
+  if (!type) return "";
+  if (type !== "actorResource") return type;
+  const resourceKey = String(cost?.resourceKey ?? "").trim();
+  return resourceKey ? `${type}:${resourceKey}` : "";
 }
 
 function getWeaponAttackPowerChangedKeys(weaponData = {}) {
@@ -4089,8 +4143,8 @@ function getWeaponAttackPowerChangedKeys(weaponData = {}) {
   if (Number(perLevel.effectiveRange?.max)) keys.add("effectiveRange.max");
   if (toInteger(perLevel.penetration)) keys.add("penetration");
   for (const cost of state.resourceCosts ?? []) {
-    const type = String(cost?.type ?? "").trim();
-    if (type && toInteger(cost?.amount)) keys.add(`resourceCost:${type}`);
+    const identity = getWeaponAttackPowerPreviewResourceCostIdentity(cost);
+    if (identity && toInteger(cost?.amount)) keys.add(`resourceCost:${identity}`);
   }
   return keys;
 }
@@ -4108,12 +4162,20 @@ function getDialogWeaponProficiencyInfluenceBonus(actor = null, weaponData = {},
   return Math.round(toInteger(range.min) + ((toInteger(range.max) - toInteger(range.min)) * ratio));
 }
 
-function getWeaponAttackPowerResourceCostPreviewLabel(type = "") {
-  if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
-  if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
-  if (type === "energyConsumer") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy");
-  if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
-  return String(type || "-");
+function getWeaponAttackPowerResourceCostPreviewLabel(identity = "") {
+  const value = String(identity ?? "").trim();
+  if (value.startsWith("actorResource:")) {
+    const resourceKey = value.slice("actorResource:".length);
+    return getResourceSettings().find(resource => String(resource?.key ?? "") === resourceKey)?.label
+      ?? (resourceKey === REACTION_RESOURCE_KEY
+        ? game.i18n.localize("FALLOUTMAW.EventReaction.Resource.ReactionPoints")
+        : resourceKey);
+  }
+  if (value === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
+  if (value === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  if (value === "energyConsumer") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy");
+  if (value === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
+  return value || "-";
 }
 
 function evaluateDialogFormula(formula, actor = null, options = {}) {

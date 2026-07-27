@@ -3,10 +3,14 @@ import { toInteger } from "./numbers.mjs";
 const RANDOM_LIMB_BASE_EXPONENT = 2.4;
 const RANDOM_LIMB_DIFFICULTY_EXPONENT_STEP = 50;
 
-export function selectRandomWeightedLimbKey(actor, { includeDestroyed = false } = {}) {
+export function selectRandomWeightedLimbKey(actor, {
+  includeDestroyed = false,
+  criticalOnly = false
+} = {}) {
   const entries = Object.entries(actor?.system?.limbs ?? {})
     .filter(([_key, limb]) => limb && typeof limb === "object")
     .filter(([_key, limb]) => includeDestroyed || !isLimbDestroyed(limb))
+    .filter(([_key, limb]) => !criticalOnly || limb?.critical === true)
     .map(([key, limb]) => ({
       key,
       weight: getRandomLimbWeight(limb)

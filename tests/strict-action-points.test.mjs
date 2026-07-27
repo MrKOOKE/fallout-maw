@@ -115,6 +115,114 @@ test("cancelled strict AP refund reports that nothing was restored", async () =>
   assert.equal(actor.system.resources.actionPoints.value, 7);
 });
 
+test("cancelled dynamic AP update does not create a spend receipt", async () => {
+  installFoundryImportGlobals();
+  const { spendCombatActionPointsWithReceipt } = await import("../src/combat/reaction-resources.mjs");
+  const actor = createActor("Actor.DynamicCancelled", 7);
+  actor.effects = [];
+  actor.update = async changes => {
+    actor.updates.push(changes);
+  };
+  const combat = {
+    started: true,
+    combatants: [{ actor }],
+    combatant: { actor }
+  };
+  globalThis.game = {
+    combat,
+    combats: [combat],
+    settings: { get: () => ({ turnOrder: { scheme: "normal" } }) }
+  };
+
+  const transaction = await spendCombatActionPointsWithReceipt(actor, 3, {
+    suppressResourceNotification: true
+  });
+
+  assert.equal(transaction.spent, 0);
+  assert.equal(transaction.receipt, null);
+  assert.equal(actor.system.resources.actionPoints.value, 7);
+});
+
+test("dynamic AP receipts restore normal and one-time points separately", async () => {
+  installFoundryImportGlobals();
+  const {
+    ONE_TIME_ACTION_POINTS_KEY,
+    getOneTimeActionPointTotal,
+    refundCombatActionPointReceipt,
+    spendCombatActionPointsWithReceipt
+  } = await import("../src/combat/reaction-resources.mjs");
+  const actor = createActor("Actor.DynamicReceipt", 2);
+  actor.effects = [];
+  actor.update = async changes => {
+    actor.updates.push(changes);
+    if (changes["system.resources.actionPoints.value"] !== undefined) {
+      actor.system.resources.actionPoints.value = changes["system.resources.actionPoints.value"];
+    }
+    if (changes["system.resources.actionPoints.spent"] !== undefined) {
+      actor.system.resources.actionPoints.spent = changes["system.resources.actionPoints.spent"];
+    }
+    return actor;
+  };
+  const createEffect = (data, id = `Effect.${actor.effects.length + 1}`) => {
+    const effect = {
+      id,
+      system: { changes: structuredClone(data.system?.changes ?? []) },
+      flags: structuredClone(data.flags ?? {}),
+      getFlag(scope, key) {
+        return this.flags?.[scope]?.[key];
+      },
+      async update(changes) {
+        if (changes["system.changes"]) this.system.changes = structuredClone(changes["system.changes"]);
+        return this;
+      },
+      async delete() {
+        actor.effects = actor.effects.filter(entry => entry !== this);
+        return this;
+      }
+    };
+    return effect;
+  };
+  actor.effects.push(createEffect({
+    system: {
+      changes: [{
+        key: ONE_TIME_ACTION_POINTS_KEY,
+        type: "add",
+        value: "4"
+      }]
+    },
+    flags: { "fallout-maw": { oneTimeActionPoints: { source: "test" } } }
+  }, "Effect.Once"));
+  actor.createEmbeddedDocuments = async (_type, entries) => {
+    const created = entries.map(entry => createEffect(entry));
+    actor.effects.push(...created);
+    return created;
+  };
+  const combat = {
+    started: true,
+    combatants: [{ actor }],
+    combatant: { actor }
+  };
+  globalThis.game = {
+    combat,
+    combats: [combat],
+    settings: { get: () => ({ turnOrder: { scheme: "normal" } }) }
+  };
+
+  const transaction = await spendCombatActionPointsWithReceipt(actor, 4, {
+    suppressResourceNotification: true
+  });
+  assert.equal(transaction.spent, 4);
+  assert.equal(transaction.receipt.normalSpent, 2);
+  assert.equal(transaction.receipt.onceSpent, 2);
+  assert.equal(actor.system.resources.actionPoints.value, 0);
+  assert.equal(getOneTimeActionPointTotal(actor), 2);
+
+  const restored = await refundCombatActionPointReceipt(actor, transaction.receipt);
+  assert.equal(restored, 4);
+  assert.equal(actor.system.resources.actionPoints.value, 2);
+  assert.equal(getOneTimeActionPointTotal(actor), 4);
+});
+
 test("only ОД, ОР, ОП and dodge are combat-only resources", () => {
   assert.deepEqual(COMBAT_ONLY_RESOURCE_KEYS, [
     "actionPoints",

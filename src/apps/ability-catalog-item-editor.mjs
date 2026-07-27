@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getDamageTypeSettings, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
 import {
@@ -27,6 +27,7 @@ import {
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_CONSTRUCT_TYPES,
+  ABILITY_DAMAGE_AMOUNT_MODES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
@@ -66,6 +67,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeActiveApplicationSettings,
   normalizeActiveApplicationCost,
+  normalizeAttackActionSettings,
   preserveMissingActiveApplicationTargetSettings,
   normalizeEventReactionSettings,
   normalizeEventReactionMode,
@@ -96,6 +98,13 @@ import {
   normalizeAbilityFunctions,
   getAbilitySourceId
 } from "../settings/abilities.mjs";
+import {
+  WEAPON_SPECIAL_PROPERTIES,
+  createDefaultWeaponSpecialPropertyData,
+  getWeaponSpecialPropertyType,
+  normalizeWeaponAttackPowerData
+} from "../utils/item-functions.mjs";
+import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
 import {
   EVENT_REACTION_EXPECTED_RESULT_KEYS,
   EVENT_REACTION_SKILL_FILTER_ALL,
@@ -146,8 +155,15 @@ import {
   prepareAbilityAccumulatorExchangeForDisplay
 } from "./ability-accumulation-ui.mjs";
 import { findCatalogAbility } from "../abilities/purchase.mjs";
+import { createAttackActionTrial } from "../abilities/attack-action-settings.mjs";
 
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
+const ATTACK_HIT_OUTCOME_KEYS = Object.freeze([
+  "criticalFailure",
+  "failure",
+  "success",
+  "criticalSuccess"
+]);
 
 export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #activeTab = "details";
@@ -209,6 +225,28 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteAbilityConstructResource: this.#onDeleteAbilityConstructResource,
       addActiveApplicationCost: this.#onAddActiveApplicationCost,
       deleteActiveApplicationCost: this.#onDeleteActiveApplicationCost,
+      addAttackDamageType: this.#onAddAttackDamageType,
+      deleteAttackDamageType: this.#onDeleteAttackDamageType,
+      addAttackResourceCost: this.#onAddAttackResourceCost,
+      deleteAttackResourceCost: this.#onDeleteAttackResourceCost,
+      addAttackRegionDamage: this.#onAddAttackRegionDamage,
+      deleteAttackRegionDamage: this.#onDeleteAttackRegionDamage,
+      addAttackSpecialProperty: this.#onAddAttackSpecialProperty,
+      deleteAttackSpecialProperty: this.#onDeleteAttackSpecialProperty,
+      addAttackRequirement: this.#onAddAttackRequirement,
+      deleteAttackRequirement: this.#onDeleteAttackRequirement,
+      addAttackCriticalFailure: this.#onAddAttackCriticalFailure,
+      deleteAttackCriticalFailure: this.#onDeleteAttackCriticalFailure,
+      addAttackHitTrial: this.#onAddAttackHitTrial,
+      deleteAttackHitTrial: this.#onDeleteAttackHitTrial,
+      moveAttackHitTrialUp: this.#onMoveAttackHitTrialUp,
+      moveAttackHitTrialDown: this.#onMoveAttackHitTrialDown,
+      addAttackHitTrialEntry: this.#onAddAttackHitTrialEntry,
+      deleteAttackHitTrialEntry: this.#onDeleteAttackHitTrialEntry,
+      addAttackHitOutcomeLink: this.#onAddAttackHitOutcomeLink,
+      deleteAttackHitOutcomeLink: this.#onDeleteAttackHitOutcomeLink,
+      browseAttackSound: this.#onBrowseAttackSound,
+      browseAttackExplosionSound: this.#onBrowseAttackExplosionSound,
       addConditionTriggerCost: this.#onAddConditionTriggerCost,
       deleteConditionTriggerCost: this.#onDeleteConditionTriggerCost,
       addConditionTrackingTarget: this.#onAddConditionTrackingTarget,
@@ -353,6 +391,15 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='active.targetMode'], [data-field='active.targetSelectionMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onActiveApplicationTargetModeChange(event));
     });
+    this.element?.querySelectorAll?.(
+      "[data-field='attack.targeting.mode'], [data-field='attack.specialProperty.type'], [data-field='attack.requirement.type'], [data-field='attack.hitTrial.subject'], [data-field='constructDamageAmountMode']"
+    )?.forEach(select => {
+      select.addEventListener("change", event => this.#onAttackSettingsStructureChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='attack.attackSoundVolume']")?.forEach(slider => {
+      slider.addEventListener("input", () => syncAttackSoundVolumeLabel(slider));
+      syncAttackSoundVolumeLabel(slider);
+    });
     this.element?.querySelectorAll?.("[data-field='action.actionPointCostMode']")?.forEach(select => {
       select.addEventListener("change", () => syncAbilityActionCostVisibility(select));
       syncAbilityActionCostVisibility(select);
@@ -440,7 +487,12 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       this.#activeTab = "functions";
       return this.#persist({ render: true, sync: false });
     }
-    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.activeApplication, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(selected)) return undefined;
+    if (![
+      ABILITY_FUNCTION_TYPES.effectChanges,
+      ABILITY_FUNCTION_TYPES.activeApplication,
+      ABILITY_FUNCTION_TYPES.attackAction,
+      ABILITY_FUNCTION_TYPES.acquisitionChanges
+    ].includes(selected)) return undefined;
     this.ability.system.functions.push(createAbilityFunction(selected));
     this.#functionPickerActive = false;
     this.#fixedFunctionPickerActive = false;
@@ -513,6 +565,30 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     event.stopPropagation();
     this.#syncFromForm();
+    this.#activeTab = "functions";
+    return this.#persist({ render: true, sync: false });
+  }
+
+  #onAttackSettingsStructureChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.#syncFromForm();
+    if (event.currentTarget?.dataset?.field === "attack.requirement.type") {
+      const abilityFunction = findAttackFunctionByTarget(this.ability, event.currentTarget);
+      const functionRow = event.currentTarget.closest("[data-ability-function-row]");
+      const requirementIndex = getRowIndex(
+        functionRow,
+        "[data-attack-requirement-row]",
+        event.currentTarget.closest("[data-attack-requirement-row]")
+      );
+      const requirement = abilityFunction?.attackSettings?.requirements?.[requirementIndex];
+      if (requirement) {
+        const entries = requirement.type === "skill" ? getSkillSettings() : getCharacteristicSettings();
+        if (!entries.some(entry => entry.key === requirement.key)) {
+          requirement.key = entries.at(0)?.key ?? "";
+        }
+      }
+    }
     this.#activeTab = "functions";
     return this.#persist({ render: true, sync: false });
   }
@@ -922,6 +998,365 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     settings.costs.splice(costIndex, 1);
     abilityFunction.activeSettings = settings;
     return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackDamageType(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
+    const used = new Set(settings.damageTypes.map(entry => String(entry?.key ?? "")));
+    const key = damageTypes.find(entry => !used.has(entry.key))?.key
+      ?? damageTypes.at(0)?.key
+      ?? settings.damageTypeKey
+      ?? "firearm";
+    settings.damageTypes.push({ key, percent: settings.damageTypes.length ? 0 : 100 });
+    if (!settings.damageTypeKey) settings.damageTypeKey = key;
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackDamageType(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const index = getRowIndex(
+      target.closest("[data-ability-function-row]"),
+      "[data-attack-damage-type-row]",
+      target.closest("[data-attack-damage-type-row]")
+    );
+    if (!abilityFunction || index < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.damageTypes.splice(index, 1);
+    settings.damageTypeKey = settings.damageTypes.at(0)?.key ?? settings.damageTypeKey;
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackResourceCost(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.resourceCosts.push({
+      id: foundry.utils.randomID(),
+      resourceKey: REACTION_POINTS_RESOURCE_KEY,
+      formula: "1",
+      overloadAmount: 0,
+      overloadDurationSeconds: 0
+    });
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackResourceCost(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const functionRow = target.closest("[data-ability-function-row]");
+    const index = getRowIndex(
+      functionRow,
+      "[data-attack-resource-cost-row]",
+      target.closest("[data-attack-resource-cost-row]")
+    );
+    if (!abilityFunction || index < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const [removed] = settings.resourceCosts.splice(index, 1);
+    const removedResourceKey = String(removed?.resourceKey ?? "").trim();
+    const resourceStillUsed = removedResourceKey && settings.resourceCosts
+      .some(cost => String(cost?.resourceKey ?? "").trim() === removedResourceKey);
+    if (removedResourceKey && !resourceStillUsed) {
+      settings.specialProperties = (settings.specialProperties ?? []).map(property => {
+        if (getWeaponSpecialPropertyType(property) !== WEAPON_SPECIAL_PROPERTIES.attackPower) return property;
+        return {
+          ...property,
+          attackPower: {
+            ...property.attackPower,
+            resourceCosts: (property.attackPower?.resourceCosts ?? [])
+              .filter(cost => String(cost?.resourceKey ?? "").trim() !== removedResourceKey)
+          }
+        };
+      });
+      settings.criticalFailureConsequences = settings.criticalFailureConsequences
+        .filter(consequence => String(consequence?.resourceKey ?? "").trim() !== removedResourceKey);
+    }
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackRegionDamage(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const damageTypeKey = getConfigurableDamageTypes(getDamageTypeSettings()).at(0)?.key
+      ?? settings.damageTypeKey
+      ?? "firearm";
+    settings.area.regionDamageEntries.push({ damageTypeKey, amount: "0" });
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackRegionDamage(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const functionRow = target.closest("[data-ability-function-row]");
+    const index = getRowIndex(
+      functionRow,
+      "[data-attack-region-damage-row]",
+      target.closest("[data-attack-region-damage-row]")
+    );
+    if (!abilityFunction || index < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.area.regionDamageEntries.splice(index, 1);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackSpecialProperty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.specialProperties.push(createDefaultWeaponSpecialPropertyData());
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackSpecialProperty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const functionRow = target.closest("[data-ability-function-row]");
+    const index = getRowIndex(
+      functionRow,
+      "[data-attack-special-property-row]",
+      target.closest("[data-attack-special-property-row]")
+    );
+    if (!abilityFunction || index < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.specialProperties.splice(index, 1);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackRequirement(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.requirements.push({
+      type: "characteristic",
+      key: getCharacteristicSettings().at(0)?.key ?? "",
+      value: 0
+    });
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackRequirement(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const functionRow = target.closest("[data-ability-function-row]");
+    const index = getRowIndex(
+      functionRow,
+      "[data-attack-requirement-row]",
+      target.closest("[data-attack-requirement-row]")
+    );
+    if (!abilityFunction || index < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.requirements.splice(index, 1);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackCriticalFailure(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const resourceKey = String(settings.resourceCosts.at(0)?.resourceKey ?? "").trim();
+    if (!resourceKey) return this.#persist({ render: true, sync: false });
+    settings.criticalFailureConsequences.push({
+      id: foundry.utils.randomID(),
+      type: "extraResourceCost",
+      resourceType: "actorResource",
+      resourceKey,
+      amount: 0
+    });
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackCriticalFailure(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const functionRow = target.closest("[data-ability-function-row]");
+    const index = getRowIndex(
+      functionRow,
+      "[data-attack-critical-failure-row]",
+      target.closest("[data-attack-critical-failure-row]")
+    );
+    if (!abilityFunction || index < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.criticalFailureConsequences.splice(index, 1);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackHitTrial(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const trial = createAttackActionTrial({
+      entries: [{
+        id: foundry.utils.randomID(),
+        kind: "skill",
+        key: getSkillSettings().at(0)?.key ?? ""
+      }]
+    });
+    settings.hitResolution.trials.push(trial);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackHitTrial(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const trialIndex = getAttackHitTrialIndex(target);
+    if (!abilityFunction || trialIndex < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const [removed] = settings.hitResolution.trials.splice(trialIndex, 1);
+    abilityFunction.attackSettings = settings;
+    removeUnlinkedAttackOutcomeConstructs(this.ability, collectAttackTrialConstructIds(removed));
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onMoveAttackHitTrialUp(event, target) {
+    return this.#moveAttackHitTrial(event, target, -1);
+  }
+
+  static #onMoveAttackHitTrialDown(event, target) {
+    return this.#moveAttackHitTrial(event, target, 1);
+  }
+
+  static #moveAttackHitTrial(event, target, offset) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const trialIndex = getAttackHitTrialIndex(target);
+    if (!abilityFunction || trialIndex < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const nextIndex = trialIndex + offset;
+    if (nextIndex < 0 || nextIndex >= settings.hitResolution.trials.length) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const [trial] = settings.hitResolution.trials.splice(trialIndex, 1);
+    settings.hitResolution.trials.splice(nextIndex, 0, trial);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackHitTrialEntry(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const trialIndex = getAttackHitTrialIndex(target);
+    if (!abilityFunction || trialIndex < 0) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.hitResolution.trials[trialIndex]?.entries.push({
+      id: foundry.utils.randomID(),
+      kind: "skill",
+      key: getSkillSettings().at(0)?.key ?? ""
+    });
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackHitTrialEntry(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const trialIndex = getAttackHitTrialIndex(target);
+    const entryIndex = Number(target.closest("[data-attack-hit-trial-entry-row]")?.dataset.entryIndex ?? -1);
+    if (!abilityFunction || trialIndex < 0 || entryIndex < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.hitResolution.trials[trialIndex]?.entries.splice(entryIndex, 1);
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddAttackHitOutcomeLink(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const trialIndex = getAttackHitTrialIndex(target);
+    const outcomeKey = getAttackHitOutcomeKey(target);
+    if (!abilityFunction || trialIndex < 0 || !outcomeKey) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const requested = String(target?.dataset?.constructType ?? "");
+    const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
+      ? requested
+      : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
+    const construct = createAbilityConstruct(type);
+    this.ability.system.constructs ??= [];
+    this.ability.system.constructs.push(construct);
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const outcome = settings.hitResolution.trials[trialIndex]?.outcomes?.[outcomeKey];
+    if (outcome) {
+      outcome.links.push({
+        id: foundry.utils.randomID(),
+        constructId: construct.id,
+        recipient: ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+        mode: ABILITY_TRIAL_LINK_MODES.perSubject
+      });
+    }
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackHitOutcomeLink(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    const trialIndex = getAttackHitTrialIndex(target);
+    const outcomeKey = getAttackHitOutcomeKey(target);
+    const linkIndex = Number(target.closest("[data-attack-hit-outcome-link-row]")?.dataset.linkIndex ?? -1);
+    if (!abilityFunction || trialIndex < 0 || !outcomeKey || linkIndex < 0) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    const outcome = settings.hitResolution.trials[trialIndex]?.outcomes?.[outcomeKey];
+    const [removed] = outcome?.links.splice(linkIndex, 1) ?? [];
+    abilityFunction.attackSettings = settings;
+    removeUnlinkedAttackOutcomeConstructs(this.ability, [removed?.constructId]);
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static async #onBrowseAttackSound(event, target) {
+    event.preventDefault();
+    return browseAttackAudioPath(target, "[data-field='attack.attackSoundPath']");
+  }
+
+  static async #onBrowseAttackExplosionSound(event, target) {
+    event.preventDefault();
+    return browseAttackAudioPath(target, "[data-field='attack.area.explosionSoundPath']");
   }
 
   static #onDeleteConditionTriggerCost(event, target) {
@@ -1479,13 +1914,17 @@ function readAbilityFunctions(root, previousValue = []) {
     const indexedFunction = previousFunctions[index];
     const previousFunction = previousFunctions.find(entry => String(entry?.id ?? "") === id)
       ?? (indexedFunction?.type === row.dataset.functionType ? indexedFunction : null);
+    const type = previousFunction?.type === ABILITY_FUNCTION_TYPES.attackAction
+      ? ABILITY_FUNCTION_TYPES.attackAction
+      : row.dataset.functionType;
     return {
       id,
-      type: row.dataset.functionType,
+      type,
       includeInPureValues: Boolean(row.querySelector("[data-advancement-pure-values-input]")?.checked),
       fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
       fixedSettings: readFixedFunctionSettings(row),
       activeSettings: readActiveApplicationSettings(row, previousFunction?.activeSettings),
+      attackSettings: readAttackActionSettings(row, previousFunction?.attackSettings, type),
       reactionSettings: { durationSeconds: 0, costs: [] },
       changes: readAbilityChanges(row.querySelector("[data-ability-changes]"), "[data-ability-change-row]"),
       actions: readAbilityActions(row),
@@ -1556,6 +1995,253 @@ function readActiveApplicationCostRows(row) {
       payer: costRow.querySelector("[data-field='active.costPayer']")?.value
         ?? ABILITY_ACTIVE_APPLICATION_COST_PAYERS.source
     }));
+}
+
+function readAttackActionSettings(row, previousValue = {}, functionType = row?.dataset?.functionType) {
+  if (functionType !== ABILITY_FUNCTION_TYPES.attackAction) return {};
+  const previous = normalizeAttackActionSettings(previousValue);
+  const getValue = (field, fallback = "") => (
+    row.querySelector(`[data-field='${field}']`)?.value ?? fallback
+  );
+  const getChecked = (field, fallback = false) => {
+    const input = row.querySelector(`[data-field='${field}']`);
+    return input ? Boolean(input.checked) : Boolean(fallback);
+  };
+  const hasConeSettings = Boolean(row.querySelector("[data-attack-cone-settings]"));
+  const hasTargetSettings = Boolean(row.querySelector("[data-attack-target-settings]"));
+  const hasAreaSettings = Boolean(row.querySelector("[data-attack-area-settings]"));
+  const damageTypes = readAttackDamageTypeRows(row);
+  const resourceCosts = readAttackResourceCostRows(row);
+  const specialProperties = readAttackSpecialPropertyRows(row, previous.specialProperties);
+  const requirements = readAttackRequirementRows(row);
+  const criticalFailureConsequences = row.querySelector("[data-attack-critical-failure-row]")
+    ? readAttackCriticalFailureRows(row)
+    : previous.criticalFailureConsequences;
+  const next = {
+    ...previous,
+    name: getValue("attack.name", previous.name),
+    damage: getValue("attack.damage", previous.damage),
+    pellets: getValue("attack.pellets", previous.pellets),
+    damageTypeKey: damageTypes.at(0)?.key
+      ?? getValue("attack.damageTypeKey", previous.damageTypeKey),
+    damageTypes,
+    attackAnimationKey: getValue("attack.attackAnimationKey", previous.attackAnimationKey),
+    attackSoundPath: getValue("attack.attackSoundPath", previous.attackSoundPath),
+    attackSoundVolume: getValue("attack.attackSoundVolume", previous.attackSoundVolume),
+    attackAnimationDelayMs: getValue("attack.attackAnimationDelayMs", previous.attackAnimationDelayMs),
+    proficiencyKey: getValue("attack.proficiencyKey", previous.proficiencyKey),
+    skillKey: getValue("attack.skillKey", previous.skillKey),
+    accuracyBonus: getValue("attack.accuracyBonus", previous.accuracyBonus),
+    criticalChanceModifier: getValue("attack.criticalChanceModifier", previous.criticalChanceModifier),
+    criticalDamagePercent: getValue("attack.criticalDamagePercent", previous.criticalDamagePercent),
+    maxRangeMeters: getValue("attack.maxRangeMeters", previous.maxRangeMeters),
+    effectiveRange: {
+      value: getValue("attack.effectiveRange.value", previous.effectiveRange.value),
+      max: getValue("attack.effectiveRange.max", previous.effectiveRange.max)
+    },
+    penetration: getValue("attack.penetration", previous.penetration),
+    noiseLevel: getValue("attack.noiseLevel", previous.noiseLevel),
+    targeting: {
+      ...previous.targeting,
+      mode: getValue("attack.targeting.mode", previous.targeting.mode),
+      targetLimitFormula: getValue(
+        "attack.targeting.targetLimitFormula",
+        previous.targeting.targetLimitFormula
+      ),
+      aimed: hasTargetSettings
+        ? getChecked("attack.targeting.aimed", previous.targeting.aimed)
+        : previous.targeting.aimed,
+      allowRepeatedTargets: hasTargetSettings
+        ? getChecked("attack.targeting.allowRepeatedTargets", previous.targeting.allowRepeatedTargets)
+        : previous.targeting.allowRepeatedTargets,
+      attackConeDegrees: hasConeSettings
+        ? getValue("attack.targeting.attackConeDegrees", previous.targeting.attackConeDegrees)
+        : previous.targeting.attackConeDegrees,
+      directions: {
+        thrust: hasConeSettings
+          ? readAttackDirectionSettings(row, "thrust", previous.targeting.directions.thrust)
+          : previous.targeting.directions.thrust,
+        swing: hasConeSettings
+          ? readAttackDirectionSettings(row, "swing", previous.targeting.directions.swing)
+          : previous.targeting.directions.swing
+      }
+    },
+    sequence: {
+      count: getValue("attack.sequence.count", previous.sequence.count),
+      difficultyPerAttack: getValue("attack.sequence.difficultyPerAttack", previous.sequence.difficultyPerAttack)
+    },
+    area: hasAreaSettings ? {
+      ...previous.area,
+      damageRadius: getValue("attack.area.damageRadius", previous.area.damageRadius),
+      regionRadius: getValue("attack.area.regionRadius", previous.area.regionRadius),
+      regionDamageEntries: readAttackRegionDamageRows(row),
+      regionDurationSeconds: getValue("attack.area.regionDurationSeconds", previous.area.regionDurationSeconds),
+      regionDelaySeconds: getValue("attack.area.regionDelaySeconds", previous.area.regionDelaySeconds),
+      regionRadiusDeltaMeters: getValue("attack.area.regionRadiusDeltaMeters", previous.area.regionRadiusDeltaMeters),
+      explosionAnimationKey: getValue("attack.area.explosionAnimationKey", previous.area.explosionAnimationKey),
+      explosionSoundPath: getValue("attack.area.explosionSoundPath", previous.area.explosionSoundPath)
+    } : previous.area,
+    resourceCosts,
+    specialProperties,
+    requirements,
+    hitResolution: readAttackHitResolution(row),
+    criticalFailureConsequences
+  };
+  reconcileWeaponResourceCostReferences(next, previous.resourceCosts, {
+    defaultType: "actorResource"
+  });
+  return normalizeAttackActionSettings(next);
+}
+
+function readAttackDirectionSettings(row, key, previous = {}) {
+  const prefix = `attack.targeting.directions.${key}`;
+  return {
+    enabled: Boolean(row.querySelector(`[data-field='${prefix}.enabled']`)?.checked),
+    accuracyModifier: row.querySelector(`[data-field='${prefix}.accuracyModifier']`)?.value
+      ?? previous.accuracyModifier,
+    criticalChanceModifier: row.querySelector(`[data-field='${prefix}.criticalChanceModifier']`)?.value
+      ?? previous.criticalChanceModifier,
+    damagePercentModifier: row.querySelector(`[data-field='${prefix}.damagePercentModifier']`)?.value
+      ?? previous.damagePercentModifier
+  };
+}
+
+function readAttackDamageTypeRows(row) {
+  return Array.from(row?.querySelectorAll("[data-attack-damage-type-row]") ?? []).map(typeRow => ({
+    key: String(typeRow.querySelector("[data-field='attack.damageType.key']")?.value ?? "").trim(),
+    percent: typeRow.querySelector("[data-field='attack.damageType.percent']")?.value ?? 0
+  })).filter(entry => entry.key);
+}
+
+function readAttackRegionDamageRows(row) {
+  return Array.from(row?.querySelectorAll("[data-attack-region-damage-row]") ?? []).map(damageRow => ({
+    damageTypeKey: String(damageRow.querySelector("[data-field='attack.area.regionDamage.damageTypeKey']")?.value ?? "").trim(),
+    amount: damageRow.querySelector("[data-field='attack.area.regionDamage.amount']")?.value ?? "0"
+  })).filter(entry => entry.damageTypeKey);
+}
+
+function readAttackResourceCostRows(row) {
+  return Array.from(row?.querySelectorAll("[data-attack-resource-cost-row]") ?? []).map(costRow => ({
+    id: costRow.dataset.costId || foundry.utils.randomID(),
+    resourceKey: String(costRow.querySelector("[data-field='attack.resourceCost.resourceKey']")?.value ?? "").trim(),
+    formula: costRow.querySelector("[data-field='attack.resourceCost.formula']")?.value ?? "0",
+    overloadAmount: costRow.querySelector("[data-field='attack.resourceCost.overloadAmount']")?.value ?? 0,
+    overloadDurationSeconds: durationPartsToSeconds(
+      costRow.querySelector("[data-field='attack.resourceCost.overloadDurationAmount']")?.value,
+      costRow.querySelector("[data-field='attack.resourceCost.overloadDurationUnit']")?.value
+    )
+  })).filter(entry => entry.resourceKey);
+}
+
+function readAttackHitResolution(row) {
+  const trials = Array.from(row?.querySelectorAll("[data-attack-hit-trial-row]") ?? []).map(trialRow => {
+    const outcomes = {};
+    for (const outcomeRow of trialRow.querySelectorAll("[data-attack-hit-outcome-row]") ?? []) {
+      const resultKey = String(outcomeRow.dataset.outcomeKey ?? "");
+      if (!ATTACK_HIT_OUTCOME_KEYS.includes(resultKey)) continue;
+      outcomes[resultKey] = {
+        id: String(outcomeRow.dataset.outcomeId ?? "").trim() || foundry.utils.randomID(),
+        flow: outcomeRow.querySelector("[data-field='attack.hitOutcome.flow']")?.value ?? "continue",
+        links: Array.from(outcomeRow.querySelectorAll("[data-attack-hit-outcome-link-row]") ?? [])
+          .map(linkRow => ({
+            id: String(linkRow.dataset.linkId ?? "").trim() || foundry.utils.randomID(),
+            constructId: linkRow.querySelector("[data-field='attack.hitOutcome.constructId']")?.value ?? "",
+            recipient: linkRow.querySelector("[data-field='attack.hitOutcome.recipient']")?.value
+              ?? ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+            mode: linkRow.querySelector("[data-field='attack.hitOutcome.mode']")?.value
+              ?? ABILITY_TRIAL_LINK_MODES.perSubject
+          }))
+      };
+    }
+    return {
+      id: String(trialRow.dataset.trialId ?? "").trim() || foundry.utils.randomID(),
+      subject: trialRow.querySelector("[data-field='attack.hitTrial.subject']")?.value ?? "targets",
+      sourceMode: trialRow.querySelector("[data-field='attack.hitTrial.sourceMode']")?.value ?? "once",
+      entries: Array.from(trialRow.querySelectorAll("[data-attack-hit-trial-entry-row]") ?? [])
+        .map(entryRow => ({
+          id: String(entryRow.dataset.entryId ?? "").trim() || foundry.utils.randomID(),
+          kind: "skill",
+          key: entryRow.querySelector("[data-field='attack.hitTrial.entryKey']")?.value ?? ""
+        })),
+      selectionMode: trialRow.querySelector("[data-field='attack.hitTrial.selectionMode']")?.value ?? "best",
+      difficultyFormula: trialRow.querySelector("[data-field='attack.hitTrial.difficultyFormula']")?.value ?? "0",
+      outcomes
+    };
+  });
+  return { trials };
+}
+
+function readAttackSpecialPropertyRows(row, previousValue = []) {
+  const previous = Array.isArray(previousValue) ? previousValue : Object.values(previousValue ?? {});
+  return Array.from(row?.querySelectorAll("[data-attack-special-property-row]") ?? []).map((propertyRow, index) => {
+    const type = String(propertyRow.querySelector("[data-field='attack.specialProperty.type']")?.value ?? "");
+    if (type !== WEAPON_SPECIAL_PROPERTIES.attackPower) {
+      return createDefaultWeaponSpecialPropertyData(type);
+    }
+    const priorPower = normalizeWeaponAttackPowerData(previous[index]?.attackPower);
+    const resourceCosts = Array.from(propertyRow.querySelectorAll("[data-attack-power-resource-cost-row]") ?? [])
+      .map(costRow => ({
+        type: "actorResource",
+        resourceKey: String(costRow.dataset.resourceKey ?? "").trim(),
+        amount: costRow.querySelector("[data-field='attack.specialProperty.attackPower.resourceCost.amount']")?.value ?? 0
+      }))
+      .filter(cost => cost.resourceKey);
+    const attackPower = normalizeWeaponAttackPowerData({
+        level: {
+          value: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.level.value']")?.value
+            ?? priorPower.level.value,
+          max: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.level.max']")?.value
+            ?? priorPower.level.max
+        },
+        perLevel: {
+          damagePercent: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.damagePercent']")?.value
+            ?? priorPower.perLevel.damagePercent,
+          accuracyBonus: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.accuracyBonus']")?.value
+            ?? priorPower.perLevel.accuracyBonus,
+          criticalChanceModifier: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.criticalChanceModifier']")?.value
+            ?? priorPower.perLevel.criticalChanceModifier,
+          criticalDamagePercent: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.criticalDamagePercent']")?.value
+            ?? priorPower.perLevel.criticalDamagePercent,
+          attackConeDegrees: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.attackConeDegrees']")?.value
+            ?? priorPower.perLevel.attackConeDegrees,
+          maxRangeMeters: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.maxRangeMeters']")?.value
+            ?? priorPower.perLevel.maxRangeMeters,
+          effectiveRange: {
+            value: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.effectiveRange.value']")?.value
+              ?? priorPower.perLevel.effectiveRange.value,
+            max: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.effectiveRange.max']")?.value
+              ?? priorPower.perLevel.effectiveRange.max
+          },
+          penetration: propertyRow.querySelector("[data-field='attack.specialProperty.attackPower.perLevel.penetration']")?.value
+            ?? priorPower.perLevel.penetration
+        }
+      });
+    return {
+      type,
+      attackPower: {
+        ...attackPower,
+        resourceCosts
+      }
+    };
+  });
+}
+
+function readAttackRequirementRows(row) {
+  return Array.from(row?.querySelectorAll("[data-attack-requirement-row]") ?? []).map(requirementRow => ({
+    type: requirementRow.querySelector("[data-field='attack.requirement.type']")?.value ?? "characteristic",
+    key: requirementRow.querySelector("[data-field='attack.requirement.key']")?.value ?? "",
+    value: requirementRow.querySelector("[data-field='attack.requirement.value']")?.value ?? 0
+  }));
+}
+
+function readAttackCriticalFailureRows(row) {
+  return Array.from(row?.querySelectorAll("[data-attack-critical-failure-row]") ?? []).map(consequenceRow => ({
+    id: consequenceRow.dataset.consequenceId || foundry.utils.randomID(),
+    type: "extraResourceCost",
+    resourceType: "actorResource",
+    resourceKey: String(consequenceRow.querySelector("[data-field='attack.criticalFailure.resourceKey']")?.value ?? "").trim(),
+    amount: consequenceRow.querySelector("[data-field='attack.criticalFailure.amount']")?.value ?? 0
+  })).filter(entry => entry.resourceKey);
 }
 
 function syncFixedRescueCountVisibility(select) {
@@ -2108,7 +2794,12 @@ function readAbilityConstructs(root) {
           id: resourceRow.dataset.resourceId || foundry.utils.randomID(),
           resourceKey: resourceRow.querySelector("[data-field='constructResourceKey']")?.value ?? "",
           formula: resourceRow.querySelector("[data-field='constructResourceFormula']")?.value ?? "0"
-        }))
+        })),
+      damage: {
+        amountMode: constructRow.querySelector("[data-field='constructDamageAmountMode']")?.value ?? "base",
+        formula: constructRow.querySelector("[data-field='constructDamageFormula']")?.value ?? "0",
+        limbMode: constructRow.querySelector("[data-field='constructDamageLimbMode']")?.value ?? "random"
+      }
     };
   }).filter(construct => {
     if (seen.has(construct.id)) return false;
@@ -2180,10 +2871,14 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
   const isAcquisitionChanges = normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = normalized.type === ABILITY_FUNCTION_TYPES.effectChanges;
   const isActiveApplication = normalized.type === ABILITY_FUNCTION_TYPES.activeApplication;
+  const isAttackAction = normalized.type === ABILITY_FUNCTION_TYPES.attackAction;
   const isFixed = normalized.type === ABILITY_FUNCTION_TYPES.fixed;
   const fixedKey = String(normalized.fixedKey ?? "");
   const activeApplicationSettings = isActiveApplication
     ? prepareActiveApplicationSettingsForDisplay(normalized.activeSettings)
+    : null;
+  const attackActionSettings = isAttackAction
+    ? prepareAttackActionSettingsForDisplay(normalized.attackSettings, constructs)
     : null;
   const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     ? prepareDeusExMachinaSettingsForDisplay(normalized.fixedSettings)
@@ -2308,12 +3003,14 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     isAcquisitionChanges,
     isEffectChanges,
     isActiveApplication,
+    isAttackAction,
     isFixed,
     canConfigureChanges: isEffectChanges || isAcquisitionChanges || isActiveApplication,
     canConfigureActions: isEffectChanges || isActiveApplication,
     showPureValuesToggle: isEffectChanges && hasAdvancementPureValueFunctionChanges(normalized),
     fixedKey,
     activeApplicationSettings,
+    attackActionSettings,
     fixedWhereAreYouGoingSettings,
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
@@ -2737,6 +3434,7 @@ function prepareFullForceSettingsForDisplay(settings = {}) {
 function getAbilityFunctionTypeLabel(entry, fixedKey = "") {
   if (entry.type === ABILITY_FUNCTION_TYPES.fixed) return getFixedAbilityFunctionLabel(fixedKey);
   if (entry.type === ABILITY_FUNCTION_TYPES.activeApplication) return "Активное применение";
+  if (entry.type === ABILITY_FUNCTION_TYPES.attackAction) return "Атакующее действие";
   if (entry.type === ABILITY_FUNCTION_TYPES.acquisitionChanges) return "Разовое изменение при приобретении";
   return "Свободная настройка";
 }
@@ -2762,6 +3460,338 @@ function prepareActiveApplicationSettingsForDisplay(settings = {}) {
     isManualTargetSelection: normalized.targetSelectionMode === ABILITY_ACTIVE_APPLICATION_SELECTION_MODES.manual,
     targetGroupChoices: buildTargetGroupChoices(normalized.targetGroups)
   };
+}
+
+function prepareAttackActionSettingsForDisplay(settings = {}, constructs = []) {
+  const normalized = normalizeAttackActionSettings(settings);
+  const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
+  const targetMode = String(normalized.targeting?.mode ?? "cone");
+  const resourceCosts = (normalized.resourceCosts ?? []).map((cost, index) => {
+    const overloadDuration = splitDurationSeconds(cost.overloadDurationSeconds);
+    return {
+      ...cost,
+      index,
+      resourceChoices: buildEventReactionResourceChoices(cost.resourceKey),
+      isUnsupportedResource: !isKnownEventReactionResource(cost.resourceKey),
+      overloadDurationAmount: cost.overloadDurationSeconds > 0 ? overloadDuration.amount : "",
+      overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
+    };
+  });
+  return {
+    ...normalized,
+    attackSoundVolume: normalizeAttackSoundVolume(normalized.attackSoundVolume),
+    attackSoundVolumePercent: formatAttackSoundVolumePercent(normalized.attackSoundVolume),
+    targetModeChoices: [
+      { value: "cone", label: "Конус", selected: targetMode === "cone" },
+      { value: "selectedTargets", label: "Выбранные цели", selected: targetMode === "selectedTargets" },
+      { value: "area", label: "Область", selected: targetMode === "area" }
+    ],
+    isCone: targetMode === "cone",
+    isTargets: targetMode === "selectedTargets",
+    isArea: targetMode === "area",
+    proficiencyChoices: buildAttackProficiencyChoices(normalized.proficiencyKey),
+    skillChoices: buildSkillChoices(normalized.skillKey, getSkillSettings()),
+    damageTypeRows: (normalized.damageTypes ?? []).map((entry, index) => ({
+      ...entry,
+      index,
+      choices: buildAttackDamageTypeChoices(entry.key, damageTypes)
+    })),
+    resourceCosts,
+    hitResolution: {
+      trials: buildAttackHitTrialRows(normalized.hitResolution?.trials, constructs)
+    },
+    area: {
+      ...normalized.area,
+      regionDamageRows: (normalized.area?.regionDamageEntries ?? []).map((entry, index) => ({
+        ...entry,
+        index,
+        choices: buildAttackDamageTypeChoices(entry.damageTypeKey, damageTypes)
+      }))
+    },
+    specialProperties: prepareAttackSpecialPropertiesForDisplay(
+      normalized.specialProperties,
+      resourceCosts
+    ),
+    requirements: prepareAttackRequirementsForDisplay(normalized.requirements),
+    criticalFailureConsequences: (normalized.criticalFailureConsequences ?? []).map((entry, index) => ({
+      ...entry,
+      index,
+      resourceChoices: buildAttackConfiguredResourceChoices(resourceCosts, entry.resourceKey)
+    }))
+  };
+}
+
+function buildAttackHitTrialRows(value = [], constructs = []) {
+  const trials = Array.isArray(value) ? value : Object.values(value ?? {});
+  return trials.map((trial, index) => {
+    const subject = trial?.subject === "source" ? "source" : "targets";
+    return {
+      ...trial,
+      index,
+      number: index + 1,
+      isSource: subject === "source",
+      canMoveUp: index > 0,
+      canMoveDown: index < trials.length - 1,
+      subjectChoices: [
+        { value: "source", label: "Применяющий" },
+        { value: "targets", label: "Цели" }
+      ].map(choice => ({ ...choice, selected: choice.value === subject })),
+      sourceModeChoices: [
+        { value: "once", label: "Один раз за применение" },
+        { value: "perTarget", label: "Отдельно для каждой цели" }
+      ].map(choice => ({ ...choice, selected: choice.value === trial?.sourceMode })),
+      selectionModeChoices: [
+        { value: "best", label: "Лучшее текущее значение" },
+        { value: "worst", label: "Худшее текущее значение" }
+      ].map(choice => ({ ...choice, selected: choice.value === trial?.selectionMode })),
+      entries: (trial?.entries ?? []).map((entry, entryIndex) => ({
+        ...entry,
+        index: entryIndex,
+        skillChoices: buildSkillChoices(entry?.key, getSkillSettings())
+      })),
+      outcomes: ATTACK_HIT_OUTCOME_KEYS.map(resultKey => (
+        buildAttackHitOutcomeRow(trial?.outcomes?.[resultKey], resultKey, constructs)
+      ))
+    };
+  });
+}
+
+function buildAttackHitOutcomeRow(outcome = {}, resultKey = "failure", constructs = []) {
+  const labels = {
+    criticalFailure: "Критический провал",
+    failure: "Провал",
+    success: "Успех",
+    criticalSuccess: "Критический успех"
+  };
+  return {
+    ...outcome,
+    resultKey,
+    label: labels[resultKey] ?? resultKey,
+    consequenceCount: outcome?.links?.length ?? 0,
+    flowChoices: [
+      { value: "continue", label: "Продолжить цепочку" },
+      { value: "stopSubject", label: "Остановить для этого участника" },
+      { value: "stopAll", label: "Остановить всю атаку" }
+    ].map(choice => ({ ...choice, selected: choice.value === outcome?.flow })),
+    links: buildAttackHitOutcomeLinkRows(outcome?.links, constructs)
+  };
+}
+
+function buildAttackHitOutcomeLinkRows(value = [], constructs = []) {
+  const normalizedConstructs = normalizeAbilityConstructs(constructs);
+  return (Array.isArray(value) ? value : Object.values(value ?? {})).map((link, index) => {
+    const constructId = String(link?.constructId ?? "");
+    const constructIndex = normalizedConstructs.findIndex(construct => construct.id === constructId);
+    const construct = constructIndex >= 0
+      ? prepareAbilityConstructForDisplay(normalizedConstructs[constructIndex], constructIndex)
+      : null;
+    return {
+      ...link,
+      index,
+      construct,
+      hasConstruct: Boolean(construct),
+      recipientChoices: [
+        { value: "subjects", label: "Проходившие это испытание" },
+        { value: "source", label: "Применяющий" },
+        { value: "targets", label: "Все цели атаки" }
+      ].map(choice => ({ ...choice, selected: choice.value === link?.recipient })),
+      modeChoices: [
+        { value: "perSubject", label: "Отдельно каждому участнику" },
+        { value: "once", label: "Один раз" }
+      ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
+    };
+  });
+}
+
+function buildAttackDamageAmountModeChoices(selected = "base") {
+  return [
+    { value: "base", label: "Базовый урон оружия" },
+    { value: "formula", label: "Своя формула урона" },
+    { value: "percent", label: "Процент базового урона" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildAttackDamageLimbModeChoices(selected = "random") {
+  return [
+    { value: "random", label: "Случайная часть тела" },
+    { value: "randomCritical", label: "Случайная ключевая конечность" },
+    { value: "selected", label: "Выбранная часть тела" },
+    { value: "healthOnly", label: "Только общее здоровье" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildAttackDamageTypeChoices(selected = "", damageTypes = getConfigurableDamageTypes(getDamageTypeSettings())) {
+  const key = String(selected ?? "").trim();
+  const entries = [...damageTypes];
+  if (key && !entries.some(entry => entry.key === key)) {
+    entries.push({ key, label: key });
+  }
+  return entries.map(entry => ({
+    value: entry.key,
+    label: entry.label || entry.key,
+    selected: entry.key === key
+  }));
+}
+
+function buildAttackProficiencyChoices(selected = "") {
+  const key = String(selected ?? "").trim();
+  const entries = [...getProficiencySettings()];
+  if (key && !entries.some(entry => entry.key === key)) entries.push({ key, label: key });
+  if (!entries.length) return [{ value: "", label: "Владения не настроены", selected: true }];
+  return entries.map(entry => ({
+    value: entry.key,
+    label: entry.label || entry.key,
+    selected: entry.key === key
+  }));
+}
+
+function prepareAttackSpecialPropertiesForDisplay(properties = [], resourceCosts = []) {
+  const source = Array.isArray(properties) ? properties : Object.values(properties ?? {});
+  const normalized = source.map(property => ({
+    ...(property && typeof property === "object" ? property : {}),
+    type: getWeaponSpecialPropertyType(property)
+  }));
+  return normalized.map((property, index) => {
+    const type = getWeaponSpecialPropertyType(property);
+    const attackPower = normalizeWeaponAttackPowerData(property.attackPower);
+    const configuredPowerCosts = Array.isArray(property?.attackPower?.resourceCosts)
+      ? property.attackPower.resourceCosts
+      : Object.values(property?.attackPower?.resourceCosts ?? {});
+    return {
+      ...property,
+      index,
+      type,
+      isAttackPower: type === WEAPON_SPECIAL_PROPERTIES.attackPower,
+      choices: buildAttackSpecialPropertyChoices(type, normalized),
+      attackPower: {
+        ...attackPower,
+        resourceCostRows: buildAttackPowerResourceCostRows(
+          resourceCosts,
+          configuredPowerCosts
+        )
+      }
+    };
+  });
+}
+
+function buildAttackSpecialPropertyChoices(selected = "", properties = []) {
+  const used = new Set(properties.map(property => getWeaponSpecialPropertyType(property)));
+  return [
+    { value: WEAPON_SPECIAL_PROPERTIES.pending, label: "Выберите свойство" },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.attackPower,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
+    }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected,
+    disabled: Boolean(
+      choice.value !== WEAPON_SPECIAL_PROPERTIES.pending
+      && choice.value !== selected
+      && used.has(choice.value)
+    )
+  }));
+}
+
+function buildAttackPowerResourceCostRows(baseCosts = [], configuredCosts = []) {
+  const configured = new Map((configuredCosts ?? []).map(cost => [
+    String(cost?.resourceKey ?? cost?.type ?? "").trim(),
+    Number(cost?.amount) || 0
+  ]));
+  const baseByKey = new Map();
+  for (const cost of baseCosts) {
+    const key = String(cost?.resourceKey ?? "").trim();
+    if (!key) continue;
+    const formulas = baseByKey.get(key) ?? [];
+    formulas.push(String(cost.formula ?? "0"));
+    baseByKey.set(key, formulas);
+  }
+  const keys = new Set([...baseByKey.keys(), ...configured.keys()]);
+  return Array.from(keys).filter(Boolean).map((resourceKey, index) => ({
+    index,
+    resourceKey,
+    label: getEventReactionResourceDefinitions().find(resource => resource.key === resourceKey)?.label
+      ?? resourceKey,
+    base: (baseByKey.get(resourceKey) ?? []).join(" + ") || "0",
+    amount: configured.get(resourceKey) ?? 0
+  }));
+}
+
+function prepareAttackRequirementsForDisplay(requirements = []) {
+  const characteristics = getCharacteristicSettings();
+  const skills = getSkillSettings();
+  return (requirements ?? []).map((requirement, index) => {
+    const type = String(requirement?.type ?? "") === "skill" ? "skill" : "characteristic";
+    return {
+      ...requirement,
+      index,
+      type,
+      typeChoices: [
+        { value: "characteristic", label: "Характеристика" },
+        { value: "skill", label: "Навык" }
+      ].map(choice => ({ ...choice, selected: choice.value === type })),
+      keyChoices: buildAttackRequirementKeyChoices(type, requirement?.key, characteristics, skills)
+    };
+  });
+}
+
+function buildAttackRequirementKeyChoices(type, selected = "", characteristics = [], skills = []) {
+  const key = String(selected ?? "").trim();
+  const entries = [...(type === "skill" ? skills : characteristics)];
+  if (key && !entries.some(entry => entry.key === key)) entries.push({ key, label: key });
+  return entries.map(entry => ({
+    value: entry.key,
+    label: entry.label || entry.key,
+    selected: entry.key === key
+  }));
+}
+
+function buildAttackConfiguredResourceChoices(resourceCosts = [], selected = "") {
+  const key = String(selected ?? "").trim();
+  const configured = Array.from(new Set(resourceCosts.map(cost => String(cost?.resourceKey ?? "").trim()).filter(Boolean)));
+  if (key && !configured.includes(key)) configured.push(key);
+  return configured.map(resourceKey => ({
+    value: resourceKey,
+    label: getEventReactionResourceDefinitions().find(resource => resource.key === resourceKey)?.label
+      ?? resourceKey,
+    selected: resourceKey === key
+  }));
+}
+
+function normalizeAttackSoundVolume(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.max(0, Math.min(1, number));
+}
+
+function formatAttackSoundVolumePercent(value) {
+  return `${Math.round(normalizeAttackSoundVolume(value) * 100)}%`;
+}
+
+function syncAttackSoundVolumeLabel(slider) {
+  const label = slider?.closest("label")?.querySelector("[data-attack-sound-volume-label]");
+  if (label) label.textContent = formatAttackSoundVolumePercent(slider.value);
+}
+
+async function browseAttackAudioPath(target, selector) {
+  const functionRow = target?.closest?.("[data-ability-function-row]");
+  const input = functionRow?.querySelector?.(selector);
+  if (!input) return undefined;
+  const picker = new foundry.applications.apps.FilePicker.implementation({
+    type: "audio",
+    current: input.value ?? "",
+    callback: path => {
+      input.value = path;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  await picker.browse(undefined, { render: false });
+  return picker.render({ force: true });
 }
 
 function buildTargetGroupChoices(value = []) {
@@ -3200,6 +4230,7 @@ function buildFunctionChoices() {
     { value: "", label: "Выберите функцию", disabled: true, selected: true },
     { value: ABILITY_FUNCTION_TYPES.fixed, label: "Фиксированные функции" },
     { value: ABILITY_FUNCTION_TYPES.activeApplication, label: "Активное применение" },
+    { value: ABILITY_FUNCTION_TYPES.attackAction, label: "Атакующее действие" },
     { value: ABILITY_FUNCTION_TYPES.effectChanges, label: "Свободная настройка" },
     { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: "Разовое изменение при приобретении" }
   ];
@@ -3586,12 +4617,17 @@ function prepareAbilityConstructForDisplay(construct, index) {
     ?? createAbilityConstruct(ABILITY_CONSTRUCT_TYPES.temporaryEffect);
   const isTemporaryEffect = normalized.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect;
   const isResourceChange = normalized.type === ABILITY_CONSTRUCT_TYPES.resourceChange;
+  const isDamage = normalized.type === ABILITY_CONSTRUCT_TYPES.damage;
+  const damageAmountMode = normalized.damage?.amountMode ?? ABILITY_DAMAGE_AMOUNT_MODES.base;
   return {
     ...normalized,
     index,
     isTemporaryEffect,
     isResourceChange,
-    typeLabel: isTemporaryEffect ? "Временный эффект" : "Изменение ресурса",
+    isDamage,
+    typeLabel: isTemporaryEffect
+      ? "Временный эффект"
+      : (isResourceChange ? "Изменение ресурса" : "Урон"),
     changes: normalized.changes.map((change, changeIndex) => (
       prepareChangeForDisplay(change, changeIndex, [])
     )),
@@ -3599,7 +4635,15 @@ function prepareAbilityConstructForDisplay(construct, index) {
       ...resource,
       index: resourceIndex,
       resourceChoices: buildEventReactionResourceChoices(resource.resourceKey)
-    }))
+    })),
+    damage: {
+      ...normalized.damage,
+      isBase: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.base,
+      isFormula: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.formula,
+      isPercent: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.percent,
+      amountModeChoices: buildAttackDamageAmountModeChoices(damageAmountMode),
+      limbModeChoices: buildAttackDamageLimbModeChoices(normalized.damage?.limbMode)
+    }
   };
 }
 
@@ -3695,6 +4739,36 @@ function isAbilityConstructLinked(ability, constructId) {
       condition?.type === ABILITY_CONDITION_TYPES.trial
       && (condition?.trialLinks ?? []).some(link => String(link?.constructId ?? "") === id)
     ))
+    || (abilityFunction?.attackSettings?.hitResolution?.trials ?? []).some(trial => (
+      ATTACK_HIT_OUTCOME_KEYS.some(resultKey => (
+        (trial?.outcomes?.[resultKey]?.links ?? [])
+          .some(link => String(link?.constructId ?? "") === id)
+      ))
+    ))
+  ));
+}
+
+function getAttackHitTrialIndex(target) {
+  return Number(target?.closest?.("[data-attack-hit-trial-row]")?.dataset?.trialIndex ?? -1);
+}
+
+function getAttackHitOutcomeKey(target) {
+  const key = String(target?.closest?.("[data-attack-hit-outcome-row]")?.dataset?.outcomeKey ?? "");
+  return ATTACK_HIT_OUTCOME_KEYS.includes(key) ? key : "";
+}
+
+function collectAttackTrialConstructIds(trial = null) {
+  return ATTACK_HIT_OUTCOME_KEYS.flatMap(resultKey => (
+    trial?.outcomes?.[resultKey]?.links ?? []
+  )).map(link => String(link?.constructId ?? "")).filter(Boolean);
+}
+
+function removeUnlinkedAttackOutcomeConstructs(ability, constructIds = []) {
+  const ids = new Set((constructIds ?? []).map(id => String(id ?? "")).filter(Boolean));
+  if (!ids.size) return;
+  ability.system.constructs = (ability.system.constructs ?? []).filter(construct => (
+    !ids.has(String(construct?.id ?? ""))
+    || isAbilityConstructLinked(ability, construct?.id)
   ));
 }
 
@@ -3712,6 +4786,19 @@ function getEventReactionResourceDefinitions() {
     });
   }
   return resources;
+}
+
+function getConfigurableDamageTypes(damageTypeSettings = []) {
+  return (damageTypeSettings ?? []).filter(damageType => !damageType?.locked && !damageType?.system);
+}
+
+function findAttackFunctionByTarget(ability, target) {
+  const row = target?.closest?.("[data-ability-function-row]");
+  const id = String(row?.dataset?.functionId ?? "");
+  if (!id) return null;
+  const abilityFunction = (ability?.system?.functions ?? [])
+    .find(entry => String(entry?.id ?? "") === id);
+  return abilityFunction?.type === ABILITY_FUNCTION_TYPES.attackAction ? abilityFunction : null;
 }
 
 function isKnownEventReactionResource(resourceKey = "") {

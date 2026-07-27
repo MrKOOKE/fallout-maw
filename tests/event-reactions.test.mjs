@@ -65,6 +65,14 @@ const { SYSTEM_ID } = await import("../src/constants.mjs");
 
 const EVENT_KEY = "fallout-maw.weapon.attack.targeted";
 
+function applyActorResourceChanges(actor, changes = {}) {
+  for (const [path, value] of Object.entries(changes)) {
+    const match = /^system\.resources\.([^.]+)\.(value|spent)$/.exec(path);
+    if (!match) continue;
+    actor.system.resources[match[1]][match[2]] = value;
+  }
+}
+
 test("event reaction tracking targets match owner, ally, enemy and empty-any", () => {
   const reactor = { uuid: "Actor.A" };
   const ally = { uuid: "Actor.B" };
@@ -462,6 +470,7 @@ test("ordinary vector uses one Actor update, strictly suppresses RP conversion, 
     },
     async update(updates, options) {
       calls.push({ updates, options });
+      applyActorResourceChanges(this, updates);
     }
   };
   const healthCalls = [];
@@ -479,6 +488,79 @@ test("ordinary vector uses one Actor update, strictly suppresses RP conversion, 
   assert.equal(calls[0].updates["system.resources.reactionPoints.value"], 1);
   assert.equal(healthCalls[0].amount, 4);
   assert.equal(healthCalls[0].context.rootId, "root");
+});
+
+test("a cancelled Actor resource update never commits health or the post-spend mutation", async () => {
+  const actor = {
+    uuid: "Actor.CancelledVector",
+    system: {
+      resources: {
+        actionPoints: { value: 7, min: 0, max: 10, spent: 3 },
+        health: { value: 9, min: 0, max: 10 }
+      }
+    },
+    async update() {
+      return undefined;
+    }
+  };
+  let healthSpent = false;
+  let postSpendCommitted = false;
+
+  await assert.rejects(
+    spendActorResourceCostVector(actor, [
+      { resourceKey: "actionPoints", amount: 2 },
+      { resourceKey: "health", amount: 3 }
+    ], {
+      spendHealth: async () => {
+        healthSpent = true;
+      },
+      afterSpend: async () => {
+        postSpendCommitted = true;
+      }
+    }),
+    /cancelled or altered/
+  );
+
+  assert.equal(actor.system.resources.actionPoints.value, 7);
+  assert.equal(healthSpent, false);
+  assert.equal(postSpendCommitted, false);
+});
+
+test("a failed atomic post-spend mutation restores both actor resources and health", async () => {
+  const updates = [];
+  const actor = {
+    uuid: "Actor.Atomic",
+    system: {
+      resources: {
+        actionPoints: { value: 7, min: 0, max: 10, spent: 3 },
+        health: { value: 9, min: 0, max: 10 }
+      }
+    },
+    async update(changes, options) {
+      updates.push({ changes, options });
+      applyActorResourceChanges(this, changes);
+    }
+  };
+  const health = [];
+  await assert.rejects(
+    spendActorResourceCostVector(actor, [
+      { resourceKey: "actionPoints", amount: 2 },
+      { resourceKey: "health", amount: 3 }
+    ], {
+      context: { rootId: "weapon-use" },
+      spendHealth: async (_actor, amount) => health.push(["spend", amount]),
+      restoreHealth: async (_actor, amount) => health.push(["restore", amount]),
+      afterSpend: async () => {
+        throw new Error("inventory commit failed");
+      }
+    }),
+    /inventory commit failed/
+  );
+  assert.equal(updates.length, 2);
+  assert.equal(updates[0].changes["system.resources.actionPoints.value"], 5);
+  assert.equal(updates[1].changes["system.resources.actionPoints.value"], 7);
+  assert.equal(updates[1].changes["system.resources.actionPoints.spent"], 3);
+  assert.deepEqual(health, [["spend", 3], ["restore", 3]]);
 });
 
 test("health cost selects the reentrant Damage Hub path only for a current operation", async () => {

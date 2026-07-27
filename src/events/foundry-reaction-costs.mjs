@@ -99,7 +99,13 @@ export async function spendFoundryReactionCostVector(actor, costs = [], context 
   return spendActorResourceCostVector(actor, costs, {
     context,
     updateOptions: { chainRef: context.chainRef },
-    spendHealth: spendHealthCost
+    spendHealth: spendHealthCost,
+    restoreHealth: (targetActor, amount, rollbackContext = {}) => (
+      typeof rollbackContext.restoreHealthCost === "function"
+        ? rollbackContext.restoreHealthCost(targetActor, amount, rollbackContext)
+        : restoreActorHealthCost(targetActor, amount, rollbackContext)
+    ),
+    afterSpend: context.afterVectorSpend
   });
 }
 
