@@ -22,7 +22,8 @@ globalThis.foundry = {
 
 const {
   applyAttackTrialOutcomeConsequences,
-  buildAttackTrialOutcomeDeduplicationKey
+  buildAttackTrialOutcomeDeduplicationKey,
+  resolveAttackTrialOutcomeCriticalDamage
 } = await import("../src/combat/attack-trial-consequences.mjs");
 
 function actor(uuid, limbs = {}) {
@@ -247,4 +248,161 @@ test("derived keys distinguish semantic lanes and an explicit key can override t
   await applyAttackTrialOutcomeConsequences({ ...common, entry: first });
   await applyAttackTrialOutcomeConsequences({ ...common, entry: second });
   assert.equal(applications, 1);
+});
+
+test("critical damage is outcome-bound, first-wins, and never inferred from the result name", async () => {
+  const sourceActor = actor("Actor.source");
+  const targetActor = actor("Actor.target");
+  const subjectActor = actor("Actor.subject");
+  const specialProperties = [{
+    type: "criticalDamage",
+    criticalDamage: {
+      outcomeId: "burning-failure",
+      percentFormula: "125 + ene + @target.energy + @subject.energy"
+    }
+  }, {
+    type: "criticalDamage",
+    criticalDamage: {
+      outcomeId: "burning-failure",
+      percentFormula: "999"
+    }
+  }];
+  let evaluation = null;
+
+  const matching = await resolveAttackTrialOutcomeCriticalDamage({
+    amount: 20,
+    specialProperties,
+    entry: {
+      outcomeId: "burning-failure",
+      resultKey: "failure",
+      actor: subjectActor
+    },
+    recipient: { actor: targetActor },
+    sourceActor,
+    evaluateFormula: (formula, evaluatedActor, options) => {
+      evaluation = { formula, evaluatedActor, options };
+      return 175;
+    }
+  });
+
+  assert.deepEqual(matching, {
+    amount: 35,
+    applied: true,
+    percent: 175,
+    outcomeId: "burning-failure"
+  });
+  assert.equal(evaluation.formula, "125 + ene + @target.energy + @subject.energy");
+  assert.equal(evaluation.evaluatedActor, sourceActor);
+  assert.equal(evaluation.options.targetActor, targetActor);
+  assert.equal(evaluation.options.subjectActor, subjectActor);
+
+  let mismatchEvaluated = false;
+  const mismatchingCriticalSuccess = await resolveAttackTrialOutcomeCriticalDamage({
+    amount: 20,
+    specialProperties,
+    entry: {
+      outcomeId: "clean-critical-success",
+      resultKey: "criticalSuccess",
+      actor: subjectActor
+    },
+    recipient: { actor: targetActor },
+    sourceActor,
+    evaluateFormula: () => {
+      mismatchEvaluated = true;
+      return 999;
+    }
+  });
+
+  assert.deepEqual(mismatchingCriticalSuccess, {
+    amount: 20,
+    applied: false,
+    percent: 100,
+    outcomeId: "clean-critical-success"
+  });
+  assert.equal(mismatchEvaluated, false);
+});
+
+test("one matching branch multiplies every damage consequence without leaking to adjacent outcomes", async () => {
+  const sourceActor = actor("Actor.source");
+  const targetActor = actor("Actor.target");
+  const specialProperties = [{
+    type: "criticalDamage",
+    criticalDamage: {
+      outcomeId: "trial-one-failure",
+      percentFormula: "200"
+    }
+  }];
+  const constructs = [
+    damageConstruct("damage", "base", "0", "healthOnly"),
+    damageConstruct("damage-one", "base", "0", "healthOnly"),
+    damageConstruct("damage-two", "base", "0", "healthOnly")
+  ];
+
+  const resolveBranch = async entry => applyAttackTrialOutcomeConsequences({
+    entry,
+    constructs,
+    sourceActor,
+    getBaseDamage: () => 7,
+    buildDamageRequests: async data => {
+      const critical = await resolveAttackTrialOutcomeCriticalDamage({
+        amount: data.amount,
+        specialProperties,
+        entry: data.entry,
+        recipient: data.recipient,
+        sourceActor,
+        evaluateFormula: () => 200
+      });
+      return [{
+        constructId: data.construct.id,
+        amount: critical.amount,
+        criticalDamageUsed: critical.applied
+      }];
+    }
+  });
+
+  const matching = await resolveBranch(resolvedEntry({
+    outcomeId: "trial-one-failure",
+    resultKey: "failure",
+    outcome: {
+      links: [
+        {
+          id: "first-damage",
+          constructId: "damage-one",
+          recipient: "subjects",
+          mode: "perSubject"
+        },
+        {
+          id: "second-damage",
+          constructId: "damage-two",
+          recipient: "subjects",
+          mode: "perSubject"
+        }
+      ]
+    }
+  }));
+  assert.deepEqual(matching, [
+    { constructId: "damage-one", amount: 14, criticalDamageUsed: true },
+    { constructId: "damage-two", amount: 14, criticalDamageUsed: true }
+  ]);
+
+  const adjacentBranch = await resolveBranch(resolvedEntry({
+    outcomeId: "trial-one-success",
+    resultKey: "success"
+  }));
+  assert.deepEqual(adjacentBranch, [{
+    constructId: "damage",
+    amount: 7,
+    criticalDamageUsed: false
+  }]);
+
+  const sameResultInAnotherTrial = await resolveBranch(resolvedEntry({
+    trialId: "trial-two",
+    outcomeId: "trial-two-failure",
+    resultKey: "failure"
+  }));
+  assert.deepEqual(sameResultInAnotherTrial, [{
+    constructId: "damage",
+    amount: 7,
+    criticalDamageUsed: false
+  }]);
 });

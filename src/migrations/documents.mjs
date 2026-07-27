@@ -10,6 +10,8 @@ const ACTOR_MIGRATIONS = Object.freeze([
 ]);
 
 const ITEM_MIGRATIONS = Object.freeze([
+  migrateAbilityTrialBranches,
+  migrateAbilityDamageConstructs,
   migrateLegacyWeaponAndArmorTypes,
   migrateDeprecatedThrowActions,
   migrateWeaponSpecialProperties,
@@ -22,6 +24,163 @@ export function migrateActorData(source = {}) {
 
 export function migrateItemData(source = {}, options = {}) {
   return runDocumentMigrations(source, ITEM_MIGRATIONS, options);
+}
+
+/**
+ * Preserve the old ordinary-Trial batching contract before Foundry cleans the
+ * item source. A legacy accepted-result set becomes exactly one branch, so a
+ * source/targets consequence still executes once for the whole matched group.
+ */
+export function migrateAbilityTrialBranches(source = {}, { partial = false } = {}) {
+  if (partial) return source;
+  const functionCollections = [];
+  if (Array.isArray(source?.system?.functions)) {
+    functionCollections.push(source.system.functions);
+  }
+  const freeSettingsEntries = source?.system?.functions?.freeSettings?.entries;
+  if (Array.isArray(freeSettingsEntries)) functionCollections.push(freeSettingsEntries);
+  else if (freeSettingsEntries && typeof freeSettingsEntries === "object") {
+    functionCollections.push(Object.values(freeSettingsEntries));
+  }
+
+  for (const functions of functionCollections) {
+    for (const abilityFunction of functions ?? []) {
+      const changes = Array.isArray(abilityFunction?.changes)
+        ? abilityFunction.changes
+        : Object.values(abilityFunction?.changes ?? {});
+      const hasPrimaryChanges = changes.some(change => (
+        String(change?.key ?? "").trim() && String(change?.value ?? "") !== ""
+      ));
+      const conditions = Array.isArray(abilityFunction?.conditions)
+        ? abilityFunction.conditions
+        : Object.values(abilityFunction?.conditions ?? {});
+      for (const condition of conditions) {
+        migrateAbilityTrialConditionBranches(condition, { hasPrimaryChanges });
+      }
+    }
+  }
+  return source;
+}
+
+function migrateAbilityTrialConditionBranches(condition, { hasPrimaryChanges = false } = {}) {
+  if (!condition || condition.type !== "trial") return;
+  const hadRoutingMarker = Object.prototype.hasOwnProperty.call(
+    condition,
+    "trialRoutesPrimaryChanges"
+  );
+  const hasCanonical = Object.prototype.hasOwnProperty.call(condition, "trialBranches");
+  if (hasCanonical) {
+    condition.trialBranches = Array.isArray(condition.trialBranches)
+      ? condition.trialBranches
+      : Object.values(condition.trialBranches ?? {});
+    delete condition.trialResultKeys;
+    delete condition.trialLinks;
+  } else {
+    const hasLegacy = Object.prototype.hasOwnProperty.call(condition, "trialResultKeys")
+      || Object.prototype.hasOwnProperty.call(condition, "trialLinks");
+    if (!hasLegacy) return;
+    const validResultKeys = new Set([
+      "criticalFailure",
+      "failure",
+      "success",
+      "criticalSuccess"
+    ]);
+    const resultKeys = (Array.isArray(condition.trialResultKeys)
+      ? condition.trialResultKeys
+      : Object.values(condition.trialResultKeys ?? {}))
+      .map(value => String(value ?? "").trim())
+      .filter(value => validResultKeys.has(value));
+    const links = Array.isArray(condition.trialLinks)
+      ? condition.trialLinks
+      : Object.values(condition.trialLinks ?? {});
+    const conditionId = String(condition.id ?? "").trim() || "trial";
+    condition.trialBranches = [{
+      id: `${conditionId}-legacy-branch`,
+      name: "Подходящий результат",
+      resultKeys: resultKeys.length ? resultKeys : ["criticalFailure", "failure"],
+      flow: "continue",
+      links
+    }];
+    delete condition.trialResultKeys;
+    delete condition.trialLinks;
+  }
+
+  for (const branch of condition.trialBranches) {
+    branch.links = (Array.isArray(branch?.links)
+      ? branch.links
+      : Object.values(branch?.links ?? {}))
+      .map(link => migrateAbilityTrialLink(link));
+  }
+  const hasPrimaryLink = condition.trialBranches.some(branch => (
+    branch.links.some(link => ["primaryChanges", "primaryChangesPercent"].includes(link.kind))
+  ));
+  const shouldMigrateEmptyBranch = !hadRoutingMarker
+    && hasPrimaryChanges
+    && condition.trialBranches.length === 1
+    && !condition.trialBranches[0].links.length;
+  if (shouldMigrateEmptyBranch) {
+    const conditionId = String(condition.id ?? "").trim() || "trial";
+    condition.trialBranches[0].links.push({
+      id: `${conditionId}-primary-changes`,
+      kind: "primaryChanges",
+      constructId: "",
+      percentFormula: "100",
+      recipient: "subjects",
+      mode: "perSubject"
+    });
+  }
+  condition.trialRoutesPrimaryChanges = condition.trialRoutesPrimaryChanges === true
+    || hasPrimaryLink
+    || shouldMigrateEmptyBranch;
+}
+
+function migrateAbilityTrialLink(link = {}) {
+  const kind = ["construct", "primaryChanges", "primaryChangesPercent"]
+    .includes(String(link?.kind ?? ""))
+    ? String(link.kind)
+    : "construct";
+  return {
+    ...link,
+    kind,
+    constructId: kind === "construct" ? String(link?.constructId ?? "") : "",
+    percentFormula: String(link?.percentFormula ?? "100")
+  };
+}
+
+/**
+ * Older ability-builder macros stored damage construct settings as flat
+ * damageFormula/damageTypeKey fields. Move them into the current nested shape
+ * before SchemaField pruning can discard them.
+ */
+export function migrateAbilityDamageConstructs(source = {}, { partial = false } = {}) {
+  if (partial) return source;
+  const constructs = source?.system?.constructs;
+  const entries = Array.isArray(constructs) ? constructs : Object.values(constructs ?? {});
+  for (const construct of entries) {
+    if (!construct || construct.type !== "damage") continue;
+    if (construct.damage && typeof construct.damage === "object") continue;
+    const legacyLimbMode = String(construct.damageLimbMode ?? "").trim();
+    construct.damage = {
+      amountMode: construct.damageFormula !== undefined ? "formula" : "base",
+      formula: String(construct.damageFormula ?? "0"),
+      damageTypeKey: String(construct.damageTypeKey ?? ""),
+      limbMode: legacyLimbMode === "critical"
+        ? "randomCritical"
+        : (["random", "randomCritical", "selected", "healthOnly"].includes(legacyLimbMode)
+          ? legacyLimbMode
+          : "random")
+    };
+    delete construct.damageFormula;
+    delete construct.damageTypeKey;
+    delete construct.damageFormulaEvaluation;
+    delete construct.damageLimbMode;
+    delete construct.damageLimbKey;
+    delete construct.damageScope;
+    delete construct.damageApplyMitigation;
+    delete construct.damageProcessTypeSettings;
+    delete construct.damageBypassBarrier;
+  }
+  return source;
 }
 
 export function sparsifyGearItemFunctions(source = {}, { partial = false } = {}) {

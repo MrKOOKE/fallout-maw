@@ -172,7 +172,10 @@ import {
   createAttackTrialResolutionState,
   resolveAttackTrialResolution
 } from "./attack-trial-resolution.mjs";
-import { applyAttackTrialOutcomeConsequences } from "./attack-trial-consequences.mjs";
+import {
+  applyAttackTrialOutcomeConsequences,
+  resolveAttackTrialOutcomeCriticalDamage
+} from "./attack-trial-consequences.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -3341,7 +3344,10 @@ class WeaponAttackController {
         weaponData: foundry.utils.deepClone(request?.source?.weaponData ?? weaponDataSnapshot)
       }
     }));
-    this.criticalDamageUsed ||= sourceRequests.some(request => request?.source?.criticalSuccess === true);
+    this.criticalDamageUsed ||= sourceRequests.some(request => (
+      request?.source?.criticalSuccess === true
+      || request?.source?.criticalDamageUsed === true
+    ));
     return sourceRequests;
   }
 
@@ -3600,7 +3606,7 @@ class WeaponAttackController {
           if (recipient?.actor === target.actor && selectedLimbKey) return selectedLimbKey;
           return selectRandomLimbKey(recipient?.actor, { includeDestroyed: true });
         },
-        buildDamageRequests: ({
+        buildDamageRequests: async ({
           recipient,
           amount,
           limbKey,
@@ -3618,13 +3624,28 @@ class WeaponAttackController {
           });
           let resolvedAmount = applyContextualDamageToAmount(this.weapon, amount, damageContext);
           resolvedAmount = applyRicochetDamageBonus(this.weapon, resolvedAmount, damageContext);
-          resolvedAmount = getCriticalDamageAmount(
-            this.weapon,
+          // Ability trials do not turn the generic `criticalSuccess` result
+          // into weapon critical damage. Preserve the ordinary non-critical
+          // bonuses (including stealth), then apply only the property attached
+          // to this exact outcome.
+          resolvedAmount = applyCriticalDamageSnapshot(
             resolvedAmount,
-            resolvedEntry.check,
-            this.weaponFunctionId,
-            damageContext
+            getCriticalDamageSnapshot(
+              this.weapon,
+              null,
+              this.weaponFunctionId,
+              damageContext
+            )
           );
+          const criticalDamage = await resolveAttackTrialOutcomeCriticalDamage({
+            amount: resolvedAmount,
+            specialProperties: settings.specialProperties,
+            entry: resolvedEntry,
+            recipient,
+            sourceActor: this.token.actor,
+            evaluateFormula: evaluateAbilityAttackFormula
+          });
+          resolvedAmount = criticalDamage.amount;
           return buildWeaponDamageRequests(this.weapon, {
             attackerActor: this.token.actor,
             attackerToken: this.token,
@@ -3641,7 +3662,9 @@ class WeaponAttackController {
               actionKey: this.actionKey,
               attackerUuid: this.token.actor.uuid,
               tokenId: this.token.id,
-              criticalSuccess: isCriticalSuccessAttack(resolvedEntry.check),
+              criticalSuccess: false,
+              criticalDamageUsed: criticalDamage.applied,
+              abilityCriticalDamagePercent: criticalDamage.percent,
               penetrationStep: Math.max(0, toInteger(penetrationStep)),
               reflectionCount: Math.max(0, toInteger(reflectionCount)),
               abilityTrialId: resolvedEntry.trialId,

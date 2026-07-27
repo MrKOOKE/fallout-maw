@@ -75,12 +75,24 @@ export const ABILITY_TRIAL_LINK_MODES = Object.freeze({
   perSubject: "perSubject"
 });
 
+export const ABILITY_TRIAL_LINK_KINDS = Object.freeze({
+  construct: "construct",
+  primaryChanges: "primaryChanges",
+  primaryChangesPercent: "primaryChangesPercent"
+});
+
 export const ABILITY_TRIAL_RESULT_KEYS = Object.freeze([
   "criticalFailure",
   "failure",
   "success",
   "criticalSuccess"
 ]);
+
+export const ABILITY_TRIAL_BRANCH_FLOWS = Object.freeze({
+  continue: "continue",
+  stopSubject: "stopSubject",
+  stopAll: "stopAll"
+});
 
 /** Formula context used by constructor actions which operate on a route. */
 export const ABILITY_ACTION_ROUTE_EVALUATION_MODES = Object.freeze({
@@ -566,11 +578,17 @@ export function normalizeAbilityConstruct(value = {}) {
   const damageSource = value?.damage && typeof value.damage === "object"
     ? value.damage
     : value;
+  const legacyDamageFormula = damageSource?.damageFormula ?? value?.damageFormula;
   const damageAmountMode = Object.values(ABILITY_DAMAGE_AMOUNT_MODES).includes(damageSource?.amountMode)
     ? damageSource.amountMode
-    : ABILITY_DAMAGE_AMOUNT_MODES.base;
-  const damageLimbMode = Object.values(ABILITY_DAMAGE_LIMB_MODES).includes(damageSource?.limbMode)
-    ? damageSource.limbMode
+    : legacyDamageFormula !== undefined
+      ? ABILITY_DAMAGE_AMOUNT_MODES.formula
+      : ABILITY_DAMAGE_AMOUNT_MODES.base;
+  const requestedLimbMode = damageSource?.limbMode ?? damageSource?.damageLimbMode ?? value?.damageLimbMode;
+  const damageLimbMode = Object.values(ABILITY_DAMAGE_LIMB_MODES).includes(requestedLimbMode)
+    ? requestedLimbMode
+    : requestedLimbMode === "critical"
+      ? ABILITY_DAMAGE_LIMB_MODES.randomCritical
     : ABILITY_DAMAGE_LIMB_MODES.random;
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
@@ -588,12 +606,16 @@ export function normalizeAbilityConstruct(value = {}) {
     damage: type === ABILITY_CONSTRUCT_TYPES.damage
       ? {
         amountMode: damageAmountMode,
-        formula: normalizeFormulaText(damageSource?.formula, "0"),
+        formula: normalizeFormulaText(damageSource?.formula ?? legacyDamageFormula, "0"),
+        damageTypeKey: String(
+          damageSource?.damageTypeKey ?? value?.damageTypeKey ?? ""
+        ).trim(),
         limbMode: damageLimbMode
       }
       : {
         amountMode: ABILITY_DAMAGE_AMOUNT_MODES.base,
         formula: "0",
+        damageTypeKey: "",
         limbMode: ABILITY_DAMAGE_LIMB_MODES.random
       }
   };
@@ -624,14 +646,58 @@ function normalizeAbilityTrialLink(value = {}) {
     : recipient === ABILITY_TRIAL_LINK_RECIPIENTS.source
       ? ABILITY_TRIAL_LINK_MODES.once
       : ABILITY_TRIAL_LINK_MODES.perSubject;
+  const constructId = String(value?.constructId ?? "").trim();
+  const kind = Object.values(ABILITY_TRIAL_LINK_KINDS).includes(value?.kind)
+    ? value.kind
+    : ABILITY_TRIAL_LINK_KINDS.construct;
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
-    constructId: String(value?.constructId ?? "").trim(),
+    kind,
+    constructId: kind === ABILITY_TRIAL_LINK_KINDS.construct ? constructId : "",
+    percentFormula: normalizeFormulaText(value?.percentFormula, "100"),
     recipient,
     mode: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.subjects
       ? ABILITY_TRIAL_LINK_MODES.perSubject
       : mode
   };
+}
+
+export function normalizeAbilityTrialBranch(value = {}, {
+  fallbackId = "",
+  fallbackName = "Ветка испытания"
+} = {}) {
+  const links = Array.isArray(value?.links)
+    ? value.links
+    : Object.values(value?.links ?? {});
+  const flow = Object.values(ABILITY_TRIAL_BRANCH_FLOWS).includes(value?.flow)
+    ? value.flow
+    : ABILITY_TRIAL_BRANCH_FLOWS.continue;
+  return {
+    id: String(value?.id ?? "").trim()
+      || String(fallbackId ?? "").trim()
+      || foundry.utils.randomID(),
+    name: String(value?.name ?? "").trim() || fallbackName,
+    resultKeys: normalizeStringList(value?.resultKeys)
+      .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key)),
+    flow,
+    links: links.map(link => normalizeAbilityTrialLink(link))
+  };
+}
+
+export function createAbilityTrialBranch({
+  id = "",
+  name = "Ветка испытания",
+  resultKeys = [],
+  flow = ABILITY_TRIAL_BRANCH_FLOWS.continue,
+  links = []
+} = {}) {
+  return normalizeAbilityTrialBranch({
+    id: String(id ?? "").trim() || foundry.utils.randomID(),
+    name,
+    resultKeys,
+    flow,
+    links
+  });
 }
 
 export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChanges, options = {}) {
@@ -687,6 +753,9 @@ export function createAbilityCondition(type = ABILITY_CONDITION_TYPES.healthPerc
   return normalizeAbilityCondition({
     id: foundry.utils.randomID(),
     groupId: "",
+    ...(data.type === ABILITY_CONDITION_TYPES.trial ? {
+      trialRoutesPrimaryChanges: true
+    } : {}),
     ...data
   });
 }
@@ -799,6 +868,7 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   const changes = isLegacy
     ? legacyFunctionToChanges(value)
     : normalizeAbilityChanges(value?.changes ?? value?.effects);
+  conditions = finalizeTrialPrimaryChangeCompatibility(conditions, changes);
   const penalties = normalizeAbilityChanges(value?.penalties);
   const legacyActiveDuration = type === ABILITY_FUNCTION_TYPES.activeApplication
     ? Math.max(0, toInteger(value?.activeSettings?.durationSeconds ?? value?.settings?.durationSeconds ?? 0))
@@ -840,6 +910,26 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   };
 }
 
+function finalizeTrialPrimaryChangeCompatibility(conditions = [], changes = []) {
+  const hasPrimaryChanges = (changes ?? []).some(change => (
+    String(change?.key ?? "").trim() && String(change?.value ?? "") !== ""
+  ));
+  return conditions.map(condition => {
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial) return condition;
+    const shouldMigrate = condition._migrateEmptyTrialToPrimaryChanges === true
+      && hasPrimaryChanges
+      && condition.trialBranches?.length === 1
+      && !(condition.trialBranches[0]?.links?.length);
+    delete condition._migrateEmptyTrialToPrimaryChanges;
+    if (!shouldMigrate) return condition;
+    condition.trialRoutesPrimaryChanges = true;
+    condition.trialBranches[0].links = [createAbilityTrialLink({
+      kind: ABILITY_TRIAL_LINK_KINDS.primaryChanges
+    })];
+    return condition;
+  });
+}
+
 export function createAbilityConstruct(type = ABILITY_CONSTRUCT_TYPES.temporaryEffect) {
   return normalizeAbilityConstruct({
     id: foundry.utils.randomID(),
@@ -851,6 +941,7 @@ export function createAbilityConstruct(type = ABILITY_CONSTRUCT_TYPES.temporaryE
     damage: {
       amountMode: ABILITY_DAMAGE_AMOUNT_MODES.base,
       formula: "0",
+      damageTypeKey: "",
       limbMode: ABILITY_DAMAGE_LIMB_MODES.random
     }
   });
@@ -872,12 +963,20 @@ export function createAbilityTrialEntry() {
   });
 }
 
-export function createAbilityTrialLink() {
+export function createAbilityTrialLink({
+  kind = ABILITY_TRIAL_LINK_KINDS.construct,
+  constructId = "",
+  percentFormula = "100",
+  recipient = ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+  mode = ABILITY_TRIAL_LINK_MODES.perSubject
+} = {}) {
   return normalizeAbilityTrialLink({
     id: foundry.utils.randomID(),
-    constructId: "",
-    recipient: ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
-    mode: ABILITY_TRIAL_LINK_MODES.perSubject
+    kind,
+    constructId,
+    percentFormula,
+    recipient,
+    mode
   });
 }
 
@@ -1522,11 +1621,73 @@ export function normalizeAbilityCondition(value = {}) {
     const entries = Array.isArray(value?.trialEntries)
       ? value.trialEntries
       : Object.values(value?.trialEntries ?? {});
-    const links = Array.isArray(value?.trialLinks)
-      ? value.trialLinks
-      : Object.values(value?.trialLinks ?? {});
-    const resultKeys = normalizeStringList(value?.trialResultKeys)
-      .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
+    const hasPrimaryRoutingMarker = Object.prototype.hasOwnProperty.call(
+      value ?? {},
+      "trialRoutesPrimaryChanges"
+    );
+    const hasCanonicalBranches = Object.prototype.hasOwnProperty.call(value ?? {}, "trialBranches");
+    const hasLegacyOutcome = Object.prototype.hasOwnProperty.call(value ?? {}, "trialResultKeys")
+      || Object.prototype.hasOwnProperty.call(value ?? {}, "trialLinks");
+    let trialBranches;
+    if (hasCanonicalBranches) {
+      const rawBranches = Array.isArray(value?.trialBranches)
+        ? value.trialBranches
+        : Object.values(value?.trialBranches ?? {});
+      const claimedResultKeys = new Set();
+      trialBranches = rawBranches.map((branch, branchIndex) => {
+        const normalized = normalizeAbilityTrialBranch(branch, {
+          fallbackId: `${id}-branch-${branchIndex + 1}`,
+          fallbackName: `Ветка ${branchIndex + 1}`
+        });
+        normalized.resultKeys = normalized.resultKeys.filter(resultKey => {
+          if (claimedResultKeys.has(resultKey)) return false;
+          claimedResultKeys.add(resultKey);
+          return true;
+        });
+        return normalized;
+      });
+    } else if (hasLegacyOutcome) {
+      const links = Array.isArray(value?.trialLinks)
+        ? value.trialLinks
+        : Object.values(value?.trialLinks ?? {});
+      const resultKeys = normalizeStringList(value?.trialResultKeys)
+        .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
+      trialBranches = [normalizeAbilityTrialBranch({
+        id: `${id}-legacy-branch`,
+        name: "Подходящий результат",
+        resultKeys: resultKeys.length ? resultKeys : ["criticalFailure", "failure"],
+        flow: ABILITY_TRIAL_BRANCH_FLOWS.continue,
+        links
+      })];
+    } else {
+      const labels = {
+        criticalFailure: "Критический провал",
+        failure: "Провал",
+        success: "Успех",
+        criticalSuccess: "Критический успех"
+      };
+      trialBranches = ABILITY_TRIAL_RESULT_KEYS.map(resultKey => normalizeAbilityTrialBranch({
+        id: `${id}-${resultKey}`,
+        name: labels[resultKey],
+        resultKeys: [resultKey],
+        flow: ABILITY_TRIAL_BRANCH_FLOWS.continue,
+        links: normalizeBoolean(value?.trialRoutesPrimaryChanges, false)
+          && ["criticalFailure", "failure"].includes(resultKey)
+          ? [{
+            id: `${id}-${resultKey}-primary-changes`,
+            kind: ABILITY_TRIAL_LINK_KINDS.primaryChanges,
+            recipient: ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+            mode: ABILITY_TRIAL_LINK_MODES.perSubject
+          }]
+          : []
+      }));
+    }
+    const hasPrimaryChangeLink = trialBranches.some(branch => (
+      (branch?.links ?? []).some(link => [
+        ABILITY_TRIAL_LINK_KINDS.primaryChanges,
+        ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent
+      ].includes(link?.kind))
+    ));
     return {
       id,
       groupId: "",
@@ -1539,8 +1700,12 @@ export function normalizeAbilityCondition(value = {}) {
         ? value.trialSelectionMode
         : ABILITY_TRIAL_SELECTION_MODES.best,
       trialDifficultyFormula: normalizeFormulaText(value?.trialDifficultyFormula ?? value?.difficultyFormula, "0"),
-      trialResultKeys: resultKeys.length ? resultKeys : ["criticalFailure", "failure"],
-      trialLinks: links.map(link => normalizeAbilityTrialLink(link))
+      trialRoutesPrimaryChanges: normalizeBoolean(value?.trialRoutesPrimaryChanges, false)
+        || hasPrimaryChangeLink,
+      trialBranches,
+      ...(!hasPrimaryRoutingMarker && trialBranches.length === 1 && !trialBranches[0]?.links?.length
+        ? { _migrateEmptyTrialToPrimaryChanges: true }
+        : {})
     };
   }
 

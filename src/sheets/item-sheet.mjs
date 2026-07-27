@@ -32,6 +32,7 @@ import {
   getWeaponSpecialPropertyType,
   normalizeWeaponSpecialProperties,
   normalizeWeaponAttackPowerData,
+  normalizeWeaponCriticalDamageData,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
@@ -68,6 +69,7 @@ import {
   ABILITY_CONDITION_TYPES,
   ABILITY_CONSTRUCT_TYPES,
   ABILITY_DAMAGE_AMOUNT_MODES,
+  ABILITY_DAMAGE_LIMB_MODES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
@@ -77,6 +79,8 @@ import {
   ABILITY_HEALTH_TARGETS,
   ABILITY_POSTURE_ACTIONS,
   ABILITY_POSTURE_SUBJECTS,
+  ABILITY_TRIAL_BRANCH_FLOWS,
+  ABILITY_TRIAL_LINK_KINDS,
   ABILITY_TRIAL_LINK_MODES,
   ABILITY_TRIAL_LINK_RECIPIENTS,
   ABILITY_TRIAL_RESULT_KEYS,
@@ -88,9 +92,11 @@ import {
   createAbilityConstruct,
   createAbilityConstructResource,
   createAbilityFunction,
+  createAbilityTrialBranch,
   createAbilityTrialEntry,
   createAbilityTrialLink,
   createAttackActionSettings,
+  getAbilityFunctionEffectDurationSeconds,
   normalizeActiveApplicationSettings,
   normalizeActiveApplicationCost,
   normalizeAttackActionSettings,
@@ -1087,6 +1093,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-ability-trial-entry]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityTrialEntry(event));
     });
+    this.element?.querySelectorAll("[data-add-ability-trial-branch]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityTrialBranch(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-trial-branch]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityTrialBranch(event));
+    });
     this.element?.querySelectorAll("[data-add-ability-trial-link]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityTrialLink(event));
     });
@@ -1095,6 +1107,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-ability-trial-link-recipient]").forEach(select => {
       this.#addHandledFormChangeListener(select, event => this.#onAbilityConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll("[data-ability-trial-branch-result-key]").forEach(input => {
+      this.#addHandledFormChangeListener(input, event => this.#onAbilityConditionTypeChange(event));
     });
     this.element?.querySelectorAll("[data-add-ability-construct]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityConstruct(event));
@@ -3082,7 +3097,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         delete change.accumulatorExchange;
       }
     }
-    return this.#submitCurrentForm({ [functionPath]: functions });
+    const update = { [functionPath]: functions };
+    if (removed?.type === ABILITY_CONDITION_TYPES.trial) {
+      const candidates = new Set((removed.trialBranches ?? [])
+        .flatMap(branch => branch?.links ?? [])
+        .map(link => String(link?.constructId ?? ""))
+        .filter(Boolean));
+      update["system.constructs"] = this.#getSubmittedAbilityConstructs()
+        .filter(construct => (
+          !candidates.has(String(construct?.id ?? ""))
+          || isAbilityConstructLinkedInFunctions(functions, construct?.id)
+        ));
+    }
+    return this.#submitCurrentForm(update);
   }
 
   #onAddAbilityTrialEntry(event) {
@@ -3106,21 +3133,75 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
-  #onAddAbilityTrialLink(event) {
+  #onAddAbilityTrialBranch(event) {
     event.preventDefault();
     const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
     if (condition?.type !== ABILITY_CONDITION_TYPES.trial) return undefined;
+    condition.trialBranches ??= [];
+    condition.trialBranches.push(createAbilityTrialBranch({
+      name: `Ветка ${condition.trialBranches.length + 1}`,
+      resultKeys: []
+    }));
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityTrialBranch(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const branchIndex = Number(
+      event.currentTarget?.closest?.("[data-ability-trial-branch-row]")?.dataset.trialBranchIndex ?? -1
+    );
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial || branchIndex < 0) return undefined;
+    const [removed] = condition.trialBranches?.splice(branchIndex, 1) ?? [];
+    const candidates = new Set((removed?.links ?? [])
+      .map(link => String(link?.constructId ?? ""))
+      .filter(Boolean));
+    const constructs = this.#getSubmittedAbilityConstructs();
+    const nextConstructs = constructs.filter(construct => (
+      !candidates.has(String(construct?.id ?? ""))
+      || isAbilityConstructLinkedInFunctions(functions, construct?.id)
+    ));
+    return this.#submitCurrentForm({
+      [functionPath]: functions,
+      "system.constructs": nextConstructs
+    });
+  }
+
+  #onAddAbilityTrialLink(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const branchIndex = Number(
+      event.currentTarget?.closest?.("[data-ability-trial-branch-row]")?.dataset.trialBranchIndex ?? -1
+    );
+    const branch = condition?.trialBranches?.[branchIndex];
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial || !branch) return undefined;
+    const requestedKind = String(event.currentTarget?.dataset.trialLinkKind ?? "");
+    if ([
+      ABILITY_TRIAL_LINK_KINDS.primaryChanges,
+      ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent
+    ].includes(requestedKind)) {
+      condition.trialRoutesPrimaryChanges = true;
+      branch.links ??= [];
+      branch.links.push(createAbilityTrialLink({
+        kind: requestedKind,
+        percentFormula: "100"
+      }));
+      return this.#submitCurrentForm({ [functionPath]: functions });
+    }
     const requested = String(event.currentTarget?.dataset.constructType ?? "");
     const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
       ? requested
       : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
     const constructs = this.#getSubmittedAbilityConstructs();
-    const construct = createAbilityConstruct(type);
+    const construct = prepareNewItemOrdinaryTrialConstruct(createAbilityConstruct(type));
     constructs.push(construct);
-    const link = createAbilityTrialLink();
+    const link = createAbilityTrialLink({
+      kind: ABILITY_TRIAL_LINK_KINDS.construct
+    });
     link.constructId = construct.id;
-    condition.trialLinks ??= [];
-    condition.trialLinks.push(link);
+    branch.links ??= [];
+    branch.links.push(link);
     return this.#submitCurrentForm({
       [functionPath]: functions,
       "system.constructs": constructs
@@ -3131,11 +3212,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     event.stopPropagation();
     const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const branchIndex = Number(
+      event.currentTarget?.closest?.("[data-ability-trial-branch-row]")?.dataset.trialBranchIndex ?? -1
+    );
     const linkIndex = Number(
       event.currentTarget?.closest?.("[data-ability-trial-link-row]")?.dataset.trialLinkIndex ?? -1
     );
-    if (condition?.type !== ABILITY_CONDITION_TYPES.trial || linkIndex < 0) return undefined;
-    const [removed] = condition.trialLinks?.splice(linkIndex, 1) ?? [];
+    const branch = condition?.trialBranches?.[branchIndex];
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial || !branch || linkIndex < 0) return undefined;
+    const [removed] = branch.links?.splice(linkIndex, 1) ?? [];
     const constructId = String(removed?.constructId ?? "");
     const constructs = this.#getSubmittedAbilityConstructs();
     const nextConstructs = constructId && !isAbilityConstructLinkedInFunctions(functions, constructId)
@@ -3172,8 +3257,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     for (const abilityFunction of functions) {
       for (const condition of abilityFunction.conditions ?? []) {
         if (condition?.type !== ABILITY_CONDITION_TYPES.trial) continue;
-        condition.trialLinks = (condition.trialLinks ?? [])
-          .filter(link => link?.constructId !== removedId);
+        for (const branch of condition.trialBranches ?? []) {
+          branch.links = (branch.links ?? [])
+            .filter(link => link?.constructId !== removedId);
+        }
       }
     }
     return this.#submitCurrentForm({
@@ -3840,6 +3927,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       foundry.utils.getProperty(submitData, "system.constructs")
       ?? this.item.system?.constructs
       ?? []
+    );
+  }
+
+  #getSubmittedAttackActionSettings(path = "") {
+    const current = foundry.utils.getProperty(this.item, path) ?? {};
+    if (!this.form) return normalizeAttackActionSettings(current);
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeAttackActionSettings(
+      foundry.utils.getProperty(submitData, path) ?? current
     );
   }
 
@@ -4998,10 +5095,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
+    if (isAttackActionSettingsSection(section)) {
+      const settings = this.#getSubmittedAttackActionSettings(path);
+      settings.specialProperties.push(createDefaultWeaponSpecialPropertyData());
+      return this.#submitCurrentForm({ [path]: settings });
+    }
     const source = foundry.utils.getProperty(this.item, path) ?? {};
-    const properties = isAttackActionSettingsSection(section)
-      ? foundry.utils.deepClone(normalizeAttackActionSettings(source).specialProperties)
-      : normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
+    const properties = normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
     properties.push(createDefaultWeaponSpecialPropertyData());
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -5020,10 +5120,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const type = String(event.currentTarget?.value ?? "").trim();
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
+    if (isAttackActionSettingsSection(section)) {
+      const settings = this.#getSubmittedAttackActionSettings(path);
+      settings.specialProperties[index] = createDefaultWeaponSpecialPropertyData(
+        type,
+        settings.specialProperties[index]
+      );
+      return this.#submitCurrentForm({ [path]: settings });
+    }
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
-    const properties = isAttackActionSettingsSection(section)
-      ? foundry.utils.deepClone(normalizeAttackActionSettings(weaponData).specialProperties)
-      : normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
+    const properties = normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
     properties[index] = createDefaultWeaponSpecialPropertyData(type, properties[index]);
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -5034,10 +5140,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!Number.isInteger(index) || index < 0) return undefined;
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
+    if (isAttackActionSettingsSection(section)) {
+      const settings = this.#getSubmittedAttackActionSettings(path);
+      settings.specialProperties.splice(index, 1);
+      return this.#submitCurrentForm({ [path]: settings });
+    }
     const source = foundry.utils.getProperty(this.item, path) ?? {};
-    const properties = isAttackActionSettingsSection(section)
-      ? foundry.utils.deepClone(normalizeAttackActionSettings(source).specialProperties)
-      : normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
+    const properties = normalizeWeaponSpecialProperties(source?.specialProperties ?? []);
     properties.splice(index, 1);
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -7720,15 +7829,11 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
       conditionIndex: index
     }),
     trialSelectionModeChoices: buildItemTrialSelectionModeChoices(condition?.trialSelectionMode),
-    trialResultChoices: buildItemTrialResultChoices(condition?.trialResultKeys, {
+    trialBranchRows: buildItemTrialBranchRows(condition?.trialBranches, constructs, {
       functionPath,
       functionIndex,
-      conditionIndex: index
-    }),
-    trialLinkRows: buildItemTrialLinkRows(condition?.trialLinks, constructs, {
-      functionPath,
-      functionIndex,
-      conditionIndex: index
+      conditionIndex: index,
+      abilityFunction
     }),
     hasTrialConstructs: Boolean(constructs.length),
     isAura,
@@ -8270,9 +8375,25 @@ function prepareItemAbilityConstructForDisplay(construct, index) {
       isFormula: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.formula,
       isPercent: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.percent,
       amountModeChoices: buildItemAttackDamageAmountModeChoices(damageAmountMode),
-      limbModeChoices: buildItemAttackDamageLimbModeChoices(normalized.damage?.limbMode)
+      damageTypeChoices: buildItemAbilityDamageTypeChoices(normalized.damage?.damageTypeKey),
+      limbModeChoices: buildItemAttackDamageLimbModeChoices(normalized.damage?.limbMode),
+      ordinaryLimbModeChoices: buildItemAttackDamageLimbModeChoices(normalized.damage?.limbMode)
+        .filter(choice => choice.value !== ABILITY_DAMAGE_LIMB_MODES.selected)
     }
   };
+}
+
+function buildItemAbilityDamageTypeChoices(selected = "") {
+  const key = String(selected ?? "").trim();
+  const damageTypes = [...getConfigurableDamageTypes(getDamageTypeSettings())];
+  if (key && !damageTypes.some(damageType => damageType.key === key)) {
+    damageTypes.push({ key, label: `${key} — тип не найден` });
+  }
+  return damageTypes.map(damageType => ({
+    value: damageType.key,
+    label: damageType.label || damageType.key,
+    selected: damageType.key === key
+  }));
 }
 
 function buildItemTrialSubjectChoices(selected = ABILITY_TRIAL_SUBJECTS.targets) {
@@ -8303,39 +8424,70 @@ function buildItemTrialSelectionModeChoices(selected = ABILITY_TRIAL_SELECTION_M
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
-function buildItemTrialResultChoices(value = [], {
+function buildItemTrialBranchRows(value = [], constructs = [], {
   functionPath = "system.functions",
   functionIndex = 0,
-  conditionIndex = 0
+  conditionIndex = 0,
+  abilityFunction = null
 } = {}) {
-  const selected = new Set(normalizeAbilityConditionValues(value));
+  const branches = Array.isArray(value) ? value : Object.values(value ?? {});
+  const branchesPath = `${functionPath}.${functionIndex}.conditions.${conditionIndex}.trialBranches`;
+  const linkContext = {
+    primaryChangeCount: (abilityFunction?.changes ?? []).length,
+    primaryDurationSeconds: getAbilityFunctionEffectDurationSeconds(abilityFunction)
+  };
   const labels = {
     criticalFailure: "Критический провал",
     failure: "Провал",
     success: "Успех",
     criticalSuccess: "Критический успех"
   };
-  return ABILITY_TRIAL_RESULT_KEYS.map(resultKey => ({
-    value: resultKey,
-    label: labels[resultKey] ?? resultKey,
-    checked: selected.has(resultKey),
-    name: `${functionPath}.${functionIndex}.conditions.${conditionIndex}.trialResultKeys.${resultKey}`
-  }));
+  return branches.map((branch, index) => {
+    const selected = new Set(normalizeAbilityConditionValues(branch?.resultKeys));
+    const claimedElsewhere = new Set(branches.flatMap((candidate, candidateIndex) => (
+      candidateIndex === index ? [] : normalizeAbilityConditionValues(candidate?.resultKeys)
+    )));
+    const basePath = `${branchesPath}.${index}`;
+    return {
+      ...branch,
+      index,
+      basePath,
+      consequenceCount: (branch?.links ?? []).length,
+      resultChoices: ABILITY_TRIAL_RESULT_KEYS.map(resultKey => ({
+        value: resultKey,
+        label: labels[resultKey] ?? resultKey,
+        checked: selected.has(resultKey),
+        disabled: !selected.has(resultKey) && claimedElsewhere.has(resultKey)
+      })),
+      flowChoices: [
+        { value: ABILITY_TRIAL_BRANCH_FLOWS.continue, label: "Продолжить цепочку" },
+        { value: ABILITY_TRIAL_BRANCH_FLOWS.stopSubject, label: "Остановить для участников ветки" },
+        { value: ABILITY_TRIAL_BRANCH_FLOWS.stopAll, label: "Остановить всю цепочку" }
+      ].map(choice => ({ ...choice, selected: choice.value === branch?.flow })),
+      links: buildItemTrialLinkRows(branch?.links, constructs, `${basePath}.links`, linkContext)
+    };
+  });
 }
 
-function buildItemTrialLinkRows(value = [], constructs = [], {
-  functionPath = "system.functions",
-  functionIndex = 0,
-  conditionIndex = 0
+function buildItemTrialLinkRows(value = [], constructs = [], basePath = "", {
+  primaryChangeCount = 0,
+  primaryDurationSeconds = 0
 } = {}) {
   const normalizedConstructs = normalizeAbilityConstructs(constructs);
-  const basePath = `${functionPath}.${functionIndex}.conditions.${conditionIndex}.trialLinks`;
   return (Array.isArray(value) ? value : Object.values(value ?? {})).map((link, index) => {
+    const kind = Object.values(ABILITY_TRIAL_LINK_KINDS).includes(link?.kind)
+      ? link.kind
+      : ABILITY_TRIAL_LINK_KINDS.construct;
+    const isPrimaryChanges = kind === ABILITY_TRIAL_LINK_KINDS.primaryChanges;
+    const isPrimaryChangesPercent = kind === ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent;
+    const isConstruct = kind === ABILITY_TRIAL_LINK_KINDS.construct;
     const recipient = Object.values(ABILITY_TRIAL_LINK_RECIPIENTS).includes(link?.recipient)
       ? link.recipient
       : ABILITY_TRIAL_LINK_RECIPIENTS.subjects;
     const constructId = String(link?.constructId ?? "");
-    const constructIndex = normalizedConstructs.findIndex(construct => construct.id === constructId);
+    const constructIndex = isConstruct
+      ? normalizedConstructs.findIndex(construct => construct.id === constructId)
+      : -1;
     const construct = constructIndex >= 0
       ? prepareItemAbilityConstructForDisplay(normalizedConstructs[constructIndex], constructIndex)
       : null;
@@ -8363,17 +8515,36 @@ function buildItemTrialLinkRows(value = [], constructs = [], {
       hasConstruct: Boolean(construct),
       constructChoices,
       recipientChoices: [
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: "Прошедшие результат испытания" },
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: "Владелец способности" }
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: "Участники этой ветки" },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: "Владелец способности" },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.targets, label: "Все цели функции" }
       ].map(choice => ({ ...choice, selected: choice.value === recipient })),
-      modeChoices: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.subjects
-        ? [{ value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "Каждому подходящему участнику", selected: true }]
+      modeChoices: recipient !== ABILITY_TRIAL_LINK_RECIPIENTS.source
+        ? [{
+            value: ABILITY_TRIAL_LINK_MODES.perSubject,
+            label: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.targets
+              ? "Каждой цели функции"
+              : "Каждому участнику ветки",
+            selected: true
+          }]
         : [
-            { value: ABILITY_TRIAL_LINK_MODES.once, label: "Один раз за испытание" },
-            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "За каждого подходящего участника" }
+            { value: ABILITY_TRIAL_LINK_MODES.once, label: "Один раз за ветку" },
+            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "За каждого участника ветки" }
           ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
     };
   });
+}
+
+function prepareNewItemOrdinaryTrialConstruct(construct = {}) {
+  if (construct?.type !== ABILITY_CONSTRUCT_TYPES.damage) return construct;
+  construct.damage = {
+    ...(construct.damage ?? {}),
+    amountMode: ABILITY_DAMAGE_AMOUNT_MODES.formula,
+    formula: "0",
+    damageTypeKey: getConfigurableDamageTypes(getDamageTypeSettings()).at(0)?.key
+      ?? "firearm"
+  };
+  return construct;
 }
 
 function isAbilityConstructLinkedInFunctions(functions = [], constructId = "") {
@@ -8382,7 +8553,9 @@ function isAbilityConstructLinkedInFunctions(functions = [], constructId = "") {
   return (functions ?? []).some(abilityFunction => (
     (abilityFunction?.conditions ?? []).some(condition => (
       condition?.type === ABILITY_CONDITION_TYPES.trial
-      && (condition?.trialLinks ?? []).some(link => String(link?.constructId ?? "") === id)
+      && (condition?.trialBranches ?? []).some(branch => (
+        (branch?.links ?? []).some(link => String(link?.constructId ?? "") === id)
+      ))
     ))
     || (abilityFunction?.attackSettings?.hitResolution?.trials ?? []).some(trial => (
       ATTACK_HIT_OUTCOME_KEYS.some(resultKey => (
@@ -9111,13 +9284,23 @@ function normalizeSubmittedAbilityTrialConditions(form = null, submitData = {}) 
     const typePath = String(typeInput.name ?? "");
     if (!typePath.endsWith(".type")) continue;
     const conditionPath = typePath.slice(0, -".type".length);
-    const resultKeys = Array.from(
-      row.querySelectorAll("input[type='checkbox'][data-ability-trial-result-key]") ?? []
-    )
-      .filter(input => input.checked)
-      .map(input => String(input.value ?? "").trim())
-      .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
-    foundry.utils.setProperty(submitData, `${conditionPath}.trialResultKeys`, resultKeys);
+    for (const branchRow of row.querySelectorAll("[data-ability-trial-branch-row]") ?? []) {
+      const branchIndex = Number(branchRow.dataset.trialBranchIndex ?? -1);
+      if (branchIndex < 0) continue;
+      const resultKeys = Array.from(
+        branchRow.querySelectorAll(
+          "input[type='checkbox'][data-ability-trial-branch-result-key]"
+        ) ?? []
+      )
+        .filter(input => input.checked)
+        .map(input => String(input.value ?? "").trim())
+        .filter(key => ABILITY_TRIAL_RESULT_KEYS.includes(key));
+      foundry.utils.setProperty(
+        submitData,
+        `${conditionPath}.trialBranches.${branchIndex}.resultKeys`,
+        resultKeys
+      );
+    }
   }
 }
 
@@ -9852,6 +10035,12 @@ function buildItemAttackHitOutcomeLinkRows(value = [], constructs = [], basePath
       ...link,
       index,
       basePath: `${basePath}.${index}`,
+      kind,
+      isPrimaryChanges,
+      isPrimaryChangesPercent,
+      isConstruct,
+      primaryChangeCount,
+      primaryDurationSeconds,
       construct,
       hasConstruct: Boolean(construct),
       recipientChoices: [
@@ -9891,11 +10080,30 @@ function buildAttackActionSpecialPropertyRows(settings = {}) {
   return properties.map((property, index) => {
     const type = getWeaponSpecialPropertyType(property);
     const normalizedPower = normalizeWeaponAttackPowerData(property?.attackPower);
+    const normalizedCriticalDamage = normalizeWeaponCriticalDamageData(
+      property?.criticalDamage
+    );
+    const usedCriticalOutcomeIds = new Set(properties
+      .filter((candidate, candidateIndex) => (
+        candidateIndex !== index
+        && getWeaponSpecialPropertyType(candidate) === WEAPON_SPECIAL_PROPERTIES.criticalDamage
+      ))
+      .map(candidate => normalizeWeaponCriticalDamageData(candidate?.criticalDamage).outcomeId)
+      .filter(Boolean));
     return {
       index,
       type,
-      choices: buildWeaponSpecialPropertyChoices(property, properties),
+      choices: buildAttackActionSpecialPropertyChoices(property, properties),
       isAttackPower: type === WEAPON_SPECIAL_PROPERTIES.attackPower,
+      isCriticalDamage: type === WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+      criticalDamage: {
+        ...normalizedCriticalDamage,
+        outcomeChoices: buildItemAttackCriticalDamageOutcomeChoices(
+          settings.hitResolution,
+          normalizedCriticalDamage.outcomeId,
+          usedCriticalOutcomeIds
+        )
+      },
       attackPower: {
         level: normalizedPower.level,
         perLevel: normalizedPower.perLevel,
@@ -9906,6 +10114,87 @@ function buildAttackActionSpecialPropertyRows(settings = {}) {
       }
     };
   });
+}
+
+function buildAttackActionSpecialPropertyChoices(selected, properties = []) {
+  const selectedType = getWeaponSpecialPropertyType(selected);
+  const usedTypes = new Set(properties.map(property => getWeaponSpecialPropertyType(property)));
+  return [
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.pending,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialPropertyChoose")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.attackPower,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+      label: "Критический урон по исходу"
+    }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selectedType,
+    disabled: Boolean(
+      choice.value !== WEAPON_SPECIAL_PROPERTIES.pending
+      && choice.value !== WEAPON_SPECIAL_PROPERTIES.criticalDamage
+      && choice.value !== selectedType
+      && usedTypes.has(choice.value)
+    )
+  }));
+}
+
+function buildItemAttackCriticalDamageOutcomeChoices(
+  hitResolution = {},
+  selected = "",
+  unavailableIds = new Set()
+) {
+  const selectedId = String(selected ?? "").trim();
+  const labels = {
+    criticalFailure: "Критический провал",
+    failure: "Провал",
+    success: "Успех",
+    criticalSuccess: "Критический успех"
+  };
+  const trials = Array.isArray(hitResolution?.trials)
+    ? hitResolution.trials
+    : Object.values(hitResolution?.trials ?? {});
+  const choices = trials.flatMap((trial, trialIndex) => (
+    ATTACK_HIT_OUTCOME_KEYS.map(resultKey => {
+      const value = String(trial?.outcomes?.[resultKey]?.id ?? "").trim();
+      return {
+        value,
+        label: `Испытание ${trialIndex + 1} — ${labels[resultKey] ?? resultKey}`,
+        selected: value === selectedId,
+        disabled: !value || (unavailableIds.has(value) && value !== selectedId)
+      };
+    })
+  )).filter(choice => choice.value);
+  if (selectedId && !choices.some(choice => choice.value === selectedId)) {
+    choices.push({
+      value: selectedId,
+      label: `${selectedId} — ветка не найдена`,
+      selected: true
+    });
+  }
+  if (choices.length) {
+    return [{
+      value: "",
+      label: "Выберите исход испытания",
+      selected: !selectedId,
+      disabled: true
+    }, ...choices];
+  }
+  return [{
+    value: "",
+    label: "Сначала добавьте испытание",
+    selected: true,
+    disabled: true
+  }];
 }
 
 function buildAttackActionAttackPowerResourceCostRows(baseCosts = [], configuredCosts = []) {

@@ -48,7 +48,8 @@ export const INSTALLED_MODULE_ITEM_ID_PREFIX = "installed-module:";
 export const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
   pending: "pending",
   hitAllConeTargets: "hitAllConeTargets",
-  attackPower: "attackPower"
+  attackPower: "attackPower",
+  criticalDamage: "criticalDamage"
 });
 
 const BROKEN_ITEM_FUNCTION_EXCEPTIONS = new Set([
@@ -256,6 +257,12 @@ export function createDefaultWeaponSpecialPropertyData(type = "", source = {}) {
       attackPower: normalizeWeaponAttackPowerData(current.attackPower)
     };
   }
+  if (propertyType === WEAPON_SPECIAL_PROPERTIES.criticalDamage) {
+    return {
+      type: propertyType,
+      criticalDamage: normalizeWeaponCriticalDamageData(current.criticalDamage)
+    };
+  }
   if (propertyType === WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets) return { type: propertyType };
   return { type: WEAPON_SPECIAL_PROPERTIES.pending };
 }
@@ -273,6 +280,11 @@ export function normalizeWeaponSpecialProperty(entry = null) {
   if (normalized.type === WEAPON_SPECIAL_PROPERTIES.attackPower) {
     normalized.attackPower = normalizeWeaponAttackPowerData(entry.attackPower ?? entry.power ?? {});
   }
+  if (normalized.type === WEAPON_SPECIAL_PROPERTIES.criticalDamage) {
+    normalized.criticalDamage = normalizeWeaponCriticalDamageData(
+      entry.criticalDamage ?? entry.critical ?? {}
+    );
+  }
   return normalized;
 }
 
@@ -280,6 +292,7 @@ export function normalizeWeaponSpecialPropertyType(type = "") {
   const key = String(type ?? "").trim();
   if (key === WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets) return key;
   if (key === WEAPON_SPECIAL_PROPERTIES.attackPower) return key;
+  if (key === WEAPON_SPECIAL_PROPERTIES.criticalDamage) return key;
   return WEAPON_SPECIAL_PROPERTIES.pending;
 }
 
@@ -331,6 +344,15 @@ export function normalizeWeaponAttackPowerData(source = {}) {
     level: { value, max },
     perLevel: normalizeWeaponAttackPowerPerLevelData(source?.perLevel ?? source),
     resourceCosts: normalizeWeaponAttackPowerResourceCosts(source?.resourceCosts)
+  };
+}
+
+export function normalizeWeaponCriticalDamageData(source = {}) {
+  return {
+    outcomeId: String(source?.outcomeId ?? "").trim(),
+    percentFormula: String(
+      source?.percentFormula ?? source?.formula ?? source?.percent ?? "150"
+    ).trim() || "150"
   };
 }
 

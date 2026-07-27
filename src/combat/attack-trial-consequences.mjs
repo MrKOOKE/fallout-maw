@@ -10,6 +10,7 @@ import { evaluateAttackTrialDifficulty } from "./attack-trial-resolution.mjs";
 
 const DAMAGE_SCOPE_HEALTH = "health";
 const DAMAGE_SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
+const CRITICAL_DAMAGE_SPECIAL_PROPERTY_TYPE = "criticalDamage";
 
 /**
  * Apply the consequence links of one resolved attack-trial entry.
@@ -104,6 +105,60 @@ export async function applyAttackTrialOutcomeConsequences({
     if (deduplicationSet instanceof Set) deduplicationSet.delete(resolvedKey);
     throw error;
   }
+}
+
+/**
+ * Apply the ability-only critical-damage property assigned to this exact
+ * outcome. A check result named `criticalSuccess` has no special meaning here:
+ * only the stable outcome id stored by the property can enable the multiplier.
+ * If old data contains duplicates, the first matching row wins rather than
+ * compounding an accidental duplicate.
+ */
+export async function resolveAttackTrialOutcomeCriticalDamage({
+  amount = 0,
+  specialProperties = [],
+  entry = {},
+  recipient = null,
+  sourceActor = null,
+  evaluateFormula = evaluateAttackDamageFormula
+} = {}) {
+  const baseAmount = normalizeDamageAmount(amount);
+  const outcomeId = String(entry?.outcomeId ?? entry?.outcome?.id ?? "").trim();
+  const property = outcomeId
+    ? (Array.isArray(specialProperties) ? specialProperties : []).find(candidate => (
+      String(candidate?.type ?? "").trim() === CRITICAL_DAMAGE_SPECIAL_PROPERTY_TYPE
+      && String(candidate?.criticalDamage?.outcomeId ?? "").trim() === outcomeId
+    ))
+    : null;
+  if (!property) {
+    return {
+      amount: baseAmount,
+      applied: false,
+      percent: 100,
+      outcomeId
+    };
+  }
+
+  const percentFormula = String(
+    property?.criticalDamage?.percentFormula ?? ""
+  ).trim() || "150";
+  const evaluatedPercent = await evaluateFormula(percentFormula, sourceActor, {
+    fallback: 100,
+    minimum: 0,
+    context: "attack trial critical damage percent",
+    targetActor: recipient?.actor ?? null,
+    subjectActor: entry?.actor ?? null
+  });
+  const numericPercent = Number(evaluatedPercent);
+  const percent = Number.isFinite(numericPercent)
+    ? Math.max(0, numericPercent)
+    : 100;
+  return {
+    amount: Math.max(0, Math.round(baseAmount * percent / 100)),
+    applied: true,
+    percent,
+    outcomeId
+  };
 }
 
 /**

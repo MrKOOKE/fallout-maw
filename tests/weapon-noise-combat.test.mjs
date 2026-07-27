@@ -39,10 +39,12 @@ test("an attempt is recorded only after the resource and action-cost path comple
     "async spendCurrentAttackCosts",
     "async executeAgainstToken"
   );
-  const spendAction = spend.indexOf("await spendWeaponActionPoints");
+  const spendResources = spend.indexOf("await spendWeaponResources");
+  const finalizeAction = spend.indexOf("await finalizeCommittedWeaponActionPointSpend");
   const attempted = spend.indexOf("this.weaponNoiseAttempted = weaponAttempted");
-  assert.ok(spendAction >= 0);
-  assert.ok(attempted > spendAction);
+  assert.ok(spendResources >= 0);
+  assert.ok(finalizeAction > spendResources);
+  assert.ok(attempted > finalizeAction);
   assert.match(spend, /const weaponAttempted = this\.shouldSpendWeaponResourcesForAttempt\(\)/);
 });
 

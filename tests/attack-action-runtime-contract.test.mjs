@@ -128,6 +128,26 @@ test("ability attack sources resolve without a synthetic weapon Item", () => {
   }]);
 });
 
+test("ability critical-damage properties survive runtime projection with their outcome identity", () => {
+  const projected = projectAbilityAttackData({
+    specialProperties: [{
+      type: "criticalDamage",
+      criticalDamage: {
+        outcomeId: "target-failure",
+        percentFormula: "150 + ene + @target.energy"
+      }
+    }]
+  });
+
+  assert.deepEqual(projected.specialProperties, [{
+    type: "criticalDamage",
+    criticalDamage: {
+      outcomeId: "target-failure",
+      percentFormula: "150 + ene + @target.energy"
+    }
+  }]);
+});
+
 test("area sequences use the configured exact count and per-attack difficulty", () => {
   const count = sliceBetween(
     controllerSource,
@@ -154,6 +174,36 @@ test("area sequences use the configured exact count and per-attack difficulty", 
   assert.match(duplicates, /getAbilityAttackSettings\(this\.weapon, this\.weaponFunctionId\)/);
   assert.match(duplicates, /duplicateCount:\s*0/);
   assert.match(duplicates, /totalAttackCount:\s*baseAttackCount/);
+});
+
+test("ability trial critical damage is outcome-bound without changing ordinary weapon criticals", () => {
+  const abilityTrialRuntime = sliceBetween(
+    controllerSource,
+    "async resolveAbilityTrialAttackAgainstTarget",
+    "hasRequiredWeaponResources(multiplier"
+  );
+  assert.match(abilityTrialRuntime, /resolveAttackTrialOutcomeCriticalDamage\(\{/);
+  assert.match(abilityTrialRuntime, /specialProperties:\s*settings\.specialProperties/);
+  assert.match(abilityTrialRuntime, /evaluateFormula:\s*evaluateAbilityAttackFormula/);
+  assert.match(abilityTrialRuntime, /criticalSuccess:\s*false/);
+  assert.match(abilityTrialRuntime, /criticalDamageUsed:\s*criticalDamage\.applied/);
+  assert.doesNotMatch(abilityTrialRuntime, /getCriticalDamageAmount\(/);
+
+  const tracker = sliceBetween(
+    controllerSource,
+    "stampAttackDamageSources(requests",
+    "createWeaponActionModifierContext"
+  );
+  assert.match(tracker, /source\?\.criticalDamageUsed === true/);
+
+  const ordinaryWeaponCritical = sliceBetween(
+    controllerSource,
+    "function getCriticalDamageSnapshot",
+    "function applyCriticalDamageSnapshot"
+  );
+  assert.match(ordinaryWeaponCritical, /isCriticalSuccessAttack\(outcome\)/);
+  assert.match(ordinaryWeaponCritical, /criticalDamagePercent/);
+  assert.match(ordinaryWeaponCritical, /getWeaponProficiencyInfluenceBonus\(weapon,\s*weaponFunctionId,\s*"criticalDamage"\)/);
 });
 
 test("HUD buttons and terminal ability dispatch include attack actions", () => {

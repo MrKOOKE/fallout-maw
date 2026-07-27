@@ -2,7 +2,8 @@ const ATTACK_ACTION_TARGETING_MODES = new Set(["cone", "selectedTargets", "area"
 const ATTACK_ACTION_SPECIAL_PROPERTY_TYPES = new Set([
   "pending",
   "hitAllConeTargets",
-  "attackPower"
+  "attackPower",
+  "criticalDamage"
 ]);
 
 export const ATTACK_ACTION_TRIAL_SUBJECTS = Object.freeze({
@@ -288,10 +289,27 @@ function normalizeSpecialProperty(value = {}) {
     : (isRecord(value) ? value : {});
   const rawType = normalizeText(source.type ?? source.property ?? source.key);
   const type = ATTACK_ACTION_SPECIAL_PROPERTY_TYPES.has(rawType) ? rawType : "pending";
+  if (type === "criticalDamage") {
+    return {
+      type,
+      criticalDamage: normalizeCriticalDamage(source.criticalDamage ?? source.critical)
+    };
+  }
   if (type !== "attackPower") return { type };
   return {
     type,
     attackPower: normalizeAttackPower(source.attackPower ?? source.power)
+  };
+}
+
+function normalizeCriticalDamage(value = {}) {
+  const source = isRecord(value) ? value : {};
+  return {
+    outcomeId: normalizeText(source.outcomeId),
+    percentFormula: normalizeFormula(
+      source.percentFormula ?? source.formula ?? source.percent,
+      "150"
+    )
   };
 }
 

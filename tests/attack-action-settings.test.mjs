@@ -24,6 +24,10 @@ const {
   createAttackActionTrialLink,
   createAttackActionTrialOutcome
 } = await import("../src/abilities/attack-action-settings.mjs");
+const {
+  WEAPON_SPECIAL_PROPERTIES,
+  createDefaultWeaponSpecialPropertyData
+} = await import("../src/utils/item-functions.mjs");
 
 test("attack action settings have constructor-safe defaults", () => {
   const settings = createAttackActionSettings();
@@ -166,6 +170,104 @@ test("actor costs, attack power, and critical consequences keep composite resour
     resourceKey: "reactionPoints",
     amount: 4
   }]);
+});
+
+test("critical damage properties preserve their stable outcome id and percent formula", () => {
+  const settings = normalizeAttackActionSettings({
+    specialProperties: [{
+      type: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+      criticalDamage: {
+        outcomeId: "trial-2-success",
+        percentFormula: "150 + @resources.energy.value / 2"
+      }
+    }]
+  });
+
+  assert.deepEqual(settings.specialProperties, [{
+    type: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+    criticalDamage: {
+      outcomeId: "trial-2-success",
+      percentFormula: "150 + @resources.energy.value / 2"
+    }
+  }]);
+  assert.deepEqual(
+    createDefaultWeaponSpecialPropertyData(WEAPON_SPECIAL_PROPERTIES.criticalDamage),
+    {
+      type: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+      criticalDamage: {
+        outcomeId: "",
+        percentFormula: "150"
+      }
+    }
+  );
+});
+
+test("adding a critical damage property preserves the complete attack settings block", () => {
+  const before = normalizeAttackActionSettings({
+    name: "Плазменная перегрузка",
+    damage: "50 + energy / 3",
+    pellets: "2",
+    criticalDamagePercent: "175",
+    maxRangeMeters: "10 + energy / 10",
+    effectiveRange: { value: "4", max: "9" },
+    penetration: "energy / 5",
+    targeting: {
+      mode: "selectedTargets",
+      targetLimitFormula: "1 + energy / 50",
+      aimed: true,
+      allowRepeatedTargets: false,
+      attackConeDegrees: 7
+    },
+    sequence: { count: 3, difficultyPerAttack: 8 },
+    area: {
+      damageRadius: "6",
+      regionRadius: "3",
+      regionDamageEntries: [{ damageTypeKey: "fire", amount: "12" }]
+    },
+    resourceCosts: [{
+      id: "energy-cost",
+      resourceKey: "energy",
+      formula: "60",
+      overloadAmount: 40,
+      overloadDurationSeconds: 3600
+    }],
+    hitResolution: {
+      trials: [{
+        id: "trial",
+        entries: [{ id: "entry", key: "fortitude" }],
+        outcomes: {
+          success: { id: "success-outcome", links: [] }
+        }
+      }]
+    },
+    specialProperties: [{
+      type: "attackPower",
+      attackPower: {
+        level: { value: 2, max: 4 },
+        perLevel: { criticalDamagePercent: 25 }
+      }
+    }]
+  });
+  const added = normalizeAttackActionSettings({
+    ...before,
+    specialProperties: [
+      ...before.specialProperties,
+      {
+        type: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+        criticalDamage: {
+          outcomeId: before.hitResolution.trials[0].outcomes.success.id,
+          percentFormula: "225"
+        }
+      }
+    ]
+  });
+  const { specialProperties: beforeProperties, ...beforeRest } = before;
+  const { specialProperties: addedProperties, ...addedRest } = added;
+
+  assert.deepEqual(addedRest, beforeRest);
+  assert.deepEqual(addedProperties[0], beforeProperties[0]);
+  assert.equal(addedProperties[1].criticalDamage.outcomeId, "success-outcome");
+  assert.equal(addedProperties[1].criticalDamage.percentFormula, "225");
 });
 
 test("only top-level attack functions retain attackSettings", () => {

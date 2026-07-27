@@ -1573,10 +1573,12 @@ async function executeActiveApplicationUse(scope, {
   }
   const requiresRemoteEffectAuthority = durationSeconds > 0
     && allowed.some(entry => !entry.target?.actor?.isOwner);
+  const requiresRemoteTrialAuthority = abilityFunctionHasTrialConsequences(abilityFunction)
+    && allowed.some(entry => !entry.target?.actor?.isOwner);
   const requiresRemoteCostAuthority = costPlanQuote.entries
     .some(entry => !entry.actor?.isOwner);
   const requiresRemoteAuthority = !game.user?.isGM
-    && (requiresRemoteEffectAuthority || requiresRemoteCostAuthority);
+    && (requiresRemoteEffectAuthority || requiresRemoteTrialAuthority || requiresRemoteCostAuthority);
   const remoteAuthority = requiresRemoteAuthority
     ? getActiveApplicationAuthorityGM({
       actorUuid: actor?.uuid ?? "",
@@ -1800,7 +1802,10 @@ async function executeActiveApplicationUse(scope, {
     ));
     if (!trialsAreDrivenByAura && !requiresRemoteAuthority) {
       await executeAbilityTrials({
-        abilityFunction,
+        abilityFunction: {
+          ...abilityFunction,
+          changes: changeSelection.changes
+        },
         constructs: normalizeAbilityConstructs(abilityItem.system?.constructs),
         sourceActor: actor,
         sourceToken,
@@ -1880,6 +1885,13 @@ async function gateActiveApplicationTargets(scope, {
     }
     if (
       durationSeconds > 0
+      && (
+        !abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction)
+        || abilityFunction.conditions?.some(condition => (
+          condition?.type === ABILITY_CONDITION_TYPES.aura
+          && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+        ))
+      )
       && !activeApplicationTargetsHaveEffectCopyCapacity(actor, abilityItem, abilityFunction, [target])
     ) {
       await emitActiveApplicationResolved(scope, entry, {
@@ -2223,14 +2235,12 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   costContext = null
 } = {}) {
   if (durationSeconds <= 0) return true;
-  if (!activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets)) {
-    throw new Error("Active application effect copy limit reached.");
-  }
   const startTime = Number(game.time?.worldTime) || 0;
   const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
   const selectedFunction = Array.isArray(selectedChanges)
     ? { ...abilityFunction, changes: selectedChanges }
     : abilityFunction;
+  const routesPrimaryChanges = abilityFunctionRoutesPrimaryChangesThroughTrials(selectedFunction);
   const chanceOperationId = [
     String(costContext?.rootId ?? chainRef?.rootId ?? "").trim(),
     String(costContext?.occurrenceId ?? "").trim()
@@ -2241,15 +2251,17 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     .filter(target => target?.actor)
     .map(target => ({
       target,
-      rawChanges: getActiveApplicationEffectChanges(
-        sourceActor,
-        abilityItem,
-        selectedFunction,
-        target,
-        sourceToken,
-        chanceOperationId
-      )
-        .filter(change => change?.key && String(change?.value ?? "") !== "")
+      rawChanges: routesPrimaryChanges
+        ? []
+        : getActiveApplicationEffectChanges(
+          sourceActor,
+          abilityItem,
+          selectedFunction,
+          target,
+          sourceToken,
+          chanceOperationId
+        )
+          .filter(change => change?.key && String(change?.value ?? "") !== "")
     }));
   if (settings.changeEvaluation === "source") {
     const snapshots = new Map();
@@ -2276,6 +2288,12 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
     && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
   ));
   const effectPlans = plans.filter(plan => plan.changes?.length || createsRuntimeAuraEffect);
+  if (
+    effectPlans.length
+    && !activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, targets)
+  ) {
+    throw new Error("Active application effect copy limit reached.");
+  }
   const effectCopyOptions = getActiveApplicationEffectCopyOptions(sourceActor);
   const effectCopyFlag = buildLimitedEffectCopyFlag({
     sourceActor,
@@ -2745,14 +2763,23 @@ async function processActiveApplicationEffectOperation(payload = {}) {
   const selected = new Set(selectedIds);
   const selectedChanges = available.filter(entry => selected.has(entry.id)).map(entry => entry.change);
   if (selectedChanges.length !== expectedCount) return false;
+  const selectedFunction = {
+    ...abilityFunction,
+    changes: selectedChanges
+  };
 
   const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const resolvedTargets = targetTokenDocuments.map(tokenDocument => ({
     token: tokenDocument.object ?? tokenDocument,
     actor: tokenDocument.actor
   }));
+  const createsRuntimeAuraEffect = abilityFunction.conditions?.some(condition => (
+    condition?.type === ABILITY_CONDITION_TYPES.aura
+    && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
+  ));
   if (
     durationSeconds > 0
+    && (!abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction) || createsRuntimeAuraEffect)
     && !activeApplicationTargetsHaveEffectCopyCapacity(sourceActor, abilityItem, abilityFunction, resolvedTargets)
   ) return false;
   let payment = null;
@@ -2802,7 +2829,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     ));
     if (!trialsAreDrivenByAura) {
       await executeAbilityTrials({
-        abilityFunction,
+        abilityFunction: selectedFunction,
         constructs: normalizeAbilityConstructs(abilityItem.system?.constructs),
         sourceActor,
         sourceToken,
@@ -2898,6 +2925,7 @@ function getActiveApplicationEffectChanges(
   sourceToken = null,
   chanceOperationId = ""
 ) {
+  if (abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction)) return [];
   const subjectActor = target.actor ?? sourceActor;
   const context = {
     abilityItemId: abilityItem.id,
@@ -2912,6 +2940,20 @@ function getActiveApplicationEffectChanges(
   return abilityConditionsApply(subjectActor, abilityFunction.conditions, context)
     ? abilityFunction.changes ?? []
     : abilityFunction.penalties ?? [];
+}
+
+function abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction = {}) {
+  return (abilityFunction?.conditions ?? []).some(condition => (
+    condition?.type === ABILITY_CONDITION_TYPES.trial
+    && condition?.trialRoutesPrimaryChanges === true
+  ));
+}
+
+function abilityFunctionHasTrialConsequences(abilityFunction = {}) {
+  return (abilityFunction?.conditions ?? []).some(condition => (
+    condition?.type === ABILITY_CONDITION_TYPES.trial
+    && (condition?.trialBranches ?? []).some(branch => (branch?.links ?? []).length)
+  ));
 }
 
 function queueActiveApplicationEffectSync(actor) {

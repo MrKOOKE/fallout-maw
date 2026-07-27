@@ -69,9 +69,10 @@ test("blockade builder installs a direct active-effect aura with a Trial and reu
   );
   assert.equal(trial.trialSelectionMode, "best");
   assert.equal(trial.trialDifficultyFormula, "50+resilience");
-  assert.deepEqual(trial.trialResultKeys, ["criticalFailure", "failure"]);
+  assert.equal(trial.trialBranches.length, 1);
+  assert.deepEqual(trial.trialBranches[0].resultKeys, ["criticalFailure", "failure"]);
   assert.deepEqual(
-    trial.trialLinks.map(link => [link.constructId, link.recipient, link.mode]),
+    trial.trialBranches[0].links.map(link => [link.constructId, link.recipient, link.mode]),
     [
       ["blockade-failed-trial-penalty", "subjects", "perSubject"],
       ["blockade-reaction-points-reward", "source", "perSubject"]
@@ -135,7 +136,7 @@ test("blockade runtime executes Trial conditions and editors keep outcomes insid
   assert.match(auraRuntime, /if \(state\.nextAllowedAt > worldTime\) continue/);
   assert.match(auraRuntime, /executeAbilityTrials\(\{/);
   assert.match(auraRuntime, /constructs: entry\.constructs/);
-  assert.match(trialRuntime, /requestSkillCheckBatch\(\{/);
+  assert.match(trialRuntime, /requestSkillCheckBatchFn\(\{/);
   assert.match(trialRuntime, /right\.value - left\.value \|\| left\.order - right\.order/);
   assert.match(trialRuntime, /grantActorReactionPoints\(actor, reactionAmount\)/);
   assert.match(trialRuntime, /await actor\.update\(update, \{ falloutMawTrialRuntime: true \}\)/);
@@ -155,8 +156,10 @@ test("blockade runtime executes Trial conditions and editors keep outcomes insid
   assert.match(itemSheet, /label: "Испытание"/);
   assert.match(catalogTemplate, /trialDifficultyFormula/);
   assert.match(itemTemplate, /trialDifficultyFormula/);
-  assert.match(catalogTemplate, /Последствия при подходящем результате/);
-  assert.match(itemTemplate, /Последствия при подходящем результате/);
+  assert.match(catalogTemplate, /Ветки результатов/);
+  assert.match(itemTemplate, /Ветки результатов/);
+  assert.match(catalogTemplate, /data-sync="ability-trial-branch-/);
+  assert.match(itemTemplate, /data-sync="ability-trial-branch-/);
   assert.doesNotMatch(catalogTemplate, /<h2>Конструкты способности<\/h2>/);
   assert.doesNotMatch(itemTemplate, /<h2>Конструкты способности<\/h2>/);
   assert.match(catalogTemplate, /fallout-maw-trauma-effect-row/);

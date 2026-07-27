@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "74e6cf250eaa84796bf3dc18cc261928348dbe1106a98d30f0b9ccf7b05e00d0",
-  "updatedAt": "2026-07-27T07:53:53.839Z",
+  "revision": "fc4a5ecbd3fe2a61538ba2fca1924a66d53cd584e4b1cb99eeab850e1dbe61d8",
+  "updatedAt": "2026-07-27T09:46:52.120Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -5039,7 +5039,89 @@
                   "constructs": [],
                   "cost": 3000,
                   "formula": "",
-                  "functions": []
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "source",
+                        "costs": [],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "5+energy/10",
+                        "targetGroups": [
+                          "enemy",
+                          "neutral"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "others",
+                        "targetSelectionMode": "all",
+                        "wallsBlock": true
+                      },
+                      "changes": [
+                        {
+                          "id": "YYjrcbh4lZ42DEcp",
+                          "key": "system.resources.dodge.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "-30"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 12,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "Wy14CAPLwJ1j4cEr",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        },
+                        {
+                          "groupId": "",
+                          "id": "ZT8IbikbrwahHobe",
+                          "trialBranches": [
+                            {
+                              "flow": "continue",
+                              "id": "4visPgHJWVInuKso",
+                              "links": [],
+                              "name": "Ветка 1",
+                              "resultKeys": [
+                                "criticalFailure",
+                                "failure"
+                              ]
+                            }
+                          ],
+                          "trialDifficultyFormula": "50+ene",
+                          "trialEntries": [
+                            {
+                              "id": "mx7AfUooBqnkxNHf",
+                              "key": "resilience",
+                              "kind": "skill"
+                            }
+                          ],
+                          "trialSelectionMode": "best",
+                          "trialSubject": "targets",
+                          "type": "trial"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "CImcSygj9gpnU5Ct",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
                 },
                 "visible": true
               },
@@ -5212,6 +5294,7 @@
                       "changes": [],
                       "damage": {
                         "amountMode": "base",
+                        "damageTypeKey": "",
                         "formula": "0",
                         "limbMode": "randomCritical"
                       },
@@ -5225,6 +5308,7 @@
                       "changes": [],
                       "damage": {
                         "amountMode": "base",
+                        "damageTypeKey": "",
                         "formula": "0",
                         "limbMode": "randomCritical"
                       },
@@ -5238,6 +5322,7 @@
                       "changes": [],
                       "damage": {
                         "amountMode": "percent",
+                        "damageTypeKey": "",
                         "formula": "50",
                         "limbMode": "random"
                       },
@@ -5251,6 +5336,7 @@
                       "changes": [],
                       "damage": {
                         "amountMode": "percent",
+                        "damageTypeKey": "",
                         "formula": "90",
                         "limbMode": "random"
                       },
@@ -5406,7 +5492,7 @@
                               "enabled": false
                             }
                           },
-                          "mode": "targets",
+                          "mode": "selectedTargets",
                           "targetLimitFormula": "1+ene/50"
                         }
                       },
@@ -5748,57 +5834,7 @@
                     }
                   ],
                   "category": "Стойкость",
-                  "constructs": [
-                    {
-                      "changes": [
-                        {
-                          "id": "blockade-action-points-penalty",
-                          "key": "system.resources.actionPoints.bonus",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-5"
-                        },
-                        {
-                          "id": "blockade-movement-points-penalty",
-                          "key": "system.resources.movementPoints.bonus",
-                          "phase": "initial",
-                          "priority": 0,
-                          "type": "add",
-                          "value": "-5"
-                        }
-                      ],
-                      "damage": {
-                        "amountMode": "base",
-                        "formula": "0",
-                        "limbMode": "random"
-                      },
-                      "durationSeconds": 6,
-                      "id": "blockade-failed-trial-penalty",
-                      "name": "Блокада: провал испытания",
-                      "resources": [],
-                      "type": "temporaryEffect"
-                    },
-                    {
-                      "changes": [],
-                      "damage": {
-                        "amountMode": "base",
-                        "formula": "0",
-                        "limbMode": "random"
-                      },
-                      "durationSeconds": 0,
-                      "id": "blockade-reaction-points-reward",
-                      "name": "Блокада: очки реакции владельцу",
-                      "resources": [
-                        {
-                          "formula": "5",
-                          "id": "blockade-reaction-points-row",
-                          "resourceKey": "reactionPoints"
-                        }
-                      ],
-                      "type": "resourceChange"
-                    }
-                  ],
+                  "constructs": [],
                   "cost": 6000,
                   "formula": "",
                   "functions": [
@@ -5883,6 +5919,18 @@
                         {
                           "groupId": "",
                           "id": "blockade-trial",
+                          "trialBranches": [
+                            {
+                              "flow": "continue",
+                              "id": "blockade-trial-legacy-branch",
+                              "links": [],
+                              "name": "Подходящий результат",
+                              "resultKeys": [
+                                "criticalFailure",
+                                "failure"
+                              ]
+                            }
+                          ],
                           "trialDifficultyFormula": "50+resilience",
                           "trialEntries": [
                             {
@@ -5895,11 +5943,6 @@
                               "key": "resilience",
                               "kind": "skill"
                             }
-                          ],
-                          "trialLinks": [],
-                          "trialResultKeys": [
-                            "criticalFailure",
-                            "failure"
                           ],
                           "trialSelectionMode": "best",
                           "trialSubject": "targets",
@@ -7281,6 +7324,112 @@
                       },
                       "sort": 0,
                       "type": "fixed"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "",
+                "id": "tUSvJ8kQsNSES9W7",
+                "img": "icons/svg/aura.svg",
+                "name": "Новая способность",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 60,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat"
+                  },
+                  "acquisitionRequirements": [],
+                  "category": "Красноречие",
+                  "constructs": [],
+                  "cost": 0,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "10",
+                            "id": "MiAtFRzLOHla2xHv",
+                            "overloadAmount": 0,
+                            "overloadDurationSeconds": 0,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "eoRLj9pJNiHibLM8",
+                          "key": "system.resources.dodge.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "30"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "auraAllowDead": false,
+                          "auraAllowUnconscious": false,
+                          "auraCombatOnly": true,
+                          "auraCombatantsOnly": true,
+                          "auraIgnoreHidden": false,
+                          "auraIgnoreIncapacitated": true,
+                          "auraIncludeSelf": false,
+                          "auraMode": "applyToTargets",
+                          "auraRadiusMeters": "100",
+                          "auraRepeatSeconds": 6,
+                          "auraTargetGroups": [
+                            "ally"
+                          ],
+                          "auraTriggerOnCreate": true,
+                          "auraTriggerOnEnter": true,
+                          "auraWallsBlock": true,
+                          "groupId": "",
+                          "id": "Gn1A4DsdwBpTYdFy",
+                          "requiredCount": "1",
+                          "type": "aura"
+                        },
+                        {
+                          "durationSeconds": 12,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "eQMpkgWPjUk7El5V",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "zi98qSli8u4KKRC9",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
                     }
                   ]
                 },
@@ -57761,7 +57910,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "standard",
+        "resultMode": "failure",
         "skillModifier": 0
       }
     },

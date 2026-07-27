@@ -1369,10 +1369,6 @@
             <input type="text" data-field="attack.pellets" value="{{attackActionSettings.pellets}}" data-formula-autocomplete="all">
           </label>
           <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponCriticalDamagePercent"}}</span>
-            <input type="text" data-field="attack.criticalDamagePercent" value="{{attackActionSettings.criticalDamagePercent}}" data-formula-autocomplete="all">
-          </label>
-          <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
             <input type="text" data-field="attack.maxRangeMeters" value="{{attackActionSettings.maxRangeMeters}}" data-formula-autocomplete="all">
           </label>
@@ -1785,10 +1781,6 @@
               <input type="number" data-field="attack.specialProperty.attackPower.perLevel.damagePercent" value="{{attackPower.perLevel.damagePercent}}" step="1">
             </label>
             <label>
-              <span>{{localize "FALLOUTMAW.Item.WeaponCriticalDamagePercent"}}</span>
-              <input type="number" data-field="attack.specialProperty.attackPower.perLevel.criticalDamagePercent" value="{{attackPower.perLevel.criticalDamagePercent}}" step="1">
-            </label>
-            <label>
               <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
               <input type="number" data-field="attack.specialProperty.attackPower.perLevel.attackConeDegrees" value="{{attackPower.perLevel.attackConeDegrees}}" step="1">
             </label>
@@ -1824,6 +1816,22 @@
             {{else}}
             <p class="fallout-maw-empty-list">Сначала добавьте расход ресурса.</p>
             {{/each}}
+          </div>
+          {{/if}}
+          {{#if isCriticalDamage}}
+          <div class="fallout-maw-list-grid two-columns">
+            <label>
+              <span>Исход испытания</span>
+              <select data-field="attack.specialProperty.criticalDamage.outcomeId">
+                {{#each criticalDamage.outcomeChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label>
+              <span>Критический урон, %</span>
+              <input type="text" data-field="attack.specialProperty.criticalDamage.percentFormula" value="{{criticalDamage.percentFormula}}" data-formula-autocomplete="all">
+            </label>
           </div>
           {{/if}}
         </section>
@@ -2726,6 +2734,7 @@
 
               {{#if isTrial}}
               <div class="fallout-maw-ability-action-section fallout-maw-trial-condition">
+                <input type="hidden" data-field="conditionTrialRoutesPrimaryChanges" value="{{trialRoutesPrimaryChanges}}">
                 <div class="fallout-maw-list-grid three-columns">
                   <label>
                     <span>Кого испытывать</span>
@@ -2761,85 +2770,116 @@
                     {{else}}<span class="fallout-maw-empty-list">Добавьте хотя бы один навык.</span>{{/each}}
                   </div>
                 </div>
-                <div class="fallout-maw-ability-action-section">
-                  <div class="fallout-maw-aura-condition-caption">Результаты, при которых испытание считается подходящим</div>
-                  <div class="fallout-maw-list-grid two-columns">
-                    {{#each trialResultChoices}}
-                    <label class="checkbox"><input type="checkbox" data-field="conditionTrialResultKey" value="{{value}}" {{#if checked}}checked{{/if}}><span>{{label}}</span></label>
-                    {{/each}}
-                  </div>
-                </div>
                 <div class="fallout-maw-item-use-category-field">
                   <div class="fallout-maw-item-use-category-header">
-                    <span>Последствия при подходящем результате</span>
-                    <div class="fallout-maw-inline-controls">
-                      <button type="button" data-action="addConditionTrialLink" data-construct-type="temporaryEffect"><i class="fa-solid fa-plus"></i> Временный эффект</button>
-                      <button type="button" data-action="addConditionTrialLink" data-construct-type="resourceChange"><i class="fa-solid fa-plus"></i> Изменение ресурса</button>
-                    </div>
+                    <span>Ветки результатов</span>
+                    <button type="button" data-action="addConditionTrialBranch"><i class="fa-solid fa-plus"></i> Добавить ветку</button>
                   </div>
-                  {{#each trialLinkRows}}
-                  <fieldset class="fallout-maw-fieldset fallout-maw-trial-outcome" data-trial-link-row data-trial-link-id="{{id}}" data-trial-link-index="{{index}}">
-                    <input type="hidden" data-field="conditionTrialLinkConstructId" value="{{constructId}}">
-                    <div class="fallout-maw-ability-condition-card-header">
-                      <strong>{{#if construct}}{{construct.typeLabel}}{{else}}Повреждённое последствие{{/if}}</strong>
-                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionTrialLink" title="Удалить последствие"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                    <div class="fallout-maw-trial-recipient-row">
-                      <label><span>Кому применить</span><select data-field="conditionTrialLinkRecipient">{{#each recipientChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                      <label><span>Кратность</span><select data-field="conditionTrialLinkMode">{{#each modeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                    </div>
-                    {{#if construct}}
-                    {{#with construct}}
-                    <div class="fallout-maw-ability-construct" data-ability-construct-row data-construct-id="{{id}}" data-construct-index="{{index}}">
-                      <input type="hidden" data-field="constructType" value="{{type}}">
-                      <label class="fallout-maw-grow-field">
-                        <span>Название последствия</span>
-                        <input type="text" data-field="constructName" value="{{name}}" placeholder="{{typeLabel}}">
-                      </label>
-                      {{#if isTemporaryEffect}}
-                      <label class="fallout-maw-construct-duration">
-                        <span>Длительность эффекта, сек</span>
-                        <input type="number" min="1" step="1" data-field="constructDurationSeconds" value="{{durationSeconds}}">
-                      </label>
-                      <div class="fallout-maw-item-use-category-header">
-                        <span>Изменения активного эффекта</span>
-                        <button type="button" data-action="addAbilityConstructChange"><i class="fa-solid fa-plus"></i> Добавить ключ</button>
+                  <p class="fallout-maw-hint">Каждый результат относится только к одной ветке. Последствия ветки применяются к участникам, получившим один из отмеченных результатов.</p>
+                  <div class="fallout-maw-attack-hit-outcomes">
+                    {{#each trialBranchRows}}
+                    <details class="fallout-maw-attack-hit-outcome" data-trial-branch-row data-trial-branch-id="{{id}}" data-trial-branch-index="{{index}}" data-sync="ability-trial-branch-{{id}}">
+                      <summary><strong>{{name}}</strong><span>{{consequenceCount}} последствий</span></summary>
+                      <div class="fallout-maw-attack-hit-outcome-body">
+                        <div class="fallout-maw-ability-condition-card-header">
+                          <label class="fallout-maw-grow-field"><span>Название ветки</span><input type="text" data-field="conditionTrialBranchName" value="{{name}}"></label>
+                          <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionTrialBranch" title="Удалить ветку"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                        <div class="fallout-maw-list-grid two-columns">
+                          {{#each resultChoices}}
+                          <label class="checkbox"><input type="checkbox" data-field="conditionTrialBranchResultKey" value="{{value}}" {{#if checked}}checked{{/if}} {{#if disabled}}disabled{{/if}}><span>{{label}}</span></label>
+                          {{/each}}
+                        </div>
+                        <label>
+                          <span>После этой ветки</span>
+                          <select data-field="conditionTrialBranchFlow">{{#each flowChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                        </label>
+                        <div class="fallout-maw-item-use-category-header">
+                          <span>Последствия</span>
+                          <div class="fallout-maw-inline-controls">
+                            <button type="button" data-action="addConditionTrialLink" data-trial-link-kind="primaryChanges"><i class="fa-solid fa-plus"></i> Основные изменения</button>
+                            <button type="button" data-action="addConditionTrialLink" data-trial-link-kind="primaryChangesPercent"><i class="fa-solid fa-plus"></i> % основных</button>
+                            <span>Самостоятельные:</span>
+                            <button type="button" data-action="addConditionTrialLink" data-construct-type="damage"><i class="fa-solid fa-plus"></i> Урон</button>
+                            <button type="button" data-action="addConditionTrialLink" data-construct-type="temporaryEffect"><i class="fa-solid fa-plus"></i> Эффект</button>
+                            <button type="button" data-action="addConditionTrialLink" data-construct-type="resourceChange"><i class="fa-solid fa-plus"></i> Ресурс</button>
+                          </div>
+                        </div>
+                        {{#each links}}
+                        <fieldset class="fallout-maw-fieldset fallout-maw-trial-outcome" data-trial-link-row data-trial-link-id="{{id}}" data-trial-link-index="{{index}}">
+                          <input type="hidden" data-field="conditionTrialLinkKind" value="{{kind}}">
+                          <input type="hidden" data-field="conditionTrialLinkConstructId" value="{{constructId}}">
+                          {{#unless isPrimaryChangesPercent}}<input type="hidden" data-field="conditionTrialLinkPercentFormula" value="{{percentFormula}}">{{/unless}}
+                          <div class="fallout-maw-ability-condition-card-header">
+                            <strong>
+                              {{#if isPrimaryChanges}}Основные изменения{{else}}
+                              {{#if isPrimaryChangesPercent}}Процент основных изменений{{else}}
+                              {{#if construct}}{{construct.typeLabel}}{{else}}Повреждённое последствие{{/if}}
+                              {{/if}}{{/if}}
+                            </strong>
+                            <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionTrialLink" title="Удалить последствие"><i class="fa-solid fa-trash"></i></button>
+                          </div>
+                          <div class="fallout-maw-trial-recipient-row">
+                            <label><span>Кому применить</span><select data-field="conditionTrialLinkRecipient">{{#each recipientChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                            <label><span>Кратность</span><select data-field="conditionTrialLinkMode">{{#each modeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                          </div>
+                          {{#if isPrimaryChanges}}
+                          <p class="fallout-maw-hint">Будут применены основные изменения функции ({{primaryChangeCount}} строк) на {{primaryDurationSeconds}} секунд.</p>
+                          {{/if}}
+                          {{#if isPrimaryChangesPercent}}
+                          <label><span>Процент основных изменений</span><input type="text" data-field="conditionTrialLinkPercentFormula" value="{{percentFormula}}" data-formula-autocomplete="all"></label>
+                          <p class="fallout-maw-hint">Основные изменения функции будут масштабированы по формуле процента и наложены на {{primaryDurationSeconds}} секунд.</p>
+                          {{/if}}
+                          {{#if isConstruct}}
+                          {{#if construct}}
+                          {{#with construct}}
+                          <div class="fallout-maw-ability-construct" data-ability-construct-row data-construct-id="{{id}}" data-construct-index="{{index}}">
+                            <input type="hidden" data-field="constructType" value="{{type}}">
+                            <label class="fallout-maw-grow-field"><span>Название последствия</span><input type="text" data-field="constructName" value="{{name}}" placeholder="{{typeLabel}}"></label>
+                            {{#if isDamage}}
+                            <div class="fallout-maw-list-grid three-columns">
+                              <input type="hidden" data-field="constructDamageAmountMode" value="formula">
+                              <label><span>Формула урона</span><input type="text" data-field="constructDamageFormula" value="{{damage.formula}}" data-formula-autocomplete="all"></label>
+                              <label><span>Тип урона</span><select data-field="constructDamageTypeKey">{{#each damage.damageTypeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                              <label><span>Распределение по телу</span><select data-field="constructDamageLimbMode">{{#each damage.ordinaryLimbModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                            </div>
+                            {{/if}}
+                            {{#if isTemporaryEffect}}
+                            <label class="fallout-maw-construct-duration"><span>Длительность эффекта, сек</span><input type="number" min="1" step="1" data-field="constructDurationSeconds" value="{{durationSeconds}}"></label>
+                            <div class="fallout-maw-item-use-category-header"><span>Изменения активного эффекта</span><button type="button" data-action="addAbilityConstructChange"><i class="fa-solid fa-plus"></i> Добавить ключ</button></div>
+                            {{#if changes.length}}<div class="fallout-maw-trauma-effect-row fallout-maw-grid-header"><span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span></div>{{/if}}
+                            {{#each changes}}
+                            <div class="fallout-maw-trauma-effect-row" data-ability-construct-change-row data-change-id="{{id}}">
+                              <input type="text" data-field="constructChangeKey" value="{{key}}" data-effect-key-autocomplete>
+                              <select data-field="constructChangeType">{{#each typeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                              <input type="text" data-field="constructChangeValue" value="{{value}}" data-formula-autocomplete="all">
+                              <input type="number" data-field="constructChangePriority" value="{{priority}}" step="1">
+                              <button type="button" class="fallout-maw-icon-button" data-action="deleteAbilityConstructChange" title="Удалить ключ"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                            {{else}}<p class="fallout-maw-empty-list">Изменения эффекта не настроены.</p>{{/each}}
+                            {{/if}}
+                            {{#if isResourceChange}}
+                            <div class="fallout-maw-item-use-category-header"><span>Изменения ресурсов</span><button type="button" data-action="addAbilityConstructResource"><i class="fa-solid fa-plus"></i> Добавить ресурс</button></div>
+                            {{#each resources}}
+                            <div class="fallout-maw-construct-resource-row" data-ability-construct-resource-row data-resource-id="{{id}}">
+                              <label><span>Ресурс</span><select data-field="constructResourceKey">{{#each resourceChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                              <label><span>Формула изменения</span><input type="text" data-field="constructResourceFormula" value="{{formula}}" data-formula-autocomplete="all"></label>
+                              <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteAbilityConstructResource" title="Удалить ресурс"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                            {{else}}<p class="fallout-maw-empty-list">Изменения ресурсов не настроены.</p>{{/each}}
+                            {{/if}}
+                          </div>
+                          {{/with}}
+                          {{else}}
+                          <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> Данные последствия не найдены. Удалите эту строку и создайте последствие заново.</p>
+                          {{/if}}
+                          {{/if}}
+                        </fieldset>
+                        {{else}}<p class="fallout-maw-empty-list">Последствия для этой ветки не настроены.</p>{{/each}}
                       </div>
-                      {{#if changes.length}}
-                      <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
-                        <span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span>
-                      </div>
-                      {{/if}}
-                      {{#each changes}}
-                      <div class="fallout-maw-trauma-effect-row" data-ability-construct-change-row data-change-id="{{id}}">
-                        <input type="text" data-field="constructChangeKey" value="{{key}}" data-effect-key-autocomplete>
-                        <select data-field="constructChangeType">{{#each typeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
-                        <input type="text" data-field="constructChangeValue" value="{{value}}" data-formula-autocomplete="all">
-                        <input type="number" data-field="constructChangePriority" value="{{priority}}" step="1">
-                        <button type="button" class="fallout-maw-icon-button" data-action="deleteAbilityConstructChange" title="Удалить ключ"><i class="fa-solid fa-trash"></i></button>
-                      </div>
-                      {{else}}<p class="fallout-maw-empty-list">Изменения эффекта не настроены.</p>{{/each}}
-                      {{/if}}
-                      {{#if isResourceChange}}
-                      <div class="fallout-maw-item-use-category-header">
-                        <span>Изменения ресурсов</span>
-                        <button type="button" data-action="addAbilityConstructResource"><i class="fa-solid fa-plus"></i> Добавить ресурс</button>
-                      </div>
-                      {{#each resources}}
-                      <div class="fallout-maw-construct-resource-row" data-ability-construct-resource-row data-resource-id="{{id}}">
-                        <label><span>Ресурс</span><select data-field="constructResourceKey">{{#each resourceChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                        <label><span>Формула изменения</span><input type="text" data-field="constructResourceFormula" value="{{formula}}" data-formula-autocomplete="all"></label>
-                        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteAbilityConstructResource" title="Удалить ресурс"><i class="fa-solid fa-trash"></i></button>
-                      </div>
-                      {{else}}<p class="fallout-maw-empty-list">Изменения ресурсов не настроены.</p>{{/each}}
-                      {{/if}}
-                    </div>
-                    {{/with}}
-                    {{else}}
-                    <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> Данные последствия не найдены. Удалите эту строку и создайте последствие заново.</p>
-                    {{/if}}
-                  </fieldset>
-                  {{else}}<p class="fallout-maw-empty-list">Последствия не настроены.</p>{{/each}}
+                    </details>
+                    {{else}}<p class="fallout-maw-empty-list">Ветки результатов не настроены.</p>{{/each}}
+                  </div>
                 </div>
               </div>
               {{/if}}

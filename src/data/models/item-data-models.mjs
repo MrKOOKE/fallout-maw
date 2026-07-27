@@ -10,6 +10,7 @@ const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
 const WEAPON_SPECIAL_PROPERTY_PENDING = "pending";
 const WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
 const WEAPON_SPECIAL_PROPERTY_ATTACK_POWER = "attackPower";
+const WEAPON_SPECIAL_PROPERTY_CRITICAL_DAMAGE = "criticalDamage";
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
@@ -288,6 +289,7 @@ function abilityConstructField() {
         initial: "base"
       }),
       formula: new StringField({ required: true, blank: true, initial: "0" }),
+      damageTypeKey: new StringField({ required: true, blank: true, initial: "" }),
       limbMode: new StringField({
         required: true,
         blank: false,
@@ -422,6 +424,7 @@ function abilityConditionField() {
       initial: "best"
     }),
     trialDifficultyFormula: new StringField({ required: true, blank: true, initial: "0" }),
+    trialRoutesPrimaryChanges: new BooleanField({ required: true, initial: false }),
     trialResultKeys: new ArrayField(new StringField({
       required: true,
       blank: false,
@@ -429,10 +432,18 @@ function abilityConditionField() {
     }), { required: true, initial: ["criticalFailure", "failure"] }),
     trialLinks: new ArrayField(new SchemaField({
       id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+      kind: new StringField({
+        required: true,
+        blank: false,
+        choices: ["construct", "primaryChanges", "primaryChangesPercent"],
+        initial: "construct"
+      }),
       constructId: new StringField({ required: true, blank: true, initial: "" }),
+      percentFormula: new StringField({ required: true, blank: true, initial: "100" }),
       recipient: new StringField({ required: true, blank: false, choices: ["source", "subjects", "targets"], initial: "subjects" }),
       mode: new StringField({ required: true, blank: false, choices: ["once", "perSubject"], initial: "perSubject" })
     }), { required: true, initial: [] }),
+    trialBranches: new ArrayField(abilityTrialBranchField(), { required: true, initial: [] }),
     accumulation: new SchemaField({
       name: new StringField({ required: true, blank: true, initial: "" }),
       valueSource: new StringField({
@@ -1055,8 +1066,59 @@ function weaponSpecialPropertyField() {
     [WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS]: {},
     [WEAPON_SPECIAL_PROPERTY_ATTACK_POWER]: {
       attackPower: weaponAttackPowerField()
+    },
+    [WEAPON_SPECIAL_PROPERTY_CRITICAL_DAMAGE]: {
+      criticalDamage: weaponCriticalDamageField()
     }
   }, { required: true });
+}
+
+function weaponCriticalDamageField() {
+  return new SchemaField({
+    outcomeId: new StringField({ required: true, blank: true, initial: "" }),
+    percentFormula: new StringField({ required: true, blank: true, initial: "150" })
+  });
+}
+
+function abilityTrialBranchField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    resultKeys: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      choices: ["criticalFailure", "failure", "success", "criticalSuccess"]
+    }), { required: true, initial: [] }),
+    flow: new StringField({
+      required: true,
+      blank: false,
+      choices: ["continue", "stopSubject", "stopAll"],
+      initial: "continue"
+    }),
+    links: new ArrayField(new SchemaField({
+      id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+      kind: new StringField({
+        required: true,
+        blank: false,
+        choices: ["construct", "primaryChanges", "primaryChangesPercent"],
+        initial: "construct"
+      }),
+      constructId: new StringField({ required: true, blank: true, initial: "" }),
+      percentFormula: new StringField({ required: true, blank: true, initial: "100" }),
+      recipient: new StringField({
+        required: true,
+        blank: false,
+        choices: ["source", "subjects", "targets"],
+        initial: "subjects"
+      }),
+      mode: new StringField({
+        required: true,
+        blank: false,
+        choices: ["once", "perSubject"],
+        initial: "perSubject"
+      })
+    }), { required: true, initial: [] })
+  });
 }
 
 function weaponAttackPowerField() {

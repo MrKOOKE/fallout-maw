@@ -28,6 +28,7 @@ import {
   ABILITY_CONDITION_TYPES,
   ABILITY_CONSTRUCT_TYPES,
   ABILITY_DAMAGE_AMOUNT_MODES,
+  ABILITY_DAMAGE_LIMB_MODES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_EVENT_TRACKING_TARGETS,
   ABILITY_EVENT_SUBJECTS,
@@ -38,6 +39,8 @@ import {
   ABILITY_HEALTH_TARGETS,
   ABILITY_POSTURE_ACTIONS,
   ABILITY_POSTURE_SUBJECTS,
+  ABILITY_TRIAL_BRANCH_FLOWS,
+  ABILITY_TRIAL_LINK_KINDS,
   ABILITY_TRIAL_LINK_MODES,
   ABILITY_TRIAL_LINK_RECIPIENTS,
   ABILITY_TRIAL_RESULT_KEYS,
@@ -51,8 +54,10 @@ import {
   createAbilityConstruct,
   createAbilityConstructResource,
   createAbilityFunction,
+  createAbilityTrialBranch,
   createAbilityTrialEntry,
   createAbilityTrialLink,
+  getAbilityFunctionEffectDurationSeconds,
   normalizeAbilityEntry,
   normalizeAbilityConstructs,
   normalizeCommandBasicsSettings,
@@ -102,7 +107,8 @@ import {
   WEAPON_SPECIAL_PROPERTIES,
   createDefaultWeaponSpecialPropertyData,
   getWeaponSpecialPropertyType,
-  normalizeWeaponAttackPowerData
+  normalizeWeaponAttackPowerData,
+  normalizeWeaponCriticalDamageData
 } from "../utils/item-functions.mjs";
 import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
 import {
@@ -215,6 +221,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
       addConditionTrialEntry: this.#onAddConditionTrialEntry,
       deleteConditionTrialEntry: this.#onDeleteConditionTrialEntry,
+      addConditionTrialBranch: this.#onAddConditionTrialBranch,
+      deleteConditionTrialBranch: this.#onDeleteConditionTrialBranch,
       addConditionTrialLink: this.#onAddConditionTrialLink,
       deleteConditionTrialLink: this.#onDeleteConditionTrialLink,
       addAbilityConstruct: this.#onAddAbilityConstruct,
@@ -384,6 +392,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     });
     this.element?.querySelectorAll?.("[data-field='conditionTrialLinkRecipient']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='conditionTrialBranchResultKey']")?.forEach(input => {
+      input.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='conditionAttackDistanceMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
@@ -784,6 +795,17 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
           delete change.accumulatorExchange;
         }
       }
+      if (removed?.type === ABILITY_CONDITION_TYPES.trial) {
+        const candidates = new Set((removed.trialBranches ?? [])
+          .flatMap(branch => branch?.links ?? [])
+          .map(link => String(link?.constructId ?? ""))
+          .filter(Boolean));
+        this.ability.system.constructs = (this.ability.system.constructs ?? [])
+          .filter(construct => (
+            !candidates.has(String(construct?.id ?? ""))
+            || isAbilityConstructLinked(this.ability, construct?.id)
+          ));
+      }
     }
     return this.#persist({ render: true, sync: false });
   }
@@ -811,24 +833,78 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
-  static #onAddConditionTrialLink(event, target) {
+  static #onAddConditionTrialBranch(event, target) {
     event.preventDefault();
     this.#syncFromForm();
     const { condition } = this.#getConditionForTarget(target);
     if (condition?.type !== ABILITY_CONDITION_TYPES.trial) {
       return this.#persist({ render: true, sync: false });
     }
+    condition.trialBranches ??= [];
+    condition.trialBranches.push(createAbilityTrialBranch({
+      name: `Ветка ${condition.trialBranches.length + 1}`,
+      resultKeys: []
+    }));
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionTrialBranch(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const branchIndex = Number(target.closest("[data-trial-branch-row]")?.dataset.trialBranchIndex ?? -1);
+    if (condition?.type === ABILITY_CONDITION_TYPES.trial && branchIndex >= 0) {
+      const [removed] = condition.trialBranches?.splice(branchIndex, 1) ?? [];
+      const constructIds = (removed?.links ?? [])
+        .map(link => String(link?.constructId ?? ""))
+        .filter(Boolean);
+      if (constructIds.length) {
+        const candidates = new Set(constructIds);
+        this.ability.system.constructs = (this.ability.system.constructs ?? [])
+          .filter(construct => (
+            !candidates.has(String(construct?.id ?? ""))
+            || isAbilityConstructLinked(this.ability, construct?.id)
+          ));
+      }
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionTrialLink(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const branchIndex = Number(target.closest("[data-trial-branch-row]")?.dataset.trialBranchIndex ?? -1);
+    const branch = condition?.trialBranches?.[branchIndex];
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial || !branch) {
+      return this.#persist({ render: true, sync: false });
+    }
+    const requestedKind = String(target?.dataset?.trialLinkKind ?? "");
+    if ([
+      ABILITY_TRIAL_LINK_KINDS.primaryChanges,
+      ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent
+    ].includes(requestedKind)) {
+      condition.trialRoutesPrimaryChanges = true;
+      branch.links ??= [];
+      branch.links.push(createAbilityTrialLink({
+        kind: requestedKind,
+        percentFormula: "100"
+      }));
+      return this.#persist({ render: true, sync: false });
+    }
     const requested = String(target?.dataset?.constructType ?? "");
     const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
       ? requested
       : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
-    const construct = createAbilityConstruct(type);
+    const construct = prepareNewOrdinaryTrialConstruct(createAbilityConstruct(type));
     this.ability.system.constructs ??= [];
     this.ability.system.constructs.push(construct);
-    condition.trialLinks ??= [];
-    const link = createAbilityTrialLink();
+    const link = createAbilityTrialLink({
+      kind: ABILITY_TRIAL_LINK_KINDS.construct
+    });
     link.constructId = construct.id;
-    condition.trialLinks.push(link);
+    branch.links ??= [];
+    branch.links.push(link);
     return this.#persist({ render: true, sync: false });
   }
 
@@ -836,9 +912,11 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     const { condition } = this.#getConditionForTarget(target);
+    const branchIndex = Number(target.closest("[data-trial-branch-row]")?.dataset.trialBranchIndex ?? -1);
     const linkIndex = Number(target.closest("[data-trial-link-row]")?.dataset.trialLinkIndex ?? -1);
-    if (condition?.type === ABILITY_CONDITION_TYPES.trial && linkIndex >= 0) {
-      const [removed] = condition.trialLinks?.splice(linkIndex, 1) ?? [];
+    const branch = condition?.trialBranches?.[branchIndex];
+    if (condition?.type === ABILITY_CONDITION_TYPES.trial && branch && linkIndex >= 0) {
+      const [removed] = branch.links?.splice(linkIndex, 1) ?? [];
       const constructId = String(removed?.constructId ?? "");
       if (constructId && !isAbilityConstructLinked(this.ability, constructId)) {
         this.ability.system.constructs = (this.ability.system.constructs ?? [])
@@ -871,8 +949,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     for (const abilityFunction of this.ability.system.functions ?? []) {
       for (const condition of abilityFunction.conditions ?? []) {
         if (condition?.type !== ABILITY_CONDITION_TYPES.trial) continue;
-        condition.trialLinks = (condition.trialLinks ?? [])
-          .filter(link => String(link?.constructId ?? "") !== removedId);
+        for (const branch of condition.trialBranches ?? []) {
+          branch.links = (branch.links ?? [])
+            .filter(link => String(link?.constructId ?? "") !== removedId);
+        }
       }
     }
     return this.#persist({ render: true, sync: false });
@@ -2033,7 +2113,6 @@ function readAttackActionSettings(row, previousValue = {}, functionType = row?.d
     skillKey: getValue("attack.skillKey", previous.skillKey),
     accuracyBonus: getValue("attack.accuracyBonus", previous.accuracyBonus),
     criticalChanceModifier: getValue("attack.criticalChanceModifier", previous.criticalChanceModifier),
-    criticalDamagePercent: getValue("attack.criticalDamagePercent", previous.criticalDamagePercent),
     maxRangeMeters: getValue("attack.maxRangeMeters", previous.maxRangeMeters),
     effectiveRange: {
       value: getValue("attack.effectiveRange.value", previous.effectiveRange.value),
@@ -2175,6 +2254,22 @@ function readAttackSpecialPropertyRows(row, previousValue = []) {
   const previous = Array.isArray(previousValue) ? previousValue : Object.values(previousValue ?? {});
   return Array.from(row?.querySelectorAll("[data-attack-special-property-row]") ?? []).map((propertyRow, index) => {
     const type = String(propertyRow.querySelector("[data-field='attack.specialProperty.type']")?.value ?? "");
+    if (type === WEAPON_SPECIAL_PROPERTIES.criticalDamage) {
+      const priorCriticalDamage = normalizeWeaponCriticalDamageData(
+        previous[index]?.criticalDamage
+      );
+      return {
+        type,
+        criticalDamage: {
+          outcomeId: propertyRow.querySelector(
+            "[data-field='attack.specialProperty.criticalDamage.outcomeId']"
+          )?.value ?? priorCriticalDamage.outcomeId,
+          percentFormula: propertyRow.querySelector(
+            "[data-field='attack.specialProperty.criticalDamage.percentFormula']"
+          )?.value ?? priorCriticalDamage.percentFormula
+        }
+      };
+    }
     if (type !== WEAPON_SPECIAL_PROPERTIES.attackPower) {
       return createDefaultWeaponSpecialPropertyData(type);
     }
@@ -2672,14 +2767,27 @@ function readAbilityConditions(root) {
       trialSelectionMode: row.querySelector("[data-field='conditionTrialSelectionMode']")?.value
         ?? ABILITY_TRIAL_SELECTION_MODES.best,
       trialDifficultyFormula: row.querySelector("[data-field='conditionTrialDifficultyFormula']")?.value ?? "0",
-      trialResultKeys: readCheckedFieldValues(row, "[data-field='conditionTrialResultKey']"),
-      trialLinks: Array.from(row.querySelectorAll("[data-trial-link-row]") ?? []).map(linkRow => ({
-        id: linkRow.dataset.trialLinkId || foundry.utils.randomID(),
-        constructId: linkRow.querySelector("[data-field='conditionTrialLinkConstructId']")?.value ?? "",
-        recipient: linkRow.querySelector("[data-field='conditionTrialLinkRecipient']")?.value
-          ?? ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
-        mode: linkRow.querySelector("[data-field='conditionTrialLinkMode']")?.value
-          ?? ABILITY_TRIAL_LINK_MODES.perSubject
+      trialRoutesPrimaryChanges: Boolean(
+        row.querySelector("[data-field='conditionTrialRoutesPrimaryChanges']")?.value === "true"
+      ),
+      trialBranches: Array.from(row.querySelectorAll("[data-trial-branch-row]") ?? []).map(branchRow => ({
+        id: branchRow.dataset.trialBranchId || foundry.utils.randomID(),
+        name: branchRow.querySelector("[data-field='conditionTrialBranchName']")?.value ?? "",
+        resultKeys: readCheckedFieldValues(branchRow, "[data-field='conditionTrialBranchResultKey']"),
+        flow: branchRow.querySelector("[data-field='conditionTrialBranchFlow']")?.value
+          ?? ABILITY_TRIAL_BRANCH_FLOWS.continue,
+        links: Array.from(branchRow.querySelectorAll("[data-trial-link-row]") ?? []).map(linkRow => ({
+          id: linkRow.dataset.trialLinkId || foundry.utils.randomID(),
+          kind: linkRow.querySelector("[data-field='conditionTrialLinkKind']")?.value
+            ?? ABILITY_TRIAL_LINK_KINDS.construct,
+          constructId: linkRow.querySelector("[data-field='conditionTrialLinkConstructId']")?.value ?? "",
+          percentFormula: linkRow.querySelector("[data-field='conditionTrialLinkPercentFormula']")?.value
+            ?? "100",
+          recipient: linkRow.querySelector("[data-field='conditionTrialLinkRecipient']")?.value
+            ?? ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
+          mode: linkRow.querySelector("[data-field='conditionTrialLinkMode']")?.value
+            ?? ABILITY_TRIAL_LINK_MODES.perSubject
+        }))
       })),
       eventKey: row.querySelector("[data-field='conditionEventKey']")?.value ?? "",
       progressRequired: row.querySelector("[data-field='conditionEventProgressRequired']")?.value ?? 1,
@@ -2798,6 +2906,7 @@ function readAbilityConstructs(root) {
       damage: {
         amountMode: constructRow.querySelector("[data-field='constructDamageAmountMode']")?.value ?? "base",
         formula: constructRow.querySelector("[data-field='constructDamageFormula']")?.value ?? "0",
+        damageTypeKey: constructRow.querySelector("[data-field='constructDamageTypeKey']")?.value ?? "",
         limbMode: constructRow.querySelector("[data-field='constructDamageLimbMode']")?.value ?? "random"
       }
     };
@@ -2994,7 +3103,8 @@ function prepareFunctionForDisplay(entry, { constructs = [] } = {}) {
     allowTriggerCost: isEffectChanges
       && (!hasTriggerCostCondition || condition?.type === ABILITY_CONDITION_TYPES.triggerCost),
     eventReactionMode: hasEventReaction,
-    constructs
+    constructs,
+    abilityFunction: normalized
   }));
   const hasRuntimeConditions = normalized.conditions.some(condition => isRuntimeCondition(condition.type));
   const preparedActions = normalized.actions.map((action, index) => prepareAbilityActionForDisplay(action, index));
@@ -3510,7 +3620,8 @@ function prepareAttackActionSettingsForDisplay(settings = {}, constructs = []) {
     },
     specialProperties: prepareAttackSpecialPropertiesForDisplay(
       normalized.specialProperties,
-      resourceCosts
+      resourceCosts,
+      normalized.hitResolution
     ),
     requirements: prepareAttackRequirementsForDisplay(normalized.requirements),
     criticalFailureConsequences: (normalized.criticalFailureConsequences ?? []).map((entry, index) => ({
@@ -3645,7 +3756,11 @@ function buildAttackProficiencyChoices(selected = "") {
   }));
 }
 
-function prepareAttackSpecialPropertiesForDisplay(properties = [], resourceCosts = []) {
+function prepareAttackSpecialPropertiesForDisplay(
+  properties = [],
+  resourceCosts = [],
+  hitResolution = {}
+) {
   const source = Array.isArray(properties) ? properties : Object.values(properties ?? {});
   const normalized = source.map(property => ({
     ...(property && typeof property === "object" ? property : {}),
@@ -3654,6 +3769,14 @@ function prepareAttackSpecialPropertiesForDisplay(properties = [], resourceCosts
   return normalized.map((property, index) => {
     const type = getWeaponSpecialPropertyType(property);
     const attackPower = normalizeWeaponAttackPowerData(property.attackPower);
+    const criticalDamage = normalizeWeaponCriticalDamageData(property.criticalDamage);
+    const usedCriticalOutcomeIds = new Set(normalized
+      .filter((candidate, candidateIndex) => (
+        candidateIndex !== index
+        && getWeaponSpecialPropertyType(candidate) === WEAPON_SPECIAL_PROPERTIES.criticalDamage
+      ))
+      .map(candidate => normalizeWeaponCriticalDamageData(candidate.criticalDamage).outcomeId)
+      .filter(Boolean));
     const configuredPowerCosts = Array.isArray(property?.attackPower?.resourceCosts)
       ? property.attackPower.resourceCosts
       : Object.values(property?.attackPower?.resourceCosts ?? {});
@@ -3662,7 +3785,16 @@ function prepareAttackSpecialPropertiesForDisplay(properties = [], resourceCosts
       index,
       type,
       isAttackPower: type === WEAPON_SPECIAL_PROPERTIES.attackPower,
+      isCriticalDamage: type === WEAPON_SPECIAL_PROPERTIES.criticalDamage,
       choices: buildAttackSpecialPropertyChoices(type, normalized),
+      criticalDamage: {
+        ...criticalDamage,
+        outcomeChoices: buildAttackCriticalDamageOutcomeChoices(
+          hitResolution,
+          criticalDamage.outcomeId,
+          usedCriticalOutcomeIds
+        )
+      },
       attackPower: {
         ...attackPower,
         resourceCostRows: buildAttackPowerResourceCostRows(
@@ -3685,16 +3817,70 @@ function buildAttackSpecialPropertyChoices(selected = "", properties = []) {
     {
       value: WEAPON_SPECIAL_PROPERTIES.attackPower,
       label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.criticalDamage,
+      label: "Критический урон по исходу"
     }
   ].map(choice => ({
     ...choice,
     selected: choice.value === selected,
     disabled: Boolean(
       choice.value !== WEAPON_SPECIAL_PROPERTIES.pending
+      && choice.value !== WEAPON_SPECIAL_PROPERTIES.criticalDamage
       && choice.value !== selected
       && used.has(choice.value)
     )
   }));
+}
+
+function buildAttackCriticalDamageOutcomeChoices(
+  hitResolution = {},
+  selected = "",
+  unavailableIds = new Set()
+) {
+  const selectedId = String(selected ?? "").trim();
+  const labels = {
+    criticalFailure: "Критический провал",
+    failure: "Провал",
+    success: "Успех",
+    criticalSuccess: "Критический успех"
+  };
+  const trials = Array.isArray(hitResolution?.trials)
+    ? hitResolution.trials
+    : Object.values(hitResolution?.trials ?? {});
+  const choices = trials.flatMap((trial, trialIndex) => (
+    ATTACK_HIT_OUTCOME_KEYS.map(resultKey => {
+      const value = String(trial?.outcomes?.[resultKey]?.id ?? "").trim();
+      return {
+        value,
+        label: `Испытание ${trialIndex + 1} — ${labels[resultKey] ?? resultKey}`,
+        selected: value === selectedId,
+        disabled: !value || (unavailableIds.has(value) && value !== selectedId)
+      };
+    })
+  )).filter(choice => choice.value);
+  if (selectedId && !choices.some(choice => choice.value === selectedId)) {
+    choices.push({
+      value: selectedId,
+      label: `${selectedId} — ветка не найдена`,
+      selected: true
+    });
+  }
+  if (choices.length) {
+    return [{
+      value: "",
+      label: "Выберите исход испытания",
+      selected: !selectedId,
+      disabled: true
+    }, ...choices];
+  }
+  return [{
+    value: "",
+    label: "Сначала добавьте испытание",
+    selected: true,
+    disabled: true
+  }];
 }
 
 function buildAttackPowerResourceCostRows(baseCosts = [], configuredCosts = []) {
@@ -3922,7 +4108,8 @@ function prepareConditionForDisplay(condition, {
   allowToggleable = false,
   allowTriggerCost = false,
   eventReactionMode = false,
-  constructs = []
+  constructs = [],
+  abilityFunction = null
 } = {}) {
   const type = String(condition?.type ?? "");
   const isToggleable = type === ABILITY_CONDITION_TYPES.toggleable;
@@ -4066,8 +4253,9 @@ function prepareConditionForDisplay(condition, {
     trialSubjectChoices: buildTrialSubjectChoices(condition?.trialSubject),
     trialEntryRows: buildTrialEntryRows(condition?.trialEntries),
     trialSelectionModeChoices: buildTrialSelectionModeChoices(condition?.trialSelectionMode),
-    trialResultChoices: buildTrialResultChoices(condition?.trialResultKeys),
-    trialLinkRows: buildTrialLinkRows(condition?.trialLinks, constructs),
+    trialBranchRows: buildTrialBranchRows(condition?.trialBranches, constructs, {
+      abilityFunction
+    }),
     hasTrialConstructs: Boolean(constructs.length),
     isAura,
     isLimitedChanges,
@@ -4642,7 +4830,13 @@ function prepareAbilityConstructForDisplay(construct, index) {
       isFormula: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.formula,
       isPercent: damageAmountMode === ABILITY_DAMAGE_AMOUNT_MODES.percent,
       amountModeChoices: buildAttackDamageAmountModeChoices(damageAmountMode),
-      limbModeChoices: buildAttackDamageLimbModeChoices(normalized.damage?.limbMode)
+      damageTypeChoices: buildAttackDamageTypeChoices(
+        normalized.damage?.damageTypeKey,
+        getConfigurableDamageTypes(getDamageTypeSettings())
+      ),
+      limbModeChoices: buildAttackDamageLimbModeChoices(normalized.damage?.limbMode),
+      ordinaryLimbModeChoices: buildAttackDamageLimbModeChoices(normalized.damage?.limbMode)
+        .filter(choice => choice.value !== ABILITY_DAMAGE_LIMB_MODES.selected)
     }
   };
 }
@@ -4669,29 +4863,81 @@ function buildTrialSelectionModeChoices(selected = ABILITY_TRIAL_SELECTION_MODES
   ].map(choice => ({ ...choice, selected: choice.value === selected }));
 }
 
-function buildTrialResultChoices(value = []) {
-  const selected = new Set(normalizeConditionValues(value));
+function buildTrialBranchRows(value = [], constructs = [], { abilityFunction = null } = {}) {
+  const branches = Array.isArray(value) ? value : Object.values(value ?? {});
+  const linkContext = {
+    primaryChangeCount: (abilityFunction?.changes ?? []).length,
+    primaryDurationSeconds: getAbilityFunctionEffectDurationSeconds(abilityFunction)
+  };
+  const claimedByOtherBranches = branches.map((branch, branchIndex) => new Set(
+    branches.flatMap((candidate, candidateIndex) => (
+      candidateIndex === branchIndex ? [] : normalizeConditionValues(candidate?.resultKeys)
+    ))
+  ));
   const labels = {
     criticalFailure: "Критический провал",
     failure: "Провал",
     success: "Успех",
     criticalSuccess: "Критический успех"
   };
-  return ABILITY_TRIAL_RESULT_KEYS.map(resultKey => ({
-    value: resultKey,
-    label: labels[resultKey] ?? resultKey,
-    checked: selected.has(resultKey)
-  }));
+  return branches.map((branch, index) => {
+    const selected = new Set(normalizeConditionValues(branch?.resultKeys));
+    return {
+      ...branch,
+      index,
+      consequenceCount: (branch?.links ?? []).length,
+      resultChoices: ABILITY_TRIAL_RESULT_KEYS.map(resultKey => ({
+        value: resultKey,
+        label: labels[resultKey] ?? resultKey,
+        checked: selected.has(resultKey),
+        disabled: !selected.has(resultKey) && claimedByOtherBranches[index].has(resultKey)
+      })),
+      flowChoices: buildTrialBranchFlowChoices(branch?.flow),
+      links: buildTrialLinkRows(branch?.links, constructs, linkContext)
+    };
+  });
 }
 
-function buildTrialLinkRows(value = [], constructs = []) {
+function buildTrialBranchFlowChoices(selected = ABILITY_TRIAL_BRANCH_FLOWS.continue) {
+  return [
+    { value: ABILITY_TRIAL_BRANCH_FLOWS.continue, label: "Продолжить цепочку" },
+    { value: ABILITY_TRIAL_BRANCH_FLOWS.stopSubject, label: "Остановить для участников ветки" },
+    { value: ABILITY_TRIAL_BRANCH_FLOWS.stopAll, label: "Остановить всю цепочку" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function prepareNewOrdinaryTrialConstruct(construct = {}) {
+  if (construct?.type !== ABILITY_CONSTRUCT_TYPES.damage) return construct;
+  const damageTypeKey = getConfigurableDamageTypes(getDamageTypeSettings()).at(0)?.key
+    ?? "firearm";
+  construct.damage = {
+    ...(construct.damage ?? {}),
+    amountMode: ABILITY_DAMAGE_AMOUNT_MODES.formula,
+    formula: "0",
+    damageTypeKey
+  };
+  return construct;
+}
+
+function buildTrialLinkRows(value = [], constructs = [], {
+  primaryChangeCount = 0,
+  primaryDurationSeconds = 0
+} = {}) {
   const normalizedConstructs = normalizeAbilityConstructs(constructs);
   return (Array.isArray(value) ? value : Object.values(value ?? {})).map((link, index) => {
+    const kind = Object.values(ABILITY_TRIAL_LINK_KINDS).includes(link?.kind)
+      ? link.kind
+      : ABILITY_TRIAL_LINK_KINDS.construct;
+    const isPrimaryChanges = kind === ABILITY_TRIAL_LINK_KINDS.primaryChanges;
+    const isPrimaryChangesPercent = kind === ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent;
+    const isConstruct = kind === ABILITY_TRIAL_LINK_KINDS.construct;
     const recipient = Object.values(ABILITY_TRIAL_LINK_RECIPIENTS).includes(link?.recipient)
       ? link.recipient
       : ABILITY_TRIAL_LINK_RECIPIENTS.subjects;
     const constructId = String(link?.constructId ?? "");
-    const constructIndex = normalizedConstructs.findIndex(construct => construct.id === constructId);
+    const constructIndex = isConstruct
+      ? normalizedConstructs.findIndex(construct => construct.id === constructId)
+      : -1;
     const construct = constructIndex >= 0
       ? prepareAbilityConstructForDisplay(normalizedConstructs[constructIndex], constructIndex)
       : null;
@@ -4714,18 +4960,31 @@ function buildTrialLinkRows(value = [], constructs = []) {
     return {
       ...link,
       index,
+      kind,
+      isPrimaryChanges,
+      isPrimaryChangesPercent,
+      isConstruct,
+      primaryChangeCount,
+      primaryDurationSeconds,
       construct,
       hasConstruct: Boolean(construct),
       constructChoices,
       recipientChoices: [
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: "Прошедшие результат испытания" },
-        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: "Владелец способности" }
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.subjects, label: "Участники этой ветки" },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.source, label: "Владелец способности" },
+        { value: ABILITY_TRIAL_LINK_RECIPIENTS.targets, label: "Все цели функции" }
       ].map(choice => ({ ...choice, selected: choice.value === recipient })),
-      modeChoices: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.subjects
-        ? [{ value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "Каждому подходящему участнику", selected: true }]
+      modeChoices: recipient !== ABILITY_TRIAL_LINK_RECIPIENTS.source
+        ? [{
+            value: ABILITY_TRIAL_LINK_MODES.perSubject,
+            label: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.targets
+              ? "Каждой цели функции"
+              : "Каждому участнику ветки",
+            selected: true
+          }]
         : [
-            { value: ABILITY_TRIAL_LINK_MODES.once, label: "Один раз за испытание" },
-            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "За каждого подходящего участника" }
+            { value: ABILITY_TRIAL_LINK_MODES.once, label: "Один раз за ветку" },
+            { value: ABILITY_TRIAL_LINK_MODES.perSubject, label: "За каждого участника ветки" }
           ].map(choice => ({ ...choice, selected: choice.value === link?.mode }))
     };
   });
@@ -4737,7 +4996,9 @@ function isAbilityConstructLinked(ability, constructId) {
   return (ability?.system?.functions ?? []).some(abilityFunction => (
     (abilityFunction?.conditions ?? []).some(condition => (
       condition?.type === ABILITY_CONDITION_TYPES.trial
-      && (condition?.trialLinks ?? []).some(link => String(link?.constructId ?? "") === id)
+      && (condition?.trialBranches ?? []).some(branch => (
+        (branch?.links ?? []).some(link => String(link?.constructId ?? "") === id)
+      ))
     ))
     || (abilityFunction?.attackSettings?.hitResolution?.trials ?? []).some(trial => (
       ATTACK_HIT_OUTCOME_KEYS.some(resultKey => (

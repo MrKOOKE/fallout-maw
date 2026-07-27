@@ -333,10 +333,14 @@ test("Trial conditions retain skill selection and links to independent construct
   }]);
 
   assert.deepEqual(trial.trialEntries.map(entry => entry.key), ["science", "resilience"]);
-  assert.deepEqual(trial.trialResultKeys, ["failure", "criticalFailure"]);
-  assert.deepEqual(trial.trialLinks[0], {
+  assert.equal(trial.trialBranches.length, 1);
+  assert.deepEqual(trial.trialBranches[0].resultKeys, ["failure", "criticalFailure"]);
+  assert.equal(trial.trialBranches[0].flow, "continue");
+  assert.deepEqual(trial.trialBranches[0].links[0], {
     id: "penalty-link",
+    kind: "construct",
     constructId: "penalty",
+    percentFormula: "100",
     recipient: "subjects",
     mode: "perSubject"
   });
@@ -987,6 +991,7 @@ test("damage constructs preserve amount and key-limb policies", () => {
   assert.deepEqual(construct.damage, {
     amountMode: "formula",
     formula: "50+energy/3",
+    damageTypeKey: "",
     limbMode: "randomCritical"
   });
   assert.deepEqual(construct.changes, []);
