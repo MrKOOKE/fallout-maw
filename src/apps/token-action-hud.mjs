@@ -517,7 +517,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipSuppressHudActivationTimer = null;
   #actionPointCostTooltipTimer = null;
   #actionPointCostTooltipElement = null;
-  #collapsedAbilityCategoryKeys = new Set();
+  #expandedAbilityCategoryKeys = new Set();
   #abilityTargetInteraction = null;
   #targetSelectionInteractions = new Map();
   #editableMeterSections = {
@@ -598,7 +598,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#activeTray = "";
       this.#weaponEquipTarget = null;
       this.#dualWeaponActionSelection = null;
-      this.#collapsedAbilityCategoryKeys.clear();
+      this.#expandedAbilityCategoryKeys.clear();
       this.#editableMeterSections.resources = false;
       this.#editableMeterSections.needs = false;
     }
@@ -737,7 +737,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actionGroups = prepareActionGroups(activeActions, systemActions);
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, passengers, hudIcons);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers, {
-      collapsedAbilityCategoryKeys: this.#collapsedAbilityCategoryKeys
+      expandedAbilityCategoryKeys: this.#expandedAbilityCategoryKeys
     });
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
@@ -785,8 +785,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       details.addEventListener("toggle", () => {
         const key = String(details.dataset.abilityCategoryKey ?? "");
         if (!key) return;
-        if (details.open) this.#collapsedAbilityCategoryKeys.delete(key);
-        else this.#collapsedAbilityCategoryKeys.add(key);
+        if (details.open) this.#expandedAbilityCategoryKeys.add(key);
+        else this.#expandedAbilityCategoryKeys.delete(key);
         this.#scheduleLayout();
       });
     }
@@ -2871,7 +2871,7 @@ function prepareAbilityItemButtons(item, fallbackIcon) {
   }));
 }
 
-function prepareAbilityGroups(abilities = [], collapsedCategoryKeys = new Set()) {
+function prepareAbilityGroups(abilities = [], expandedCategoryKeys = new Set()) {
   const prepareCategories = (items, groupKey) => {
     const categories = new Map();
     for (const ability of items) {
@@ -2883,7 +2883,7 @@ function prepareAbilityGroups(abilities = [], collapsedCategoryKeys = new Set())
           label: categoryName || game.i18n.localize("FALLOUTMAW.Common.Uncategorized"),
           items: [],
           count: 0,
-          open: !collapsedCategoryKeys.has(key)
+          open: expandedCategoryKeys.has(key)
         });
       }
       const category = categories.get(categoryName);
@@ -3019,7 +3019,7 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
     skills,
     items,
     abilities,
-    abilityGroups: prepareAbilityGroups(abilities, options.collapsedAbilityCategoryKeys),
+    abilityGroups: prepareAbilityGroups(abilities, options.expandedAbilityCategoryKeys),
     activeActions,
     systemActions,
     actionGroups,
