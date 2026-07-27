@@ -18560,12 +18560,14 @@ label.checkbox.fallout-maw-ability-change-choice {
 
 /* Recipe knowledge */
 
+.fallout-maw-tooltip-item-chip-list,
 .fallout-maw-recipe-knowledge-chip-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
+.fallout-maw-tooltip-item-chip,
 .fallout-maw-recipe-knowledge-chip {
   align-items: center;
   background: rgba(0, 0, 0, 0.34);
@@ -18576,12 +18578,22 @@ label.checkbox.fallout-maw-ability-change-choice {
   padding: 3px 6px 3px 3px;
 }
 
+.fallout-maw-tooltip-item-chip:hover,
 .fallout-maw-recipe-knowledge-chip:hover,
 .fallout-maw-recipe-knowledge-chip.known {
   border-color: #e4d06f;
   color: #fff0a6;
 }
 
+.fallout-maw-tooltip-item-chip.active {
+  border-color: #e4d06f;
+  box-shadow:
+    0 0 0 1px #e4d06f,
+    0 0 8px rgba(228, 208, 111, 0.42);
+  color: #fff0a6;
+}
+
+.fallout-maw-tooltip-item-chip > img,
 .fallout-maw-recipe-knowledge-chip > img {
   border: 0;
   height: 24px;
@@ -18590,6 +18602,7 @@ label.checkbox.fallout-maw-ability-change-choice {
   width: 24px;
 }
 
+.fallout-maw-tooltip-item-chip > span,
 .fallout-maw-recipe-knowledge-chip > span {
   overflow: hidden;
   text-overflow: ellipsis;

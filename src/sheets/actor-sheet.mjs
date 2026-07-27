@@ -202,6 +202,10 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { grantActorInventoryItem, planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
+import {
+  getWeaponDamageSourceTooltipDirection,
+  getWeaponTooltipDamageSourceEntries
+} from "../utils/weapon-tooltip-damage-sources.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
@@ -325,6 +329,7 @@ let recipeKnowledgeTooltipPendingAnchor = null;
 let recipeKnowledgeTooltipElement = null;
 let recipeKnowledgeTooltipCloseTimer = null;
 const recipeKnowledgeMiddleActiveAnchors = new WeakSet();
+let responsiveHorizontalTooltipListenersActive = false;
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
@@ -4521,6 +4526,7 @@ export async function renderInventoryItemTooltipHTML(item, sourceActor, {
   evaluatingActor = sourceActor
 } = {}) {
   ensureRecipeKnowledgeTooltipListeners();
+  ensureResponsiveHorizontalTooltipListeners();
   const descriptionHTML = await renderInventoryItemDescriptionHTML(item, evaluatingActor);
   const recipeKnowledgePreviews = await prepareOneTimeUseRecipeKnowledgePreviews(item, evaluatingActor);
   if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, evaluatingActor, { descriptionHTML });
@@ -4766,6 +4772,40 @@ function ensureRecipeKnowledgeTooltipListeners() {
     }
     activateCraftKnowledgeTooltip(anchor, anchor.dataset.recipeKnowledgeTooltipHtml, { locked: true });
   }, true);
+}
+
+function ensureResponsiveHorizontalTooltipListeners() {
+  if (responsiveHorizontalTooltipListenersActive || !globalThis.document?.body) return;
+  responsiveHorizontalTooltipListenersActive = true;
+  document.addEventListener("pointerover", event => {
+    const anchor = event.target.closest?.("[data-tooltip-responsive-horizontal]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    anchor.dataset.tooltipDirection = getResponsiveHorizontalTooltipDirection(anchor);
+  }, true);
+}
+
+function getResponsiveHorizontalTooltipDirection(anchor) {
+  const documentRoot = anchor?.ownerDocument ?? document;
+  const view = documentRoot.defaultView ?? window;
+  const viewportWidth = view.innerWidth || documentRoot.documentElement?.clientWidth || 1280;
+  const margin = 5;
+  const anchorRect = anchor.getBoundingClientRect();
+  const preferredWidth = Math.max(0, Number(anchor.dataset.tooltipPreferredWidth) || 660);
+  const tooltipWidth = Math.min(preferredWidth, Math.max(0, viewportWidth - (margin * 2)));
+  let rightBoundary = viewportWidth;
+  const foundryRightUi = documentRoot.getElementById("ui-right");
+  if (foundryRightUi && !foundryRightUi.contains(anchor)) {
+    const rightUiRect = foundryRightUi.getBoundingClientRect();
+    if (rightUiRect.width > 0 && rightUiRect.left > anchorRect.right) {
+      rightBoundary = Math.min(rightBoundary, rightUiRect.left);
+    }
+  }
+  return getWeaponDamageSourceTooltipDirection({
+    anchorRight: anchorRect.right,
+    margin,
+    rightBoundary,
+    tooltipWidth
+  });
 }
 
 function renderInventoryTooltipComparisonHTML(itemHTML = "", equippedHTMLs = []) {
@@ -6034,7 +6074,8 @@ function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}, evaluati
       };
       const tooltipHTML = renderAddedWeaponFunctionTooltipHTML(title, buildWeaponTooltipRows(item, entry, {
         actor: evaluatingActor,
-        baseMode: false
+        baseMode: false,
+        sourceActor: item?.actor ?? evaluatingActor
       }));
       return ["Добавляет функцию", {
         html: `
@@ -6146,7 +6187,11 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, {
   const panels = [
     ...entries.map((entry, index) => `
       <div class="weapon-tab-panel ${index === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${index}">
-        ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry, { actor: evaluatingActor, baseMode }))}
+        ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry, {
+          actor: evaluatingActor,
+          baseMode,
+          sourceActor
+        }))}
       </div>
     `),
     ...installedModuleTabs.map((entry, index) => {
@@ -6303,7 +6348,11 @@ function renderModuleChangePreview(item, evaluatingActor = null) {
   `;
 }
 
-function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = false } = {}) {
+function buildWeaponTooltipRows(item, entry = {}, {
+  actor = null,
+  baseMode = false,
+  sourceActor = item?.actor ?? actor
+} = {}) {
   const rawData = entry.data ?? {};
   const moduleSlots = getWeaponFunctionModuleSlots(item, entry.id);
   const data = getEffectiveWeaponTooltipData(rawData, {
@@ -6330,7 +6379,10 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     }]
   ];
   if (isSourceDamageMode(data)) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), getWeaponDamageSourceLabel(data)]);
+    rows.push([
+      game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"),
+      renderWeaponDamageSourceChips(data, { evaluatingActor: actor, sourceActor })
+    ]);
   }
   const magazineMax = hasWeaponResourceCostData(data, "magazine") ? toInteger(data.magazine?.max) : 0;
   if (magazineMax) {
@@ -8010,11 +8062,65 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
   };
 }
 
-function getWeaponDamageSourceLabel(data = {}) {
-  const sourceItem = getWeaponDamageSourceItem(data);
-  if (!sourceItem) return "—";
-  const source = getDamageSourceFunction(sourceItem);
-  return String(source?.name ?? "").trim() || sourceItem.name;
+function renderWeaponDamageSourceChips(data = {}, {
+  evaluatingActor = null,
+  sourceActor = evaluatingActor
+} = {}) {
+  const entries = getWeaponTooltipDamageSourceEntries(data?.magazine, {
+    resolveItem: resolveWorldItemSync,
+    getLabel: sourceItem => {
+      const source = getDamageSourceFunction(sourceItem);
+      return String(source?.name ?? "").trim() || sourceItem?.name;
+    }
+  });
+  if (!entries.length) return "—";
+
+  return {
+    html: `
+      <span class="fallout-maw-tooltip-item-chip-list tooltip-damage-source-list" role="list">
+        ${entries.map(entry => {
+          const tooltipAttributes = entry.item
+            ? renderWeaponDamageSourceTooltipAttributes(entry.item, sourceActor, evaluatingActor)
+            : `title="${escapeAttribute(entry.label)}"`;
+          return `
+            <span class="fallout-maw-tooltip-item-chip tooltip-damage-source-chip${entry.active ? " active" : ""}"
+              role="listitem"
+              ${entry.active ? `aria-current="true"` : ""}
+              ${tooltipAttributes}>
+              <img src="${escapeAttribute(entry.item?.img || "icons/svg/item-bag.svg")}" alt="">
+              <span>${escapeHTML(entry.label)}</span>
+            </span>
+          `;
+        }).join("")}
+      </span>
+    `
+  };
+}
+
+const weaponDamageSourceTooltipRenderStack = new Set();
+
+function renderWeaponDamageSourceTooltipAttributes(sourceItem, sourceActor = null, evaluatingActor = sourceActor) {
+  const sourceKey = String(sourceItem?.uuid ?? sourceItem?.id ?? "").trim();
+  if (sourceKey && weaponDamageSourceTooltipRenderStack.has(sourceKey)) {
+    return `title="${escapeAttribute(sourceItem?.name ?? sourceKey)}"`;
+  }
+
+  if (sourceKey) weaponDamageSourceTooltipRenderStack.add(sourceKey);
+  let html = "";
+  try {
+    html = renderInventoryItemTooltipContentHTML(sourceItem, sourceActor, {
+      evaluatingActor,
+      includeRecipeKnowledge: false
+    });
+  } finally {
+    if (sourceKey) weaponDamageSourceTooltipRenderStack.delete(sourceKey);
+  }
+  return [
+    `data-tooltip-html="${escapeAttribute(html)}"`,
+    `data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`,
+    `data-tooltip-responsive-horizontal`,
+    `data-tooltip-preferred-width="660"`
+  ].join(" ");
 }
 
 function getWeaponDamageSourceItem(data = {}) {
