@@ -434,12 +434,13 @@ function abilityConditionField() {
       id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
       kind: new StringField({
         required: true,
-        blank: false,
-        choices: ["construct", "primaryChanges", "primaryChangesPercent"],
-        initial: "construct"
+        blank: true,
+        choices: ["", "construct", "primaryChanges", "primaryChangesPercent"],
+        initial: ""
       }),
       constructId: new StringField({ required: true, blank: true, initial: "" }),
       percentFormula: new StringField({ required: true, blank: true, initial: "100" }),
+      durationPercentFormula: new StringField({ required: true, blank: true, initial: "100" }),
       recipient: new StringField({ required: true, blank: false, choices: ["source", "subjects", "targets"], initial: "subjects" }),
       mode: new StringField({ required: true, blank: false, choices: ["once", "perSubject"], initial: "perSubject" })
     }), { required: true, initial: [] }),
@@ -1099,12 +1100,13 @@ function abilityTrialBranchField() {
       id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
       kind: new StringField({
         required: true,
-        blank: false,
-        choices: ["construct", "primaryChanges", "primaryChangesPercent"],
-        initial: "construct"
+        blank: true,
+        choices: ["", "construct", "primaryChanges", "primaryChangesPercent"],
+        initial: ""
       }),
       constructId: new StringField({ required: true, blank: true, initial: "" }),
       percentFormula: new StringField({ required: true, blank: true, initial: "100" }),
+      durationPercentFormula: new StringField({ required: true, blank: true, initial: "100" }),
       recipient: new StringField({
         required: true,
         blank: false,

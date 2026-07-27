@@ -118,32 +118,41 @@ function migrateAbilityTrialConditionBranches(condition, { hasPrimaryChanges = f
     && hasPrimaryChanges
     && condition.trialBranches.length === 1
     && !condition.trialBranches[0].links.length;
-  if (shouldMigrateEmptyBranch) {
+  const shouldRepairOrphanedLink = hasPrimaryChanges
+    && condition.trialBranches.length === 1
+    && condition.trialBranches[0].links.length === 1
+    && condition.trialBranches[0].links[0]?.kind === "construct"
+    && !String(condition.trialBranches[0].links[0]?.constructId ?? "").trim();
+  if (shouldMigrateEmptyBranch || shouldRepairOrphanedLink) {
     const conditionId = String(condition.id ?? "").trim() || "trial";
-    condition.trialBranches[0].links.push({
+    condition.trialBranches[0].links = [{
       id: `${conditionId}-primary-changes`,
       kind: "primaryChanges",
       constructId: "",
       percentFormula: "100",
+      durationPercentFormula: "100",
       recipient: "subjects",
       mode: "perSubject"
-    });
+    }];
   }
   condition.trialRoutesPrimaryChanges = condition.trialRoutesPrimaryChanges === true
     || hasPrimaryLink
-    || shouldMigrateEmptyBranch;
+    || shouldMigrateEmptyBranch
+    || shouldRepairOrphanedLink;
 }
 
 function migrateAbilityTrialLink(link = {}) {
-  const kind = ["construct", "primaryChanges", "primaryChangesPercent"]
-    .includes(String(link?.kind ?? ""))
-    ? String(link.kind)
-    : "construct";
+  const constructId = String(link?.constructId ?? "");
+  const rawKind = String(link?.kind ?? "");
+  const kind = ["", "construct", "primaryChanges", "primaryChangesPercent"].includes(rawKind)
+    ? (rawKind || (constructId ? "construct" : ""))
+    : (constructId ? "construct" : "");
   return {
     ...link,
     kind,
-    constructId: kind === "construct" ? String(link?.constructId ?? "") : "",
-    percentFormula: String(link?.percentFormula ?? "100")
+    constructId: kind === "construct" ? constructId : "",
+    percentFormula: String(link?.percentFormula ?? "100"),
+    durationPercentFormula: String(link?.durationPercentFormula ?? "100")
   };
 }
 

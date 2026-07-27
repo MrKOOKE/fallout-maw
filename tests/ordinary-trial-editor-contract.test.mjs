@@ -35,8 +35,9 @@ test("ordinary Trial schema persists grouped outcomes, flow and nested consequen
     assert.match(branchField, new RegExp(`\\b${field}: new `));
   }
   assert.match(branchField, /choices: \["continue", "stopSubject", "stopAll"\]/);
-  assert.match(branchField, /choices: \["construct", "primaryChanges", "primaryChangesPercent"\]/);
+  assert.match(branchField, /choices: \["", "construct", "primaryChanges", "primaryChangesPercent"\]/);
   assert.match(branchField, /percentFormula: new StringField/);
+  assert.match(branchField, /durationPercentFormula: new StringField/);
 });
 
 test("both ordinary Trial editors expose persistent branch panels without the flat accepted-result block", () => {
@@ -46,15 +47,36 @@ test("both ordinary Trial editors expose persistent branch panels without the fl
     assert.match(template, /После этой ветки/);
     assert.match(template, /data-construct-type="damage"/);
     assert.match(template, /damageTypeKey|constructDamageTypeKey/);
-    assert.match(template, /data-trial-link-kind="primaryChanges"/);
-    assert.match(template, /data-trial-link-kind="primaryChangesPercent"/);
-    assert.match(template, /Основные изменения/);
-    assert.match(template, /Самостоятельные:/);
+    assert.match(template, /Добавить последствие/);
+    assert.match(template, /conditionTrialLinkType|data-ability-trial-link-type/);
+    assert.match(template, /typeChoices/);
     assert.match(template, /isPrimaryChangesPercent/);
+    assert.match(template, /Процент основной длительности/);
+    assert.doesNotMatch(template, /Длительность эффекта, сек/);
     assert.doesNotMatch(template, /Последствия при подходящем результате/);
   }
   assert.match(catalogTemplate, /data-field="conditionTrialBranchResultKey"/);
+  assert.match(catalogTemplate, /data-field="constructDurationAmount"/);
+  assert.match(catalogTemplate, /data-field="constructDurationUnit"/);
   assert.match(itemTemplate, /data-ability-trial-branch-result-key/);
+  assert.match(itemTemplate, /data-ability-construct-duration-amount/);
+  assert.match(itemTemplate, /data-ability-construct-duration-unit/);
+});
+
+test("issued abilities and free-settings functions both render the complete ordinary Trial editor", () => {
+  for (const marker of [
+    "{{#if isTrial}}",
+    "data-add-ability-trial-entry",
+    "data-add-ability-trial-branch",
+    "data-add-ability-trial-link",
+    "data-ability-trial-link-type"
+  ]) {
+    assert.equal(
+      itemTemplate.split(marker).length - 1,
+      2,
+      `Expected the Item sheet marker in both function render paths: ${marker}`
+    );
+  }
 });
 
 test("both editor pipelines read, mutate and clean nested ordinary Trial branches", () => {
@@ -63,14 +85,39 @@ test("both editor pipelines read, mutate and clean nested ordinary Trial branche
   assert.match(catalogEditor, /condition\.trialRoutesPrimaryChanges = true/);
   assert.match(catalogEditor, /conditionTrialLinkKind/);
   assert.match(catalogEditor, /conditionTrialLinkPercentFormula/);
+  assert.match(catalogEditor, /conditionTrialLinkDurationPercentFormula/);
+  assert.match(catalogEditor, /conditionTrialLinkType/);
   assert.match(catalogEditor, /condition\?\.trialBranches \?\? \[\]\)\.some\(branch/);
   assert.match(itemSheet, /buildItemTrialBranchRows\(condition\?\.trialBranches/);
   assert.match(itemSheet, /branch\.links \?\?= \[\]/);
   assert.match(itemSheet, /condition\.trialRoutesPrimaryChanges = true/);
   assert.match(itemSheet, /ABILITY_TRIAL_LINK_KINDS\.primaryChangesPercent/);
+  assert.match(itemSheet, /data-ability-trial-link-type/);
   assert.match(itemSheet, /percentFormula/);
+  assert.match(itemSheet, /durationPercentFormula/);
   assert.match(itemSheet, /data-ability-trial-branch-result-key/);
   assert.match(itemSheet, /condition\?\.trialBranches \?\? \[\]\)\.some\(branch/);
+});
+
+test("both display builders expose the selected consequence type to their templates", () => {
+  const catalogLinks = sourceBetween(
+    catalogEditor,
+    "function buildTrialLinkRows",
+    "function isAbilityConstructLinked"
+  );
+  const itemLinks = sourceBetween(
+    itemSheet,
+    "function buildItemTrialLinkRows",
+    "function prepareNewItemOrdinaryTrialConstruct"
+  );
+  for (const builder of [catalogLinks, itemLinks]) {
+    assert.match(builder, /const typeKey =/);
+    assert.match(builder, /Выберите последствие/);
+    assert.match(builder, /Процент от основных изменений/);
+    assert.match(builder, /Самостоятельное: урон/);
+    assert.match(builder, /typeChoices,/);
+    assert.match(builder, /isPending: !typeKey/);
+  }
 });
 
 function sourceBetween(source, start, end) {

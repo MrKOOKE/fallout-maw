@@ -341,6 +341,7 @@ test("Trial conditions retain skill selection and links to independent construct
     kind: "construct",
     constructId: "penalty",
     percentFormula: "100",
+    durationPercentFormula: "100",
     recipient: "subjects",
     mode: "perSubject"
   });

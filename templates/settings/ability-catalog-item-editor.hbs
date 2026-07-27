@@ -1676,7 +1676,14 @@
                       </div>
                       {{/if}}
                       {{#if isTemporaryEffect}}
-                      <label class="fallout-maw-construct-duration"><span>Длительность эффекта, сек</span><input type="number" min="1" step="1" data-field="constructDurationSeconds" value="{{durationSeconds}}"></label>
+                      <input type="hidden" data-field="constructDurationSeconds" value="{{durationSeconds}}">
+                      <label class="fallout-maw-construct-duration">
+                        <span>Длительность эффекта</span>
+                        <span class="fallout-maw-split-number-field">
+                          <input type="number" min="0" step="1" value="{{durationAmount}}" data-field="constructDurationAmount">
+                          <select data-field="constructDurationUnit">{{#each durationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                        </span>
+                      </label>
                       <div class="fallout-maw-item-use-category-header"><span>Изменения активного эффекта</span><button type="button" data-action="addAbilityConstructChange"><i class="fa-solid fa-plus"></i> Добавить ключ</button></div>
                       {{#each changes}}
                       <div class="fallout-maw-trauma-effect-row" data-ability-construct-change-row data-change-id="{{id}}">
@@ -2796,39 +2803,35 @@
                         </label>
                         <div class="fallout-maw-item-use-category-header">
                           <span>Последствия</span>
-                          <div class="fallout-maw-inline-controls">
-                            <button type="button" data-action="addConditionTrialLink" data-trial-link-kind="primaryChanges"><i class="fa-solid fa-plus"></i> Основные изменения</button>
-                            <button type="button" data-action="addConditionTrialLink" data-trial-link-kind="primaryChangesPercent"><i class="fa-solid fa-plus"></i> % основных</button>
-                            <span>Самостоятельные:</span>
-                            <button type="button" data-action="addConditionTrialLink" data-construct-type="damage"><i class="fa-solid fa-plus"></i> Урон</button>
-                            <button type="button" data-action="addConditionTrialLink" data-construct-type="temporaryEffect"><i class="fa-solid fa-plus"></i> Эффект</button>
-                            <button type="button" data-action="addConditionTrialLink" data-construct-type="resourceChange"><i class="fa-solid fa-plus"></i> Ресурс</button>
-                          </div>
+                          <button type="button" data-action="addConditionTrialLink"><i class="fa-solid fa-plus"></i> Добавить последствие</button>
                         </div>
                         {{#each links}}
                         <fieldset class="fallout-maw-fieldset fallout-maw-trial-outcome" data-trial-link-row data-trial-link-id="{{id}}" data-trial-link-index="{{index}}">
                           <input type="hidden" data-field="conditionTrialLinkKind" value="{{kind}}">
                           <input type="hidden" data-field="conditionTrialLinkConstructId" value="{{constructId}}">
                           {{#unless isPrimaryChangesPercent}}<input type="hidden" data-field="conditionTrialLinkPercentFormula" value="{{percentFormula}}">{{/unless}}
-                          <div class="fallout-maw-ability-condition-card-header">
-                            <strong>
-                              {{#if isPrimaryChanges}}Основные изменения{{else}}
-                              {{#if isPrimaryChangesPercent}}Процент основных изменений{{else}}
-                              {{#if construct}}{{construct.typeLabel}}{{else}}Повреждённое последствие{{/if}}
-                              {{/if}}{{/if}}
-                            </strong>
+                          {{#unless usesPrimaryDurationPercent}}<input type="hidden" data-field="conditionTrialLinkDurationPercentFormula" value="{{durationPercentFormula}}">{{/unless}}
+                          <div class="fallout-maw-settings-row">
+                            <select data-field="conditionTrialLinkType">
+                              {{#each typeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                            </select>
                             <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionTrialLink" title="Удалить последствие"><i class="fa-solid fa-trash"></i></button>
                           </div>
+                          {{#unless isPending}}
                           <div class="fallout-maw-trial-recipient-row">
                             <label><span>Кому применить</span><select data-field="conditionTrialLinkRecipient">{{#each recipientChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                             <label><span>Кратность</span><select data-field="conditionTrialLinkMode">{{#each modeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                           </div>
                           {{#if isPrimaryChanges}}
-                          <p class="fallout-maw-hint">Будут применены основные изменения функции ({{primaryChangeCount}} строк) на {{primaryDurationSeconds}} секунд.</p>
+                          <p class="fallout-maw-hint">Будут применены основные изменения функции ({{primaryChangeCount}} строк) с длительностью из основной функции.</p>
                           {{/if}}
                           {{#if isPrimaryChangesPercent}}
                           <label><span>Процент основных изменений</span><input type="text" data-field="conditionTrialLinkPercentFormula" value="{{percentFormula}}" data-formula-autocomplete="all"></label>
-                          <p class="fallout-maw-hint">Основные изменения функции будут масштабированы по формуле процента и наложены на {{primaryDurationSeconds}} секунд.</p>
+                          <p class="fallout-maw-hint">Значения основных изменений будут масштабированы по этой формуле.</p>
+                          {{/if}}
+                          {{#if usesPrimaryDurationPercent}}
+                          <label><span>Процент основной длительности</span><input type="text" data-field="conditionTrialLinkDurationPercentFormula" value="{{durationPercentFormula}}" data-formula-autocomplete="all"></label>
+                          <p class="fallout-maw-hint">Длительность рассчитывается отдельно от условия «Длительность» основной функции.</p>
                           {{/if}}
                           {{#if isConstruct}}
                           {{#if construct}}
@@ -2845,7 +2848,16 @@
                             </div>
                             {{/if}}
                             {{#if isTemporaryEffect}}
-                            <label class="fallout-maw-construct-duration"><span>Длительность эффекта, сек</span><input type="number" min="1" step="1" data-field="constructDurationSeconds" value="{{durationSeconds}}"></label>
+                            <input type="hidden" data-field="constructDurationSeconds" value="{{durationSeconds}}">
+                            {{#unless ../usesPrimaryDurationPercent}}
+                            <label class="fallout-maw-construct-duration">
+                              <span>Длительность эффекта</span>
+                              <span class="fallout-maw-split-number-field">
+                                <input type="number" min="0" step="1" value="{{durationAmount}}" data-field="constructDurationAmount">
+                                <select data-field="constructDurationUnit">{{#each durationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                              </span>
+                            </label>
+                            {{/unless}}
                             <div class="fallout-maw-item-use-category-header"><span>Изменения активного эффекта</span><button type="button" data-action="addAbilityConstructChange"><i class="fa-solid fa-plus"></i> Добавить ключ</button></div>
                             {{#if changes.length}}<div class="fallout-maw-trauma-effect-row fallout-maw-grid-header"><span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span></div>{{/if}}
                             {{#each changes}}
@@ -2874,6 +2886,7 @@
                           <p class="fallout-maw-event-reaction-warning"><i class="fa-solid fa-triangle-exclamation"></i> Данные последствия не найдены. Удалите эту строку и создайте последствие заново.</p>
                           {{/if}}
                           {{/if}}
+                          {{/unless}}
                         </fieldset>
                         {{else}}<p class="fallout-maw-empty-list">Последствия для этой ветки не настроены.</p>{{/each}}
                       </div>

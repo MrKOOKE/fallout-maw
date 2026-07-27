@@ -76,6 +76,7 @@ export const ABILITY_TRIAL_LINK_MODES = Object.freeze({
 });
 
 export const ABILITY_TRIAL_LINK_KINDS = Object.freeze({
+  pending: "",
   construct: "construct",
   primaryChanges: "primaryChanges",
   primaryChangesPercent: "primaryChangesPercent"
@@ -647,14 +648,16 @@ function normalizeAbilityTrialLink(value = {}) {
       ? ABILITY_TRIAL_LINK_MODES.once
       : ABILITY_TRIAL_LINK_MODES.perSubject;
   const constructId = String(value?.constructId ?? "").trim();
-  const kind = Object.values(ABILITY_TRIAL_LINK_KINDS).includes(value?.kind)
-    ? value.kind
-    : ABILITY_TRIAL_LINK_KINDS.construct;
+  const rawKind = String(value?.kind ?? "");
+  const kind = Object.values(ABILITY_TRIAL_LINK_KINDS).includes(rawKind)
+    ? (rawKind || (constructId ? ABILITY_TRIAL_LINK_KINDS.construct : ABILITY_TRIAL_LINK_KINDS.pending))
+    : (constructId ? ABILITY_TRIAL_LINK_KINDS.construct : ABILITY_TRIAL_LINK_KINDS.pending);
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     kind,
     constructId: kind === ABILITY_TRIAL_LINK_KINDS.construct ? constructId : "",
     percentFormula: normalizeFormulaText(value?.percentFormula, "100"),
+    durationPercentFormula: normalizeFormulaText(value?.durationPercentFormula, "100"),
     recipient,
     mode: recipient === ABILITY_TRIAL_LINK_RECIPIENTS.subjects
       ? ABILITY_TRIAL_LINK_MODES.perSubject
@@ -916,14 +919,21 @@ function finalizeTrialPrimaryChangeCompatibility(conditions = [], changes = []) 
   ));
   return conditions.map(condition => {
     if (condition?.type !== ABILITY_CONDITION_TYPES.trial) return condition;
+    const onlyBranch = condition.trialBranches?.length === 1
+      ? condition.trialBranches[0]
+      : null;
+    const orphanedLegacyLink = onlyBranch?.links?.length === 1
+      && onlyBranch.links[0]?.kind === ABILITY_TRIAL_LINK_KINDS.construct
+      && !String(onlyBranch.links[0]?.constructId ?? "").trim();
     const shouldMigrate = condition._migrateEmptyTrialToPrimaryChanges === true
       && hasPrimaryChanges
-      && condition.trialBranches?.length === 1
-      && !(condition.trialBranches[0]?.links?.length);
+      && onlyBranch
+      && !onlyBranch.links?.length;
+    const shouldRepairOrphan = hasPrimaryChanges && orphanedLegacyLink;
     delete condition._migrateEmptyTrialToPrimaryChanges;
-    if (!shouldMigrate) return condition;
+    if (!shouldMigrate && !shouldRepairOrphan) return condition;
     condition.trialRoutesPrimaryChanges = true;
-    condition.trialBranches[0].links = [createAbilityTrialLink({
+    onlyBranch.links = [createAbilityTrialLink({
       kind: ABILITY_TRIAL_LINK_KINDS.primaryChanges
     })];
     return condition;
@@ -967,6 +977,7 @@ export function createAbilityTrialLink({
   kind = ABILITY_TRIAL_LINK_KINDS.construct,
   constructId = "",
   percentFormula = "100",
+  durationPercentFormula = "100",
   recipient = ABILITY_TRIAL_LINK_RECIPIENTS.subjects,
   mode = ABILITY_TRIAL_LINK_MODES.perSubject
 } = {}) {
@@ -975,6 +986,7 @@ export function createAbilityTrialLink({
     kind,
     constructId,
     percentFormula,
+    durationPercentFormula,
     recipient,
     mode
   });

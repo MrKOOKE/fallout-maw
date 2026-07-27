@@ -231,14 +231,23 @@ export async function executeAbilityTrialLinks({
     const construct = constructsById.get(String(link?.constructId ?? ""));
     if (!construct) continue;
     if (construct.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect) {
-      await applyTemporaryConstruct({
-        construct,
-        recipients,
-        sourceEffect,
-        sourceItemUuid,
-        title,
-        worldTime
-      });
+      for (const recipient of uniqueActorTargets(recipients)) {
+        const durationSeconds = await resolveTrialLinkDurationSeconds({
+          abilityFunction,
+          link,
+          sourceActor,
+          recipient,
+          fallbackSeconds: construct.durationSeconds
+        });
+        await applyTemporaryConstruct({
+          construct: { ...construct, durationSeconds },
+          recipients: [recipient],
+          sourceEffect,
+          sourceItemUuid,
+          title,
+          worldTime
+        });
+      }
     } else if (construct.type === ABILITY_CONSTRUCT_TYPES.resourceChange) {
       collectResourceConstructGrants(resourceGrants, construct, recipients, multiplier);
     } else if (
@@ -264,14 +273,24 @@ async function applyPrimaryChangeLink({
   title,
   worldTime
 }) {
-  const durationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
+  const primaryDurationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
   const primaryChanges = (abilityFunction?.changes ?? [])
     .filter(change => change?.key && String(change?.value ?? "") !== "");
-  if (!durationSeconds || !primaryChanges.length) return;
+  if (!primaryDurationSeconds || !primaryChanges.length) return;
 
   const settings = normalizeActiveApplicationSettings(abilityFunction?.activeSettings);
   const uniqueRecipients = uniqueActorTargets(recipients);
   for (const recipient of uniqueRecipients) {
+    const durationSeconds = link?.kind === ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent
+      ? await resolveTrialLinkDurationSeconds({
+        abilityFunction,
+        link,
+        sourceActor,
+        recipient,
+        fallbackSeconds: primaryDurationSeconds
+      })
+      : primaryDurationSeconds;
+    if (!durationSeconds) continue;
     const evaluationActor = settings.changeEvaluation === "source"
       ? sourceActor
       : recipient.actor;
@@ -313,6 +332,29 @@ async function applyPrimaryChangeLink({
       worldTime
     });
   }
+}
+
+async function resolveTrialLinkDurationSeconds({
+  abilityFunction,
+  link,
+  sourceActor,
+  recipient,
+  fallbackSeconds = 0
+}) {
+  const primaryDurationSeconds = getAbilityFunctionEffectDurationSeconds(abilityFunction);
+  if (!primaryDurationSeconds) return Math.max(0, Number(fallbackSeconds) || 0);
+  const percent = await evaluateAttackTrialDifficulty({
+    formula: link?.durationPercentFormula,
+    sourceActor,
+    targetActor: recipient?.actor,
+    subjectActor: recipient?.actor,
+    fallback: 100,
+    minimum: 0
+  });
+  return Math.max(
+    0,
+    Math.round(primaryDurationSeconds * (Math.max(0, Number(percent) || 0) / 100))
+  );
 }
 
 function preparePrimaryChangeForRatio(actor, change = {}, ratio = 1) {
@@ -416,7 +458,7 @@ async function applyTemporaryConstruct({
   title,
   worldTime
 }) {
-  const durationSeconds = Math.max(0, toInteger(construct.durationSeconds));
+  const durationSeconds = Math.max(0, Number(construct.durationSeconds) || 0);
   if (!durationSeconds || !construct.changes?.length) return;
   for (const recipient of uniqueActorTargets(recipients)) {
     const actor = recipient.actor;

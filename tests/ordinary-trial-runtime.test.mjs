@@ -316,6 +316,7 @@ test("a percentage primary consequence scales additive and multiplicative change
         id: "half",
         kind: "primaryChangesPercent",
         percentFormula: "50",
+        durationPercentFormula: "50",
         recipient: "subjects",
         mode: "perSubject"
       }])])]
@@ -332,4 +333,89 @@ test("a percentage primary consequence scales additive and multiplicative change
     target.createdEffects[0].system.changes.map(change => change.value),
     [-15, 0.9]
   );
+  assert.equal(target.createdEffects[0].duration.value, 6);
+});
+
+test("an independent temporary consequence scales the main duration separately", async () => {
+  const target = actor("Actor.target");
+  await executeAbilityTrials({
+    abilityFunction: {
+      id: "scaled-independent",
+      type: "activeApplication",
+      conditions: [{
+        id: "duration",
+        type: "duration",
+        durationSeconds: 12
+      }, trial("scaled-independent-trial", [
+        branch("failure", ["failure"], "continue", [{
+          id: "quarter-duration",
+          kind: "construct",
+          constructId: "penalty",
+          durationPercentFormula: "25",
+          recipient: "subjects",
+          mode: "perSubject"
+        }])
+      ])]
+    },
+    constructs: [{
+      id: "penalty",
+      type: "temporaryEffect",
+      name: "Штраф",
+      durationSeconds: 999,
+      changes: [{
+        id: "dodge",
+        key: "system.resources.dodge.bonus",
+        type: "add",
+        value: "-30"
+      }]
+    }],
+    sourceActor: actor("Actor.source"),
+    targets: [{ actor: target }],
+    requestSkillCheckBatchFn: async ({ entries }) => ({
+      outcomes: [{ actor: entries[0].actor, result: { key: "failure" } }]
+    })
+  });
+
+  assert.equal(target.createdEffects.length, 1);
+  assert.equal(target.createdEffects[0].duration.value, 3);
+});
+
+test("an independent temporary consequence keeps its own duration without a main duration", async () => {
+  const target = actor("Actor.target");
+  await executeAbilityTrials({
+    abilityFunction: {
+      id: "standalone-duration",
+      type: "activeApplication",
+      conditions: [trial("standalone-duration-trial", [
+        branch("failure", ["failure"], "continue", [{
+          id: "own-duration",
+          kind: "construct",
+          constructId: "penalty",
+          durationPercentFormula: "25",
+          recipient: "subjects",
+          mode: "perSubject"
+        }])
+      ])]
+    },
+    constructs: [{
+      id: "penalty",
+      type: "temporaryEffect",
+      name: "Штраф",
+      durationSeconds: 120,
+      changes: [{
+        id: "dodge",
+        key: "system.resources.dodge.bonus",
+        type: "add",
+        value: "-30"
+      }]
+    }],
+    sourceActor: actor("Actor.source"),
+    targets: [{ actor: target }],
+    requestSkillCheckBatchFn: async ({ entries }) => ({
+      outcomes: [{ actor: entries[0].actor, result: { key: "failure" } }]
+    })
+  });
+
+  assert.equal(target.createdEffects.length, 1);
+  assert.equal(target.createdEffects[0].duration.value, 120);
 });

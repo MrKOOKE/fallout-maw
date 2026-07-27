@@ -62,6 +62,7 @@ test("Item source migration converts one legacy accepted set into one exact bran
       kind: "construct",
       constructId: "construct",
       percentFormula: "100",
+      durationPercentFormula: "100",
       recipient: "source",
       mode: "once"
     }]
@@ -186,6 +187,46 @@ test("an old single empty failure branch is linked to primary changes exactly on
   const [renormalized] = normalizeAbilityFunctions([abilityFunction]);
   assert.equal(renormalized.conditions[0].trialRoutesPrimaryChanges, true);
   assert.deepEqual(renormalized.conditions[0].trialBranches[0].links, []);
+});
+
+test("an orphaned legacy consequence is repaired but a new pending selector remains pending", () => {
+  const makeFunction = link => ({
+    id: "impulse",
+    type: "activeApplication",
+    changes: [{
+      id: "dodge",
+      key: "system.resources.dodge.bonus",
+      type: "add",
+      value: "-30"
+    }],
+    conditions: [{
+      id: "impulse-trial",
+      type: "trial",
+      trialRoutesPrimaryChanges: false,
+      trialBranches: [{
+        id: "failure",
+        name: "Ветка 1",
+        resultKeys: ["criticalFailure", "failure"],
+        flow: "continue",
+        links: [link]
+      }]
+    }]
+  });
+
+  const [repaired] = normalizeAbilityFunctions([makeFunction({
+    id: "broken",
+    kind: "construct",
+    constructId: ""
+  })]);
+  assert.equal(repaired.conditions[0].trialRoutesPrimaryChanges, true);
+  assert.equal(repaired.conditions[0].trialBranches[0].links[0].kind, "primaryChanges");
+
+  const [pending] = normalizeAbilityFunctions([makeFunction({
+    id: "pending",
+    kind: "",
+    constructId: ""
+  })]);
+  assert.equal(pending.conditions[0].trialBranches[0].links[0].kind, "");
 });
 
 test("legacy flat damage constructs retain formula, damage type and key-limb policy", () => {

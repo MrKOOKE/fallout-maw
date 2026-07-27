@@ -800,6 +800,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       foundry.utils.setProperty(submitData, "system.functions.trap.recharge.value", null);
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
+    normalizeSubmittedAbilityConstructDurations(form, submitData);
     normalizeSubmittedAbilityActionCheckboxes(form, submitData);
     normalizeSubmittedAbilityTrialConditions(form, submitData);
     normalizeSubmittedAdvancementPureValueCheckboxes(form, submitData);
@@ -829,6 +830,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const submitData = super._processFormData(event, form, formData);
     normalizeWeaponSpecialPropertiesInSubmitData(submitData, this.item);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
+    normalizeSubmittedAbilityConstructDurations(form, submitData);
     normalizeSubmittedAbilityActionCheckboxes(form, submitData);
     normalizeSubmittedAbilityTrialConditions(form, submitData);
     normalizeSubmittedAdvancementPureValueCheckboxes(form, submitData);
@@ -1104,6 +1106,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-trial-link]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityTrialLink(event));
+    });
+    this.element?.querySelectorAll("[data-ability-trial-link-type]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onAbilityTrialLinkTypeChange(event));
     });
     this.element?.querySelectorAll("[data-ability-trial-link-recipient]").forEach(select => {
       this.#addHandledFormChangeListener(select, event => this.#onAbilityConditionTypeChange(event));
@@ -3176,35 +3181,56 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     );
     const branch = condition?.trialBranches?.[branchIndex];
     if (condition?.type !== ABILITY_CONDITION_TYPES.trial || !branch) return undefined;
-    const requestedKind = String(event.currentTarget?.dataset.trialLinkKind ?? "");
+    branch.links ??= [];
+    branch.links.push(createAbilityTrialLink({
+      kind: ABILITY_TRIAL_LINK_KINDS.pending
+    }));
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAbilityTrialLinkTypeChange(event) {
+    const selectedType = String(event.currentTarget?.value ?? "");
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const branchIndex = Number(
+      event.currentTarget?.closest?.("[data-ability-trial-branch-row]")?.dataset.trialBranchIndex ?? -1
+    );
+    const linkIndex = Number(
+      event.currentTarget?.closest?.("[data-ability-trial-link-row]")?.dataset.trialLinkIndex ?? -1
+    );
+    const link = condition?.trialBranches?.[branchIndex]?.links?.[linkIndex];
+    if (condition?.type !== ABILITY_CONDITION_TYPES.trial || !link) return undefined;
+
+    const constructs = this.#getSubmittedAbilityConstructs();
+    const previousConstructId = String(link.constructId ?? "");
     if ([
       ABILITY_TRIAL_LINK_KINDS.primaryChanges,
       ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent
-    ].includes(requestedKind)) {
+    ].includes(selectedType)) {
       condition.trialRoutesPrimaryChanges = true;
-      branch.links ??= [];
-      branch.links.push(createAbilityTrialLink({
-        kind: requestedKind,
-        percentFormula: "100"
-      }));
-      return this.#submitCurrentForm({ [functionPath]: functions });
+      link.kind = selectedType;
+      link.constructId = "";
+      link.percentFormula ||= "100";
+    } else if (Object.values(ABILITY_CONSTRUCT_TYPES).includes(selectedType)) {
+      const existing = constructs.find(construct => String(construct?.id ?? "") === previousConstructId);
+      if (!existing || existing.type !== selectedType) {
+        const construct = prepareNewItemOrdinaryTrialConstruct(createAbilityConstruct(selectedType));
+        constructs.push(construct);
+        link.constructId = construct.id;
+      }
+      link.kind = ABILITY_TRIAL_LINK_KINDS.construct;
+    } else {
+      link.kind = ABILITY_TRIAL_LINK_KINDS.pending;
+      link.constructId = "";
     }
-    const requested = String(event.currentTarget?.dataset.constructType ?? "");
-    const type = Object.values(ABILITY_CONSTRUCT_TYPES).includes(requested)
-      ? requested
-      : ABILITY_CONSTRUCT_TYPES.temporaryEffect;
-    const constructs = this.#getSubmittedAbilityConstructs();
-    const construct = prepareNewItemOrdinaryTrialConstruct(createAbilityConstruct(type));
-    constructs.push(construct);
-    const link = createAbilityTrialLink({
-      kind: ABILITY_TRIAL_LINK_KINDS.construct
-    });
-    link.constructId = construct.id;
-    branch.links ??= [];
-    branch.links.push(link);
+
+    const nextConstructs = previousConstructId
+      && previousConstructId !== String(link.constructId ?? "")
+      && !isAbilityConstructLinkedInFunctions(functions, previousConstructId)
+      ? constructs.filter(construct => String(construct?.id ?? "") !== previousConstructId)
+      : constructs;
     return this.#submitCurrentForm({
       [functionPath]: functions,
-      "system.constructs": constructs
+      "system.constructs": nextConstructs
     });
   }
 
@@ -8342,6 +8368,7 @@ function prepareItemAbilityConstructForDisplay(construct, index) {
   const normalized = normalizeAbilityConstructs([construct])[0]
     ?? createAbilityConstruct(ABILITY_CONSTRUCT_TYPES.temporaryEffect);
   const basePath = `system.constructs.${index}`;
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
   const isTemporaryEffect = normalized.type === ABILITY_CONSTRUCT_TYPES.temporaryEffect;
   const isResourceChange = normalized.type === ABILITY_CONSTRUCT_TYPES.resourceChange;
   const isDamage = normalized.type === ABILITY_CONSTRUCT_TYPES.damage;
@@ -8353,6 +8380,8 @@ function prepareItemAbilityConstructForDisplay(construct, index) {
     isTemporaryEffect,
     isResourceChange,
     isDamage,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: isTemporaryEffect
       ? "Временный эффект"
       : (isResourceChange ? "Изменение ресурса" : "Урон"),
@@ -8491,6 +8520,17 @@ function buildItemTrialLinkRows(value = [], constructs = [], basePath = "", {
     const construct = constructIndex >= 0
       ? prepareItemAbilityConstructForDisplay(normalizedConstructs[constructIndex], constructIndex)
       : null;
+    const typeKey = isPrimaryChanges || isPrimaryChangesPercent
+      ? kind
+      : (construct?.type ?? "");
+    const typeChoices = [
+      { value: "", label: "Выберите последствие" },
+      { value: ABILITY_TRIAL_LINK_KINDS.primaryChanges, label: "Основные изменения" },
+      { value: ABILITY_TRIAL_LINK_KINDS.primaryChangesPercent, label: "Процент от основных изменений" },
+      { value: ABILITY_CONSTRUCT_TYPES.damage, label: "Самостоятельное: урон" },
+      { value: ABILITY_CONSTRUCT_TYPES.temporaryEffect, label: "Самостоятельное: временный эффект" },
+      { value: ABILITY_CONSTRUCT_TYPES.resourceChange, label: "Самостоятельное: изменение ресурса" }
+    ].map(choice => ({ ...choice, selected: choice.value === typeKey }));
     const constructChoices = normalizedConstructs.map(construct => ({
       value: construct.id,
       label: construct.name || (
@@ -8511,6 +8551,20 @@ function buildItemTrialLinkRows(value = [], constructs = [], basePath = "", {
       ...link,
       index,
       basePath: `${basePath}.${index}`,
+      kind,
+      isPrimaryChanges,
+      isPrimaryChangesPercent,
+      isConstruct,
+      isPending: !typeKey,
+      typeKey,
+      typeChoices,
+      primaryChangeCount,
+      primaryDurationSeconds,
+      hasPrimaryDuration: primaryDurationSeconds > 0,
+      usesPrimaryDurationPercent: primaryDurationSeconds > 0 && (
+        isPrimaryChangesPercent || construct?.isTemporaryEffect
+      ),
+      durationPercentFormula: String(link?.durationPercentFormula ?? "100"),
       construct,
       hasConstruct: Boolean(construct),
       constructChoices,
@@ -9144,6 +9198,23 @@ function normalizeSubmittedAbilityItemUseConditions(form = null, submitData = {}
       .map(input => String(input.value ?? "").trim())
       .filter(Boolean);
     foundry.utils.setProperty(submitData, `${conditionPath}.itemCategories`, categories);
+  }
+}
+
+function normalizeSubmittedAbilityConstructDurations(form = null, submitData = {}) {
+  for (const row of form?.querySelectorAll?.("[data-ability-construct-row]") ?? []) {
+    const secondsInput = row.querySelector("[data-ability-construct-duration-seconds]");
+    const amountInput = row.querySelector("[data-ability-construct-duration-amount]");
+    const path = String(secondsInput?.name ?? "").trim();
+    if (!path || !amountInput) continue;
+    foundry.utils.setProperty(
+      submitData,
+      path,
+      abilityDurationPartsToSeconds(
+        amountInput.value,
+        row.querySelector("[data-ability-construct-duration-unit]")?.value
+      )
+    );
   }
 }
 
@@ -10035,12 +10106,6 @@ function buildItemAttackHitOutcomeLinkRows(value = [], constructs = [], basePath
       ...link,
       index,
       basePath: `${basePath}.${index}`,
-      kind,
-      isPrimaryChanges,
-      isPrimaryChangesPercent,
-      isConstruct,
-      primaryChangeCount,
-      primaryDurationSeconds,
       construct,
       hasConstruct: Boolean(construct),
       recipientChoices: [
