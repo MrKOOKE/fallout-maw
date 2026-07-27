@@ -6401,6 +6401,10 @@ function buildWeaponTooltipRows(item, entry = {}, {
   rows.push(...getWeaponActionDetailRows(data, { actor }));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
   if (isWeaponActionEnabled(data, "burst")) {
+    rows.push([
+      game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"),
+      getWeaponBurstCount(data, actor)
+    ]);
     const baseRecoil = getWeaponBurstDifficultyPerShot(baseData);
     const recoil = baseMode ? baseRecoil : getEffectiveWeaponBurstDifficultyPerShot(data, actor);
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponRecoil"), renderChangedSignedNumber(recoil, baseRecoil, {
@@ -7847,6 +7851,13 @@ function getWeaponActionDetailRows(data = {}, { actor = null } = {}) {
 
 function getWeaponBurstDifficultyPerShot(data = {}) {
   return Math.max(0, toInteger(data?.burst?.difficultyPerShot));
+}
+
+function getWeaponBurstCount(data = {}, actor = null) {
+  return Math.max(1, toInteger(evaluateTooltipFormula(data?.burst?.count, actor, {
+    fallback: 3,
+    minimum: 1
+  })) || 1);
 }
 
 function getEffectiveWeaponBurstDifficultyPerShot(data = {}, actor = null) {

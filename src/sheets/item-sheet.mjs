@@ -9913,6 +9913,11 @@ function buildWeaponFunctionSection({
   formWeaponData.attackSoundVolume = normalizeAttackSoundVolume(formWeaponData.attackSoundVolume);
   formWeaponData.attackSoundVolumePercent = formatAttackSoundVolumePercent(formWeaponData.attackSoundVolume);
   const effectiveWeaponData = getWeaponDisplayData(formWeaponData);
+  const resourceCosts = buildWeaponResourceCostRowsForData(
+    formWeaponData,
+    hasConditionFunction,
+    hasEnergyConsumerFunction
+  );
   return {
     title,
     tabId,
@@ -9936,7 +9941,8 @@ function buildWeaponFunctionSection({
     damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, formWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(formWeaponData, skillSettings),
     proficiencyChoices: buildWeaponProficiencyChoicesForData(formWeaponData, proficiencySettings),
-    resourceCosts: buildWeaponResourceCostRowsForData(formWeaponData, hasConditionFunction, hasEnergyConsumerFunction),
+    resourceCosts,
+    hasActorResourceCosts: resourceCosts.some(cost => cost.isActorResource),
     specialProperties: buildWeaponSpecialPropertyRowsForData(formWeaponData),
     requirements: buildWeaponRequirementRowsForData(formWeaponData, characteristicSettings, skillSettings),
     actionChoices: buildWeaponActionChoicesForData(effectiveWeaponData, formWeaponData, damageTypeSettings)

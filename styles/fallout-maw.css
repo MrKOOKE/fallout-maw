@@ -5173,6 +5173,18 @@ body #prosemirror-dropdown {
   grid-template-columns: minmax(130px, 0.8fr) minmax(140px, 1fr) minmax(100px, 0.8fr) 2.5rem;
 }
 
+.fallout-maw-weapon-resource-costs.without-actor-resource-costs .fallout-maw-settings-row {
+  grid-template-columns: minmax(130px, 1fr) minmax(100px, 1fr) 2.5rem;
+}
+
+.fallout-maw-weapon-resource-costs.has-actor-resource-costs .fallout-maw-settings-row.fixed-resource > [data-weapon-resource-cost-amount] {
+  grid-column: 3;
+}
+
+.fallout-maw-weapon-resource-costs.has-actor-resource-costs .fallout-maw-settings-row.fixed-resource > [data-delete-weapon-resource-cost] {
+  grid-column: 4;
+}
+
 .fallout-maw-attack-resource-costs .fallout-maw-settings-row {
   grid-template-columns: minmax(160px, 1fr) minmax(130px, 1fr) 2.5rem;
 }

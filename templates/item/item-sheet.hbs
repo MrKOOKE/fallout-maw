@@ -6041,15 +6041,17 @@
       <h3>{{localize "FALLOUTMAW.Item.WeaponResourceCosts"}}</h3>
       <button type="button" data-add-weapon-resource-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddResourceCost"}}</button>
     </div>
-    <div class="fallout-maw-settings-table fallout-maw-weapon-resource-costs">
+    <div class="fallout-maw-settings-table fallout-maw-weapon-resource-costs {{#if hasActorResourceCosts}}has-actor-resource-costs{{else}}without-actor-resource-costs{{/if}}">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
         <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        {{#if hasActorResourceCosts}}
         <span>Ресурс</span>
+        {{/if}}
         <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
         <span></span>
       </div>
       {{#each resourceCosts}}
-      <div class="fallout-maw-settings-row {{#if isActorResource}}actor-resource{{/if}}">
+      <div class="fallout-maw-settings-row {{#if isActorResource}}actor-resource{{else}}fixed-resource{{/if}}">
         {{#if id}}<input type="hidden" name="{{../path}}.resourceCosts.{{index}}.id" value="{{id}}">{{/if}}
         {{#if locked}}
         <select disabled>
@@ -6073,8 +6075,7 @@
         </select>
         <input type="text" name="{{../path}}.resourceCosts.{{index}}.formula" value="{{formula}}" data-formula-autocomplete="all" aria-label="Формула расхода">
         {{else}}
-        <span>—</span>
-        <input type="number" name="{{../path}}.resourceCosts.{{index}}.amount" value="{{amount}}" min="0" step="1">
+        <input type="number" name="{{../path}}.resourceCosts.{{index}}.amount" value="{{amount}}" min="0" step="1" data-weapon-resource-cost-amount>
         {{/if}}
         <button type="button" data-delete-weapon-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
       </div>
