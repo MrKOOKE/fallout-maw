@@ -228,6 +228,7 @@ let tokenActionHudLayoutRefresh = null;
 let tokenActionHudPreviewPercent = null;
 let tokenActionHudMovementPreview = null;
 const pendingTokenActionHudSocketRequests = new Map();
+const pendingEndCombatTurnOperations = new Map();
 const hudImageAspectCache = new Map();
 
 function isHudActionBlockedByReactionLock() {
@@ -4523,14 +4524,28 @@ async function requestWeaponReloadOperation({ actor = null, weapon = null, weapo
   return requestTokenActionHudSocket("weaponReload", payload, gm);
 }
 
-export async function requestEndCombatTurnOperation({ combat = null, actor = null, conversionMode = "" } = {}) {
-  if (!combat?.started || !actor?.isOwner) return undefined;
+export function requestEndCombatTurnOperation({ combat = null, actor = null, conversionMode = "" } = {}) {
+  if (!combat?.started || !actor?.isOwner) return Promise.resolve(undefined);
+  const operationKey = `${combat.id}:${actor.uuid}`;
+  const pending = pendingEndCombatTurnOperations.get(operationKey);
+  if (pending) return pending;
+  const operation = requestEndCombatTurnOperationNow({ combat, actor, conversionMode });
+  pendingEndCombatTurnOperations.set(operationKey, operation);
+  void operation.finally(() => {
+    if (pendingEndCombatTurnOperations.get(operationKey) === operation) {
+      pendingEndCombatTurnOperations.delete(operationKey);
+    }
+  }).catch(() => {});
+  return operation;
+}
+
+async function requestEndCombatTurnOperationNow({ combat, actor, conversionMode }) {
   const payload = {
     combatId: combat.id,
     actorUuid: actor.uuid,
     conversionMode: normalizeTurnConversionMode(conversionMode)
   };
-  if (game.user?.isGM) return performEndCombatTurnOperation(payload, game.user?.id ?? "");
+  if (game.user?.isActiveGM) return performEndCombatTurnOperation(payload, game.user?.id ?? "");
   const gm = getResponsibleGM();
   if (!gm) throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoGM"));
   return requestTokenActionHudSocket("endCombatTurn", payload, gm);
@@ -4543,6 +4558,8 @@ async function performEndCombatTurnOperation({ combatId = "", actorUuid = "", co
   if (!actor) throw new Error("Actor not found.");
   const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
   if (requester && !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
+  await combat.waitForFalloutMawTurnTransition?.();
+  if (!game.user?.isActiveGM) throw new Error("The active GM changed. Retry the turn request.");
   if (!isActorTurnTarget(actor, combat)) throw new Error("Actor is not active in the current combat turn.");
 
   await combat.nextTurn({
@@ -4921,7 +4938,7 @@ async function handleTokenActionHudSocketMessage(message = {}) {
   }
 
   if (message.type !== "request") return;
-  if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+  if (!game.user?.isActiveGM || message.gmUserId !== game.user.id) return;
 
   try {
     const result = await handleTokenActionHudSocketRequest(message.action, message.payload ?? {}, message.requesterUserId ?? "");
@@ -4953,7 +4970,7 @@ async function handleTokenActionHudSocketRequest(action, payload = {}, requester
 }
 
 function getResponsibleGM() {
-  return (game.users?.contents ?? [])
+  return game.users?.activeGM ?? (game.users?.contents ?? [])
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;

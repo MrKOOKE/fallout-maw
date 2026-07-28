@@ -86,7 +86,7 @@ test("weapon repair class and difficulty follow the new weapon class", () => {
 
 test("condition resizing preserves wear percentage and standardizes weakening threshold", () => {
   const result = resizedConditionState(
-    { value: 150, max: 300, weakeningThreshold: 20 },
+    { value: 150, max: 300, weakeningThreshold: 10 },
     { targetMax: 400 }
   );
   assert.equal(result.value, 200);

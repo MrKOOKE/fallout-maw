@@ -5,6 +5,7 @@ import {
     promptCombatInitiativeSurprise
 } from "./combat-initiative-surprise-dialog.mjs";
 import { HandlebarsApplication, mergeClone, mergeObject } from "./utils.mjs";
+import { addManagedEventListener } from "./managed-event-listener.mjs";
 import {
     getActiveCombatTurnBlock,
     getCombatTurnBlocks,
@@ -27,8 +28,10 @@ export class CombatDock extends HandlebarsApplication {
             aspect: game.settings.get(MODULE_ID, "portraitAspect"),
         };
         this.setHooks();
-        window.addEventListener("resize", this.autosize.bind(this));
+        this._onWindowResize = this.autosize.bind(this);
+        this._removeWindowResizeListener = addManagedEventListener(window, "resize", this._onWindowResize);
         this._combatTrackerRefreshed = false;
+        this._turnNavigationPromise = null;
     }
 
     static get DEFAULT_OPTIONS() {
@@ -141,6 +144,22 @@ export class CombatDock extends HandlebarsApplication {
         for (let hook of this.hooks) {
             Hooks.off(hook.hook, hook.id);
         }
+        this.hooks.length = 0;
+    }
+
+    /**
+     * Release references owned outside the ApplicationV2 DOM lifecycle.
+     * This runs synchronously so replacing a dock cannot leave its old global
+     * listener or Foundry hooks alive during the close animation.
+     */
+    _releaseExternalBindings() {
+        if (this._closed) return;
+        this._closed = true;
+        this.removeHooks();
+        this._removeWindowResizeListener?.();
+        this._removeWindowResizeListener = null;
+        this._onWindowResize = null;
+        if (ui.combatDock === this) ui.combatDock = null;
     }
 
     _prepareContext(options) {
@@ -148,7 +167,7 @@ export class CombatDock extends HandlebarsApplication {
         const lessButtons = game.settings.get(MODULE_ID, "lessButtons");
         const reverseHeaderPosition = !this.isDocked && !this.isVertical;
         return {
-            isGM: game.user.isGM,
+            isGM: game.user.isActiveGM,
             scroll,
             lessButtons,
             reverseHeaderPosition
@@ -357,16 +376,16 @@ export class CombatDock extends HandlebarsApplication {
                 const action = e.currentTarget.dataset.action;
                 switch (action) {
                     case "previous-turn":
-                        this.combat.previousTurn();
+                        await this._runTurnNavigation(() => this.combat?.previousTurn());
                         break;
                     case "next-turn":
-                        this.combat.nextTurn();
+                        await this._runTurnNavigation(() => this.combat?.nextTurn());
                         break;
                     case "previous-round":
-                        this.combat.previousRound();
+                        await this._runTurnNavigation(() => this.combat?.previousRound());
                         break;
                     case "next-round":
-                        this.combat.nextRound();
+                        await this._runTurnNavigation(() => this.combat?.nextRound());
                         break;
                     case "end-combat":
                         this.combat.endCombat();
@@ -385,7 +404,7 @@ export class CombatDock extends HandlebarsApplication {
                         new foundry.applications.apps.CombatTrackerConfig().render(true);
                         break;
                     case "start-combat":
-                        this.combat.startCombat();
+                        await this._runTurnNavigation(() => this.combat?.startCombat());
                         break;
                     case "add-event":
                         new AddEvent(this.combat).render(true);
@@ -400,17 +419,45 @@ export class CombatDock extends HandlebarsApplication {
             ".combatant-portrait",
             [
                 {
-                    condition: game?.user?.isGM,
+                    condition: game?.user?.isActiveGM,
                     name: `${MODULE_ID}.contextMenu.setAsCurrent`,
                     icon: `<i class="fas fa-swords"></i>`,
-                    callback: (el) => {
-                        this.combat.update({ turn: this.sortedCombatants.indexOf(this.combat.combatants.get(el.dataset.combatantId)) });
-                    },
+                    callback: el => this._runTurnNavigation(() => (
+                        this.combat?.setTurn(
+                            this.sortedCombatants.indexOf(this.combat.combatants.get(el.dataset.combatantId))
+                        )
+                    )),
                 },
                 ...game.combats.directory._getEntryContextOptions(),
             ],
             { jQuery: false, fixed: true }
         );
+    }
+
+    async _runTurnNavigation(operation) {
+        if (this._turnNavigationPromise) return this._turnNavigationPromise;
+        const setDisabled = disabled => {
+            this.element?.querySelectorAll?.([
+                '[data-action="previous-turn"]',
+                '[data-action="next-turn"]',
+                '[data-action="previous-round"]',
+                '[data-action="next-round"]'
+            ].join(","))?.forEach(button => {
+                button.disabled = disabled;
+            });
+        };
+        setDisabled(true);
+        const pending = Promise.resolve().then(operation);
+        this._turnNavigationPromise = pending;
+        try {
+            return await pending;
+        } catch (error) {
+            ui.notifications.error(error?.message ?? String(error));
+            return undefined;
+        } finally {
+            if (this._turnNavigationPromise === pending) this._turnNavigationPromise = null;
+            setDisabled(false);
+        }
     }
 
     _onRenderCombatTracker() {
@@ -613,11 +660,14 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     async close(...args) {
-        this.removeHooks();
-        window.removeEventListener("resize", this.autosize.bind(this));
-        if (this.element) this.element.remove();
-        this._closed = true;
-        return super.close(...args);
+        this._releaseExternalBindings();
+        try {
+            return await super.close(...args);
+        } finally {
+            this.portraits.length = 0;
+            this._promises = [];
+            this.combat = null;
+        }
     }
 
     getCarouselItems() {

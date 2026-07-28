@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { COMBAT_LIFECYCLE_CONTEXT_OPTION } from "./combat-lifecycle-lease.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
@@ -16,16 +17,24 @@ import {
 import { actorHasIncapacitatingStatus } from "./reaction-hub.mjs";
 import {
   MOVEMENT_RESOURCE_KEY,
-  restoreActorMovementResources
+  buildActorMovementResourceRestoreUpdate,
+  restoreCombatMovementResources
 } from "./movement-resources.mjs";
-import { restoreActorDodgeResource } from "./dodge-resource.mjs";
+import {
+  initializeCombatDodgeResources,
+  restoreActorDodgeResource
+} from "./dodge-resource.mjs";
 import {
   callActorTurnEndHandlers,
   callActorTurnStartPreparedHandlers
 } from "./turn-events.mjs";
 import {
+  BLOCK_TURN_ACTOR_OPTION,
   BLOCK_TURN_STATE_FLAG,
+  TURN_ORDER_SCHEMES,
   getActiveBlockProgress,
+  getCombatTurnBlocks,
+  getCombatTurnOrderScheme,
   isActorInActiveBlock,
   isActorPendingInActiveBlock,
   isBlockTurnOrderEnabled,
@@ -71,6 +80,8 @@ const CLEAR_EFFECT_DURATION_UPDATE = Object.freeze({
 const INCAPACITATING_COMBATANT_STATUSES = new Set(["dead", "unconscious"]);
 
 let advancingDefeatedTurnKey = "";
+const combatReactionResourceInitializations = new WeakMap();
+const queuedDefeatedActorSyncs = new Map();
 
 export function registerReactionResourceHooks() {
   Hooks.on("updateActor", (actor, changes, options) => {
@@ -80,44 +91,20 @@ export function registerReactionResourceHooks() {
     void convertInTurnReactionPoints(actor, value);
   });
 
-  Hooks.on("combatTurnChange", async (combat, prior, current) => {
-    if (!game.user?.isActiveGM || !combat?.started) return undefined;
-    const previousActor = combat.combatants?.get(prior?.combatantId)?.actor ?? null;
-    const currentActor = combat.combatants?.get(current?.combatantId)?.actor ?? combat.combatant?.actor ?? null;
-    if (isBlockTurnOrderEnabled(combat)) {
-      if (previousActor?.uuid && !isActorInActiveBlock(previousActor, combat)) {
-        await restoreActorReactionResource(previousActor);
-      }
-      return prepareActiveBlockTurnStart(combat);
-    }
-    if (previousActor?.uuid && previousActor.uuid !== currentActor?.uuid) {
-      await restoreActorReactionResource(previousActor);
-    }
-    await prepareActorTurnStart(currentActor);
-    return syncActorDefeatedCombatants(currentActor, { advanceCurrent: false });
-  });
-
   Hooks.on("createActiveEffect", effect => queueActorDefeatedCombatantSyncForEffect(effect));
-  Hooks.on("updateActiveEffect", effect => queueActorDefeatedCombatantSyncForEffect(effect));
+  Hooks.on("updateActiveEffect", (effect, changes) => {
+    queueActorDefeatedCombatantSyncForEffect(effect, {
+      statusMutation: hasActiveEffectStatusUpdate(changes)
+    });
+  });
   Hooks.on("deleteActiveEffect", effect => queueActorDefeatedCombatantSyncForEffect(effect));
   Hooks.on("combatStart", (combat, updateData) => {
     prepareCombatStartDefeatedTurn(combat, updateData);
-    void initializeCombatReactionResources(combat, updateData);
-    globalThis.setTimeout(() => {
-      void syncCombatDefeatedCombatants(combat, { advanceCurrent: true });
-    }, 0);
-  });
-  Hooks.on("deleteCombat", combat => resetCombatReactionResources(combat));
-  Hooks.on("createCombatant", async combatant => {
-    const combat = combatant?.combat;
-    if (!game.user?.isActiveGM || !combat?.started) return undefined;
-    const isCurrentActor = combatant.actor?.uuid === combat.combatant?.actor?.uuid;
-    await resetActorReactionResources(combatant.actor, { restore: !isCurrentActor });
-    return syncActorDefeatedCombatants(combatant.actor, { advanceCurrent: isCurrentActor });
+    queueCombatReactionResourceInitialization(combat, updateData);
   });
 }
 
-async function prepareActiveBlockTurnStart(combat) {
+async function prepareActiveBlockTurnStart(combat, { lifecycleContextId = "" } = {}) {
   const progress = getActiveBlockProgress(combat);
   if (!progress) return undefined;
 
@@ -131,45 +118,59 @@ async function prepareActiveBlockTurnStart(combat) {
     if (!actor?.uuid || seenActors.has(actor.uuid)) continue;
     seenActors.add(actor.uuid);
     if (isCombatantAutoCompleted(combatant)) {
-      await syncActorDefeatedCombatants(actor, { combat, advanceCurrent: false });
+      await syncActorDefeatedCombatants(actor, {
+        combat,
+        advanceCurrent: false,
+        lifecycleContextId
+      });
       continue;
     }
     if (!prepared.has(actor.uuid)) {
-      await prepareActorTurnStart(actor);
+      await prepareActorTurnStart(actor, { combat });
       state = markActorPreparedInState(combat, actor, state);
       prepared.add(actor.uuid);
       changed = true;
     }
-    await syncActorDefeatedCombatants(actor, { combat, advanceCurrent: false });
+    await syncActorDefeatedCombatants(actor, {
+      combat,
+      advanceCurrent: false,
+      lifecycleContextId
+    });
   }
 
   if (changed) {
     await combat.update({
       [`flags.${SYSTEM_ID}.${BLOCK_TURN_STATE_FLAG}`]: state
-    }, { turnEvents: false });
+    }, createCombatLifecycleOptions({ turnEvents: false }, lifecycleContextId));
   }
   return undefined;
 }
 
-export async function prepareActorTurnStart(actor) {
+export async function prepareActorTurnStart(actor, { combat = game.combat } = {}) {
   if (!actor?.isOwner) return;
-  await deleteReactionDodgeEffects(actor);
-  await deleteReactionPointEffects(actor);
+  await deleteTurnStartResourceEffects(actor);
 
-  const updates = {};
+  const updates = buildActorMovementResourceRestoreUpdate(actor);
   const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
   if (reaction) {
-    updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = 0;
-    updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(reaction.max));
+    const max = Math.max(0, toInteger(reaction.max));
+    if (toInteger(reaction.value) !== 0) {
+      updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = 0;
+    }
+    if (toInteger(reaction.spent) !== max) {
+      updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = max;
+    }
   }
   if (Object.keys(updates).length) await actor.update(updates, { [REACTION_UPDATE_OPTION]: true });
 
-  await restoreActorMovementResources(actor);
   await restoreActorDodgeResource(actor, { mode: "round" });
-  await callActorTurnStartPreparedHandlers({ actor, combat: game.combat });
+  await callActorTurnStartPreparedHandlers({ actor, combat });
 }
 
-async function syncCombatDefeatedCombatants(combat, { advanceCurrent = false } = {}) {
+async function syncCombatDefeatedCombatants(combat, {
+  advanceCurrent = false,
+  lifecycleContextId = ""
+} = {}) {
   if (!game.user?.isActiveGM || !combat) return false;
   const actors = new Map();
   for (const combatant of combat.combatants ?? []) {
@@ -177,12 +178,20 @@ async function syncCombatDefeatedCombatants(combat, { advanceCurrent = false } =
   }
   let changed = false;
   for (const actor of actors.values()) {
-    changed = (await syncActorDefeatedCombatants(actor, { combat, advanceCurrent })) || changed;
+    changed = (await syncActorDefeatedCombatants(actor, {
+      combat,
+      advanceCurrent,
+      lifecycleContextId
+    })) || changed;
   }
   return changed;
 }
 
-async function syncActorDefeatedCombatants(actor, { combat = game.combat, advanceCurrent = false } = {}) {
+export async function syncActorDefeatedCombatants(actor, {
+  combat = game.combat,
+  advanceCurrent = false,
+  lifecycleContextId = ""
+} = {}) {
   if (!game.user?.isActiveGM || !combat || !actor?.uuid) return false;
   const freshActor = fromUuidSync(actor.uuid) ?? actor;
   const defeated = actorHasIncapacitatingStatus(freshActor);
@@ -190,15 +199,21 @@ async function syncActorDefeatedCombatants(actor, { combat = game.combat, advanc
     .filter(combatant => combatant.actor?.uuid === freshActor.uuid);
   let changed = false;
   for (const combatant of combatants) {
-    changed = (await syncCombatantDefeatedState(combatant, defeated)) || changed;
+    changed = (await syncCombatantDefeatedState(combatant, defeated, {
+      lifecycleContextId
+    })) || changed;
   }
   if (defeated && advanceCurrent) {
-    changed = (await advanceCurrentDefeatedTurn(combat, freshActor)) || changed;
+    changed = (await advanceCurrentDefeatedTurn(combat, freshActor, {
+      lifecycleContextId
+    })) || changed;
   }
   return changed;
 }
 
-async function syncCombatantDefeatedState(combatant, defeated) {
+async function syncCombatantDefeatedState(combatant, defeated, {
+  lifecycleContextId = ""
+} = {}) {
   const syncData = combatant.getFlag?.(SYSTEM_ID, COMBATANT_DEFEATED_SYNC_FLAG);
   const hasSyncFlag = Boolean(syncData);
   if (defeated) {
@@ -210,7 +225,9 @@ async function syncCombatantDefeatedState(combatant, defeated) {
       [`flags.${SYSTEM_ID}.${COMBATANT_DEFEATED_SYNC_FLAG}`]: { previousDefeated }
     };
     if (!combatant.defeated) update.defeated = true;
-    await combatant.update(update);
+    await combatant.update(update, createCombatLifecycleOptions({
+      turnEvents: false
+    }, lifecycleContextId));
     return true;
   }
 
@@ -219,19 +236,35 @@ async function syncCombatantDefeatedState(combatant, defeated) {
     [`flags.${SYSTEM_ID}.${COMBATANT_DEFEATED_SYNC_FLAG}`]: globalThis._del
   };
   if (combatant.defeated && !syncData?.previousDefeated) update.defeated = false;
-  await combatant.update(update);
+  await combatant.update(update, createCombatLifecycleOptions({
+    turnEvents: false
+  }, lifecycleContextId));
   return true;
 }
 
-async function advanceCurrentDefeatedTurn(combat, actor) {
+async function advanceCurrentDefeatedTurn(combat, actor, {
+  lifecycleContextId = ""
+} = {}) {
   if (!game.user?.isActiveGM || !combat?.started || !combat.settings?.skipDefeated || !actor?.uuid) return false;
-  const combatant = combat.combatant;
+  const blockTurn = isBlockTurnOrderEnabled(combat);
+  const combatant = blockTurn
+    ? getActiveBlockProgress(combat)?.block.combatants.find(candidate => (
+      candidate.actor?.uuid === actor.uuid
+      && candidate.isDefeated
+    )) ?? null
+    : combat.combatant;
   if (!combatant || combatant.actor?.uuid !== actor.uuid || !combatant.isDefeated) return false;
   const advanceKey = `${combat.id}:${combat.round}:${combat.turn}:${combatant.id}`;
   if (advancingDefeatedTurnKey === advanceKey) return false;
   advancingDefeatedTurnKey = advanceKey;
   try {
-    await combat.nextTurn({ falloutMawConversionMode: TURN_CONVERSION_MODES.skip });
+    const options = {
+      falloutMawConversionMode: TURN_CONVERSION_MODES.skip
+    };
+    if (blockTurn) {
+      options[BLOCK_TURN_ACTOR_OPTION] = actor.uuid;
+    }
+    await combat.nextTurn(createCombatLifecycleOptions(options, lifecycleContextId));
   } finally {
     if (advancingDefeatedTurnKey === advanceKey) advancingDefeatedTurnKey = "";
   }
@@ -249,15 +282,38 @@ function combatantShouldBeSkippedByDefeatedState(combatant) {
   return Boolean(combatant?.defeated || actorHasIncapacitatingStatus(combatant?.actor));
 }
 
-function queueActorDefeatedCombatantSyncForEffect(effect) {
+function queueActorDefeatedCombatantSyncForEffect(effect, { statusMutation = false } = {}) {
   const actor = effect?.parent;
   if (!actor?.uuid) return;
-  if (!effectHasIncapacitatingCombatantStatus(effect) && !actorHasIncapacitatingStatus(actor)) return;
+  if (
+    !statusMutation
+    && !effectHasIncapacitatingCombatantStatus(effect)
+    && !actorHasIncapacitatingStatus(actor)
+  ) return;
+  if (queuedDefeatedActorSyncs.has(actor.uuid)) return;
+  queuedDefeatedActorSyncs.set(actor.uuid, actor);
   globalThis.setTimeout(() => {
-    const combat = game.combat;
-    const isCurrentActor = combat?.combatant?.actor?.uuid === actor.uuid;
-    void syncActorDefeatedCombatants(actor, { combat, advanceCurrent: isCurrentActor });
+    const queuedActor = queuedDefeatedActorSyncs.get(actor.uuid) ?? actor;
+    queuedDefeatedActorSyncs.delete(actor.uuid);
+    const freshActor = fromUuidSync(queuedActor.uuid) ?? queuedActor;
+    const combat = getActorActiveCombat(freshActor) ?? game.combat;
+    const isActiveTurnActor = isBlockTurnOrderEnabled(combat)
+      ? isActorInActiveBlock(freshActor, combat)
+      : combat?.combatant?.actor?.uuid === freshActor.uuid;
+    void syncActorDefeatedCombatants(freshActor, {
+      combat,
+      advanceCurrent: isActiveTurnActor
+    }).catch(error => {
+      console.error(`${SYSTEM_ID} | Failed to synchronize defeated Combatants`, error);
+    });
   }, 0);
+}
+
+function hasActiveEffectStatusUpdate(changes = {}) {
+  return Object.keys(changes ?? {}).some(path => (
+    path === "statuses"
+    || path.startsWith("statuses.")
+  ));
 }
 
 function effectHasIncapacitatingCombatantStatus(effect) {
@@ -267,9 +323,13 @@ function effectHasIncapacitatingCombatantStatus(effect) {
   return false;
 }
 
-export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERSION_MODES.dodge } = {}) {
+export async function prepareActorTurnEnd(actor, {
+  conversionMode = TURN_CONVERSION_MODES.dodge,
+  combat = game.combat,
+  turnContext = null
+} = {}) {
   if (!actor?.isOwner) return;
-  await callActorTurnEndHandlers({ actor, combat: game.combat, conversionMode });
+  await callActorTurnEndHandlers({ actor, combat, conversionMode, turnContext });
   if (conversionMode !== TURN_CONVERSION_MODES.skip) {
     const remainingActionPoints = getAvailableNormalActionPointValue(actor);
     if (remainingActionPoints > 0) {
@@ -280,8 +340,7 @@ export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERS
       }
     }
   }
-  await zeroTurnResources(actor);
-  await restoreActorReactionResource(actor);
+  await closeActorTurnResources(actor);
   await deleteOneTimeActionPointEffects(actor, { source: IN_TURN_REACTION_SOURCE });
 }
 
@@ -290,10 +349,59 @@ export async function restoreActorReactionResource(actor) {
   const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
   if (!reaction) return;
   const max = Math.max(0, toInteger(reaction.max));
-  await actor.update({
-    [`system.resources.${REACTION_RESOURCE_KEY}.value`]: max,
-    [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: 0
-  }, { [REACTION_UPDATE_OPTION]: true });
+  const updates = {};
+  if (toInteger(reaction.value) !== max) {
+    updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = max;
+  }
+  if (toInteger(reaction.spent) !== 0) {
+    updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = 0;
+  }
+  if (Object.keys(updates).length) {
+    await actor.update(updates, { [REACTION_UPDATE_OPTION]: true });
+  }
+}
+
+export async function prepareCombatTurnStart(combat, combatant, {
+  skipped = false,
+  lifecycleContextId = ""
+} = {}) {
+  if (!game.user?.isActiveGM || !combat?.started || skipped) return undefined;
+  await waitForCombatReactionResourceInitialization(combat);
+  if (isBlockTurnOrderEnabled(combat)) {
+    return prepareActiveBlockTurnStart(combat, { lifecycleContextId });
+  }
+  const actor = combatant?.actor ?? combat.combatant?.actor ?? null;
+  await prepareActorTurnStart(actor, { combat });
+  return syncActorDefeatedCombatants(actor, {
+    combat,
+    advanceCurrent: false,
+    lifecycleContextId
+  });
+}
+
+export async function prepareCombatTurnRewind(combat, prior, current, {
+  turnEndProcessed = false,
+  lifecycleContextId = ""
+} = {}) {
+  if (!game.user?.isActiveGM || !combat?.started) return undefined;
+  await waitForCombatReactionResourceInitialization(combat);
+  const previousActor = combat.combatants?.get(prior?.combatantId)?.actor ?? null;
+  const currentActor = combat.combatants?.get(current?.combatantId)?.actor ?? combat.combatant?.actor ?? null;
+  if (isBlockTurnOrderEnabled(combat)) {
+    if (previousActor?.uuid && !isActorInActiveBlock(previousActor, combat)) {
+      await restoreActorReactionResource(previousActor);
+    }
+    return prepareActiveBlockTurnStart(combat, { lifecycleContextId });
+  }
+  if (!turnEndProcessed && previousActor?.uuid && previousActor.uuid !== currentActor?.uuid) {
+    await restoreActorReactionResource(previousActor);
+  }
+  await prepareActorTurnStart(currentActor, { combat });
+  return syncActorDefeatedCombatants(currentActor, {
+    combat,
+    advanceCurrent: false,
+    lifecycleContextId
+  });
 }
 
 /**
@@ -738,7 +846,7 @@ export function isReactionResourceUpdateOption(options = {}) {
   return Boolean(options?.[REACTION_UPDATE_OPTION]);
 }
 
-async function resetCombatReactionResources(combat) {
+export async function resetCombatReactionResources(combat) {
   if (!game.user?.isActiveGM) return;
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
@@ -747,29 +855,94 @@ async function resetCombatReactionResources(combat) {
   for (const actor of actors.values()) await resetActorReactionResources(actor);
 }
 
-async function initializeCombatReactionResources(combat, updateData = {}) {
+function queueCombatReactionResourceInitialization(combat, updateData = {}) {
+  if (!game.user?.isActiveGM || !combat) return;
+  const lifecycleContextId = String(combat.falloutMawLifecycleContextId ?? "");
+  const initialization = initializeCombatReactionResources(combat, updateData, {
+    lifecycleContextId
+  })
+    .catch(error => {
+      console.error(`${SYSTEM_ID} | Combat resource initialization failed`, error);
+    });
+  const tracked = initialization.finally(() => {
+    if (combatReactionResourceInitializations.get(combat) === tracked) {
+      combatReactionResourceInitializations.delete(combat);
+    }
+  });
+  combatReactionResourceInitializations.set(combat, tracked);
+}
+
+async function waitForCombatReactionResourceInitialization(combat) {
+  const initialization = combatReactionResourceInitializations.get(combat);
+  if (initialization) await initialization;
+}
+
+async function initializeCombatReactionResources(combat, updateData = {}, {
+  lifecycleContextId = ""
+} = {}) {
   if (!game.user?.isActiveGM) return;
   const initialTurn = Number.isInteger(updateData?.turn) ? updateData.turn : combat?.turn;
-  const currentActorUuid = combat?.turns?.[initialTurn]?.actor?.uuid ?? combat?.combatant?.actor?.uuid ?? "";
+  const initiallyPreparedActorUuids = getInitiallyPreparedActorUuids(combat, initialTurn);
+  await initializeCombatDodgeResources(combat);
+  await restoreCombatMovementResources(combat, {
+    excludeActorUuids: initiallyPreparedActorUuids,
+    includeSceneTokenActors: false
+  });
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
     if (combatant.actor) actors.set(combatant.actor.uuid, combatant.actor);
   }
   for (const actor of actors.values()) {
-    await resetActorReactionResources(actor, { restore: actor.uuid !== currentActorUuid });
+    if (initiallyPreparedActorUuids.has(actor.uuid)) continue;
+    await resetActorReactionResources(actor, { restore: true });
   }
+  await syncCombatDefeatedCombatants(combat, {
+    advanceCurrent: false,
+    lifecycleContextId
+  });
 }
 
-async function resetActorReactionResources(actor, { restore = false } = {}) {
+function createCombatLifecycleOptions(options = {}, lifecycleContextId = "") {
+  if (!lifecycleContextId) return options;
+  return {
+    ...options,
+    [COMBAT_LIFECYCLE_CONTEXT_OPTION]: lifecycleContextId
+  };
+}
+
+function getInitiallyPreparedActorUuids(combat, initialTurn) {
+  const currentCombatant = combat?.turns?.[initialTurn] ?? combat?.combatant ?? null;
+  const actorUuids = new Set();
+  if (currentCombatant?.actor?.uuid) actorUuids.add(currentCombatant.actor.uuid);
+  if (getCombatTurnOrderScheme() !== TURN_ORDER_SCHEMES.block || !Number.isInteger(initialTurn)) {
+    return actorUuids;
+  }
+
+  const block = getCombatTurnBlocks(combat)
+    .find(candidate => candidate.start <= initialTurn && initialTurn <= candidate.end);
+  for (const combatant of block?.combatants ?? []) {
+    if (!isCombatantAutoCompleted(combatant) && combatant.actor?.uuid) {
+      actorUuids.add(combatant.actor.uuid);
+    }
+  }
+  return actorUuids;
+}
+
+export async function resetActorReactionResources(actor, { restore = false } = {}) {
   if (!actor?.isOwner) return;
-  await deleteReactionDodgeEffects(actor);
-  await deleteReactionPointEffects(actor);
+  await deleteTurnStartResourceEffects(actor);
   const updates = {};
   const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
   if (reaction) {
     const max = Math.max(0, toInteger(reaction.max));
-    updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = restore ? max : 0;
-    updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = restore ? 0 : max;
+    const nextValue = restore ? max : 0;
+    const nextSpent = restore ? 0 : max;
+    if (toInteger(reaction.value) !== nextValue) {
+      updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = nextValue;
+    }
+    if (toInteger(reaction.spent) !== nextSpent) {
+      updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = nextSpent;
+    }
   }
   if (Object.keys(updates).length) await actor.update(updates, { [REACTION_UPDATE_OPTION]: true });
 }
@@ -791,15 +964,32 @@ async function convertActionPointsToReactionPoints(actor, amount) {
   await createOrUpdateReactionPointEffect(actor, value);
 }
 
-async function zeroTurnResources(actor) {
+async function closeActorTurnResources(actor) {
   const updates = {};
   for (const key of [ACTION_RESOURCE_KEY, MOVEMENT_RESOURCE_KEY]) {
     const resource = actor.system?.resources?.[key];
     if (!resource) continue;
-    updates[`system.resources.${key}.value`] = 0;
-    updates[`system.resources.${key}.spent`] = Math.max(0, toInteger(resource.max));
+    const max = Math.max(0, toInteger(resource.max));
+    if (toInteger(resource.value) !== 0) {
+      updates[`system.resources.${key}.value`] = 0;
+    }
+    if (toInteger(resource.spent) !== max) {
+      updates[`system.resources.${key}.spent`] = max;
+    }
   }
-  if (Object.keys(updates).length) await actor.update(updates);
+  const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
+  if (reaction) {
+    const max = Math.max(0, toInteger(reaction.max));
+    if (toInteger(reaction.value) !== max) {
+      updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = max;
+    }
+    if (toInteger(reaction.spent) !== 0) {
+      updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = 0;
+    }
+  }
+  if (Object.keys(updates).length) {
+    await actor.update(updates, { [REACTION_UPDATE_OPTION]: true });
+  }
 }
 
 async function createOrUpdateReactionDodgeEffect(actor, amount) {
@@ -847,11 +1037,22 @@ async function deleteReactionPointEffects(actor) {
   if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
 }
 
-async function deleteReactionDodgeEffects(actor) {
-  const ids = actor?.effects
-    ?.filter(effect => effect.getFlag(SYSTEM_ID, REACTION_DODGE_EFFECT_FLAG))
-    .map(effect => effect.id) ?? [];
-  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
+async function deleteTurnStartResourceEffects(actor) {
+  const ids = new Set();
+  for (const effect of actor?.effects ?? []) {
+    if (
+      effect.getFlag?.(SYSTEM_ID, REACTION_DODGE_EFFECT_FLAG)
+      || effect.getFlag?.(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG)
+    ) {
+      if (effect.id) ids.add(effect.id);
+      continue;
+    }
+    const oneTime = effect.getFlag?.(SYSTEM_ID, ONE_TIME_ACTION_EFFECT_FLAG);
+    if (oneTime?.source === IN_TURN_REACTION_SOURCE && effect.id) ids.add(effect.id);
+  }
+  if (ids.size) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", Array.from(ids), { animate: false });
+  }
 }
 
 async function addOneTimeActionPointEffect(actor, amount, { source = "" } = {}) {
@@ -976,6 +1177,9 @@ function buildOneTimeActionPointEffectData(actor, value, { source = "" } = {}) {
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    ...(source === IN_TURN_REACTION_SOURCE
+      ? { duration: { expiry: "combatEnd" } }
+      : {}),
     system: {
       changes: [{
         key: ONE_TIME_ACTION_POINTS_KEY,

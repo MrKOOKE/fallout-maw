@@ -23,22 +23,6 @@ const pendingDodgeSocketRequests = new Map();
 const actorDodgeMutationQueue = new Map();
 
 export function registerCombatDodgeHooks() {
-  Hooks.on("combatStart", combat => {
-    if (!getDodgeSettings().restoreOnCombatStart) return undefined;
-    return restoreCombatDodgeResources(combat, { mode: "full" });
-  });
-
-  Hooks.on("deleteCombat", combat => {
-    if (!getDodgeSettings().restoreOnCombatEnd) return undefined;
-    return restoreCombatDodgeResources(combat, { mode: "full" });
-  });
-
-  Hooks.on("createCombatant", combatant => {
-    const combat = combatant?.combat;
-    if (!game.user.isActiveGM || !combat?.started) return undefined;
-    if (!getDodgeSettings().restoreOnCombatStart) return undefined;
-    return restoreActorDodgeResource(combatant.actor, { mode: "full" });
-  });
 }
 
 export function registerCombatDodgeSocket() {
@@ -115,6 +99,26 @@ export async function restoreCombatDodgeResources(combat, { mode = "full" } = {}
   for (const actor of actors.values()) {
     await restoreActorDodgeResource(actor, { mode });
   }
+}
+
+export async function initializeCombatDodgeResources(combat) {
+  if (!getDodgeSettings().restoreOnCombatStart) return;
+  await restoreCombatDodgeResources(combat, { mode: "full" });
+}
+
+export async function initializeActorDodgeResource(actor) {
+  if (!getDodgeSettings().restoreOnCombatStart) return;
+  await restoreActorDodgeResource(actor, { mode: "full" });
+}
+
+export async function cleanupCombatDodgeResources(combat) {
+  if (!getDodgeSettings().restoreOnCombatEnd) return;
+  await restoreCombatDodgeResources(combat, { mode: "full" });
+}
+
+export async function cleanupActorDodgeResource(actor) {
+  if (!getDodgeSettings().restoreOnCombatEnd) return;
+  await restoreActorDodgeResource(actor, { mode: "full" });
 }
 
 export async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {

@@ -8173,10 +8173,19 @@ async function processAtRandomAttackResolution(context = {}) {
   await replaceAtRandomActionBlockEffect(actor, entry.abilityItem, entry.abilityFunction, [...blockedActionKeys]);
 }
 
-async function applyDefensiveTacticsAtTurnEnd({ actor = null } = {}) {
+async function applyDefensiveTacticsAtTurnEnd({
+  actor = null,
+  combat = null,
+  turnContext = null
+} = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
-  if (!isActorInActiveCombat(actor)) return;
-  if (hasActorCombatMovementInCurrentTurn(actor)) return;
+  const actorWasInEndingCombat = Number(turnContext?.round) > 0
+    && Array.from(combat?.combatants ?? [])
+      .some(combatant => combatant?.actor?.uuid === actor.uuid);
+  if (!isActorInActiveCombat(actor) && !actorWasInEndingCombat) return;
+  if (hasActorCombatMovementInCurrentTurn(actor, {
+    round: turnContext?.round
+  })) return;
 
   const entries = getActorDefensiveTacticsEntries(actor);
   if (!entries.length) return;
@@ -8229,6 +8238,7 @@ async function createDefensiveTacticsEffect(actor, abilityItem, abilityFunction,
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: { expiry: "combatEnd" },
     system: { changes },
     flags: {
       [SYSTEM_ID]: {

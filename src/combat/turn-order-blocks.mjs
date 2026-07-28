@@ -151,15 +151,13 @@ export function getBlockTurnTargetCombatant(combat = game.combat, options = {}) 
   const byCombatantId = normalizeId(options?.[BLOCK_TURN_COMBATANT_OPTION]);
   if (byCombatantId) {
     const combatant = block.combatants.find(candidate => candidate.id === byCombatantId);
-    if (combatant && !isCombatantCompleted(combatant, progress)) return combatant;
-    return firstIncomplete;
+    return combatant ?? firstIncomplete;
   }
 
   const byActorUuid = normalizeId(options?.[BLOCK_TURN_ACTOR_OPTION]);
   if (byActorUuid) {
     const combatant = block.combatants.find(candidate => candidate.actor?.uuid === byActorUuid);
-    if (combatant && !isCombatantCompleted(combatant, progress)) return combatant;
-    return firstIncomplete;
+    return combatant ?? firstIncomplete;
   }
 
   const selected = getSelectedBlockCombatant(combat, block);

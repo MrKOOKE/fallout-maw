@@ -17,11 +17,18 @@ import {
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
+import { registerCombatTurnNavigationSocket } from "./combat/turn-navigation-socket.mjs";
+import { registerCombatLifecycleLeaseQueries } from "./combat/combat-lifecycle-lease.mjs";
 import { registerCombatEndResolutionHooks, registerCombatEndResolutionSocket } from "./combat/combat-end-resolution.mjs";
 import { registerReactionHubConfig, registerReactionHubSocket } from "./combat/reaction-hub.mjs";
 import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
-import { FalloutMaWActor, FalloutMaWCombat, FalloutMaWItem } from "./documents/index.mjs";
+import {
+  FalloutMaWActor,
+  FalloutMaWCombat,
+  FalloutMaWCombatant,
+  FalloutMaWItem
+} from "./documents/index.mjs";
 import { registerAdvancementMediaSocket } from "./advancement/media.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
 import {
@@ -140,6 +147,7 @@ Hooks.once("init", () => {
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Combat.documentClass = FalloutMaWCombat;
+  CONFIG.Combatant.documentClass = FalloutMaWCombatant;
   CONFIG.Item.documentClass = FalloutMaWItem;
   CONFIG.Token.objectClass = FalloutMaWToken;
   CONFIG.Canvas.layers.tokens.layerClass = FalloutMaWTokenLayer;
@@ -173,6 +181,7 @@ Hooks.once("init", () => {
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerReactionResourceHooks();
+  registerCombatLifecycleLeaseQueries();
   registerCombatEndResolutionHooks();
   registerActiveActionHooks();
   registerAbilityEffectHooks();
@@ -230,6 +239,7 @@ Hooks.once("ready", async () => {
   registerAdvancementMediaSocket();
   registerAttackAnimationSocket();
   registerCombatDodgeSocket();
+  registerCombatTurnNavigationSocket();
   registerCombatEndResolutionSocket();
   registerCoverSocket();
   registerActiveActionSocket();

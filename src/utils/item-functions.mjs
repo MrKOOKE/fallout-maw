@@ -230,12 +230,12 @@ export function isActiveItem(itemOrSystem = null) {
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {
   if (!hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.condition)) {
-    return { current: 0, max: 0, threshold: 10, steps: 0, ratio: 1, active: false };
+    return { current: 0, max: 0, threshold: 20, steps: 0, ratio: 1, active: false };
   }
   const condition = getConditionFunction(itemOrSystem);
   const current = Math.max(0, Math.trunc(Number(condition.value) || 0));
   const max = Math.max(0, Math.trunc(Number(condition.max) || 0));
-  const threshold = Math.max(1, Math.trunc(Number(condition.weakeningThreshold) || 10));
+  const threshold = Math.max(1, Math.trunc(Number(condition.weakeningThreshold) || 20));
   if (max <= 0) return { current, max, threshold, steps: 0, ratio: 1, active: true };
 
   const lostPercent = Math.max(0, (1 - (current / max)) * 100);

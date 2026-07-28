@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { UNIFIED_WEAKENING_THRESHOLD } from "../scripts/rebalance/condition-state.mjs";
 import {
   armoredEffectiveDamage,
   damagePacketAmounts,
@@ -185,7 +186,10 @@ test("throwable grenades become classed one-use volley weapons without condition
   assert.equal(item.system.functions.condition.enabled, false);
   assert.equal(item.system.functions.condition.value, 0);
   assert.equal(item.system.functions.condition.max, 0);
-  assert.equal(item.system.functions.condition.weakeningThreshold, 10);
+  assert.equal(
+    item.system.functions.condition.weakeningThreshold,
+    UNIFIED_WEAKENING_THRESHOLD
+  );
   assert.deepEqual(item.system.functions.condition.recoveryMethods, []);
 });
 

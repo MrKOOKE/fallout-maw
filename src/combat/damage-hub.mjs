@@ -66,6 +66,7 @@ import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { registerCombatRoundStartHandler } from "./turn-events.mjs";
 import {
   getConstructPartLimbKey,
   getConstructPartSlotForLimb,
@@ -4552,7 +4553,7 @@ function registerDamageTimeHooks() {
     combatRoundWorldTimes.set(combat.id, Number(game.time?.worldTime) || 0);
   });
   Hooks.on("deleteCombat", combat => combatRoundWorldTimes.delete(combat.id));
-  Hooks.on("combatTurnChange", advanceWorldTimeForCombatRound);
+  registerCombatRoundStartHandler(advanceWorldTimeForCombatRound);
   registerQueuedWorldTimeProcessor(processTimedDamageEffects, { priority: 100 });
   Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
   Hooks.on("preUpdateActiveEffect", preventManagedTimedDamageEffectExpiration);
@@ -4562,11 +4563,10 @@ function registerDamageTimeHooks() {
   damageTimeHooksRegistered = true;
 }
 
-async function advanceWorldTimeForCombatRound(combat, previous, current) {
+async function advanceWorldTimeForCombatRound({ combat, round, skipped = false } = {}) {
   if (!game.user?.isActiveGM || !combat?.started) return;
-  const previousRound = toInteger(previous?.round);
-  const currentRound = toInteger(current?.round);
-  if (currentRound <= 1 || currentRound <= previousRound) return;
+  const currentRound = toInteger(round);
+  if (skipped || currentRound <= 1) return;
 
   const roundSeconds = getRoundSeconds();
   const previousWorldTime = combatRoundWorldTimes.get(combat.id) ?? (Number(game.time?.worldTime) || 0);

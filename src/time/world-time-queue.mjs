@@ -5,6 +5,8 @@ const pendingWorldTimeUpdates = [];
 let worldTimeHookRegistered = false;
 let processingWorldTimeQueue = false;
 let worldTimeAdvanceQueue = Promise.resolve();
+let worldTimeQueueIdlePromise = Promise.resolve();
+let resolveWorldTimeQueueIdle = null;
 const SYSTEM_TIME_ADVANCE_OPTION = "falloutMawSystemTimeAdvance";
 
 export async function advanceWorldTime(seconds, {
@@ -44,6 +46,7 @@ export async function advanceWorldTime(seconds, {
         ...(campRest ? { campRest } : {})
       }
     });
+    await waitForWorldTimeQueueIdle();
     const after = Number(game.time?.worldTime) || (before + amount);
     await scope.emit("fallout-maw.world.time.advanced", {
       data: { seconds: after - before, source: String(source ?? "system") },
@@ -64,6 +67,10 @@ export async function advanceWorldTime(seconds, {
   return advance;
 }
 
+export function waitForWorldTimeQueueIdle() {
+  return worldTimeQueueIdlePromise;
+}
+
 export function registerQueuedWorldTimeProcessor(processor, { priority = 0 } = {}) {
   if (typeof processor !== "function") return () => {};
   registerWorldTimeQueueHook();
@@ -74,15 +81,14 @@ export function registerQueuedWorldTimeProcessor(processor, { priority = 0 } = {
 function registerWorldTimeQueueHook() {
   if (worldTimeHookRegistered) return;
   Hooks.on("updateWorldTime", enqueueWorldTimeUpdate);
-  Hooks.on("updateWorldTime", emitExternalWorldTimeUpdate);
   worldTimeHookRegistered = true;
 }
 
-function emitExternalWorldTimeUpdate(worldTime, deltaTime, options = {}, userId = "") {
+async function emitExternalWorldTimeUpdate(worldTime, deltaTime, options = {}, userId = "") {
   if (options?.[SYSTEM_TIME_ADVANCE_OPTION] || !isCurrentActiveGM()) return;
   const after = Number(worldTime) || 0;
   const delta = Number(deltaTime) || 0;
-  void dispatchSystemEvent("fallout-maw.world.time.advanced", {
+  await dispatchSystemEvent("fallout-maw.world.time.advanced", {
     data: { seconds: delta, source: "external", userId: String(userId ?? "") },
     before: { worldTime: after - delta },
     after: { worldTime: after },
@@ -99,6 +105,7 @@ function emitExternalWorldTimeUpdate(worldTime, deltaTime, options = {}, userId 
 }
 
 function enqueueWorldTimeUpdate(worldTime, deltaTime, options, userId) {
+  markWorldTimeQueueBusy();
   pendingWorldTimeUpdates.push({
     worldTime: Number(worldTime) || 0,
     deltaTime: Number(deltaTime) || 0,
@@ -115,6 +122,7 @@ function isCurrentActiveGM() {
 function pullCoalescedWorldTimeUpdate() {
   if (!pendingWorldTimeUpdates.length) return null;
   const first = pendingWorldTimeUpdates.shift();
+  const sourceUpdates = [first];
   let worldTime = Number(first.worldTime) || 0;
   let deltaTime = Number(first.deltaTime) || 0;
   const current = Number(game.time?.worldTime) || 0;
@@ -124,6 +132,7 @@ function pullCoalescedWorldTimeUpdate() {
     const peekW = Number(peek.worldTime) || 0;
     if (peekW > current) break;
     const next = pendingWorldTimeUpdates.shift();
+    sourceUpdates.push(next);
     deltaTime += Number(next.deltaTime) || 0;
     worldTime = Number(next.worldTime) || worldTime;
   }
@@ -137,7 +146,8 @@ function pullCoalescedWorldTimeUpdate() {
     worldTime,
     deltaTime,
     options: first.options,
-    userId: first.userId
+    userId: first.userId,
+    sourceUpdates
   };
 }
 
@@ -165,9 +175,38 @@ async function processWorldTimeQueue() {
           console.error("Fallout MaW | World time processor failed", error);
         }
       }
+      for (const sourceUpdate of update.sourceUpdates) {
+        try {
+          await emitExternalWorldTimeUpdate(
+            sourceUpdate.worldTime,
+            sourceUpdate.deltaTime,
+            sourceUpdate.options,
+            sourceUpdate.userId
+          );
+        } catch (error) {
+          console.error("Fallout MaW | World time event dispatch failed", error);
+        }
+      }
     }
   } finally {
     processingWorldTimeQueue = false;
-    if (pendingWorldTimeUpdates.length) void processWorldTimeQueue();
+    if (pendingWorldTimeUpdates.length) {
+      void processWorldTimeQueue();
+    } else {
+      markWorldTimeQueueIdle();
+    }
   }
+}
+
+function markWorldTimeQueueBusy() {
+  if (resolveWorldTimeQueueIdle) return;
+  worldTimeQueueIdlePromise = new Promise(resolve => {
+    resolveWorldTimeQueueIdle = resolve;
+  });
+}
+
+function markWorldTimeQueueIdle() {
+  const resolve = resolveWorldTimeQueueIdle;
+  resolveWorldTimeQueueIdle = null;
+  resolve?.();
 }

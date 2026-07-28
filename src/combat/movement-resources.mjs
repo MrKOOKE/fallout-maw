@@ -34,13 +34,6 @@ export const MOVEMENT_RULER_COLORS = Object.freeze({
 export function registerCombatMovementHooks() {
   Hooks.on("preMoveToken", preventUnaffordableCombatMovement);
   Hooks.on("moveToken", spendCombatMovementResources);
-  Hooks.on("combatStart", combat => restoreCombatMovementResources(combat));
-  Hooks.on("deleteCombat", combat => restoreCombatMovementResources(combat));
-  Hooks.on("createCombatant", combatant => {
-    const combat = combatant?.combat;
-    if (!game.user.isActiveGM || !combat?.started) return;
-    return restoreActorMovementResources(combatant.actor);
-  });
 }
 
 export function getCombatMovementResourceState(actor) {
@@ -547,16 +540,21 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
   await actor.update(updates);
 }
 
-export async function restoreCombatMovementResources(combat) {
+export async function restoreCombatMovementResources(combat, {
+  excludeActorUuids = [],
+  includeSceneTokenActors = true
+} = {}) {
   if (!game.user.isActiveGM) return;
-  const actors = getCombatMovementRestoreActors(combat);
+  const actors = getCombatMovementRestoreActors(combat, { includeSceneTokenActors });
+  const excluded = new Set(Array.from(excludeActorUuids, value => String(value ?? "")).filter(Boolean));
 
   for (const actor of actors.values()) {
+    if (excluded.has(actor.uuid)) continue;
     await restoreActorMovementResources(actor);
   }
 }
 
-function getCombatMovementRestoreActors(combat) {
+function getCombatMovementRestoreActors(combat, { includeSceneTokenActors = true } = {}) {
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
     const actor = combatant.actor;
@@ -564,11 +562,13 @@ function getCombatMovementRestoreActors(combat) {
     actors.set(actor.uuid, actor);
   }
 
-  for (const scene of getCombatMovementRestoreScenes(combat)) {
-    for (const tokenDocument of scene.tokens?.contents ?? []) {
-      const actor = tokenDocument.actor;
-      if (!actor) continue;
-      actors.set(actor.uuid, actor);
+  if (includeSceneTokenActors) {
+    for (const scene of getCombatMovementRestoreScenes(combat)) {
+      for (const tokenDocument of scene.tokens?.contents ?? []) {
+        const actor = tokenDocument.actor;
+        if (!actor) continue;
+        actors.set(actor.uuid, actor);
+      }
     }
   }
 
@@ -590,19 +590,32 @@ function getCombatMovementRestoreScenes(combat) {
 
 export async function restoreActorMovementResources(actor) {
   if (!actor?.isOwner) return;
+  const updates = buildActorMovementResourceRestoreUpdate(actor);
+  if (Object.keys(updates).length) await actor.update(updates);
+}
 
-  const updates = {
-    [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: []
-  };
+export function buildActorMovementResourceRestoreUpdate(actor) {
+  const updates = {};
+  if (!actor) return updates;
+  const storedSpending = actor.getFlag?.(FALLOUT_MAW.id, MOVEMENT_RESOURCE_SPENDING_FLAG);
+  const hasStoredSpending = Array.isArray(storedSpending)
+    ? storedSpending.length > 0
+    : storedSpending !== null && storedSpending !== undefined;
+  if (hasStoredSpending) {
+    updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [];
+  }
   for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY]) {
     const resource = actor.system?.resources?.[key];
     if (!resource) continue;
     const max = Math.max(0, toInteger(resource.max));
-    updates[`system.resources.${key}.value`] = max;
-    updates[`system.resources.${key}.spent`] = 0;
+    if (toInteger(resource.value) !== max) {
+      updates[`system.resources.${key}.value`] = max;
+    }
+    if (toInteger(resource.spent) !== 0) {
+      updates[`system.resources.${key}.spent`] = 0;
+    }
   }
-
-  if (Object.keys(updates).length) await actor.update(updates);
+  return updates;
 }
 
 function createMovementResourceSpendingEntry(tokenDocument, movement, resources, {
@@ -631,9 +644,10 @@ function getMovementResourceSpendingStack(actor) {
   return Array.isArray(stack) ? stack.filter(entry => entry && typeof entry === "object") : [];
 }
 
-export function hasActorCombatMovementInCurrentTurn(actor) {
+export function hasActorCombatMovementInCurrentTurn(actor, { round = null } = {}) {
   if (!actor) return false;
-  const currentRound = Math.max(0, toInteger(getActorActiveCombat(actor)?.round));
+  const requestedRound = Math.max(0, toInteger(round));
+  const currentRound = requestedRound || Math.max(0, toInteger(getActorActiveCombat(actor)?.round));
   return getMovementResourceSpendingStack(actor).some(entry => {
     if (String(entry?.actorUuid ?? "") !== String(actor.uuid ?? "")) return false;
     if (currentRound > 0 && toInteger(entry?.round) !== currentRound) return false;

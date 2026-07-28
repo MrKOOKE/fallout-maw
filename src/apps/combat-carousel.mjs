@@ -9,6 +9,8 @@ import {
   getInitiativeDisplay,
   getSystemIcons
 } from "./combat-carousel/systems.mjs";
+import { requestEndCombatTurnOperation } from "./token-action-hud.mjs";
+import { TURN_CONVERSION_MODES } from "../combat/reaction-resources.mjs";
 
 const MODULE_ID = FALLOUT_MAW.id;
 const PRESET_SETTING_KEYS = new Set([
@@ -177,7 +179,9 @@ function registerCombatCarouselHotkeys() {
     restricted: false,
     onDown: () => {},
     onUp: () => {
-      if (game.combat?.combatant?.isOwner) game.combat.previousTurn();
+      if (!game.combat?.combatant?.isOwner) return false;
+      runCombatCarouselHotkeyOperation(() => game.combat.previousTurn());
+      return true;
     }
   });
 
@@ -187,9 +191,29 @@ function registerCombatCarouselHotkeys() {
     restricted: false,
     onDown: () => {},
     onUp: () => {
-      if (game.combat?.combatant?.isOwner) game.combat.nextTurn();
+      const combat = game.combat;
+      const actor = combat?.combatant?.actor;
+      if (!combat?.combatant?.isOwner || !actor) return false;
+      runCombatCarouselHotkeyOperation(() => (
+        game.user?.isActiveGM
+          ? combat.nextTurn()
+          : requestEndCombatTurnOperation({
+            combat,
+            actor,
+            conversionMode: TURN_CONVERSION_MODES.dodge
+          })
+      ));
+      return true;
     }
   });
+}
+
+function runCombatCarouselHotkeyOperation(operation) {
+  void Promise.resolve()
+    .then(operation)
+    .catch(error => {
+      ui.notifications.error(error?.message ?? String(error));
+    });
 }
 
 export async function restartCombatCarousel() {

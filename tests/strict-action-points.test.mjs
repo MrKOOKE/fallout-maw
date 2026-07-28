@@ -499,7 +499,7 @@ test("every direct movement, posture, active-action and dodge spend path recheck
   );
   assert.match(
     movement,
-    /const currentRound = Math\.max\(0, toInteger\(getActorActiveCombat\(actor\)\?\.round\)\);/u
+    /export function hasActorCombatMovementInCurrentTurn\(actor, \{ round = null \} = \{\}\)[\s\S]*?const requestedRound = Math\.max\(0, toInteger\(round\)\);[\s\S]*?const currentRound = requestedRound \|\| Math\.max\(0, toInteger\(getActorActiveCombat\(actor\)\?\.round\)\);/u
   );
   assert.match(
     posture,
