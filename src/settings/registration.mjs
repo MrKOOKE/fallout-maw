@@ -15,6 +15,7 @@ import { CampSettingsConfig } from "../apps/camp-settings-config.mjs";
 import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
 import { CombatSettingsConfig } from "../apps/combat-settings-config.mjs";
 import { CoverSettingsConfig } from "../apps/cover-settings-config.mjs";
+import { CraftingSettingsConfig } from "../apps/crafting-settings-config.mjs";
 import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
@@ -52,6 +53,7 @@ import {
   COMBAT_CAROUSEL_SIZE_SETTING,
   COMBAT_SETTINGS_SETTING,
   COVER_SETTINGS_SETTING,
+  CRAFTING_SETTINGS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
@@ -85,6 +87,7 @@ import { createDefaultAbilityCatalog } from "./abilities.mjs";
 import { createDefaultCampSettings, createEmptyCampState } from "./camp.mjs";
 import { createDefaultCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings } from "./cover.mjs";
+import { createDefaultCraftingSettings } from "./crafting.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultFactionMatrix, createDefaultFactionSettings, registerFactionApi } from "./factions.mjs";
@@ -297,6 +300,16 @@ export function registerSystemSettings() {
     default: getMainPresetDefault(SYSTEM_ACTION_SETTINGS_SETTING, createDefaultSystemActionSettings()),
     presetEffect: "actors",
     onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, CRAFTING_SETTINGS_SETTING, {
+    name: "Ремесло",
+    scope: "world",
+    config: false,
+    type: Object,
+    preset: true,
+    default: getMainPresetDefault(CRAFTING_SETTINGS_SETTING, createDefaultCraftingSettings()),
+    onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.craftingSettingsChanged`)
   });
 
   game.settings.register(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING, {
@@ -545,6 +558,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-hand-sparkles",
     type: SystemActionSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "craftingSettingsMenu", {
+    name: "Ремесло",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-hammer",
+    type: CraftingSettingsConfig,
     restricted: true
   });
 

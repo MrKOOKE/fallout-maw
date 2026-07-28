@@ -5471,33 +5471,52 @@ class WeaponAttackController {
       await this.notifyAttackCheckResolved(outcome, checkBatch);
       return null;
     }
-    const damageContext = this.createWeaponDamageContext({
-      targetToken: target,
-      limbKey: resolvedLimbKey,
-      damageShareCount: 1
-    });
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
-    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId, damageContext);
+    const impactCount = hasConcentratedPelletImpact(this.weapon, this.weaponFunctionId)
+      ? getWeaponPelletCount(this.weapon, this.weaponFunctionId)
+      : 1;
+    const impactDamages = distributePelletImpactDamage(damageAmount, impactCount);
+    const requests = [];
+    for (const [impactIndex, impactDamage] of impactDamages.entries()) {
+      const damageContext = this.createWeaponDamageContext({
+        targetToken: target,
+        limbKey: resolvedLimbKey,
+        damageShareIndex: impactIndex,
+        damageShareCount: impactCount
+      });
+      let resolvedDamage = applyContextualDamageToAmount(this.weapon, impactDamage, damageContext);
+      resolvedDamage = getCriticalDamageAmount(
+        this.weapon,
+        resolvedDamage,
+        outcome,
+        this.weaponFunctionId,
+        damageContext
+      );
+      requests.push(...buildWeaponDamageRequests(this.weapon, {
+        attackerActor: this.token.actor,
+        attackerToken: this.token,
+        actor: target.actor,
+        targetToken: target,
+        limbKey: resolvedLimbKey,
+        amount: resolvedDamage,
+        source: {
+          attackId: this.attackId,
+          weaponUuid: this.weapon.uuid,
+          weaponFunctionId: this.weaponFunctionId,
+          weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
+          actionKey: this.actionKey,
+          attackerUuid: this.token.actor.uuid,
+          tokenId: this.token.id,
+          criticalSuccess: isCriticalSuccessAttack(outcome),
+          penetrationStep,
+          ...(impactCount > 1 ? {
+            pelletImpactCount: impactCount,
+            pelletImpactIndex: impactIndex
+          } : {})
+        }
+      }, this.weaponFunctionId));
+    }
     await this.notifyAttackCheckResolved(outcome, checkBatch);
-    return buildWeaponDamageRequests(this.weapon, {
-      attackerActor: this.token.actor,
-      attackerToken: this.token,
-      actor: target.actor,
-      targetToken: target,
-      limbKey: resolvedLimbKey,
-      amount: damageAmount,
-      source: {
-        attackId: this.attackId,
-        weaponUuid: this.weapon.uuid,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: foundry.utils.deepClone(getWeaponAttackData(this.weapon, this.weaponFunctionId) ?? {}),
-        actionKey: this.actionKey,
-        attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id,
-        criticalSuccess: isCriticalSuccessAttack(outcome),
-        penetrationStep
-      }
-    }, this.weaponFunctionId);
+    return requests;
   }
 
   async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {

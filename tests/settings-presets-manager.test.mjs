@@ -203,7 +203,7 @@ test("both bundled seeds are valid and initially carry the same portable snapsho
     fs.readFileSync(new URL("../storage/settings-presets/fallout-maw-migration-seed.json", import.meta.url), "utf8")
   ));
   const ids = new Set(seed.settings.map(setting => setting.id));
-  assert.equal(seed.settings.length, 58);
+  assert.equal(seed.settings.length, 59);
   assert.equal(migrationSeed.id, "fallout-maw-migration-seed");
   assert.equal(migrationSeed.seedPending, false);
   assert.deepEqual(

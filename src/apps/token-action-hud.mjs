@@ -547,14 +547,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       selectHudWeaponSet: TokenActionHud.#onSelectHudWeaponSet,
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
       openWeaponSlotPicker: { handler: TokenActionHud.#onOpenWeaponSlotPicker, buttons: [0, 1] },
-      equipHudWeapon: { handler: TokenActionHud.#onEquipHudWeapon, buttons: [0, 1] },
+      equipHudWeapon: { handler: TokenActionHud.#onEquipHudWeapon, buttons: [0] },
       replaceHudWeapon: { handler: TokenActionHud.#onReplaceHudWeapon, buttons: [0, 1] },
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       toggleLightSource: { handler: TokenActionHud.#onToggleLightSource, buttons: [0, 1] },
       openLightSourceRecharge: { handler: TokenActionHud.#onOpenLightSourceRecharge, buttons: [0, 1] },
       openEnergyConsumerManage: { handler: TokenActionHud.#onOpenEnergyConsumerManage, buttons: [0, 1] },
-      openEnergyConsumption: { handler: TokenActionHud.#onOpenEnergyConsumption, buttons: [0, 1] },
+      openEnergyConsumption: { handler: TokenActionHud.#onOpenEnergyConsumption, buttons: [0] },
       setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
@@ -562,9 +562,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       endCombatTurn: TokenActionHud.#onEndCombatTurn,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
-      openItem: { handler: TokenActionHud.#onOpenItem, buttons: [1] },
-      useItem: { handler: TokenActionHud.#onUseItem, buttons: [0, 1] },
-      useAbility: { handler: TokenActionHud.#onUseAbility, buttons: [0, 1] },
+      useItem: { handler: TokenActionHud.#onUseItem, buttons: [0] },
+      useAbility: { handler: TokenActionHud.#onUseAbility, buttons: [0] },
       useActiveAction: TokenActionHud.#onUseActiveAction,
       dragGrappledTarget: TokenActionHud.#onDragGrappledTarget,
       exitActorContainerPassenger: { handler: TokenActionHud.#onExitActorContainerPassenger, buttons: [0, 2] },
@@ -1074,7 +1073,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const itemId = String(target.dataset.itemId ?? "");
     const item = actor?.items.get(itemId);
     if (!item) return undefined;
-    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
 
     const weaponSetKey = String(target.dataset.weaponSet ?? this.#weaponEquipTarget?.weaponSetKey ?? "");
@@ -1291,7 +1289,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const conditionId = String(target.dataset.conditionId ?? "");
     const item = resolveActorItemOrInstalledModule(this.actor, itemId);
     if (!item) return undefined;
-    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (target.disabled) return undefined;
     return openEnergyConsumptionDialog({
@@ -1342,19 +1339,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  static #onOpenItem(event, target) {
-    event.preventDefault();
-    if (!isMiddleMouseClick(event)) return undefined;
-    const item = resolveActorItemOrInstalledModule(this.actor, target.dataset.itemId ?? "");
-    return item?.sheet?.render(true);
-  }
-
   static async #onUseItem(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const item = resolveActorItemOrInstalledModule(this.actor, target.dataset.itemId ?? "");
     if (!item) return undefined;
-    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (!isActiveItem(item)) return undefined;
     if (hasItemFunction(item, ITEM_FUNCTIONS.trap)) {
@@ -1378,7 +1367,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isHudActionBlockedByReactionLock()) return undefined;
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     if (!item) return undefined;
-    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     const functionId = String(target.dataset.abilityFunctionId ?? "");
     const toggleConditionId = String(target.dataset.abilityToggleConditionId ?? "");
@@ -1526,7 +1514,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #onHudItemMiddlePointerDown(event) {
-    if (event.button !== 1 || !this.#getHudItemActionElement(event.target)) return;
+    if (event.button !== 1 || !(event.target instanceof Element)) return;
+    const action = event.target.closest("[data-action]");
+    if (!action || !this.element?.contains(action) || !this.#shouldPinHudTooltipOnMiddleClick(action)) return;
     event.preventDefault();
   }
 
@@ -1616,8 +1606,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #shouldPinHudTooltipOnMiddleClick(actionElement) {
-    const action = String(actionElement?.dataset?.action ?? "");
-    return action === "openItem" || action === "useItem" || action === "useAbility";
+    return Boolean(String(actionElement?.dataset?.hudTooltipItem ?? "").trim());
   }
 
   #pinHudTooltipFromActionElement(actionElement, event = null) {
@@ -1691,14 +1680,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#limbDisplayLayer = layer;
     this.#destroyLimbPopover();
     void this.render({ force: true });
-  }
-
-  #getHudItemActionElement(target) {
-    if (!(target instanceof Element)) return null;
-    const button = target.closest("[data-action][data-item-id]");
-    if (!button || !this.element?.contains(button)) return null;
-    const action = String(button.dataset.action ?? "");
-    return ["openItem", "useItem", "useAbility", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions", "equipHudWeapon", "replaceHudWeapon"].includes(action) ? button : null;
   }
 
   #getHudTooltipItemElement(target) {
@@ -2202,7 +2183,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const resolvedAvailableHeight = Number.isFinite(Number(availableHeight))
       ? Math.max(0, Math.min(viewportAvailableHeight, Number(availableHeight)))
       : viewportAvailableHeight;
-    const maxTooltipHeight = Math.max(80, Math.floor(resolvedAvailableHeight));
+    const tooltipScale = this.#getHudItemTooltipScale(tooltip);
+    const maxTooltipHeight = Math.max(80, Math.floor(resolvedAvailableHeight / tooltipScale));
     tooltip.style.setProperty("--fallout-maw-tooltip-max-height", `${maxTooltipHeight}px`);
 
     const picker = tooltip.querySelector(".tooltip-module-picker-panels:has(.tooltip-module-picker-panel.active)");
@@ -2214,8 +2196,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const tooltipRect = tooltip.getBoundingClientRect();
     const pickerRect = picker.getBoundingClientRect();
     const nonPickerHeight = Math.max(0, tooltipRect.height - pickerRect.height);
-    const maxPickerHeight = Math.max(80, Math.floor(resolvedAvailableHeight - nonPickerHeight));
+    const maxPickerHeight = Math.max(80, Math.floor((resolvedAvailableHeight - nonPickerHeight) / tooltipScale));
     tooltip.style.setProperty("--fallout-maw-module-picker-max-height", `${maxPickerHeight}px`);
+  }
+
+  #getHudItemTooltipScale(tooltip = this.#itemTooltipElement) {
+    const value = Number.parseFloat(tooltip?.style?.getPropertyValue("--fallout-maw-ui-scale"));
+    return Number.isFinite(value) && value > 0 ? value : 1;
   }
 
   #syncHudItemTooltipLayer({ bringToFront = false } = {}) {

@@ -1,5 +1,10 @@
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getCraftingSettings, getCreatureOptions, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import {
+  calculateCraftConsumedQuantity,
+  getCraftFailureRefundPercent,
+  isSkillThresholdMode
+} from "../settings/crafting.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
@@ -2799,6 +2804,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #resolveCraftLinkResults(actor, links = [], { createMessages = true, collector = null } = {}) {
     const linkResults = [];
+    const thresholdMode = isSkillThresholdMode(getCraftingSettings().craft.mode);
     for (const link of links) {
       if (link.noCheck) {
         linkResults.push({
@@ -2807,6 +2813,16 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
           linkIndex: link.index,
           success: true,
           resultKey: "noCheck"
+        });
+        continue;
+      }
+      if (thresholdMode) {
+        linkResults.push({
+          linkId: link.id,
+          linkKey: link.key,
+          linkIndex: link.index,
+          success: true,
+          resultKey: "skillThreshold"
         });
         continue;
       }
@@ -3313,6 +3329,11 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
 
   const craft = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId, randomizeBlocks: true });
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
+  const links = prepareCraftOperationLinks(craft.links, craft.nodes);
+  const unmetSkillThreshold = getUnmetCraftSkillThreshold(actor, links);
+  if (unmetSkillThreshold) {
+    return { valid: false, message: getCraftSkillThresholdMessage(unmetSkillThreshold, mode) };
+  }
   if (!craft.requirements.length && !craft.toolRequirements.length) {
     return {
       valid: false,
@@ -3376,16 +3397,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
     outputPlan,
     failureOutputs,
     failureOutputPlan,
-    links: craft.links
-      .filter(link => !isCraftLinkFailureResult(link))
-      .map((link, index) => ({
-      id: link.id,
-      key: getCraftResolvedLinkKey(link, craft.nodes),
-      index,
-      noCheck: isCraftLinkNoCheck(link),
-      skillKey: String(link.skillKey ?? "repair") || "repair",
-      difficulty: normalizeCraftLinkDifficulty(link.difficulty)
-    }))
+    links
   };
 }
 
@@ -3395,7 +3407,18 @@ async function applyCraftOperation(operation) {
   if (!actor?.isOwner) throw new Error("Нет прав на крафт этим актером.");
   if (!recipe) throw new Error("Рецепт не найден.");
 
-  const spendPlan = createCraftRequirementSpendPlan(actor, operation.requirements);
+  const craftingSettings = getCraftingSettings();
+  const hasFailureOutput = !operation.success && operation.failureOutputs?.length > 0;
+  const refundPercent = !operation.success && !hasFailureOutput
+    ? getCraftFailureRefundPercent(craftingSettings, operation.linkResults?.map(result => result.resultKey))
+    : 0;
+  const spendRequirements = operation.success || hasFailureOutput
+    ? operation.requirements
+    : operation.requirements.map(requirement => ({
+      ...requirement,
+      quantity: calculateCraftConsumedQuantity(requirement.quantity, refundPercent)
+    }));
+  const spendPlan = createCraftRequirementSpendPlan(actor, spendRequirements);
   const toolSpendPlan = createCraftToolRequirementSpendPlan(actor, operation.toolRequirements, operation.toolSelections);
   if (!toolSpendPlan.valid) throw new Error(toolSpendPlan.message);
   const consumptionPlan = {
@@ -3930,6 +3953,10 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     + data.toolRequirements.filter(requirement => requirement.owned < requirement.quantity).length;
   const checks = getCraftCheckSummaries(data.links);
   const hasRequiredComponents = missingCount === 0;
+  const unmetSkillThreshold = getUnmetCraftSkillThreshold(
+    actor,
+    prepareCraftOperationLinks(data.links, data.nodes)
+  );
   const toolPickerNode = data.nodes.find(node => node.id === toolPickerNodeId && node.toolRequirements?.length) ?? null;
   return {
     mode,
@@ -3942,10 +3969,12 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     })),
     toolPicker: null,
     checks,
-    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && (data.requirements.length || data.toolRequirements.length) && hasRequiredComponents && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
-    summary: missingCount
-      ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов/инструментов: ${missingCount}`)
-      : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}, инструменты: ${data.toolRequirements.length}`)
+    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && (data.requirements.length || data.toolRequirements.length) && hasRequiredComponents && !unmetSkillThreshold && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
+    summary: unmetSkillThreshold
+      ? getCraftSkillThresholdMessage(unmetSkillThreshold, mode)
+      : (missingCount
+        ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов/инструментов: ${missingCount}`)
+        : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}, инструменты: ${data.toolRequirements.length}`))
   };
 }
 
@@ -3997,6 +4026,40 @@ function getCraftCheckLabel(check) {
 function getCraftSkillLabel(skillKey = "") {
   const normalized = String(skillKey ?? "repair") || "repair";
   return getSkillSettings().find(skill => skill.key === normalized)?.label ?? normalized;
+}
+
+function prepareCraftOperationLinks(links = [], nodes = []) {
+  return links
+    .filter(link => !isCraftLinkFailureResult(link))
+    .map((link, index) => ({
+      id: link.id,
+      key: getCraftResolvedLinkKey(link, nodes),
+      index,
+      noCheck: isCraftLinkNoCheck(link),
+      skillKey: String(link.skillKey ?? "repair") || "repair",
+      difficulty: normalizeCraftLinkDifficulty(link.difficulty)
+    }));
+}
+
+function getUnmetCraftSkillThreshold(actor, links = []) {
+  if (!isSkillThresholdMode(getCraftingSettings().craft.mode)) return null;
+  for (const link of links) {
+    if (link.noCheck) continue;
+    const skillValue = toInteger(actor?.system?.skills?.[link.skillKey]?.value);
+    if (skillValue >= link.difficulty) continue;
+    return {
+      skillKey: link.skillKey,
+      skillLabel: getCraftSkillLabel(link.skillKey),
+      skillValue,
+      difficulty: link.difficulty
+    };
+  }
+  return null;
+}
+
+function getCraftSkillThresholdMessage(threshold = {}, mode = CRAFT_MODE_CREATE) {
+  const action = normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? "разбора" : "крафта";
+  return `Для ${action} нужно ${threshold.difficulty} ${threshold.skillLabel} (сейчас ${threshold.skillValue}).`;
 }
 
 function getCraftLinkTooltipData(link = null) {

@@ -1,0 +1,74 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <div>
+        <h2>Режимы</h2>
+        <p class="hint">В режиме «Навык как порог» бросок не выполняется: значение навыка должно быть не ниже сложности.</p>
+      </div>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-settings-grid fallout-maw-crafting-mode-grid">
+      <label>
+        <span>Крафты</span>
+        <select name="craft.mode" data-crafting-mode="craft">
+          {{#each craftModeChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Ремонт</span>
+        <select name="repair.mode" data-crafting-mode="repair">
+          {{#each repairModeChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel" data-crafting-check-options="craft" {{#unless craftSkillChecks}}hidden{{/unless}}>
+    <header class="fallout-maw-panel-header">
+      <div>
+        <h2>Крафты — провальные проверки</h2>
+        <p class="hint">Процент входных предметов, которые остаются у персонажа после неудачи. Если у рецепта задан провальный выходной ресурс, возврат не применяется и выдаётся только этот ресурс.</p>
+      </div>
+    </header>
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>Возврат при провале, %</span>
+        <input type="number" name="craft.failureRefundPercent" value="{{settings.craft.failureRefundPercent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>Возврат при критическом провале, %</span>
+        <input type="number" name="craft.criticalFailureRefundPercent" value="{{settings.craft.criticalFailureRefundPercent}}" min="0" max="100" step="1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel" data-crafting-check-options="repair" {{#unless repairSkillChecks}}hidden{{/unless}}>
+    <header class="fallout-maw-panel-header">
+      <div>
+        <h2>Ремонт — провальные проверки</h2>
+        <p class="hint">На сколько процентов увеличивается расход запаса инструмента. Например, 100% означает двойной расход.</p>
+      </div>
+    </header>
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>Увеличение расхода при провале, %</span>
+        <input type="number" name="repair.failureToolCostIncreasePercent" value="{{settings.repair.failureToolCostIncreasePercent}}" min="0" max="1000" step="1">
+      </label>
+      <label>
+        <span>Увеличение расхода при критическом провале, %</span>
+        <input type="number" name="repair.criticalFailureToolCostIncreasePercent" value="{{settings.repair.criticalFailureToolCostIncreasePercent}}" min="0" max="1000" step="1">
+      </label>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

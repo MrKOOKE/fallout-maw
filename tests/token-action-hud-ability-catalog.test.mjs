@@ -41,3 +41,18 @@ test("HUD ability categories keep their summaries below upward-opening ability l
     /\.fallout-maw-token-hud-ability-category-buttons\s*\{[^}]*border-bottom:/s
   );
 });
+
+test("HUD item chips reserve middle click for pinning their tooltip", () => {
+  assert.match(source, /#shouldPinHudTooltipOnMiddleClick\(actionElement\)\s*\{\s*return Boolean\(String\(actionElement\?\.dataset\?\.hudTooltipItem/);
+  assert.match(source, /equipHudWeapon:\s*\{\s*handler:[^}]+buttons:\s*\[0\]\s*\}/);
+  assert.match(source, /openEnergyConsumption:\s*\{\s*handler:[^}]+buttons:\s*\[0\]\s*\}/);
+  assert.match(source, /useItem:\s*\{\s*handler:[^}]+buttons:\s*\[0\]\s*\}/);
+  assert.match(source, /useAbility:\s*\{\s*handler:[^}]+buttons:\s*\[0\]\s*\}/);
+  assert.doesNotMatch(source, /openItem:\s*\{\s*handler:[^}]+buttons:\s*\[1\]\s*\}/);
+});
+
+test("HUD item tooltip height accounts for the HUD transform scale before positioning above its chip", () => {
+  assert.match(source, /const tooltipScale = this\.#getHudItemTooltipScale\(tooltip\)/);
+  assert.match(source, /Math\.floor\(resolvedAvailableHeight \/ tooltipScale\)/);
+  assert.match(source, /getPropertyValue\("--fallout-maw-ui-scale"\)/);
+});

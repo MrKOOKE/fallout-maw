@@ -4,7 +4,7 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "3e114634c053352baf87311a3ccf78d58ae950b3d6995d52a4535c66c9d3fd58",
+  "revision": "f314aeb22da65b007e50dd175ec596f3cbf682f66e0c00ac23f66dc60184d7fe",
   "updatedAt": "2026-07-21T03:38:34.892Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
@@ -5123,6 +5123,22 @@
             "overlapPercent": 80
           }
         ]
+      }
+    },
+    {
+      "id": "fallout-maw.craftingSettings",
+      "scope": "world",
+      "value": {
+        "craft": {
+          "criticalFailureRefundPercent": 20,
+          "failureRefundPercent": 80,
+          "mode": "skillChecks"
+        },
+        "repair": {
+          "criticalFailureToolCostIncreasePercent": 0,
+          "failureToolCostIncreasePercent": 100,
+          "mode": "skillChecks"
+        }
       }
     },
     {

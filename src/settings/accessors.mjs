@@ -25,6 +25,7 @@ import {
   CHARACTERISTICS_SETTING,
   COMBAT_SETTINGS_SETTING,
   COVER_SETTINGS_SETTING,
+  CRAFTING_SETTINGS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
@@ -48,6 +49,7 @@ import {
 import { createDefaultCampSettings, createEmptyCampState, normalizeCampSettings, normalizeCampState } from "./camp.mjs";
 import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings, normalizeCoverSettings } from "./cover.mjs";
+import { createDefaultCraftingSettings, normalizeCraftingSettings } from "./crafting.mjs";
 import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
@@ -537,6 +539,20 @@ export function getSystemActionSettings() {
 export async function setSystemActionSettings(settings) {
   const normalized = normalizeSystemActionSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, SYSTEM_ACTION_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export function getCraftingSettings() {
+  try {
+    return normalizeCraftingSettings(game.settings.get(FALLOUT_MAW.id, CRAFTING_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultCraftingSettings();
+  }
+}
+
+export async function setCraftingSettings(settings) {
+  const normalized = normalizeCraftingSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, CRAFTING_SETTINGS_SETTING, normalized);
   return normalized;
 }
 

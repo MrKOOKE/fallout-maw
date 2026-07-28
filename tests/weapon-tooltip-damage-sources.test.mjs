@@ -3,8 +3,22 @@ import test from "node:test";
 
 import {
   getWeaponDamageSourceTooltipDirection,
-  getWeaponTooltipDamageSourceEntries
+  getWeaponTooltipDamageSourceEntries,
+  hasWeaponTooltipDamageSourceReferences
 } from "../src/utils/weapon-tooltip-damage-sources.mjs";
+
+test("weapon tooltip detects configured magazine source references independently of damage mode", () => {
+  assert.equal(hasWeaponTooltipDamageSourceReferences({
+    sourceItemUuids: ["Item.556"]
+  }), true);
+  assert.equal(hasWeaponTooltipDamageSourceReferences({
+    sourceItemUuid: "Item.legacy"
+  }), true);
+  assert.equal(hasWeaponTooltipDamageSourceReferences({
+    sourceItemUuids: ["", "   "],
+    sourceItemUuid: ""
+  }), false);
+});
 
 test("weapon tooltip damage sources preserve configured order and mark the loaded source active", () => {
   const items = new Map([

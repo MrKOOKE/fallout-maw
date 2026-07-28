@@ -10913,6 +10913,15 @@ html.fallout-maw-token-action-hud-open #hotbar {
   line-height: 1.25;
 }
 
+.fallout-maw-crafting-mode-grid label {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.7fr);
+}
+
+.fallout-maw-crafting-settings [data-crafting-check-options][hidden] {
+  display: none;
+}
+
 .fallout-maw-stealth-settings-table .fallout-maw-settings-row {
   align-items: center;
   grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 0.8fr) 2.5rem;

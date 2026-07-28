@@ -4,7 +4,7 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw-migration-seed",
   "name": "Fallout-MaW Migration Seed",
-  "revision": "a66700c405b05e3230e68acdc8e48b35b3ca00be2a3a20b3dda7595d3243d7c6",
+  "revision": "abc710733953406e129037d748c3dd8069bb82343aee56705f4d912ba869148f",
   "updatedAt": "2026-07-06T13:42:33.540Z",
   "seedPending": false,
   "deleted": false,
@@ -3714,6 +3714,22 @@
             }
           }
         ]
+      }
+    },
+    {
+      "id": "fallout-maw.craftingSettings",
+      "scope": "world",
+      "value": {
+        "craft": {
+          "mode": "skillChecks",
+          "failureRefundPercent": 80,
+          "criticalFailureRefundPercent": 20
+        },
+        "repair": {
+          "mode": "skillChecks",
+          "failureToolCostIncreasePercent": 100,
+          "criticalFailureToolCostIncreasePercent": 0
+        }
       }
     },
     {

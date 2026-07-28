@@ -9,4 +9,5 @@ export * from "./accessors.mjs";
 export * from "./presets/manager.mjs";
 export * from "./presets/schema.mjs";
 export * from "./camp.mjs";
+export * from "./crafting.mjs";
 export * from "./registration.mjs";

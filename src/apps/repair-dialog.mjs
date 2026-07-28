@@ -1,7 +1,13 @@
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
+import {
+  getCraftingSettings,
+  getSkillSettings,
+  getSystemActionSettings,
+  getToolSettings
+} from "../settings/accessors.mjs";
+import { getRepairToolCostMultiplier, isSkillThresholdMode } from "../settings/crafting.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   ITEM_FUNCTIONS,
@@ -105,7 +111,12 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const instruments = prepareRepairInstruments(this.#sourceActor, this.#toolKey);
-    const items = prepareRepairableItems(this.#targetContext?.items ?? [], instruments, this.#activeItemId);
+    const items = prepareRepairableItems(
+      this.#targetContext?.items ?? [],
+      instruments,
+      this.#activeItemId,
+      this.#sourceActor
+    );
     return {
       ...context,
       sourceActor: this.#sourceActor,
@@ -116,7 +127,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       targetToken: this.#targetToken,
       toolLabel: getToolSettings().find(tool => tool.key === this.#toolKey)?.label ?? this.#toolKey,
       items,
-      hasRepairableItems: items.length > 0,
+      hasRepairableItems: items.some(item => item.usableInstrumentCount > 0),
       fallbackIcon: "icons/svg/item-bag.svg"
     };
   }
@@ -271,22 +282,24 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
     });
 }
 
-function prepareRepairableItems(items, instruments, activeItemId) {
+function prepareRepairableItems(items, instruments, activeItemId, sourceActor = null) {
   return items.map(item => {
     const availableInstruments = item.recoveryMethods.flatMap((method, methodIndex) => {
       const requiredClass = String(method.toolClass ?? "D");
+      const threshold = getRepairSkillThreshold(sourceActor, method, item.conditionValue);
       return instruments
         .filter(instrument => instrument.toolKey === method.toolKey)
         .map(instrument => {
           const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
           const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
-          const usable = classAccepted && instrument.supplyValue > 0 && instrument.requirementMet;
+          const usable = classAccepted && instrument.supplyValue > 0 && instrument.requirementMet && threshold.met;
           return {
             ...instrument,
             methodIndex,
             efficiency,
             efficiencyLabel: `${formatNumber(efficiency)}%`,
             classAccepted,
+            repairSkillThresholdMet: threshold.met,
             usable
           };
         });
@@ -380,13 +393,15 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
 }
 
 function collectMassRepairInstrumentOptions(sourceActor, targetContext) {
-  const methods = targetContext.items.flatMap(item => item.recoveryMethods ?? []);
   return prepareRepairInstruments(sourceActor)
     .filter(instrument => instrument.supplyValue > 0 && instrument.requirementMet)
-    .filter(instrument => methods.some(method => (
+    .filter(instrument => targetContext.items.some(item => (
+      item.recoveryMethods ?? []
+    ).some(method => (
       method.toolKey === instrument.toolKey
       && isToolClassAccepted(instrument.toolClass, method.toolClass)
-    )))
+      && getRepairSkillThreshold(sourceActor, method, item.conditionValue).met
+    ))))
     .sort((left, right) => (
       toToolClassRank(right.toolClass) - toToolClassRank(left.toolClass)
       || right.supplyValue - left.supplyValue
@@ -470,6 +485,7 @@ function chooseBestRepairOption(sourceActor, item, options = {}) {
       .filter(instrument => instrument.toolKey === method.toolKey)
       .filter(instrument => instrument.supplyValue > 0 && instrument.requirementMet)
       .filter(instrument => isToolClassAccepted(instrument.toolClass, requiredClass))
+      .filter(() => getRepairSkillThreshold(sourceActor, method, item.conditionValue).met)
       .map(instrument => ({
         methodIndex,
         instrumentId: instrument.id,
@@ -615,6 +631,8 @@ async function runRepairChecks({
     ? await fromUuid(targetContext.actorUuid).catch(() => null)
     : null);
   const targetActor = targetDocument?.documentName === "Actor" ? targetDocument : null;
+  const craftingSettings = getCraftingSettings();
+  const thresholdMode = isSkillThresholdMode(craftingSettings.repair.mode);
   let currentValue = initialValue;
   let availableCharges = toInteger(tool.supply?.value);
   let spentCharges = 0;
@@ -626,31 +644,46 @@ async function runRepairChecks({
     if (availableCharges <= 0) break;
 
     const valueForCheck = Math.min(progressPerCheck, remainingValue);
-    const difficulty = currentValue <= 0
-      ? Math.ceil(Math.max(0, toInteger(method.difficulty)) * 1.3)
-      : Math.max(0, toInteger(method.difficulty));
-    const outcome = await requestSkillCheck({
-      actor: sourceActor,
-      skillKey: DEFAULT_REPAIR_SKILL_KEY,
-      data: {
-        difficulty,
-        actorToken: sourceToken?.object ?? sourceToken,
-        targetActor,
-        targetToken: targetToken?.object ?? targetToken
-      },
-      animate: false,
-      createMessage: true,
-      prompt: false,
-      requester: "repair"
-    });
-    if (!outcome) {
-      return {
-        entries,
-        spentCharges,
-        remainingCharges: availableCharges,
-        finalValue: currentValue,
-        reason: "Проверка навыка ремонта не выполнена."
-      };
+    const difficulty = getRepairDifficulty(method, currentValue);
+    let resultKey = "success";
+    let resultLabel = "навык соответствует порогу";
+    if (thresholdMode) {
+      const threshold = getRepairSkillThreshold(sourceActor, method, currentValue);
+      if (!threshold.met) {
+        return {
+          entries,
+          spentCharges,
+          remainingCharges: availableCharges,
+          finalValue: currentValue,
+          reason: `Для ремонта нужно ${threshold.difficulty} ${threshold.skillLabel} (сейчас ${threshold.skillValue}).`
+        };
+      }
+    } else {
+      const outcome = await requestSkillCheck({
+        actor: sourceActor,
+        skillKey: DEFAULT_REPAIR_SKILL_KEY,
+        data: {
+          difficulty,
+          actorToken: sourceToken?.object ?? sourceToken,
+          targetActor,
+          targetToken: targetToken?.object ?? targetToken
+        },
+        animate: false,
+        createMessage: true,
+        prompt: false,
+        requester: "repair"
+      });
+      if (!outcome) {
+        return {
+          entries,
+          spentCharges,
+          remainingCharges: availableCharges,
+          finalValue: currentValue,
+          reason: "Проверка навыка ремонта не выполнена."
+        };
+      }
+      resultKey = String(outcome.result?.key ?? "failure");
+      resultLabel = getRepairResultLabel(resultKey);
     }
 
     const repair = calculateRepairResult({
@@ -659,7 +692,8 @@ async function runRepairChecks({
       availableCharges,
       valueForCheck,
       missingValue: remainingValue,
-      resultKey: String(outcome.result?.key ?? "failure")
+      resultKey,
+      craftingSettings
     });
     if (repair.chargesUsed <= 0) break;
 
@@ -669,7 +703,7 @@ async function runRepairChecks({
     entries.push({
       index,
       total: totalChecks,
-      resultLabel: getRepairResultLabel(outcome.result?.key),
+      resultLabel,
       condition: repair.condition,
       charges: repair.chargesUsed,
       efficiency: repair.efficiency,
@@ -706,18 +740,54 @@ function validateInstrumentForRepair(actor, method, tool) {
   return { ok: true, message: "" };
 }
 
-function calculateRepairResult({ method, tool, availableCharges, valueForCheck, missingValue, resultKey }) {
+function calculateRepairResult({
+  method,
+  tool,
+  availableCharges,
+  valueForCheck,
+  missingValue,
+  resultKey,
+  craftingSettings = getCraftingSettings()
+}) {
   const targetValue = Math.min(valueForCheck, missingValue);
   let efficiency = calculateBaseEfficiency(tool.toolClass, method.toolClass);
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
-  else if (resultKey === "failure") efficiency *= 0.5;
 
-  const chargesNeeded = Math.max(1, Math.ceil(targetValue * (100 / Math.max(1, efficiency))));
+  const productiveChargesNeeded = Math.max(1, Math.ceil(targetValue * (100 / Math.max(1, efficiency))));
+  const costMultiplier = getRepairToolCostMultiplier(craftingSettings, resultKey);
+  const chargesNeeded = Math.max(1, Math.ceil(productiveChargesNeeded * costMultiplier));
   const chargesUsed = Math.min(chargesNeeded, availableCharges);
-  const normalCondition = Math.max(0, Math.ceil(chargesUsed * (efficiency / 100)));
+  const productiveChargesUsed = chargesUsed / costMultiplier;
+  const normalCondition = Math.max(0, Math.ceil(productiveChargesUsed * (efficiency / 100)));
   const conditionMultiplier = resultKey === "criticalSuccess" ? 2 : resultKey === "criticalFailure" ? 0.5 : 1;
   const condition = Math.min(missingValue, Math.max(0, Math.floor(normalCondition * conditionMultiplier)));
   return { condition, chargesUsed, efficiency };
+}
+
+function getRepairDifficulty(method = {}, currentValue = 1) {
+  const baseDifficulty = Math.max(0, toInteger(method.difficulty));
+  return currentValue <= 0 ? Math.ceil(baseDifficulty * 1.3) : baseDifficulty;
+}
+
+function getRepairSkillThreshold(actor, method = {}, currentValue = 1) {
+  if (!isSkillThresholdMode(getCraftingSettings().repair.mode)) {
+    return {
+      met: true,
+      skillKey: DEFAULT_REPAIR_SKILL_KEY,
+      skillLabel: getSkillSettings().find(skill => skill.key === DEFAULT_REPAIR_SKILL_KEY)?.label ?? DEFAULT_REPAIR_SKILL_KEY,
+      skillValue: toInteger(actor?.system?.skills?.[DEFAULT_REPAIR_SKILL_KEY]?.value),
+      difficulty: getRepairDifficulty(method, currentValue)
+    };
+  }
+  const difficulty = getRepairDifficulty(method, currentValue);
+  const skillValue = toInteger(actor?.system?.skills?.[DEFAULT_REPAIR_SKILL_KEY]?.value);
+  return {
+    met: skillValue >= difficulty,
+    skillKey: DEFAULT_REPAIR_SKILL_KEY,
+    skillLabel: getSkillSettings().find(skill => skill.key === DEFAULT_REPAIR_SKILL_KEY)?.label ?? DEFAULT_REPAIR_SKILL_KEY,
+    skillValue,
+    difficulty
+  };
 }
 
 async function applyRepairToTarget(targetContext, {

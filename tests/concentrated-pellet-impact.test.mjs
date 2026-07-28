@@ -127,3 +127,67 @@ test("weapon runtime collapses trajectories and burst bullets before expanding o
   assert.match(hit, /limbKey,/);
   assert.match(hit, /pelletImpactIndex:\s*impactIndex/);
 });
+
+test("directed melee expands one successful impact before damage mitigation", () => {
+  const directed = sliceBetween(
+    controllerSource,
+    "async resolveDirectedAttackAgainstTarget",
+    "async resolveAimedAttackTrajectory"
+  );
+
+  assert.match(
+    directed,
+    /hasConcentratedPelletImpact\(this\.weapon,\s*this\.weaponFunctionId\)[\s\S]*?getWeaponPelletCount\(this\.weapon,\s*this\.weaponFunctionId\)/
+  );
+  assert.match(directed, /distributePelletImpactDamage\(damageAmount,\s*impactCount\)/);
+  assert.match(directed, /limbKey:\s*resolvedLimbKey/);
+  assert.match(directed, /pelletImpactIndex:\s*impactIndex/);
+});
+
+test("160 damage in three impacts applies 49 defense with 8 penetration three times", async () => {
+  const previousFoundry = globalThis.foundry;
+  globalThis.foundry = {
+    applications: {
+      api: { DialogV2: class DialogV2 {} },
+      ux: { FormDataExtended: class FormDataExtended {} },
+      handlebars: { renderTemplate: async () => "" }
+    },
+    utils: {
+      deepClone: value => structuredClone(value),
+      hasProperty: () => false,
+      mergeObject: (target, source, { inplace = true } = {}) => (
+        Object.assign(inplace ? target : structuredClone(target), source)
+      ),
+      setProperty: (object, path, value) => {
+        object[path] = value;
+        return true;
+      },
+      randomID: () => "generated-id"
+    }
+  };
+
+  try {
+    const { calculateDamageMitigation } = await import("../src/combat/damage-hub.mjs");
+    const actor = {
+      items: Object.assign([], { contents: [] }),
+      effects: [],
+      getDamageDefense: () => 49,
+      getDamageResistance: () => 0,
+      allApplicableEffects: () => []
+    };
+    const impacts = distributePelletImpactDamage(160, 3);
+    const mitigated = impacts.map(amount => calculateDamageMitigation(
+      actor,
+      amount,
+      "bludgeoning",
+      "head",
+      { penetrationPower: 8 }
+    ).amount);
+
+    assert.deepEqual(impacts, [54, 53, 53]);
+    assert.deepEqual(mitigated, [13, 12, 12]);
+    assert.equal(mitigated.reduce((sum, amount) => sum + amount, 0), 37);
+  } finally {
+    globalThis.foundry = previousFoundry;
+  }
+});

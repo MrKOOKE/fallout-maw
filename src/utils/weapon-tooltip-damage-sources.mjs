@@ -1,3 +1,10 @@
+export function hasWeaponTooltipDamageSourceReferences(magazine = {}) {
+  return [
+    ...(Array.isArray(magazine?.sourceItemUuids) ? magazine.sourceItemUuids : []),
+    magazine?.sourceItemUuid
+  ].some(value => String(value ?? "").trim());
+}
+
 export function getWeaponTooltipDamageSourceEntries(magazine = {}, {
   resolveItem = () => null,
   getLabel = item => item?.name

@@ -204,7 +204,8 @@ import { grantActorInventoryItem, planActorInventoryGrant } from "../utils/inven
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import {
   getWeaponDamageSourceTooltipDirection,
-  getWeaponTooltipDamageSourceEntries
+  getWeaponTooltipDamageSourceEntries,
+  hasWeaponTooltipDamageSourceReferences
 } from "../utils/weapon-tooltip-damage-sources.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -6382,10 +6383,10 @@ function buildWeaponTooltipRows(item, entry = {}, {
       html: renderTooltipValueTokens(getWeaponDamageTypeLabels(getEffectiveWeaponDamageData(item, data)))
     }]
   ];
-  if (isSourceDamageMode(data)) {
+  if (isSourceDamageMode(data) || hasWeaponTooltipDamageSourceReferences(data?.magazine)) {
     rows.push([
-      game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"),
-      renderWeaponDamageSourceChips(data, { evaluatingActor: actor, sourceActor })
+      game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSource"),
+      renderWeaponMagazineSourceChips(data, { evaluatingActor: actor, sourceActor })
     ]);
   }
   const magazineMax = hasWeaponResourceCostData(data, "magazine") ? toInteger(data.magazine?.max) : 0;
@@ -8077,7 +8078,7 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
   };
 }
 
-function renderWeaponDamageSourceChips(data = {}, {
+function renderWeaponMagazineSourceChips(data = {}, {
   evaluatingActor = null,
   sourceActor = evaluatingActor
 } = {}) {
