@@ -1664,6 +1664,7 @@
       "DamageSourceDamage": "Damage",
       "DamageSourceDamageTypes": "Damage Types",
       "DamageSourceExplosion": "Explosion",
+      "DamageSourceNoiseLevelModifier": "Noise Level Modifier",
       "WeaponDamage": "Damage",
       "WeaponDamageDistribution": "Damage Distribution",
       "WeaponDamageMode": "Damage Mode",

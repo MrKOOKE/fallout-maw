@@ -1,9 +1,10 @@
 import {
+  buildWeaponNoiseZone,
+  doGridZonesOverlap,
   getGridOffsetKey,
   getStealthObserverZones,
   getTokenVisualizationGridKey,
-  invalidateStealthDetectionCache,
-  weaponNoiseToRangeBonus
+  invalidateStealthDetectionCache
 } from "./detection.mjs";
 import { isValidStealthObserver } from "./observers.mjs";
 import {
@@ -19,7 +20,7 @@ const STEALTH_WINDOW_SOURCE_ID = "stealth-window";
 const WEAPON_SOURCE_PREFIX = "weapon:";
 const VISUALIZATION_COALESCE_MS = 50;
 const BASE_ZONE_COLOR = 0xff3b3b;
-const ADDED_ZONE_COLOR = 0xff6a55;
+const WEAPON_NOISE_ZONE_COLOR = 0xff3b3b;
 
 const visualizationSources = new Map();
 const detectionVisualizations = new Map();
@@ -27,7 +28,6 @@ const movementKeys = new Map();
 const movementTrackers = new Map();
 
 let hoverTokenId = null;
-let detectionNoiseOverlay = null;
 let refreshTimeout = null;
 let pendingRefreshAfterMovement = false;
 let pendingInvalidation = false;
@@ -118,14 +118,16 @@ function getEffectiveVisualizationRequest(sources, settings) {
   const hasPersistentSource = sources?.has(STEALTH_PERSISTENT_SOURCE_ID);
   const hasStealthWindow = sources?.has(STEALTH_WINDOW_SOURCE_ID);
   const autoDetectionEnabled = settings?.autoDetection?.enabled === true;
+  const hasWeaponSource = hasWeaponVisualizationSource(sources);
   const noiseLevel = autoDetectionEnabled ? getMaximumWeaponNoiseSource(sources) : 0;
   return {
     active: Boolean(
       hasPersistentSource
       || hasStealthWindow
-      || (autoDetectionEnabled && hasWeaponVisualizationSource(sources))
+      || (autoDetectionEnabled && hasWeaponSource)
     ),
-    noiseLevel
+    noiseLevel,
+    showNoiseZone: autoDetectionEnabled && hasWeaponSource
   };
 }
 
@@ -150,15 +152,13 @@ function normalizeNoiseLevel(value) {
 }
 
 function removeAllDetectionVisualizationSources(tokenId, {
-  refreshHover = true,
-  refreshNoise = true
+  refreshHover = true
 } = {}) {
   if (!tokenId) return;
   visualizationSources.delete(tokenId);
   destroyRenderedDetectionVisualization(tokenId);
   movementKeys.delete(tokenId);
   stopDetectionVisualizationMovementTracking(tokenId);
-  if (refreshNoise) rebuildDetectionNoiseOverlay();
   if (refreshHover) refreshDetectionHoverFill();
 }
 
@@ -176,8 +176,7 @@ export function refreshDetectionVisualizations({ invalidate = false } = {}) {
     const token = activeCanvas?.tokens?.get(tokenId);
     if (!token?.actor || !isActorStealthed(token.actor)) {
       removeAllDetectionVisualizationSources(tokenId, {
-        refreshHover: false,
-        refreshNoise: false
+        refreshHover: false
       });
       continue;
     }
@@ -192,7 +191,6 @@ export function refreshDetectionVisualizations({ invalidate = false } = {}) {
     }
     rebuildDetectionVisualization(token, request, settings);
   }
-  rebuildDetectionNoiseOverlay();
   refreshDetectionHoverFill();
 }
 
@@ -266,8 +264,6 @@ export function cleanupAllStealthVisualizations() {
   pendingRefreshAfterMovement = false;
   pendingInvalidation = false;
   hoverTokenId = null;
-  detectionNoiseOverlay?.destroy?.({ children: true });
-  detectionNoiseOverlay = null;
   const gridLayer = globalThis.canvas?.interface?.grid;
   gridLayer?.destroyHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
   const layer = globalThis.canvas?.controls?.[STEALTH_DETECTION_LAYER];
@@ -297,10 +293,12 @@ function rebuildDetectionVisualization(token, request, settings) {
   const previous = detectionVisualizations.get(token.id);
   const zones = getStealthObserverZones(token, {
     visibleOnly: true,
-    rangeBonus: weaponNoiseToRangeBonus(request.noiseLevel),
     settings
   });
-  if (!zones.length) {
+  const noiseZone = request.showNoiseZone
+    ? buildWeaponNoiseVisualizationZone(token, request.noiseLevel)
+    : null;
+  if (!zones.length && !noiseZone) {
     previous?.container?.destroy?.({ children: true });
     detectionVisualizations.delete(token.id);
     return;
@@ -309,6 +307,13 @@ function rebuildDetectionVisualization(token, request, settings) {
   const container = new PIXI.Container();
   container.eventMode = "none";
   container.interactiveChildren = false;
+  if (noiseZone) {
+    const graphics = new PIXI.Graphics();
+    graphics.eventMode = "none";
+    graphics.interactiveChildren = false;
+    drawWeaponNoiseZone(graphics, noiseZone);
+    container.addChild(graphics);
+  }
   for (const zone of zones) {
     const graphics = new PIXI.Graphics();
     graphics.eventMode = "none";
@@ -317,7 +322,7 @@ function rebuildDetectionVisualization(token, request, settings) {
     container.addChild(graphics);
   }
   getDetectionLayer().addChild(container);
-  detectionVisualizations.set(token.id, { container, zones });
+  detectionVisualizations.set(token.id, { container, zones, noiseZone });
   previous?.container?.destroy?.({ children: true });
 }
 
@@ -358,6 +363,9 @@ function getDetectionLayer() {
   activeCanvas.controls[STEALTH_DETECTION_LAYER] ??= activeCanvas.controls.addChild(new PIXI.Container());
   activeCanvas.controls[STEALTH_DETECTION_LAYER].eventMode = "none";
   activeCanvas.controls[STEALTH_DETECTION_LAYER].interactiveChildren = false;
+  if (activeCanvas.masks?.canvas) {
+    activeCanvas.controls[STEALTH_DETECTION_LAYER].mask = activeCanvas.masks.canvas;
+  }
   return activeCanvas.controls[STEALTH_DETECTION_LAYER];
 }
 
@@ -366,105 +374,76 @@ function refreshDetectionHoverFill() {
   const activeCanvas = globalThis.canvas;
   if (!hoverTokenId || !detectionVisualizations.size || !activeCanvas?.interface?.grid || activeCanvas.grid?.isGridless) return;
 
-  const zones = [];
+  const baseOffsetGroups = [];
+  const contactingNoiseOffsetGroups = [];
   for (const visualization of detectionVisualizations.values()) {
-    for (const zone of visualization.zones ?? []) {
-      if (zone.observerToken?.id === hoverTokenId) zones.push(zone);
+    const hoveredZones = (visualization.zones ?? [])
+      .filter(zone => zone.observerToken?.id === hoverTokenId);
+    for (const zone of hoveredZones) {
+      baseOffsetGroups.push(zone.offsets ?? []);
+    }
+    // The noise zone joins hover fill only after the exact same cell-overlap
+    // predicate used by gameplay has established a reaction opportunity.
+    if (
+      visualization.noiseZone?.offsets?.length
+      && hoveredZones.some(zone => doGridZonesOverlap(zone, visualization.noiseZone))
+    ) {
+      contactingNoiseOffsetGroups.push(visualization.noiseZone.offsets);
     }
   }
-  if (!zones.length) return;
+  if (!baseOffsetGroups.length) return;
 
   const gridLayer = activeCanvas.interface.grid;
   gridLayer.addHighlightLayer(STEALTH_DETECTION_HOVER_LAYER);
-  const baseOffsets = collectUniqueGridOffsets(
-    zones.map(zone => zone.baseOffsets ?? zone.offsets)
-  );
-  const baseKeys = new Set(baseOffsets.map(getGridOffsetKey));
-  const addedOffsets = collectUniqueGridOffsets(
-    zones.map(zone => zone.addedOffsets)
-  ).filter(offset => !baseKeys.has(getGridOffsetKey(offset)));
-
-  for (const offset of baseOffsets) {
-    const { x, y } = activeCanvas.grid.getTopLeftPoint(offset);
-    gridLayer.highlightPosition(STEALTH_DETECTION_HOVER_LAYER, {
-      x,
-      y,
-      color: BASE_ZONE_COLOR,
-      alpha: 0.14
-    });
-  }
-  for (const offset of addedOffsets) {
-    const { x, y } = activeCanvas.grid.getTopLeftPoint(offset);
-    gridLayer.highlightPosition(STEALTH_DETECTION_HOVER_LAYER, {
-      x,
-      y,
-      color: ADDED_ZONE_COLOR,
-      alpha: 0.08
-    });
-  }
+  const highlightedOffsets = collectUniqueGridOffsets([
+    ...baseOffsetGroups,
+    ...contactingNoiseOffsetGroups
+  ]);
+  highlightGridOffsets(gridLayer, highlightedOffsets, {
+    color: BASE_ZONE_COLOR,
+    alpha: 0.14
+  });
 }
 
 function clearDetectionHoverFill() {
   globalThis.canvas?.interface?.grid?.clearHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
 }
 
+function highlightGridOffsets(gridLayer, offsets, { color, alpha }) {
+  for (const offset of offsets) {
+    const { x, y } = globalThis.canvas.grid.getTopLeftPoint(offset);
+    gridLayer.highlightPosition(STEALTH_DETECTION_HOVER_LAYER, {
+      x,
+      y,
+      color,
+      alpha
+    });
+  }
+}
+
 function drawBaseGridZone(graphics, zone) {
-  const baseOffsets = zone.baseOffsets ?? zone.offsets ?? [];
-  drawGridZoneOutline(graphics, baseOffsets, { width: 2, color: BASE_ZONE_COLOR, alpha: 0.85 });
+  drawGridZoneOutline(graphics, zone.offsets ?? [], {
+    width: 2,
+    color: BASE_ZONE_COLOR,
+    alpha: 0.85
+  });
 }
 
 /**
- * Render all noise additions once for the local canvas. Keeping this outside
- * observer/token containers prevents overlapping zones from multiplying fill
- * alpha or drawing the same expanded edge more than once.
+ * Weapon noise belongs to the attacker, not to every observer. A single
+ * source-owned grid zone can overlap any ordinary observer zone without
+ * repainting those zones at a larger radius.
  */
-function rebuildDetectionNoiseOverlay() {
-  detectionNoiseOverlay?.destroy?.({ children: true });
-  detectionNoiseOverlay = null;
-
-  const activeCanvas = globalThis.canvas;
-  if (!activeCanvas?.controls || activeCanvas.grid?.isGridless) return;
-
-  const noiseZones = [];
-  for (const visualization of detectionVisualizations.values()) {
-    for (const zone of visualization.zones ?? []) {
-      if (zone.addedOffsets?.length) noiseZones.push(zone);
-    }
-  }
-  if (!noiseZones.length) return;
-
-  const addedOffsets = collectUniqueGridOffsets(
-    noiseZones.map(zone => zone.addedOffsets)
-  );
-  const expandedOffsets = collectUniqueGridOffsets(
-    noiseZones.map(zone => zone.offsets)
-  );
-  if (!addedOffsets.length || !expandedOffsets.length) return;
-
-  const graphics = new PIXI.Graphics();
-  graphics.eventMode = "none";
-  graphics.interactiveChildren = false;
-  drawGridZoneFill(graphics, addedOffsets, ADDED_ZONE_COLOR, 0.08);
-  drawGridZoneOutline(graphics, expandedOffsets, {
-    width: 1,
-    color: ADDED_ZONE_COLOR,
-    alpha: 0.45
-  });
-
-  const layer = getDetectionLayer();
-  if (typeof layer.addChildAt === "function") layer.addChildAt(graphics, 0);
-  else layer.addChild(graphics);
-  detectionNoiseOverlay = graphics;
+function buildWeaponNoiseVisualizationZone(token, noiseLevel) {
+  return buildWeaponNoiseZone(token, { noiseLevel });
 }
 
-function drawGridZoneFill(graphics, offsets, color, alpha) {
-  graphics.beginFill(color, alpha);
-  for (const offset of offsets) {
-    const vertices = globalThis.canvas?.grid?.getVertices?.(offset) ?? [];
-    if (vertices.length < 3) continue;
-    graphics.drawPolygon(vertices.flatMap(vertex => [Number(vertex.x) || 0, Number(vertex.y) || 0]));
-  }
-  graphics.endFill();
+function drawWeaponNoiseZone(graphics, zone) {
+  drawGridZoneOutline(graphics, zone.offsets ?? [], {
+    width: 2,
+    color: WEAPON_NOISE_ZONE_COLOR,
+    alpha: 0.9
+  });
 }
 
 function drawGridZoneOutline(graphics, offsets, { width, color, alpha }) {

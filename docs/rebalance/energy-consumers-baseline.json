@@ -1,0 +1,1052 @@
+{
+  "schemaVersion": 1,
+  "source": "closed-world energy pass 2026-07-28",
+  "sources": [
+    {
+      "id": "CReBGFCcxsYlrObv",
+      "name": "Высокоразрядная оружейная батарея (C)",
+      "class": "C",
+      "capacity": 300,
+      "price": 387,
+      "recipeResources": [
+        {
+          "name": "Компонент электроники C класса",
+          "quantity": 1
+        },
+        {
+          "name": "Компонент химиката C класса",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "b79f279500d79adf",
+      "name": "Высокоразрядная оружейная батарея (B)",
+      "class": "B",
+      "capacity": 600,
+      "price": 1184,
+      "recipeResources": [
+        {
+          "name": "Компонент электроники B класса",
+          "quantity": 1
+        },
+        {
+          "name": "Компонент химиката B класса",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "aff056c7f8605b10",
+      "name": "Высокоразрядная оружейная батарея (A)",
+      "class": "A",
+      "capacity": 1200,
+      "price": 2191,
+      "recipeResources": [
+        {
+          "name": "Компонент электроники A класса",
+          "quantity": 1
+        },
+        {
+          "name": "Компонент химиката A класса",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "idCnJLNhPJOKiJFQ",
+      "name": "Ядерный блок (B)",
+      "class": "B",
+      "capacity": 10000,
+      "price": 4211,
+      "recipeResources": [
+        {
+          "name": "Компонент электроники B класса",
+          "quantity": 4
+        },
+        {
+          "name": "Компонент химиката B класса",
+          "quantity": 2
+        },
+        {
+          "name": "Компонент каркаса B класса",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "810613648446db93",
+      "name": "Ядерный блок (A)",
+      "class": "A",
+      "capacity": 16000,
+      "price": 7711,
+      "recipeResources": [
+        {
+          "name": "Компонент электроники A класса",
+          "quantity": 4
+        },
+        {
+          "name": "Компонент химиката A класса",
+          "quantity": 2
+        },
+        {
+          "name": "Компонент каркаса A класса",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "60ac3df89403b230",
+      "name": "Ядерный блок (S)",
+      "class": "S",
+      "capacity": 24000,
+      "price": 18359,
+      "recipeResources": [
+        {
+          "name": "Компонент электроники S класса",
+          "quantity": 4
+        },
+        {
+          "name": "Компонент химиката S класса",
+          "quantity": 2
+        },
+        {
+          "name": "Компонент каркаса S класса",
+          "quantity": 1
+        }
+      ]
+    }
+  ],
+  "powerArmor": {
+    "C": {
+      "count": 38,
+      "amountPerHour": 30
+    },
+    "B": {
+      "count": 20,
+      "amountPerHour": 40
+    },
+    "A": {
+      "count": 9,
+      "amountPerHour": 55
+    },
+    "S": {
+      "count": 5,
+      "amountPerHour": 75
+    }
+  },
+  "trueConsumers": [
+    {
+      "id": "2h8p9d1TB6rkFG5o",
+      "name": "Винтовка Гаусса Спецслужбы",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 18
+        }
+      ]
+    },
+    {
+      "id": "3uehdTUIVHG9EpEu",
+      "name": "YCS/186",
+      "class": "B",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 14
+        }
+      ]
+    },
+    {
+      "id": "7oI3q8pjcifL993Q",
+      "name": "Гаусс-Пулемёт",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    },
+    {
+      "id": "908t60KuZaBRSjMt",
+      "name": "Китайская Винтовка Гаусса",
+      "class": "B",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 12
+        }
+      ]
+    },
+    {
+      "id": "9FWjq0n8ew7NJfsk",
+      "name": "Гауссов пистолет PPK12",
+      "class": "B",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    },
+    {
+      "id": "C4pDEiNtMsxabz8n",
+      "name": "Наплечный Гатлинг Гаусса",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    },
+    {
+      "id": "DYccpE0aJTw9nYi3",
+      "name": "Гауссов пистолет PPK12 Секретной Службы",
+      "class": "B",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    },
+    {
+      "id": "EuQqVxoz1kXSIUaz",
+      "name": "Двигатель сингулярности",
+      "class": "S",
+      "sources": [
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 600
+        }
+      ]
+    },
+    {
+      "id": "UaZqgQUBuZhmlZoD",
+      "name": "Гаусс-миниган MEC Mk.II",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    },
+    {
+      "id": "V1sBYlTidekllsx8",
+      "name": "Гаусс-винтовка M72 Mk.II",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 18
+        }
+      ]
+    },
+    {
+      "id": "XSr4bKRHtPjEaqyO",
+      "name": "«В последнюю минуту»",
+      "class": "B",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 14
+        }
+      ]
+    },
+    {
+      "id": "Xur9B7YUcF5QUe6A",
+      "name": "Гаусс-винтовка M72",
+      "class": "B",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 12
+        }
+      ]
+    },
+    {
+      "id": "iZOHUocqkCIq03qc",
+      "name": "Трёхствольный Гаусс-миниган MEC",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    },
+    {
+      "id": "koYRk0lu9PnSd6eK",
+      "name": "Аннигилятор материи",
+      "class": "S",
+      "sources": [
+        "Item.60ac3df89403b230"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "manual",
+          "amount": 500
+        }
+      ]
+    },
+    {
+      "id": "ogT5CNiCxUsZNAUm",
+      "name": "Гауссов пистолет PPK12 Mk.II",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 12
+        }
+      ]
+    },
+    {
+      "id": "teYqUZJWFlMrFU85",
+      "name": "BFG 9000",
+      "class": "A",
+      "sources": [
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 250
+        }
+      ]
+    },
+    {
+      "id": "zCuz6ED2olNBicyP",
+      "name": "Карабин Гаусса",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 16
+        }
+      ]
+    },
+    {
+      "id": "zwp7bfSrsOBksfbd",
+      "name": "Гаусс-миниган MEC",
+      "class": "A",
+      "sources": [
+        "Item.CReBGFCcxsYlrObv",
+        "Item.b79f279500d79adf",
+        "Item.aff056c7f8605b10"
+      ],
+      "costs": [
+        {
+          "functionId": "weapon",
+          "mode": "source",
+          "amount": 8
+        }
+      ]
+    }
+  ],
+  "fixedManualDamageWeapons": [
+    {
+      "id": "0J3RPqRK67ZlGP5z",
+      "name": "Протонный Меч",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 96
+    },
+    {
+      "id": "0QPKtApTgBiaOME1",
+      "name": "Электропогонялка",
+      "functionId": "weapon",
+      "sourceUuid": "Item.066d60005fad3bd1",
+      "source": "Энергетический аккумулятор (C)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 62
+    },
+    {
+      "id": "16Yvp9o6qZt1To3B",
+      "name": "Головинтовка",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 80
+    },
+    {
+      "id": "1ssDgxysBsODCSRx",
+      "name": "Термокопьё",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 72
+    },
+    {
+      "id": "3xS59nKctYONQY74",
+      "name": "Эксперементальное Звуковое Ружьё",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 92
+    },
+    {
+      "id": "47BMtLduDvfLggxW",
+      "name": "Инверсионный Протонная Глефа",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 127
+    },
+    {
+      "id": "4TurzNXFRVnIyjOY",
+      "name": "«Потрошитель»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.066d60005fad3bd1",
+      "source": "Энергетический аккумулятор (C)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 88
+    },
+    {
+      "id": "8LWELv8EgRq6tFK3",
+      "name": "Антенна X-2",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 92
+    },
+    {
+      "id": "9FbcTQNyMP5gYTLh",
+      "name": "Кулак Востока",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 126
+    },
+    {
+      "id": "CsDlecr8IFyUo7XS",
+      "name": "Мьёльнир",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 72
+    },
+    {
+      "id": "Cuc9bu3SP2lDzJOX",
+      "name": "Индустриальный кастет",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 132
+    },
+    {
+      "id": "D5YVK74bLgjAcM6G",
+      "name": "\"Вытеснитель\"",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 92
+    },
+    {
+      "id": "EvMmZscgG2WUgLV7",
+      "name": "Плазменная Реактивная Кувалда",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 133
+    },
+    {
+      "id": "FdcqNIqX7s2FFv5O",
+      "name": "Суперкувалда",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 92
+    },
+    {
+      "id": "Gwej6FCjFOvqowsf",
+      "name": "«Бэби!»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 92
+    },
+    {
+      "id": "JAQG5jfegULhU3Gs",
+      "name": "Нахрап",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 126
+    },
+    {
+      "id": "LaJm2ajbCEOFhASP",
+      "name": "Шоковая перчатка",
+      "functionId": "weapon",
+      "sourceUuid": "Item.066d60005fad3bd1",
+      "source": "Энергетический аккумулятор (C)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 84
+    },
+    {
+      "id": "LpcWtOh4Vaq5cRVd",
+      "name": "Плазменный Кулак Mk.II",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 174
+    },
+    {
+      "id": "MZaheMZBqqbEUf7u",
+      "name": "Автопила Базз",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 4,
+      "magazine": 12,
+      "damage": 132
+    },
+    {
+      "id": "MccD7z28MKpwUQAz",
+      "name": "Радужный Бластер!",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 133
+    },
+    {
+      "id": "Mt9RJzFCzG27hT8G",
+      "name": "Молния",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 126
+    },
+    {
+      "id": "NrcNNnqzQ7FWI08i",
+      "name": "Жвах-перчатка",
+      "functionId": "weapon",
+      "sourceUuid": "Item.CReBGFCcxsYlrObv",
+      "source": "Высокоразрядная оружейная батарея (C)",
+      "unitsPerAttack": 1,
+      "attacksPerReload": 6,
+      "magazine": 6,
+      "damage": 49
+    },
+    {
+      "id": "PyjV32r6w1RhjmRI",
+      "name": "Суперкувалда Братства Стали",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 92
+    },
+    {
+      "id": "R60NI82s6nphzDgL",
+      "name": "ЭлектроКомар",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 72
+    },
+    {
+      "id": "RiGiU0CyWOmOtwJm",
+      "name": "Суперэлектрокнут",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 72
+    },
+    {
+      "id": "WY2oND6EMLkPxTV8",
+      "name": "Инверсионный Протонный Топорик",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 5,
+      "magazine": 15,
+      "damage": 127
+    },
+    {
+      "id": "WhCjmJYgq9E1wX63",
+      "name": "Подарочный «Потрошитель»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 132
+    },
+    {
+      "id": "YaKKUavWOrzqoMOr",
+      "name": "Протонная Алебарда",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 96
+    },
+    {
+      "id": "a9t00nZaHJjS95et",
+      "name": "Микроядерный гипераппарат «Альфа»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.5ff5e7fd837271b2",
+      "source": "Микроядерный генератор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 80
+    },
+    {
+      "id": "afoRExzphadDXAnb",
+      "name": "Сатурнитовый Кастет",
+      "functionId": "weapon",
+      "sourceUuid": "Item.066d60005fad3bd1",
+      "source": "Энергетический аккумулятор (C)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 84
+    },
+    {
+      "id": "an0Kbp6TYUpUqe9P",
+      "name": "\"Разъединитель\"",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 90
+    },
+    {
+      "id": "dE5l2Q0oiJiwvLwC",
+      "name": "Аргоновыйы Автомат",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 80
+    },
+    {
+      "id": "dOPCFLpNeqTmQot9",
+      "name": "Эксперементальное Магнитное Орудие",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 127
+    },
+    {
+      "id": "dmKY2lctbC5LFwio",
+      "name": "Инверсионный Протонный Меч",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 127
+    },
+    {
+      "id": "dyIMASGieuVv4f7o",
+      "name": "Силовой Кастет",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 4,
+      "magazine": 12,
+      "damage": 126
+    },
+    {
+      "id": "eLp9HeVacMcJxeoC",
+      "name": "«Шиш-кебаб» ЭКСТРА",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 72
+    },
+    {
+      "id": "fCVWRJiLJP7gNMCB",
+      "name": "Китайский Резак",
+      "functionId": "weapon",
+      "sourceUuid": "Item.066d60005fad3bd1",
+      "source": "Энергетический аккумулятор (C)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 88
+    },
+    {
+      "id": "jxaZLSBX9hHZHURC",
+      "name": "Силовой кастет Соль-на-Раны",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 5,
+      "magazine": 15,
+      "damage": 126
+    },
+    {
+      "id": "kgZQqfghovviT3yN",
+      "name": "Шоковый Клинок",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 72
+    },
+    {
+      "id": "kttaf5kl8I1beDt7",
+      "name": "Цепная пила «Гром»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 132
+    },
+    {
+      "id": "lD4qHjuf2fSIgma9",
+      "name": "Автотопор Союза",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 132
+    },
+    {
+      "id": "lz20wCiS8hDOWmgX",
+      "name": "Винтовка с подзарядкой",
+      "functionId": "weapon",
+      "sourceUuid": "Item.4d63807ea78f0994",
+      "source": "Микроядерный генератор (C)",
+      "unitsPerAttack": 1,
+      "attacksPerReload": 5,
+      "magazine": 5,
+      "damage": 54
+    },
+    {
+      "id": "oaYKzrygNOaNauBI",
+      "name": "Автотопор",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 132
+    },
+    {
+      "id": "pdfF2jY0x7uwtCwd",
+      "name": "«Потрошитель» Mk II",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 132
+    },
+    {
+      "id": "sqVtKXLhCUTeZtBd",
+      "name": "Протонный Топорик",
+      "functionId": "weapon",
+      "sourceUuid": "Item.b79f279500d79adf",
+      "source": "Высокоразрядная оружейная батарея (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 5,
+      "magazine": 10,
+      "damage": 96
+    },
+    {
+      "id": "tNdOYjEg3oZdHhlx",
+      "name": "Пистолет с подзарядкой",
+      "functionId": "weapon",
+      "sourceUuid": "Item.4d63807ea78f0994",
+      "source": "Микроядерный генератор (C)",
+      "unitsPerAttack": 1,
+      "attacksPerReload": 5,
+      "magazine": 5,
+      "damage": 54
+    },
+    {
+      "id": "tnlX2tqdFWEIOhKl",
+      "name": "Солнечный скорчер",
+      "functionId": "weapon",
+      "sourceUuid": "Item.424ab4e8ffa6e5e4",
+      "source": "Солнечный аккумулятор (A)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 111
+    },
+    {
+      "id": "vuVQ8joQrIDVHO8r",
+      "name": "Плазменный резак",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 6,
+      "magazine": 12,
+      "damage": 119
+    },
+    {
+      "id": "xEjj4vh5cYk8U0B6",
+      "name": "Плазменный Кулак",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 174
+    },
+    {
+      "id": "xPqMOwkjkjNbB6i5",
+      "name": "Пика-Пика",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 2,
+      "attacksPerReload": 4,
+      "magazine": 8,
+      "damage": 88
+    },
+    {
+      "id": "xc7L9SS9CHYFHruN",
+      "name": "Тостер паладина",
+      "functionId": "weapon",
+      "sourceUuid": "Item.345616cdf39dfa4e",
+      "source": "Энергетический аккумулятор (B)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 6,
+      "magazine": 18,
+      "damage": 126
+    },
+    {
+      "id": "zDxa3u2M17wuO4d4",
+      "name": "«Приговор»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.aff056c7f8605b10",
+      "source": "Высокоразрядная оружейная батарея (A)",
+      "unitsPerAttack": 3,
+      "attacksPerReload": 3,
+      "magazine": 9,
+      "damage": 122
+    }
+  ],
+  "exactMagazineFixes": [
+    {
+      "id": "6rBBnUfFTsDlMyCl",
+      "name": "«Шиш-кебаб»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.x5bUvcfsMiwOfm3W",
+      "source": "Топливо для огнемёта"
+    },
+    {
+      "id": "EckRBQWKe2k9bPFN",
+      "name": "Реактивная Кувалда",
+      "functionId": "weapon",
+      "sourceUuid": "Item.x5bUvcfsMiwOfm3W",
+      "source": "Топливо для огнемёта"
+    },
+    {
+      "id": "asIgxP6FFfIWlDJC",
+      "name": "Голо-Гранатомёт",
+      "functionId": "weapon",
+      "sourceUuid": "Item.c2652eddaca02c64",
+      "source": "Микроядерная батарея «Высокой ёмкости»"
+    },
+    {
+      "id": "sRJn3c8uOGJOuXaw",
+      "name": "«Геенна»",
+      "functionId": "weapon",
+      "sourceUuid": "Item.x5bUvcfsMiwOfm3W",
+      "source": "Топливо для огнемёта"
+    }
+  ],
+  "powerFist": {
+    "id": "dyIMASGieuVv4f7o",
+    "name": "Силовой Кастет",
+    "functionId": "weapon",
+    "sourceUuid": "Item.345616cdf39dfa4e",
+    "source": "Энергетический аккумулятор (B)",
+    "unitsPerAttack": 3,
+    "attacksPerReload": 4,
+    "magazine": 12,
+    "damage": 126
+  }
+}

@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-28T07:48:47.516Z",
+  "mode": "catalog-dry-run",
+  "worldDatabaseTouched": false,
+  "engineFacts": {
+    "fireSplit": "50% immediately and 50% on one delayed tick",
+    "splitOrder": "each pellet is split before mitigation; immediate and delayed portions are mitigated independently",
+    "flamerEffectivePacketCount": "pellets × 2 for pure fire under the current 50/50 rule"
+  },
+  "targets": {
+    "flamerFuel": [
+      {
+        "name": "Топливо для огнемёта «Военное липкое»",
+        "class": "B",
+        "beforeDamage": 180,
+        "proposedDamage": 392,
+        "pellets": 4,
+        "effectiveFirePackets": 8,
+        "penetration": 3,
+        "maxRange": 4,
+        "effectiveFar": 3
+      },
+      {
+        "name": "Топливо для огнемёта «Реактивное»",
+        "class": "B",
+        "beforeDamage": 161,
+        "proposedDamage": 336,
+        "pellets": 4,
+        "effectiveFirePackets": 8,
+        "penetration": 12,
+        "maxRange": 12,
+        "effectiveFar": 7
+      },
+      {
+        "name": "Топливо для огнемёта «Напалмовое»",
+        "class": "C",
+        "beforeDamage": 126,
+        "proposedDamage": 280,
+        "pellets": 4,
+        "effectiveFirePackets": 8,
+        "penetration": 1,
+        "maxRange": 0,
+        "effectiveFar": 0
+      },
+      {
+        "name": "Топливо для огнемёта «Стабилизированное»",
+        "class": "C",
+        "beforeDamage": 102,
+        "proposedDamage": 224,
+        "pellets": 4,
+        "effectiveFirePackets": 8,
+        "penetration": 1,
+        "maxRange": 5,
+        "effectiveFar": 4
+      },
+      {
+        "name": "Топливо для огнемёта",
+        "class": "D",
+        "beforeDamage": 0,
+        "proposedDamage": 144,
+        "pellets": 4,
+        "effectiveFirePackets": 8,
+        "penetration": 0,
+        "maxRange": 0,
+        "effectiveFar": 0
+      }
+    ],
+    "zeroSources": [
+      {
+        "name": "Микроядерный генератор (B)",
+        "class": "B",
+        "family": "energyCell",
+        "beforeDamage": 0,
+        "proposedDamage": 86,
+        "proposedPenetration": 30,
+        "damageTypes": [
+          {
+            "key": "energy",
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "name": "Микроядерный генератор (C)",
+        "class": "C",
+        "family": "energyCell",
+        "beforeDamage": 0,
+        "proposedDamage": 54,
+        "proposedPenetration": 18,
+        "damageTypes": [
+          {
+            "key": "energy",
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "name": "Солнечный аккумулятор (A)",
+        "class": "A",
+        "family": "conventionalBallistic",
+        "beforeDamage": 0,
+        "proposedDamage": 127,
+        "proposedPenetration": 46,
+        "damageTypes": [
+          {
+            "key": "energy",
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "name": "Энергетический аккумулятор (B)",
+        "class": "B",
+        "family": "energyCell",
+        "beforeDamage": 0,
+        "proposedDamage": 86,
+        "proposedPenetration": 30,
+        "damageTypes": [
+          {
+            "key": "energy",
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "name": "Энергетический аккумулятор (C)",
+        "class": "C",
+        "family": "energyCell",
+        "beforeDamage": 0,
+        "proposedDamage": 54,
+        "proposedPenetration": 18,
+        "damageTypes": [
+          {
+            "key": "energy",
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "name": "Микроядерная батарея «Высокой ёмкости»",
+        "class": "B",
+        "family": "energyCell",
+        "beforeDamage": 0,
+        "proposedDamage": 86,
+        "proposedPenetration": 30,
+        "damageTypes": [
+          {
+            "key": "energy",
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "name": "Топливо для огнемёта",
+        "class": "D",
+        "family": "flamerFuel",
+        "beforeDamage": 0,
+        "proposedDamage": 144,
+        "proposedPenetration": 0,
+        "damageTypes": [
+          {
+            "key": "fire",
+            "percent": 100
+          }
+        ]
+      }
+    ],
+    "dConventionalPrices": [
+      {
+        "name": ".22 LR",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": ".223",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": ".32",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": ".357 Magnum",
+        "beforePrice": 4,
+        "proposedPrice": 6,
+        "resultQuantity": 15
+      },
+      {
+        "name": ".45 Auto",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": "10 мм Auto",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": "5 мм",
+        "beforePrice": 5,
+        "proposedPrice": 7,
+        "resultQuantity": 15
+      },
+      {
+        "name": "5,56 мм",
+        "beforePrice": 7,
+        "proposedPrice": 6,
+        "resultQuantity": 15
+      },
+      {
+        "name": "9-мм",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": "Гвоздь",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": "Железнодорожный костыль",
+        "beforePrice": 4,
+        "proposedPrice": 6,
+        "resultQuantity": 15
+      },
+      {
+        "name": "Стрела/болт",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      },
+      {
+        "name": "Шарик для пневматики",
+        "beforePrice": 2,
+        "proposedPrice": 4,
+        "resultQuantity": 15
+      }
+    ]
+  },
+  "comparisons": [
+    {
+      "class": "D",
+      "flameName": "Топливо для огнемёта",
+      "shotgunName": "12 калибр",
+      "flameBefore": 0,
+      "flameAfter": 144,
+      "flamePackets": 8,
+      "shotgunDamage": 125,
+      "shotgunPellets": 8,
+      "protectionResults": [
+        {
+          "protection": 0,
+          "flameBefore": 0,
+          "flameAfter": 144,
+          "shotgun": 125
+        },
+        {
+          "protection": 15,
+          "flameBefore": 0,
+          "flameAfter": 24,
+          "shotgun": 29
+        },
+        {
+          "protection": 30,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        },
+        {
+          "protection": 50,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        },
+        {
+          "protection": 80,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        }
+      ]
+    },
+    {
+      "class": "C",
+      "flameName": "Топливо для огнемёта «Стабилизированное»",
+      "shotgunName": "12 калибр «Картечь»",
+      "flameBefore": 102,
+      "flameAfter": 224,
+      "flamePackets": 8,
+      "shotgunDamage": 178,
+      "shotgunPellets": 8,
+      "protectionResults": [
+        {
+          "protection": 0,
+          "flameBefore": 104,
+          "flameAfter": 224,
+          "shotgun": 178
+        },
+        {
+          "protection": 15,
+          "flameBefore": 0,
+          "flameAfter": 112,
+          "shotgun": 98
+        },
+        {
+          "protection": 30,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        },
+        {
+          "protection": 50,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        },
+        {
+          "protection": 80,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        }
+      ]
+    },
+    {
+      "class": "C",
+      "flameName": "Топливо для огнемёта «Напалмовое»",
+      "shotgunName": "12 калибр «Убойный»",
+      "flameBefore": 126,
+      "flameAfter": 280,
+      "flamePackets": 8,
+      "shotgunDamage": 214,
+      "shotgunPellets": 8,
+      "protectionResults": [
+        {
+          "protection": 0,
+          "flameBefore": 128,
+          "flameAfter": 280,
+          "shotgun": 214
+        },
+        {
+          "protection": 15,
+          "flameBefore": 16,
+          "flameAfter": 168,
+          "shotgun": 166
+        },
+        {
+          "protection": 30,
+          "flameBefore": 0,
+          "flameAfter": 48,
+          "shotgun": 46
+        },
+        {
+          "protection": 50,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        },
+        {
+          "protection": 80,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 0
+        }
+      ]
+    },
+    {
+      "class": "B",
+      "flameName": "Топливо для огнемёта «Реактивное»",
+      "shotgunName": "12 калибр «Флешетта»",
+      "flameBefore": 161,
+      "flameAfter": 336,
+      "flamePackets": 8,
+      "shotgunDamage": 215,
+      "shotgunPellets": 8,
+      "protectionResults": [
+        {
+          "protection": 0,
+          "flameBefore": 162,
+          "flameAfter": 336,
+          "shotgun": 215
+        },
+        {
+          "protection": 15,
+          "flameBefore": 74,
+          "flameAfter": 312,
+          "shotgun": 215
+        },
+        {
+          "protection": 30,
+          "flameBefore": 0,
+          "flameAfter": 192,
+          "shotgun": 215
+        },
+        {
+          "protection": 50,
+          "flameBefore": 0,
+          "flameAfter": 32,
+          "shotgun": 215
+        },
+        {
+          "protection": 80,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 175
+        }
+      ]
+    },
+    {
+      "class": "B",
+      "flameName": "Топливо для огнемёта «Военное липкое»",
+      "shotgunName": "12 калибр «Бронебойный»",
+      "flameBefore": 180,
+      "flameAfter": 392,
+      "flamePackets": 8,
+      "shotgunDamage": 229,
+      "shotgunPellets": 8,
+      "protectionResults": [
+        {
+          "protection": 0,
+          "flameBefore": 184,
+          "flameAfter": 392,
+          "shotgun": 229
+        },
+        {
+          "protection": 15,
+          "flameBefore": 88,
+          "flameAfter": 296,
+          "shotgun": 229
+        },
+        {
+          "protection": 30,
+          "flameBefore": 0,
+          "flameAfter": 176,
+          "shotgun": 229
+        },
+        {
+          "protection": 50,
+          "flameBefore": 0,
+          "flameAfter": 16,
+          "shotgun": 229
+        },
+        {
+          "protection": 80,
+          "flameBefore": 0,
+          "flameAfter": 0,
+          "shotgun": 189
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "catalogRecords": 195,
+    "combatAdjusted": 11,
+    "zeroDamageBefore": 7,
+    "zeroDamageAfter": 0,
+    "allFlamersFourPellets": true
+  }
+}

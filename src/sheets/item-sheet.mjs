@@ -196,6 +196,10 @@ import {
   isModuleItemCompatibleWithSlot,
   isWeaponModuleItem
 } from "../utils/weapon-modules.mjs";
+import {
+  getDamageSourceAdjustedNoiseLevel,
+  resolveDamageSourceAnimationKey
+} from "../utils/damage-source-weapon.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getDroppedWorldItems, mergeDroppedUuids } from "../utils/document-drop.mjs";
 import {
@@ -10804,7 +10808,7 @@ function getWeaponDisplayData(weaponData = {}) {
     pellets: normalizeDamageFormula(source.pellets || "1"),
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
-    attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    attackAnimationKey: resolveDamageSourceAnimationKey(weaponData.attackAnimationKey, source.attackAnimationKey),
     accuracyBonus: addFormulaTexts(weaponData.accuracyBonus, source.accuracyBonus),
     criticalChanceModifier: addFormulaTexts(weaponData.criticalChanceModifier, source.criticalChanceModifier),
     criticalDamagePercent: addFormulaTexts(weaponData.criticalDamagePercent, source.criticalDamagePercent),
@@ -10814,6 +10818,7 @@ function getWeaponDisplayData(weaponData = {}) {
       max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
     penetration: addFormulaTexts(weaponData.penetration, source.penetration),
+    noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
@@ -10829,7 +10834,10 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDurationSeconds: normalizeDamageFormula(sourceVolley?.regionDurationSeconds),
     regionDelaySeconds: normalizeDamageFormula(sourceVolley?.regionDelaySeconds),
     regionRadiusDeltaMeters: normalizeDamageFormula(sourceVolley?.regionRadiusDeltaMeters),
-    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
+    explosionAnimationKey: resolveDamageSourceAnimationKey(
+      weaponVolley?.explosionAnimationKey,
+      sourceVolley?.explosionAnimationKey
+    )
   };
 }
 
@@ -11294,6 +11302,7 @@ function createDefaultDamageSourceFunctionData(source = {}) {
       max: 0
     },
     penetration: 0,
+    noiseLevel: 0,
     volley: createDefaultDamageSourceVolleyData()
   }, foundry.utils.deepClone(source), { inplace: false });
 }

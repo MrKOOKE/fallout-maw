@@ -176,6 +176,7 @@ import {
   getWeaponModuleSlotItemData,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
+import { getDamageSourceAdjustedNoiseLevel } from "../utils/damage-source-weapon.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
@@ -3966,7 +3967,8 @@ function applyDamageSourceWeaponDialogModifiers(weaponData = {}) {
       value: addFormulaTexts(weaponData.effectiveRange?.value, source.effectiveRange?.value),
       max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
-    penetration: addFormulaTexts(weaponData.penetration, source.penetration)
+    penetration: addFormulaTexts(weaponData.penetration, source.penetration),
+    noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source)
   };
 }
 
@@ -4735,6 +4737,7 @@ function areDamageSourcesEqual(left = {}, right = {}) {
   if (String(left?.effectiveRange?.value ?? "0") !== String(right?.effectiveRange?.value ?? "0")) return false;
   if (String(left?.effectiveRange?.max ?? "0") !== String(right?.effectiveRange?.max ?? "0")) return false;
   if (String(left?.penetration ?? "0") !== String(right?.penetration ?? "0")) return false;
+  if (toInteger(left?.noiseLevel) !== toInteger(right?.noiseLevel)) return false;
   const leftTypes = normalizeDamageSourceTypeSignature(left?.damageTypes);
   const rightTypes = normalizeDamageSourceTypeSignature(right?.damageTypes);
   if (leftTypes !== rightTypes) return false;

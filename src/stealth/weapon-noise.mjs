@@ -1,6 +1,6 @@
 import {
-  testStealthDetectionPoint,
-  weaponNoiseToRangeBonus
+  buildWeaponNoiseZone,
+  testWeaponNoiseZoneContact
 } from "./detection.mjs";
 import { isValidStealthObserver } from "./observers.mjs";
 import {
@@ -69,13 +69,14 @@ async function resolveWeaponNoiseDetectionNow(attackerToken, noiseLevel) {
   ) return false;
 
   const hiddenPoint = getTokenCenter(hiddenToken);
-  const rangeBonus = weaponNoiseToRangeBonus(noiseLevel);
+  const noiseZone = buildWeaponNoiseZone(hiddenToken, { noiseLevel });
   for (const observerToken of globalThis.canvas?.tokens?.placeables ?? []) {
     if (!isActorStealthed(hiddenToken.actor)) return true;
     if (!isValidStealthObserver(hiddenToken, observerToken)) continue;
     const observerOrigin = getTokenCenter(observerToken);
-    if (!testStealthDetectionPoint(observerToken, observerOrigin, hiddenPoint, {
-      rangeBonus,
+    if (!testWeaponNoiseZoneContact(observerToken, observerOrigin, hiddenPoint, {
+      noiseLevel,
+      noiseZone,
       settings
     })) continue;
 

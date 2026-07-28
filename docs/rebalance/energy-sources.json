@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "status": "current-world-record-awaiting-unlocked-db-recheck",
+  "pricing": {
+    "calculator": "built-in item-sheet craft price calculator",
+    "previousFlatTenPercentPricesAreRejected": true,
+    "pendingWrite": true
+  },
+  "sources": [
+    {
+      "id": "4umVpm4htpJBclCF",
+      "name": "Пальчиковая батарейка",
+      "class": "D",
+      "capacity": 1000,
+      "currentRecordedPrice": 70,
+      "recalculatedPrice": 75,
+      "recipe": {
+        "componentCostPerResult": 73,
+        "difficulty": 30,
+        "difficultyPercent": 3
+      },
+      "consumerSummary": {
+        "flashlights": 1
+      },
+      "recipeStatus": "ready-for-write"
+    },
+    {
+      "id": "CReBGFCcxsYlrObv",
+      "name": "Высокоразрядная оружейная батарея (C)",
+      "class": "C",
+      "capacity": 300,
+      "currentRecordedPrice": 387,
+      "recalculatedPrice": 391,
+      "recipe": {
+        "componentCostPerResult": 352,
+        "difficulty": 80,
+        "difficultyPercent": 11
+      },
+      "consumerSummary": {
+        "weaponsAcceptingSource": 15,
+        "mainFamily": "Gauss and other high-discharge weapons"
+      }
+    },
+    {
+      "id": "b79f279500d79adf",
+      "name": "Высокоразрядная оружейная батарея (B)",
+      "class": "B",
+      "capacity": 600,
+      "currentRecordedPrice": 1184,
+      "recalculatedPrice": 1270,
+      "recipe": {
+        "componentCostPerResult": 1076,
+        "difficulty": 110,
+        "difficultyPercent": 18
+      },
+      "consumerSummary": {
+        "weaponsAcceptingSource": 15,
+        "mainFamily": "Gauss and other high-discharge weapons"
+      }
+    },
+    {
+      "id": "aff056c7f8605b10",
+      "name": "Высокоразрядная оружейная батарея (A)",
+      "class": "A",
+      "capacity": 1200,
+      "currentRecordedPrice": 2191,
+      "recalculatedPrice": 2530,
+      "recipe": {
+        "componentCostPerResult": 1992,
+        "difficulty": 140,
+        "difficultyPercent": 27
+      },
+      "consumerSummary": {
+        "weaponsAcceptingSource": 9,
+        "mainFamily": "advanced Gauss and high-discharge weapons"
+      }
+    },
+    {
+      "id": "idCnJLNhPJOKiJFQ",
+      "name": "Ядерный блок (B)",
+      "class": "B",
+      "capacity": 10000,
+      "currentRecordedPrice": 4211,
+      "recalculatedPrice": 4632,
+      "recipe": {
+        "componentCostPerResult": 3828,
+        "difficulty": 120,
+        "difficultyPercent": 21
+      },
+      "consumerSummary": {
+        "weaponsAcceptingSource": 2,
+        "powerArmorBodiesAcceptingSource": 72,
+        "powerArmorOfSameClass": 20,
+        "powerArmorConsumptionPerHour": 40
+      }
+    },
+    {
+      "id": "810613648446db93",
+      "name": "Ядерный блок (A)",
+      "class": "A",
+      "capacity": 16000,
+      "currentRecordedPrice": 7711,
+      "recalculatedPrice": 9113,
+      "recipe": {
+        "componentCostPerResult": 7010,
+        "difficulty": 150,
+        "difficultyPercent": 30
+      },
+      "consumerSummary": {
+        "weaponsAcceptingSource": 2,
+        "powerArmorBodiesAcceptingSource": 14,
+        "powerArmorOfSameClass": 9,
+        "powerArmorConsumptionPerHour": 55
+      }
+    },
+    {
+      "id": "60ac3df89403b230",
+      "name": "Ядерный блок (S)",
+      "class": "S",
+      "capacity": 24000,
+      "currentRecordedPrice": 18359,
+      "recalculatedPrice": 23700,
+      "recipe": {
+        "componentCostPerResult": 16690,
+        "difficulty": 180,
+        "difficultyPercent": 42
+      },
+      "consumerSummary": {
+        "weaponsAcceptingSource": 2,
+        "powerArmorBodiesAcceptingSource": 5,
+        "powerArmorOfSameClass": 5,
+        "powerArmorConsumptionPerHour": 75
+      }
+    }
+  ],
+  "consumerRules": {
+    "powerArmor": {
+      "bodyItems": 72,
+      "classAndHourlyConsumption": {
+        "C": 30,
+        "B": 40,
+        "A": 55,
+        "S": 75
+      },
+      "disabledSourcePenalty": {
+        "strength": -5,
+        "dexterity": -5
+      }
+    },
+    "gauss": {
+      "hybridWeapons": 15,
+      "usesProjectileDamageSourceAndEnergySource": true,
+      "energyPerAttackExamples": {
+        "pistolB": 8,
+        "pistolA": 12,
+        "rifleB": 12,
+        "rifleA": 18,
+        "YCSOrLastMinute": 14,
+        "carbine": 16,
+        "machineGunMinigunOrGatling": 8
+      }
+    },
+    "specialWeapons": {
+      "BFG": 250,
+      "Аннигилятор материи": 500,
+      "Сингулярность": 600
+    },
+    "fixedManualDamageWeapons": {
+      "count": 52,
+      "rule": "exactly one ordinary magazine or energy source; roughly four attacks before reload",
+      "magazineSizeDistribution": {
+        "3": 11,
+        "4": 13,
+        "5": 13,
+        "6": 15
+      },
+      "powerFistExample": {
+        "source": "one energy battery",
+        "costPerAttack": 3,
+        "magazineCapacity": 12,
+        "attacksBeforeReload": 4
+      }
+    }
+  },
+  "validationFromLastClosedWorldPass": {
+    "activeEnergySources": 7,
+    "energyConsumers": 91,
+    "brokenReferences": 0,
+    "manualWeaponsWithMultipleMagazineSources": 0,
+    "testsPassed": 42
+  }
+}

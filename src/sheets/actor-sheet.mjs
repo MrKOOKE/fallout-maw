@@ -298,6 +298,10 @@ import {
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
 import {
+  getDamageSourceAdjustedNoiseLevel,
+  resolveDamageSourceAnimationKey
+} from "../utils/damage-source-weapon.mjs";
+import {
   applyWeaponEffectiveRangeBonuses,
   resolveBaseWeaponEffectiveRange
 } from "../utils/weapon-range.mjs";
@@ -5842,6 +5846,20 @@ function buildDamageSourceTooltipSection(item, actor = null) {
   if (effectiveValue || effectiveMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(effectiveValue)} / ${formatNumber(effectiveMax)} м`]);
   const penetration = evaluateTooltipFormula(source?.penetration, actor);
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
+  const noiseLevel = toInteger(source?.noiseLevel);
+  if (noiseLevel) rows.push([
+    game.i18n.localize("FALLOUTMAW.Item.DamageSourceNoiseLevelModifier"),
+    renderSignedTooltipModifier(noiseLevel, {
+      higherIsBetter: false,
+      breakdown: buildDamageSourceFormulaAttribution(
+        item,
+        actor,
+        game.i18n.localize("FALLOUTMAW.Item.DamageSourceNoiseLevelModifier"),
+        source?.noiseLevel,
+        noiseLevel
+      )
+    })
+  ]);
   rows.push(...getWeaponVolleyRows(source, { actor }));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
 }
@@ -6446,6 +6464,7 @@ function buildWeaponTooltipRows(item, entry = {}, {
   })]);
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"), renderChangedNumber(stats.noiseLevel, baseStats.noiseLevel, {
     baseMode,
+    higherIsBetter: false,
     breakdown: stats.breakdowns?.noiseLevel
   })]);
   rows.push(...getWeaponResourceCostRows(data, baseData, {
@@ -7973,7 +7992,7 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
     pellets: source.pellets,
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
-    attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    attackAnimationKey: resolveDamageSourceAnimationKey(data.attackAnimationKey, source.attackAnimationKey),
     accuracyBonus: addFormulaTexts(data.accuracyBonus, source.accuracyBonus),
     criticalChanceModifier: addFormulaTexts(data.criticalChanceModifier, source.criticalChanceModifier),
     criticalDamagePercent: addFormulaTexts(data.criticalDamagePercent, source.criticalDamagePercent),
@@ -7983,6 +8002,7 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
       max: addFormulaTexts(data.effectiveRange?.max, source.effectiveRange?.max)
     },
     penetration: addFormulaTexts(data.penetration, source.penetration),
+    noiseLevel: getDamageSourceAdjustedNoiseLevel(data, source),
     volley: mergeDamageSourceVolleyData(data.volley, source.volley)
   };
 }
@@ -8074,7 +8094,10 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDurationSeconds: normalizeFormulaText(sourceVolley?.regionDurationSeconds),
     regionDelaySeconds: normalizeFormulaText(sourceVolley?.regionDelaySeconds),
     regionRadiusDeltaMeters: normalizeFormulaText(sourceVolley?.regionRadiusDeltaMeters),
-    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
+    explosionAnimationKey: resolveDamageSourceAnimationKey(
+      weaponVolley?.explosionAnimationKey,
+      sourceVolley?.explosionAnimationKey
+    )
   };
 }
 

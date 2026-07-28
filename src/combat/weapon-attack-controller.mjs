@@ -90,6 +90,10 @@ import {
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers, getWeaponNoiseLevel } from "../utils/weapon-modules.mjs";
+import {
+  getDamageSourceAdjustedNoiseLevel,
+  resolveDamageSourceAnimationKey
+} from "../utils/damage-source-weapon.mjs";
 import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import {
   calculateStealthDamageBonusAmount,
@@ -7196,7 +7200,7 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
     pellets: source.pellets,
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
-    attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    attackAnimationKey: resolveDamageSourceAnimationKey(weaponData.attackAnimationKey, source.attackAnimationKey),
     accuracyBonus: addFormulaTexts(weaponData.accuracyBonus, source.accuracyBonus),
     criticalChanceModifier: addFormulaTexts(weaponData.criticalChanceModifier, source.criticalChanceModifier),
     criticalDamagePercent: addFormulaTexts(weaponData.criticalDamagePercent, source.criticalDamagePercent),
@@ -7206,6 +7210,7 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
       max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
     penetration: addFormulaTexts(weaponData.penetration, source.penetration),
+    noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
@@ -7308,7 +7313,10 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDurationSeconds: normalizeFormulaText(sourceVolley?.regionDurationSeconds),
     regionDelaySeconds: normalizeFormulaText(sourceVolley?.regionDelaySeconds),
     regionRadiusDeltaMeters: normalizeFormulaText(sourceVolley?.regionRadiusDeltaMeters),
-    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
+    explosionAnimationKey: resolveDamageSourceAnimationKey(
+      weaponVolley?.explosionAnimationKey,
+      sourceVolley?.explosionAnimationKey
+    )
   };
 }
 

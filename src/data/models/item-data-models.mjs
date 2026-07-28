@@ -743,6 +743,7 @@ function damageSourceFunctionField(options = {}) {
       max: new StringField({ required: true, blank: true, initial: "0" })
     }),
     penetration: new StringField({ required: true, blank: true, initial: "0" }),
+    noiseLevel: new NumberField({ required: true, integer: true, initial: 0 }),
     volley: damageSourceVolleyField()
   }, options);
 }

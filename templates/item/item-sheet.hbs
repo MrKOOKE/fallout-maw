@@ -5145,6 +5145,10 @@
         <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
         <input type="text" name="system.functions.damageSource.penetration" value="{{system.functions.damageSource.penetration}}" data-formula-autocomplete="all">
       </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.DamageSourceNoiseLevelModifier"}}</span>
+        <input type="number" name="system.functions.damageSource.noiseLevel" value="{{system.functions.damageSource.noiseLevel}}" step="1">
+      </label>
     </div>
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.DamageSourceExplosion"}}</h3>
@@ -6484,7 +6488,7 @@
     <div class="fallout-maw-list-grid {{#if hasVolleyAction}}three-columns{{else}}two-columns{{/if}}">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
-        <input type="text" name="{{path}}.attackAnimationKey" value="{{effectiveWeaponData.attackAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.attackAnimationKey" value="{{weaponData.attackAnimationKey}}" placeholder="{{effectiveWeaponData.attackAnimationKey}}">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackSound"}}</span>
@@ -6509,7 +6513,7 @@
       {{#if hasVolleyAction}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
-        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{effectiveWeaponData.volley.explosionAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{weaponData.volley.explosionAnimationKey}}" placeholder="{{effectiveWeaponData.volley.explosionAnimationKey}}">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>

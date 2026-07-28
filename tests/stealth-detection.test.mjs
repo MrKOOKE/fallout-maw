@@ -3,11 +3,14 @@ import { afterEach, test } from "node:test";
 
 import {
   buildObserverDetectionZone,
+  buildWeaponNoiseZone,
   computeDetectionPathCost,
+  doGridZonesOverlap,
   getStealthObserverZones,
   getStealthDetectionCacheStats,
   invalidateStealthDetectionCache,
   testStealthDetectionPoint,
+  testWeaponNoiseZoneContact,
   weaponNoiseToRangeBonus
 } from "../src/stealth/detection.mjs";
 import { invalidateLightingAnalysisCache } from "../src/stealth/lighting.mjs";
@@ -88,27 +91,195 @@ test("preview construction and its LRU cache both obey cell budgets", () => {
   assert.ok(oversized.offsets.length <= bounded.maxPreviewCells);
 });
 
-test("range bonus splits one preview scan into base and weapon-noise cells", () => {
+test("weapon noise contact wrapper retains darkness, LOS, and blindness rules", () => {
   installRectangleMock();
-  globalThis.canvas = createLinearCanvas({ cells: 7, cellSize: 100 });
-  const observer = createObserverWithUnlimitedSight("observer-noise-bands");
+  globalThis.CONFIG = {
+    specialStatusEffects: { BLIND: "blind" }
+  };
+  globalThis.canvas = createLinearCanvas({
+    cells: 7,
+    cellSize: 100,
+    darknessBand: [-1, 10_000]
+  });
+  const observer = createObserver("observer-noise-contact");
   const settings = createSettings("2");
+  const observerOrigin = { x: 0, y: 0, elevation: 0 };
+  const insideNoiseContact = { x: 200, y: 0, elevation: 0 };
+  const outsideDarknessShapedContact = { x: 300, y: 0, elevation: 0 };
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, insideNoiseContact, {
+      noiseLevel: 1,
+      settings
+    }),
+    true
+  );
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, outsideDarknessShapedContact, {
+      noiseLevel: 1,
+      settings
+    }),
+    false
+  );
 
-  const baseZone = buildObserverDetectionZone(observer, { settings });
-  const expandedZone = buildObserverDetectionZone(observer, { rangeBonus: 2, settings });
+  observer.checkCollision = point => point.x >= insideNoiseContact.x;
+  invalidateStealthDetectionCache();
+  assert.equal(
+    testStealthDetectionPoint(observer, observerOrigin, insideNoiseContact, {
+      rangeBonus: weaponNoiseToRangeBonus(1),
+      settings
+    }),
+    false
+  );
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, insideNoiseContact, {
+      noiseLevel: 1,
+      settings
+    }),
+    true,
+    "noise may reach a different visible cell instead of testing only the attacker's center ray"
+  );
 
-  assert.deepEqual(baseZone.offsets.map(({ j }) => j), [0, 1, 2]);
-  assert.deepEqual(expandedZone.baseOffsets.map(({ j }) => j), [0, 1, 2]);
-  assert.deepEqual(expandedZone.addedOffsets.map(({ j }) => j), [3, 4]);
-  assert.deepEqual(expandedZone.offsets.map(({ j }) => j), [0, 1, 2, 3, 4]);
-  assert.equal(expandedZone.range, 4);
-  assert.equal(expandedZone.baseRange, 2);
-  assert.equal(expandedZone.rangeBonus, 2);
-  assert.equal(expandedZone.maxRange, 4);
-  assert.notStrictEqual(expandedZone, baseZone);
-  assert.strictEqual(
-    buildObserverDetectionZone(observer, { rangeBonus: 2, settings }),
-    expandedZone
+  observer.checkCollision = () => true;
+  invalidateStealthDetectionCache();
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, insideNoiseContact, {
+      noiseLevel: 1,
+      settings
+    }),
+    false
+  );
+
+  observer.checkCollision = () => false;
+  observer.actor.statuses = new Set(["blind"]);
+  invalidateStealthDetectionCache();
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, insideNoiseContact, {
+      noiseLevel: 1,
+      settings
+    }),
+    false
+  );
+});
+
+test("weapon noise builds one source-owned cell zone instead of expanding observers", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 9, cellSize: 100 });
+
+  const quiet = buildWeaponNoiseZone({ x: 400, y: 0, elevation: 7 }, { noiseLevel: 0 });
+  assert.deepEqual(quiet.offsets, [{ i: 0, j: 4 }]);
+  assert.equal(quiet.origin.elevation, 7);
+
+  const loud = buildWeaponNoiseZone({ x: 400, y: 0, elevation: 7 }, { noiseLevel: 2 });
+  assert.deepEqual(loud.offsets.map(({ j }) => j), [2, 3, 4, 5, 6]);
+  assert.deepEqual([...loud.offsetKeys], ["0:2", "0:3", "0:4", "0:5", "0:6"]);
+
+  globalThis.canvas.grid.isGridless = true;
+  assert.equal(
+    buildWeaponNoiseZone({ x: 400, y: 0, elevation: 7 }, { noiseLevel: 2 }),
+    null
+  );
+});
+
+test("weapon noise starts from the token footprint and contact requires a shared cell", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 9, cellSize: 100 });
+  const sourceToken = {
+    document: {
+      elevation: 0,
+      getCenterPoint: () => ({ x: 350, y: 0, elevation: 0 }),
+      getOccupiedGridSpaceOffsets: () => [
+        { i: 0, j: 3, k: 0 },
+        { i: 0, j: 4, k: 0 },
+        { i: 0, j: 4, k: 1 }
+      ]
+    }
+  };
+
+  const quiet = buildWeaponNoiseZone(sourceToken, { noiseLevel: 0 });
+  assert.deepEqual(quiet.offsets, [{ i: 0, j: 3 }, { i: 0, j: 4 }]);
+
+  const loud = buildWeaponNoiseZone(sourceToken, { noiseLevel: 1 });
+  assert.deepEqual(loud.offsets.map(({ j }) => j), [2, 3, 4, 5]);
+  assert.equal(
+    doGridZonesOverlap({ contactKeys: new Set(["0:1:0"]) }, loud),
+    false,
+    "adjacent boundaries alone must not add a free noise cell"
+  );
+  assert.equal(
+    doGridZonesOverlap({ contactKeys: new Set(["0:2:0"]) }, loud),
+    true
+  );
+});
+
+test("weapon noise contact requires a shared Foundry elevation grid space", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 9, cellSize: 100, gridDistance: 1 });
+  const grid = globalThis.canvas.grid;
+  grid.getOffset = point => ({
+    i: 0,
+    j: Math.round((Number(point?.x) || 0) / grid.size),
+    k: Math.floor(((Number(point?.elevation) || 0) / grid.distance) + 1e-8)
+  });
+
+  const observer = createObserverWithUnlimitedSight("observer-elevation");
+  const settings = createSettings("0");
+  const observerOrigin = { x: 400, y: 0, elevation: 0 };
+  const createSourceAtLevel = k => ({
+    document: {
+      elevation: k * grid.distance,
+      getCenterPoint: () => ({
+        x: 400,
+        y: 0,
+        elevation: k * grid.distance
+      }),
+      getOccupiedGridSpaceOffsets: () => [{ i: 0, j: 4, k }]
+    }
+  });
+
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, createSourceAtLevel(0), {
+      noiseLevel: 0,
+      settings
+    }),
+    true
+  );
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, createSourceAtLevel(1), {
+      noiseLevel: 0,
+      settings
+    }),
+    false
+  );
+});
+
+test("truncated gridded previews never fall back to a hidden center-ray contact", () => {
+  installRectangleMock();
+  const maxPreviewCells = getStealthDetectionCacheStats().maxPreviewCells;
+  const cells = maxPreviewCells * 3;
+  globalThis.canvas = createLinearCanvas({ cells, cellSize: 1 });
+  const observer = createObserverWithUnlimitedSight("observer-truncated-contact");
+  const settings = createSettings(String(cells - 1));
+  const observerOrigin = { x: 0, y: 0, elevation: 0 };
+  const noiseOrigin = { x: cells - 1, y: 0, elevation: 0 };
+
+  const observerZone = buildObserverDetectionZone(observer, {
+    origin: observerOrigin,
+    settings
+  });
+  assert.equal(observerZone.truncated, true);
+  assert.equal(observerZone.offsets.some(({ j }) => j === cells - 1), false);
+  assert.equal(
+    testStealthDetectionPoint(observer, observerOrigin, noiseOrigin, { settings }),
+    true,
+    "the old center-ray check would have reacted outside the displayed zone"
+  );
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, observerOrigin, noiseOrigin, {
+      noiseLevel: 0,
+      settings
+    }),
+    false,
+    "gridded gameplay must use the same retained shared cells as hover"
   );
 });
 
@@ -121,12 +292,18 @@ test("authoritative point checks apply weapon noise on gridded and gridless scen
   const target = { x: 400, y: 0, elevation: 0 };
 
   assert.equal(testStealthDetectionPoint(observer, origin, target, { settings }), false);
-  assert.equal(testStealthDetectionPoint(observer, origin, target, { rangeBonus: 2, settings }), true);
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, origin, target, { noiseLevel: 2, settings }),
+    true
+  );
 
   globalThis.canvas.grid.isGridless = true;
   invalidateStealthDetectionCache();
   assert.equal(testStealthDetectionPoint(observer, origin, target, { settings }), false);
-  assert.equal(testStealthDetectionPoint(observer, origin, target, { rangeBonus: 2, settings }), true);
+  assert.equal(
+    testWeaponNoiseZoneContact(observer, origin, target, { noiseLevel: 2, settings }),
+    true
+  );
 });
 
 test("blind observers and observers with zero sight modes have no zone even with weapon noise", () => {
@@ -145,25 +322,23 @@ test("blind observers and observers with zero sight modes have no zone even with
   const settings = createSettings("10");
   const origin = { x: 0, y: 0, elevation: 0 };
   const target = { x: 100, y: 0, elevation: 0 };
-  const rangeBonus = weaponNoiseToRangeBonus(100);
-
   const zeroSight = createObserver("observer-zero-sight");
   zeroSight.document.detectionModes = {
     basicSight: { enabled: true, range: 0 },
     lightPerception: { enabled: true, range: 0 },
     feelTremor: { enabled: false, range: null }
   };
-  assert.equal(buildObserverDetectionZone(zeroSight, { rangeBonus, settings }), null);
+  assert.equal(buildObserverDetectionZone(zeroSight, { settings }), null);
   assert.equal(
-    testStealthDetectionPoint(zeroSight, origin, target, { rangeBonus, settings }),
+    testWeaponNoiseZoneContact(zeroSight, origin, target, { noiseLevel: 100, settings }),
     false
   );
 
   const blind = createObserverWithUnlimitedSight("observer-blind");
   blind.actor.statuses = new Set(["blind"]);
-  assert.equal(buildObserverDetectionZone(blind, { rangeBonus, settings }), null);
+  assert.equal(buildObserverDetectionZone(blind, { settings }), null);
   assert.equal(
-    testStealthDetectionPoint(blind, origin, target, { rangeBonus, settings }),
+    testWeaponNoiseZoneContact(blind, origin, target, { noiseLevel: 100, settings }),
     false
   );
 });
@@ -187,7 +362,7 @@ test("positive Light Perception keeps a zero-range Basic Sight observer operatio
   assert.ok(buildObserverDetectionZone(observer, { settings })?.offsets?.length);
 });
 
-test("weapon noise adds exact unattenuated cells beyond a darkness-shaped base zone", () => {
+test("weapon noise adds exact unattenuated distance beyond a darkness-shaped base zone", () => {
   installRectangleMock();
   globalThis.canvas = createLinearCanvas({
     cells: 8,
@@ -202,21 +377,25 @@ test("weapon noise adds exact unattenuated cells beyond a darkness-shaped base z
       Object.freeze({ threshold: 0, penaltyPercent: 80 })
     ])
   });
-  const rangeBonus = weaponNoiseToRangeBonus(5);
-
-  const zone = buildObserverDetectionZone(observer, { rangeBonus, settings });
-  assert.deepEqual(zone.baseOffsets.map(({ j }) => j), [0]);
-  assert.deepEqual(zone.addedOffsets.map(({ j }) => j), [1, 2, 3, 4, 5]);
-
   globalThis.canvas.grid.isGridless = true;
   invalidateStealthDetectionCache();
   const origin = { x: 0, y: 0, elevation: 0 };
   assert.equal(
-    testStealthDetectionPoint(observer, origin, { x: 500, y: 0 }, { rangeBonus, settings }),
+    testWeaponNoiseZoneContact(
+      observer,
+      origin,
+      { x: 500, y: 0 },
+      { noiseLevel: 5, settings }
+    ),
     true
   );
   assert.equal(
-    testStealthDetectionPoint(observer, origin, { x: 501, y: 0 }, { rangeBonus, settings }),
+    testWeaponNoiseZoneContact(
+      observer,
+      origin,
+      { x: 501, y: 0 },
+      { noiseLevel: 5, settings }
+    ),
     false
   );
 });
@@ -243,23 +422,20 @@ test("one noise level reaches every adjacent hex but not the second ring", () =>
   globalThis.canvas = createHexCanvas({ cellSize: 100, gridDistance: 3 });
   const observer = createObserver("observer-hex-noise");
   const settings = createSettings("0");
-  const rangeBonus = weaponNoiseToRangeBonus(1);
-
-  const zone = buildObserverDetectionZone(observer, { rangeBonus, settings });
-  assert.deepEqual(zone.baseOffsets.map(({ j }) => j), [0]);
-  assert.deepEqual(zone.addedOffsets.map(({ j }) => j), [1, 2, 3, 4, 5, 6]);
-  assert.equal(zone.offsets.some(({ j }) => j === 7), false);
 
   const origin = { x: 0, y: 0, elevation: 0 };
   for (const point of globalThis.canvas.hexCenters.slice(1, 7)) {
-    assert.equal(testStealthDetectionPoint(observer, origin, point, { rangeBonus, settings }), true);
+    assert.equal(
+      testWeaponNoiseZoneContact(observer, origin, point, { noiseLevel: 1, settings }),
+      true
+    );
   }
   assert.equal(
-    testStealthDetectionPoint(
+    testWeaponNoiseZoneContact(
       observer,
       origin,
       globalThis.canvas.hexCenters[7],
-      { rangeBonus, settings }
+      { noiseLevel: 1, settings }
     ),
     false
   );

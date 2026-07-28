@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "assumptions": {
+    "baseHitChancePercent": 60,
+    "baseCriticalChancePercent": 4,
+    "baseCriticalDamagePercent": 150,
+    "accuracy": {
+      "codeMeaning": "Одна единица напрямую меняет итоговое значение навыка примерно на один процентный пункт успеха.",
+      "sourceStep": 5,
+      "bands": {
+        "minor": 5,
+        "major": 10,
+        "exceptional": 15
+      },
+      "policy": "Ненулевые модификаторы источника должны быть кратны 5; ±1–2 без выраженной роли обнуляются."
+    },
+    "criticalChance": {
+      "codeMeaning": "Одна единица — один дополнительный процентный пункт критического успеха.",
+      "classBands": {
+        "D": {
+          "chance": 3,
+          "damage": 15
+        },
+        "C": {
+          "chance": 4,
+          "damage": 20
+        },
+        "B": {
+          "chance": 5,
+          "damage": 25
+        },
+        "A": {
+          "chance": 6,
+          "damage": 30
+        },
+        "S": {
+          "chance": 8,
+          "damage": 35
+        }
+      }
+    },
+    "criticalDamage": {
+      "codeMeaning": "Значение источника прибавляется к базовым 150% платформы и применяется только при критическом успехе.",
+      "classBands": {
+        "D": 15,
+        "C": 20,
+        "B": 25,
+        "A": 30,
+        "S": 35
+      }
+    },
+    "penetration": {
+      "codeMeaning": "Одна единица 1:1 расходуется сначала на защиту, затем на сопротивление; ценность растёт с числом отдельных дробинок/порций.",
+      "pricePolicy": "Пробитие не переводится в цену простым сравнением с точностью; оно проверяется в отдельных броневых сценариях."
+    },
+    "effectiveRange": {
+      "codeMeaning": "Один метр может убрать около 10 пунктов дистанционного штрафа на соответствующей границе."
+    },
+    "maximumRange": {
+      "codeMeaning": "Один метр открывает один метр ранее недоступной зоны атаки."
+    },
+    "noise": {
+      "codeMeaning": "Одна единица добавляет одну клетку сетки к дальности обнаружения шума.",
+      "platformExamples": {
+        "knife": 1,
+        "bat": 3,
+        "pistol": 15,
+        "shotgun": 25
+      },
+      "composition": "Итоговый шум = базовый шум функции оружия + модификатор источника + модификаторы модулей, минимум 0."
+    },
+    "armorReferences": {
+      "D": {
+        "light": 10,
+        "medium": 21,
+        "heavy": 39,
+        "power": null
+      },
+      "C": {
+        "light": 14,
+        "medium": 27,
+        "heavy": 52,
+        "power": 70
+      },
+      "B": {
+        "light": 20,
+        "medium": 40,
+        "heavy": 78,
+        "power": 110
+      },
+      "A": {
+        "light": 27,
+        "medium": 53,
+        "heavy": 104,
+        "power": 150
+      },
+      "S": {
+        "light": 40,
+        "medium": 79,
+        "heavy": 156,
+        "power": 220
+      }
+    },
+    "fire": "В матрице показывается полный огненный урон; внутреннее деление 50/50 учитывается только как две независимо ослабляемые порции."
+  },
+  "sourceNoiseModifiers": {
+    "subsonic": -8,
+    "militaryStickyFlamerFuel": -2,
+    "incendiary": 2,
+    "enhancedPressure": 3,
+    "armorPiercing": 2,
+    "reactiveFlamerFuel": 5,
+    "overchargedEnergy": 5,
+    "explosiveProjectile": 12,
+    "nuclearProjectile": 25
+  },
+  "platformNoise": {
+    "compact-pistol": 10,
+    "pistol": 15,
+    "heavy-pistol": 20,
+    "machine-pistol": 18,
+    "carbine": 18,
+    "rifle": 20,
+    "hunting-rifle": 21,
+    "automatic-rifle": 22,
+    "automatic": 23,
+    "sniper-rifle": 24,
+    "anti-materiel-rifle": 35,
+    "machine-gun": 30,
+    "shotgun": 25,
+    "shotgun-compact": 22,
+    "shotgun-long": 25,
+    "deviant-shotgun": 22,
+    "embedded-shotgun": 25,
+    "grenade-launcher": 22,
+    "rocket-launcher": 32,
+    "nuclear-launcher": 38,
+    "energy-launcher": 25,
+    "flamethrower": 20,
+    "gauss-rifle": 30,
+    "gauss-shotgun": 32,
+    "crossbow": 3
+  }
+}

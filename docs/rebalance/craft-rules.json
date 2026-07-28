@@ -1,0 +1,376 @@
+{
+  "schemaVersion": 1,
+  "status": "ready-for-direct-world-write",
+  "scope": {
+    "include": [
+      "damageSources",
+      "energySources",
+      "weapons",
+      "nonCivilianEquipment"
+    ],
+    "exclude": [
+      "actors",
+      "civilianEquipment",
+      "compendiumItems",
+      "robots"
+    ]
+  },
+  "classOrder": [
+    "D",
+    "C",
+    "B",
+    "A",
+    "S"
+  ],
+  "baseDifficulty": {
+    "D": 40,
+    "C": 70,
+    "B": 100,
+    "A": 130,
+    "S": 160
+  },
+  "difficultyAdjustments": {
+    "improvisedOrWastelandCommon": -10,
+    "precisionPlatform": 10,
+    "advancedEnergyOrGuidance": 10,
+    "powerArmor": 20,
+    "exceptionalUniqueArchitecture": 20,
+    "minimum": 20
+  },
+  "priceCalculator": {
+    "implementation": "systems/fallout-maw/src/sheets/item-sheet.mjs",
+    "componentCost": "round(sum(component.price * quantity) / resultQuantity)",
+    "toolCost": "round(sum(tool.price * quantity / tool.maxSupply) / resultQuantity)",
+    "difficultyPercent": "5*n*(n+1)/2 + (n+1)*r, where tens=floor(difficulty/10), n=floor(tens/5), r=tens-5*n",
+    "finalPrice": "round(componentCost * (1 + difficultyPercent/100) + toolCost)",
+    "mandatoryAfterRecipeChange": true
+  },
+  "damageSources": {
+    "defaultBatchSize": 30,
+    "batchSizeByFamily": {
+      "conventionalBallistic": {
+        "D": 15,
+        "C-B-A-S": 30
+      },
+      "shotgunShell": 20,
+      "gaussProjectile": 20,
+      "energyCell": 20,
+      "flamerFuel": 20,
+      "grenadeOrRocket": 1,
+      "miniNuke": 1
+    },
+    "consumableClassMix": {
+      "D-C": "Для обычных баллистических и дробовых боеприпасов корпус и активный заряд остаются текущего класса.",
+      "B-A-S": "Активный заряд или ключевой преобразователь остаётся текущего класса; массовый корпус и вспомогательная основа берутся предыдущего класса.",
+      "explosives": "Один взрывчатый компонент остаётся текущего класса, второй и корпус берутся предыдущего класса.",
+      "gauss": "Пробойник остаётся текущего класса, геометрия и стабилизация берутся предыдущего класса.",
+      "reason": "Класс боевого действия не должен заставлять каждую одноразовую гильзу стоить как полноценный узел платформы того же класса."
+    },
+    "componentRoles": {
+      "frame": "case, projectile body, sabot or shell",
+      "chemistry": "propellant, explosive, incendiary, cryogenic or fuel fill",
+      "electronics": "energy storage, ignition, guidance or field control",
+      "properties": "unusual payload or high-grade terminal effect",
+      "armor": "hard penetrator or gauss projectile"
+    },
+    "combatNormalization": {
+      "zeroDamageSourcesAllowed": false,
+      "fixedManualConsumerRule": "Ручной урон конкретного оружия не обнуляет общий расходник: тот же предмет остаётся полноценным источником урона для других платформ.",
+      "flamerFuel": {
+        "damageType": "fire",
+        "pellets": 4,
+        "periodicSplit": "50% immediately / 50% delayed, with mitigation applied independently to both halves",
+        "damageByVariant": {
+          "D.default": 144,
+          "C.stabilized": 224,
+          "C.napalm": 280,
+          "B.reactive": 336,
+          "B.militarySticky": 392
+        },
+        "reactiveVariant": {
+          "penetration": 12,
+          "maxRangeBonusMeters": 4,
+          "effectiveFarBonusMeters": 2,
+          "tradeoff": "Меньший полный урон и штраф точности относительно военной липкой смеси."
+        },
+        "roundingRule": "Полный урон кратен 8, поэтому четыре струи и две половины не создают скрытого округления по незащищённой цели."
+      },
+      "zeroEnergyFallback": {
+        "damageByClass": {
+          "D": 34,
+          "C": 54,
+          "B": 86,
+          "A": 127,
+          "S": 200
+        },
+        "penetrationByClass": {
+          "D": 10,
+          "C": 18,
+          "B": 30,
+          "A": 46,
+          "S": 70
+        },
+        "damageType": "energy"
+      }
+    },
+    "variantDeviations": {
+      "stock": {
+        "difficulty": 0,
+        "extraComponents": []
+      },
+      "reinforcedOrHighPressure": {
+        "difficulty": 10,
+        "extraComponents": [
+          "frame"
+        ],
+        "intendedEffect": [
+          "damage",
+          "penetration"
+        ]
+      },
+      "armorPiercing": {
+        "difficulty": 10,
+        "extraComponents": [
+          "armor"
+        ],
+        "intendedEffect": [
+          "penetration",
+          "possibleAccuracyPenalty",
+          "oneOptionalPreviousClassStabilizerForExceptionalPenetration"
+        ]
+      },
+      "incendiary": {
+        "difficulty": 5,
+        "extraComponents": [
+          "chemistry"
+        ],
+        "intendedEffect": [
+          "higherDamage",
+          "damageSplit50Ballistic50Fire"
+        ]
+      },
+      "tracer": {
+        "difficulty": 0,
+        "extraComponents": [
+          "previousClassChemistryForBPlus"
+        ],
+        "intendedEffect": [
+          "accuracyBonus",
+          "effectiveFarRangeBonus",
+          "maxRangeBonus",
+          "allThreeAdvantagesFormOnePackage"
+        ]
+      },
+      "shotgunSlug": {
+        "difficulty": 5,
+        "extraComponents": [
+          "previousClassFrameForBPlus"
+        ],
+        "intendedEffect": [
+          "pellets1",
+          "higherSingleHitDamage",
+          "accuracyPenalty"
+        ]
+      },
+      "gaussHighPenetration": {
+        "difficulty": 20,
+        "extraComponents": [
+          "armor",
+          "properties"
+        ],
+        "intendedEffect": [
+          "veryHighPenetration",
+          "powerArmorThreat",
+          "highPrice"
+        ]
+      },
+      "measuredPerformanceDeviation": {
+        "comparisonCohort": "same damage-source family and class",
+        "packageLimits": {
+          "conventionalBallistic": 2,
+          "shotgunShell": 2,
+          "energyCell": 2,
+          "flamerFuel": 2,
+          "gaussProjectile": 3,
+          "grenadeOrRocket": 3,
+          "miniNuke": 2
+        },
+        "directPackage": [
+          "fullDamage",
+          "penetration"
+        ],
+        "handlingPackage": [
+          "accuracyBonus",
+          "criticalChanceBonus",
+          "criticalDamageBonus",
+          "maxRangeBonus",
+          "effectiveFarRangeBonus"
+        ],
+        "areaPackage": [
+          "explosionRadius",
+          "persistentAreaEffects"
+        ],
+        "specialPackage": [
+          "specialDamageChannels"
+        ],
+        "priceMechanism": [
+          "one package is charged once even when several related fields are improved",
+          "above75thPercentile uses a previous-class component for B/A/S",
+          "top10Percent may use one current-class component",
+          "only exceptional aggregate packages add 5 difficulty, capped at 10"
+        ],
+        "importantConstraint": "Drawbacks do not create a negative ingredient, but related weak advantages cannot stack into several premiums. Named and measured advantages share the same package limit."
+      }
+    }
+  },
+  "energySources": {
+    "componentRoles": {
+      "electronics": "cells, conductors and regulation",
+      "chemistry": "electrolyte or active energy medium",
+      "properties": "high-density or nuclear conversion",
+      "frame": "shielded durable housing"
+    },
+    "pricePerChargeIsNotDirect": true,
+    "note": "The item price follows the recipe; capacity and per-action/per-hour consumption determine economic efficiency."
+  },
+  "weapons": {
+    "baseComponentProfiles": {
+      "pistol": {
+        "mechanics": 3,
+        "frame": 2
+      },
+      "submachineGun": {
+        "mechanics": 4,
+        "frame": 3
+      },
+      "shotgun": {
+        "mechanics": 4,
+        "frame": 3
+      },
+      "rifle": {
+        "mechanics": 5,
+        "frame": 3
+      },
+      "machineGun": {
+        "mechanics": 6,
+        "frame": 4
+      },
+      "heavyWeapon": {
+        "mechanics": 8,
+        "frame": 5
+      },
+      "simpleMelee": {
+        "mechanics": 2,
+        "frame": 2
+      },
+      "advancedMelee": {
+        "mechanics": 3,
+        "frame": 3,
+        "electronics": 1
+      }
+    },
+    "technologySubstitutions": {
+      "energyWeapon": "replace part of mechanics with electronics",
+      "explosiveLauncher": "add chemistry; add electronics only for guidance or advanced fire control",
+      "gaussWeapon": "mechanics + electronics + properties; projectile remains a separate damage source"
+    },
+    "deviationComponentRoles": {
+      "accuracy": "properties",
+      "criticalChance": "properties",
+      "criticalDamage": "properties",
+      "range": "frame and properties",
+      "magazineCapacity": "mechanics",
+      "burstLengthOrRate": "mechanics",
+      "durability": "mechanics or armor",
+      "moduleSlots": "frame and mechanics",
+      "lowNoise": "properties",
+      "secondaryAttack": "components appropriate to the attached subsystem"
+    },
+    "importantConstraint": "Weapon damage never increases recipe cost directly when damage is supplied by the magazine source."
+  },
+  "equipment": {
+    "baseComponentProfiles": {
+      "lightArmor": {
+        "armor": 3,
+        "textile": 2
+      },
+      "mediumArmor": {
+        "armor": 6,
+        "textile": 2,
+        "frame": 1
+      },
+      "heavyArmor": {
+        "armor": 9,
+        "textile": 2,
+        "frame": 2
+      },
+      "powerArmor": {
+        "armor": 12,
+        "frame": 5,
+        "mechanics": 3,
+        "electronics": 2
+      },
+      "lightHelmet": {
+        "armor": 2,
+        "textile": 1
+      },
+      "mediumHelmet": {
+        "armor": 3,
+        "frame": 1
+      },
+      "heavyHelmet": {
+        "armor": 5,
+        "frame": 1
+      },
+      "powerHelmet": {
+        "armor": 6,
+        "frame": 2,
+        "electronics": 1
+      },
+      "protectiveGlassesOrMask": {
+        "frame": 1,
+        "textile": 1
+      },
+      "sealedProtectiveEquipment": {
+        "textile": 3,
+        "chemistry": 2,
+        "electronics": 1
+      }
+    },
+    "deviationComponentRoles": {
+      "broadPhysicalProtection": "armor",
+      "coverageOfAdditionalLimbs": "armor and textile",
+      "radiationPoisonOrGasProtection": "chemistry and textile; electronics for active filtration",
+      "energyOrPlasmaBias": "properties and armor",
+      "conditionAndWeakeningThreshold": "armor or frame",
+      "poweredFunctions": "electronics and mechanics"
+    },
+    "importantConstraints": [
+      "No more than 25 percent degradation between torso protection and additionally protected body parts unless the item is explicitly partial.",
+      "Only chemical-protection equipment and all power armor receive radiation protection in the current draft.",
+      "All power armor receives poison protection in the current draft.",
+      "Civilian equipment is not changed in this pass."
+    ]
+  },
+  "historicalOrientation": {
+    "source": "old-craft-baseline.json",
+    "oldMedian": {
+      "damageSources": {
+        "difficulty": 100,
+        "resultQuantity": 30,
+        "componentUnits": 2
+      },
+      "weapons": {
+        "difficulty": 140,
+        "resultQuantity": 1,
+        "componentUnits": 8
+      },
+      "equipment": {
+        "difficulty": 180,
+        "resultQuantity": 1,
+        "componentUnits": 12
+      }
+    },
+    "use": "Choose relative composition and deviation direction only; do not copy old rarity, damage or difficulty."
+  }
+}

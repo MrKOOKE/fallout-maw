@@ -12,6 +12,7 @@ import {
 
 const originalCanvas = globalThis.canvas;
 const originalConfig = globalThis.CONFIG;
+const originalPIXI = globalThis.PIXI;
 
 afterEach(() => {
   configureWeaponNoiseDetection();
@@ -23,6 +24,8 @@ afterEach(() => {
   else globalThis.canvas = originalCanvas;
   if (originalConfig === undefined) delete globalThis.CONFIG;
   else globalThis.CONFIG = originalConfig;
+  if (originalPIXI === undefined) delete globalThis.PIXI;
+  else globalThis.PIXI = originalPIXI;
 });
 
 test("weapon noise detection is disabled with the world auto-detection setting", async () => {
@@ -39,6 +42,47 @@ test("weapon noise detection is disabled with the world auto-detection setting",
   assert.equal(await resolveWeaponNoiseDetection(fixture.staleAttacker, { noiseLevel: 5 }), false);
   assert.equal(rolls, 0);
   assert.equal(fixture.actor.statuses.has("invisible"), true);
+});
+
+test("gridded resolver rolls only for a shared source-noise and observer cell", async () => {
+  const fixture = createGriddedNoiseFixture({
+    attackerOffset: { i: 1, j: 3, k: 0 },
+    observerOffsets: [
+      { i: 1, j: 2, k: 0 },
+      { i: 1, j: 1, k: 0 }
+    ]
+  });
+  const rolledObserverIds = [];
+  configureWeaponNoiseDetection({
+    getSettings: () => createSettings(true),
+    rollStealthCheck: async (_source, observer) => {
+      rolledObserverIds.push(observer.id);
+      return successOutcome();
+    }
+  });
+
+  assert.equal(await resolveWeaponNoiseDetection(fixture.staleAttacker, { noiseLevel: 1 }), false);
+  assert.deepEqual(rolledObserverIds, [fixture.observers[0].id]);
+});
+
+test("gridded resolver does not treat the same horizontal cell on another elevation as contact", async () => {
+  const fixture = createGriddedNoiseFixture({
+    attackerOffset: { i: 1, j: 3, k: 0 },
+    observerOffsets: [
+      { i: 1, j: 3, k: 4 }
+    ]
+  });
+  let rolls = 0;
+  configureWeaponNoiseDetection({
+    getSettings: () => createSettings(true),
+    rollStealthCheck: async () => {
+      rolls += 1;
+      return successOutcome();
+    }
+  });
+
+  assert.equal(await resolveWeaponNoiseDetection(fixture.staleAttacker, { noiseLevel: 1 }), false);
+  assert.equal(rolls, 0);
 });
 
 test("resolver uses the current post-effect token and includes non-visible observers", async () => {
@@ -251,6 +295,97 @@ function createNoiseFixture({
   return { actor, currentAttacker, staleAttacker, observers };
 }
 
+function createGriddedNoiseFixture({
+  attackerOffset,
+  observerOffsets,
+  gridSize = 100,
+  gridDistance = 1
+}) {
+  globalThis.CONFIG = {
+    specialStatusEffects: {
+      DEFEATED: "defeated",
+      INVISIBLE: "invisible"
+    }
+  };
+  globalThis.PIXI = {
+    Rectangle: class Rectangle {
+      constructor(x, y, width, height) {
+        Object.assign(this, { x, y, width, height });
+      }
+
+      fit() {
+        return this;
+      }
+    }
+  };
+
+  const actor = createActor("attacker-gridded", { stealthed: true });
+  const currentAttacker = createTokenAtGridOffset(
+    "attacker-token-gridded",
+    actor,
+    attackerOffset,
+    { gridSize, gridDistance }
+  );
+  const staleAttacker = createTokenAtGridOffset(
+    "attacker-token-gridded",
+    actor,
+    attackerOffset,
+    { gridSize, gridDistance }
+  );
+  const observers = observerOffsets.map((offset, index) => createTokenAtGridOffset(
+    `observer-gridded-${index + 1}`,
+    createActor(`observer-gridded-${index + 1}`),
+    offset,
+    { gridSize, gridDistance }
+  ));
+  const placeables = [currentAttacker, ...observers];
+  globalThis.canvas = {
+    ready: true,
+    scene: {
+      id: "noise-scene-gridded",
+      grid: { distance: gridDistance }
+    },
+    grid: {
+      distance: gridDistance,
+      isGridless: false,
+      size: gridSize,
+      getOffset: point => ({
+        i: Math.floor((Number(point?.y) || 0) / gridSize),
+        j: Math.floor((Number(point?.x) || 0) / gridSize),
+        k: Math.floor(((Number(point?.elevation) || 0) / gridDistance) + 1e-8)
+      }),
+      getCenterPoint: ({ i, j, k = 0 }) => ({
+        x: (j + 0.5) * gridSize,
+        y: (i + 0.5) * gridSize,
+        elevation: k * gridDistance
+      }),
+      getOffsetRange: ({ x, y, width, height }) => [
+        Math.floor(y / gridSize),
+        Math.floor(x / gridSize),
+        Math.ceil((y + height) / gridSize),
+        Math.ceil((x + width) / gridSize)
+      ]
+    },
+    tokens: {
+      get: id => placeables.find(token => token.id === id) ?? null,
+      placeables
+    },
+    dimensions: {
+      rect: new globalThis.PIXI.Rectangle(0, 0, gridSize * 8, gridSize * 4)
+    },
+    environment: {
+      darknessLevel: 0,
+      globalLightSource: { active: false }
+    },
+    effects: {
+      lightSources: new Map(),
+      getDarknessLevel: () => 0,
+      testInsideDarkness: () => false
+    }
+  };
+  return { actor, currentAttacker, staleAttacker, observers };
+}
+
 function createActor(id, { stealthed = false } = {}) {
   return {
     uuid: `Actor.${id}`,
@@ -281,6 +416,19 @@ function createToken(id, actor, x) {
       hasStatusEffect: () => false
     }
   };
+}
+
+function createTokenAtGridOffset(id, actor, offset, { gridSize, gridDistance }) {
+  const point = {
+    x: (offset.j + 0.5) * gridSize,
+    y: (offset.i + 0.5) * gridSize,
+    elevation: offset.k * gridDistance
+  };
+  const token = createToken(id, actor, point.x);
+  token.document.elevation = point.elevation;
+  token.document.getCenterPoint = () => point;
+  token.document.getOccupiedGridSpaceOffsets = () => [{ ...offset }];
+  return token;
 }
 
 function createSettings(enabled, { penaltyPercent = 0 } = {}) {

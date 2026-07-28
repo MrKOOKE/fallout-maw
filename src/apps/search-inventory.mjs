@@ -4008,6 +4008,7 @@ function areTradeDamageSourcesEqual(left = {}, right = {}) {
   if (String(left?.effectiveRange?.value ?? "0") !== String(right?.effectiveRange?.value ?? "0")) return false;
   if (String(left?.effectiveRange?.max ?? "0") !== String(right?.effectiveRange?.max ?? "0")) return false;
   if (String(left?.penetration ?? "0") !== String(right?.penetration ?? "0")) return false;
+  if (toInteger(left?.noiseLevel) !== toInteger(right?.noiseLevel)) return false;
   if (normalizeTradeDamageSourceTypes(left?.damageTypes) !== normalizeTradeDamageSourceTypes(right?.damageTypes)) return false;
   return normalizeTradeDamageSourceVolley(left?.volley) === normalizeTradeDamageSourceVolley(right?.volley);
 }

@@ -1676,6 +1676,7 @@
       "DamageSourceDamage": "Урон",
       "DamageSourceDamageTypes": "Типы урона",
       "DamageSourceExplosion": "Взрыв",
+      "DamageSourceNoiseLevelModifier": "Изменение уровня шума",
       "TrapInstallation": "Установка",
       "TrapActionPointCost": "Стоимость применения, ОД",
       "TrapInstallationDifficulty": "Сложность установки",

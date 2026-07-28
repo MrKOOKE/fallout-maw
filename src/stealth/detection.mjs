@@ -36,7 +36,6 @@ let detectionZoneCachedCells = 0;
  */
 export function getStealthObserverZones(hiddenToken, {
   visibleOnly = false,
-  rangeBonus = 0,
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
@@ -52,7 +51,7 @@ export function getStealthObserverZones(hiddenToken, {
 
   const zones = [];
   for (const observerToken of observers) {
-    const zone = buildObserverDetectionZone(observerToken, { rangeBonus, settings });
+    const zone = buildObserverDetectionZone(observerToken, { settings });
     if (!zone?.offsets?.length) continue;
     zones.push({ hiddenToken, observerToken, ...zone });
   }
@@ -61,7 +60,6 @@ export function getStealthObserverZones(hiddenToken, {
 
 export function buildObserverDetectionZone(observerToken, {
   origin = null,
-  rangeBonus = 0,
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
@@ -71,22 +69,26 @@ export function buildObserverDetectionZone(observerToken, {
     || !activeCanvas?.ready
     || activeCanvas.grid?.isGridless
   ) return null;
-  const baseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
-  const normalizedRangeBonus = normalizeRangeBonus(rangeBonus);
-  const maxRange = baseRange + normalizedRangeBonus;
+  const maxRange = evaluateStealthDetectionRange(observerToken.actor, settings);
   const maxPixels = sceneDistanceToPixels(maxRange);
-  if (maxPixels <= 0) return null;
-
   const center = normalizePoint(origin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
-  const cacheKey = getDetectionZoneCacheKey(
-    observerToken,
-    center,
-    settings,
-    baseRange,
-    normalizedRangeBonus
-  );
+  const contactLevel = getGridOffsetElevation(activeCanvas.grid?.getOffset?.(center));
+  const cacheKey = getDetectionZoneCacheKey(observerToken, center, settings, maxRange);
   const cached = readCache(detectionZoneCache, cacheKey);
   if (cached) return cached;
+  if (maxPixels <= 0) {
+    const offset = normalizeGridOffset(activeCanvas.grid?.getOffset?.(center));
+    if (!offset) return null;
+    const zone = {
+      offsets: [offset],
+      contactKeys: new Set([getGridSpaceOffsetKey({ ...offset, k: contactLevel })]),
+      origin: center,
+      range: 0,
+      truncated: false
+    };
+    writeDetectionZoneCache(cacheKey, zone);
+    return zone;
+  }
 
   const sceneRect = activeCanvas.dimensions?.rect
     ?? new PIXI.Rectangle(0, 0, activeCanvas.dimensions?.width ?? Infinity, activeCanvas.dimensions?.height ?? Infinity);
@@ -99,8 +101,6 @@ export function buildObserverDetectionZone(observerToken, {
   );
   const [i0, j0, i1, j1] = previewRange.range;
   const offsets = [];
-  const baseOffsets = [];
-  const addedOffsets = [];
   const radiusWithCell = maxPixels + (activeCanvas.grid.size / 2);
   const radiusSquared = radiusWithCell * radiusWithCell;
 
@@ -112,28 +112,22 @@ export function buildObserverDetectionZone(observerToken, {
       const dy = point.y - center.y;
       if ((dx * dx) + (dy * dy) > radiusSquared) continue;
       if (observerToken.checkCollision?.(point, { origin: center, type: "sight", mode: "any" })) continue;
-      const path = computeDetectionPathReach(observerToken, center, point, settings, {
-        baseRange,
+      if (computeDetectionPathCost(observerToken, center, point, settings, {
+        costLimit: maxRange,
         sampleLimit: DETECTION_PREVIEW_PATH_SAMPLE_LIMIT
-      });
-      const insideBase = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON;
-      const addedDistance = Math.max(0, path.directDistance - path.baseReachDistance);
-      if (!insideBase && addedDistance > normalizedRangeBonus + DETECTION_DISTANCE_EPSILON) continue;
+      }) > maxRange) continue;
       offsets.push(offset);
-      if (insideBase) baseOffsets.push(offset);
-      else addedOffsets.push(offset);
     }
   }
 
   const zone = {
     offsets,
-    baseOffsets,
-    addedOffsets,
+    contactKeys: new Set(offsets.map(offset => getGridSpaceOffsetKey({
+      ...offset,
+      k: contactLevel
+    }))),
     origin: center,
     range: maxRange,
-    baseRange,
-    rangeBonus: normalizedRangeBonus,
-    maxRange,
     truncated: previewRange.truncated
   };
   writeDetectionZoneCache(cacheKey, zone);
@@ -142,6 +136,7 @@ export function buildObserverDetectionZone(observerToken, {
 
 export function testStealthDetectionPoint(observerToken, observerOrigin, targetPoint, {
   rangeBonus = 0,
+  snapTargetToGrid = true,
   settings = getRuntimeStealthSettings()
 } = {}) {
   const activeCanvas = globalThis.canvas;
@@ -153,7 +148,12 @@ export function testStealthDetectionPoint(observerToken, observerOrigin, targetP
   ) return false;
   const origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
   let point = normalizePoint(targetPoint, origin.elevation);
-  if (!activeCanvas.grid?.isGridless && activeCanvas.grid?.getOffset && activeCanvas.grid?.getCenterPoint) {
+  if (
+    snapTargetToGrid
+    && !activeCanvas.grid?.isGridless
+    && activeCanvas.grid?.getOffset
+    && activeCanvas.grid?.getCenterPoint
+  ) {
     point = normalizePoint(activeCanvas.grid.getCenterPoint(activeCanvas.grid.getOffset(point)), origin.elevation);
   }
   const baseRange = evaluateStealthDetectionRange(observerToken.actor, settings);
@@ -187,27 +187,219 @@ export function testStealthDetectionPoint(observerToken, observerOrigin, targetP
   return result;
 }
 
+/**
+ * Build one grid-cell zone owned by the weapon-noise source. Unlike observer
+ * zones this zone is not shaped by sight or darkness: those rules have already
+ * shaped the ordinary observer zone which it must reach.
+ */
+export function buildWeaponNoiseZone(noiseSource, {
+  noiseLevel = 0
+} = {}) {
+  const activeCanvas = globalThis.canvas;
+  const grid = activeCanvas?.grid;
+  if (
+    !noiseSource
+    || !activeCanvas?.ready
+    || grid?.isGridless
+    || typeof grid?.getOffset !== "function"
+    || typeof grid?.getCenterPoint !== "function"
+  ) return null;
+
+  const normalizedNoise = normalizeWeaponNoiseLevel(noiseLevel);
+  const sourceToken = noiseSource?.document ? noiseSource : null;
+  const origin = normalizePoint(sourceToken ? getTokenCenter(sourceToken) : noiseSource);
+  const sourceSpaces = getWeaponNoiseSourceOffsets(sourceToken, origin, grid);
+  if (!sourceSpaces.length) return null;
+  const sourceOffsets = collectUniqueOffsets(sourceSpaces);
+  const sourceCenters = sourceSpaces.map(offset => {
+    const point = grid.getCenterPoint(offset);
+    return {
+      x: Number(point?.x) || 0,
+      y: Number(point?.y) || 0,
+      k: getGridOffsetElevation(offset)
+    };
+  });
+  if (normalizedNoise === 0) {
+    const offsetKeys = new Set(sourceOffsets.map(getGridOffsetKey));
+    return {
+      offsets: sourceOffsets,
+      offsetKeys,
+      contactKeys: new Set(sourceSpaces.map(getGridSpaceOffsetKey)),
+      origin,
+      noiseLevel: 0
+    };
+  }
+
+  const Rectangle = globalThis.PIXI?.Rectangle;
+  if (typeof Rectangle !== "function" || typeof grid.getOffsetRange !== "function") return null;
+  const radius = normalizedNoise * Math.max(1, Number(grid.size) || 100);
+  const sourceBounds = sourceCenters.reduce((bounds, point) => ({
+    minX: Math.min(bounds.minX, point.x),
+    minY: Math.min(bounds.minY, point.y),
+    maxX: Math.max(bounds.maxX, point.x),
+    maxY: Math.max(bounds.maxY, point.y)
+  }), {
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity
+  });
+  const sceneRect = activeCanvas.dimensions?.rect
+    ?? new Rectangle(0, 0, activeCanvas.dimensions?.width ?? Infinity, activeCanvas.dimensions?.height ?? Infinity);
+  const bounds = new Rectangle(
+    sourceBounds.minX - radius,
+    sourceBounds.minY - radius,
+    (sourceBounds.maxX - sourceBounds.minX) + (radius * 2),
+    (sourceBounds.maxY - sourceBounds.minY) + (radius * 2)
+  ).fit(sceneRect);
+  const [i0, j0, i1, j1] = grid.getOffsetRange(bounds);
+  const radiusSquared = (radius + DETECTION_DISTANCE_EPSILON) ** 2;
+  const offsets = [];
+  const offsetKeys = new Set();
+  const contactKeys = new Set();
+
+  for (let i = i0; i < i1; i += 1) {
+    for (let j = j0; j < j1; j += 1) {
+      const offset = { i, j };
+      const point = grid.getCenterPoint(offset);
+      const contactingSourceCenters = sourceCenters.filter(sourceCenter => {
+        const dx = (Number(point?.x) || 0) - sourceCenter.x;
+        const dy = (Number(point?.y) || 0) - sourceCenter.y;
+        return ((dx * dx) + (dy * dy)) <= radiusSquared;
+      });
+      if (!contactingSourceCenters.length) continue;
+      offsets.push(offset);
+      offsetKeys.add(getGridOffsetKey(offset));
+      for (const sourceCenter of contactingSourceCenters) {
+        contactKeys.add(getGridSpaceOffsetKey({ ...offset, k: sourceCenter.k }));
+      }
+    }
+  }
+
+  return {
+    offsets,
+    offsetKeys,
+    contactKeys,
+    origin,
+    noiseLevel: normalizedNoise
+  };
+}
+
+/**
+ * Authoritative contact test between the attacker's grid-cell noise zone and
+ * an observer's ordinary wall- and darkness-shaped zone. Gridless scenes
+ * retain the previous continuous point calculation because they have no cells.
+ */
+export function testWeaponNoiseZoneContact(observerToken, observerOrigin, noiseOrigin, {
+  noiseLevel = 0,
+  noiseZone = null,
+  settings = getRuntimeStealthSettings()
+} = {}) {
+  const activeCanvas = globalThis.canvas;
+  if (!activeCanvas?.grid?.isGridless) {
+    const observerZone = buildObserverDetectionZone(observerToken, {
+      origin: observerOrigin,
+      settings
+    });
+    const sourceZone = noiseZone ?? buildWeaponNoiseZone(noiseOrigin, { noiseLevel });
+    return Boolean(observerZone && sourceZone && doGridZonesOverlap(observerZone, sourceZone));
+  }
+
+  return testStealthDetectionPoint(observerToken, observerOrigin, noiseOrigin, {
+    rangeBonus: weaponNoiseToRangeBonus(noiseLevel),
+    snapTargetToGrid: false,
+    settings
+  });
+}
+
 export function isPointInsideObserverZone(
   point,
   observerToken,
   observerOrigin,
-  settings = getRuntimeStealthSettings(),
-  { rangeBonus = 0 } = {}
+  settings = getRuntimeStealthSettings()
 ) {
-  return testStealthDetectionPoint(observerToken, observerOrigin, point, { rangeBonus, settings });
+  return testStealthDetectionPoint(observerToken, observerOrigin, point, { settings });
 }
 
 /**
- * Convert the integer weapon noise scale to an unattenuated physical
- * scene-distance extension. Deriving it through the rendered grid size makes
- * one level exactly one cell regardless of the configured distance units.
- * Gridless scenes retain the same virtual grid-size scale for continuous
- * authoritative checks.
+ * Convert the integer weapon-noise scale to scene distance for the continuous
+ * gridless fallback. On gridded scenes the same scale constructs a source-owned
+ * set of cells instead of expanding observer ranges.
  */
 export function weaponNoiseToRangeBonus(noiseLevel) {
-  const normalizedNoise = Math.max(0, Math.trunc(Number(noiseLevel) || 0));
+  const normalizedNoise = normalizeWeaponNoiseLevel(noiseLevel);
   const gridSize = Math.max(1, Number(globalThis.canvas?.grid?.size) || 100);
   return pixelsToSceneDistance(normalizedNoise * gridSize);
+}
+
+export function doGridZonesOverlap(leftZone, rightZone) {
+  const leftKeys = getZoneContactKeys(leftZone);
+  const rightKeys = getZoneContactKeys(rightZone);
+  const [smaller, larger] = leftKeys.size <= rightKeys.size
+    ? [leftKeys, rightKeys]
+    : [rightKeys, leftKeys];
+  for (const key of smaller) {
+    if (larger.has(key)) return true;
+  }
+  return false;
+}
+
+function getWeaponNoiseSourceOffsets(sourceToken, origin, grid) {
+  let offsets = [];
+  try {
+    offsets = sourceToken?.document?.getOccupiedGridSpaceOffsets?.() ?? [];
+  } catch (_error) {
+    offsets = [];
+  }
+  if (!offsets.length) offsets = [grid.getOffset(origin)];
+
+  const unique = new Map();
+  for (const offset of offsets) {
+    const normalized = normalizeGridSpaceOffset(offset);
+    if (!normalized) continue;
+    unique.set(getGridSpaceOffsetKey(normalized), normalized);
+  }
+  return [...unique.values()];
+}
+
+function collectUniqueOffsets(offsets = []) {
+  const unique = new Map();
+  for (const offset of offsets) {
+    const normalized = normalizeGridOffset(offset);
+    if (!normalized) continue;
+    unique.set(getGridOffsetKey(normalized), normalized);
+  }
+  return [...unique.values()];
+}
+
+function getZoneContactKeys(zone) {
+  if (zone?.contactKeys instanceof Set) return zone.contactKeys;
+  if (zone?.offsetKeys instanceof Set) return zone.offsetKeys;
+  return new Set((zone?.offsets ?? []).map(getGridOffsetKey));
+}
+
+function normalizeGridOffset(offset) {
+  const i = Number(offset?.i);
+  const j = Number(offset?.j);
+  return Number.isFinite(i) && Number.isFinite(j) ? { i, j } : null;
+}
+
+function normalizeGridSpaceOffset(offset) {
+  const normalized = normalizeGridOffset(offset);
+  if (!normalized) return null;
+  const k = getGridOffsetElevation(offset);
+  return k === undefined ? normalized : { ...normalized, k };
+}
+
+function getGridOffsetElevation(offset) {
+  const k = Number(offset?.k);
+  return Number.isFinite(k) ? Math.round(k) : undefined;
+}
+
+function getGridSpaceOffsetKey(offset) {
+  const key = getGridOffsetKey(offset);
+  const k = getGridOffsetElevation(offset);
+  return k === undefined ? key : `${key}:${k}`;
 }
 
 /**
@@ -383,9 +575,9 @@ export function getStealthDetectionCacheStats() {
 }
 
 /**
- * Keep preview construction bounded before entering the O(cells * samples)
- * loop. Oversized ranges are cropped around the observer; authoritative point
- * checks never use this helper and remain exact at any distance.
+ * Keep gridded zone construction bounded before entering the O(cells * samples)
+ * loop. Oversized ranges are cropped around the observer. Shared-cell gameplay
+ * and hover both use these same retained cells so they cannot disagree.
  */
 function getBoundedPreviewOffsetRange(range = [], center = {}, grid = null) {
   let [i0, j0, i1, j1] = range.map(value => Math.trunc(Number(value) || 0));
@@ -414,7 +606,7 @@ function getCenteredOffsetRangeStart(minimum, maximum, span, center) {
   return Math.min(latest, Math.max(minimum, desired));
 }
 
-function getDetectionZoneCacheKey(observerToken, origin, settings, baseRange, rangeBonus) {
+function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
   const activeCanvas = globalThis.canvas;
   const offset = activeCanvas?.grid?.getOffset?.(origin) ?? { i: Math.round(origin.y), j: Math.round(origin.x) };
   return [
@@ -424,8 +616,7 @@ function getDetectionZoneCacheKey(observerToken, origin, settings, baseRange, ra
     normalizeExactCacheNumber(origin.x),
     normalizeExactCacheNumber(origin.y),
     normalizeExactCacheNumber(origin.elevation),
-    Math.round(baseRange * 100),
-    Math.round(rangeBonus * 100),
+    Math.round(maxRange * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
     getSettingsSignature(settings)
   ].join(":");
@@ -475,6 +666,10 @@ function normalizeSceneRange(value, fallback = 0) {
 function normalizeRangeBonus(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, number) : 0;
+}
+
+function normalizeWeaponNoiseLevel(value) {
+  return Math.max(0, Math.trunc(Number(value) || 0));
 }
 
 function normalizeRangeCachePart(value) {

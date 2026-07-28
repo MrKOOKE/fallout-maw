@@ -1,0 +1,535 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-28T12:30:32.206Z",
+  "world": "fallout",
+  "group": "energySources",
+  "writeRequested": true,
+  "records": [
+    {
+      "id": "aff056c7f8605b10",
+      "oldId": "mdYx8YgaEakDTHoy",
+      "name": "Высокоразрядная оружейная батарея (A)",
+      "folderPath": "Боеприпасы / Источники энергии / Высокоразрядная оружейная батарея / A",
+      "class": "A",
+      "family": "highDischarge",
+      "difficulty": 140,
+      "resultQuantity": 1,
+      "previousPrice": 2191,
+      "price": 4459,
+      "priceDelta": 2268,
+      "priceRatio": 2.035,
+      "priceCalculation": {
+        "rawComponentCost": 3511,
+        "componentCost": 3511,
+        "toolCost": 0,
+        "difficultyPercent": 27,
+        "final": 4459
+      },
+      "ingredients": [
+        {
+          "itemId": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "kind": "electronics",
+          "class": "A",
+          "quantity": 2,
+          "unitPrice": 1093,
+          "reasons": [
+            "высокотоковая сборка",
+            "прямая высокоразрядная отдача энергии как источник урона"
+          ]
+        },
+        {
+          "itemId": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "kind": "chemistry",
+          "class": "A",
+          "quantity": 1,
+          "unitPrice": 899,
+          "reasons": [
+            "активная среда"
+          ]
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "kind": "properties",
+          "class": "B",
+          "quantity": 1,
+          "unitPrice": 426,
+          "reasons": [
+            "стабилизация прямого боевого разряда"
+          ]
+        }
+      ],
+      "reasons": [
+        "источник энергии одновременно является боевым источником урона"
+      ],
+      "deviationPayments": [
+        {
+          "channel": "directDamageSource",
+          "label": "прямой боевой разряд",
+          "rank": 1,
+          "componentKind": "electronics+properties",
+          "componentCount": 2
+        }
+      ],
+      "signals": {
+        "reserveMax": 1200,
+        "capacityBaseline": 1200,
+        "capacityRatio": 1,
+        "directDamageSource": true,
+        "directDamage": 127,
+        "directArmoredEffectiveDamage": 93.2,
+        "directPenetration": 46
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "b79f279500d79adf",
+      "oldId": "mdYx8YgaEakDTHoy",
+      "name": "Высокоразрядная оружейная батарея (B)",
+      "folderPath": "Боеприпасы / Источники энергии / Высокоразрядная оружейная батарея / B",
+      "class": "B",
+      "family": "highDischarge",
+      "difficulty": 110,
+      "resultQuantity": 1,
+      "previousPrice": 1184,
+      "price": 2157,
+      "priceDelta": 973,
+      "priceRatio": 1.822,
+      "priceCalculation": {
+        "rawComponentCost": 1828,
+        "componentCost": 1828,
+        "toolCost": 0,
+        "difficultyPercent": 18,
+        "final": 2157
+      },
+      "ingredients": [
+        {
+          "itemId": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "kind": "electronics",
+          "class": "B",
+          "quantity": 2,
+          "unitPrice": 625,
+          "reasons": [
+            "высокотоковая сборка",
+            "прямая высокоразрядная отдача энергии как источник урона"
+          ]
+        },
+        {
+          "itemId": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "kind": "chemistry",
+          "class": "B",
+          "quantity": 1,
+          "unitPrice": 451,
+          "reasons": [
+            "активная среда"
+          ]
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "kind": "properties",
+          "class": "C",
+          "quantity": 1,
+          "unitPrice": 127,
+          "reasons": [
+            "стабилизация прямого боевого разряда"
+          ]
+        }
+      ],
+      "reasons": [
+        "источник энергии одновременно является боевым источником урона"
+      ],
+      "deviationPayments": [
+        {
+          "channel": "directDamageSource",
+          "label": "прямой боевой разряд",
+          "rank": 1,
+          "componentKind": "electronics+properties",
+          "componentCount": 2
+        }
+      ],
+      "signals": {
+        "reserveMax": 600,
+        "capacityBaseline": 600,
+        "capacityRatio": 1,
+        "directDamageSource": true,
+        "directDamage": 86,
+        "directArmoredEffectiveDamage": 58.4,
+        "directPenetration": 30
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "CReBGFCcxsYlrObv",
+      "oldId": "mdYx8YgaEakDTHoy",
+      "name": "Высокоразрядная оружейная батарея (C)",
+      "folderPath": "Боеприпасы / Источники энергии / Высокоразрядная оружейная батарея / C",
+      "class": "C",
+      "family": "highDischarge",
+      "difficulty": 80,
+      "resultQuantity": 1,
+      "previousPrice": 387,
+      "price": 674,
+      "priceDelta": 287,
+      "priceRatio": 1.742,
+      "priceCalculation": {
+        "rawComponentCost": 607,
+        "componentCost": 607,
+        "toolCost": 0,
+        "difficultyPercent": 11,
+        "final": 674
+      },
+      "ingredients": [
+        {
+          "itemId": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "unitPrice": 224,
+          "reasons": [
+            "высокотоковая сборка",
+            "прямая высокоразрядная отдача энергии как источник урона"
+          ]
+        },
+        {
+          "itemId": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 1,
+          "unitPrice": 128,
+          "reasons": [
+            "активная среда"
+          ]
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "kind": "properties",
+          "class": "D",
+          "quantity": 1,
+          "unitPrice": 31,
+          "reasons": [
+            "стабилизация прямого боевого разряда"
+          ]
+        }
+      ],
+      "reasons": [
+        "источник энергии одновременно является боевым источником урона"
+      ],
+      "deviationPayments": [
+        {
+          "channel": "directDamageSource",
+          "label": "прямой боевой разряд",
+          "rank": 1,
+          "componentKind": "electronics+properties",
+          "componentCount": 2
+        }
+      ],
+      "signals": {
+        "reserveMax": 300,
+        "capacityBaseline": 300,
+        "capacityRatio": 1,
+        "directDamageSource": true,
+        "directDamage": 54,
+        "directArmoredEffectiveDamage": 35,
+        "directPenetration": 18
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "810613648446db93",
+      "oldId": "fAcMh2nE13DTOXih",
+      "name": "Ядерный блок (A)",
+      "folderPath": "Боеприпасы / Источники энергии / Ядерный блок / A",
+      "class": "A",
+      "family": "nuclearBlock",
+      "difficulty": 150,
+      "resultQuantity": 1,
+      "previousPrice": 7711,
+      "price": 9113,
+      "priceDelta": 1402,
+      "priceRatio": 1.182,
+      "priceCalculation": {
+        "rawComponentCost": 7010,
+        "componentCost": 7010,
+        "toolCost": 0,
+        "difficultyPercent": 30,
+        "final": 9113
+      },
+      "ingredients": [
+        {
+          "itemId": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "kind": "electronics",
+          "class": "A",
+          "quantity": 4,
+          "unitPrice": 1093,
+          "reasons": [
+            "энергетическая и управляющая сборка"
+          ]
+        },
+        {
+          "itemId": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "kind": "chemistry",
+          "class": "A",
+          "quantity": 2,
+          "unitPrice": 899,
+          "reasons": [
+            "активная среда"
+          ]
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "kind": "frame",
+          "class": "A",
+          "quantity": 1,
+          "unitPrice": 840,
+          "reasons": [
+            "экранированный корпус"
+          ]
+        }
+      ],
+      "reasons": [],
+      "deviationPayments": [],
+      "signals": {
+        "reserveMax": 16000,
+        "capacityBaseline": 16000,
+        "capacityRatio": 1,
+        "directDamageSource": false,
+        "directDamage": 0,
+        "directArmoredEffectiveDamage": 0,
+        "directPenetration": 0
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "idCnJLNhPJOKiJFQ",
+      "oldId": "fAcMh2nE13DTOXih",
+      "name": "Ядерный блок (B)",
+      "folderPath": "Боеприпасы / Источники энергии / Ядерный блок / B",
+      "class": "B",
+      "family": "nuclearBlock",
+      "difficulty": 120,
+      "resultQuantity": 1,
+      "previousPrice": 4211,
+      "price": 4632,
+      "priceDelta": 421,
+      "priceRatio": 1.1,
+      "priceCalculation": {
+        "rawComponentCost": 3828,
+        "componentCost": 3828,
+        "toolCost": 0,
+        "difficultyPercent": 21,
+        "final": 4632
+      },
+      "ingredients": [
+        {
+          "itemId": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "kind": "electronics",
+          "class": "B",
+          "quantity": 4,
+          "unitPrice": 625,
+          "reasons": [
+            "энергетическая и управляющая сборка"
+          ]
+        },
+        {
+          "itemId": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "kind": "chemistry",
+          "class": "B",
+          "quantity": 2,
+          "unitPrice": 451,
+          "reasons": [
+            "активная среда"
+          ]
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "kind": "frame",
+          "class": "B",
+          "quantity": 1,
+          "unitPrice": 426,
+          "reasons": [
+            "экранированный корпус"
+          ]
+        }
+      ],
+      "reasons": [],
+      "deviationPayments": [],
+      "signals": {
+        "reserveMax": 10000,
+        "capacityBaseline": 10000,
+        "capacityRatio": 1,
+        "directDamageSource": false,
+        "directDamage": 0,
+        "directArmoredEffectiveDamage": 0,
+        "directPenetration": 0
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "60ac3df89403b230",
+      "oldId": "fAcMh2nE13DTOXih",
+      "name": "Ядерный блок (S)",
+      "folderPath": "Боеприпасы / Источники энергии / Ядерный блок / S",
+      "class": "S",
+      "family": "nuclearBlock",
+      "difficulty": 180,
+      "resultQuantity": 1,
+      "previousPrice": 18359,
+      "price": 23700,
+      "priceDelta": 5341,
+      "priceRatio": 1.291,
+      "priceCalculation": {
+        "rawComponentCost": 16690,
+        "componentCost": 16690,
+        "toolCost": 0,
+        "difficultyPercent": 42,
+        "final": 23700
+      },
+      "ingredients": [
+        {
+          "itemId": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "kind": "electronics",
+          "class": "S",
+          "quantity": 4,
+          "unitPrice": 2952,
+          "reasons": [
+            "энергетическая и управляющая сборка"
+          ]
+        },
+        {
+          "itemId": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "kind": "chemistry",
+          "class": "S",
+          "quantity": 2,
+          "unitPrice": 1661,
+          "reasons": [
+            "активная среда"
+          ]
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "kind": "frame",
+          "class": "S",
+          "quantity": 1,
+          "unitPrice": 1560,
+          "reasons": [
+            "экранированный корпус"
+          ]
+        }
+      ],
+      "reasons": [],
+      "deviationPayments": [],
+      "signals": {
+        "reserveMax": 24000,
+        "capacityBaseline": 24000,
+        "capacityRatio": 1,
+        "directDamageSource": false,
+        "directDamage": 0,
+        "directArmoredEffectiveDamage": 0,
+        "directPenetration": 0
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "4umVpm4htpJBclCF",
+      "oldId": "2dVrESFdIKVmUmyT",
+      "name": "Пальчиковая батарейка",
+      "folderPath": "Хлам / Обычный",
+      "class": "D",
+      "family": "smallBattery",
+      "difficulty": 30,
+      "resultQuantity": 1,
+      "previousPrice": 70,
+      "price": 75,
+      "priceDelta": 5,
+      "priceRatio": 1.071,
+      "priceCalculation": {
+        "rawComponentCost": 73,
+        "componentCost": 73,
+        "toolCost": 0,
+        "difficultyPercent": 3,
+        "final": 75
+      },
+      "ingredients": [
+        {
+          "itemId": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 1,
+          "unitPrice": 42,
+          "reasons": [
+            "электрическая сборка"
+          ]
+        },
+        {
+          "itemId": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 1,
+          "unitPrice": 31,
+          "reasons": [
+            "активная среда"
+          ]
+        }
+      ],
+      "reasons": [],
+      "deviationPayments": [],
+      "signals": {
+        "reserveMax": 1000,
+        "capacityBaseline": 1000,
+        "capacityRatio": 1,
+        "directDamageSource": false,
+        "directDamage": 0,
+        "directArmoredEffectiveDamage": 0,
+        "directPenetration": 0
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    }
+  ]
+}
