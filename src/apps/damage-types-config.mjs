@@ -11,11 +11,14 @@ import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-ap
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 const { FormDataExtended } = foundry.applications.ux;
-const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "blocked";
+const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "protected";
 const LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS = Object.freeze({
-  "protected + unconditional": "blocked",
-  "protected * 1,5 + unconditional": "blocked * 1,5",
-  "protected * 3 + unconditional": "blocked * 3"
+  "blocked": "protected",
+  "blocked * 1,5": "protected * 1,5",
+  "blocked * 3": "protected * 3",
+  "protected + unconditional": "protected",
+  "protected * 1,5 + unconditional": "protected * 1,5",
+  "protected * 3 + unconditional": "protected * 3"
 });
 
 export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {

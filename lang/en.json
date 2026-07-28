@@ -1758,6 +1758,7 @@
       "WeaponAttackPowerBase": "Base",
       "WeaponAttackPowerPerLevel": "Per Level",
       "WeaponUseRequirements": "Use Requirements",
+      "EquipmentRequirements": "Wear Requirements",
       "WeaponActions": "Actions",
       "WeaponAddRequirement": "Add Requirement",
       "WeaponNoRequirements": "No requirements configured.",

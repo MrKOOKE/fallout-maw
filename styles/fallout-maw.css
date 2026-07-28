@@ -10671,7 +10671,7 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-token-hud-ability-section {
-  align-items: start;
+  align-items: end;
   display: grid;
   flex: 0 0 auto;
   gap: 5px;
@@ -10705,6 +10705,8 @@ html.fallout-maw-token-action-hud-open #hotbar {
   background: linear-gradient(180deg, rgba(43, 42, 32, 0.92), rgba(20, 20, 17, 0.94));
   border: 1px solid rgba(210, 186, 112, 0.38);
   border-radius: 4px;
+  display: flex;
+  flex-direction: column-reverse;
   min-width: 0;
   overflow: hidden;
   width: 100%;
@@ -10749,7 +10751,7 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-token-hud-ability-category[open] > .fallout-maw-token-hud-ability-category-summary::before {
-  transform: rotate(45deg) translate(-1px, -1px);
+  transform: rotate(-135deg);
 }
 
 .fallout-maw-token-hud-ability-category-summary:hover,
@@ -10780,7 +10782,7 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .fallout-maw-token-hud-ability-category-buttons {
-  border-top: 1px solid rgba(231, 204, 128, 0.22);
+  border-bottom: 1px solid rgba(231, 204, 128, 0.22);
   padding: 6px;
 }
 

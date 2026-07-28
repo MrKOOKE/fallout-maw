@@ -1818,6 +1818,7 @@
       "WeaponAttackPowerBase": "База",
       "WeaponAttackPowerPerLevel": "За уровень",
       "WeaponUseRequirements": "Требования",
+      "EquipmentRequirements": "Требования для ношения",
       "WeaponActions": "Действия",
       "WeaponAddRequirement": "Добавить требование",
       "WeaponNoRequirements": "Требования не заданы.",

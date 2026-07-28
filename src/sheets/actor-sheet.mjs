@@ -5751,6 +5751,10 @@ function buildDamageMitigationTooltipSection(item, actor) {
     ? game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance")
     : game.i18n.localize("FALLOUTMAW.Item.MitigationModeDefense");
   const rows = [[game.i18n.localize("FALLOUTMAW.Item.MitigationMode"), modeLabel]];
+  const requirements = getWeaponRequirementLabels(mitigation, actor, item);
+  if (requirements.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.EquipmentRequirements"), {
+    html: renderTooltipValueTokens(requirements)
+  }]);
   const tableHTML = renderDamageMitigationTooltipTables(buildDamageMitigationTables(item, getCreatureOptions(), getDamageTypeSettings(), {
     actorRaceId: actor?.system?.creature?.raceId ?? ""
   }));

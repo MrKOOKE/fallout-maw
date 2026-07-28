@@ -699,6 +699,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: currency.key === priceCurrency
       })),
       itemCategoryChoices: buildItemCategoryChoices(itemCategory),
+      itemRequirements: buildWeaponRequirementRowsForData(
+        item.system?.functions?.damageMitigation ?? {},
+        characteristicSettings,
+        skillSettings
+      ),
       equipmentSlotSelections: Array.from(equipmentSlotSelections.values()),
       equipmentSlotGroups: equipmentSlotGroups.map(group => ({
         raceNames: group.races.join(", "),
@@ -1403,6 +1408,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-weapon-requirement-type]").forEach(select => {
       this.#addHandledFormChangeListener(select, event => this.#onWeaponRequirementTypeChange(event));
+    });
+    this.element?.querySelector("[data-add-item-requirement]")?.addEventListener("click", event => {
+      this.#onAddItemRequirement(event);
+    });
+    this.element?.querySelectorAll("[data-delete-item-requirement]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteItemRequirement(event));
+    });
+    this.element?.querySelectorAll("[data-item-requirement-type]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onItemRequirementTypeChange(event));
     });
     this.element?.querySelectorAll("[data-add-weapon-critical-failure-consequence]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponCriticalFailureConsequence(event));
@@ -5214,6 +5228,42 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({
       [`${path}.requirements.${index}.type`]: type,
       [`${path}.requirements.${index}.key`]: key
+    });
+  }
+
+  #onAddItemRequirement(event) {
+    event.preventDefault();
+    const requirements = [...(this.item.system?.functions?.damageMitigation?.requirements ?? [])];
+    requirements.push({
+      type: "characteristic",
+      key: getCharacteristicSettings().at(0)?.key ?? "",
+      value: 0
+    });
+    return this.item.update({ "system.functions.damageMitigation.requirements": requirements });
+  }
+
+  #onDeleteItemRequirement(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteItemRequirement);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const requirements = [...(this.item.system?.functions?.damageMitigation?.requirements ?? [])];
+    requirements.splice(index, 1);
+    return this.item.update({ "system.functions.damageMitigation.requirements": requirements });
+  }
+
+  #onItemRequirementTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const index = Number(event.currentTarget?.dataset?.itemRequirementType);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const type = String(event.currentTarget?.value ?? "") === "skill" ? "skill" : "characteristic";
+    const key = type === "skill"
+      ? getSkillSettings().at(0)?.key ?? ""
+      : getCharacteristicSettings().at(0)?.key ?? "";
+    return this.item.update({
+      [`system.functions.damageMitigation.requirements.${index}.type`]: type,
+      [`system.functions.damageMitigation.requirements.${index}.key`]: key
     });
   }
 

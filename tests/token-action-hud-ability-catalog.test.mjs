@@ -26,3 +26,18 @@ test("HUD ability category blocks use a two-column grid", () => {
     /\.fallout-maw-token-hud-ability-section-title\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s
   );
 });
+
+test("HUD ability categories keep their summaries below upward-opening ability lists", () => {
+  assert.match(
+    styles,
+    /\.fallout-maw-token-hud-ability-section\s*\{[^}]*align-items:\s*end/s
+  );
+  assert.match(
+    styles,
+    /\.fallout-maw-token-hud-ability-category\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column-reverse/s
+  );
+  assert.match(
+    styles,
+    /\.fallout-maw-token-hud-ability-category-buttons\s*\{[^}]*border-bottom:/s
+  );
+});

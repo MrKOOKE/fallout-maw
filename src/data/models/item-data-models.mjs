@@ -91,6 +91,7 @@ export class GearDataModel extends BaseItemDataModel {
         damageMitigation: new SchemaField({
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, choices: ["defense", "resistance"], initial: "defense" }),
+          requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
           limbSetIds: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
           entries: new TypedObjectField(
             new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),

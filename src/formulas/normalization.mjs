@@ -33,11 +33,14 @@ const DEFAULT_RESOURCE_LIMIT_RESOURCES = Object.freeze([
   Object.freeze({ resourceKey: "actionPoints", percent: 100 }),
   Object.freeze({ resourceKey: "movementPoints", percent: 100 })
 ]);
-const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "blocked";
+const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "protected";
 const LEGACY_EQUIPMENT_CONDITION_DAMAGE_FORMULAS = Object.freeze({
-  "protected + unconditional": "blocked",
-  "protected * 1,5 + unconditional": "blocked * 1,5",
-  "protected * 3 + unconditional": "blocked * 3"
+  "blocked": "protected",
+  "blocked * 1,5": "protected * 1,5",
+  "blocked * 3": "protected * 3",
+  "protected + unconditional": "protected",
+  "protected * 1,5 + unconditional": "protected * 1,5",
+  "protected * 3 + unconditional": "protected * 3"
 });
 const BLEEDING_DAMAGE_TYPE = Object.freeze({
   key: BLEEDING_DAMAGE_TYPE_KEY,
@@ -180,7 +183,7 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   acid: Object.freeze({
     equipmentConditionDamage: Object.freeze({
       enabled: true,
-      formula: "blocked * 3"
+      formula: "protected * 3"
     })
   }),
   cryo: Object.freeze({

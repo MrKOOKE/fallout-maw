@@ -37,6 +37,11 @@ import {
 } from "./trigger-cost-effects.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 import {
+  buildEquipmentRequirementMovementPointChange,
+  hasDamageMitigationRequirements,
+  isActiveDamageMitigationRequirementItem
+} from "../items/equipment-requirements.mjs";
+import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS,
   buildEffectFunctionSnapshot
@@ -63,6 +68,7 @@ import {
 } from "./environment-conditions.mjs";
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
+const EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY = "equipmentRequirementEffect";
 const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -89,7 +95,12 @@ export function registerAbilityEffectHooks() {
   registerBulkOperationFlusher(flushDeferredAbilityEffectSyncs);
   Hooks.on("createItem", item => {
     if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
-    if (item?.type === "ability" || isEquipmentItem(item) || hasItemFreeSettingsFunction(item)) {
+    if (
+      item?.type === "ability"
+      || isEquipmentItem(item)
+      || hasItemFreeSettingsFunction(item)
+      || hasDamageMitigationRequirements(item)
+    ) {
       queueActorAbilityEffectSync(item.parent, {}, {
         aura: item?.type === "ability" || hasItemFreeSettingsFunction(item)
       });
@@ -102,7 +113,13 @@ export function registerAbilityEffectHooks() {
     // Intermediate counter updates must not enqueue actor/aura rebuilds.
     if (options?.falloutMawLimitedUses === true) return;
     if (shouldRefreshEnvironmentConditionIndex(item, changes)) refreshEnvironmentConditionActorIndex(item?.parent);
-    if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) {
+    if (
+      item?.type === "ability"
+      || isEquipmentItem(item)
+      || isEquipmentItemUpdate(changes)
+      || isItemFreeSettingsUpdate(item, changes)
+      || isDamageMitigationRequirementsUpdate(item, changes)
+    ) {
       queueActorAbilityEffectSync(item.parent, {}, {
         aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)
       });
@@ -118,7 +135,9 @@ export function registerAbilityEffectHooks() {
       queueAuraStateSync();
       return;
     }
-    if (item?.type === "gear") void deleteItemFreeSettingsEffects(item.parent, item.id, item.uuid);
+    if (item?.type === "gear") {
+      void deleteManagedItemEffects(item.parent, item.id, item.uuid);
+    }
     if (isEquipmentItem(item)) queueActorAbilityEffectSync(item.parent, {}, { aura: item?.type === "gear" });
     else if (item?.type === "gear") queueAuraStateSync();
   });
@@ -162,6 +181,7 @@ export function registerAbilityEffectHooks() {
     queueAuraStateSync();
   });
   Hooks.on("createActiveEffect", (effect, options = {}) => {
+    if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
     if (
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
@@ -172,6 +192,7 @@ export function registerAbilityEffectHooks() {
     if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
   });
   Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
+    if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
     if (options?.falloutMawLimitedUses === true) return;
     if (options?.falloutMawDamageBarrierCommit === true) return;
     if (
@@ -181,7 +202,7 @@ export function registerAbilityEffectHooks() {
       || isExecutingActiveApplicationAuraEffect(effect)
     ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
-    const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
+    const managed = isManagedProjectionEffect(effect);
     const expiredLimitedCopy = Boolean(
       effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY)
       && effect?.duration?.expired === true
@@ -191,6 +212,7 @@ export function registerAbilityEffectHooks() {
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
+    if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (options?.falloutMawDamageBarrierCommit === true) return;
     if (
@@ -199,7 +221,7 @@ export function registerAbilityEffectHooks() {
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
       || isExecutingActiveApplicationAuraEffect(effect)
     ) return;
-    const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
+    const managed = isManagedProjectionEffect(effect);
     const limitedCopy = Boolean(effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY));
     if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
     if (!managed && !limitedCopy) return;
@@ -523,8 +545,11 @@ export async function syncActorAbilityEffects(actor, context = {}) {
   try {
     const abilityItems = actor.items?.filter(item => item.type === "ability") ?? [];
     const activeAbilityItemIds = new Set(abilityItems.map(item => item.id));
-    const itemFreeSettingsItems = getActorItemsWithActiveHudModules(actor).filter(item => isActiveItemFreeSettingsItem(item));
+    const activeItemDocuments = getActorItemsWithActiveHudModules(actor);
+    const itemFreeSettingsItems = activeItemDocuments.filter(item => isActiveItemFreeSettingsItem(item));
     const activeItemFreeSettingsItemIds = new Set(itemFreeSettingsItems.map(item => item.id));
+    const equipmentRequirementItems = activeItemDocuments.filter(item => isActiveDamageMitigationRequirementItem(item));
+    const activeEquipmentRequirementItemIds = new Set(equipmentRequirementItems.map(item => item.id));
 
     for (const item of abilityItems) {
       await syncSingleAbilityEffect(actor, item, context);
@@ -538,6 +563,9 @@ export async function syncActorAbilityEffects(actor, context = {}) {
         item.system?.functions?.freeSettings?.entries ?? [],
         context
       );
+    }
+    for (const item of equipmentRequirementItems) {
+      await syncSingleEquipmentRequirementEffect(actor, item);
     }
 
     const stale = actor.effects
@@ -553,6 +581,16 @@ export async function syncActorAbilityEffects(actor, context = {}) {
         return data?.itemId && !activeItemFreeSettingsItemIds.has(data.itemId);
       });
     await deleteAbilitySyncEffects(actor, staleItemEffects, ITEM_EFFECT_FLAG_KEY);
+    const staleEquipmentRequirementEffects = actor.effects
+      .filter(effect => {
+        const data = effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY);
+        return data?.itemId && !activeEquipmentRequirementItemIds.has(data.itemId);
+      });
+    await deleteAbilitySyncEffects(
+      actor,
+      staleEquipmentRequirementEffects,
+      EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY
+    );
     await pruneManagedBarrierProjectionDepletions(actor, record => (
       (record?.kind === "ability" && !activeAbilityItemIds.has(String(record?.sourceId ?? "")))
       || (record?.kind === "item" && !activeItemFreeSettingsItemIds.has(String(record?.sourceId ?? "")))
@@ -661,6 +699,56 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
     "ActiveEffect",
     [buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon, pureChangeIndexes)],
     operationOptions
+  );
+}
+
+async function syncSingleEquipmentRequirementEffect(actor, item) {
+  const existing = actor.effects.filter(effect => (
+    effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY)?.itemId === item.id
+  ));
+  const change = buildEquipmentRequirementMovementPointChange(actor, item);
+  if (!change) {
+    if (existing.length) {
+      await deleteAbilitySyncEffects(
+        actor,
+        existing,
+        EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY
+      );
+    }
+    return;
+  }
+
+  const changes = [change];
+  const signature = JSON.stringify({ itemId: item.id, changes });
+  const current = existing.find(effect => (
+    effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY)?.signature === signature
+  ));
+  const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
+  if (obsolete.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete);
+  }
+
+  if (current) {
+    const update = {};
+    if (current.disabled) update.disabled = false;
+    if (current.name !== item.name) update.name = item.name;
+    if (current.img !== item.img) update.img = item.img;
+    if (current.origin !== item.uuid) update.origin = item.uuid;
+    if (current.showIcon !== ACTIVE_EFFECT_SHOW_ICON_ALWAYS) {
+      update.showIcon = ACTIVE_EFFECT_SHOW_ICON_ALWAYS;
+    }
+    if (current.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) {
+      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
+        kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
+      };
+    }
+    if (Object.keys(update).length) await current.update(update);
+    return;
+  }
+
+  await actor.createEmbeddedDocuments(
+    "ActiveEffect",
+    [buildEquipmentRequirementActiveEffectData(item, changes, signature)]
   );
 }
 
@@ -1094,6 +1182,31 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
   };
 }
 
+function buildEquipmentRequirementActiveEffectData(item, changes, signature) {
+  return {
+    type: "base",
+    name: item.name,
+    img: item.img || "icons/svg/item-bag.svg",
+    origin: item.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    system: { changes },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "active",
+        [EFFECT_LIFECYCLE_FLAG_KEY]: {
+          kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
+        },
+        [EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY]: {
+          itemId: item.id,
+          signature
+        }
+      }
+    }
+  };
+}
+
 function buildAbilityEffectProjection(actor, item, context = {}) {
   return getAbilityEffectProjectionFromFunctions(
     actor,
@@ -1273,6 +1386,19 @@ async function deleteItemFreeSettingsEffects(actor, itemId = "", sourceItemUuid 
   await deleteAbilitySyncEffects(actor, effects, ITEM_EFFECT_FLAG_KEY);
 }
 
+async function deleteEquipmentRequirementEffects(actor, itemId = "") {
+  if (!actor || !game.user?.isActiveGM || !itemId) return;
+  const effects = actor.effects.filter(effect => (
+    effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY)?.itemId === itemId
+  ));
+  await deleteAbilitySyncEffects(actor, effects, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY);
+}
+
+async function deleteManagedItemEffects(actor, itemId = "", sourceItemUuid = "") {
+  await deleteItemFreeSettingsEffects(actor, itemId, sourceItemUuid);
+  await deleteEquipmentRequirementEffects(actor, itemId);
+}
+
 async function reconcileEventReactionAccumulatorEffects(item = null) {
   const actor = item?.parent;
   if (!actor || !game.user?.isActiveGM || !item?.uuid) return;
@@ -1337,6 +1463,16 @@ function isEquipmentItemUpdate(changes = {}) {
     || path.startsWith("system.occupiedSlots."));
 }
 
+function isDamageMitigationRequirementsUpdate(item, changes = {}) {
+  if (item?.type !== "gear") return false;
+  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
+  return hasDamageMitigationRequirements(item)
+    || paths.some(path => (
+      path === "system.functions.damageMitigation"
+      || path.startsWith("system.functions.damageMitigation.")
+    ));
+}
+
 function hasItemFreeSettingsFunction(item) {
   return item?.type === "gear" && Boolean(item.system?.functions?.freeSettings?.enabled);
 }
@@ -1360,4 +1496,26 @@ function isItemFreeSettingsUpdate(item, changes = {}) {
       || path.startsWith("system.placement.")
       || path === "system.functions.constructPart"
       || path.startsWith("system.functions.constructPart."));
+}
+
+function isManagedProjectionEffect(effect = null) {
+  return Boolean(
+    effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)
+    || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)
+    || effect?.getFlag?.(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY)
+  );
+}
+
+function effectMayChangeEquipmentRequirementValues(effect = null) {
+  return (effect?.system?.changes ?? []).some(change => {
+    const key = String(change?.key ?? "").trim();
+    return key === "system.characteristics"
+      || key.startsWith("system.characteristics.")
+      || key === "system.skills"
+      || key.startsWith("system.skills.")
+      || key === "system.development.characteristics"
+      || key.startsWith("system.development.characteristics.")
+      || key === "system.development.skills"
+      || key.startsWith("system.development.skills.");
+  });
 }

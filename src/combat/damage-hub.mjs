@@ -7423,7 +7423,7 @@ function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "
   return calculateDamageMitigation(actor, amount, damageTypeKey, limbKey, source, options).amount;
 }
 
-function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
+export function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
   const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
   const mitigationPenetration = getDamageMitigationPenetration(source);
   if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
@@ -7915,7 +7915,7 @@ function reserveEquipmentConditionDamage(item, amount, state = null) {
   return Math.min(requested, Math.max(0, toInteger(getConditionFunction(item).value)));
 }
 
-async function applyEquipmentConditionDamage(actor, entries = []) {
+export async function applyEquipmentConditionDamage(actor, entries = []) {
   const totals = new Map();
   for (const entry of entries ?? []) {
     const itemId = String(entry?.itemId ?? "");
