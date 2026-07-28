@@ -315,10 +315,17 @@ test("Foundry hook adapter captures pre-state and dispatches post-commit only on
   assert.equal(calls.length, 1);
   assert.equal(roots.length, 1);
 
+  let inactiveSnapshotCount = 0;
+  const originalToObject = actor.toObject;
+  actor.toObject = function toObject(...args) {
+    inactiveSnapshotCount += 1;
+    return originalToObject.apply(this, args);
+  };
   active = false;
   callbacks.get("updateActor")(actor, { "system.resources.health.value": 7 }, {}, "player-1");
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.length, 1);
+  assert.equal(inactiveSnapshotCount, 0);
 });
 
 test("one committed document operation emits every descriptor inside one event root", async () => {

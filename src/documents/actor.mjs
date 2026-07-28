@@ -14,10 +14,12 @@ import {
   getCreatureOptions,
   getCurrencySettings,
   getLevelSettings,
+  getPreparedRuntimeSettings,
   getProficiencySettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { applyTokenPrototypeDefaults } from "../settings/token-prototype-defaults.mjs";
+import { syncTrackedResourceValueUpdates } from "./actor-resource-updates.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import {
   DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
@@ -503,7 +505,12 @@ function applyNewActorResourceDefaults(actor) {
 }
 
 function prepareActorLoadData(actor) {
-  const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+  const {
+    creatureOptions,
+    characteristicSettings,
+    skillSettings
+  } = getPreparedRuntimeSettings();
+  const race = creatureOptions.races.find(entry => entry.id === actor.system?.creature?.raceId);
   const characteristics = actor.system?.characteristics ?? {};
   const skills = getSkillValues(actor.system?.skills ?? {});
   const bonus = Math.trunc(Number(actor.system?.load?.bonus) || 0);
@@ -516,8 +523,8 @@ function prepareActorLoadData(actor) {
 
   const baseMax = race?.baseParameters?.loadFormula
     ? Math.max(0, evaluateFormula(race.baseParameters.loadFormula, {
-      characteristicSettings: getCharacteristicSettings(),
-      skillSettings: getSkillSettings(),
+      characteristicSettings,
+      skillSettings,
       characteristics,
       skills
     }))
@@ -740,31 +747,6 @@ function resetProficiencyMap(proficiencies = {}, proficiencySettings = []) {
   );
 }
 
-function syncTrackedResourceValueUpdates(actor, changes) {
-  for (const resourceKey of Object.keys(actor.system?.resources ?? {})) {
-    if (resourceKey === "health") continue;
-    const currentResource = actor.system?.resources?.[resourceKey];
-    if (!currentResource) continue;
-    foundry.utils.setProperty(
-      changes,
-      `system.resources.${resourceKey}.spent`,
-      Math.max(0, toInteger(currentResource?.max) - toInteger(currentResource?.value))
-    );
-
-    const valuePath = `system.resources.${resourceKey}.value`;
-    if (!hasUpdatePath(changes, valuePath)) continue;
-
-    const min = Math.max(0, getUpdatedResourceBound(changes, resourceKey, "min", actor.system?.resources?.[resourceKey]?.min));
-    const max = Math.max(min, getUpdatedResourceBound(changes, resourceKey, "max", actor.system?.resources?.[resourceKey]?.max));
-    const nextValue = Math.min(
-      Math.max(getUpdatedResourceBound(changes, resourceKey, "value", actor.system?.resources?.[resourceKey]?.value), min),
-      max
-    );
-
-    foundry.utils.setProperty(changes, `system.resources.${resourceKey}.spent`, Math.max(0, max - nextValue));
-  }
-}
-
 function prepareIntegratedProsthesisHealth(actor) {
   const health = actor?.system?.resources?.health;
   if (!health) return;
@@ -843,21 +825,6 @@ function getInstalledActorProsthesis(actor, limbKey = "") {
     && String(item.system?.placement?.mode ?? "") === "prosthesis"
     && String(item.system?.placement?.limbKey ?? "") === key
   )) ?? null;
-}
-
-function getUpdatedResourceBound(changes, resourceKey, field, fallback) {
-  const path = `system.resources.${resourceKey}.${field}`;
-  const value = getUpdatePath(changes, path);
-  return toInteger(value ?? fallback);
-}
-
-function hasUpdatePath(object, path) {
-  return foundry.utils.hasProperty(object, path) || Object.hasOwn(object, path);
-}
-
-function getUpdatePath(object, path) {
-  if (foundry.utils.hasProperty(object, path)) return foundry.utils.getProperty(object, path);
-  return object[path];
 }
 
 function toInteger(value) {

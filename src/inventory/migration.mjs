@@ -4,6 +4,11 @@ import { planActorInventoryRepair } from "./repair.mjs";
 import { INVENTORY_ATOMIC_OPTION } from "./constants.mjs";
 
 const INVENTORY_REPAIR_REASON = "inventory-repair";
+const LIMB_RUNTIME_STATE_FIELDS = new Set([
+  "value",
+  "spent",
+  "damageAccumulation"
+]);
 
 let hooksRegistered = false;
 let repairQueueRunning = false;
@@ -195,16 +200,25 @@ function isInventoryRelevantItemUpdate(changes = {}) {
   ));
 }
 
-function isInventoryRelevantActorUpdate(changes = {}) {
+export function isInventoryRelevantActorUpdate(changes = {}) {
   const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
   return paths.some(path => (
     path === "type"
     || path.startsWith("system.constructPartSlots")
     || path.startsWith("system.creature.raceId")
     || path.startsWith("system.inventory")
-    || path.startsWith("system.limbs")
+    || isInventoryRelevantLimbPath(path)
     || path.startsWith("system.trade.infiniteInventory")
   ));
+}
+
+function isInventoryRelevantLimbPath(path = "") {
+  if (path === "system.limbs") return true;
+  if (!path.startsWith("system.limbs.")) return false;
+
+  const [, , limbKey, field] = path.split(".");
+  if (!limbKey || limbKey.startsWith("-=") || !field) return true;
+  return !LIMB_RUNTIME_STATE_FIELDS.has(field);
 }
 
 function isRepairOperation(options = {}) {

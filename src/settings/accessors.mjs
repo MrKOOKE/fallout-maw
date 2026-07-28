@@ -143,6 +143,7 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
 
 const SKILL_CHECK_RESULT_MODES = new Set(["standard", "criticalSuccess", "success", "failure", "criticalFailure"]);
 const SKILL_CHECK_EDGE_MODES = new Set(["none", "advantage", "disadvantage"]);
+let preparedRuntimeSettingsCache = null;
 
 export function normalizeSkillCheckControl(value = {}) {
   const source = foundry.utils.mergeObject(
@@ -508,6 +509,36 @@ export function getTraumaSettings(creatureOptions = getCreatureOptions(), damage
   }
 }
 
+/**
+ * Return one normalized, read-only-by-contract settings snapshot for hot
+ * preparation and damage paths. World settings only change through Foundry's
+ * settings lifecycle, which invalidates this snapshot before Actors reset.
+ */
+export function getPreparedRuntimeSettings() {
+  if (preparedRuntimeSettingsCache) return preparedRuntimeSettingsCache;
+
+  const characteristicSettings = getCharacteristicSettings();
+  const skillSettings = getSkillSettings();
+  const damageTypeSettings = getDamageTypeSettings();
+  const creatureOptions = getCreatureOptions(characteristicSettings, damageTypeSettings);
+  preparedRuntimeSettingsCache = Object.freeze({
+    characteristicSettings,
+    skillSettings,
+    skillAdvancementSettings: getSkillAdvancementSettings(characteristicSettings, skillSettings),
+    proficiencySettings: getProficiencySettings(),
+    damageTypeSettings,
+    currencySettings: getCurrencySettings(),
+    resourceSettings: getResourceSettings(),
+    creatureOptions,
+    traumaSettings: getTraumaSettings(creatureOptions, damageTypeSettings)
+  });
+  return preparedRuntimeSettingsCache;
+}
+
+export function invalidatePreparedRuntimeSettingsCache() {
+  preparedRuntimeSettingsCache = null;
+}
+
 export async function setTraumaSettings(settings, creatureOptions = getCreatureOptions(), damageTypes = getDamageTypeSettings()) {
   const normalized = normalizeTraumaSettings(settings, creatureOptions, damageTypes);
   await game.settings.set(FALLOUT_MAW.id, TRAUMA_SETTINGS_SETTING, normalized);
@@ -660,6 +691,7 @@ export async function setTokenActionHudIcons(value) {
 }
 
 export function syncSettingsIntoSystemConfig() {
+  invalidatePreparedRuntimeSettingsCache();
   return syncSystemConfig({
     characteristics: getCharacteristicSettings(),
     currencies: getCurrencySettings(),

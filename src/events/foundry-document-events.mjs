@@ -331,42 +331,58 @@ export function registerFoundryDocumentSystemEventHooks({
   }
 
   on("updateActor", (actor, changes, options = {}, userId = "") => {
-    if (options?.[DOCUMENT_MIGRATION_OPTION]) return;
+    if (options?.[DOCUMENT_MIGRATION_OPTION] || !isActiveGM()) return;
     emitAfterCommit(classifyActorUpdate(actor, changes, snapshotOptions(actor, options)), actor, options, userId);
   });
-  on("createItem", (item, options = {}, userId = "") => emitAfterCommit(classifyItemCreate(item), item, options, userId));
+  on("createItem", (item, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
+    emitAfterCommit(classifyItemCreate(item), item, options, userId);
+  });
   on("updateItem", (item, changes, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyItemUpdate(item, changes, {
       ...snapshotOptions(item, options),
       options
     }), item, options, userId);
   });
   on("deleteItem", (item, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyItemDelete(item, { before: getBeforeSnapshot(item, options) }), item, options, userId);
   });
   on("createActiveEffect", (effect, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyActiveEffectCreate(effect, options), effect, options, userId);
   });
   on("updateActiveEffect", (effect, changes, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyActiveEffectUpdate(effect, changes, { ...snapshotOptions(effect, options), options }), effect, options, userId);
   });
   on("deleteActiveEffect", (effect, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyActiveEffectDelete(effect, { before: getBeforeSnapshot(effect, options), options }), effect, options, userId);
   });
-  on("createCombat", (combat, options = {}, userId = "") => emitAfterCommit(classifyCombatCreate(combat), combat, options, userId));
+  on("createCombat", (combat, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
+    emitAfterCommit(classifyCombatCreate(combat), combat, options, userId);
+  });
   on("updateCombat", (combat, changes, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyCombatUpdate(combat, changes, snapshotOptions(combat, options)), combat, options, userId);
   });
   on("deleteCombat", (combat, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyCombatDelete(combat, { before: getBeforeSnapshot(combat, options) }), combat, options, userId);
   });
   on("createCombatant", (combatant, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyCombatantCreate(combatant), combatant, options, userId);
   });
   on("updateCombatant", (combatant, changes, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyCombatantUpdate(combatant, changes, snapshotOptions(combatant, options)), combatant, options, userId);
   });
   on("deleteCombatant", (combatant, options = {}, userId = "") => {
+    if (!isActiveGM()) return;
     emitAfterCommit(classifyCombatantDelete(combatant, { before: getBeforeSnapshot(combatant, options) }), combatant, options, userId);
   });
 
@@ -392,7 +408,12 @@ export function registerFoundryDocumentSystemEventHooks({
 
 export function captureDocumentSnapshot(document) {
   if (!document) return null;
-  const source = cloneJson(document.toObject?.(false) ?? document._source ?? document) ?? {};
+  // Foundry DataModel#toObject already returns a detached primitive object.
+  // Cloning that result again doubles the cost of every document snapshot,
+  // which is especially expensive for Actors with embedded Items and Effects.
+  const source = typeof document.toObject === "function"
+    ? (document.toObject(false) ?? {})
+    : (cloneJson(document._source ?? document) ?? {});
   const currentCombatant = participantForCombatant(document.combatant);
   return {
     source,
@@ -622,7 +643,10 @@ function ensureOccurrenceBase(options = {}, randomId = defaultRandomId) {
 
 function normalizeSnapshot(snapshot) {
   if (!snapshot) return null;
-  if (Object.hasOwn(snapshot, "source") && Object.hasOwn(snapshot, "meta")) return cloneJson(snapshot);
+  // Snapshot wrappers are immutable inputs throughout classification. Event
+  // payloads clone only the focused leaf values, so repeatedly cloning the
+  // entire Actor graph here provides no additional isolation.
+  if (Object.hasOwn(snapshot, "source") && Object.hasOwn(snapshot, "meta")) return snapshot;
   return { source: cloneJson(snapshot) ?? {}, meta: {} };
 }
 

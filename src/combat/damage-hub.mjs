@@ -2,12 +2,10 @@ import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } 
 import { spendActorDodgeForAreaDamage, spendDodgeForAreaDamageRequests } from "./dodge-resource.mjs";
 import { evaluateFormulaVariables, parseFormula } from "../formulas/index.mjs";
 import {
-  getCreatureOptions,
   getCombatSettings,
-  getDamageTypeSettings,
+  getPreparedRuntimeSettings,
   getTimeMechanicsIgnored,
-  getTokenActionHudDamageIcons,
-  getTraumaSettings
+  getTokenActionHudDamageIcons
 } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -1202,7 +1200,7 @@ async function applyDamageApplicationNow(request = {}, {
       chanceOperationId: getActiveUseOperationId(data?.source, getCurrentDamageHubOperationRef())
     }))
     : data.amount;
-  const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
   if (shouldSplitPeriodicDamage(data, mode, periodic) && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
     return applyPeriodicSplitDamageApplicationNow(actor, { ...data, amount: requestedAmount }, {
@@ -1515,7 +1513,7 @@ export function estimateDamageApplication(request = {}) {
     };
   }
 
-  const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const mitigationResult = data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
@@ -1717,7 +1715,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   }
   if (batchResult?.resourceLimitEntries?.length) {
     for (const entry of batchResult.resourceLimitEntries) {
-      const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
+      const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(type => type.key === entry.damageTypeKey);
       await createResourceLimitEffect(actor, {
         damageType,
         healthDelta: entry.amount,
@@ -1753,7 +1751,7 @@ async function prepareDamageBatchEntry(actor, data = {}, {
   damageBarrierLedger = null
 } = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
-  const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
   if (shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic) && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
     const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
@@ -3226,7 +3224,7 @@ function getActorLimbSettings(actor, limbKey = "") {
       lossEffects: normalizeLimbLossEffects(part.lossEffects)
     };
   }
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const race = getPreparedRuntimeSettings().creatureOptions.races.find(entry => entry.id === actor?.system?.creature?.raceId);
   return race?.limbs?.find(limb => limb.key === limbKey) ?? actor?.system?.limbs?.[limbKey] ?? null;
 }
 
@@ -6962,7 +6960,7 @@ function broadcastDamageMitigationIcon(actor, display = null) {
 }
 
 function prepareDamageNumberEntries(entries = []) {
-  const damageTypes = getDamageTypeSettings();
+  const damageTypes = getPreparedRuntimeSettings().damageTypeSettings;
   return entries
     .map(entry => {
       const amount = roundDamageAmount(entry.amount);
@@ -8202,7 +8200,7 @@ function createBrokenProsthesisInventoryPlacement(actor, prosthesis) {
 
 function createBrokenProsthesisLockedStoragePlacement(actor, prosthesis) {
   const raceId = String(actor?.system?.creature?.raceId ?? "");
-  const race = getCreatureOptions().races.find(entry => String(entry.id) === raceId) ?? null;
+  const race = getPreparedRuntimeSettings().creatureOptions.races.find(entry => String(entry.id) === raceId) ?? null;
   const dimensions = getActorInventoryGridDimensions(actor, race);
   const footprint = getItemFootprint(prosthesis, actor.items);
   const columns = Math.max(1, dimensions.columns, footprint.width);
@@ -8318,9 +8316,11 @@ function prepareTriggeredTraumaPlan(actor, { limbKey, damageTypeKey, previousVal
   const empty = { createData: [], deleteIds: [] };
   if (!limb || toInteger(limb.max) <= 0) return empty;
 
-  const creatureOptions = getCreatureOptions();
-  const damageTypes = getDamageTypeSettings();
-  const traumaSettings = getTraumaSettings(creatureOptions, damageTypes);
+  const {
+    creatureOptions,
+    damageTypeSettings: damageTypes,
+    traumaSettings
+  } = getPreparedRuntimeSettings();
   const traumaGroup = getTraumaGroupForActor(actor, traumaSettings, creatureOptions, damageTypes);
   const stages = traumaGroup.config?.limbs?.[limbKey]?.stages ?? [];
   if (!stages.length) return empty;

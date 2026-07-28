@@ -14,16 +14,9 @@ import {
   normalizeNumberMap
 } from "../../formulas/index.mjs";
 import {
-  getCharacteristicSettings,
-  getCreatureOptions,
-  getCurrencySettings,
-  getDamageTypeSettings,
   getConstructPartNeedSettings,
-  getProficiencySettings,
-  getRaceNeedSettings,
-  getResourceSettings,
-  getSkillAdvancementSettings,
-  getSkillSettings
+  getPreparedRuntimeSettings,
+  getRaceNeedSettings
 } from "../../settings/accessors.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../../constants.mjs";
 import {
@@ -206,13 +199,16 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   }
 
   prepareDerivedData() {
-    const characteristicSettings = getCharacteristicSettings();
-    const skillSettings = getSkillSettings();
-    const damageTypeSettings = getDamageTypeSettings();
-    const currencySettings = getCurrencySettings();
-    const resourceSettings = getResourceSettings();
-    const proficiencySettings = getProficiencySettings();
-    const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const {
+      characteristicSettings,
+      skillSettings,
+      damageTypeSettings,
+      currencySettings,
+      resourceSettings,
+      proficiencySettings,
+      skillAdvancementSettings,
+      creatureOptions
+    } = getPreparedRuntimeSettings();
     const abilityBonuses = {
       characteristics: Object.fromEntries(characteristicSettings.map(entry => [entry.key, 0])),
       skills: Object.fromEntries(skillSettings.map(entry => [entry.key, 0]))
@@ -281,7 +277,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     const race = isConstruct
       ? null
-      : getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
+      : creatureOptions.races.find(entry => entry.id === this.creature?.raceId);
     const needSettings = isConstruct
       ? getConstructPartNeedSettings(this.parent?.items)
       : getRaceNeedSettings(race);
