@@ -34,7 +34,13 @@ import {
   ITEM_FUNCTIONS
 } from "../utils/item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
-import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
+import {
+  buildActorLimbHealthContext,
+  clampActorLimbValuesToCurrentCaps,
+  handleActorDamageUpdate,
+  prepareActorDamageUpdate,
+  requestDamageApplication
+} from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 import { getInstalledConstructPartForLimb } from "../utils/construct-parts.mjs";
 import {
@@ -167,12 +173,14 @@ export class FalloutMaWActor extends Actor {
     }
 
     const limbs = this.system?.limbs;
+    let limbHealthContext = null;
     if (limbs) {
       for (const limb of Object.values(limbs)) clampPreparedResource(limb);
-      clampActorLimbValuesToCurrentCaps(this);
+      limbHealthContext = buildActorLimbHealthContext(this);
+      clampActorLimbValuesToCurrentCaps(this, limbHealthContext);
     }
 
-    prepareIntegratedProsthesisHealth(this);
+    prepareIntegratedProsthesisHealth(this, limbHealthContext);
     prepareActorLoadData(this);
   }
 
@@ -747,14 +755,17 @@ function resetProficiencyMap(proficiencies = {}, proficiencySettings = []) {
   );
 }
 
-function prepareIntegratedProsthesisHealth(actor) {
+function prepareIntegratedProsthesisHealth(
+  actor,
+  context = buildActorLimbHealthContext(actor)
+) {
   const health = actor?.system?.resources?.health;
   if (!health) return;
 
   let value = 0;
   let max = 0;
   for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
-    const prosthesis = getInstalledActorProsthesis(actor, limbKey);
+    const prosthesis = context?.prosthesesByLimb?.get(String(limbKey ?? "").trim());
     if (prosthesis) {
       const contribution = getIntegratedProsthesisHealth(prosthesis, limb);
       value += contribution.value;
@@ -813,18 +824,6 @@ function getIntegratedProsthesisHealth(prosthesis, limb = {}) {
 
 function toIntegratedHealthValue(value = 0, integration = 0) {
   return Math.max(0, Math.round((Math.max(0, toInteger(value)) * Math.max(0, Math.min(100, toInteger(integration)))) / 100));
-}
-
-function getInstalledActorProsthesis(actor, limbKey = "") {
-  const key = String(limbKey ?? "").trim();
-  if (!key) return null;
-  return Array.from(actor?.items ?? []).find(item => (
-    item?.type === "gear"
-    && item.system?.equipped
-    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
-    && String(item.system?.placement?.mode ?? "") === "prosthesis"
-    && String(item.system?.placement?.limbKey ?? "") === key
-  )) ?? null;
 }
 
 function toInteger(value) {

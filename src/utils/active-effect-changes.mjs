@@ -386,7 +386,10 @@ export function isActorTraumaDiseaseEffectSuppressed(actor, effect = null, suppr
 
 function getSuppressedActorItemIds(actor, type = "") {
   const itemType = type === "disease" ? "disease" : "trauma";
-  const items = (actor?.items?.filter?.(item => item.type === itemType) ?? [])
+  const typedItems = actor?.itemTypes?.[itemType];
+  const items = (Array.isArray(typedItems)
+    ? typedItems
+    : actor?.items?.filter?.(item => item.type === itemType) ?? [])
     .filter(item => String(item?.id ?? "").trim());
   if (!items.length) return new Set();
 

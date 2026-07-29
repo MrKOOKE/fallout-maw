@@ -97,7 +97,7 @@ function moduleItem(modifiers, current = 100, maximum = 100, hasAttack = false) 
 test("module catalogue is complete, source-first, and respects AP limits", () => {
   const validation = validateModuleCatalog();
   assert.equal(validation.valid, true, JSON.stringify(validation.errors));
-  assert.equal(MODULE_CATALOG.length, 168);
+  assert.equal(MODULE_CATALOG.length, 172);
   assert.equal(validation.counts.additionalWeapons, 16);
   assert.equal(validation.counts.lightSources, 3);
 
@@ -203,8 +203,81 @@ test("module recipes pay separately for each real benefit channel", () => {
     ingredient.kind === "properties" && ingredient.class === "D"
   )));
   assert.ok(recipe.ingredients.some(ingredient => (
-    ingredient.kind === "armor" && ingredient.class === "C"
+    ingredient.kind === "armor" && ingredient.class === "D"
   )));
+});
+
+test("high-class module recipes mix component classes instead of becoming solid S blocks", () => {
+  const smartMuzzle = MODULE_CATALOG.find(module => module.id === "muzzle-standard-smart-s");
+  const recipe = buildModuleRecipeSpec(smartMuzzle);
+  const classes = new Set(recipe.ingredients.map(ingredient => ingredient.class));
+  const ownClassCount = recipe.ingredients
+    .filter(ingredient => ingredient.class === "S")
+    .reduce((sum, ingredient) => sum + ingredient.quantity, 0);
+  const totalCount = recipe.ingredients.reduce(
+    (sum, ingredient) => sum + ingredient.quantity,
+    0
+  );
+
+  assert.ok(classes.has("B"));
+  assert.ok(classes.has("A"));
+  assert.ok(classes.has("S"));
+  assert.ok(ownClassCount > 0);
+  assert.ok(ownClassCount < totalCount / 2);
+});
+
+test("suppressors have material C-S ladders and top variants can approach two-cell noise", () => {
+  const byId = new Map(MODULE_CATALOG.map(module => [module.id, module]));
+  const ladders = [
+    [
+      "muzzle-compact-suppressor-c",
+      "muzzle-compact-suppressor-b",
+      "muzzle-compact-adaptive-a",
+      "muzzle-compact-smart-s"
+    ],
+    [
+      "muzzle-standard-suppressor-c",
+      "muzzle-standard-suppressor-b",
+      "muzzle-standard-adaptive-a",
+      "muzzle-standard-smart-s"
+    ],
+    [
+      "muzzle-shotgun-suppressor-c",
+      "muzzle-shotgun-suppressor-b",
+      "muzzle-shotgun-suppressor-a",
+      "muzzle-shotgun-suppressor-s"
+    ]
+  ];
+
+  for (const ids of ladders) {
+    const suppression = ids.map(id => -byId.get(id).modifiers.noiseLevel);
+    for (let index = 1; index < suppression.length; index += 1) {
+      assert.ok(suppression[index] > suppression[index - 1], ids.join(", "));
+    }
+  }
+  assert.equal(
+    25 + byId.get("muzzle-shotgun-suppressor-s").modifiers.noiseLevel,
+    2
+  );
+  assert.ok(byId.get("muzzle-standard-smart-s").modifiers.accuracyBonus >= 40);
+});
+
+test("module effect fingerprints are distinct within the same technical slot", () => {
+  const seen = new Map();
+  for (const module of MODULE_CATALOG) {
+    const fingerprint = JSON.stringify({
+      slotKey: module.slotKey,
+      modifiers: module.modifiers,
+      light: module.light,
+      attack: module.attack
+    });
+    assert.equal(
+      seen.has(fingerprint),
+      false,
+      `${module.name} duplicates ${seen.get(fingerprint) ?? "another module"}`
+    );
+    seen.set(fingerprint, module.name);
+  }
 });
 
 test("S-class action discounts cannot stack on one action through different slots", () => {

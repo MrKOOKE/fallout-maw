@@ -10,6 +10,7 @@ import {
   isLaunchedGrenade,
   rebalanceDamageSourceArea,
   rebalanceWeaponContent,
+  shotgunActionPreset,
   thrownGrenadeProfile
 } from "../scripts/rebalance/weapon-content-rebalance.mjs";
 
@@ -232,6 +233,90 @@ test("Curated automatic shotguns receive a three-shell burst", () => {
   assert.equal(weapon.burst.name, "Очередь");
   assert.equal(weapon.burst.count, 3);
   assert.equal(weapon.burst.difficultyPerShot, 10);
+  assert.equal(weapon.burst.attackConeDegrees, 40);
+  assert.equal(weapon.availableActions.snapshot, true);
+  assert.equal(weapon.snapshot.name, "Выстрел на вскидку");
+  assert.equal(weapon.snapshot.attackConeDegrees, 40);
+  assert.equal(weapon.aimedShot.name, "Прицельный выстрел");
+  assert.equal(weapon.aimedShot.attackConeDegrees, 15);
+});
+
+test("ordinary shotguns receive both aimed and snapshot actions with platform spread", () => {
+  const item = weaponItem("shotgun-standard", "Полицейский дробовик", {
+    proficiencyKey: "shotgun",
+    aimedShot: {
+      name: "Прицельный выстрел дробью",
+      actionPointCost: 6,
+      attackConeDegrees: 3,
+      criticalFailureConsequences: []
+    }
+  });
+  rebalanceWeaponContent(item, { modulePlatformProfileId: "shotshell.tubularShotgun" });
+  const weapon = item.system.functions.weapon;
+
+  assert.equal(weapon.availableActions.aimedShot, true);
+  assert.equal(weapon.availableActions.snapshot, true);
+  assert.equal(weapon.availableActions.burst, false);
+  assert.equal(weapon.aimedShot.name, "Прицельный выстрел");
+  assert.equal(weapon.aimedShot.attackConeDegrees, 15);
+  assert.equal(weapon.snapshot.name, "Выстрел на вскидку");
+  assert.equal(weapon.snapshot.attackConeDegrees, 40);
+  assert.equal(weapon.attackConeDegrees, 40);
+});
+
+test("sawed-off and advanced shotguns keep meaningful spread deviations", () => {
+  const sawedOff = weaponItem("shotgun-sawed", "Обрез 12 кал.", {
+    proficiencyKey: "shotgun"
+  });
+  const gauss = weaponItem("shotgun-gauss", "Гаусс-Дробовик", {
+    proficiencyKey: "shotgun"
+  });
+
+  assert.deepEqual(
+    shotgunActionPreset(sawedOff, { modulePlatformProfileId: "shotshell.tubularShotgun" }),
+    {
+      automatic: false,
+      variant: "sawedOff",
+      aimedConeDegrees: 25,
+      snapshotConeDegrees: 55,
+      burstConeDegrees: 50
+    }
+  );
+  assert.deepEqual(
+    shotgunActionPreset(gauss, { modulePlatformProfileId: "gauss.long" }),
+    {
+      automatic: false,
+      variant: "advanced",
+      aimedConeDegrees: 10,
+      snapshotConeDegrees: 35,
+      burstConeDegrees: 35
+    }
+  );
+});
+
+test("single-projectile break-action ballistic weapons do not inherit pellet spread", () => {
+  const item = weaponItem("slug-rifle", "Ружьё кал. 45-70", {
+    proficiencyKey: "shotgun",
+    availableActions: {
+      aimedShot: true,
+      snapshot: true,
+      burst: false,
+      volley: false,
+      meleeAttack: false,
+      aimedMeleeAttack: false,
+      push: false,
+      reload: true
+    }
+  });
+
+  assert.equal(
+    shotgunActionPreset(item, { modulePlatformProfileId: "ballistic.shotgun" }),
+    null
+  );
+  assert.equal(
+    rebalanceWeaponContent(item, { modulePlatformProfileId: "ballistic.shotgun" }),
+    null
+  );
 });
 
 test("Burst lengths distinguish rifles, SMGs, machine guns, and rotary weapons", () => {

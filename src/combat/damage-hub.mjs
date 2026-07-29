@@ -2064,11 +2064,12 @@ function selectFinishingBlowCriticalLimbKey(actor, preferredLimbKey = "") {
   const preferred = String(preferredLimbKey ?? "").trim();
   if (preferred && isCriticalLimb(actor, preferred) && !isLimbDestroyed(actor, preferred)) return preferred;
 
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   return Object.entries(actor?.system?.limbs ?? {})
     .filter(([limbKey]) => isCriticalLimb(actor, limbKey) && !isLimbDestroyed(actor, limbKey))
     .map(([limbKey, limb]) => ({
       limbKey,
-      value: Math.max(0, getEffectiveLimbStateValue(actor, limbKey)),
+      value: Math.max(0, getEffectiveLimbStateValue(actor, limbKey, null, limbHealthContext)),
       max: Math.max(1, toInteger(limb?.max))
     }))
     .sort((left, right) => (left.value / left.max) - (right.value / right.max))
@@ -2164,15 +2165,56 @@ async function publishFinishingBlowMessage({
 }
 
 export function getActorTraumas(actor) {
-  return actor?.items?.filter(item => item.type === "trauma") ?? [];
+  return getActorItemsByType(actor, "trauma");
 }
 
-export function getLimbHealingCap(actor, limbKey = "") {
+/**
+ * Build item-dependent limb lookups for one synchronous Actor snapshot.
+ * Rebuild after any Actor or embedded Item mutation; never retain across await.
+ */
+export function buildActorLimbHealthContext(actor) {
+  const prosthesesByLimb = new Map();
+  for (const item of getActorItemsByType(actor, "gear")) {
+    if (
+      !item.system?.equipped
+      || !hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+      || String(item.system?.placement?.mode ?? "") !== "prosthesis"
+    ) continue;
+    const limbKey = String(item.system?.placement?.limbKey ?? "");
+    if (!limbKey || prosthesesByLimb.has(limbKey)) continue;
+    prosthesesByLimb.set(limbKey, item);
+  }
+
+  const traumas = getActorTraumas(actor);
+  const suppressedTraumaIds = traumas.length
+    ? getActorSuppressedTraumaDiseaseIds(actor).trauma
+    : new Set();
+  const activeTraumasByLimb = new Map();
+  for (const trauma of traumas) {
+    if (suppressedTraumaIds.has(trauma?.id)) continue;
+    const limbKey = trauma?.system?.limbKey;
+    const entries = activeTraumasByLimb.get(limbKey) ?? [];
+    entries.push(trauma);
+    activeTraumasByLimb.set(limbKey, entries);
+  }
+
+  return {
+    actor,
+    prosthesesByLimb,
+    activeTraumasByLimb
+  };
+}
+
+export function getLimbHealingCap(actor, limbKey = "", context = null) {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 0;
-  if (hasInstalledProsthesis(actor, limbKey)) return 0;
+  if (hasInstalledProsthesis(actor, limbKey, context)) return 0;
   if (isLimbPhysicallyMissing(actor, limbKey)) return 0;
   const max = toInteger(limb.max);
+  if (isActorLimbHealthContextFor(context, actor)) {
+    return (context.activeTraumasByLimb.get(limbKey) ?? [])
+      .reduce((cap, item) => Math.min(cap, getTraumaLimbHealingCap(item, max)), max);
+  }
   const suppressedTraumas = getActorSuppressedTraumaDiseaseIds(actor).trauma;
   return getActorTraumas(actor)
     .filter(item => item.system?.limbKey === limbKey)
@@ -2180,24 +2222,27 @@ export function getLimbHealingCap(actor, limbKey = "") {
     .reduce((cap, item) => Math.min(cap, getTraumaLimbHealingCap(item, max)), max);
 }
 
-export function getLimbEffectiveMaximum(actor, limbKey = "") {
+export function getLimbEffectiveMaximum(actor, limbKey = "", context = null) {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 0;
   const max = Math.max(0, toInteger(limb.max));
-  return Math.min(max, getLimbHealingCap(actor, limbKey));
+  return Math.min(max, getLimbHealingCap(actor, limbKey, context));
 }
 
-export function clampActorLimbValuesToCurrentCaps(actor) {
+export function clampActorLimbValuesToCurrentCaps(
+  actor,
+  context = buildActorLimbHealthContext(actor)
+) {
   let changed = false;
   for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     if (!limb || typeof limb !== "object") continue;
-    const boundedValue = clampLimbStateValue(actor, limbKey, limb.value);
+    const boundedValue = clampLimbStateValue(actor, limbKey, limb.value, context);
     if (boundedValue === toInteger(limb.value)) continue;
     limb.value = boundedValue;
     limb.spent = calculateLimbSpentFromValue(limb, boundedValue);
     changed = true;
   }
-  if (changed) synchronizePreparedAggregateHealthResource(actor);
+  if (changed) synchronizePreparedAggregateHealthResource(actor, context);
   return changed;
 }
 
@@ -2569,10 +2614,11 @@ function preventCriticalLimbHealthRecovery(actor, changes = {}) {
 }
 
 function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     const critical = isCriticalLimb(actor, key) || Boolean(getUpdatePath(changes, `system.limbs.${key}.critical`) ?? limb?.critical);
     if (!critical) continue;
-    if (hasInstalledProsthesis(actor, key)) continue;
+    if (hasInstalledProsthesis(actor, key, limbHealthContext)) continue;
 
     const missing = Boolean(getUpdatePath(changes, `system.limbs.${key}.missing`) ?? limb?.missing);
     if (missing) return true;
@@ -2782,6 +2828,7 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
   const missingUpdates = {};
   const destroyedLimbKeys = [];
   const limbLossEffectData = [];
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
     const limb = actor?.system?.limbs?.[limbKey];
     if (!limb) continue;
@@ -2795,7 +2842,7 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
     destroyed.add(limbKey);
     destroyedLimbKeys.push(limbKey);
     if (!missing) missingUpdates[`system.limbs.${limbKey}.missing`] = true;
-    if (!ignoreInstalledProsthesis && hasInstalledProsthesis(actor, limbKey)) continue;
+    if (!ignoreInstalledProsthesis && hasInstalledProsthesis(actor, limbKey, limbHealthContext)) continue;
     if (!isCriticalLimb(actor, limbKey)) {
       const effectData = prepareLimbLossEffectData(actor, limbKey);
       if (effectData) limbLossEffectData.push(effectData);
@@ -3346,8 +3393,8 @@ function normalizeLimbLossEffects(value = []) {
     .filter(effect => effect.key);
 }
 
-function hasInstalledProsthesis(actor, limbKey = "") {
-  return Boolean(getInstalledProsthesis(actor, limbKey));
+function hasInstalledProsthesis(actor, limbKey = "", context = null) {
+  return Boolean(getInstalledProsthesis(actor, limbKey, context));
 }
 
 function isLimbTimedDamageBlocked(actor, limbKey = "", damageType = {}, kind = "") {
@@ -3380,17 +3427,30 @@ function isTimedDamageKeyBlocked(blockedKeys = [], damageType = {}, kind = "") {
   return false;
 }
 
-function getInstalledProsthesis(actor, limbKey = "") {
+function getInstalledProsthesis(actor, limbKey = "", context = null) {
   const key = String(limbKey ?? "").trim();
   if (!key) return null;
-  return (actor?.items?.contents ?? Array.from(actor?.items ?? []))
+  if (isActorLimbHealthContextFor(context, actor)) {
+    return context.prosthesesByLimb.get(key) ?? null;
+  }
+  return getActorItemsByType(actor, "gear")
     .find(item => (
-      item?.type === "gear"
-      && item.system?.equipped
+      item.system?.equipped
       && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
       && String(item.system?.placement?.mode ?? "") === "prosthesis"
       && String(item.system?.placement?.limbKey ?? "") === key
     )) ?? null;
+}
+
+function getActorItemsByType(actor, type = "") {
+  const typed = actor?.itemTypes?.[type];
+  if (Array.isArray(typed)) return typed;
+  return actor?.items?.filter?.(item => item?.type === type)
+    ?? Array.from(actor?.items ?? []).filter(item => item?.type === type);
+}
+
+function isActorLimbHealthContextFor(context, actor) {
+  return Boolean(context && context.actor === actor);
 }
 
 export function isCriticalLimb(actor, limbKey = "") {
@@ -6048,10 +6108,13 @@ function getLimbLabel(actor, limbKey = "") {
   return String(actor?.system?.limbs?.[limbKey]?.label ?? limbKey);
 }
 
-function calculateAggregateHealth(actor) {
+function calculateAggregateHealth(
+  actor,
+  context = buildActorLimbHealthContext(actor)
+) {
   const entries = Object.entries(actor?.system?.limbs ?? {}).filter(([_key, limb]) => limb && typeof limb === "object");
   return entries.reduce((result, [limbKey, limb]) => {
-    const prosthesis = getInstalledProsthesis(actor, limbKey);
+    const prosthesis = getInstalledProsthesis(actor, limbKey, context);
     if (prosthesis) {
       const replacement = getProsthesisHealthForAggregate(prosthesis, limb);
       result.value += replacement.value;
@@ -6059,7 +6122,7 @@ function calculateAggregateHealth(actor) {
       return result;
     }
     if (isLimbPhysicallyMissing(actor, limbKey)) return result;
-    result.value += Math.max(0, getEffectiveLimbStateValue(actor, limbKey));
+    result.value += Math.max(0, getEffectiveLimbStateValue(actor, limbKey, null, context));
     result.max += Math.max(0, toInteger(limb?.max));
     return result;
   }, { min: 0, value: 0, max: 0 });
@@ -6182,10 +6245,13 @@ function getProsthesisIntegrationPercent(prosthesis) {
   return Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)));
 }
 
-function synchronizePreparedAggregateHealthResource(actor) {
+function synchronizePreparedAggregateHealthResource(
+  actor,
+  context = buildActorLimbHealthContext(actor)
+) {
   const health = actor?.system?.resources?.health;
   if (!health) return;
-  const aggregate = calculateAggregateHealth(actor);
+  const aggregate = calculateAggregateHealth(actor, context);
   health.min = aggregate.min;
   health.max = aggregate.max;
   health.value = Math.min(Math.max(aggregate.value, aggregate.min), aggregate.max);
@@ -6253,30 +6319,32 @@ async function calculateManualAggregateHealthAdjustment(
 }
 
 function getManualHealthDamageTargets(actor) {
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   const limbTargets = Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => ({
       type: "limb",
       key,
       limbKey: key,
-      capacity: Math.max(0, getEffectiveLimbStateValue(actor, key))
+      capacity: Math.max(0, getEffectiveLimbStateValue(actor, key, null, limbHealthContext))
     }))
     .filter(target => target.capacity > 0);
   return [
     ...limbTargets,
-    ...getIntegratedProsthesisHealthDamageTargets(actor)
+    ...getIntegratedProsthesisHealthDamageTargets(actor, new Set(), limbHealthContext)
   ];
 }
 
 function getManualHealthHealingTargets(actor, { ignoreHealingCaps = false } = {}) {
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   const limbTargets = Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => {
-      const currentPositive = Math.max(0, getEffectiveLimbStateValue(actor, key));
+      const currentPositive = Math.max(0, getEffectiveLimbStateValue(actor, key, null, limbHealthContext));
       const physicalMaximum = Math.max(0, toInteger(limb?.max));
       const cap = ignoreHealingCaps
         ? physicalMaximum
-        : Math.min(physicalMaximum, getLimbHealingCap(actor, key));
+        : Math.min(physicalMaximum, getLimbHealingCap(actor, key, limbHealthContext));
       return {
         type: "limb",
         key,
@@ -6288,7 +6356,7 @@ function getManualHealthHealingTargets(actor, { ignoreHealingCaps = false } = {}
     .filter(target => target.capacity > 0);
   return [
     ...limbTargets,
-    ...getIntegratedProsthesisHealthHealingTargets(actor)
+    ...getIntegratedProsthesisHealthHealingTargets(actor, limbHealthContext)
   ];
 }
 
@@ -6754,34 +6822,48 @@ function calculateNewNegativeLimbDamage(previousValue = 0, nextValue = 0) {
 }
 
 function getPositiveHealthDamageTargets(actor, limbStates = new Map(), excludeLimbKeys = new Set()) {
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   return [
-    ...getPositiveLimbTargets(actor, limbStates, excludeLimbKeys),
-    ...getIntegratedProsthesisHealthDamageTargets(actor, excludeLimbKeys)
+    ...getPositiveLimbTargets(actor, limbStates, excludeLimbKeys, limbHealthContext),
+    ...getIntegratedProsthesisHealthDamageTargets(actor, excludeLimbKeys, limbHealthContext)
   ];
 }
 
-function getPositiveLimbTargets(actor, limbStates = new Map(), excludeLimbKeys = new Set()) {
+function getPositiveLimbTargets(
+  actor,
+  limbStates = new Map(),
+  excludeLimbKeys = new Set(),
+  context = buildActorLimbHealthContext(actor)
+) {
   const excluded = new Set(Array.from(excludeLimbKeys ?? []).map(key => String(key)));
   return Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !excluded.has(String(key)))
     .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
-    .map(([key, limb]) => ({
-      type: "limb",
-      key,
-      limbKey: key,
-      value: getLimbStateValue(actor, key, limbStates),
-      min: toInteger(limb?.min),
-      capacity: Math.max(0, getLimbStateValue(actor, key, limbStates) - toInteger(limb?.min))
-    }))
+    .map(([key, limb]) => {
+      const value = getLimbStateValue(actor, key, limbStates, context);
+      const min = toInteger(limb?.min);
+      return {
+        type: "limb",
+        key,
+        limbKey: key,
+        value,
+        min,
+        capacity: Math.max(0, value - min)
+      };
+    })
     .filter(target => target.value > 0 && target.value > target.min);
 }
 
-function getIntegratedProsthesisHealthDamageTargets(actor, excludeLimbKeys = new Set()) {
+function getIntegratedProsthesisHealthDamageTargets(
+  actor,
+  excludeLimbKeys = new Set(),
+  context = buildActorLimbHealthContext(actor)
+) {
   const excluded = new Set(Array.from(excludeLimbKeys ?? []).map(key => String(key)));
   const targets = [];
   for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     if (!isLimbPhysicallyMissing(actor, limbKey) || excluded.has(String(limbKey))) continue;
-    const prosthesis = getInstalledProsthesis(actor, limbKey);
+    const prosthesis = getInstalledProsthesis(actor, limbKey, context);
     if (!prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) continue;
     const contribution = getProsthesisHealthForAggregate(prosthesis, limb);
     if (contribution.value <= 0) continue;
@@ -6801,11 +6883,14 @@ function getProsthesisHealthDamageTargetKey(prosthesis) {
   return `prosthesis:${prosthesis?.id ?? ""}`;
 }
 
-function getIntegratedProsthesisHealthHealingTargets(actor) {
+function getIntegratedProsthesisHealthHealingTargets(
+  actor,
+  context = buildActorLimbHealthContext(actor)
+) {
   const targets = [];
   for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     if (!isLimbPhysicallyMissing(actor, limbKey)) continue;
-    const prosthesis = getInstalledProsthesis(actor, limbKey);
+    const prosthesis = getInstalledProsthesis(actor, limbKey, context);
     if (!prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) continue;
     const contribution = getProsthesisHealthForAggregate(prosthesis, limb);
     if (contribution.value >= contribution.max) continue;
@@ -6822,19 +6907,26 @@ function getIntegratedProsthesisHealthHealingTargets(actor) {
 }
 
 function getHealingLimbTargets(actor, limbStates = new Map()) {
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   return Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
-    .map(([key, limb]) => ({
-      key,
-      value: getLimbStateValue(actor, key, limbStates),
-      cap: Math.min(Math.max(0, toInteger(limb?.max)), getLimbHealingCap(actor, key))
-    }))
+    .map(([key, limb]) => {
+      const value = getLimbStateValue(actor, key, limbStates, limbHealthContext);
+      return {
+        key,
+        value,
+        cap: Math.min(
+          Math.max(0, toInteger(limb?.max)),
+          getLimbHealingCap(actor, key, limbHealthContext)
+        )
+      };
+    })
     .filter(target => target.value < target.cap);
 }
 
-function getLimbStateValue(actor, limbKey = "", limbStates = new Map()) {
+function getLimbStateValue(actor, limbKey = "", limbStates = new Map(), context = null) {
   if (limbStates.has(limbKey)) return toInteger(limbStates.get(limbKey)?.nextValue);
-  return getEffectiveLimbStateValue(actor, limbKey);
+  return getEffectiveLimbStateValue(actor, limbKey, null, context);
 }
 
 function distributeCappedIntegerAmount(amount = 0, targets = []) {
@@ -7299,12 +7391,16 @@ function getResponsibleGM() {
 
 function synchronizeManualLimbValueUpdates(actor, changes = {}) {
   let restoredHealth = 0;
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     const valuePath = `system.limbs.${limbKey}.value`;
     if (!hasUpdatePath(changes, valuePath)) continue;
-    const previousValue = getEffectiveLimbStateValue(actor, limbKey);
+    const previousValue = getEffectiveLimbStateValue(actor, limbKey, null, limbHealthContext);
     const restoringMissing = getUpdatePath(changes, `system.limbs.${limbKey}.missing`) === false;
-    const value = clampLimbStateValueForUpdate(actor, limbKey, getUpdatePath(changes, valuePath), { restoringMissing });
+    const value = clampLimbStateValueForUpdate(actor, limbKey, getUpdatePath(changes, valuePath), {
+      restoringMissing,
+      context: limbHealthContext
+    });
     setUpdatePath(changes, valuePath, value);
     setUpdatePath(changes, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
     const accumulationPath = `system.limbs.${limbKey}.damageAccumulation`;
@@ -7334,10 +7430,11 @@ function calculateLimbSpentFromValue(limb, value) {
 
 function buildLimbValueCapSyncUpdate(actor) {
   const updates = {};
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     if (!limb || typeof limb !== "object") continue;
     const currentValue = getUncappedSourceLimbValue(actor, limbKey, limb);
-    const boundedValue = clampLimbStateValue(actor, limbKey, currentValue);
+    const boundedValue = clampLimbStateValue(actor, limbKey, currentValue, limbHealthContext);
     const spent = calculateLimbSpentFromValue(limb, boundedValue);
     const sourceLimb = getSourceLimb(actor, limbKey);
     const sourceSpentMatches = !sourceLimb
@@ -7366,13 +7463,18 @@ function getUncappedSourceLimbValue(actor, limbKey = "", limb = null) {
   return Math.min(Math.max(toInteger(source?.value ?? limb?.value), min), max);
 }
 
-function getEffectiveLimbStateValue(actor, limbKey = "", value = null) {
+function getEffectiveLimbStateValue(actor, limbKey = "", value = null, context = null) {
   const limb = actor?.system?.limbs?.[limbKey];
-  return clampLimbStateValue(actor, limbKey, value ?? limb?.value);
+  return clampLimbStateValue(actor, limbKey, value ?? limb?.value, context);
 }
 
-function clampLimbStateValueForUpdate(actor, limbKey = "", value = null, { restoringMissing = false } = {}) {
-  if (!restoringMissing) return clampLimbStateValue(actor, limbKey, value);
+function clampLimbStateValueForUpdate(
+  actor,
+  limbKey = "",
+  value = null,
+  { restoringMissing = false, context = null } = {}
+) {
+  if (!restoringMissing) return clampLimbStateValue(actor, limbKey, value, context);
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 0;
   const max = Math.max(0, toInteger(limb.max));
@@ -7380,12 +7482,12 @@ function clampLimbStateValueForUpdate(actor, limbKey = "", value = null, { resto
   return Math.min(Math.max(toInteger(value), min), max);
 }
 
-function clampLimbStateValue(actor, limbKey = "", value = null) {
+function clampLimbStateValue(actor, limbKey = "", value = null, context = null) {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 0;
   const max = Math.max(0, toInteger(limb.max));
   const min = toInteger(limb.min ?? -max);
-  const cap = getLimbEffectiveMaximum(actor, limbKey);
+  const cap = getLimbEffectiveMaximum(actor, limbKey, context);
   return Math.min(Math.max(toInteger(value), min), cap);
 }
 

@@ -55,7 +55,11 @@ export function getEffectSourceFunctionContext(effect = null, actor = null) {
 export function buildEffectFunctionSnapshot(abilityFunction = {}) {
   if (!String(abilityFunction?.id ?? "").trim()) return null;
   const normalized = normalizeAbilityFunctions([abilityFunction])[0];
-  if (!normalized) return null;
+  return buildNormalizedEffectFunctionSnapshot(normalized);
+}
+
+export function buildNormalizedEffectFunctionSnapshot(normalized = null) {
+  if (!String(normalized?.id ?? "").trim()) return null;
   return clonePlainData({
     id: normalized.id,
     type: normalized.type,

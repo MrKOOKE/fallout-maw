@@ -1,0 +1,1724 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-29T07:24:26.614Z",
+  "mode": "dry-run",
+  "status": "validated-dry-run",
+  "databasePath": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\data\\items",
+  "summary": {
+    "shotguns": 76,
+    "changed": 0,
+    "automatic": 6,
+    "byVariant": {
+      "advanced": 7,
+      "compact": 2,
+      "doubleBarrel": 6,
+      "precision": 10,
+      "sawedOff": 10,
+      "standard": 41
+    }
+  },
+  "items": [
+    {
+      "itemId": "140aG3MA9GmesHEr",
+      "name": "Дробовик Сити-Киллер .12",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "1F6KkUZqb2HOLpih",
+      "name": "Револьвер .410 кал.",
+      "class": "D",
+      "profileId": "shotshell.compact",
+      "variant": "compact",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 20
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "1Hhaw0WV3lD4LqVB",
+      "name": "Дробовик Вышибалы",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "2bTKK6EEED4AYirp",
+      "name": "Полицейский дробовик",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "2znYlI22vjqQz1x5",
+      "name": "«Помните Наварро»",
+      "class": "B",
+      "profileId": "energy.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "3Ha5jZE4NJX05gva",
+      "name": "Однозарядное ружьё",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "3bZyG0Nz76Jw6dQs",
+      "name": "Двуствольное ружьё Обрез",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "4E13S0jLSxzHhYlI",
+      "name": "«Большой бум»",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "doubleBarrel",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 18
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "4e4iLRCO6FuCYS1Q",
+      "name": "Уличный Задира",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "5RPp9COcKb2i3og0",
+      "name": "Рычажной дробовик",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "6JcxAxpz0kCQS0PA",
+      "name": "Утяжелённый Штурмовой Дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": true,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": {
+          "name": "Очередь",
+          "actionPointCost": 6,
+          "attackConeDegrees": 40,
+          "count": 3
+        }
+      }
+    },
+    {
+      "itemId": "7PKwU2OYxlfvnsZw",
+      "name": "Двуствольное ружьё",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "doubleBarrel",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 18
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "9bP0xBlWeY7kKDn2",
+      "name": "Тесла Дробовик",
+      "class": "A",
+      "profileId": "energy.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "9h6yt3GombZVRwUu",
+      "name": "Мультиплазменная винтовка",
+      "class": "A",
+      "profileId": "energy.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "ACrdSzJ13c1e7Q9E",
+      "name": "Супердробовик",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "doubleBarrel",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 18
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "AvpqyqYsPRJvMRyz",
+      "name": "Охотничий дробовик",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "CGXy3SYqCfzSg9cs",
+      "name": "«Душегуб»",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "CgpxTeEZtlutUq9k",
+      "name": "Тактический Дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "DxieDYi6mKwmFTmf",
+      "name": "Дробовик .410 Булл-Пап",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "ERkjv4ei6Iq21I1C",
+      "name": "Дробовик Неостед-Комбат",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "FVDwdk3HuCPbM7r8",
+      "name": "Дробовик Ренегата СПЕЦ",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "GBou99xUOBZ6zwqI",
+      "name": "Автоматический тяжёлый штурмовой дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": true,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": {
+          "name": "Очередь",
+          "actionPointCost": 6,
+          "attackConeDegrees": 40,
+          "count": 3
+        }
+      }
+    },
+    {
+      "itemId": "GRFiXPNPHI7czKAS",
+      "name": "Панкор Джекхаммер",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": true,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": {
+          "name": "Очередь",
+          "actionPointCost": 6,
+          "attackConeDegrees": 40,
+          "count": 3
+        }
+      }
+    },
+    {
+      "itemId": "HxhHy87EO4ytLwfZ",
+      "name": "Обрез",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "IXobei0typyz7kp2",
+      "name": "Мексиканский Дробовик",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "JXmm9PKqKjzN1r1S",
+      "name": "Дробовик Итака М37",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "JbEB1sA8VZoddoHW",
+      "name": "Дробовик «Барбэра» 20 кал.",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "L3jgsrSk0QmwemBw",
+      "name": "Износостойкий дробовик караванщика",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "NKn70Ebaa3rhUS2x",
+      "name": "Самопальный дуплет",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "doubleBarrel",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 18
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "NbuPbdmdHwXB1gUw",
+      "name": "Укороченный Браунинг Авто-5 12кал.",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "OcgKSEn9UBmAOHNj",
+      "name": "H&K ШОББ",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": true,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": {
+          "name": "Очередь",
+          "actionPointCost": 6,
+          "attackConeDegrees": 40,
+          "count": 3
+        }
+      }
+    },
+    {
+      "itemId": "Q5Vsn585D1AMzQ6C",
+      "name": "Лазерный Охотничий Дробовик",
+      "class": "B",
+      "profileId": "energy.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "QXtaZIje3XFjXo1B",
+      "name": "Полуавтоматическое Ружьё 12 кал.",
+      "class": "C",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "RLVmmiU2HV0qgvvb",
+      "name": "Племенной дробовик",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "RhH6xxpq5O1zP4T9",
+      "name": "Армейский Дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": true,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": {
+          "name": "Очередь",
+          "actionPointCost": 6,
+          "attackConeDegrees": 40,
+          "count": 3
+        }
+      }
+    },
+    {
+      "itemId": "U4ThcpYcSfYoO1Es",
+      "name": "Охотничий Травматический дробовик",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "UpWpCx6yTAN906wD",
+      "name": "Вертикальное Ружьё",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "VS90x8Pt2kaqsLb9",
+      "name": "Штурмовой Дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": true,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": {
+          "name": "Очередь",
+          "actionPointCost": 6,
+          "attackConeDegrees": 40,
+          "count": 3
+        }
+      }
+    },
+    {
+      "itemId": "WUbuD30UgmT6PEYe",
+      "name": "Военный Дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "WdwfDLc1D3SwvErV",
+      "name": "«Кладоискатель»",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "X82hIleItOBluFvX",
+      "name": "Помповая Двухстволка Обрез",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "XbwxCqpNmEmoh2I7",
+      "name": "Сеятель Рока",
+      "class": "D",
+      "profileId": "shotshell.compact",
+      "variant": "compact",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 20
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "XkpZ0kPXTRB8DHIy",
+      "name": "Утяжелённый Дробовик Норинко Гонг",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "Y7MgYriYIMVb6N5t",
+      "name": "Помповая Двухстволка",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "YUQNEIJq94SlkGai",
+      "name": "Дробовик Браулер",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "aDzTPuqXqZIyBxu3",
+      "name": "КС-23М",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "ahHGTvUDw3pct1qz",
+      "name": "SPAS-12",
+      "class": "C",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "bU7RbSQyNAh6WoZs",
+      "name": "Обрез Самопал",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "cAQVzLAe7jUjAjco",
+      "name": "Модный помповый дробовик",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "dwgVtaEmYNsJjDYw",
+      "name": "Дробовик караванщика",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "gIc6xQ9AxydcQTig",
+      "name": "Полицейский дробовик СПЕЦ",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "gqm3FXPlCy8XZNcv",
+      "name": "Трёхлучевая лазерная винтовка",
+      "class": "A",
+      "profileId": "energy.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "hFnl4sEZrvw0yMAU",
+      "name": "Китайский Дробовик 12 кал.",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "iwsavEgyqj49gwEf",
+      "name": "«Колумб»",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "ldzmRraEASebXVVF",
+      "name": "Непревзойденный Спутник Джентльмена",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "lo0WnMmTxFq92LDh",
+      "name": "«Три-Бим»",
+      "class": "A",
+      "profileId": "energy.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "m4oqGLw6IAUMa2ff",
+      "name": "Боевой Обрез",
+      "class": "C",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "m7Iees255ZkryeoJ",
+      "name": "Обрез 12 кал.",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "mmXtAiMHpmcmQVms",
+      "name": "«Смертобаш»",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "nN7RVmeBiHBx8PEW",
+      "name": "Второе дыхание",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "o35D4Wga0qc9fU09",
+      "name": "Гаусс-Дробовик",
+      "class": "B",
+      "profileId": "gauss.long",
+      "variant": "advanced",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 10
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "oQK19Q5KXmkZiczX",
+      "name": "Боевой Дробовик СПЕЦ",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "pogC4CE9n14VQnOJ",
+      "name": "Дробовик Норинко Гонг",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "pzjADiOOuxr0CSQ1",
+      "name": "Укороченный Охотничий дробовик",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "r9rw7pZyytd16Ve3",
+      "name": "Укороченное Полуавтоматическое Ружьё 12 кал.",
+      "class": "C",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "rB1YIBGaEpT8Hvh5",
+      "name": "Гражданское Полуавтоматическое Ружьё 12 кал.",
+      "class": "D",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "sE5W62WrFnzGvv3p",
+      "name": "Винчестер 12 кал.",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "sEAcYSXbw0rrQhoK",
+      "name": "Ассистент",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "syBbCelGOC3pVJg1",
+      "name": "Золотой Дуплет",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "doubleBarrel",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 18
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "vIQbGIjaKHpktpwn",
+      "name": "Дробовик Ренегата",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "vKEnqadD6HFDoie8",
+      "name": "Обрез Браунинг Авто-5 12кал.",
+      "class": "D",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "sawedOff",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 55
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "voTcKz9BHhcG5gEN",
+      "name": "Двуствольное ружьё СПЕЦ",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "doubleBarrel",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 18
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "xabSpLM6rRi9s59s",
+      "name": "«Пенетратор»",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "yl80SgGFj7Owdb2c",
+      "name": "Полицейский дробовик ТАКТИК",
+      "class": "B",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "zS8wQoJeEv4Tr5Do",
+      "name": "«Обеденный колокол»",
+      "class": "C",
+      "profileId": "shotshell.tubularShotgun",
+      "variant": "precision",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 12
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 35
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "zi2uZox8VAFrahQ4",
+      "name": "Боевой Дробовик",
+      "class": "B",
+      "profileId": "shotshell.magazineShotgun",
+      "variant": "standard",
+      "automatic": false,
+      "changed": false,
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 15
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 40
+        },
+        "burst": null
+      }
+    }
+  ]
+}

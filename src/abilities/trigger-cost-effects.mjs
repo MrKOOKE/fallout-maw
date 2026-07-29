@@ -16,7 +16,7 @@ import {
 import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS,
-  buildEffectFunctionSnapshot
+  buildNormalizedEffectFunctionSnapshot
 } from "./effect-lifecycle.mjs";
 import {
   LIMITED_EFFECT_COPY_FLAG_KEY,
@@ -32,13 +32,32 @@ export const ABILITY_TIMED_TRIGGER_STATE_FLAG_KEY = "abilityTimedTriggerStates";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 
 export function withoutTimedTriggerCostFunctions(functions = []) {
-  return normalizeAbilityFunctions(functions)
-    .filter(abilityFunction => !isAbilityFunctionTimedTriggerCost(abilityFunction));
+  return withoutTimedTriggerCostNormalizedFunctions(normalizeAbilityFunctions(functions));
 }
 
 export async function syncTimedTriggerCostEffects(actor, sourceItem, functions = [], context = {}) {
   if (!actor || !sourceItem || !game.user?.isActiveGM) return;
-  const timedFunctions = normalizeAbilityFunctions(functions)
+  return syncNormalizedTimedTriggerCostEffects(
+    actor,
+    sourceItem,
+    normalizeAbilityFunctions(functions),
+    context
+  );
+}
+
+export function withoutTimedTriggerCostNormalizedFunctions(normalizedFunctions = []) {
+  return (normalizedFunctions ?? [])
+    .filter(abilityFunction => !isAbilityFunctionTimedTriggerCost(abilityFunction));
+}
+
+export async function syncNormalizedTimedTriggerCostEffects(
+  actor,
+  sourceItem,
+  normalizedFunctions = [],
+  context = {}
+) {
+  if (!actor || !sourceItem || !game.user?.isActiveGM) return;
+  const timedFunctions = (normalizedFunctions ?? [])
     .filter(isAbilityFunctionTimedTriggerCost)
     .filter(hasUsableChanges);
   const states = foundry.utils.deepClone(
@@ -218,7 +237,7 @@ async function createTimedTriggerEffect(actor, sourceItem, abilityFunction, {
           sourceItemId: String(sourceItem?.id ?? ""),
           abilitySourceId: getAbilitySourceId(sourceItem),
           functionId,
-          functionData: buildEffectFunctionSnapshot(abilityFunction),
+          functionData: buildNormalizedEffectFunctionSnapshot(abilityFunction),
           durationSeconds,
           triggeredAt: startTime
         },

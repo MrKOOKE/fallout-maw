@@ -76,9 +76,21 @@ export function getAbilityEffectChangesFromFunctions(actor, functions = [], cont
 }
 
 export function getAbilityEffectProjectionFromFunctions(actor, functions = [], context = {}) {
+  return getAbilityEffectProjectionFromNormalizedFunctions(
+    actor,
+    normalizeAbilityFunctions(functions),
+    context
+  );
+}
+
+export function getAbilityEffectProjectionFromNormalizedFunctions(
+  actor,
+  normalizedFunctions = [],
+  context = {}
+) {
   const changes = [];
   const pureChangeIndexes = [];
-  for (const entry of normalizeAbilityFunctions(functions)) {
+  for (const entry of normalizedFunctions ?? []) {
     if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
     for (const change of getConditionalFunctionChanges(actor, entry, context)) {
       if (!change.key || change.value === "") continue;
@@ -151,7 +163,10 @@ export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) 
     for (const change of effect?.system?.changes ?? []) appendChange(change, effect, { effect });
   }
 
-  for (const abilityItem of actor?.items?.filter(item => item?.type === "ability") ?? []) {
+  const abilityItems = actor?.itemTypes?.ability
+    ?? actor?.items?.filter(item => item?.type === "ability")
+    ?? [];
+  for (const abilityItem of abilityItems) {
     for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
       if (
         abilityFunction.type !== ABILITY_FUNCTION_TYPES.fixed

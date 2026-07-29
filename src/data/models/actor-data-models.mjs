@@ -683,6 +683,10 @@ function normalizeResourceMap(
     consciousnessRecoveryTarget = 0
   } = {}
 ) {
+  const initialBonusChanges = collectInitialResourceBonusChangesByKey(
+    actor,
+    settings.map(setting => setting?.key)
+  );
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentResources?.[setting.key];
@@ -694,7 +698,8 @@ function normalizeResourceMap(
       let max = Math.max(min, baseMax + bonus);
       const overriddenMax = resolveResourceBonusOverrideMaximum(actor, setting.key, {
         baseMax,
-        sourceBonus: toInteger(sourceResources?.[setting.key]?.bonus)
+        sourceBonus: toInteger(sourceResources?.[setting.key]?.bonus),
+        changes: initialBonusChanges.get(String(setting.key ?? "").trim()) ?? []
       });
       if (Number.isFinite(overriddenMax)) {
         max = Math.max(min, Math.trunc(overriddenMax));
@@ -736,11 +741,14 @@ function normalizeResourceMap(
   );
 }
 
-function resolveResourceBonusOverrideMaximum(actor, resourceKey = "", { baseMax = 0, sourceBonus = 0 } = {}) {
+function resolveResourceBonusOverrideMaximum(
+  actor,
+  resourceKey = "",
+  { baseMax = 0, sourceBonus = 0, changes = [] } = {}
+) {
   const key = String(resourceKey ?? "").trim();
   if (!actor || !key) return Number.NaN;
 
-  const changes = collectInitialResourceBonusChanges(actor, key);
   if (!changes.some(change => change.type === "override")) return Number.NaN;
 
   let value = toInteger(baseMax) + toInteger(sourceBonus);
@@ -758,23 +766,37 @@ function resolveResourceBonusOverrideMaximum(actor, resourceKey = "", { baseMax 
   return value;
 }
 
-function collectInitialResourceBonusChanges(actor, resourceKey = "") {
-  const acceptedKey = `system.resources.${resourceKey}.bonus`;
-  if (actor?._falloutMawRoutedFinalEffectKeys?.has?.(acceptedKey)) return [];
-  const changes = [];
+function collectInitialResourceBonusChangesByKey(actor, resourceKeys = []) {
+  const changesByResourceKey = new Map();
+  const resourceKeyByEffectKey = new Map();
+  for (const value of resourceKeys ?? []) {
+    const resourceKey = String(value ?? "").trim();
+    if (!resourceKey || changesByResourceKey.has(resourceKey)) continue;
+    changesByResourceKey.set(resourceKey, []);
+    const effectKey = `system.resources.${resourceKey}.bonus`;
+    if (!actor?._falloutMawRoutedFinalEffectKeys?.has?.(effectKey)) {
+      resourceKeyByEffectKey.set(effectKey, resourceKey);
+    }
+  }
+  if (!actor || !resourceKeyByEffectKey.size) return changesByResourceKey;
+
   for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
     if (!effect?.active || effect.disabled) continue;
     for (const change of effect.system?.changes ?? []) {
+      const resourceKey = resourceKeyByEffectKey.get(String(change?.key ?? "").trim());
+      if (!resourceKey) continue;
       if (getActorFormulaApplicationPhase(change, actor) !== "initial") continue;
-      if (String(change?.key ?? "").trim() !== acceptedKey) continue;
-      changes.push({
+      changesByResourceKey.get(resourceKey).push({
         ...foundry.utils.deepClone(change),
         effect,
         priority: getEffectChangePriority(change)
       });
     }
   }
-  return changes.sort((left, right) => getEffectChangePriority(left) - getEffectChangePriority(right));
+  for (const changes of changesByResourceKey.values()) {
+    changes.sort((left, right) => getEffectChangePriority(left) - getEffectChangePriority(right));
+  }
+  return changesByResourceKey;
 }
 
 function getEffectChangePriority(change = {}) {

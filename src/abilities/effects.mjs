@@ -10,7 +10,7 @@ import {
 } from "../settings/abilities.mjs";
 import {
   abilityConditionsApply,
-  getAbilityEffectProjectionFromFunctions,
+  getAbilityEffectProjectionFromNormalizedFunctions,
   getAbilityFunctionChangesForSatisfiedAuraCondition,
   hasAbilityWeaponContextCondition
 } from "./evaluation.mjs";
@@ -32,9 +32,18 @@ import {
   pruneManagedBarrierProjectionDepletions
 } from "./barrier-depletion.mjs";
 import {
-  syncTimedTriggerCostEffects,
-  withoutTimedTriggerCostFunctions
+  syncNormalizedTimedTriggerCostEffects
 } from "./trigger-cost-effects.mjs";
+import {
+  ABILITY_EFFECT_FLAG_KEY,
+  EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY,
+  ITEM_EFFECT_FLAG_KEY,
+  abilityFunctionsMayContainAuraCondition,
+  buildAbilityEffectSourceDescriptor,
+  buildActorAbilityEffectSyncIndex,
+  getLiveIndexedEffects,
+  getLiveStaleIndexedEffects
+} from "./effect-sync-context.mjs";
 import { getAbilityEffectOriginUuid } from "../utils/ability-effect-origin.mjs";
 import {
   buildEquipmentRequirementMovementPointChange,
@@ -44,7 +53,7 @@ import {
 import {
   EFFECT_LIFECYCLE_FLAG_KEY,
   EFFECT_LIFECYCLE_KINDS,
-  buildEffectFunctionSnapshot
+  buildNormalizedEffectFunctionSnapshot
 } from "./effect-lifecycle.mjs";
 import {
   ADVANCEMENT_PURE_EFFECT_FLAG_KEY,
@@ -66,9 +75,6 @@ import {
   invalidateAbilityConditionLightingCache,
   timeOfDayConditionApplies
 } from "./environment-conditions.mjs";
-const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
-const ITEM_EFFECT_FLAG_KEY = "itemEffect";
-const EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY = "equipmentRequirementEffect";
 const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -543,49 +549,81 @@ export async function syncActorAbilityEffects(actor, context = {}) {
 
   processingActors.add(actor.uuid);
   try {
-    const abilityItems = actor.items?.filter(item => item.type === "ability") ?? [];
+    const abilityItems = actor.itemTypes?.ability
+      ?? actor.items?.filter(item => item.type === "ability")
+      ?? [];
     const activeAbilityItemIds = new Set(abilityItems.map(item => item.id));
     const activeItemDocuments = getActorItemsWithActiveHudModules(actor);
     const itemFreeSettingsItems = activeItemDocuments.filter(item => isActiveItemFreeSettingsItem(item));
     const activeItemFreeSettingsItemIds = new Set(itemFreeSettingsItems.map(item => item.id));
     const equipmentRequirementItems = activeItemDocuments.filter(item => isActiveDamageMitigationRequirementItem(item));
     const activeEquipmentRequirementItemIds = new Set(equipmentRequirementItems.map(item => item.id));
+    const effectIndex = buildActorAbilityEffectSyncIndex(actor);
 
     for (const item of abilityItems) {
-      await syncSingleAbilityEffect(actor, item, context);
-      await syncTimedTriggerCostEffects(actor, item, item.system?.functions ?? [], context);
-    }
-    for (const item of itemFreeSettingsItems) {
-      await syncSingleItemFreeSettingsEffect(actor, item, context);
-      await syncTimedTriggerCostEffects(
+      const descriptor = buildAbilityEffectSourceDescriptor(item.system?.functions ?? []);
+      await syncSingleAbilityEffect(
         actor,
         item,
-        item.system?.functions?.freeSettings?.entries ?? [],
+        descriptor,
+        getLiveIndexedEffects(actor, effectIndex.abilityEffectsByItemId, item.id),
+        context
+      );
+      await syncNormalizedTimedTriggerCostEffects(
+        actor,
+        item,
+        descriptor.normalizedFunctions,
+        context
+      );
+    }
+    for (const item of itemFreeSettingsItems) {
+      const descriptor = buildAbilityEffectSourceDescriptor(
+        item.system?.functions?.freeSettings?.entries ?? []
+      );
+      await syncSingleItemFreeSettingsEffect(
+        actor,
+        item,
+        descriptor,
+        getLiveIndexedEffects(actor, effectIndex.itemEffectsByItemId, item.id),
+        context
+      );
+      await syncNormalizedTimedTriggerCostEffects(
+        actor,
+        item,
+        descriptor.normalizedFunctions,
         context
       );
     }
     for (const item of equipmentRequirementItems) {
-      await syncSingleEquipmentRequirementEffect(actor, item);
+      await syncSingleEquipmentRequirementEffect(
+        actor,
+        item,
+        getLiveIndexedEffects(
+          actor,
+          effectIndex.equipmentRequirementEffectsByItemId,
+          item.id
+        )
+      );
     }
 
-    const stale = actor.effects
-      .filter(effect => {
-        const data = effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY);
-        return data?.abilityItemId && !activeAbilityItemIds.has(data.abilityItemId);
-      });
+    const stale = getLiveStaleIndexedEffects(
+      actor,
+      effectIndex.abilityEffectEntries,
+      activeAbilityItemIds
+    );
     await deleteAbilitySyncEffects(actor, stale, ABILITY_EFFECT_FLAG_KEY);
 
-    const staleItemEffects = actor.effects
-      .filter(effect => {
-        const data = effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY);
-        return data?.itemId && !activeItemFreeSettingsItemIds.has(data.itemId);
-      });
+    const staleItemEffects = getLiveStaleIndexedEffects(
+      actor,
+      effectIndex.itemEffectEntries,
+      activeItemFreeSettingsItemIds
+    );
     await deleteAbilitySyncEffects(actor, staleItemEffects, ITEM_EFFECT_FLAG_KEY);
-    const staleEquipmentRequirementEffects = actor.effects
-      .filter(effect => {
-        const data = effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY);
-        return data?.itemId && !activeEquipmentRequirementItemIds.has(data.itemId);
-      });
+    const staleEquipmentRequirementEffects = getLiveStaleIndexedEffects(
+      actor,
+      effectIndex.equipmentRequirementEffectEntries,
+      activeEquipmentRequirementItemIds
+    );
     await deleteAbilitySyncEffects(
       actor,
       staleEquipmentRequirementEffects,
@@ -600,18 +638,27 @@ export async function syncActorAbilityEffects(actor, context = {}) {
   }
 }
 
-async function syncSingleAbilityEffect(actor, item, context = {}) {
-  const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === item.id);
-  const operationOptions = getAbilityEffectOperationOptions(item);
-  const { changes, pureChangeIndexes } = buildAbilityEffectProjection(actor, item, context);
+async function syncSingleAbilityEffect(actor, item, descriptor, existing = [], context = {}) {
+  const { changes, pureChangeIndexes } = buildAbilityEffectProjection(
+    actor,
+    item,
+    descriptor,
+    context
+  );
   if (!changes.length) {
     await clearManagedBarrierProjectionDepletion(actor, `ability:${item.id}`);
-    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
+    if (existing.length) {
+      await actor.deleteEmbeddedDocuments(
+        "ActiveEffect",
+        existing.map(effect => effect.id),
+        getAbilityEffectOperationOptions(descriptor)
+      );
+    }
     return;
   }
 
   const sourceId = getAbilitySourceId(item);
-  const showIcon = getAbilityEffectShowIcon(actor, item, context);
+  const showIcon = getAbilityEffectShowIcon(actor, item, descriptor, context);
   const signature = JSON.stringify({
     itemId: item.id,
     sourceId,
@@ -623,7 +670,13 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
   await clearManagedBarrierProjectionDepletion(actor, `ability:${item.id}`);
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
-  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
+  if (obsolete.length) {
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      obsolete,
+      getAbilityEffectOperationOptions(descriptor)
+    );
+  }
 
   if (current) {
     const update = {};
@@ -637,7 +690,7 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
         kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
       };
     }
-    const auraCondition = hasAuraConditionFunction(item?.system?.functions ?? []);
+    const auraCondition = descriptor.hasAuraCondition;
     if (current.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
       update[`flags.${SYSTEM_ID}.${ABILITY_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
     }
@@ -647,22 +700,39 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
 
   await actor.createEmbeddedDocuments(
     "ActiveEffect",
-    [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon, pureChangeIndexes)],
-    operationOptions
+    [buildAbilityActiveEffectData(
+      item,
+      changes,
+      signature,
+      sourceId,
+      showIcon,
+      pureChangeIndexes,
+      descriptor.hasAuraCondition
+    )],
+    getAbilityEffectOperationOptions(descriptor)
   );
 }
 
-async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
-  const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === item.id);
-  const operationOptions = getItemFreeSettingsEffectOperationOptions(item);
-  const { changes, pureChangeIndexes } = buildItemFreeSettingsEffectProjection(actor, item, context);
+async function syncSingleItemFreeSettingsEffect(actor, item, descriptor, existing = [], context = {}) {
+  const { changes, pureChangeIndexes } = buildItemFreeSettingsEffectProjection(
+    actor,
+    item,
+    descriptor,
+    context
+  );
   if (!changes.length) {
     await clearManagedBarrierProjectionDepletion(actor, `item:${item.id}`);
-    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
+    if (existing.length) {
+      await actor.deleteEmbeddedDocuments(
+        "ActiveEffect",
+        existing.map(effect => effect.id),
+        getItemFreeSettingsEffectOperationOptions(descriptor)
+      );
+    }
     return;
   }
 
-  const showIcon = getItemFreeSettingsEffectShowIcon(actor, item, context);
+  const showIcon = getItemFreeSettingsEffectShowIcon(actor, item, descriptor, context);
   const signature = JSON.stringify({
     itemId: item.id,
     changes,
@@ -673,7 +743,13 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
   await clearManagedBarrierProjectionDepletion(actor, `item:${item.id}`);
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
-  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
+  if (obsolete.length) {
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      obsolete,
+      getItemFreeSettingsEffectOperationOptions(descriptor)
+    );
+  }
 
   if (current) {
     const update = {};
@@ -687,7 +763,7 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
         kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
       };
     }
-    const auraCondition = hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []);
+    const auraCondition = descriptor.hasAuraCondition;
     if (current.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
       update[`flags.${SYSTEM_ID}.${ITEM_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
     }
@@ -697,15 +773,19 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
 
   await actor.createEmbeddedDocuments(
     "ActiveEffect",
-    [buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon, pureChangeIndexes)],
-    operationOptions
+    [buildItemFreeSettingsActiveEffectData(
+      item,
+      changes,
+      signature,
+      showIcon,
+      pureChangeIndexes,
+      descriptor.hasAuraCondition
+    )],
+    getItemFreeSettingsEffectOperationOptions(descriptor)
   );
 }
 
-async function syncSingleEquipmentRequirementEffect(actor, item) {
-  const existing = actor.effects.filter(effect => (
-    effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY)?.itemId === item.id
-  ));
+async function syncSingleEquipmentRequirementEffect(actor, item, existing = []) {
   const change = buildEquipmentRequirementMovementPointChange(actor, item);
   if (!change) {
     if (existing.length) {
@@ -788,89 +868,91 @@ export async function syncAuraGeneratedEffects() {
 function buildDesiredAuraGeneratedEffects() {
   const desired = new Map();
   const targetActors = new Map();
+  const preparedSourcesByActorUuid = new Map();
   for (const sourceToken of canvas?.tokens?.placeables ?? []) {
     const sourceActor = sourceToken?.actor;
     if (!sourceActor || !["character", "construct"].includes(sourceActor.type)) continue;
-    for (const source of getAuraSourceFunctionSets(sourceActor)) {
-      for (const entry of normalizeAbilityFunctions(source.functions)) {
-        if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
-        if (hasEventReactionCondition(entry.conditions)) continue;
-        const functionData = buildEffectFunctionSnapshot(entry);
-        const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
-        const effectCopyFlag = buildLimitedEffectCopyFlag({
-          sourceActor,
-          sourceItem: source.item,
-          abilityFunction: entry
-        }, {
-          evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
-            fallback: 1,
-            minimum: 1,
-            context: "aura effect copy limit"
-          })
-        });
-        const lateContextual = hasAbilityWeaponContextCondition(entry.conditions);
-        if (lateContextual && !hasPotentialLateAuraChanges(entry)) continue;
-        for (const condition of findAuraDistributionConditions(entry.conditions)) {
-          const targets = getAuraGeneratedTargetTokens(sourceActor, condition, { actorToken: sourceToken });
-          if (!targets.length) continue;
-          for (const targetToken of targets) {
-            const targetActor = targetToken?.actor;
-            if (!targetActor) continue;
-            const changes = lateContextual
-              ? []
-              : prepareAuraGeneratedChanges(sourceActor, getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
-                abilityItemId: source.item.id,
-                actorToken: sourceToken,
-                targetActor,
-                targetToken
-              })).filter(isApplicableGeneratedAuraChange);
-            if (!lateContextual && !changes.length) continue;
-            const key = [
-              source.kind,
-              sourceActor.uuid,
-              source.item.id,
-              entry.id,
-              condition.id
-            ].join(".");
-            // Runtime counters live on the source item. Keeping usesSpent out of
-            // the signature prevents every spent charge from recreating every
-            // projected aura effect on the scene.
-            const limitedUseIds = (functionData?.conditions ?? [])
-              .filter(candidate => candidate?.type === ABILITY_CONDITION_TYPES.limitedUses)
-              .map(candidate => String(candidate.id ?? ""));
-            const projectionContext = lateContextual ? {
-              lateContextual: true,
-              sourceItemUuid: String(source.item?.uuid ?? ""),
-              sourceTokenUuid: getAuraProjectionTokenUuid(sourceToken),
-              targetTokenUuid: getAuraProjectionTokenUuid(targetToken)
-            } : {};
-            const signature = JSON.stringify({
-              key,
-              changes,
-              triggerCost,
-              ...(entry.includeInPureValues ? { advancementPure: true } : {}),
-              ...(effectCopyFlag ? { effectCopyFlag } : {}),
-              limitedUseIds,
-              ...projectionContext
-            });
-            const data = buildAuraGeneratedActiveEffectData(
-              source,
-              sourceActor,
-              entry,
-              condition,
-              changes,
-              key,
-              signature,
-              functionData,
-              triggerCost,
-              effectCopyFlag,
-              projectionContext
-            );
-            const actorDesired = desired.get(targetActor.uuid) ?? new Map();
-            actorDesired.set(key, data);
-            desired.set(targetActor.uuid, actorDesired);
-            targetActors.set(targetActor.uuid, targetActor);
-          }
+    let preparedSources = preparedSourcesByActorUuid.get(sourceActor.uuid);
+    if (!preparedSources) {
+      preparedSources = prepareAuraSourceFunctions(sourceActor);
+      preparedSourcesByActorUuid.set(sourceActor.uuid, preparedSources);
+    }
+    for (const { source, entry, distributionConditions } of preparedSources) {
+      const functionData = buildNormalizedEffectFunctionSnapshot(entry);
+      const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
+      const effectCopyFlag = buildLimitedEffectCopyFlag({
+        sourceActor,
+        sourceItem: source.item,
+        abilityFunction: entry
+      }, {
+        evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
+          fallback: 1,
+          minimum: 1,
+          context: "aura effect copy limit"
+        })
+      });
+      const lateContextual = hasAbilityWeaponContextCondition(entry.conditions);
+      if (lateContextual && !hasPotentialLateAuraChanges(entry)) continue;
+      for (const condition of distributionConditions) {
+        const targets = getAuraGeneratedTargetTokens(sourceActor, condition, { actorToken: sourceToken });
+        if (!targets.length) continue;
+        for (const targetToken of targets) {
+          const targetActor = targetToken?.actor;
+          if (!targetActor) continue;
+          const changes = lateContextual
+            ? []
+            : prepareAuraGeneratedChanges(sourceActor, getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
+              abilityItemId: source.item.id,
+              actorToken: sourceToken,
+              targetActor,
+              targetToken
+            })).filter(isApplicableGeneratedAuraChange);
+          if (!lateContextual && !changes.length) continue;
+          const key = [
+            source.kind,
+            sourceActor.uuid,
+            source.item.id,
+            entry.id,
+            condition.id
+          ].join(".");
+          // Runtime counters live on the source item. Keeping usesSpent out of
+          // the signature prevents every spent charge from recreating every
+          // projected aura effect on the scene.
+          const limitedUseIds = (functionData?.conditions ?? [])
+            .filter(candidate => candidate?.type === ABILITY_CONDITION_TYPES.limitedUses)
+            .map(candidate => String(candidate.id ?? ""));
+          const projectionContext = lateContextual ? {
+            lateContextual: true,
+            sourceItemUuid: String(source.item?.uuid ?? ""),
+            sourceTokenUuid: getAuraProjectionTokenUuid(sourceToken),
+            targetTokenUuid: getAuraProjectionTokenUuid(targetToken)
+          } : {};
+          const signature = JSON.stringify({
+            key,
+            changes,
+            triggerCost,
+            ...(entry.includeInPureValues ? { advancementPure: true } : {}),
+            ...(effectCopyFlag ? { effectCopyFlag } : {}),
+            limitedUseIds,
+            ...projectionContext
+          });
+          const data = buildAuraGeneratedActiveEffectData(
+            source,
+            sourceActor,
+            entry,
+            condition,
+            changes,
+            key,
+            signature,
+            functionData,
+            triggerCost,
+            effectCopyFlag,
+            projectionContext
+          );
+          const actorDesired = desired.get(targetActor.uuid) ?? new Map();
+          actorDesired.set(key, data);
+          desired.set(targetActor.uuid, actorDesired);
+          targetActors.set(targetActor.uuid, targetActor);
         }
       }
     }
@@ -879,6 +961,7 @@ function buildDesiredAuraGeneratedEffects() {
 }
 
 function getAuraSourceFunctionSets(actor) {
+  if (!actorHasPotentialAuraSource(actor)) return [];
   const sources = [];
   for (const item of getActorItemsWithActiveHudModules(actor)) {
     if (item?.type === "ability") {
@@ -890,6 +973,66 @@ function getAuraSourceFunctionSets(actor) {
     }
   }
   return sources;
+}
+
+function prepareAuraSourceFunctions(actor) {
+  const prepared = [];
+  for (const source of getAuraSourceFunctionSets(actor)) {
+    if (!abilityFunctionsMayContainAuraCondition(source.functions)) continue;
+    const descriptor = buildAbilityEffectSourceDescriptor(source.functions);
+    for (const entry of descriptor.passiveEffectFunctions) {
+      const distributionConditions = findAuraDistributionConditions(entry.conditions);
+      if (!distributionConditions.length) continue;
+      prepared.push({ source, entry, distributionConditions });
+    }
+  }
+  return prepared;
+}
+
+function actorHasPotentialAuraSource(actor) {
+  const abilityItems = actor?.itemTypes?.ability
+    ?? actor?.items?.filter?.(item => item?.type === "ability")
+    ?? [];
+  if (abilityItems.some(item => abilityFunctionsMayContainAuraCondition(item.system?.functions))) {
+    return true;
+  }
+
+  const gearItems = actor?.itemTypes?.gear
+    ?? actor?.items?.filter?.(item => item?.type === "gear")
+    ?? [];
+  for (const item of gearItems) {
+    if (abilityFunctionsMayContainAuraCondition(item.system?.functions?.freeSettings?.entries)) {
+      return true;
+    }
+  }
+
+  const actorItems = Array.isArray(actor?.items?.contents)
+    ? actor.items.contents
+    : Array.from(actor?.items ?? []);
+  for (const item of actorItems) {
+    const moduleSlots = item.system?.functions?.weapon?.moduleSlots;
+    if (!Array.isArray(moduleSlots)) continue;
+    for (const slot of moduleSlots) {
+      const moduleItem = getPotentialAuraModuleItem(slot);
+      if (abilityFunctionsMayContainAuraCondition(moduleItem?.system?.functions?.freeSettings?.entries)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function getPotentialAuraModuleItem(slot = {}) {
+  if (slot?.itemData?.system) return slot.itemData;
+  const uuid = String(slot?.itemUuid ?? "").trim();
+  if (!uuid) return null;
+  try {
+    return globalThis.fromUuidSync?.(uuid)
+      ?? globalThis.foundry?.utils?.fromUuidSync?.(uuid)
+      ?? null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function applyAuraEffectCopyLimits(desired = new Map(), targetActors = new Map()) {
@@ -1119,8 +1262,15 @@ function isApplicableGeneratedAuraChange(change = {}) {
     && String(change?.value ?? "") !== "";
 }
 
-function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon, pureChangeIndexes = []) {
-  const auraCondition = hasAuraConditionFunction(item?.system?.functions ?? []);
+function buildAbilityActiveEffectData(
+  item,
+  changes,
+  signature,
+  sourceId,
+  showIcon,
+  pureChangeIndexes = [],
+  auraCondition = false
+) {
   const advancementPureFlag = buildAdvancementPureEffectFlag(pureChangeIndexes);
   return {
     type: "base",
@@ -1151,8 +1301,14 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIc
   };
 }
 
-function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon, pureChangeIndexes = []) {
-  const auraCondition = hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []);
+function buildItemFreeSettingsActiveEffectData(
+  item,
+  changes,
+  signature,
+  showIcon,
+  pureChangeIndexes = [],
+  auraCondition = false
+) {
   const advancementPureFlag = buildAdvancementPureEffectFlag(pureChangeIndexes);
   return {
     type: "base",
@@ -1207,39 +1363,35 @@ function buildEquipmentRequirementActiveEffectData(item, changes, signature) {
   };
 }
 
-function buildAbilityEffectProjection(actor, item, context = {}) {
-  return getAbilityEffectProjectionFromFunctions(
+function buildAbilityEffectProjection(actor, item, descriptor, context = {}) {
+  return getAbilityEffectProjectionFromNormalizedFunctions(
     actor,
-    withoutTimedTriggerCostFunctions(item?.system?.functions ?? []),
+    descriptor.projectionFunctions,
     { ...context, abilityItemId: item?.id ?? "" }
   );
 }
 
-function buildItemFreeSettingsEffectProjection(actor, item, context = {}) {
-  return getAbilityEffectProjectionFromFunctions(actor, withoutTimedTriggerCostFunctions(
-    item?.system?.functions?.freeSettings?.entries ?? []
-  ), {
+function buildItemFreeSettingsEffectProjection(actor, item, descriptor, context = {}) {
+  return getAbilityEffectProjectionFromNormalizedFunctions(actor, descriptor.projectionFunctions, {
     ...context,
     abilityItemId: item?.id ?? ""
   });
 }
 
-function getAbilityEffectShowIcon(actor, item, context = {}) {
-  return hasActiveRuntimeAbilityState(actor, item, context)
+function getAbilityEffectShowIcon(actor, item, descriptor, context = {}) {
+  return hasActiveRuntimeAbilityState(actor, item, descriptor, context)
     ? ACTIVE_EFFECT_SHOW_ICON_ALWAYS
     : ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL;
 }
 
-function getItemFreeSettingsEffectShowIcon(actor, item, context = {}) {
-  return hasActiveRuntimeItemFreeSettingsState(actor, item, context)
+function getItemFreeSettingsEffectShowIcon(actor, item, descriptor, context = {}) {
+  return hasActiveRuntimeItemFreeSettingsState(actor, item, descriptor, context)
     ? ACTIVE_EFFECT_SHOW_ICON_ALWAYS
     : ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL;
 }
 
-function hasActiveRuntimeAbilityState(actor, item, context = {}) {
-  return withoutTimedTriggerCostFunctions(item?.system?.functions ?? [])
-    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .filter(entry => !hasEventReactionCondition(entry.conditions))
+function hasActiveRuntimeAbilityState(actor, item, descriptor, context = {}) {
+  return descriptor.passiveEffectFunctions
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
@@ -1253,10 +1405,8 @@ function hasActiveRuntimeAbilityState(actor, item, context = {}) {
     });
 }
 
-function hasActiveRuntimeItemFreeSettingsState(actor, item, context = {}) {
-  return withoutTimedTriggerCostFunctions(item?.system?.functions?.freeSettings?.entries ?? [])
-    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .filter(entry => !hasEventReactionCondition(entry.conditions))
+function hasActiveRuntimeItemFreeSettingsState(actor, item, descriptor, context = {}) {
+  return descriptor.passiveEffectFunctions
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
@@ -1284,29 +1434,16 @@ function hasRuntimeConditions(conditions = []) {
   ));
 }
 
-function getAbilityEffectOperationOptions(item) {
-  return hasAuraConditionFunction(item?.system?.functions ?? []) ? { animate: false } : {};
+function getAbilityEffectOperationOptions(descriptor) {
+  return descriptor.hasAuraCondition ? { animate: false } : {};
 }
 
-function getItemFreeSettingsEffectOperationOptions(item) {
-  return hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []) ? { animate: false } : {};
-}
-
-function hasAuraConditionFunction(functions = []) {
-  return normalizeAbilityFunctions(functions)
-    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .filter(entry => !hasEventReactionCondition(entry.conditions))
-    .some(entry => (entry.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.aura));
+function getItemFreeSettingsEffectOperationOptions(descriptor) {
+  return descriptor.hasAuraCondition ? { animate: false } : {};
 }
 
 function hasAuraPresenceConditionFunction(functions = []) {
-  return normalizeAbilityFunctions(functions)
-    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .filter(entry => !hasEventReactionCondition(entry.conditions))
-    .some(entry => (entry.conditions ?? []).some(condition => (
-      condition?.type === ABILITY_CONDITION_TYPES.aura
-      && condition?.auraMode !== "applyToTargets"
-    )));
+  return buildAbilityEffectSourceDescriptor(functions).hasAuraPresenceCondition;
 }
 
 async function deleteAbilitySyncEffects(actor, effects = [], flagKey = "") {
