@@ -17,6 +17,7 @@ import {
   getUniqueLimbSets,
   normalizeTraumaSettings
 } from "../settings/traumas.mjs";
+import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
 import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageBarrierEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 import { buildStealthAttackBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 
@@ -474,6 +475,7 @@ function buildEffectKeyTokens() {
       path: `system.needs.${entry.key}.bonus`,
       group: "Потребности"
     })),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
     ...getProficiencySettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

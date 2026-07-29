@@ -15,6 +15,7 @@ export function buildFirstAidApplicationCardContext({
   healing = 0,
   selectedLimbs = [],
   appliedLimbs = [],
+  appliedNeeds = null,
   appliedDurationSeconds = 0,
   appliedWithdrawalDurationSeconds = 0,
   hasEffectRemoval = false,
@@ -76,10 +77,19 @@ export function buildFirstAidApplicationCardContext({
     }));
   }
 
+  const hasAppliedNeedResults = Array.isArray(appliedNeeds);
+  const appliedNeedValues = new Map((hasAppliedNeedResults ? appliedNeeds : [])
+    .map(entry => [
+      String(entry?.key ?? entry?.needKey ?? "").trim(),
+      toInteger(entry?.appliedDelta)
+    ])
+    .filter(([key]) => key));
   for (const entry of normalizeNeedEntries(firstAid.needs)) {
-    const applied = effectMultiplier > 0
-      ? scaleFirstAidSignedValue(entry.value, effectMultiplier)
-      : 0;
+    const applied = hasAppliedNeedResults
+      ? (appliedNeedValues.get(entry.key) ?? 0)
+      : effectMultiplier > 0
+        ? scaleFirstAidSignedValue(entry.value, effectMultiplier)
+        : 0;
     mainEffects.push(createComparisonRow({
       label: `${resolvedLabels.needs}: ${getMapLabel(needLabels, entry.key)}`,
       configured: formatSignedNumber(entry.value),

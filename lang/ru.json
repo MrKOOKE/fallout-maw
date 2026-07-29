@@ -1932,6 +1932,8 @@
       "FirstAidOutgoingEffectiveness": "Исходящая эффективность препаратов",
       "FirstAidDuration": "Длительность препаратов",
       "FirstAidWithdrawalResistance": "Сопротивление отдаче первой помощи, %",
+      "NeedGrowthResistance": "Сопротивление росту ({need})",
+      "NeedSatisfactionEffectiveness": "Эффективность утоления ({need})",
       "StealthAttackGroup": "Атака из скрытности",
       "StealthAttackAccuracy": "Атака из скрытности: точность",
       "StealthAttackCriticalChance": "Атака из скрытности: шанс на крит",

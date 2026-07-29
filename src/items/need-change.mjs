@@ -1,4 +1,4 @@
-import { requestDamageApplication, requestDamageApplications, requestFirstAidEffect, requestFirstAidNeedChanges } from "../combat/damage-hub.mjs";
+import { requestDamageApplication, requestDamageApplications, requestFirstAidEffect, requestNeedChanges } from "../combat/damage-hub.mjs";
 import { commitInventoryItemConsumption } from "../inventory/consume.mjs";
 import { addOrganismDevelopment } from "../races/organism-development.mjs";
 import { getNeedChangeChargesData, getNeedChangeFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
@@ -44,7 +44,14 @@ export async function useNeedChangeItem({
   if (!needs.length && !damages.length && !organismDevelopment.length && healthRecovery <= 0 && !hasTimedEffect) return false;
 
   if (needs.length) {
-    const results = await requestFirstAidNeedChanges({ actor: targetActor, needs });
+    const results = await requestNeedChanges({
+      actor: targetActor,
+      needs,
+      context: {
+        kind: "needChangeItem",
+        itemUuid: item.uuid
+      }
+    });
     if (!results.length) return false;
   }
 

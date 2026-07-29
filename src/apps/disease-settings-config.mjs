@@ -8,6 +8,7 @@ import {
   getSkillSettings,
   setDiseaseSettings
 } from "../settings/accessors.mjs";
+import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
 import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageBarrierEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildStealthAttackBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -291,6 +292,7 @@ function buildEffectKeyTokens() {
     buildInitiativeBonusEffectKeyToken(),
     ...buildResourceBonusEffectKeyTokens("Ресурсы"),
     ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
     ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}`, group: "Владения" })),
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildDamageBarrierEffectKeyTokens(),

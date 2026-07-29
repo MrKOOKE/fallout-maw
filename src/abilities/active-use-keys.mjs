@@ -31,6 +31,7 @@ import {
   getDamageBarrierEffectKey
 } from "../combat/damage-barriers.mjs";
 import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
+import { isNeedChangeModifierEffectKey } from "../needs/need-change-effect-keys.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -282,6 +283,7 @@ export function isActiveUseEffectKey(key = "") {
   if (!path) return false;
   const sourcePath = getOriginalEffectKeyFromReverse(path) || path;
   return STATIC_ACTIVE_USE_KEYS.has(sourcePath)
+    || isNeedChangeModifierEffectKey(sourcePath)
     || SKILL_CHANGE_KEY_PATTERN.test(sourcePath)
     || isSkillCheckActionEffectKey(sourcePath)
     || PROFICIENCY_BONUS_KEY_PATTERN.test(sourcePath)

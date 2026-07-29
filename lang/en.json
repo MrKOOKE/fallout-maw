@@ -1872,6 +1872,8 @@
       "FirstAidOutgoingEffectiveness": "Outgoing medication effectiveness",
       "FirstAidDuration": "Medication duration",
       "FirstAidWithdrawalResistance": "First-aid withdrawal resistance, %",
+      "NeedGrowthResistance": "Growth resistance ({need})",
+      "NeedSatisfactionEffectiveness": "Satisfaction effectiveness ({need})",
       "StealthAttackGroup": "Stealth attack",
       "StealthAttackAccuracy": "Stealth attack: accuracy",
       "StealthAttackCriticalChance": "Stealth attack: critical chance",

@@ -64,6 +64,7 @@ import {
 } from "../rolls/skill-check-action-effects.mjs";
 import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
 import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
+import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
 
 export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
@@ -109,6 +110,9 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
       path: `system.needs.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Needs")
     })),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), {
+      group: game.i18n.localize("FALLOUTMAW.Common.Needs")
+    }),
     ...getProficiencySettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

@@ -124,6 +124,71 @@ test("first-aid card uses the same rounded effect values as application runtime"
   ]);
 });
 
+test("first-aid card reports the need value actually applied after recipient modifiers", () => {
+  const context = buildFirstAidApplicationCardContext({
+    firstAid: {
+      healing: 0,
+      durationSeconds: 0,
+      changes: [],
+      needs: [{ needKey: "addiction", value: 20 }],
+      withdrawal: [],
+      removeEffects: []
+    },
+    scaling: {
+      effect: 1,
+      healing: 1,
+      withdrawalEffect: 0,
+      withdrawalHealing: 0
+    },
+    appliedNeeds: [{
+      needKey: "addiction",
+      requestedDelta: 20,
+      scaledDelta: 10,
+      appliedDelta: 10
+    }],
+    needLabels: new Map([["addiction", "Зависимость"]]),
+    labels: {
+      needs: "Потребности",
+      zeroDuration: "0 сек."
+    }
+  });
+
+  assert.deepEqual(context.mainEffects, [{
+    label: "Потребности: Зависимость",
+    configured: "+20",
+    applied: "+10",
+    appliedZero: false
+  }]);
+});
+
+test("first-aid card reports zero when a configured need change produced no runtime result", () => {
+  const context = buildFirstAidApplicationCardContext({
+    firstAid: {
+      healing: 0,
+      durationSeconds: 0,
+      changes: [],
+      needs: [{ needKey: "addiction", value: 20 }],
+      withdrawal: [],
+      removeEffects: []
+    },
+    scaling: {
+      effect: 1,
+      healing: 1,
+      withdrawalEffect: 0,
+      withdrawalHealing: 0
+    },
+    appliedNeeds: [],
+    needLabels: new Map([["addiction", "Зависимость"]]),
+    labels: {
+      needs: "Потребности",
+      zeroDuration: "0 сек."
+    }
+  });
+
+  assert.equal(context.mainEffects[0].applied, "0");
+  assert.equal(context.mainEffects[0].appliedZero, true);
+});
+
 test("zero duration reports timed changes as unapplied even with nonzero effectiveness", () => {
   const context = buildFirstAidApplicationCardContext({
     firstAid: {

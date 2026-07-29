@@ -13,6 +13,8 @@ import {
   isTimeMechanicsForced
 } from "../time/rest-context.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { resolveActorNeedChangeModifiers } from "./need-change-runtime.mjs";
+import { scaleNeedChangeExact } from "./need-change-scaling.mjs";
 const NEED_EFFECT_FLAG_KEY = "needEffect";
 const NEED_ACCUMULATION_REMAINDER_FLAG_KEY = "needAccumulationRemainder";
 const DISEASE_FLAG_KEY = "disease";
@@ -109,10 +111,19 @@ async function processActorNeedAccumulation(actor, elapsedSeconds, { restMode = 
   const remainders = getNeedAccumulationRemainders(actor);
   const initialRemainders = JSON.stringify(remainders);
   const effectRates = collectNeedEffectRates(effects);
-  for (const need of getActorNeedSettings(actor)) {
+  const needSettings = getActorNeedSettings(actor);
+  const modifierMap = resolveActorNeedChangeModifiers(actor, needSettings.map(need => need.key), {
+    kind: "needWorldTime"
+  });
+  for (const need of needSettings) {
     const basePerHour = Number(need.settings?.accumulation?.perHour) || 0;
-    const perHour = applyRestTimeMultiplier(basePerHour, restMode)
-      + (effectRates.get(need.key) ?? []).reduce((total, rate) => total + applyRestTimeMultiplier(rate, restMode), 0);
+    const rates = [basePerHour, ...(effectRates.get(need.key) ?? [])];
+    const perHour = rates.reduce((total, rate) => (
+      total + scaleNeedChangeExact(
+        applyRestTimeMultiplier(rate, restMode),
+        modifierMap.get(need.key)
+      )
+    ), 0);
     if (!perHour) continue;
     const resource = actor.system?.needs?.[need.key];
     if (!resource) continue;

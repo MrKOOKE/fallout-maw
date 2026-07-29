@@ -23,6 +23,7 @@ import {
 } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { LOCKED_FEATURES_CATEGORY_ID } from "../settings/abilities.mjs";
+import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
 import {
   createDefaultNaturalItemSetEntry,
   createDefaultNaturalFeatureEntry,
@@ -1132,6 +1133,7 @@ function buildEffectKeyTokens() {
     buildInitiativeBonusEffectKeyToken(),
     ...buildResourceBonusEffectKeyTokens("Ресурсы"),
     ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
+    ...buildNeedChangeModifierEffectKeyTokens(getNeedSettings(), { group: "Потребности" }),
     ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: "Владения" })),
     ...buildDamageMitigationEffectKeyTokens(),
     ...buildDamageBarrierEffectKeyTokens(),

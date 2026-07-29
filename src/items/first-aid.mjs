@@ -2,9 +2,9 @@
   getActorHealingModifierPercent,
   requestDamageApplication,
   requestFirstAidEffect,
-  requestFirstAidNeedChanges,
   requestFirstAidRemoveEffects,
-  requestFirstAidWithdrawalEffect
+  requestFirstAidWithdrawalEffect,
+  requestNeedChanges
 } from "../combat/damage-hub.mjs";
 import {
   canSpendCombatActionPoints,
@@ -284,6 +284,7 @@ export async function useFirstAidItem({
       selectedLimbs,
       healing: 0,
       appliedLimbs: [],
+      appliedNeeds: [],
       appliedDurationSeconds: 0,
       appliedWithdrawalDurationSeconds,
       hasEffectRemoval: false,
@@ -323,7 +324,19 @@ export async function useFirstAidItem({
     });
   }
 
-  if (needs.length) await requestFirstAidNeedChanges({ actor: targetActor, needs });
+  const appliedNeeds = needs.length
+    ? await requestNeedChanges({
+      actor: targetActor,
+      needs,
+      context: {
+        kind: "firstAidNeedChange",
+        chanceOperationId: firstAidOperationId,
+        limitedUseOperationId: firstAidOperationId,
+        itemUuid: item.uuid,
+        sourceActorUuid: sourceActor.uuid
+      }
+    })
+    : [];
 
   if (hasEffectRemoval) {
     await requestFirstAidRemoveEffects({
@@ -378,6 +391,7 @@ export async function useFirstAidItem({
     selectedLimbs,
     healing,
     appliedLimbs: limbs,
+    appliedNeeds,
     appliedDurationSeconds,
     appliedWithdrawalDurationSeconds,
     hasEffectRemoval,
@@ -1079,6 +1093,7 @@ async function postFirstAidApplicationChat({
   selectedLimbs = [],
   healing = 0,
   appliedLimbs = [],
+  appliedNeeds = null,
   appliedDurationSeconds = 0,
   appliedWithdrawalDurationSeconds = 0,
   hasEffectRemoval = false,
@@ -1113,6 +1128,7 @@ async function postFirstAidApplicationChat({
       healing,
       selectedLimbs,
       appliedLimbs,
+      appliedNeeds,
       appliedDurationSeconds,
       appliedWithdrawalDurationSeconds,
       hasEffectRemoval,

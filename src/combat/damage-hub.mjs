@@ -97,6 +97,7 @@ import {
   activeEffectChangesEqual,
   canonicalizeActiveEffectChanges
 } from "../utils/active-effect-source.mjs";
+import { applyActorNeedChanges } from "../needs/need-change-runtime.mjs";
 export {
   getResourceBlockState,
   getResourceLimitState
@@ -604,34 +605,42 @@ export async function requestFirstAidWithdrawalEffect({
   });
 }
 
-export async function requestFirstAidNeedChanges({
+export async function requestNeedChanges({
   actor = null,
   actorUuid = "",
-  needs = []
+  needs = [],
+  context = {}
 } = {}) {
   const resolvedActor = actor ?? await fromUuid(actorUuid);
   if (!resolvedActor) return [];
 
-  const request = normalizeFirstAidNeedChangesRequest({
+  const request = normalizeNeedChangesRequest({
     actorUuid: resolvedActor.uuid,
-    needs
+    needs,
+    context
   });
   if (!request.needs.length) return [];
 
   if (canApplyDamageLocally(resolvedActor)) {
-    return runDamageHubOperation(() => applyFirstAidNeedChanges(resolvedActor, request.needs));
+    return runDamageHubOperation(() => applyNeedChanges(resolvedActor, request.needs, {
+      context: request.context
+    }));
   }
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("No active GM is available to apply first aid need changes.");
+    ui.notifications.warn("No active GM is available to apply need changes.");
     return [];
   }
 
   return requestDamageSocketActionFromGM(gm, {
-    action: "applyFirstAidNeedChanges",
+    action: "applyNeedChanges",
     request
   });
+}
+
+export async function requestFirstAidNeedChanges(options = {}) {
+  return requestNeedChanges(options);
 }
 
 export async function requestFirstAidRemoveEffects({
@@ -4640,7 +4649,7 @@ async function applyStoredFirstAidWithdrawalOnDelete(effect) {
   await createFirstAidWithdrawalEffect(actor, payload);
 }
 
-function normalizeFirstAidNeedChangesRequest(request = {}) {
+function normalizeNeedChangesRequest(request = {}) {
   const source = Array.isArray(request.needs) ? request.needs : Object.values(request.needs ?? {});
   return {
     actorUuid: String(request.actorUuid ?? "").trim(),
@@ -4649,7 +4658,21 @@ function normalizeFirstAidNeedChangesRequest(request = {}) {
         key: String(entry?.key ?? entry?.needKey ?? "").trim(),
         value: toInteger(entry?.value)
       }))
-      .filter(entry => entry.key && entry.value)
+      .filter(entry => entry.key && entry.value),
+    context: normalizeNeedChangeContext(request.context)
+  };
+}
+
+function normalizeNeedChangeContext(context = {}) {
+  const source = context && typeof context === "object" ? context : {};
+  return {
+    kind: String(source.kind ?? "needChange"),
+    chanceOperationId: String(source.chanceOperationId ?? ""),
+    limitedUseOperationId: String(source.limitedUseOperationId ?? ""),
+    operationId: String(source.operationId ?? ""),
+    rootId: String(source.rootId ?? ""),
+    itemUuid: String(source.itemUuid ?? ""),
+    sourceActorUuid: String(source.sourceActorUuid ?? "")
   };
 }
 
@@ -4671,20 +4694,9 @@ function normalizeFirstAidRemoveEffectsRequest(request = {}) {
   };
 }
 
-async function applyFirstAidNeedChanges(actor, needs = []) {
+async function applyNeedChanges(actor, needs = [], { context = {} } = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return [];
-  const updates = {};
-  for (const entry of needs) {
-    const need = actor.system?.needs?.[entry.key];
-    if (!need) continue;
-    const min = Math.max(0, toInteger(need.min));
-    const max = Math.max(min, toInteger(need.max));
-    const next = Math.min(max, Math.max(min, toInteger(need.value) + toInteger(entry.value)));
-    updates[`system.needs.${entry.key}.value`] = next;
-  }
-  if (!Object.keys(updates).length) return [];
-  await actor.update(updates);
-  return Object.entries(updates).map(([path, value]) => ({ path, value }));
+  return applyActorNeedChanges(actor, needs, { context });
 }
 
 async function applyFirstAidRemoveEffects(actor, request = {}) {
@@ -4753,14 +4765,20 @@ async function applyNeedIncrease(actor, { amount = 0, settings = {} } = {}) {
   const delta = roundDamageAmount(Math.max(0, Number(amount) || 0) * (Math.max(0, Number(settings.percent) || 0) / 100));
   if (!delta) return null;
 
-  const min = Math.max(0, toInteger(need.min));
-  const max = Math.max(min, toInteger(need.max));
-  const current = Math.min(Math.max(toInteger(need.value), min), max);
-  const next = Math.min(max, current + delta);
-  if (next === current) return null;
-
-  await actor.update({ [`system.needs.${needKey}.value`]: next });
-  return { needKey, delta: next - current, value: next };
+  const [result] = await applyActorNeedChanges(actor, [{ key: needKey, value: delta }], {
+    context: {
+      kind: "damageNeedIncrease",
+      source: settings
+    }
+  });
+  if (!result) return null;
+  return {
+    needKey,
+    delta: result.appliedDelta,
+    value: result.value,
+    requestedDelta: result.requestedDelta,
+    scaledDelta: result.scaledDelta
+  };
 }
 
 async function handleDamageSocketMessage(payload = {}) {
@@ -4859,19 +4877,23 @@ async function handleDamageSocketMessage(payload = {}) {
     });
     return;
   }
-  if (payload.action === "applyFirstAidNeedChanges") {
+  if (payload.action === "applyNeedChanges" || payload.action === "applyFirstAidNeedChanges") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     let ok = true;
     let result = [];
     let error = "";
     try {
-      const request = normalizeFirstAidNeedChangesRequest(payload.request);
+      const request = normalizeNeedChangesRequest(payload.request);
       const actor = await fromUuid(request.actorUuid);
-      if (actor) result = await runDamageHubOperation(() => applyFirstAidNeedChanges(actor, request.needs));
+      if (actor) {
+        result = await runDamageHubOperation(() => applyNeedChanges(actor, request.needs, {
+          context: request.context
+        }));
+      }
     } catch (caught) {
       ok = false;
       error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
-      console.error("Fallout MaW | First aid need socket request failed", caught);
+      console.error("Fallout MaW | Need change socket request failed", caught);
     }
     respondDamageHubSocketAction(payload, { ok, error, result: ok ? result : [] });
     return;
