@@ -153,6 +153,7 @@ import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-e
 import { isActorInActiveCombat } from "./combat-membership.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
+import { createLatestFrameScheduler } from "../canvas/latest-frame-scheduler.mjs";
 import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
@@ -186,6 +187,10 @@ import {
   applyAttackTrialOutcomeConsequences,
   resolveAttackTrialOutcomeCriticalDamage
 } from "./attack-trial-consequences.mjs";
+import {
+  getBurstSampleCount,
+  getEvenBurstSampleOffset
+} from "./burst-sampling-policy.mjs";
 
 export { canTokenPhysicallySeeTarget } from "../canvas/physical-los.mjs";
 
@@ -203,8 +208,6 @@ const PREVIEW_ANGLE_EPSILON = 0.002;
 const BURST_PREVIEW_STABILIZE_MS = 120;
 const BURST_PREVIEW_FORCE_ANGLE_DELTA = 0.012;
 const BURST_PREVIEW_FORCE_DISTANCE_DELTA = 24;
-const BURST_DISTRIBUTION_SAMPLE_MIN = 64;
-const BURST_DISTRIBUTION_SAMPLE_MULTIPLIER = 12;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
@@ -1513,6 +1516,9 @@ class CommandedWeaponAttackController {
     this.lastPreviewBroadcastAt = 0;
     this.processing = false;
     this.destroyed = false;
+    this.previewFrameScheduler = createLatestFrameScheduler(() => {
+      if (!this.processing && !this.destroyed) this.refresh();
+    });
     this.onCancelled = typeof onCancel === "function" ? onCancel : null;
     this.onBeforeExecute = typeof onBeforeExecute === "function" ? onBeforeExecute : null;
     this.onComplete = typeof onComplete === "function" ? onComplete : null;
@@ -1594,6 +1600,7 @@ class CommandedWeaponAttackController {
     if (this.destroyed) return;
     this.finishTargetSelection();
     this.destroyed = true;
+    this.previewFrameScheduler.destroy();
     canvas.stage.off("mousemove", this.events.move);
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.removeEventListener("keydown", this.events.keyDown, { capture: true });
@@ -1614,7 +1621,7 @@ class CommandedWeaponAttackController {
     this.updateRightClickCancelCandidate(event);
     event.stopPropagation();
     this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
-    this.refresh();
+    this.previewFrameScheduler.request();
   }
 
   onTick() {
@@ -1709,7 +1716,8 @@ class CommandedWeaponAttackController {
   updatePointerFromClientEvent(event) {
     if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return;
     this.pointer = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-    this.refresh();
+    this.previewFrameScheduler.request();
+    this.previewFrameScheduler.flush();
   }
 
   lockEntry(entry) {
@@ -1857,7 +1865,13 @@ class CommandedWeaponAttackController {
       attackCount,
       getWeaponProjectileCountPerAttack(entry.weapon, entry.weaponFunctionId)
     );
-    return buildBurstTargetRanges(entry.token, entry.geometry, entry.targets, projectileCount);
+    return buildBurstTargetRanges(
+      entry.token,
+      entry.geometry,
+      entry.targets,
+      projectileCount,
+      { purpose: "preview" }
+    );
   }
 
   getEntryFocusedTarget(entry) {
@@ -3050,6 +3064,15 @@ class WeaponAttackController {
     this.destroyed = false;
     this.finishRequested = false;
     this.previewSuppressed = false;
+    this.previewFrameScheduler = createLatestFrameScheduler(() => {
+      if (
+        !this.processing
+        && !this.destroyed
+        && !this.isInteractionLocked()
+        && this.pushStrengthMaximum <= 0
+        && !(this.targetedAction && ["limb", "direction"].includes(this.aimedMode))
+      ) this.refresh();
+    });
     this.meleeAction = MELEE_ACTION_KEYS.has(actionKey);
     this.aimedShot = isAimedShotAction(weapon, actionKey, this.weaponFunctionId);
     this.ignoreAimedObstructions = this.aimedShot
@@ -4161,6 +4184,7 @@ class WeaponAttackController {
     if (this.destroyed) return;
     this.finishTargetSelection();
     this.destroyed = true;
+    this.previewFrameScheduler.destroy();
     this.clearWeaponNoisePreview();
     void this.abortSkillCheckCollectors();
     if (typeof this.attackModifier?.onDestroy === "function") {
@@ -4310,7 +4334,7 @@ class WeaponAttackController {
       return;
     }
     this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
-    this.refresh();
+    this.previewFrameScheduler.request();
   }
 
   onPointerDown(event) {
@@ -4334,7 +4358,6 @@ class WeaponAttackController {
     event.stopImmediatePropagation?.();
     event.cancelBubble = true;
     if (event.button === 0 && this.pushStrengthMaximum > 0) return false;
-    this.updatePointerFromClientEvent(event);
     return this.onConfirm(event);
   }
 
@@ -4506,7 +4529,7 @@ class WeaponAttackController {
     if (isWhirlwindAttackModifier(this.attackModifier)) return this.performWhirlwindAttack();
     if (this.actionKey === PUSH_ACTION_KEY) return this.preparePushAttack();
     if (this.volleyAction) return this.performVolleyAttack();
-    this.refresh(true);
+    this.refresh(true, { skipBurstDistribution: true });
     const actionContext = this.createWeaponActionContext();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
@@ -4935,7 +4958,7 @@ class WeaponAttackController {
   async performBurstAttack({ attackCount = 1, actionContext = null } = {}) {
     this.beginProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
-    this.refresh(true);
+    this.refresh(true, { skipBurstDistribution: true });
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
     const totalAttackCount = duplicatePlan.totalAttackCount;
 
@@ -4960,8 +4983,28 @@ class WeaponAttackController {
       totalAttackCount,
       getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId)
     );
-    const burstRanges = this.getBurstTargetRanges(this.targets);
-    const primaryShots = buildBurstPrimaryShotsForRanges(this.token, this.geometry, projectileCount, this.targets, burstRanges);
+    const exactDistribution = getBurstTargetHitDistribution(
+      this.token,
+      this.geometry,
+      this.targets,
+      projectileCount,
+      { purpose: "resolution" }
+    );
+    const burstRanges = buildBurstTargetRanges(
+      this.token,
+      this.geometry,
+      this.targets,
+      projectileCount,
+      { purpose: "resolution", distribution: exactDistribution }
+    );
+    const primaryShots = buildBurstPrimaryShotsForRanges(
+      this.token,
+      this.geometry,
+      projectileCount,
+      this.targets,
+      burstRanges,
+      { distribution: exactDistribution }
+    );
     const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, projectileCount, { primaryShots });
     let attempted = false;
 
@@ -6467,7 +6510,7 @@ class WeaponAttackController {
     return requests;
   }
 
-  refresh(forceBroadcast = false) {
+  refresh(forceBroadcast = false, { skipBurstDistribution = false } = {}) {
     if (this.destroyed) return;
     if (this.previewSuppressed) {
       this.shape.clear();
@@ -6494,7 +6537,10 @@ class WeaponAttackController {
       hasTargets: this.targets.length > 0
     });
     this.drawMeleeDirectionHoverPreview();
-    const markerPreview = this.getTargetMarkerPreview(forceBroadcast || this.processing);
+    const markerPreview = this.getTargetMarkerPreview(
+      forceBroadcast || this.processing,
+      { skipBurstDistribution }
+    );
     this.drawTargetMarkersForPreview(markerPreview, {
       force: forceBroadcast || this.processing,
       time: performance.now()
@@ -6632,7 +6678,13 @@ class WeaponAttackController {
     return this.selectedTarget ?? this.hoveredTarget ?? this.trajectoryAimTarget;
   }
 
-  getTargetMarkerPreview(force = false) {
+  getTargetMarkerPreview(force = false, { skipBurstDistribution = false } = {}) {
+    if (skipBurstDistribution) {
+      return {
+        targets: this.targets,
+        burstRanges: this.burstTargetPreview?.burstRanges ?? new Map()
+      };
+    }
     const burstRanges = this.getBurstTargetRanges(this.targets);
     if (!this.shouldStabilizeBurstTargetPreview()) return {
       targets: this.targets,
@@ -6714,7 +6766,7 @@ class WeaponAttackController {
     this.burstPreviewStabilizeTimeout = window.setTimeout(() => {
       this.burstPreviewStabilizeTimeout = null;
       if (activeAttack !== this || this.processing || !this.pointer) return;
-      this.refresh();
+      this.previewFrameScheduler.request();
     }, BURST_PREVIEW_STABILIZE_MS + 16);
   }
 
@@ -6764,13 +6816,26 @@ class WeaponAttackController {
       attackCount,
       getWeaponProjectileCountPerAttack(this.weapon, this.weaponFunctionId)
     );
-    return buildBurstTargetRanges(this.token, this.geometry, targets, projectileCount);
+    return buildBurstTargetRanges(
+      this.token,
+      this.geometry,
+      targets,
+      projectileCount,
+      { purpose: "preview" }
+    );
   }
 
   updatePointerFromClientEvent(event) {
     if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return;
     this.pointer = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-    if (!this.processing && this.pushStrengthMaximum <= 0 && !(this.targetedAction && ["limb", "direction"].includes(this.aimedMode))) this.refresh();
+    if (
+      !this.processing
+      && this.pushStrengthMaximum <= 0
+      && !(this.targetedAction && ["limb", "direction"].includes(this.aimedMode))
+    ) {
+      this.previewFrameScheduler.request();
+      this.previewFrameScheduler.flush();
+    }
   }
 
   unlockAimedTarget() {
@@ -11771,8 +11836,22 @@ function getNearestAttackChanceTarget(attackerToken, geometry, targets = []) {
   return getTrajectoryTargetEntries(attackerToken, trajectory).at(0)?.target ?? null;
 }
 
-function buildBurstTargetRanges(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
-  return new Map(buildBurstTargetEntries(attackerToken, geometry, targets, attackCount, { primaryShots })
+function buildBurstTargetRanges(
+  attackerToken,
+  geometry,
+  targets = [],
+  attackCount = 1,
+  {
+    primaryShots = null,
+    purpose = "resolution",
+    distribution = null
+  } = {}
+) {
+  return new Map(buildBurstTargetEntries(attackerToken, geometry, targets, attackCount, {
+    primaryShots,
+    purpose,
+    distribution
+  })
     .map(entry => [entry.target, entry.range]));
 }
 
@@ -11786,10 +11865,31 @@ function buildBurstBulletAssignments(attackerToken, geometry, targets = [], atta
   });
 }
 
-function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
+function buildBurstTargetEntries(
+  attackerToken,
+  geometry,
+  targets = [],
+  attackCount = 1,
+  {
+    primaryShots = null,
+    purpose = "resolution",
+    distribution = null
+  } = {}
+) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   if (!geometry || geometry.type === VOLLEY_ACTION_KEY || !targets.length) return [];
-  const { buckets, denominator, distances, weights } = getBurstTargetHitDistribution(attackerToken, geometry, targets, amount);
+  const {
+    buckets,
+    denominator,
+    distances,
+    weights
+  } = distribution ?? getBurstTargetHitDistribution(
+    attackerToken,
+    geometry,
+    targets,
+    amount,
+    { purpose }
+  );
   if (denominator <= 0) return [];
   return Array.from(buckets.entries())
     .filter(([target, shots]) => ((weights.get(target) ?? shots.length) > 0) && target?.actor && target.visible)
@@ -11808,12 +11908,17 @@ function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCo
     });
 }
 
-function buildBurstDistributionShots(attackerToken, geometry, attackCount = 1) {
+function buildBurstDistributionShots(
+  attackerToken,
+  geometry,
+  attackCount = 1,
+  { purpose = "resolution" } = {}
+) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
-  const sampleCount = Math.max(BURST_DISTRIBUTION_SAMPLE_MIN, amount * BURST_DISTRIBUTION_SAMPLE_MULTIPLIER);
+  const sampleCount = getBurstSampleCount(amount, { purpose });
   const shotGeometry = getRandomBurstMissGeometry(attackerToken, geometry);
   return Array.from({ length: sampleCount }, (_value, index) => {
-    const offset = sampleCount <= 1 ? 0 : -1 + ((2 * index) / (sampleCount - 1));
+    const offset = getEvenBurstSampleOffset(index, sampleCount);
     const angle = (Number(geometry?.angle) || 0) + ((Number(geometry?.halfAngle) || 0) * offset);
     const trajectory = buildTrajectoryByAngle(attackerToken, shotGeometry, angle, Number(shotGeometry?.elevationSlope) || 0);
     const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0) ?? null;
@@ -11825,12 +11930,23 @@ function buildBurstDistributionShots(attackerToken, geometry, attackCount = 1) {
   });
 }
 
-function getBurstTargetHitDistribution(attackerToken, geometry, targets = [], attackCount = 1) {
+function getBurstTargetHitDistribution(
+  attackerToken,
+  geometry,
+  targets = [],
+  attackCount = 1,
+  { purpose = "resolution" } = {}
+) {
   const allowedTargets = new Set(targets);
   const aimShots = new Map();
   const buckets = new Map();
   const distances = new Map();
-  const distributionShots = buildBurstDistributionShots(attackerToken, geometry, attackCount);
+  const distributionShots = buildBurstDistributionShots(
+    attackerToken,
+    geometry,
+    attackCount,
+    { purpose }
+  );
   for (const shot of distributionShots) {
     const target = shot?.target ?? null;
     if (!target || !allowedTargets.has(target) || !target.actor || !target.visible) continue;
@@ -11973,9 +12089,22 @@ function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
   });
 }
 
-function buildBurstPrimaryShotsForRanges(attackerToken, geometry, attackCount = 1, targets = [], burstRanges = new Map()) {
+function buildBurstPrimaryShotsForRanges(
+  attackerToken,
+  geometry,
+  attackCount = 1,
+  targets = [],
+  burstRanges = new Map(),
+  { distribution = null } = {}
+) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
-  const distributedShots = buildBurstPrimaryShotsFromTargetDistribution(attackerToken, geometry, amount, targets);
+  const distributedShots = buildBurstPrimaryShotsFromTargetDistribution(
+    attackerToken,
+    geometry,
+    amount,
+    targets,
+    { distribution }
+  );
   if (distributedShots.length === amount) return distributedShots;
   if (!burstRanges?.size) return buildBurstPrimaryShots(attackerToken, geometry, amount);
   const allowedTargets = new Set(targets);
@@ -11995,10 +12124,29 @@ function buildBurstPrimaryShotsForRanges(attackerToken, geometry, attackCount = 
   return bestShots ?? buildBurstPrimaryShots(attackerToken, geometry, amount);
 }
 
-function buildBurstPrimaryShotsFromTargetDistribution(attackerToken, geometry, attackCount = 1, targets = []) {
+function buildBurstPrimaryShotsFromTargetDistribution(
+  attackerToken,
+  geometry,
+  attackCount = 1,
+  targets = [],
+  { distribution = null } = {}
+) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
-  const distribution = getBurstTargetHitDistribution(attackerToken, geometry, targets, amount);
-  const { aimShots, buckets, denominator, distances, missWeight, weights } = distribution;
+  const resolvedDistribution = distribution ?? getBurstTargetHitDistribution(
+    attackerToken,
+    geometry,
+    targets,
+    amount,
+    { purpose: "resolution" }
+  );
+  const {
+    aimShots,
+    buckets,
+    denominator,
+    distances,
+    missWeight,
+    weights
+  } = resolvedDistribution;
   if (denominator <= 0) return [];
 
   const allocations = Array.from(buckets.entries())
