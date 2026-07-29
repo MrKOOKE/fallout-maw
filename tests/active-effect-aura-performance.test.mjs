@@ -381,3 +381,40 @@ test("an unrelated Actor update does not scan indexed source aura documents", as
     await clearAuraIndex();
   }
 });
+
+test("an unrelated ActiveEffect update does not scan aura entries owned by other effects", async () => {
+  await clearAuraIndex();
+  const callbacks = registerFreshAuraHooks();
+  const sourceEffects = [];
+  let sourceEffectUuidReads = 0;
+
+  beginBulkOperation();
+  try {
+    for (let index = 0; index < 40; index += 1) {
+      const sourceActor = createActor(`indexed-effect-source-${index}`);
+      const sourceEffect = createAuraEffect(sourceActor, `source-aura-${index}`);
+      const sourceEffectUuid = sourceEffect.uuid;
+      Object.defineProperty(sourceEffect, "uuid", {
+        configurable: true,
+        get() {
+          sourceEffectUuidReads += 1;
+          return sourceEffectUuid;
+        }
+      });
+      sourceEffects.push(sourceEffect);
+      callbacks.createActiveEffect(sourceEffect, {});
+    }
+
+    sourceEffectUuidReads = 0;
+    const ordinaryActor = createActor("ordinary-effect-target");
+    const ordinaryEffect = createOrdinaryEffect(ordinaryActor, "ordinary-effect");
+    callbacks.updateActiveEffect(ordinaryEffect, { name: "Renamed" }, {});
+
+    assert.equal(sourceEffectUuidReads, 0);
+  } finally {
+    for (const sourceEffect of sourceEffects) callbacks.deleteActiveEffect(sourceEffect, {});
+    await endBulkOperation();
+    await settleAuraRuntime();
+    await clearAuraIndex();
+  }
+});

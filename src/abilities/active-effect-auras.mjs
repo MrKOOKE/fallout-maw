@@ -22,6 +22,7 @@ export const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const indexedAuras = new Map();
 const indexedAurasBySourceActorUuid = new Map();
+const indexedAurasByEffectUuid = new Map();
 const deferredAuraEntryEvaluations = new Map();
 const deferredAuraActorChanges = new Map();
 let runtimeQueue = Promise.resolve();
@@ -65,8 +66,7 @@ export function registerActiveEffectAuraHooks() {
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
     ) return;
-    const preservedStates = collectIndexedEffectStates(effect);
-    removeIndexedEffect(effect);
+    const preservedStates = removeIndexedEffect(effect, { preserveStates: true });
     const entries = indexActiveApplicationAuraEffect(effect);
     for (const entry of entries) {
       entry.states = cloneAuraStates(preservedStates.get(String(entry.condition?.id ?? "")));
@@ -228,6 +228,7 @@ function flushDeferredActiveAuraRuntime() {
 async function rebuildActiveAuraIndex() {
   indexedAuras.clear();
   indexedAurasBySourceActorUuid.clear();
+  indexedAurasByEffectUuid.clear();
   const actors = new Map();
   for (const token of canvas?.tokens?.placeables ?? []) {
     if (token?.actor?.uuid) actors.set(token.actor.uuid, token.actor);
@@ -259,6 +260,7 @@ function indexActiveApplicationAuraEffect(effect = null, { rebuilding = false } 
     const entry = {
       key,
       effect,
+      effectUuid: String(effect?.uuid ?? ""),
       sourceActorUuid: String(effect?.parent?.uuid ?? ""),
       flag,
       abilityFunction,
@@ -285,6 +287,11 @@ function addIndexedAuraEntry(entry = null) {
   const sourceEntries = indexedAurasBySourceActorUuid.get(sourceActorUuid) ?? new Set();
   sourceEntries.add(entry);
   indexedAurasBySourceActorUuid.set(sourceActorUuid, sourceEntries);
+  const effectUuid = String(entry?.effectUuid ?? "");
+  if (!effectUuid) return;
+  const effectEntries = indexedAurasByEffectUuid.get(effectUuid) ?? new Set();
+  effectEntries.add(entry);
+  indexedAurasByEffectUuid.set(effectUuid, effectEntries);
 }
 
 function removeIndexedAuraEntry(entry = null) {
@@ -293,26 +300,27 @@ function removeIndexedAuraEntry(entry = null) {
   if (indexedAuras.get(key) === entry) indexedAuras.delete(key);
   const sourceActorUuid = String(entry.sourceActorUuid ?? "");
   const sourceEntries = indexedAurasBySourceActorUuid.get(sourceActorUuid);
-  if (!sourceEntries) return;
-  sourceEntries.delete(entry);
-  if (!sourceEntries.size) indexedAurasBySourceActorUuid.delete(sourceActorUuid);
-}
-
-function removeIndexedEffect(effect = null) {
-  const effectUuid = String(effect?.uuid ?? "");
-  if (!effectUuid) return;
-  for (const entry of Array.from(indexedAuras.values())) {
-    if (String(entry.effect?.uuid ?? "") === effectUuid) removeIndexedAuraEntry(entry);
+  if (sourceEntries) {
+    sourceEntries.delete(entry);
+    if (!sourceEntries.size) indexedAurasBySourceActorUuid.delete(sourceActorUuid);
   }
+  const effectUuid = String(entry.effectUuid ?? "");
+  const effectEntries = indexedAurasByEffectUuid.get(effectUuid);
+  if (!effectEntries) return;
+  effectEntries.delete(entry);
+  if (!effectEntries.size) indexedAurasByEffectUuid.delete(effectUuid);
 }
 
-function collectIndexedEffectStates(effect = null) {
+function removeIndexedEffect(effect = null, { preserveStates = false } = {}) {
   const effectUuid = String(effect?.uuid ?? "");
   const states = new Map();
   if (!effectUuid) return states;
-  for (const entry of indexedAuras.values()) {
-    if (String(entry.effect?.uuid ?? "") !== effectUuid) continue;
-    states.set(String(entry.condition?.id ?? ""), entry.states);
+  const entries = Array.from(indexedAurasByEffectUuid.get(effectUuid) ?? []);
+  for (const entry of entries) {
+    if (preserveStates) {
+      states.set(String(entry.condition?.id ?? ""), entry.states);
+    }
+    removeIndexedAuraEntry(entry);
   }
   return states;
 }

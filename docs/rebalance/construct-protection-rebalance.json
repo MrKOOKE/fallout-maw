@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-29T17:54:30.246Z",
+  "mode": "write",
+  "status": "written-and-verified",
+  "scope": {
+    "actorsTouched": 0,
+    "constructParts": 42,
+    "groups": 7,
+    "changed": 0,
+    "itemsDatabasePath": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\data\\items"
+  },
+  "rules": {
+    "priceAccounting": "Полная цена конструкта — сумма всех его деталей; защита оплачивается комплектом один раз.",
+    "partProtection": "Каждая целевая деталь получает полный профиль своего конструкта.",
+    "electricProtection": "Гражданские модели: 0; военные модели: сниженная, но ненулевая защита.",
+    "mitigationMode": "defense",
+    "weakeningThreshold": 20,
+    "freeSettingKeysUseConditionWeakening": true
+  },
+  "groups": [
+    {
+      "folderPath": "Деталей конструктов / Робоглаз",
+      "key": "eyebot",
+      "role": "лёгкий разведывательный дрон",
+      "military": false,
+      "exceptionalPrice": false,
+      "armorReference": "Средняя броня D",
+      "armorReferencePrice": 2329,
+      "completeConstructPriceBefore": 8154,
+      "completeConstructPrice": 8154,
+      "priceToArmorReferenceRatio": 3.5,
+      "armorBudget": {
+        "class": "D",
+        "quantity": 8,
+        "payerName": "Корпус Робоглаза",
+        "componentId": "MbJjX3815eYKaRvc",
+        "componentName": "Компонент армирования D класса",
+        "payerQuantity": 8,
+        "outsidePayerQuantity": 0
+      },
+      "partCount": 5,
+      "changed": 0,
+      "profile": {
+        "piercing": 25,
+        "slashing": 20,
+        "bludgeoning": 18,
+        "firearm": 30,
+        "energy": 17,
+        "fire": 14,
+        "cryo": 16,
+        "electric": 0,
+        "acid": 17,
+        "poison": 30,
+        "radiation": 30
+      },
+      "parts": [
+        {
+          "id": "0b15OWMlBVhcbJJw",
+          "name": "Антенна Робоглаза",
+          "price": 201,
+          "priceBefore": 201,
+          "conditionMax": 60,
+          "changed": false
+        },
+        {
+          "id": "BvfUJqNZY1wgLwml",
+          "name": "Антенна Локатор",
+          "price": 78,
+          "priceBefore": 78,
+          "conditionMax": 20,
+          "changed": false
+        },
+        {
+          "id": "J0P8Kh25Sm7C9Nuf",
+          "name": "Корпус Робоглаза",
+          "price": 672,
+          "priceBefore": 672,
+          "conditionMax": 100,
+          "changed": false
+        },
+        {
+          "id": "X3qOF9NQUt0PhmZB",
+          "name": "Лазер Робоглаза",
+          "price": 6935,
+          "priceBefore": 6935,
+          "conditionMax": 60,
+          "changed": false
+        },
+        {
+          "id": "qYThA6QhU1vBofw5",
+          "name": "Двигатель Робоглаза",
+          "price": 268,
+          "priceBefore": 268,
+          "conditionMax": 70,
+          "changed": false
+        }
+      ]
+    },
+    {
+      "folderPath": "Деталей конструктов / Мистер Помощник / Гражданская модель",
+      "key": "mister-handy-civilian",
+      "role": "сервисная гражданская платформа",
+      "military": false,
+      "exceptionalPrice": false,
+      "armorReference": "Средняя броня C",
+      "armorReferencePrice": 2363,
+      "completeConstructPriceBefore": 15381,
+      "completeConstructPrice": 15381,
+      "priceToArmorReferenceRatio": 6.51,
+      "armorBudget": {
+        "class": "C",
+        "quantity": 8,
+        "payerName": "Корпус Мистера Помощника",
+        "componentId": "UixDzPJuR77ohltt",
+        "componentName": "Компонент армирования C класса",
+        "payerQuantity": 8,
+        "outsidePayerQuantity": 0
+      },
+      "partCount": 8,
+      "changed": 0,
+      "profile": {
+        "piercing": 34,
+        "slashing": 25,
+        "bludgeoning": 22,
+        "firearm": 42,
+        "energy": 21,
+        "fire": 18,
+        "cryo": 18,
+        "electric": 0,
+        "acid": 21,
+        "poison": 42,
+        "radiation": 42
+      },
+      "parts": [
+        {
+          "id": "0Gkatb63OkQqZJJo",
+          "name": "Корпус Мистера Помощника",
+          "price": 3210,
+          "priceBefore": 3210,
+          "conditionMax": 200,
+          "changed": false
+        },
+        {
+          "id": "73cf5vBow6Tcm1wN",
+          "name": "Сканер",
+          "price": 293,
+          "priceBefore": 293,
+          "conditionMax": 50,
+          "changed": false
+        },
+        {
+          "id": "Tn9NaoG2cwOov0SA",
+          "name": "Двигатель Мистера Помощника",
+          "price": 551,
+          "priceBefore": 551,
+          "conditionMax": 100,
+          "changed": false
+        },
+        {
+          "id": "W8E1MRciYQGIn829",
+          "name": "Циркулярная Пила Мистера Помощника",
+          "price": 1961,
+          "priceBefore": 1961,
+          "conditionMax": 100,
+          "changed": false
+        },
+        {
+          "id": "lwdyHMkMlSQKIunE",
+          "name": "Тайзер Мистера Помощника",
+          "price": 6197,
+          "priceBefore": 6197,
+          "conditionMax": 150,
+          "changed": false
+        },
+        {
+          "id": "q3M9wUEhS3JIZfZY",
+          "name": "Глаза Мистера Помощника",
+          "price": 488,
+          "priceBefore": 488,
+          "conditionMax": 50,
+          "changed": false
+        },
+        {
+          "id": "uGMoCdRuof1Yynpi",
+          "name": "Клешня Мистера Помощника",
+          "price": 216,
+          "priceBefore": 216,
+          "conditionMax": 100,
+          "changed": false
+        },
+        {
+          "id": "wzOXHKyINzKK9mIx",
+          "name": "Огнемёт Мистера Помощника",
+          "price": 2465,
+          "priceBefore": 2465,
+          "conditionMax": 100,
+          "changed": false
+        }
+      ]
+    },
+    {
+      "folderPath": "Деталей конструктов / Протектрон",
+      "key": "protectron",
+      "role": "тяжёлая промышленная платформа",
+      "military": false,
+      "exceptionalPrice": false,
+      "armorReference": "Тяжёлая броня C",
+      "armorReferencePrice": 3313,
+      "completeConstructPriceBefore": 9207,
+      "completeConstructPrice": 9207,
+      "priceToArmorReferenceRatio": 2.78,
+      "armorBudget": {
+        "class": "C",
+        "quantity": 12,
+        "payerName": "Корпус Протектрона",
+        "componentId": "UixDzPJuR77ohltt",
+        "componentName": "Компонент армирования C класса",
+        "payerQuantity": 10,
+        "outsidePayerQuantity": 2
+      },
+      "partCount": 5,
+      "changed": 0,
+      "profile": {
+        "piercing": 65,
+        "slashing": 53,
+        "bludgeoning": 47,
+        "firearm": 73,
+        "energy": 42,
+        "fire": 39,
+        "cryo": 39,
+        "electric": 0,
+        "acid": 47,
+        "poison": 73,
+        "radiation": 73
+      },
+      "parts": [
+        {
+          "id": "4M3Hl82OvfdKmnGT",
+          "name": "Окуляры",
+          "price": 452,
+          "priceBefore": 452,
+          "conditionMax": 80,
+          "changed": false
+        },
+        {
+          "id": "RCEnjKRiQEQyr6er",
+          "name": "Рука Протектрона",
+          "price": 1961,
+          "priceBefore": 1961,
+          "conditionMax": 225,
+          "changed": false
+        },
+        {
+          "id": "dDPZtFf58iNu1ynB",
+          "name": "Нога Протектрона",
+          "price": 758,
+          "priceBefore": 758,
+          "conditionMax": 225,
+          "changed": false
+        },
+        {
+          "id": "nZQ3olAqhJngpRGh",
+          "name": "Голова Протектрона",
+          "price": 1309,
+          "priceBefore": 1309,
+          "conditionMax": 150,
+          "changed": false
+        },
+        {
+          "id": "sQl78PTd4386KxMp",
+          "name": "Корпус Протектрона",
+          "price": 4727,
+          "priceBefore": 4727,
+          "conditionMax": 450,
+          "changed": false
+        }
+      ]
+    },
+    {
+      "folderPath": "Деталей конструктов / Мистер Помощник / Военная модель",
+      "key": "mister-gutsy",
+      "role": "военная версия Мистера Помощника",
+      "military": true,
+      "exceptionalPrice": false,
+      "armorReference": "Тяжёлая броня B",
+      "armorReferencePrice": 9837,
+      "completeConstructPriceBefore": 28806,
+      "completeConstructPrice": 28806,
+      "priceToArmorReferenceRatio": 2.93,
+      "armorBudget": {
+        "class": "B",
+        "quantity": 12,
+        "payerName": "Корпус Мистера Помощника (ВМ)",
+        "componentId": "SDZz9ePMcdPVZQhg",
+        "componentName": "Компонент армирования B класса",
+        "payerQuantity": 12,
+        "outsidePayerQuantity": 0
+      },
+      "partCount": 8,
+      "changed": 0,
+      "profile": {
+        "piercing": 84,
+        "slashing": 77,
+        "bludgeoning": 69,
+        "firearm": 112,
+        "energy": 69,
+        "fire": 57,
+        "cryo": 58,
+        "electric": 25,
+        "acid": 69,
+        "poison": 112,
+        "radiation": 112
+      },
+      "parts": [
+        {
+          "id": "4LHMjLAr9OtcBJYa",
+          "name": "Двигатель Мистера Помощника (ВМ)",
+          "price": 1908,
+          "priceBefore": 1908,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "GydrH0RYTOEPmGQ2",
+          "name": "Корпус Мистера Помощника (ВМ)",
+          "price": 14007,
+          "priceBefore": 14007,
+          "conditionMax": 750,
+          "changed": false
+        },
+        {
+          "id": "HeD0BDedRR5P0I9s",
+          "name": "Клешня Мистера Помощника (ВМ)",
+          "price": 216,
+          "priceBefore": 216,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "IKDWUjVMRAZEr3uK",
+          "name": "Циркулярная Пила Мистера Помощника (ВМ)",
+          "price": 1277,
+          "priceBefore": 1277,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "W8EkIPM7ucd9MtDN",
+          "name": "Огнемёт Мистера Помощника (ВМ)",
+          "price": 2465,
+          "priceBefore": 2465,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "YCu9eZ7vGP61lqjb",
+          "name": "Сканер (ВМ)",
+          "price": 955,
+          "priceBefore": 955,
+          "conditionMax": 150,
+          "changed": false
+        },
+        {
+          "id": "bMusltNCnw1wjnAe",
+          "name": "Глаза Мистера Помощника (ВМ)",
+          "price": 1781,
+          "priceBefore": 1781,
+          "conditionMax": 150,
+          "changed": false
+        },
+        {
+          "id": "kGdpY8sgcuyYUyLa",
+          "name": "Тайзер Мистера Помощника (ВМ)",
+          "price": 6197,
+          "priceBefore": 6197,
+          "conditionMax": 400,
+          "changed": false
+        }
+      ]
+    },
+    {
+      "folderPath": "Деталей конструктов / Робомозг",
+      "key": "robobrain",
+      "role": "бронированная военная платформа",
+      "military": true,
+      "exceptionalPrice": false,
+      "armorReference": "Тяжёлая броня B",
+      "armorReferencePrice": 9837,
+      "completeConstructPriceBefore": 25652,
+      "completeConstructPrice": 25652,
+      "priceToArmorReferenceRatio": 2.61,
+      "armorBudget": {
+        "class": "B",
+        "quantity": 12,
+        "payerName": "Корпус Робомозга",
+        "componentId": "SDZz9ePMcdPVZQhg",
+        "componentName": "Компонент армирования B класса",
+        "payerQuantity": 12,
+        "outsidePayerQuantity": 0
+      },
+      "partCount": 5,
+      "changed": 0,
+      "profile": {
+        "piercing": 84,
+        "slashing": 77,
+        "bludgeoning": 69,
+        "firearm": 112,
+        "energy": 75,
+        "fire": 57,
+        "cryo": 58,
+        "electric": 20,
+        "acid": 69,
+        "poison": 112,
+        "radiation": 112
+      },
+      "parts": [
+        {
+          "id": "UEuy9PEgtBnyrEiP",
+          "name": "Гусеница",
+          "price": 1332,
+          "priceBefore": 1332,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "XmR0y6HBVbvcdfRG",
+          "name": "Голова Робомозга",
+          "price": 2555,
+          "priceBefore": 2555,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "dSuU7k3g2e4YQlHN",
+          "name": "Корпус Робомозга",
+          "price": 13446,
+          "priceBefore": 13446,
+          "conditionMax": 600,
+          "changed": false
+        },
+        {
+          "id": "fYlgz8L48fYxyrvX",
+          "name": "Камеры",
+          "price": 452,
+          "priceBefore": 452,
+          "conditionMax": 80,
+          "changed": false
+        },
+        {
+          "id": "fwYnvbr4wyeYCkKt",
+          "name": "Рука лазер Робомозга",
+          "price": 7867,
+          "priceBefore": 7867,
+          "conditionMax": 400,
+          "changed": false
+        }
+      ]
+    },
+    {
+      "folderPath": "Деталей конструктов / Штурмотрон",
+      "key": "assaultron",
+      "role": "фронтовая военная платформа",
+      "military": true,
+      "exceptionalPrice": false,
+      "armorReference": "Силовая броня A",
+      "armorReferencePrice": 53981,
+      "completeConstructPriceBefore": 80644,
+      "completeConstructPrice": 80644,
+      "priceToArmorReferenceRatio": 1.49,
+      "armorBudget": {
+        "class": "A",
+        "quantity": 20,
+        "payerName": "Корпус Штурмотрона",
+        "componentId": "HeUFgD0VHAH8XazV",
+        "componentName": "Компонент армирования A класса",
+        "payerQuantity": 19,
+        "outsidePayerQuantity": 1
+      },
+      "partCount": 5,
+      "changed": 0,
+      "profile": {
+        "piercing": 203,
+        "slashing": 188,
+        "bludgeoning": 173,
+        "firearm": 233,
+        "energy": 219,
+        "fire": 203,
+        "cryo": 203,
+        "electric": 60,
+        "acid": 218,
+        "poison": 180,
+        "radiation": 190
+      },
+      "parts": [
+        {
+          "id": "9S1kSirChBpHRIi5",
+          "name": "Голова Штурмотрона",
+          "price": 8142,
+          "priceBefore": 8142,
+          "conditionMax": 750,
+          "changed": false
+        },
+        {
+          "id": "Ol4hRjCOiqtljZfB",
+          "name": "Корпус Штурмотрона",
+          "price": 59620,
+          "priceBefore": 59620,
+          "conditionMax": 1200,
+          "changed": false
+        },
+        {
+          "id": "VkRQGOPSLg9FOgFH",
+          "name": "Рука-Манипулятор Штурмотрона",
+          "price": 1042,
+          "priceBefore": 1042,
+          "conditionMax": 450,
+          "changed": false
+        },
+        {
+          "id": "koLvj5AmVCQoku74",
+          "name": "Оптический Модуль «Страж»",
+          "price": 5636,
+          "priceBefore": 5636,
+          "conditionMax": 300,
+          "changed": false
+        },
+        {
+          "id": "wIHHujft3K6s2wkc",
+          "name": "Нога Штурмотрона",
+          "price": 6204,
+          "priceBefore": 6204,
+          "conditionMax": 450,
+          "changed": false
+        }
+      ]
+    },
+    {
+      "folderPath": "Деталей конструктов / Разрушитель",
+      "key": "sentry-destroyer",
+      "role": "сверхтяжёлая военная платформа",
+      "military": true,
+      "exceptionalPrice": true,
+      "armorReference": "верхняя силовая броня S",
+      "armorReferencePrice": 146859,
+      "completeConstructPriceBefore": 972382,
+      "completeConstructPrice": 972382,
+      "priceToArmorReferenceRatio": 6.62,
+      "armorBudget": null,
+      "partCount": 6,
+      "changed": 0,
+      "profile": {
+        "piercing": 297,
+        "slashing": 275,
+        "bludgeoning": 253,
+        "firearm": 341,
+        "energy": 330,
+        "fire": 297,
+        "cryo": 286,
+        "electric": 90,
+        "acid": 330,
+        "poison": 264,
+        "radiation": 286
+      },
+      "parts": [
+        {
+          "id": "31RVeacz1kqvUkBC",
+          "name": "Голова Разрушителя",
+          "price": 187985,
+          "priceBefore": 187985,
+          "conditionMax": 10500,
+          "changed": false
+        },
+        {
+          "id": "5G4LHj91xV6mR5br",
+          "name": "Источник питания Разрушителя",
+          "price": 85083,
+          "priceBefore": 85083,
+          "conditionMax": 3000,
+          "changed": false
+        },
+        {
+          "id": "7bMqAKUYlBLctAXZ",
+          "name": "Корпус Разрушителя",
+          "price": 585583,
+          "priceBefore": 585583,
+          "conditionMax": 15000,
+          "changed": false
+        },
+        {
+          "id": "U3buSgPHPNg4xdtJ",
+          "name": "Нога Разрушителя",
+          "price": 92221,
+          "priceBefore": 92221,
+          "conditionMax": 7500,
+          "changed": false
+        },
+        {
+          "id": "demKPKQJxvy2oFfZ",
+          "name": "Гатлинг-Лазер Разрушителя",
+          "price": 20729,
+          "priceBefore": 20729,
+          "conditionMax": 6300,
+          "changed": false
+        },
+        {
+          "id": "ngJJEtAxgqoPeLKb",
+          "name": "АвтоГранатомёт Разрушителя",
+          "price": 781,
+          "priceBefore": 781,
+          "conditionMax": 4500,
+          "changed": false
+        }
+      ]
+    }
+  ]
+}
