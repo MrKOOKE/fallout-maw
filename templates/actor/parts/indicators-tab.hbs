@@ -45,9 +45,22 @@
   <div class="fallout-maw-limb-trauma-layout">
     <section class="fallout-maw-panel fallout-maw-limb-silhouette-section">
       <h2>{{localize "FALLOUTMAW.Common.Limbs"}}</h2>
-      <svg class="fallout-maw-actor-limb-silhouette" viewBox="{{limbSilhouette.viewBox}}" role="img" aria-label="{{localize 'FALLOUTMAW.Common.Limbs'}}">
+      <svg class="fallout-maw-actor-limb-silhouette" viewBox="{{limbSilhouette.viewBox}}" role="img" aria-label="{{localize 'FALLOUTMAW.Common.Limbs'}}" data-limb-popover-root>
         {{#each limbSilhouette.parts}}
-        <path class="fallout-maw-actor-limb-silhouette-part{{#if active}} active{{/if}}" d="{{d}}" fill="{{fill}}" data-limb-control-card data-limb-key="{{limbKey}}" role="button" tabindex="0"></path>
+        <path
+          class="fallout-maw-actor-limb-silhouette-part{{#if active}} active{{/if}}"
+          d="{{d}}"
+          fill="{{fill}}"
+          data-limb-control-card
+          data-limb-popover
+          data-limb-key="{{limbKey}}"
+          data-label="{{label}}"
+          data-value="{{value}}"
+          data-max="{{max}}"
+          data-popover-rows="{{popoverRowsJson}}"
+          role="button"
+          tabindex="0"
+        ></path>
         {{/each}}
         {{#each limbSilhouette.outline}}
         <path class="fallout-maw-actor-limb-silhouette-outline" d="{{d}}"></path>
@@ -133,9 +146,20 @@
   {{else}}
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Limbs"}}</h2>
-    <div class="fallout-maw-resource-grid">
+    <div class="fallout-maw-resource-grid" data-limb-popover-root>
       {{#each limbs}}
-      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card{{#if active}} active{{/if}}" data-limb-control-card data-limb-key="{{key}}" role="button" tabindex="0">
+      <div
+        class="fallout-maw-resource-card fallout-maw-resource-meter-card{{#if active}} active{{/if}}"
+        data-limb-control-card
+        data-limb-popover
+        data-limb-key="{{key}}"
+        data-label="{{label}}"
+        data-value="{{valueLabel}}"
+        data-max="{{maxLabel}}"
+        data-popover-rows="{{popoverRowsJson}}"
+        role="button"
+        tabindex="0"
+      >
         <div class="fallout-maw-resource-card-header">
           <button
             type="button"

@@ -95,6 +95,7 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { getHoveredLimbPopoverTarget, LimbPopoverController } from "../utils/limb-popover.mjs";
 import { LimbSilhouetteConfig } from "../apps/limb-silhouette-config.mjs";
 import {
   getActorContainerFlag,
@@ -116,7 +117,11 @@ import {
   getStealthAttackModifiers
 } from "../stealth/attack-bonuses.mjs";
 import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
-import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
+import {
+  calculateFirstAidScalingMultipliers,
+  scaleFirstAidSignedValue
+} from "../utils/first-aid-scaling.mjs";
+import { getActorFirstAidModifiers } from "../items/first-aid-modifiers.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
 import { openButcheringConfig } from "../apps/butchering-config.mjs";
@@ -341,6 +346,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #freeEdit = false;
   #actorNameDraft = null;
   #activeLimbKey = "";
+  #limbPopover = new LimbPopoverController();
   #draggedItemData = null;
   #draggedItemId = "";
   #dragPreviewSourceKey = "";
@@ -566,7 +572,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       color: "#8f8456",
       data: displayLimbs[key],
       inputName: `system.limbs.${key}.value`,
-      active: key === activeLimbKey
+      active: key === activeLimbKey,
+      popoverRowsJson: JSON.stringify(displayLimbs[key]?.popoverRows ?? [])
     }));
     const limbSilhouette = prepareSheetLimbSilhouette(getActorConfiguredLimbSilhouette(actor, race), displayLimbs, activeLimbKey);
 
@@ -723,6 +730,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateInventoryInteractions();
     this.#activateWeaponSlotAspectSizing();
     this.#activateLimbControlClicks();
+    this.#limbPopover.bind(
+      this.element?.querySelector("[data-limb-popover-root]"),
+      this.element
+    );
     this.#activateDevelopmentPointInputs();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
@@ -736,6 +747,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#unbindViewportResize();
     this.#closeInventoryContextMenu();
     this.#clearInventoryTooltip({ force: true });
+    this.#limbPopover.destroy();
   }
 
   async _onDrop(event) {
@@ -1238,11 +1250,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   static #onSelectLimb(event, target) {
-    if (!game.user?.isGM) return undefined;
     event.preventDefault();
     const limbKey = target.dataset.limbKey ?? "";
     if (!limbKey || (limbKey === this.#activeLimbKey)) return undefined;
     this.#activeLimbKey = limbKey;
+    this.#limbPopover.destroy();
     return this.render({ parts: ["indicators"] });
   }
 
@@ -1283,6 +1295,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!root || root.dataset.limbControlClicksBound === "true") return;
     root.dataset.limbControlClicksBound = "true";
     root.addEventListener("click", event => this.#onLimbControlClick(event), { capture: true });
+    root.addEventListener("contextmenu", event => this.#onLimbControlContextMenu(event), { capture: true });
     root.addEventListener("keydown", event => this.#onLimbControlKeyDown(event), { capture: true });
   }
 
@@ -1445,22 +1458,49 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onLimbControlKeyDown(event) {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    this.#onLimbControlClick(event);
+    if (event.key === "Enter" || event.key === " ") {
+      this.#onLimbControlClick(event);
+      return;
+    }
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      this.#onLimbControlContextMenu(event);
+    }
   }
 
   #onLimbControlClick(event) {
     const target = event.target instanceof Element ? event.target : null;
-    const card = target?.closest("[data-limb-control-card]");
+    const popoverRoot = target?.closest("[data-limb-popover-root]");
+    const card = popoverRoot
+      ? getHoveredLimbPopoverTarget(popoverRoot, event)
+      : target?.closest("[data-limb-control-card]");
     if (!card || !this.element?.contains(card)) return;
     if (target.closest("input, select, textarea, [data-action='deleteTrauma']")) return;
-    if (!game.user?.isGM) return;
 
     event.preventDefault();
     event.stopPropagation();
     const limbKey = card.dataset.limbKey ?? "";
     if (!limbKey) return;
+    const changed = limbKey !== this.#activeLimbKey;
     this.#activeLimbKey = limbKey;
+    this.#limbPopover.hide();
+    if (changed) void this.render({ parts: ["indicators"] });
+  }
+
+  #onLimbControlContextMenu(event) {
+    if (!game.user?.isGM) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const popoverRoot = target?.closest("[data-limb-popover-root]");
+    const card = popoverRoot
+      ? getHoveredLimbPopoverTarget(popoverRoot, event)
+      : target?.closest("[data-limb-control-card]");
+    if (!card || !this.element?.contains(card)) return;
+    if (target.closest("input, select, textarea, [data-action='deleteTrauma']")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const limbKey = card.dataset.limbKey ?? "";
+    if (!limbKey) return;
+    this.#limbPopover.hide();
     void openLimbDamageDialog(this.actor, limbKey);
   }
 
@@ -5437,15 +5477,18 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.FirstAidCharges"), renderTooltipMeterValue(charges.value, charges.max)]
   ];
-  const outgoingPercent = getActorHealingModifierPercent(actor, "outgoing");
-  const outgoingMultiplier = Math.max(0, 1 + (outgoingPercent / 100));
+  const firstAidModifiers = getActorFirstAidModifiers(actor);
+  const scaling = calculateFirstAidScalingMultipliers({
+    outgoingEffectivenessPercent: firstAidModifiers.outgoingEffectivenessPercent,
+    outgoingHealingPercent: getActorHealingModifierPercent(actor, "outgoing")
+  });
   const actionPointCost = Math.max(0, toInteger(firstAid.actionPointCost));
   if (actionPointCost) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidActionPointCost"), actionPointCost]);
   const healing = Math.max(0, toInteger(firstAid.healing));
   if (healing) {
     const effectiveHealing = firstAid.healingIsPercentage
-      ? healing * outgoingMultiplier
-      : scaleFirstAidTooltipHealing(healing, outgoingMultiplier);
+      ? healing * scaling.healing
+      : scaleFirstAidTooltipHealing(healing, scaling.healing);
     const breakdown = buildFirstAidHealingAttribution(item, actor, healing, effectiveHealing, {
       isPercentage: firstAid.healingIsPercentage
     });
@@ -5460,19 +5503,22 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const limbValue = toInteger(firstAid.limbSelection?.value);
   if (limbCount && limbValue) {
     const limbLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidLimbHealingPerCharge");
-    const effectiveLimbValue = limbValue > 0
-      ? scaleFirstAidTooltipHealing(limbValue, outgoingMultiplier, { zeroWhenDisabled: true })
-      : limbValue;
-    rows.push([limbLabel, limbValue > 0
-      ? renderChangedSignedNumber(effectiveLimbValue, limbValue, {
-        breakdown: buildFirstAidHealingAttribution(item, actor, limbValue, effectiveLimbValue, { title: limbLabel })
-      })
-      : formatSignedNumber(limbValue)]);
+    const limbMultiplier = limbValue > 0 ? scaling.healing : scaling.effect;
+    const effectiveLimbValue = scaleFirstAidTooltipHealing(
+      limbValue,
+      limbMultiplier,
+      { zeroWhenDisabled: true }
+    );
+    rows.push([limbLabel, renderChangedSignedNumber(effectiveLimbValue, limbValue, {
+      ...(limbValue > 0
+        ? { breakdown: buildFirstAidHealingAttribution(item, actor, limbValue, effectiveLimbValue, { title: limbLabel }) }
+        : {})
+    })]);
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidChargeLimitPerUse"), limbCount]);
   }
   rows.push(...getFirstAidRemoveEffectTooltipRows(firstAid));
-  rows.push(...getFirstAidNeedTooltipRows(firstAid));
-  const changeRows = getFirstAidChangeTooltipRows(firstAid, actor, item);
+  rows.push(...getFirstAidNeedTooltipRows(firstAid, actor, scaling.effect));
+  const changeRows = getFirstAidChangeTooltipRows(firstAid, actor, item, scaling);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
   if (durationSeconds && changeRows.length) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDuration"), formatDurationShort(durationSeconds)]);
@@ -5491,7 +5537,7 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const criticalMin = Math.max(0, toInteger(firstAid.criticalFailureDamageMin));
   const criticalMax = Math.max(criticalMin, toInteger(firstAid.criticalFailureDamageMax));
   if (criticalMin || criticalMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidCriticalFailureDamageMax"), `${criticalMin}-${criticalMax}`]);
-  const withdrawalChangeRows = getFirstAidWithdrawalChangeTooltipRows(firstAid, actor, item);
+  const withdrawalChangeRows = getFirstAidWithdrawalChangeTooltipRows(firstAid, actor, item, scaling);
   const withdrawalDurationSeconds = Math.max(0, toInteger(firstAid.withdrawalDurationSeconds));
   if (withdrawalDurationSeconds) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidWithdrawalDuration"), formatDurationShort(withdrawalDurationSeconds)]);
@@ -5528,12 +5574,28 @@ function buildFirstAidHealingAttribution(item, actor, base = 0, total = 0, { isP
     total: base,
     formatValue
   };
-  const modifier = collectActorPreparedPathAttribution(actor, "system.healing.outgoingPercent", {
+  const firstAidModifierValue = getActorFirstAidModifiers(actor).outgoingEffectivenessPercent;
+  const firstAidModifier = collectActorPreparedPathAttribution(
+    actor,
+    "system.firstAid.outgoingEffectivenessPercent",
+    {
+      preparedValue: firstAidModifierValue,
+      suffix: "%"
+    }
+  );
+  appendParallelPercentSources(breakdown, firstAidModifier.sources, {
+    expectedPercent: firstAidModifier.value,
+    total: base * Math.max(0, 1 + (firstAidModifierValue / 100)),
+    contributionUnit: isPercentage
+      ? "%"
+      : localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownHealingUnit", "лечения")
+  });
+  const healingModifier = collectActorPreparedPathAttribution(actor, "system.healing.outgoingPercent", {
     preparedValue: getActorHealingModifierPercent(actor, "outgoing"),
     suffix: "%"
   });
-  appendParallelPercentSources(breakdown, modifier.sources, {
-    expectedPercent: modifier.value,
+  appendParallelPercentSources(breakdown, healingModifier.sources, {
+    expectedPercent: healingModifier.value,
     total,
     contributionUnit: isPercentage
       ? "%"
@@ -5635,11 +5697,11 @@ function buildOneTimeUseTooltipSection(item, actor = null, { includeRecipeKnowle
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionOneTimeUse"), rows);
 }
 
-function getFirstAidNeedTooltipRows(firstAid = {}) {
-  return getConfiguredNeedTooltipRows(firstAid.needs);
+function getFirstAidNeedTooltipRows(firstAid = {}, actor = null, multiplier = 1) {
+  return getConfiguredNeedTooltipRows(firstAid.needs, actor, { multiplier });
 }
 
-function getConfiguredNeedTooltipRows(needs = [], actor = null) {
+function getConfiguredNeedTooltipRows(needs = [], actor = null, { multiplier = 1 } = {}) {
   const needLabels = new Map([
     ...getNeedSettings().map(need => [need.key, need.label ?? need.key]),
     ...getActorNeedSettings(actor).map(need => [need.key, need.label ?? need.key])
@@ -5650,7 +5712,7 @@ function getConfiguredNeedTooltipRows(needs = [], actor = null) {
   const values = source
     .map(entry => {
       const key = String(entry?.needKey ?? "").trim();
-      const value = toInteger(entry?.value);
+      const value = toInteger(scaleFirstAidTooltipEffectChange(toInteger(entry?.value), multiplier));
       if (!key || !value) return "";
       return `${needLabels.get(key) ?? key}: ${formatSignedNumber(value)}`;
     })
@@ -5677,25 +5739,31 @@ function getFirstAidRemoveEffectTooltipRows(firstAid = {}) {
     : [];
 }
 
-function getFirstAidChangeTooltipRows(firstAid = {}, actor = null, item = null) {
+function getFirstAidChangeTooltipRows(firstAid = {}, actor = null, item = null, scaling = {}) {
   return getFirstAidEffectChangeTooltipRows(firstAid.changes, actor, "FALLOUTMAW.Item.FirstAidEffectChanges", {
     applyOutgoingHealing: true,
-    item
+    item,
+    effectMultiplier: scaling.effect,
+    healingMultiplier: scaling.healing
   });
 }
 
-function getFirstAidWithdrawalChangeTooltipRows(firstAid = {}, actor = null, item = null) {
+function getFirstAidWithdrawalChangeTooltipRows(firstAid = {}, actor = null, item = null, scaling = {}) {
   return getFirstAidEffectChangeTooltipRows(firstAid.withdrawal, actor, "FALLOUTMAW.Item.FirstAidWithdrawalChanges", {
     applyOutgoingHealing: true,
     item,
-    prefixHealingLabel: true
+    prefixHealingLabel: true,
+    effectMultiplier: scaling.effect,
+    healingMultiplier: scaling.healing
   });
 }
 
 function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey = "FALLOUTMAW.Item.FirstAidEffectChanges", {
   applyOutgoingHealing = false,
   item = null,
-  prefixHealingLabel = false
+  prefixHealingLabel = false,
+  effectMultiplier = 1,
+  healingMultiplier = null
 } = {}) {
   const sourceChanges = Array.isArray(changes) ? changes : Object.values(changes ?? {});
   const healingChanges = applyOutgoingHealing
@@ -5716,7 +5784,13 @@ function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey
       label: limb?.label ?? key
     }))
   });
-  const summaries = prepareTraumaEffectEntries(effectChanges, pathLabels)
+  const scaledEffectChanges = Number(effectMultiplier) <= 0
+    ? []
+    : effectChanges.map(change => ({
+      ...change,
+      value: scaleFirstAidTooltipEffectChange(change?.value, effectMultiplier)
+    }));
+  const summaries = prepareTraumaEffectEntries(scaledEffectChanges, pathLabels)
     .map(entry => entry.summary)
     .filter(Boolean);
   const rows = summaries.length
@@ -5724,8 +5798,9 @@ function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey
     : [];
   if (!healingChanges.length) return rows;
 
-  const outgoingPercent = getActorHealingModifierPercent(actor, "outgoing");
-  const outgoingMultiplier = Math.max(0, 1 + (outgoingPercent / 100));
+  const outgoingMultiplier = healingMultiplier === null
+    ? Math.max(0, 1 + (getActorHealingModifierPercent(actor, "outgoing") / 100))
+    : Math.max(0, Number(healingMultiplier) || 0);
   const baseHealing = Math.max(0, healingChanges.reduce((total, change) => total + toInteger(change?.value), 0));
   const effectiveHealing = outgoingMultiplier <= 0
     ? 0
@@ -5747,6 +5822,14 @@ function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey
 function isFirstAidTooltipHealingChange(change = {}) {
   const key = String(change?.key ?? "").trim().toLocaleLowerCase();
   return key === "fallout-maw.healing" || key === "healing";
+}
+
+function scaleFirstAidTooltipEffectChange(value = 0, multiplier = 1) {
+  const safeMultiplier = Math.max(0, Number(multiplier) || 0);
+  if (safeMultiplier <= 0) return 0;
+  const number = Number(value);
+  if (!Number.isFinite(number) || safeMultiplier === 1) return value;
+  return scaleFirstAidSignedValue(number, safeMultiplier);
 }
 
 function buildDamageMitigationTooltipSection(item, actor) {

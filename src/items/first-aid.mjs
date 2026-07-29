@@ -15,11 +15,18 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
-import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
+import {
+  calculateFirstAidScalingMultipliers,
+  scaleFirstAidDurationSeconds,
+  scaleFirstAidSignedValue
+} from "../utils/first-aid-scaling.mjs";
 import { getFirstAidChargesData, getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { getHealingResolutionActiveUseKeys } from "../abilities/active-use-keys.mjs";
+import {
+  getFirstAidResolutionActiveUseKeys,
+  getHealingResolutionActiveUseKeys
+} from "../abilities/active-use-keys.mjs";
 import {
   commitPreparedActiveUseOperations,
   prepareActiveUseOperation
@@ -29,6 +36,7 @@ import {
   PERIODIC_HEALING_INTERVAL_SECONDS,
   isPeriodicHealingEffectKey
 } from "../combat/periodic-healing.mjs";
+import { getActorFirstAidModifiers } from "./first-aid-modifiers.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FIRST_AID_SOCKET = `system.${SYSTEM_ID}`;
@@ -72,7 +80,12 @@ export async function useFirstAidItem({
     return false;
   }
   if (!isTargetInFirstAidRange(sourceToken, targetToken, firstAid)) return false;
-  const targetContext = await getFirstAidTargetContext(targetToken, targetActor);
+  const firstAidOperationId = `first-aid:${String(item.uuid ?? item.id ?? "")}:${foundry.utils.randomID()}`;
+  const targetContext = await getFirstAidTargetContext(targetToken, targetActor, {
+    sourceActor,
+    sourceToken,
+    chanceOperationId: firstAidOperationId
+  });
   if (!targetContext) return false;
   const selectedLimbs = await requestLimbSelection(targetActor, limitFirstAidSelectionByCharges(firstAid, charges.value), targetContext);
   if (selectedLimbs === null) return false;
@@ -121,45 +134,117 @@ export async function useFirstAidItem({
   const criticalSuccessMultiplier = resultKey === "criticalSuccess"
     ? 1 + (Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus ?? CRITICAL_SUCCESS_DEFAULT_BONUS)) / 100)
     : 1;
-  const effectMultiplier = resultMultiplier * criticalSuccessMultiplier;
-  const healingOperationId = `first-aid:${String(item.uuid ?? item.id ?? "")}:${foundry.utils.randomID()}`;
-  source.chanceOperationId = healingOperationId;
-  source.limitedUseOperationId = healingOperationId;
-  const outgoingActiveUsePreparation = firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs)
-    ? prepareActiveUseOperation({
-      kind: "firstAidOutgoingHealing",
-      actor: sourceActor,
-      keys: getHealingResolutionActiveUseKeys({ direction: "outgoing" }),
-      conditionContexts: [{
-        actorToken: sourceToken?.object ?? sourceToken,
-        targetActor,
-        targetToken: targetToken?.object ?? targetToken,
-        chanceOperationId: healingOperationId
-      }],
-      reverseOnly: false
-    })
-    : null;
-  const healingMultiplier = effectMultiplier * Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing", {
+  source.chanceOperationId = firstAidOperationId;
+  source.limitedUseOperationId = firstAidOperationId;
+
+  const outgoingContext = {
     actorToken: sourceToken?.object ?? sourceToken,
     targetActor,
     targetToken: targetToken?.object ?? targetToken,
-    chanceOperationId: healingOperationId
-  }) / 100));
+    chanceOperationId: firstAidOperationId
+  };
+  const incomingContext = {
+    actorToken: targetToken?.object ?? targetToken,
+    targetActor: sourceActor,
+    targetToken: sourceToken?.object ?? sourceToken,
+    chanceOperationId: firstAidOperationId
+  };
+  const canScaleEffects = firstAidHasScalableEffects(firstAid, targetContext, selectedLimbs);
+  const canScaleDuration = firstAidHasScalableDuration(firstAid);
+  const canResistWithdrawal = firstAidHasWithdrawalEffects(firstAid);
+  const canUseOutgoingHealing = firstAidCanUseOutgoingHealing(firstAid, targetContext, selectedLimbs);
+  const outgoingActiveUseKeys = canScaleEffects
+    ? getFirstAidResolutionActiveUseKeys({ direction: "outgoing" })
+    : new Set();
+  if (canUseOutgoingHealing) {
+    for (const key of getHealingResolutionActiveUseKeys({ direction: "outgoing" })) {
+      outgoingActiveUseKeys.add(key);
+    }
+  }
+  const incomingActiveUseKeys = canScaleEffects
+    ? getFirstAidResolutionActiveUseKeys({
+      direction: "incoming",
+      includeDuration: canScaleDuration,
+      includeWithdrawalResistance: canResistWithdrawal
+    })
+    : new Set();
+  const hasDistinctActors = String(sourceActor?.uuid ?? sourceActor?.id ?? "")
+    !== String(targetActor?.uuid ?? targetActor?.id ?? "");
+  const activeUsePreparations = [
+    outgoingActiveUseKeys.size
+      ? prepareActiveUseOperation({
+        kind: "firstAidOutgoing",
+        actor: sourceActor,
+        keys: outgoingActiveUseKeys,
+        conditionContexts: [outgoingContext],
+        reverseOnly: false
+      })
+      : null,
+    hasDistinctActors && outgoingActiveUseKeys.size
+      ? prepareActiveUseOperation({
+        kind: "firstAidOutgoingReverse",
+        actor: targetActor,
+        keys: outgoingActiveUseKeys,
+        conditionContexts: [incomingContext],
+        reverseOnly: true
+      })
+      : null,
+    incomingActiveUseKeys.size
+      ? prepareActiveUseOperation({
+        kind: "firstAidIncoming",
+        actor: targetActor,
+        keys: incomingActiveUseKeys,
+        conditionContexts: [incomingContext],
+        reverseOnly: false
+      })
+      : null,
+    hasDistinctActors && incomingActiveUseKeys.size
+      ? prepareActiveUseOperation({
+        kind: "firstAidIncomingReverse",
+        actor: sourceActor,
+        keys: incomingActiveUseKeys,
+        conditionContexts: [outgoingContext],
+        reverseOnly: true
+      })
+      : null
+  ].filter(Boolean);
 
-  const healing = calculateHealingAmount(targetActor, firstAid, healingMultiplier, targetContext);
-  const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
-  const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, effectMultiplier, healingMultiplier);
+  const outgoingFirstAidModifiers = getActorFirstAidModifiers(sourceActor, outgoingContext);
+  const incomingFirstAidModifiers = targetContext.firstAidModifiers
+    ?? getActorFirstAidModifiers(targetActor, incomingContext);
+  const scaling = calculateFirstAidScalingMultipliers({
+    resultMultiplier: resultMultiplier * criticalSuccessMultiplier,
+    outgoingEffectivenessPercent: outgoingFirstAidModifiers.outgoingEffectivenessPercent,
+    incomingEffectivenessPercent: incomingFirstAidModifiers.incomingEffectivenessPercent,
+    outgoingHealingPercent: canUseOutgoingHealing
+      ? getActorHealingModifierPercent(sourceActor, "outgoing", outgoingContext)
+      : 0,
+    durationPercent: incomingFirstAidModifiers.durationPercent,
+    withdrawalResistancePercent: incomingFirstAidModifiers.withdrawalResistancePercent
+  });
+
+  const healing = calculateHealingAmount(targetActor, firstAid, scaling.healing, targetContext);
+  const durationSeconds = scaleFirstAidDurationSeconds(firstAid.durationSeconds, scaling.duration);
+  const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, scaling.effect, scaling.healing);
   const healingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedChanges.healingPerTick);
   const changes = normalizedChanges.changes;
-  const normalizedWithdrawal = normalizeFirstAidWithdrawal(firstAid, effectMultiplier, healingMultiplier);
+  const normalizedWithdrawal = normalizeFirstAidWithdrawal(
+    firstAid,
+    scaling.withdrawalEffect,
+    scaling.withdrawalHealing
+  );
   const withdrawalHealingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedWithdrawal.healingPerTick);
   const withdrawalChanges = normalizedWithdrawal.changes;
-  const withdrawalDurationSeconds = Math.max(0, toInteger(firstAid.withdrawalDurationSeconds));
-  const hasWithdrawal = withdrawalChanges.length > 0 || withdrawalHealingPerTick > 0;
-  const needs = normalizeFirstAidNeeds(firstAid.needs, effectMultiplier);
+  const withdrawalDurationSeconds = scaleFirstAidDurationSeconds(
+    firstAid.withdrawalDurationSeconds,
+    scaling.withdrawalDuration
+  );
+  const hasWithdrawal = withdrawalDurationSeconds > 0
+    && (withdrawalChanges.length > 0 || withdrawalHealingPerTick > 0);
+  const needs = normalizeFirstAidNeeds(firstAid.needs, scaling.effect);
   const limbs = targetContext.isConstruct
     ? []
-    : normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier, healingMultiplier);
+    : normalizeFirstAidLimbs(selectedLimbs, firstAid, scaling.effect, scaling.healing);
   const hasImmediateHealing = healing > 0;
   const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
   if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval && !hasWithdrawal) return false;
@@ -235,16 +320,42 @@ export async function useFirstAidItem({
   }
 
   await spendFirstAidItem(item, chargeCost, createFirstAidDocumentOptions(inheritedChainRef));
-  if (outgoingActiveUsePreparation) {
+  if (activeUsePreparations.length) {
     try {
-      await commitPreparedActiveUseOperations([outgoingActiveUsePreparation], {
-        operationId: healingOperationId
+      await commitPreparedActiveUseOperations(activeUsePreparations, {
+        operationId: firstAidOperationId
       });
     } catch (error) {
-      console.error(`${SYSTEM_ID} | First-aid outgoing-healing active-use commit failed`, error);
+      console.error(`${SYSTEM_ID} | First-aid modifier active-use commit failed`, error);
     }
   }
   return true;
+}
+
+function firstAidHasScalableEffects(firstAid = {}, targetContext = null, selectedLimbs = []) {
+  if (!targetContext?.isConstruct && Math.max(0, toInteger(firstAid?.healing)) > 0) return true;
+  if (!targetContext?.isConstruct
+    && toInteger(firstAid?.limbSelection?.value)
+    && selectedLimbs.some(entry => Math.max(0, toInteger(entry?.count)) > 0)) return true;
+  if ((Array.isArray(firstAid?.needs) ? firstAid.needs : Object.values(firstAid?.needs ?? {}))
+    .some(entry => toInteger(entry?.value ?? entry))) return true;
+  return [firstAid?.changes, firstAid?.withdrawal].some(changes => (
+    (Array.isArray(changes) ? changes : Object.values(changes ?? {}))
+      .some(change => String(change?.key ?? "").trim())
+  ));
+}
+
+function firstAidHasScalableDuration(firstAid = {}) {
+  if (Math.max(0, toInteger(firstAid?.durationSeconds)) <= 0) return false;
+  const changes = Array.isArray(firstAid?.changes)
+    ? firstAid.changes
+    : Object.values(firstAid?.changes ?? {});
+  return changes.some(change => String(change?.key ?? "").trim());
+}
+
+function firstAidHasWithdrawalEffects(firstAid = {}) {
+  return (Array.isArray(firstAid?.withdrawal) ? firstAid.withdrawal : Object.values(firstAid?.withdrawal ?? {}))
+    .some(change => String(change?.key ?? "").trim());
 }
 
 function firstAidCanUseOutgoingHealing(firstAid = {}, targetContext = null, selectedLimbs = []) {
@@ -266,6 +377,7 @@ function firstAidCanUseOutgoingHealing(firstAid = {}, targetContext = null, sele
 
 function calculateHealingAmount(actor, firstAid = {}, multiplier = 1, targetContext = null) {
   if (targetContext?.isConstruct || actor?.type === "construct") return 0;
+  if (Number(multiplier) <= 0) return 0;
   const base = Math.max(0, toInteger(firstAid.healing));
   if (!base) return 0;
   if (firstAid.healingIsPercentage) {
@@ -285,24 +397,29 @@ function normalizeFirstAidWithdrawal(firstAid = {}, multiplier = 1, healingMulti
 
 function normalizeFirstAidEffectChangeList(changes = [], multiplier = 1, healingMultiplier = multiplier) {
   const source = Array.isArray(changes) ? changes : Object.values(changes ?? {});
+  if (Number(multiplier) <= 0 && Number(healingMultiplier) <= 0) {
+    return { changes: [], healingPerTick: 0 };
+  }
   let healingPerTick = 0;
   const normalized = source
     .map(change => {
       const key = String(change?.key ?? "").trim();
       if (isPeriodicHealingEffectKey(key)) {
+        if (Number(healingMultiplier) <= 0) return null;
         const value = scaleHealingChangeValue(change?.value, healingMultiplier);
         healingPerTick += toInteger(value);
         return null;
       }
+      if (Number(multiplier) <= 0) return null;
       const value = scaleChangeValue(change?.value, multiplier);
       return {
-      key: String(change?.key ?? "").trim(),
-      type: ["add", "multiply", "override"].includes(String(change?.type ?? "")) ? String(change.type) : "add",
-      value: String(value),
-      phase: String(change?.phase ?? "initial") || "initial",
-      priority: change?.priority === null || change?.priority === "" || change?.priority === undefined
-        ? null
-        : toInteger(change.priority)
+        key,
+        type: ["add", "multiply", "override"].includes(String(change?.type ?? "")) ? String(change.type) : "add",
+        value: String(value),
+        phase: String(change?.phase ?? "initial") || "initial",
+        priority: change?.priority === null || change?.priority === "" || change?.priority === undefined
+          ? null
+          : toInteger(change.priority)
       };
     })
     .filter(Boolean)
@@ -331,6 +448,7 @@ function buildFirstAidWithdrawalPayload({
 }
 
 function normalizeFirstAidNeeds(needs = [], multiplier = 1) {
+  if (Number(multiplier) <= 0) return [];
   const source = Array.isArray(needs) ? needs : Object.entries(needs ?? {}).map(([needKey, value]) => ({ needKey, value }));
   return source
     .map(entry => ({
@@ -358,9 +476,11 @@ function getSelectedFirstAidLimbKeys(selectedLimbs = []) {
 
 function normalizeFirstAidLimbs(limbs = [], firstAid = {}, multiplier = 1, healingMultiplier = multiplier) {
   const baseValue = toInteger(firstAid.limbSelection?.value);
+  const resolvedMultiplier = baseValue > 0 ? healingMultiplier : multiplier;
+  if (Number(resolvedMultiplier) <= 0) return [];
   const value = baseValue > 0 && Number(healingMultiplier) <= 0
     ? 0
-    : scaleFirstAidSignedValue(baseValue, baseValue > 0 ? healingMultiplier : multiplier);
+    : scaleFirstAidSignedValue(baseValue, resolvedMultiplier);
   if (!value) return [];
   const source = Array.isArray(limbs) ? limbs : [];
   return source
@@ -435,10 +555,20 @@ function getFirstAidSkillKey(firstAid = {}) {
   return String(firstAid?.skillKey ?? "").trim() || "doctor";
 }
 
-async function getFirstAidTargetContext(targetToken, fallbackActor = null) {
+async function getFirstAidTargetContext(targetToken, fallbackActor = null, {
+  sourceActor = null,
+  sourceToken = null,
+  chanceOperationId = ""
+} = {}) {
   const actor = targetToken?.actor ?? fallbackActor;
   if (!actor) return null;
-  if (canUseActorLocally(actor)) return buildFirstAidTargetContext(actor, targetToken);
+  if (canUseActorLocally(actor)) {
+    return buildFirstAidTargetContext(actor, targetToken, {
+      sourceActor,
+      sourceToken,
+      chanceOperationId
+    });
+  }
 
   const gm = getResponsibleGM();
   if (!gm) {
@@ -449,7 +579,11 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null) {
   try {
     const result = await requestFirstAidSocket("getTargetContext", {
       actorUuid: actor.uuid,
-      tokenName: targetToken?.name ?? ""
+      tokenName: targetToken?.name ?? "",
+      targetTokenUuid: getDocumentUuid(targetToken),
+      sourceActorUuid: sourceActor?.uuid ?? "",
+      sourceTokenUuid: getDocumentUuid(sourceToken),
+      chanceOperationId
     }, gm);
     return result?.targetContext ?? null;
   } catch (error) {
@@ -459,7 +593,11 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null) {
   }
 }
 
-function buildFirstAidTargetContext(actor, token = null) {
+function buildFirstAidTargetContext(actor, token = null, {
+  sourceActor = null,
+  sourceToken = null,
+  chanceOperationId = ""
+} = {}) {
   const installedProstheses = getInstalledProsthesesByLimb(actor);
   return {
     actorUuid: actor?.uuid ?? "",
@@ -468,6 +606,12 @@ function buildFirstAidTargetContext(actor, token = null) {
     tokenName: token?.name ?? "",
     healthMax: Math.max(0, toInteger(actor?.system?.resources?.health?.max)),
     isConstruct: isConstructActor(actor),
+    firstAidModifiers: getActorFirstAidModifiers(actor, {
+      actorToken: token?.object ?? token,
+      targetActor: sourceActor,
+      targetToken: sourceToken?.object ?? sourceToken,
+      chanceOperationId
+    }),
     limbs: Object.entries(actor?.system?.limbs ?? {})
       .map(([key, limb]) => {
         const value = toInteger(limb?.value);
@@ -733,9 +877,18 @@ async function handleFirstAidSocketRequest(action, payload = {}) {
   if (!actor) throw new Error("цель не найдена");
 
   if (action === "getTargetContext") {
+    const [sourceActor, sourceToken, targetToken] = await Promise.all([
+      resolveFirstAidUuid(payload.sourceActorUuid),
+      resolveFirstAidUuid(payload.sourceTokenUuid),
+      resolveFirstAidUuid(payload.targetTokenUuid)
+    ]);
     return {
       targetContext: {
-        ...buildFirstAidTargetContext(actor),
+        ...buildFirstAidTargetContext(actor, targetToken, {
+          sourceActor,
+          sourceToken,
+          chanceOperationId: String(payload.chanceOperationId ?? "")
+        }),
         name: String(payload.tokenName ?? "") || actor.name,
         tokenName: String(payload.tokenName ?? "")
       }
@@ -743,6 +896,20 @@ async function handleFirstAidSocketRequest(action, payload = {}) {
   }
 
   throw new Error(`неизвестное действие первой помощи: ${action}`);
+}
+
+async function resolveFirstAidUuid(uuid = "") {
+  const value = String(uuid ?? "").trim();
+  if (!value) return null;
+  try {
+    return await fromUuid(value);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getDocumentUuid(document = null) {
+  return String(document?.document?.uuid ?? document?.uuid ?? "").trim();
 }
 
 function canUseActorLocally(actor) {

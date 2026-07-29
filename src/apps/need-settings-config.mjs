@@ -382,7 +382,7 @@ export class NeedAdvancedSettingsConfig extends FalloutMaWFormApplicationV2 {
 function normalizeNeedAdvancedSettings(settings = {}) {
   return {
     accumulation: {
-      perHour: Math.max(0, Number(settings.accumulation?.perHour) || 0)
+      perHour: Number(settings.accumulation?.perHour) || 0
     },
     thresholds: normalizeIndexedCollection(settings.thresholds).map((entry, index) => ({
       id: String(entry?.id ?? `threshold-${index + 1}`),
@@ -413,7 +413,7 @@ function prepareNeedAdvancedSettings(settings = {}) {
   const skillSettings = getSkillSettings();
   return {
     accumulation: {
-      perHour: Math.max(0, Number(settings.accumulation?.perHour) || 0)
+      perHour: Number(settings.accumulation?.perHour) || 0
     },
     thresholds: (settings.thresholds ?? []).map(threshold => ({
       ...threshold,

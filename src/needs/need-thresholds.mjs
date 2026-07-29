@@ -21,6 +21,7 @@ const DISEASE_WORSENING_PROGRESS_MAX = 100;
 const DEFAULT_DISEASE_WORSENING_SECONDS = 24 * 60 * 60;
 const DISEASE_IMMUNITY_SECONDS = 24 * 60 * 60;
 const NEED_REMAINDER_EPSILON = 0.000001;
+const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const processingActors = new Set();
 const needAccumulationRemainderCache = new Map();
 
@@ -48,6 +49,13 @@ export async function processActorNeedThresholds(actor) {
     await syncActorDiseaseWorseningMultipliers(actor);
   } finally {
     processingActors.delete(actor.uuid);
+  }
+}
+
+export async function syncLoadedActorNeedThresholdEffects() {
+  if (!game.user?.isActiveGM) return;
+  for (const actor of getLoadedActors()) {
+    await processActorNeedThresholds(actor);
   }
 }
 
@@ -102,7 +110,7 @@ async function processActorNeedAccumulation(actor, elapsedSeconds, { restMode = 
   const initialRemainders = JSON.stringify(remainders);
   const effectRates = collectNeedEffectRates(effects);
   for (const need of getActorNeedSettings(actor)) {
-    const basePerHour = Math.max(0, Number(need.settings?.accumulation?.perHour) || 0);
+    const basePerHour = Number(need.settings?.accumulation?.perHour) || 0;
     const perHour = applyRestTimeMultiplier(basePerHour, restMode)
       + (effectRates.get(need.key) ?? []).reduce((total, rate) => total + applyRestTimeMultiplier(rate, restMode), 0);
     if (!perHour) continue;
@@ -208,24 +216,47 @@ function getNeedPercent(resource) {
 
 async function syncNeedPenaltyEffect(actor, need, threshold) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, NEED_EFFECT_FLAG_KEY)?.needKey === need.key);
-  const changes = (threshold?.effects ?? []).map(prepareEffectChange).filter(change => change.key);
-  if (!threshold || !changes.length) {
+  const effectData = buildNeedPenaltyEffectData(need, threshold);
+  if (!effectData) {
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id));
     return;
   }
 
-  const signature = JSON.stringify({ thresholdId: threshold.id, changes });
-  const current = existing.find(effect => effect.getFlag(SYSTEM_ID, NEED_EFFECT_FLAG_KEY)?.signature === signature);
-  const obsolete = existing.filter(effect => effect.id !== current?.id);
-  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete.map(effect => effect.id));
-  if (current) return;
+  const signature = effectData.flags[SYSTEM_ID][NEED_EFFECT_FLAG_KEY].signature;
+  const current = existing[0] ?? null;
+  const duplicates = existing.slice(1);
+  if (duplicates.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", duplicates.map(effect => effect.id));
+  }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [{
+  if (!current) {
+    await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+    return;
+  }
+  if (needPenaltyEffectMatches(current, effectData, signature)) return;
+
+  const { type: _type, ...updateData } = effectData;
+  await actor.updateEmbeddedDocuments("ActiveEffect", [{
+    _id: current.id,
+    ...updateData
+  }]);
+}
+
+function buildNeedPenaltyEffectData(need, threshold) {
+  const changes = (threshold?.effects ?? []).map(prepareEffectChange).filter(change => change.key);
+  if (!threshold || !changes.length) return null;
+  const signature = JSON.stringify({
+    thresholdId: threshold.id,
+    changes,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS
+  });
+  return {
     type: "base",
     name: `${need.label}: ${Math.trunc(Number(threshold.percent) || 0)}%`,
     img: "icons/svg/downgrade.svg",
     transfer: false,
     disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
     system: { changes },
     flags: {
       [SYSTEM_ID]: {
@@ -237,7 +268,17 @@ async function syncNeedPenaltyEffect(actor, need, threshold) {
         }
       }
     }
-  }]);
+  };
+}
+
+function needPenaltyEffectMatches(effect, desired, signature) {
+  return effect.getFlag(SYSTEM_ID, NEED_EFFECT_FLAG_KEY)?.signature === signature
+    && effect.type === desired.type
+    && effect.name === desired.name
+    && effect.img === desired.img
+    && effect.transfer === desired.transfer
+    && effect.disabled === desired.disabled
+    && Number(effect.showIcon ?? effect._source?.showIcon) === desired.showIcon;
 }
 
 async function deleteNeedThresholdEffects(actor, needKey) {
@@ -578,3 +619,8 @@ function prepareEffectChange(effect = {}) {
   if (Number.isFinite(priority)) change.priority = Math.trunc(priority);
   return change;
 }
+
+export const NEED_THRESHOLDS_TESTING = Object.freeze({
+  buildNeedPenaltyEffectData,
+  syncNeedPenaltyEffect
+});

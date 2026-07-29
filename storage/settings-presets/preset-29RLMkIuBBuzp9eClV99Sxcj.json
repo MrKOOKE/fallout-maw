@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "57568e5b947e23c32d394aac52a4631d1b2837b040aaeb612854405755fcf050",
-  "updatedAt": "2026-07-29T13:11:06.831Z",
+  "revision": "7925a70c13456a7aa87652ce94e2101d23f893f1f19941f10e6dc7aabfe83b93",
+  "updatedAt": "2026-07-29T14:58:29.519Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -29247,265 +29247,6 @@
                         "description": "",
                         "equipped": false,
                         "functions": {
-                          "actorContainer": {
-                            "enabled": false,
-                            "slots": []
-                          },
-                          "additionalWeapons": {},
-                          "condition": {
-                            "enabled": false,
-                            "max": 0,
-                            "recoveryMethods": [],
-                            "value": 0,
-                            "weakeningThreshold": 20
-                          },
-                          "constructPart": {
-                            "aimedDifficultyBonus": 0,
-                            "aimedDifficultyPercent": 0,
-                            "blockedPeriodicEffects": [],
-                            "critical": false,
-                            "enabled": false,
-                            "lossEffects": [],
-                            "needs": [],
-                            "partType": "",
-                            "weaponSets": []
-                          },
-                          "container": {
-                            "enabled": false,
-                            "extraWeaponSlots": 0,
-                            "loadReduction": 0
-                          },
-                          "damageMitigation": {
-                            "enabled": false,
-                            "entries": {},
-                            "limbSetIds": [],
-                            "mode": "defense"
-                          },
-                          "damageSource": {
-                            "accuracyBonus": "0",
-                            "attackAnimationDelayMs": 0,
-                            "attackAnimationKey": "",
-                            "attackSoundPath": "",
-                            "criticalChanceModifier": "0",
-                            "criticalDamagePercent": "0",
-                            "damage": "0",
-                            "damageTypeKey": "firearm",
-                            "damageTypes": [
-                              {
-                                "key": "firearm",
-                                "percent": 100
-                              }
-                            ],
-                            "effectiveRange": {
-                              "max": "0",
-                              "value": "0"
-                            },
-                            "enabled": false,
-                            "maxRangeMeters": "0",
-                            "name": "",
-                            "pellets": "1",
-                            "penetration": "0",
-                            "volley": {
-                              "damageRadius": "0",
-                              "explosionAnimationKey": "",
-                              "explosionSoundPath": "",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            }
-                          },
-                          "energyConsumer": {
-                            "activeConditions": {},
-                            "activeSourceUuid": "",
-                            "enabled": false,
-                            "installedSource": {
-                              "class": "",
-                              "img": "",
-                              "itemData": {},
-                              "name": "",
-                              "reserve": {
-                                "max": 0,
-                                "value": 0
-                              },
-                              "sourceItemUuid": ""
-                            },
-                            "sourceItemUuid": "",
-                            "sourceItemUuids": []
-                          },
-                          "energySource": {
-                            "class": "D",
-                            "enabled": false,
-                            "name": "",
-                            "reserve": {
-                              "max": 0,
-                              "value": 0
-                            }
-                          },
-                          "firstAid": {
-                            "actionPointCost": 0,
-                            "changes": [],
-                            "charges": {
-                              "max": 1,
-                              "value": 1
-                            },
-                            "criticalFailureDamageMax": 10,
-                            "criticalFailureDamageMin": 1,
-                            "criticalSuccessHealingBonus": 20,
-                            "difficulty": 0,
-                            "durationSeconds": 0,
-                            "enabled": false,
-                            "healing": 0,
-                            "healingIsPercentage": false,
-                            "intervalSeconds": 6,
-                            "limbSelection": {
-                              "count": 0,
-                              "value": 0
-                            },
-                            "maxDistance": 0,
-                            "needs": [],
-                            "removeEffects": [],
-                            "withdrawal": [],
-                            "withdrawalDurationSeconds": 0,
-                            "withdrawalIntervalSeconds": 6
-                          },
-                          "freeSettings": {
-                            "enabled": false,
-                            "entries": [],
-                            "useConditionWeakening": false
-                          },
-                          "implant": {
-                            "difficulty": 60,
-                            "enabled": false,
-                            "limbKeys": [],
-                            "skillKey": "doctor"
-                          },
-                          "lightSource": {
-                            "angle": 360,
-                            "bright": 0,
-                            "color": "",
-                            "dim": 0,
-                            "enabled": false,
-                            "name": "",
-                            "resourceCosts": [],
-                            "rotation": 0
-                          },
-                          "module": {
-                            "additionalWeapons": {},
-                            "enabled": false,
-                            "name": "",
-                            "targetFunction": "weapon",
-                            "weapon": {
-                              "accuracyBonus": 0,
-                              "actionPointCosts": {
-                                "aimedMeleeAttack": 0,
-                                "aimedShot": 0,
-                                "burst": 0,
-                                "meleeAttack": 0,
-                                "push": 0,
-                                "reload": 0,
-                                "snapshot": 0,
-                                "volley": 0
-                              },
-                              "attackConeDegrees": 0,
-                              "criticalChanceModifier": 0,
-                              "criticalDamagePercent": 0,
-                              "damage": 0,
-                              "effectiveRange": {
-                                "max": 0,
-                                "value": 0
-                              },
-                              "magazineMax": 0,
-                              "maxRangeMeters": 0,
-                              "penetration": 0
-                            }
-                          },
-                          "needChange": {
-                            "changes": [],
-                            "charges": {
-                              "max": 1,
-                              "value": 1
-                            },
-                            "damages": [],
-                            "durationSeconds": 0,
-                            "enabled": false,
-                            "healthRecovery": 0,
-                            "intervalSeconds": 6,
-                            "needs": [],
-                            "organismDevelopment": []
-                          },
-                          "oneTimeUse": {
-                            "changes": [],
-                            "enabled": false,
-                            "repeatApplicationBlocked": false
-                          },
-                          "prosthesis": {
-                            "blockedPeriodicEffects": [],
-                            "breakShockResistant": false,
-                            "difficulty": 60,
-                            "enabled": false,
-                            "integrationPercent": 0,
-                            "limbKeys": [],
-                            "skillKey": "doctor"
-                          },
-                          "tools": {},
-                          "trap": {
-                            "actionPointCost": 0,
-                            "detection": {
-                              "conditions": [],
-                              "difficulty": 60,
-                              "radiusMeters": "1",
-                              "skillKey": "naturalist"
-                            },
-                            "disarm": {
-                              "attempts": 1,
-                              "difficulty": 60,
-                              "toolClass": "D",
-                              "toolKey": "mechanicalHacking"
-                            },
-                            "effect": {
-                              "damage": "0",
-                              "damageRadiusMeters": "0",
-                              "damageTypeKey": "firearm",
-                              "damageTypes": [
-                                {
-                                  "key": "firearm",
-                                  "percent": 100
-                                }
-                              ],
-                              "mode": "explosion",
-                              "pellets": "1",
-                              "penetration": "0",
-                              "regionDamageEntries": [],
-                              "regionDelaySeconds": "0",
-                              "regionDurationSeconds": "0",
-                              "regionRadius": "0",
-                              "regionRadiusDeltaMeters": "0"
-                            },
-                            "enabled": false,
-                            "evasion": {
-                              "avoidPercent": 50,
-                              "difficulty": null,
-                              "skillKey": "athletics"
-                            },
-                            "installation": {
-                              "difficulty": 60,
-                              "skillKey": "traps"
-                            },
-                            "recharge": {
-                              "unit": "seconds",
-                              "value": null
-                            },
-                            "trigger": {
-                              "activationMode": "exit",
-                              "heightCells": 1,
-                              "imageScale": 0.5,
-                              "widthCells": 1
-                            },
-                            "triggerAnimationKey": "",
-                            "triggerSoundPath": ""
-                          },
                           "weapon": {
                             "accuracyBonus": "0",
                             "aimedMeleeAttack": {
@@ -29536,6 +29277,7 @@
                             "attackAnimationKey": "fallout-maw.generic.creature.fist.creature_attack_fist_001_003_red",
                             "attackConeDegrees": 3,
                             "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Kulaki/wpn_hand_hit_flesh_02.mp3",
+                            "attackSoundVolume": 1,
                             "availableActions": {
                               "aimedMeleeAttack": true,
                               "aimedShot": false,
@@ -29556,7 +29298,7 @@
                             },
                             "criticalChanceModifier": "0",
                             "criticalDamagePercent": "150",
-                            "damage": "15",
+                            "damage": "20",
                             "damageMode": "manual",
                             "damageTypeKey": "firearm",
                             "damageTypes": [
@@ -29596,6 +29338,7 @@
                               }
                             },
                             "moduleSlots": [],
+                            "noiseLevel": 1,
                             "pellets": "1",
                             "penetration": "0",
                             "proficiencyKey": "pistol",
@@ -29659,6 +29402,7 @@
                         "price": 0,
                         "priceCurrency": "caps",
                         "quantity": 1,
+                        "stackParts": [],
                         "weaponSlotRequirement": {
                           "mode": "oneOf",
                           "slots": {}
@@ -30068,10 +29812,186 @@
                 "label": "Зависимость",
                 "settings": {
                   "accumulation": {
-                    "perHour": 0
+                    "perHour": -10
                   },
                   "diseases": [],
-                  "thresholds": []
+                  "thresholds": [
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-30"
+                        }
+                      ],
+                      "id": "at-40",
+                      "percent": 40
+                    },
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-40"
+                        },
+                        {
+                          "key": "system.firstAid.durationPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-25"
+                        }
+                      ],
+                      "id": "at-60",
+                      "percent": 60
+                    },
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-70"
+                        },
+                        {
+                          "key": "system.firstAid.durationPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-50"
+                        },
+                        {
+                          "key": "system.characteristics.strength",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.dexterity",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.endurance",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.perception",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.intelligence",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.luck",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "id": "at-80",
+                      "percent": 80
+                    },
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-100"
+                        },
+                        {
+                          "key": "system.firstAid.durationPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-100"
+                        },
+                        {
+                          "key": "system.characteristics.strength",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.dexterity",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.endurance",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.perception",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.intelligence",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.luck",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        }
+                      ],
+                      "id": "at-100",
+                      "percent": 100
+                    }
+                  ]
                 }
               }
             ],
@@ -52860,10 +52780,186 @@
                 "label": "Зависимость",
                 "settings": {
                   "accumulation": {
-                    "perHour": 0
+                    "perHour": -10
                   },
                   "diseases": [],
-                  "thresholds": []
+                  "thresholds": [
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-30"
+                        }
+                      ],
+                      "id": "at-40",
+                      "percent": 40
+                    },
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-40"
+                        },
+                        {
+                          "key": "system.firstAid.durationPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-25"
+                        }
+                      ],
+                      "id": "at-60",
+                      "percent": 60
+                    },
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-70"
+                        },
+                        {
+                          "key": "system.firstAid.durationPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-50"
+                        },
+                        {
+                          "key": "system.characteristics.strength",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.dexterity",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.endurance",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.perception",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.intelligence",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        },
+                        {
+                          "key": "system.characteristics.luck",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-1"
+                        }
+                      ],
+                      "id": "at-80",
+                      "percent": 80
+                    },
+                    {
+                      "diseaseLevel": 0,
+                      "effects": [
+                        {
+                          "key": "system.firstAid.incomingEffectivenessPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-100"
+                        },
+                        {
+                          "key": "system.firstAid.durationPercent",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-100"
+                        },
+                        {
+                          "key": "system.characteristics.strength",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.dexterity",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.endurance",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.perception",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.intelligence",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.charisma",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        },
+                        {
+                          "key": "system.characteristics.luck",
+                          "phase": "initial",
+                          "priority": 0,
+                          "type": "add",
+                          "value": "-2"
+                        }
+                      ],
+                      "id": "at-100",
+                      "percent": 100
+                    }
+                  ]
                 }
               }
             ],
@@ -57977,7 +58073,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "standard",
+        "resultMode": "success",
         "skillModifier": 0
       }
     },

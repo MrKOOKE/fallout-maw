@@ -130,6 +130,12 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         outgoingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
+      firstAid: new SchemaField({
+        incomingEffectivenessPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        outgoingEffectivenessPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        durationPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        withdrawalResistancePercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+      }),
       trade: new SchemaField({
         infiniteInventory: new BooleanField({ required: true, initial: false }),
         markupPercent: new NumberField({ required: true, integer: true, initial: 0 }),

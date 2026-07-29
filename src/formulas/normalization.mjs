@@ -13,6 +13,7 @@ import {
   DEFAULT_SKILLS
 } from "../config/defaults.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../constants.mjs";
+import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const FALLBACK_ICON = "icons/svg/d20-grey.svg";
@@ -91,6 +92,15 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
     accumulation: Object.freeze({ perHour: 0 }),
     thresholds: Object.freeze([
       createNeedDiseaseThreshold(25, 1)
+    ])
+  }),
+  addiction: Object.freeze({
+    accumulation: Object.freeze({ perHour: -10 }),
+    thresholds: Object.freeze([
+      createAddictionThreshold(40, -30),
+      createAddictionThreshold(60, -40, -25),
+      createAddictionThreshold(80, -70, -50, -1),
+      createAddictionThreshold(100, -100, -100, -2)
     ])
   })
 });
@@ -691,7 +701,7 @@ function normalizeNeedBehavior(settings = {}, key = "") {
 function normalizeNeedAccumulation(accumulation = {}, defaults = DEFAULT_NEED_BEHAVIOR.accumulation) {
   const source = accumulation && typeof accumulation === "object" ? accumulation : {};
   return {
-    perHour: Math.max(0, toDecimal(source.perHour, defaults?.perHour ?? 10))
+    perHour: toDecimal(source.perHour, defaults?.perHour ?? 10)
   };
 }
 
@@ -755,17 +765,48 @@ function getDefaultNeedBehavior(key = "") {
 }
 
 function createNeedEffectThreshold(percent, penalties = {}) {
+  return createNeedChangesThreshold(
+    percent,
+    Object.entries(penalties).map(([key, value]) => createNeedEffectChange(`system.characteristics.${key}`, value))
+  );
+}
+
+function createAddictionThreshold(
+  percent,
+  effectivenessPercent,
+  durationPercent = 0,
+  characteristicPenalty = 0
+) {
+  const effects = [
+    createNeedEffectChange(FIRST_AID_EFFECT_KEYS.incomingEffectivenessPercent, effectivenessPercent)
+  ];
+  if (durationPercent) {
+    effects.push(createNeedEffectChange(FIRST_AID_EFFECT_KEYS.durationPercent, durationPercent));
+  }
+  if (characteristicPenalty) {
+    effects.push(...ALL_CHARACTERISTIC_KEYS.map(key => (
+      createNeedEffectChange(`system.characteristics.${key}`, characteristicPenalty)
+    )));
+  }
+  return createNeedChangesThreshold(percent, effects);
+}
+
+function createNeedChangesThreshold(percent, effects = []) {
   return Object.freeze({
     id: `at-${percent}`,
     percent,
     diseaseLevel: 0,
-    effects: Object.freeze(Object.entries(penalties).map(([key, value]) => Object.freeze({
-      key: `system.characteristics.${key}`,
-      type: "add",
-      value: String(value),
-      phase: "initial",
-      priority: null
-    })))
+    effects: Object.freeze(effects)
+  });
+}
+
+function createNeedEffectChange(key, value) {
+  return Object.freeze({
+    key,
+    type: "add",
+    value: String(value),
+    phase: "initial",
+    priority: null
   });
 }
 

@@ -109,7 +109,10 @@ import {
 import { registerFoundryCompatibilitySystemEventHooks } from "./events/foundry-compatibility-events.mjs";
 import { registerFoundryDocumentSystemEventHooks } from "./events/foundry-document-events.mjs";
 import { registerFoundryWorldSystemEventHooks } from "./events/foundry-world-events.mjs";
-import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
+import {
+  registerNeedThresholdHooks,
+  syncLoadedActorNeedThresholdEffects
+} from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
 import { registerNaturalRaceItemHooks, syncLoadedActorNaturalRaceItems } from "./races/natural-items.mjs";
 import { registerStealthHooks } from "./stealth/index.mjs";
@@ -268,6 +271,7 @@ async function initializeFalloutMawReadyState() {
   await finalizeSettingsPresetStartup();
   await migrateWorldConsciousnessData();
   await syncLoadedActorNaturalRaceItems();
+  await syncLoadedActorNeedThresholdEffects();
   await repairWorldInventories();
   refreshSkillCheckControlButton();
   refreshTokenActionHudControlButton();

@@ -166,6 +166,7 @@ import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import { activateInventoryTooltipTab } from "../utils/inventory-tooltip-tabs.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { getHoveredLimbPopoverTarget, LimbPopoverController } from "../utils/limb-popover.mjs";
 import { getWeaponActionPointCostAttribution } from "../utils/weapon-tooltip-attribution.mjs";
 import { getWeaponTooltipModuleSlotsTabIndex, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
@@ -531,13 +532,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     resources: false,
     needs: false
   };
-  #limbPopover = {
-    element: null,
-    showTimer: null,
-    hideTimer: null,
-    hoveredPart: null,
-    boundRoot: null
-  };
+  #limbPopover = new LimbPopoverController();
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-token-action-hud",
@@ -791,11 +786,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#clearDetachedHudTooltips();
     this.#activateLimbControlClicks();
     const silhouette = this.element?.querySelector("[data-limb-popover-root]");
-    if (silhouette && silhouette !== this.#limbPopover.boundRoot) {
-      silhouette.addEventListener("pointermove", event => this.#onLimbPopoverMove(event));
-      silhouette.addEventListener("pointerleave", () => this.#onLimbPopoverLeaveRoot());
-      this.#limbPopover.boundRoot = silhouette;
-    }
+    this.#limbPopover.bind(silhouette, this.element);
     for (const details of this.element?.querySelectorAll("[data-ability-category-key]") ?? []) {
       details.addEventListener("toggle", () => {
         const key = String(details.dataset.abilityCategoryKey ?? "");
@@ -852,7 +843,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#clearHudItemTooltip();
     this.#clearHudItemTooltipActivationSuppression();
     this.#clearActionPointCostTooltip();
-    this.#destroyLimbPopover();
+    this.#limbPopover.destroy();
   }
 
   #scheduleLayout() {
@@ -1694,7 +1685,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #setLimbDisplayLayer(layer) {
     if (!HUD_LIMB_LAYER_KEYS.includes(layer) || layer === this.#limbDisplayLayer) return;
     this.#limbDisplayLayer = layer;
-    this.#destroyLimbPopover();
+    this.#limbPopover.destroy();
     void this.render({ force: true });
   }
 
@@ -1722,14 +1713,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const silhouette = event.target.closest("[data-limb-popover-root]");
     const target = silhouette
-      ? getHoveredLimbPart(silhouette, event)
+      ? getHoveredLimbPopoverTarget(silhouette, event)
       : event.target.closest("[data-limb-key]");
     if (!target) return;
     if (!game.user?.isGM) return;
 
     event.preventDefault();
     event.stopPropagation();
-    this.#destroyLimbPopover();
+    this.#limbPopover.hide();
     void openLimbDamageDialog(this.actor, target.dataset.limbKey ?? "");
   }
 
@@ -1773,25 +1764,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       updates[`system.resources.${key}.spent`] = Math.max(0, max - value);
     }
     await actor.update(updates);
-  }
-
-  #onLimbPopoverMove(event) {
-    const target = getHoveredLimbPart(event.currentTarget, event);
-    if (target === this.#limbPopover.hoveredPart) return;
-    this.#limbPopover.hoveredPart = target;
-    if (!target) {
-      this.#scheduleLimbPopoverClose();
-      return;
-    }
-
-    this.#clearLimbPopoverTimers();
-    const delay = this.#limbPopover.element?.isConnected ? 200 : 400;
-    this.#limbPopover.showTimer = window.setTimeout(() => this.#showLimbPopover(target), delay);
-  }
-
-  #onLimbPopoverLeaveRoot() {
-    this.#limbPopover.hoveredPart = null;
-    this.#scheduleLimbPopoverClose();
   }
 
   async #showHudItemTooltip(item, anchor, { pinned = true, refresh = false } = {}) {
@@ -2381,72 +2353,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#clearActionPointCostTooltip();
     }
 
-    if (this.#limbPopover.element && (
-      !this.#limbPopover.hoveredPart?.isConnected
-      || !this.element?.contains(this.#limbPopover.hoveredPart)
-    )) {
-      this.#destroyLimbPopover();
-    }
-  }
-
-  #scheduleLimbPopoverClose() {
-    if (this.#limbPopover.showTimer) {
-      window.clearTimeout(this.#limbPopover.showTimer);
-      this.#limbPopover.showTimer = null;
-    }
-    this.#limbPopover.hideTimer = window.setTimeout(() => this.#destroyLimbPopover(), 200);
-  }
-
-  #showLimbPopover(target) {
-    if (!target?.isConnected) return;
-    this.#clearLimbPopoverTimers();
-    const label = String(target.dataset.label ?? "");
-    const value = String(target.dataset.value ?? "0");
-    const max = String(target.dataset.max ?? "0");
-    const rows = parseLimbPopoverRows(target);
-
-    const element = this.#limbPopover.element ?? document.createElement("div");
-    element.className = "fallout-maw fallout-maw-token-hud-limb-popover";
-    element.replaceChildren();
-    const title = document.createElement("div");
-    title.className = "fallout-maw-token-hud-limb-popover-title";
-    title.textContent = label;
-    element.append(title);
-    if (rows.length) {
-      for (const row of rows) {
-        const valueRow = document.createElement("div");
-        valueRow.className = "fallout-maw-token-hud-limb-popover-row";
-        const rowLabel = document.createElement("span");
-        rowLabel.textContent = String(row.label ?? "");
-        const rowValue = document.createElement("strong");
-        rowValue.textContent = String(row.value ?? "");
-        valueRow.append(rowLabel, rowValue);
-        element.append(valueRow);
-      }
-    } else {
-      const valueRow = document.createElement("div");
-      valueRow.className = "fallout-maw-token-hud-limb-popover-value";
-      valueRow.textContent = max ? `${value} / ${max}` : value;
-      element.append(valueRow);
-    }
-    document.body.append(element);
-    this.#limbPopover.element = element;
-    positionLimbPopover(element, target);
-  }
-
-  #clearLimbPopoverTimers() {
-    if (this.#limbPopover.showTimer) window.clearTimeout(this.#limbPopover.showTimer);
-    if (this.#limbPopover.hideTimer) window.clearTimeout(this.#limbPopover.hideTimer);
-    this.#limbPopover.showTimer = null;
-    this.#limbPopover.hideTimer = null;
-  }
-
-  #destroyLimbPopover() {
-    this.#clearLimbPopoverTimers();
-    this.#limbPopover.element?.remove();
-    this.#limbPopover.element = null;
-    this.#limbPopover.hoveredPart = null;
-    this.#limbPopover.boundRoot = null;
+    this.#limbPopover.sync(this.element);
   }
 
 }
@@ -2628,17 +2535,6 @@ function mixColor(from, to, ratio) {
 function formatSignedNumber(value) {
   const number = toInteger(value);
   return number > 0 ? `+${number}` : String(number);
-}
-
-function parseLimbPopoverRows(target) {
-  const text = String(target?.dataset?.popoverRows ?? "").trim();
-  if (!text) return [];
-  try {
-    const rows = JSON.parse(text);
-    return Array.isArray(rows) ? rows : [];
-  } catch (_error) {
-    return [];
-  }
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {
@@ -5180,42 +5076,6 @@ function getHudImageAspectCacheKeys(src = "") {
     String(src ?? "").trim(),
     normalizeImagePath(src)
   ].filter(Boolean)));
-}
-
-function positionLimbPopover(popover, target) {
-  const margin = 8;
-  const gap = 10;
-  const targetRect = target.getBoundingClientRect();
-  const popoverRect = popover.getBoundingClientRect();
-  let left = targetRect.left + ((targetRect.width - popoverRect.width) / 2);
-  let top = targetRect.top - popoverRect.height - gap;
-
-  if (top < margin) top = targetRect.bottom + gap;
-
-  left = Math.max(margin, Math.min(window.innerWidth - popoverRect.width - margin, left));
-  top = Math.max(margin, Math.min(window.innerHeight - popoverRect.height - margin, top));
-  popover.style.left = `${Math.round(left)}px`;
-  popover.style.top = `${Math.round(top)}px`;
-}
-
-function getHoveredLimbPart(root, event) {
-  if (!(root instanceof SVGSVGElement)) {
-    const target = event.target?.closest?.("[data-limb-popover]");
-    return target && root?.contains?.(target) ? target : null;
-  }
-  const svg = root;
-  const screenPoint = svg.createSVGPoint();
-  screenPoint.x = event.clientX;
-  screenPoint.y = event.clientY;
-
-  const parts = Array.from(svg.querySelectorAll("[data-limb-popover]")).reverse();
-  for (const part of parts) {
-    const matrix = part.getScreenCTM()?.inverse();
-    if (!matrix) continue;
-    const localPoint = screenPoint.matrixTransform(matrix);
-    if (part.isPointInFill(localPoint)) return part;
-  }
-  return null;
 }
 
 function getActiveTokenActionHudScaleFactor() {

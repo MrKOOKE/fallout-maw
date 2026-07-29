@@ -30,6 +30,7 @@ import {
   DAMAGE_BARRIER_ALL_EFFECT_KEY,
   getDamageBarrierEffectKey
 } from "../combat/damage-barriers.mjs";
+import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 
 const ATTACKING_WEAPON_ACTION_KEYS = new Set(ABILITY_ATTACKING_WEAPON_ACTION_KEYS);
 const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush"]);
@@ -80,7 +81,8 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   "fallout-maw.dodge.loss",
   "fallout-maw.dodge.roundRecovery",
   "system.healing.incomingPercent",
-  "system.healing.outgoingPercent"
+  "system.healing.outgoingPercent",
+  ...Object.values(FIRST_AID_EFFECT_KEYS)
 ]);
 
 const SKILL_CHANGE_KEY_PATTERN = /^system\.skills\.[^.]+\.(?:bonus|advantage|disadvantage|criticalSuccessChance|criticalFailureChance)$/;
@@ -236,6 +238,21 @@ export function getHealingResolutionActiveUseKeys({ direction = "incoming" } = {
       ? "system.healing.outgoingPercent"
       : "system.healing.incomingPercent"
   ]);
+}
+
+/** Effect keys read while resolving one first-aid application. */
+export function getFirstAidResolutionActiveUseKeys({
+  direction = "incoming",
+  includeDuration = true,
+  includeWithdrawalResistance = true
+} = {}) {
+  if (direction === "outgoing") {
+    return new Set([FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent]);
+  }
+  const keys = new Set([FIRST_AID_EFFECT_KEYS.incomingEffectivenessPercent]);
+  if (includeDuration) keys.add(FIRST_AID_EFFECT_KEYS.durationPercent);
+  if (includeWithdrawalResistance) keys.add(FIRST_AID_EFFECT_KEYS.withdrawalResistancePercent);
+  return keys;
 }
 
 /** Effect keys read by one evaluated initiative roll. */

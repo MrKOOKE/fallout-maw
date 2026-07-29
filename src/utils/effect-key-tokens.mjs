@@ -63,6 +63,7 @@ import {
   SKILL_CHECK_ACTIONS
 } from "../rolls/skill-check-action-effects.mjs";
 import { STEALTH_ATTACK_BONUS_EFFECT_KEYS } from "../stealth/effect-keys.mjs";
+import { FIRST_AID_EFFECT_KEYS } from "../items/first-aid-effect-keys.mjs";
 
 export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
   const tokens = [
@@ -762,6 +763,34 @@ export function buildCombatEffectKeyTokens() {
       label: "Исходящее лечение, %",
       path: "system.healing.outgoingPercent",
       group: "Лечение"
+    }),
+    createEffectKeyToken({
+      code: "incomingFirstAidEffectiveness",
+      key: "incomingFirstAidEffectiveness",
+      label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidIncomingEffectiveness"),
+      path: FIRST_AID_EFFECT_KEYS.incomingEffectivenessPercent,
+      group: game.i18n.localize("FALLOUTMAW.Effects.FirstAidGroup")
+    }),
+    createEffectKeyToken({
+      code: "outgoingFirstAidEffectiveness",
+      key: "outgoingFirstAidEffectiveness",
+      label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidOutgoingEffectiveness"),
+      path: FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent,
+      group: game.i18n.localize("FALLOUTMAW.Effects.FirstAidGroup")
+    }),
+    createEffectKeyToken({
+      code: "firstAidDuration",
+      key: "firstAidDuration",
+      label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidDuration"),
+      path: FIRST_AID_EFFECT_KEYS.durationPercent,
+      group: game.i18n.localize("FALLOUTMAW.Effects.FirstAidGroup")
+    }),
+    createEffectKeyToken({
+      code: "firstAidWithdrawalResistance",
+      key: "firstAidWithdrawalResistance",
+      label: game.i18n.localize("FALLOUTMAW.Effects.FirstAidWithdrawalResistance"),
+      path: FIRST_AID_EFFECT_KEYS.withdrawalResistancePercent,
+      group: game.i18n.localize("FALLOUTMAW.Effects.FirstAidGroup")
     })
   ].filter(Boolean);
 }
