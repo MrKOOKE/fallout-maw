@@ -68,7 +68,9 @@ globalThis.Hooks = {
 const { SYSTEM_ID } = await import("../src/constants.mjs");
 const {
   initializeActiveEffectAuras,
-  registerActiveEffectAuraHooks
+  isUsableActiveEffect,
+  registerActiveEffectAuraHooks,
+  resolveAuraSourceToken
 } = await import("../src/abilities/active-effect-auras.mjs");
 const {
   beginBulkOperation,
@@ -415,6 +417,74 @@ test("an unrelated ActiveEffect update does not scan aura entries owned by other
     for (const sourceEffect of sourceEffects) callbacks.deleteActiveEffect(sourceEffect, {});
     await endBulkOperation();
     await settleAuraRuntime();
+    await clearAuraIndex();
+  }
+});
+
+test("a saved source Token never falls back to another linked Token", () => {
+  const actor = createActor("exact-token-source");
+  const first = createToken(actor);
+  const second = createToken(actor);
+  second.document.uuid = "Scene.scene.Token.exact-second";
+  const previousTokens = canvas.tokens;
+  canvas.tokens = { placeables: [first, second] };
+
+  try {
+    const entry = {
+      effect: { parent: actor },
+      flag: { targetTokenUuid: "Scene.scene.Token.missing" }
+    };
+    assert.equal(resolveAuraSourceToken(entry), null);
+
+    entry.flag.targetTokenUuid = second.document.uuid;
+    assert.equal(resolveAuraSourceToken(entry), second);
+
+    delete entry.flag.targetTokenUuid;
+    assert.equal(resolveAuraSourceToken(entry), first);
+  } finally {
+    canvas.tokens = previousTokens;
+  }
+});
+
+test("a system-suppressed ActiveEffect cannot remain a trigger aura source", () => {
+  const actor = createActor("suppressed-source");
+  const effect = createAuraEffect(actor);
+  effect.active = false;
+  assert.equal(isUsableActiveEffect(effect), false);
+  effect.active = true;
+  assert.equal(isUsableActiveEffect(effect), true);
+});
+
+test("renaming an indexed trigger aura preserves its index without a refresh pass", async () => {
+  await clearAuraIndex();
+  const callbacks = registerFreshAuraHooks();
+  const actor = createActor("cosmetic-source");
+  const sourceEffect = createAuraEffect(actor);
+  const token = createToken(actor);
+  let placeableReads = 0;
+  const previousTokens = canvas.tokens;
+  canvas.tokens = {
+    get placeables() {
+      placeableReads += 1;
+      return [token];
+    }
+  };
+
+  try {
+    callbacks.createActiveEffect(sourceEffect, {});
+    await settleAuraRuntime();
+    placeableReads = 0;
+
+    callbacks.updateActiveEffect(sourceEffect, { name: "Renamed aura" }, {});
+    await settleAuraRuntime();
+    assert.equal(placeableReads, 0);
+
+    callbacks[`${SYSTEM_ID}.factionSettingsChanged`]();
+    await settleAuraRuntime();
+    assert.ok(placeableReads > 0);
+  } finally {
+    callbacks.deleteActiveEffect(sourceEffect, {});
+    canvas.tokens = previousTokens;
     await clearAuraIndex();
   }
 });

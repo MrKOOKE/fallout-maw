@@ -1,15 +1,20 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
-  ABILITY_FUNCTION_TYPES,
-  normalizeAbilityConstructs,
-  normalizeAbilityFunctions
+  normalizeAbilityConstructs
 } from "../settings/abilities.mjs";
 import {
   auraTriggerTargetMatches,
-  findAuraTriggerConditions,
   getAuraGeneratedTargetTokens
 } from "./aura-conditions.mjs";
+import {
+  ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
+  getActiveApplicationEffectAuraDescriptor,
+  getActiveApplicationEffectFlag
+} from "./active-application-effects.mjs";
+import {
+  activeEffectUpdateNeedsAuraStateSync
+} from "./active-effect-update-delta.mjs";
 import {
   isBulkOperationActive,
   registerBulkOperationFlusher
@@ -17,7 +22,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { executeAbilityTrials, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY } from "./trial-runtime.mjs";
 
-export const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
+export { ACTIVE_APPLICATION_EFFECT_FLAG_KEY };
 
 const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const indexedAuras = new Map();
@@ -58,7 +63,7 @@ export function registerActiveEffectAuraHooks() {
     for (const entry of entries) queueAuraEntryEvaluation(entry, "create");
     if (!entries.length) queueActorAuraChange(effect?.parent);
   });
-  Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
+  Hooks.on("updateActiveEffect", (effect, changes = {}, options = {}) => {
     if (
       !game.user?.isActiveGM
       || options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true
@@ -66,6 +71,7 @@ export function registerActiveEffectAuraHooks() {
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
     ) return;
+    if (!activeEffectUpdateNeedsAuraStateSync(effect, changes)) return;
     const preservedStates = removeIndexedEffect(effect, { preserveStates: true });
     const entries = indexActiveApplicationAuraEffect(effect);
     for (const entry of entries) {
@@ -244,11 +250,11 @@ async function rebuildActiveAuraIndex() {
 
 function indexActiveApplicationAuraEffect(effect = null, { rebuilding = false } = {}) {
   if (!isUsableActiveEffect(effect)) return [];
-  const flag = getActiveApplicationFlag(effect);
-  const abilityFunction = normalizeAbilityFunctions([flag?.functionData])[0];
-  if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.activeApplication) return [];
-  const conditions = findAuraTriggerConditions(abilityFunction.conditions);
-  const hasTrials = abilityFunction.conditions?.some(condition => condition?.type === ABILITY_CONDITION_TYPES.trial);
+  const descriptor = getActiveApplicationEffectAuraDescriptor(effect);
+  const flag = descriptor?.flag;
+  const abilityFunction = descriptor?.abilityFunction;
+  const conditions = descriptor?.triggerConditions ?? [];
+  const hasTrials = abilityFunction?.conditions?.some(condition => condition?.type === ABILITY_CONDITION_TYPES.trial);
   if (!conditions.length || !hasTrials) {
     return [];
   }
@@ -456,13 +462,16 @@ function uniqueActorTargets(tokens = []) {
   return Array.from(unique.values());
 }
 
-function resolveAuraSourceToken(entry) {
-  const preferredUuid = String(entry.flag?.targetTokenUuid ?? "");
+export function resolveAuraSourceToken(entry) {
+  const preferredUuid = String(entry.flag?.targetTokenUuid ?? "").trim();
   const parentActorUuid = String(entry.effect?.parent?.uuid ?? "");
   const tokens = canvas?.tokens?.placeables ?? [];
-  return tokens.find(token => String((token?.document ?? token)?.uuid ?? "") === preferredUuid)
-    ?? tokens.find(token => String(token?.actor?.uuid ?? "") === parentActorUuid)
-    ?? null;
+  if (preferredUuid) {
+    return tokens.find(token => (
+      String((token?.document ?? token)?.uuid ?? "") === preferredUuid
+    )) ?? null;
+  }
+  return tokens.find(token => String(token?.actor?.uuid ?? "") === parentActorUuid) ?? null;
 }
 
 function resolveRebuildNextAllowedAt(entry, worldTime) {
@@ -482,19 +491,14 @@ function isAuraEntryLive(entry, worldTime = getWorldTime()) {
   return true;
 }
 
-function isUsableActiveEffect(effect = null) {
+export function isUsableActiveEffect(effect = null) {
   return Boolean(
     effect?.parent
     && !effect.disabled
+    && effect.active !== false
     && effect.duration?.expired !== true
-    && getActiveApplicationFlag(effect)
+    && getActiveApplicationEffectFlag(effect)
   );
-}
-
-function getActiveApplicationFlag(effect = null) {
-  return effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)
-    ?? effect?.flags?.[SYSTEM_ID]?.[ACTIVE_APPLICATION_EFFECT_FLAG_KEY]
-    ?? null;
 }
 
 function getWorldTime() {

@@ -7995,6 +7995,10 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     auraTargetGroupsLabel: getAbilityAuraTargetGroupsLabel(condition?.auraMode),
     showAuraIncludeSelf: condition?.auraMode === ABILITY_AURA_MODES.applyToTargets,
     showAuraTriggerTiming: condition?.auraMode === ABILITY_AURA_MODES.triggerConditions,
+    showActiveApplicationAuraProjectionHint: (
+      abilityFunction?.type === ABILITY_FUNCTION_TYPES.activeApplication
+      && condition?.auraMode === ABILITY_AURA_MODES.applyToTargets
+    ),
     auraTargetGroupRows: buildAbilityAuraTargetGroupRows(condition?.auraTargetGroups),
     canAddAuraTargetGroup: normalizeAbilityConditionValues(condition?.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group)).length < ABILITY_AURA_TARGET_GROUPS.length,
     auraRadiusMeters: normalizeAbilityFormulaText(condition?.auraRadiusMeters, "0"),
@@ -8857,7 +8861,7 @@ function isAbilityRuntimeCondition(type = "") {
 function buildAbilityAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
   return [
     { value: ABILITY_AURA_MODES.triggerConditions, label: "Запускать условия по целям" },
-    { value: ABILITY_AURA_MODES.applyToTargets, label: "Обычный" },
+    { value: ABILITY_AURA_MODES.applyToTargets, label: "Накладывать изменения на цели" },
     { value: ABILITY_AURA_MODES.selfWhenPresent, label: "Сбор внешних условий для наложения на себя" }
   ].map(choice => ({
     ...choice,

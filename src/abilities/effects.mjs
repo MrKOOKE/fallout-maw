@@ -1,7 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
-  ABILITY_AURA_MODES,
   ABILITY_FUNCTION_TYPES,
   getAbilityFunctionTriggerCostRows,
   getAbilitySourceId,
@@ -80,7 +79,18 @@ import {
   canonicalizeActiveEffectChanges
 } from "../utils/active-effect-source.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "./deus-ex-machina-progress-runtime.mjs";
-const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
+import {
+  ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
+  getActiveApplicationEffectAuraDescriptor,
+  getActiveApplicationEffectAuraProjectionDescriptor,
+  getActiveApplicationEffectFlag
+} from "./active-application-effects.mjs";
+import {
+  activeEffectUpdateNeedsAuraStateSync,
+  getActiveEffectOwningActor,
+  getChangedActiveEffectPaths
+} from "./active-effect-update-delta.mjs";
+export { activeEffectUpdateNeedsAuraStateSync } from "./active-effect-update-delta.mjs";
 const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -232,26 +242,39 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("createActiveEffect", (effect, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
-    if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
+    if (getActiveApplicationEffectFlag(effect)) {
+      invalidateActorPotentialAuraSource(getActiveEffectOwningActor(effect));
+    }
+    if (effectMayChangeEquipmentRequirementValues(effect)) {
+      queueActorAbilityEffectSync(getActiveEffectOwningActor(effect));
+    }
     if (
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
-      || isExecutingActiveApplicationAuraEffect(effect)
+      || isTriggerOnlyActiveApplicationAuraEffect(effect)
     ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
   });
-  Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
+  Hooks.on("updateActiveEffect", (effect, changes = {}, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
-    if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
+    const changedPaths = getChangedActiveEffectPaths(changes);
+    const mechanicalUpdate = activeEffectUpdateNeedsAuraStateSync(effect, changes, changedPaths);
+    if (
+      (getActiveApplicationEffectFlag(effect) && mechanicalUpdate)
+      || changedPathsAffect(changedPaths, `flags.${SYSTEM_ID}.${ACTIVE_APPLICATION_EFFECT_FLAG_KEY}`)
+    ) invalidateActorPotentialAuraSource(getActiveEffectOwningActor(effect));
+    if (mechanicalUpdate && effectMayChangeEquipmentRequirementValues(effect)) {
+      queueActorAbilityEffectSync(getActiveEffectOwningActor(effect));
+    }
     if (options?.falloutMawLimitedUses === true) return;
     if (options?.falloutMawDamageBarrierCommit === true) return;
     if (
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
-      || isExecutingActiveApplicationAuraEffect(effect)
+      || isTriggerOnlyActiveApplicationAuraEffect(effect)
     ) return;
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     const managed = isManagedProjectionEffect(effect);
@@ -259,20 +282,25 @@ export function registerAbilityEffectHooks() {
       effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY)
       && effect?.duration?.expired === true
     );
-    if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
+    if (!getAuraGeneratedEffectFlag(effect) && !managed && mechanicalUpdate) queueAuraStateSync();
     if (!managed && !expiredLimitedCopy) return;
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
     if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
-    if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
+    if (getActiveApplicationEffectFlag(effect)) {
+      invalidateActorPotentialAuraSource(getActiveEffectOwningActor(effect));
+    }
+    if (effectMayChangeEquipmentRequirementValues(effect)) {
+      queueActorAbilityEffectSync(getActiveEffectOwningActor(effect));
+    }
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (options?.falloutMawDamageBarrierCommit === true) return;
     if (
       options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, "trialConstructEffect")
-      || isExecutingActiveApplicationAuraEffect(effect)
+      || isTriggerOnlyActiveApplicationAuraEffect(effect)
     ) return;
     const managed = isManagedProjectionEffect(effect);
     const limitedCopy = Boolean(effect?.getFlag?.(SYSTEM_ID, LIMITED_EFFECT_COPY_FLAG_KEY));
@@ -545,18 +573,11 @@ export async function syncActiveSceneActorAbilityEffects() {
   await syncAuraGeneratedEffects();
 }
 
-function isExecutingActiveApplicationAuraEffect(effect = null) {
-  const flag = effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)
-    ?? effect?.flags?.[SYSTEM_ID]?.[ACTIVE_APPLICATION_EFFECT_FLAG_KEY]
-    ?? null;
-  if (!flag?.functionData) return false;
-  const abilityFunction = normalizeAbilityFunctions([flag?.functionData])[0];
+function isTriggerOnlyActiveApplicationAuraEffect(effect = null) {
+  const descriptor = getActiveApplicationEffectAuraDescriptor(effect);
   return Boolean(
-    abilityFunction?.type === ABILITY_FUNCTION_TYPES.activeApplication
-    && abilityFunction.conditions?.some(condition => (
-      condition?.type === ABILITY_CONDITION_TYPES.aura
-      && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
-    ))
+    descriptor?.triggerConditions?.length
+    && !descriptor?.distributionConditions?.length
   );
 }
 
@@ -968,19 +989,24 @@ function buildDesiredAuraGeneratedEffects() {
       preparedSourcesByActorUuid.set(sourceActor.uuid, preparedSources);
     }
     for (const { source, entry, distributionConditions } of preparedSources) {
+      if (!auraSourceUsesToken(source, sourceToken)) continue;
       const functionData = buildNormalizedEffectFunctionSnapshot(entry);
       const triggerCost = buildAuraTriggerCostData(sourceActor, source, entry);
-      const effectCopyFlag = buildLimitedEffectCopyFlag({
-        sourceActor,
-        sourceItem: source.item,
-        abilityFunction: entry
-      }, {
-        evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
-          fallback: 1,
-          minimum: 1,
-          context: "aura effect copy limit"
-        })
-      });
+      // The marker ActiveEffect has already consumed the active-application
+      // copy slot. Its aura projections are consequences, not new applications.
+      const effectCopyFlag = source.kind === "activeEffect"
+        ? null
+        : buildLimitedEffectCopyFlag({
+          sourceActor,
+          sourceItem: source.item,
+          abilityFunction: entry
+        }, {
+          evaluateLimit: formula => evaluateActorFormula(formula, sourceActor, {
+            fallback: 1,
+            minimum: 1,
+            context: "aura effect copy limit"
+          })
+        });
       const lateContextual = hasAbilityWeaponContextCondition(entry.conditions);
       if (lateContextual && !hasPotentialLateAuraChanges(entry)) continue;
       for (const condition of distributionConditions) {
@@ -989,19 +1015,25 @@ function buildDesiredAuraGeneratedEffects() {
         for (const targetToken of targets) {
           const targetActor = targetToken?.actor;
           if (!targetActor) continue;
+          const conditionActor = source.kind === "activeEffect" ? targetActor : sourceActor;
+          const formulaActor = (
+            source.kind === "activeEffect"
+            && source.changeEvaluation !== "source"
+          ) ? targetActor : sourceActor;
           const changes = lateContextual
             ? []
-            : prepareAuraGeneratedChanges(sourceActor, getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
-              abilityItemId: source.item.id,
+            : prepareAuraGeneratedChanges(formulaActor, getAbilityFunctionChangesForSatisfiedAuraCondition(conditionActor, entry, condition, {
+              abilityItemId: source.item?.id ?? source.abilityItemId ?? "",
               actorToken: sourceToken,
               targetActor,
-              targetToken
+              targetToken,
+              chanceOperationId: source.chanceOperationId ?? ""
             })).filter(isApplicableGeneratedAuraChange);
           if (!lateContextual && !changes.length) continue;
           const key = [
             source.kind,
             sourceActor.uuid,
-            source.item.id,
+            source.identityId,
             entry.id,
             condition.id
           ].join(".");
@@ -1013,7 +1045,7 @@ function buildDesiredAuraGeneratedEffects() {
             .map(candidate => String(candidate.id ?? ""));
           const projectionContext = lateContextual ? {
             lateContextual: true,
-            sourceItemUuid: String(source.item?.uuid ?? ""),
+            sourceItemUuid: String(source.sourceItemUuid ?? source.item?.uuid ?? ""),
             sourceTokenUuid: getAuraProjectionTokenUuid(sourceToken),
             targetTokenUuid: getAuraProjectionTokenUuid(targetToken)
           } : {};
@@ -1055,12 +1087,42 @@ function getAuraSourceFunctionSets(actor) {
   const sources = [];
   for (const item of getActorItemsWithActiveHudModules(actor)) {
     if (item?.type === "ability") {
-      sources.push({ kind: "ability", item, functions: item.system?.functions ?? [] });
+      sources.push({
+        kind: "ability",
+        document: item,
+        item,
+        identityId: String(item.id ?? ""),
+        functions: item.system?.functions ?? []
+      });
       continue;
     }
     if (isActiveItemFreeSettingsItem(item)) {
-      sources.push({ kind: "itemFreeSettings", item, functions: item.system?.functions?.freeSettings?.entries ?? [] });
+      sources.push({
+        kind: "itemFreeSettings",
+        document: item,
+        item,
+        identityId: String(item.id ?? ""),
+        functions: item.system?.functions?.freeSettings?.entries ?? []
+      });
     }
+  }
+  for (const effect of actor?.effects ?? []) {
+    const descriptor = getUsableDistributedActiveApplicationAuraDescriptor(effect);
+    if (!descriptor) continue;
+    const sourceItem = resolveActiveApplicationAuraSourceItem(descriptor.flag);
+    sources.push({
+      kind: "activeEffect",
+      document: effect,
+      item: sourceItem,
+      identityId: String(effect.id ?? effect.uuid ?? ""),
+      originActorUuid: String(descriptor.flag?.sourceActorUuid ?? ""),
+      abilityItemId: String(descriptor.flag?.abilityItemId ?? sourceItem?.id ?? ""),
+      sourceItemUuid: String(descriptor.flag?.sourceItemUuid ?? sourceItem?.uuid ?? ""),
+      sourceTokenUuid: String(descriptor.flag?.targetTokenUuid ?? ""),
+      chanceOperationId: String(descriptor.flag?.chanceOperationId ?? ""),
+      changeEvaluation: descriptor.flag?.changeEvaluation === "source" ? "source" : "target",
+      functions: [descriptor.projectionFunction]
+    });
   }
   return sources;
 }
@@ -1079,7 +1141,20 @@ function prepareAuraSourceFunctions(actor) {
   return prepared;
 }
 
+function auraSourceUsesToken(source = null, sourceToken = null) {
+  if (source?.kind !== "activeEffect") return true;
+  const expectedTokenUuid = String(source?.sourceTokenUuid ?? "").trim();
+  return Boolean(
+    expectedTokenUuid
+    && expectedTokenUuid === getAuraProjectionTokenUuid(sourceToken)
+  );
+}
+
 function actorHasPotentialAuraSource(actor) {
+  if (Array.from(actor?.effects ?? []).some(effect => (
+    Boolean(getUsableDistributedActiveApplicationAuraDescriptor(effect))
+  ))) return true;
+
   const abilityItems = actor?.itemTypes?.ability
     ?? actor?.items?.filter?.(item => item?.type === "ability")
     ?? [];
@@ -1110,6 +1185,46 @@ function actorHasPotentialAuraSource(actor) {
     }
   }
   return false;
+}
+
+function getUsableDistributedActiveApplicationAuraDescriptor(effect = null) {
+  if (
+    !effect?.parent
+    || effect.disabled
+    || effect.active === false
+    || effect.duration?.expired === true
+  ) return null;
+  const descriptor = getActiveApplicationEffectAuraProjectionDescriptor(effect);
+  return descriptor?.distributionConditions?.length ? descriptor : null;
+}
+
+function resolveActiveApplicationAuraSourceItem(flag = null) {
+  const sourceItemUuid = String(flag?.sourceItemUuid ?? "").trim();
+  if (sourceItemUuid) {
+    try {
+      const item = globalThis.fromUuidSync?.(sourceItemUuid)
+        ?? globalThis.foundry?.utils?.fromUuidSync?.(sourceItemUuid)
+        ?? null;
+      if (["ability", "gear"].includes(String(item?.type ?? ""))) return item;
+    } catch (_error) {
+      // The persisted function snapshot remains authoritative if its Item no
+      // longer exists or its synthetic UUID cannot be resolved.
+    }
+  }
+
+  const sourceActorUuid = String(flag?.sourceActorUuid ?? "").trim();
+  const sourceItemId = String(flag?.abilityItemId ?? "").trim();
+  if (!sourceActorUuid || !sourceItemId) return null;
+  try {
+    const sourceActor = globalThis.fromUuidSync?.(sourceActorUuid)
+      ?? globalThis.foundry?.utils?.fromUuidSync?.(sourceActorUuid)
+      ?? null;
+    return sourceActor?.items?.get?.(sourceItemId)
+      ?? Array.from(sourceActor?.items ?? []).find(item => String(item?.id ?? "") === sourceItemId)
+      ?? null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function actorHasPotentialAuraSourceCached(actor) {
@@ -1222,11 +1337,16 @@ function buildAuraGeneratedActiveEffectData(
   effectCopyFlag,
   projectionContext = {}
 ) {
+  const sourceDocument = source?.document ?? source?.item ?? null;
+  const sourceItemUuid = String(source?.sourceItemUuid ?? source?.item?.uuid ?? "").trim();
+  const sourceEffectUuid = source?.kind === "activeEffect"
+    ? String(sourceDocument?.uuid ?? "").trim()
+    : "";
   return {
     type: "base",
-    name: source.item.name,
-    img: source.item.img || "icons/svg/aura.svg",
-    origin: getAbilityEffectOriginUuid(sourceActor, source.item),
+    name: sourceDocument?.name ?? source?.item?.name ?? "Аура",
+    img: sourceDocument?.img || source?.item?.img || "icons/svg/aura.svg",
+    origin: sourceEffectUuid || getAbilityEffectOriginUuid(sourceActor, source?.item),
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -1242,10 +1362,13 @@ function buildAuraGeneratedActiveEffectData(
           signature,
           sourceKind: source.kind,
           sourceActorUuid: sourceActor.uuid,
-          itemId: source.item.id,
+          sourceDocumentUuid: String(sourceDocument?.uuid ?? ""),
+          itemId: String(source?.item?.id ?? ""),
           functionId: entry.id,
           conditionId: condition.id,
           functionData,
+          ...(sourceItemUuid ? { sourceItemUuid } : {}),
+          ...(sourceEffectUuid ? { sourceEffectUuid } : {}),
           ...(effectCopyFlag ? {
             sourceItemUuid: effectCopyFlag.sourceItemUuid,
             abilitySourceId: effectCopyFlag.abilitySourceId,
@@ -1277,17 +1400,18 @@ function buildAuraTriggerCostData(sourceActor, source, entry) {
   if (!(entry?.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.triggerCost)) {
     return null;
   }
-  const sourceActorUuid = String(sourceActor?.uuid ?? "").trim();
-  const sourceItemUuid = String(source?.item?.uuid ?? "").trim();
+  const sourceDocument = source?.document ?? source?.item ?? null;
+  const sourceActorUuid = String(source?.originActorUuid ?? sourceActor?.uuid ?? "").trim();
+  const sourceItemUuid = String(source?.sourceItemUuid ?? source?.item?.uuid ?? "").trim();
   if (!sourceActorUuid || !sourceItemUuid) return null;
   // Aura ingress is passive. Carry the cost to the recipient effect so a
   // concrete consumer (for example, a skill check) charges that recipient.
   return {
     sourceIdentity: `${sourceActorUuid}:${sourceItemUuid}`,
     sourceItemUuid,
-    sourceItemId: String(source?.item?.id ?? ""),
-    sourceItemName: String(source?.item?.name ?? ""),
-    sourceItemImg: String(source?.item?.img ?? ""),
+    sourceItemId: String(source?.item?.id ?? source?.abilityItemId ?? ""),
+    sourceItemName: String(source?.item?.name ?? sourceDocument?.name ?? ""),
+    sourceItemImg: String(source?.item?.img ?? sourceDocument?.img ?? ""),
     functionId: String(entry?.id ?? ""),
     costs: getAbilityFunctionTriggerCostRows(entry)
   };
@@ -1344,7 +1468,13 @@ async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
     }
     existingByKey.set(key, effect);
   }
-  if (deletions.length) await actor.deleteEmbeddedDocuments("ActiveEffect", deletions, { animate: false });
+  if (deletions.length) {
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      deletions,
+      getManagedProjectionOperationOptions()
+    );
+  }
 
   const creations = [];
   for (const [key, data] of desired.entries()) {
@@ -1354,7 +1484,13 @@ async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
       && !isManagedBarrierProjectionDepleted(actor, `aura:${key}`, signature)
     ) creations.push(data);
   }
-  if (creations.length) await actor.createEmbeddedDocuments("ActiveEffect", creations, { animate: false });
+  if (creations.length) {
+    await actor.createEmbeddedDocuments(
+      "ActiveEffect",
+      creations,
+      getManagedProjectionOperationOptions()
+    );
+  }
 }
 
 function prepareAuraGeneratedChanges(sourceActor, changes = []) {
@@ -1976,11 +2112,11 @@ function isActorHealthBearingItem(item) {
 
 function getChangedItemPaths(changes = {}) {
   return Object.keys(foundry.utils.flattenObject(changes ?? {}))
-    .map(normalizeChangedItemPath)
+    .map(normalizeChangedDocumentPath)
     .filter(Boolean);
 }
 
-function normalizeChangedItemPath(path = "") {
+function normalizeChangedDocumentPath(path = "") {
   return String(path ?? "")
     .split(".")
     .map(segment => segment.startsWith("-=") ? segment.slice(2) : segment)

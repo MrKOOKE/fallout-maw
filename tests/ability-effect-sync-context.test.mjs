@@ -132,7 +132,8 @@ const {
 } = await import("../src/abilities/effect-sync-context.mjs");
 const {
   getAbilityEffectProjectionFromFunctions,
-  getAbilityEffectProjectionFromNormalizedFunctions
+  getAbilityEffectProjectionFromNormalizedFunctions,
+  getLateAuraContextualChanges
 } = await import("../src/abilities/evaluation.mjs");
 const {
   withoutTimedTriggerCostFunctions,
@@ -143,6 +144,7 @@ const {
   buildNormalizedEffectFunctionSnapshot
 } = await import("../src/abilities/effect-lifecycle.mjs");
 const {
+  activeEffectUpdateNeedsAuraStateSync,
   actorUpdateNeedsAuraStateSync,
   getItemAbilityEffectSyncPlan,
   registerAbilityEffectHooks,
@@ -152,6 +154,11 @@ const {
 const {
   registerActiveEffectAuraHooks
 } = await import("../src/abilities/active-effect-auras.mjs");
+const {
+  buildActiveApplicationMarkerChangeUpdate,
+  prepareActiveApplicationAuraFunctionData,
+  resolveActiveApplicationMarkerChanges
+} = await import("../src/abilities/active-application-effects.mjs");
 const {
   ADVANCEMENT_PURE_EFFECT_FLAG_KEY
 } = await import("../src/advancement/pure-value-effects.mjs");
@@ -164,6 +171,67 @@ function change(id, key, value = "1") {
 function condition(id, type, data = {}) {
   return { id, groupId: "", type, ...data };
 }
+
+test("ActiveEffect presentation-only deltas do not request a global aura pass", () => {
+  const actor = { documentName: "Actor", type: "character" };
+  const effect = { parent: actor };
+  const cosmeticDeltas = [
+    { name: "Renamed" },
+    { img: "renamed.webp" },
+    { description: "Presentation only" },
+    { tint: "#ffffff" },
+    { showIcon: 2 },
+    { folder: "folder-id" },
+    { sort: 10 },
+    { _stats: { modifiedTime: 100 } },
+    { "-=description": null },
+    {
+      _id: "effect-id",
+      name: "Renamed",
+      img: "renamed.webp",
+      _stats: { modifiedTime: 101 }
+    }
+  ];
+
+  for (const changes of cosmeticDeltas) {
+    assert.equal(activeEffectUpdateNeedsAuraStateSync(effect, changes), false);
+  }
+});
+
+test("ActiveEffect mechanical and unknown deltas conservatively request an aura pass", () => {
+  const effect = { parent: { documentName: "Actor", type: "character" } };
+  const mechanicalDeltas = [
+    { system: { changes: [] } },
+    { "system.changes": [] },
+    { disabled: true },
+    { statuses: ["dead"] },
+    { duration: { expired: true } },
+    { "duration.value": 6 },
+    { start: { time: 100 } },
+    { flags: { [SYSTEM_ID]: { activeApplication: null } } },
+    { origin: "Actor.source.Item.ability" },
+    { type: "base" },
+    { futureMechanicalField: true },
+    { "-=statuses": null },
+    {}
+  ];
+
+  for (const changes of mechanicalDeltas) {
+    assert.equal(activeEffectUpdateNeedsAuraStateSync(effect, changes), true);
+  }
+});
+
+test("ActiveEffect transfer is inert on an Actor but mechanical on an Item", () => {
+  const actor = { documentName: "Actor", type: "character" };
+  assert.equal(activeEffectUpdateNeedsAuraStateSync({ parent: actor }, { transfer: true }), false);
+  assert.equal(activeEffectUpdateNeedsAuraStateSync({
+    parent: {
+      documentName: "Item",
+      type: "ability",
+      parent: actor
+    }
+  }, { transfer: true }), true);
+});
 
 function gearItem({
   mode = "equipment",
@@ -890,6 +958,442 @@ test("aura pass rejects actors without raw aura dependencies before HUD preparat
 
   assert.equal(randomIdCalls, 0);
   assert.equal(actorFlagReads, 0);
+});
+
+function createRuntimeAuraActor(id) {
+  const effects = [];
+  const items = [];
+  const embeddedOperations = [];
+  items.contents = items;
+  const actor = {
+    id,
+    uuid: `Actor.${id}`,
+    documentName: "Actor",
+    type: "character",
+    effects,
+    embeddedOperations,
+    items,
+    itemTypes: { ability: [], gear: [] },
+    flags: {},
+    statuses: new Set(),
+    system: {
+      creature: { raceId: "", typeId: "" },
+      limbs: {},
+      resources: {},
+      characteristics: {},
+      skills: {},
+      development: {}
+    },
+    allApplicableEffects() {
+      return this.effects;
+    },
+    getFlag(scope, key) {
+      return this.flags?.[scope]?.[key];
+    },
+    async createEmbeddedDocuments(_documentName, creations, options = {}) {
+      embeddedOperations.push({ kind: "create", options });
+      return creations.map((data, index) => {
+        const effect = {
+          ...structuredClone(data),
+          id: `generated-aura-${this.effects.length}-${index}`,
+          parent: this,
+          disabled: false,
+          duration: data.duration ?? { expired: false },
+          getFlag(scope, key) {
+            return this.flags?.[scope]?.[key];
+          }
+        };
+        effect.uuid = `${this.uuid}.ActiveEffect.${effect.id}`;
+        this.effects.push(effect);
+        return effect;
+      });
+    },
+    async deleteEmbeddedDocuments(_documentName, ids, options = {}) {
+      embeddedOperations.push({ kind: "delete", options });
+      for (const id of ids) {
+        const index = this.effects.findIndex(effect => effect.id === id);
+        if (index >= 0) this.effects.splice(index, 1);
+      }
+      return [];
+    }
+  };
+  return actor;
+}
+
+function createRuntimeAuraToken(actor, id, x = 0, y = 0) {
+  const document = {
+    id,
+    uuid: `Scene.aura.Token.${id}`,
+    documentName: "Token",
+    hidden: false,
+    x,
+    y,
+    parent: { id: "aura", uuid: "Scene.aura" }
+  };
+  return {
+    id,
+    actor,
+    document,
+    center: { x, y },
+    visible: true,
+    renderable: true,
+    checkCollision: () => false
+  };
+}
+
+function createRuntimeDistributedAuraEffect(actor, token, {
+  id = "runtime-aura",
+  includeSelf = false,
+  radius = "3",
+  changeEvaluation = "target",
+  changeValue = "2"
+} = {}) {
+  const activeApplication = {
+    abilityItemId: "missing-source-item",
+    sourceItemUuid: "Actor.missing.Item.missing-source-item",
+    sourceActorUuid: "Actor.missing",
+    targetTokenUuid: token.document.uuid,
+    changeEvaluation,
+    chanceOperationId: `runtime-aura:${id}`,
+    functionData: {
+      id: "runtime-distributed-aura",
+      type: ABILITY_FUNCTION_TYPES.activeApplication,
+      changes: [change("runtime-aura-change", "system.resources.actionPoints.bonus", changeValue)],
+      conditions: [condition("runtime-aura-condition", ABILITY_CONDITION_TYPES.aura, {
+        auraMode: ABILITY_AURA_MODES.applyToTargets,
+        auraTargetGroups: ["ally"],
+        auraRadiusMeters: radius,
+        requiredCount: "1",
+        auraWallsBlock: false,
+        auraIncludeSelf: includeSelf,
+        auraIgnoreIncapacitated: false,
+        auraIgnoreHidden: true
+      })],
+      penalties: []
+    }
+  };
+  return {
+    id,
+    uuid: `${actor.uuid}.ActiveEffect.${id}`,
+    documentName: "ActiveEffect",
+    parent: actor,
+    name: `Runtime aura ${id}`,
+    img: "runtime-aura.webp",
+    disabled: false,
+    active: true,
+    duration: { expired: false, value: 18 },
+    system: { changes: [] },
+    flags: {
+      [SYSTEM_ID]: { activeApplication }
+    },
+    getFlag(scope, key) {
+      return this.flags?.[scope]?.[key];
+    }
+  };
+}
+
+function getGeneratedAuraEffects(actor) {
+  return actor.effects.filter(effect => effect.flags?.[SYSTEM_ID]?.auraGenerated);
+}
+
+test("a temporary ActiveEffect aura emits only from its persisted target Token", async () => {
+  const carrier = createRuntimeAuraActor("runtime-carrier");
+  const target = createRuntimeAuraActor("runtime-target");
+  const unselectedCarrierToken = createRuntimeAuraToken(carrier, "carrier-near", 0, 0);
+  const selectedCarrierToken = createRuntimeAuraToken(carrier, "carrier-selected", 1000, 0);
+  const targetToken = createRuntimeAuraToken(target, "target", 100, 0);
+  const sourceEffect = createRuntimeDistributedAuraEffect(carrier, selectedCarrierToken);
+  carrier.effects.push(sourceEffect);
+  const previousTokens = canvas.tokens.placeables;
+  canvas.tokens.placeables = [unselectedCarrierToken, selectedCarrierToken, targetToken];
+
+  try {
+    await syncAuraGeneratedEffects();
+    assert.equal(getGeneratedAuraEffects(target).length, 0);
+
+    selectedCarrierToken.center.x = 100;
+    await syncAuraGeneratedEffects();
+
+    const [projection] = getGeneratedAuraEffects(target);
+    assert.ok(projection);
+    assert.equal(projection.origin, sourceEffect.uuid);
+    assert.equal(projection.flags[SYSTEM_ID].auraGenerated.sourceKind, "activeEffect");
+    assert.equal(projection.flags[SYSTEM_ID].auraGenerated.sourceEffectUuid, sourceEffect.uuid);
+    assert.equal(projection.system.changes[0].key, "system.resources.actionPoints.bonus");
+    assert.equal(sourceEffect.system.changes.length, 0);
+    assert.deepEqual(target.embeddedOperations.at(-1), {
+      kind: "create",
+      options: {
+        falloutMawAbilityEffectSync: true,
+        animate: false
+      }
+    });
+
+    sourceEffect.disabled = true;
+    await syncAuraGeneratedEffects();
+    assert.equal(getGeneratedAuraEffects(target).length, 0);
+    assert.deepEqual(target.embeddedOperations.at(-1), {
+      kind: "delete",
+      options: {
+        falloutMawAbilityEffectSync: true,
+        animate: false
+      }
+    });
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+  }
+});
+
+test("two temporary aura effects keep independent projections and clean up by source", async () => {
+  const carrier = createRuntimeAuraActor("runtime-stacked-carrier");
+  const target = createRuntimeAuraActor("runtime-stacked-target");
+  const carrierToken = createRuntimeAuraToken(carrier, "stacked-carrier", 0, 0);
+  const targetToken = createRuntimeAuraToken(target, "stacked-target", 100, 0);
+  const first = createRuntimeDistributedAuraEffect(carrier, carrierToken, { id: "first-aura" });
+  const second = createRuntimeDistributedAuraEffect(carrier, carrierToken, { id: "second-aura" });
+  carrier.effects.push(first, second);
+  const previousTokens = canvas.tokens.placeables;
+  canvas.tokens.placeables = [carrierToken, targetToken];
+
+  try {
+    await syncAuraGeneratedEffects();
+    assert.deepEqual(
+      getGeneratedAuraEffects(target)
+        .map(effect => effect.flags[SYSTEM_ID].auraGenerated.sourceEffectUuid)
+        .sort(),
+      [first.uuid, second.uuid].sort()
+    );
+
+    carrier.effects.splice(carrier.effects.indexOf(first), 1);
+    await syncAuraGeneratedEffects();
+    assert.deepEqual(
+      getGeneratedAuraEffects(target)
+        .map(effect => effect.flags[SYSTEM_ID].auraGenerated.sourceEffectUuid),
+      [second.uuid]
+    );
+
+    second.duration.expired = true;
+    await syncAuraGeneratedEffects();
+    assert.equal(getGeneratedAuraEffects(target).length, 0);
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+  }
+});
+
+test("a temporary aura applies to its carrier only through an include-self projection", async () => {
+  const carrier = createRuntimeAuraActor("runtime-self-carrier");
+  const carrierToken = createRuntimeAuraToken(carrier, "self-carrier", 0, 0);
+  const sourceEffect = createRuntimeDistributedAuraEffect(carrier, carrierToken, {
+    includeSelf: true,
+    radius: "0"
+  });
+  carrier.effects.push(sourceEffect);
+  const previousTokens = canvas.tokens.placeables;
+  canvas.tokens.placeables = [carrierToken];
+
+  try {
+    await syncAuraGeneratedEffects();
+    assert.equal(sourceEffect.system.changes.length, 0);
+    assert.equal(getGeneratedAuraEffects(carrier).length, 1);
+    assert.equal(getGeneratedAuraEffects(carrier)[0].system.changes.length, 1);
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+  }
+});
+
+test("a temporary aura keeps late weapon conditions without its original Item", async () => {
+  const carrier = createRuntimeAuraActor("runtime-context-carrier");
+  const target = createRuntimeAuraActor("runtime-context-target");
+  const carrierToken = createRuntimeAuraToken(carrier, "context-carrier", 0, 0);
+  const targetToken = createRuntimeAuraToken(target, "context-target", 100, 0);
+  const sourceEffect = createRuntimeDistributedAuraEffect(carrier, carrierToken);
+  sourceEffect.flags[SYSTEM_ID].activeApplication.functionData.conditions.push(condition(
+    "runtime-weapon-action",
+    ABILITY_CONDITION_TYPES.weaponAction,
+    { weaponActionKeys: ["aimedShot"] }
+  ));
+  carrier.effects.push(sourceEffect);
+  const previousTokens = canvas.tokens.placeables;
+  const previousFromUuidSync = globalThis.fromUuidSync;
+  const documents = new Map([
+    [sourceEffect.uuid, sourceEffect],
+    [carrierToken.document.uuid, carrierToken],
+    [targetToken.document.uuid, targetToken]
+  ]);
+  canvas.tokens.placeables = [carrierToken, targetToken];
+  globalThis.fromUuidSync = uuid => documents.get(uuid) ?? null;
+
+  try {
+    await syncAuraGeneratedEffects();
+    const [projection] = getGeneratedAuraEffects(target);
+    assert.ok(projection);
+    assert.equal(projection.flags[SYSTEM_ID].auraGenerated.lateContextual, true);
+    assert.deepEqual(projection.system.changes, []);
+    assert.deepEqual(
+      getLateAuraContextualChanges(target, projection, {
+        actorToken: targetToken,
+        weaponActionKey: "aimedShot"
+      }).map(entry => [entry.key, entry.value]),
+      [["system.resources.actionPoints.bonus", 2]]
+    );
+    assert.deepEqual(
+      getLateAuraContextualChanges(target, projection, {
+        actorToken: targetToken,
+        weaponActionKey: "burst"
+      }),
+      []
+    );
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+    globalThis.fromUuidSync = previousFromUuidSync;
+  }
+});
+
+test("Actor resync keeps a distributed-aura marker empty", async () => {
+  const actor = createRuntimeAuraActor("runtime-marker-resync");
+  const token = createRuntimeAuraToken(actor, "marker-resync", 0, 0);
+  const effect = createRuntimeDistributedAuraEffect(actor, token);
+  const stalePenalty = change(
+    "stale-marker-penalty",
+    "system.resources.actionPoints.bonus",
+    "-7"
+  );
+  effect.flags[SYSTEM_ID].activeApplication.functionData.penalties = [stalePenalty];
+  effect.flags[SYSTEM_ID].activeApplication.changeSnapshot = [stalePenalty];
+  effect.flags[SYSTEM_ID].activeApplication.signature = JSON.stringify([stalePenalty]);
+  effect.system.changes = [structuredClone(stalePenalty)];
+  let evaluations = 0;
+  const changes = resolveActiveApplicationMarkerChanges(
+    effect.flags[SYSTEM_ID].activeApplication.functionData,
+    {
+      changeSnapshot: effect.flags[SYSTEM_ID].activeApplication.changeSnapshot,
+      evaluateChanges: () => {
+        evaluations += 1;
+        return [stalePenalty];
+      }
+    }
+  );
+  const update = buildActiveApplicationMarkerChangeUpdate(
+    effect,
+    effect.flags[SYSTEM_ID].activeApplication,
+    changes
+  );
+
+  assert.equal(evaluations, 0);
+  assert.deepEqual(update?.["system.changes"], []);
+  assert.equal(update?.[`flags.${SYSTEM_ID}.activeApplication.signature`], "[]");
+});
+
+test("source-mode aura snapshots both branches while target mode evaluates the recipient", async () => {
+  const sourceFunction = createRuntimeDistributedAuraEffect(
+    createRuntimeAuraActor("runtime-snapshot-source"),
+    createRuntimeAuraToken(createRuntimeAuraActor("runtime-snapshot-token-actor"), "snapshot-source"),
+    { changeEvaluation: "source", changeValue: "source-value" }
+  ).flags[SYSTEM_ID].activeApplication.functionData;
+  sourceFunction.penalties = [change(
+    "runtime-aura-penalty",
+    "system.resources.actionPoints.bonus",
+    "source-penalty"
+  )];
+  const prepared = prepareActiveApplicationAuraFunctionData(sourceFunction, {
+    changeEvaluation: "source",
+    prepareChange: entry => ({
+      ...entry,
+      value: entry.value === "source-value" ? 17 : -17
+    })
+  });
+  assert.equal(prepared.changes[0].value, 17);
+  assert.equal(prepared.penalties[0].value, -17);
+
+  const carrier = createRuntimeAuraActor("runtime-target-formula-carrier");
+  const target = createRuntimeAuraActor("runtime-target-formula-recipient");
+  carrier.system.resources.actionPoints = { value: 4 };
+  target.system.resources.actionPoints = { value: 9 };
+  const carrierToken = createRuntimeAuraToken(carrier, "target-formula-carrier", 0, 0);
+  const targetToken = createRuntimeAuraToken(target, "target-formula-recipient", 100, 0);
+  const sourceEffect = createRuntimeDistributedAuraEffect(carrier, carrierToken, {
+    changeEvaluation: "target",
+    changeValue: "@resources.actionPoints.value"
+  });
+  carrier.effects.push(sourceEffect);
+  const previousTokens = canvas.tokens.placeables;
+  canvas.tokens.placeables = [carrierToken, targetToken];
+
+  try {
+    await syncAuraGeneratedEffects();
+    assert.equal(getGeneratedAuraEffects(target)[0]?.system.changes[0]?.value, 9);
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+  }
+});
+
+test("temporary aura preserves trigger chance and trigger cost without its Item", async () => {
+  const carrier = createRuntimeAuraActor("runtime-metadata-carrier");
+  const target = createRuntimeAuraActor("runtime-metadata-target");
+  const carrierToken = createRuntimeAuraToken(carrier, "metadata-carrier", 0, 0);
+  const targetToken = createRuntimeAuraToken(target, "metadata-target", 100, 0);
+  const sourceEffect = createRuntimeDistributedAuraEffect(carrier, carrierToken);
+  const functionData = sourceEffect.flags[SYSTEM_ID].activeApplication.functionData;
+  functionData.conditions.push(
+    condition("runtime-trigger-chance", ABILITY_CONDITION_TYPES.triggerChance, {
+      chanceFormula: "100"
+    }),
+    condition("runtime-trigger-cost", ABILITY_CONDITION_TYPES.triggerCost, {
+      costs: [{
+        id: "runtime-ap-cost",
+        resourceKey: "actionPoints",
+        formula: "1"
+      }]
+    })
+  );
+  functionData.penalties = [change(
+    "runtime-failed-chance",
+    "system.resources.actionPoints.bonus",
+    "-9"
+  )];
+  carrier.effects.push(sourceEffect);
+  const previousTokens = canvas.tokens.placeables;
+  canvas.tokens.placeables = [carrierToken, targetToken];
+
+  try {
+    await syncAuraGeneratedEffects();
+    const [projection] = getGeneratedAuraEffects(target);
+    assert.equal(projection?.system.changes[0]?.value, 2);
+    assert.deepEqual(
+      projection?.flags[SYSTEM_ID].auraGenerated.triggerCost?.costs
+        .map(cost => [cost.resourceKey, cost.formula]),
+      [["actionPoints", "1"]]
+    );
+    assert.equal(
+      projection?.flags[SYSTEM_ID].auraGenerated.triggerCost?.sourceItemUuid,
+      "Actor.missing.Item.missing-source-item"
+    );
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+  }
+});
+
+test("Trial-routed primary changes are not also distributed by an aura", async () => {
+  const carrier = createRuntimeAuraActor("runtime-trial-carrier");
+  const target = createRuntimeAuraActor("runtime-trial-target");
+  const carrierToken = createRuntimeAuraToken(carrier, "trial-carrier", 0, 0);
+  const targetToken = createRuntimeAuraToken(target, "trial-target", 100, 0);
+  const sourceEffect = createRuntimeDistributedAuraEffect(carrier, carrierToken);
+  sourceEffect.flags[SYSTEM_ID].activeApplication.functionData.conditions.push(condition(
+    "runtime-routed-trial",
+    ABILITY_CONDITION_TYPES.trial,
+    { trialRoutesPrimaryChanges: true }
+  ));
+  carrier.effects.push(sourceEffect);
+  const previousTokens = canvas.tokens.placeables;
+  canvas.tokens.placeables = [carrierToken, targetToken];
+
+  try {
+    await syncAuraGeneratedEffects();
+    assert.equal(getGeneratedAuraEffects(target).length, 0);
+  } finally {
+    canvas.tokens.placeables = previousTokens;
+  }
 });
 
 test("managed projection index scans Actor.effects once and keeps strict ids plus document order", () => {

@@ -61,8 +61,12 @@ import { isActiveUseEffectKey } from "./active-use-keys.mjs";
 import { getActiveUseOperationId } from "./active-use-runtime.mjs";
 import {
   EFFECT_LIFECYCLE_KINDS,
+  getEffectLifecycleKind,
   getEffectSourceFunctionContext
 } from "./effect-lifecycle.mjs";
+import {
+  getActiveApplicationEffectAuraProjectionDescriptor
+} from "./active-application-effects.mjs";
 import { isAdvancementPureValueEffectKey } from "../advancement/pure-value-keys.mjs";
 
 const TRIGGER_CHANCE_DECISION_LIMIT = 512;
@@ -636,18 +640,52 @@ function getLateAuraContextualSelection(hostActor, effect, runtimeContext = {}) 
   if (!hostActor || !effect || effect.disabled || effect.active === false) return null;
   const auraFlag = getAuraGeneratedEffectFlag(effect);
   if (auraFlag?.lateContextual !== true) return null;
+  if (getEffectLifecycleKind(effect) !== EFFECT_LIFECYCLE_KINDS.reconciledInstance) return null;
 
-  const sourceContext = getEffectSourceFunctionContext(effect, hostActor);
-  if (sourceContext.lifecycleKind !== EFFECT_LIFECYCLE_KINDS.reconciledInstance) return null;
   const functionId = String(auraFlag.functionId ?? "").trim();
-  const sourceFunction = sourceContext.applicableFunctions.find(entry => (
-    String(entry?.id ?? "").trim() === functionId
-  ));
-  const sourceItem = sourceContext.sourceItem;
-  const sourceActor = sourceItem?.actor ?? sourceItem?.parent ?? null;
-  if (!sourceItem || !sourceActor || !sourceFunction) return null;
+  let sourceFunction = null;
+  let sourceItem = null;
+  let sourceActor = null;
+  let sourceTokenUuid = String(auraFlag.sourceTokenUuid ?? "").trim();
+  let abilityItemId = "";
+  let chanceOperationId = "";
+  let changeEvaluation = "source";
+  if (auraFlag.sourceKind === "activeEffect") {
+    const sourceEffect = resolveLateAuraDocument(auraFlag.sourceEffectUuid);
+    if (
+      !sourceEffect?.parent
+      || sourceEffect.disabled
+      || sourceEffect.active === false
+      || sourceEffect.duration?.expired === true
+    ) return null;
+    const descriptor = getActiveApplicationEffectAuraProjectionDescriptor(sourceEffect);
+    if (!descriptor?.distributionConditions?.length) return null;
+    sourceFunction = descriptor.projectionFunction;
+    if (String(sourceFunction?.id ?? "").trim() !== functionId) return null;
+    sourceActor = sourceEffect.parent;
+    const sourceEffectContext = getEffectSourceFunctionContext(sourceEffect, sourceActor);
+    sourceItem = sourceEffectContext.sourceItem;
+    abilityItemId = String(sourceItem?.id ?? descriptor.flag?.abilityItemId ?? "").trim();
+    chanceOperationId = String(descriptor.flag?.chanceOperationId ?? "").trim();
+    changeEvaluation = descriptor.flag?.changeEvaluation === "source" ? "source" : "target";
+    const currentSourceTokenUuid = String(descriptor.flag?.targetTokenUuid ?? "").trim();
+    if (!currentSourceTokenUuid || currentSourceTokenUuid !== sourceTokenUuid) return null;
+    sourceTokenUuid = currentSourceTokenUuid;
+  } else {
+    const sourceContext = getEffectSourceFunctionContext(effect, hostActor);
+    sourceFunction = sourceContext.applicableFunctions.find(entry => (
+      String(entry?.id ?? "").trim() === functionId
+    ));
+    sourceItem = sourceContext.sourceItem;
+    sourceActor = sourceItem?.actor ?? sourceItem?.parent ?? null;
+    abilityItemId = String(sourceItem?.id ?? "").trim();
+    if (!sourceItem || !sourceActor || !sourceFunction) return null;
+  }
+  if (!sourceActor || !sourceFunction) return null;
   if (sourceFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) return null;
   if (!hasAbilityWeaponContextCondition(sourceFunction.conditions)) return null;
+  const expectedSourceActorUuid = String(auraFlag.sourceActorUuid ?? "").trim();
+  if (expectedSourceActorUuid && expectedSourceActorUuid !== String(sourceActor.uuid ?? "").trim()) return null;
 
   const conditionId = String(auraFlag.conditionId ?? "").trim();
   const auraCondition = (sourceFunction.conditions ?? []).find(condition => (
@@ -656,7 +694,7 @@ function getLateAuraContextualSelection(hostActor, effect, runtimeContext = {}) 
   ));
   if (!auraCondition) return null;
 
-  const sourceToken = resolveLateAuraToken(auraFlag.sourceTokenUuid);
+  const sourceToken = resolveLateAuraToken(sourceTokenUuid);
   if (!sourceToken || !isTokenForActor(sourceToken, sourceActor)) return null;
   const runtimeHostToken = isTokenForActor(runtimeContext?.actorToken, hostActor)
     ? runtimeContext.actorToken
@@ -671,22 +709,28 @@ function getLateAuraContextualSelection(hostActor, effect, runtimeContext = {}) 
     actorToken: sourceToken,
     targetActor: hostActor,
     targetToken: hostToken,
-    abilityItemId: String(sourceItem.id ?? ""),
+    abilityItemId,
     functionId: String(sourceFunction.id ?? ""),
+    chanceOperationId,
     allowContextual: true,
     requirePreparedEffectiveRange: true
   };
+  const conditionActor = auraFlag.sourceKind === "activeEffect" ? hostActor : sourceActor;
   const selection = getSatisfiedAuraFunctionSelection(
-    sourceActor,
+    conditionActor,
     sourceFunction,
     auraCondition,
     conditionContext,
     { requireTriggerChanceScope: true }
   );
+  const formulaActor = (
+    auraFlag.sourceKind === "activeEffect"
+    && changeEvaluation !== "source"
+  ) ? hostActor : sourceActor;
   let formulaData = null;
   const changes = selection.changes.map(change => {
-    const result = tryEvaluateEffectChangeValue(sourceActor, change?.value, {
-      formulaData: () => (formulaData ??= buildActorFormulaData(sourceActor, { stage: "prepared" }))
+    const result = tryEvaluateEffectChangeValue(formulaActor, change?.value, {
+      formulaData: () => (formulaData ??= buildActorFormulaData(formulaActor, { stage: "prepared" }))
     });
     if (!result.ok) return null;
     return { ...change, value: result.value };
@@ -702,18 +746,22 @@ function getLateAuraContextualSelection(hostActor, effect, runtimeContext = {}) 
   };
 }
 
-function resolveLateAuraToken(uuid = "") {
+function resolveLateAuraDocument(uuid = "") {
   const value = String(uuid ?? "").trim();
   if (!value) return null;
   try {
-    const document = globalThis.fromUuidSync?.(value)
+    return globalThis.fromUuidSync?.(value)
       ?? globalThis.foundry?.utils?.fromUuidSync?.(value)
       ?? null;
-    const token = document?.object ?? document;
-    return token?.actor ? token : null;
   } catch (_error) {
     return null;
   }
+}
+
+function resolveLateAuraToken(uuid = "") {
+  const document = resolveLateAuraDocument(uuid);
+  const token = document?.object ?? document;
+  return token?.actor ? token : null;
 }
 
 function isTokenForActor(token = null, actor = null) {

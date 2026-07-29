@@ -3,7 +3,6 @@ import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_ACTIVE_APPLICATION_COST_PAYERS,
-  ABILITY_AURA_MODES,
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_CONDITION_TYPES,
   ABILITY_FUNCTION_TYPES,
@@ -223,6 +222,15 @@ import {
   hasAuraLineOfSight as hasActiveApplicationLineOfSight,
   measureTokenDistanceMeters as measureActiveApplicationTokenDistance
 } from "./aura-conditions.mjs";
+import {
+  ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
+  activeApplicationFunctionHasDistributionAura,
+  activeApplicationFunctionHasRuntimeAura,
+  activeApplicationFunctionHasTriggerAura,
+  buildActiveApplicationMarkerChangeUpdate,
+  prepareActiveApplicationAuraFunctionData,
+  resolveActiveApplicationMarkerChanges
+} from "./active-application-effects.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -239,7 +247,6 @@ const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const KNOCK_OFF_BALANCE_EFFECT_FLAG_KEY = "knockOffBalance";
 const TO_THE_END_EFFECT_FLAG_KEY = "toTheEnd";
-const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
@@ -1309,6 +1316,29 @@ async function useActiveApplicationAbilityFunction(scope, actor, abilityItem, ab
     chainRef: scope.chainRef,
     occurrenceId: `active-application:${occurrenceId}:${abilityItem.id}:${abilityFunction.id}`
   };
+  if (activeApplicationFunctionHasRuntimeAura(abilityFunction) && durationSeconds <= 0) {
+    ui.notifications.warn("Для ауры активного применения задайте длительность больше 0 секунд.");
+    await runTerminalSystemEventWorkflow({
+      scope,
+      resolvedEventKey: "fallout-maw.ability.use.resolved",
+      occurrenceBase,
+      participants: { source: sourceEventParticipant, target: null, related: [] },
+      resolvedData: ({ status }) => ({
+        ...buildAbilityUseEventData(actor, abilityItem, abilityFunction, {
+          activationCosts,
+          durationSeconds,
+          targetCount: 0
+        }),
+        status
+      }),
+      forcedResult: {
+        status: "failed",
+        reason: "auraDurationRequired",
+        value: false
+      }
+    });
+    return false;
+  }
   let costPreflight;
   try {
     costPreflight = await quoteAbilityFunctionResourceCosts({
@@ -1801,10 +1831,7 @@ async function executeActiveApplicationUse(scope, {
       }
       return { used: false, appliedCount: actionResult.executed, reason: "actionFailed" };
     }
-    const trialsAreDrivenByAura = abilityFunction.conditions?.some(condition => (
-      condition?.type === ABILITY_CONDITION_TYPES.aura
-      && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
-    ));
+    const trialsAreDrivenByAura = activeApplicationFunctionHasTriggerAura(abilityFunction);
     if (!trialsAreDrivenByAura && !requiresRemoteAuthority) {
       await executeAbilityTrials({
         abilityFunction: {
@@ -1893,10 +1920,7 @@ async function gateActiveApplicationTargets(scope, {
       durationSeconds > 0
       && (
         !abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction)
-        || abilityFunction.conditions?.some(condition => (
-          condition?.type === ABILITY_CONDITION_TYPES.aura
-          && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
-        ))
+        || activeApplicationFunctionHasRuntimeAura(abilityFunction)
       )
       && !activeApplicationTargetsHaveEffectCopyCapacity(actor, abilityItem, abilityFunction, [target])
     ) {
@@ -2246,7 +2270,12 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
   const selectedFunction = Array.isArray(selectedChanges)
     ? { ...abilityFunction, changes: selectedChanges }
     : abilityFunction;
-  const routesPrimaryChanges = abilityFunctionRoutesPrimaryChangesThroughTrials(selectedFunction);
+  const storedFunction = prepareActiveApplicationAuraFunctionData(selectedFunction, {
+    changeEvaluation: settings.changeEvaluation,
+    prepareChange: change => prepareEffectChangeForApplication(sourceActor, change)
+  });
+  const routesPrimaryChanges = abilityFunctionRoutesPrimaryChangesThroughTrials(selectedFunction)
+    || activeApplicationFunctionHasDistributionAura(selectedFunction);
   const chanceOperationId = [
     String(costContext?.rootId ?? chainRef?.rootId ?? "").trim(),
     String(costContext?.occurrenceId ?? "").trim()
@@ -2289,10 +2318,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
         .map(change => prepareEffectChangeForApplication(targetActor, change))
         .filter(change => change.key && change.value !== "");
   }
-  const createsRuntimeAuraEffect = abilityFunction.conditions?.some(condition => (
-    condition?.type === ABILITY_CONDITION_TYPES.aura
-    && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
-  ));
+  const createsRuntimeAuraEffect = activeApplicationFunctionHasRuntimeAura(abilityFunction);
   const effectPlans = plans.filter(plan => plan.changes?.length || createsRuntimeAuraEffect);
   if (
     effectPlans.length
@@ -2354,7 +2380,7 @@ async function applyActiveApplicationEffectsDirect(sourceActor, abilityItem, abi
               sourceActorUuid: sourceActor.uuid,
               sourceTokenUuid: String((sourceToken?.document ?? sourceToken)?.uuid ?? ""),
               targetTokenUuid: String((target?.token?.document ?? target?.token)?.uuid ?? ""),
-              functionData: foundry.utils.deepClone(selectedFunction),
+              functionData: foundry.utils.deepClone(storedFunction),
               constructData: foundry.utils.deepClone(abilityItem.system?.constructs ?? []),
               signature,
               changeEvaluation: settings.changeEvaluation,
@@ -2779,10 +2805,8 @@ async function processActiveApplicationEffectOperation(payload = {}) {
     token: tokenDocument.object ?? tokenDocument,
     actor: tokenDocument.actor
   }));
-  const createsRuntimeAuraEffect = abilityFunction.conditions?.some(condition => (
-    condition?.type === ABILITY_CONDITION_TYPES.aura
-    && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
-  ));
+  const createsRuntimeAuraEffect = activeApplicationFunctionHasRuntimeAura(abilityFunction);
+  if (createsRuntimeAuraEffect && durationSeconds <= 0) return false;
   if (
     durationSeconds > 0
     && (!abilityFunctionRoutesPrimaryChangesThroughTrials(abilityFunction) || createsRuntimeAuraEffect)
@@ -2829,10 +2853,7 @@ async function processActiveApplicationEffectOperation(payload = {}) {
         }
       );
     if (!applied) return false;
-    const trialsAreDrivenByAura = abilityFunction.conditions?.some(condition => (
-      condition?.type === ABILITY_CONDITION_TYPES.aura
-      && condition?.auraMode === ABILITY_AURA_MODES.triggerConditions
-    ));
+    const trialsAreDrivenByAura = activeApplicationFunctionHasTriggerAura(abilityFunction);
     if (!trialsAreDrivenByAura) {
       await executeAbilityTrials({
         abilityFunction: selectedFunction,
@@ -2985,6 +3006,16 @@ async function syncActorActiveApplicationEffects(actor) {
     const flag = effect.getFlag(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY);
     const abilityFunction = normalizeAbilityFunctions([flag?.functionData])[0];
     if (!abilityFunction) continue;
+    if (activeApplicationFunctionHasDistributionAura(abilityFunction)) {
+      const update = buildActiveApplicationMarkerChangeUpdate(effect, flag, []);
+      if (effect.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.disposableInstance) {
+        update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
+          kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
+        };
+      }
+      if (Object.keys(update).length) await effect.update(update);
+      continue;
+    }
     const sourceActor = await fromUuid(String(flag?.sourceActorUuid ?? "")) ?? actor;
     const abilityItem = {
       id: String(flag?.abilityItemId ?? ""),
@@ -3000,20 +3031,16 @@ async function syncActorActiveApplicationEffects(actor) {
       }
     };
     const snapshot = Array.isArray(flag?.changeSnapshot) ? flag.changeSnapshot : null;
-    const changes = snapshot
-      ? foundry.utils.deepClone(snapshot)
-      : getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, {
+    const changes = resolveActiveApplicationMarkerChanges(abilityFunction, {
+      changeSnapshot: snapshot,
+      evaluateChanges: () => getActiveApplicationEffectChanges(sourceActor, abilityItem, abilityFunction, {
         actor,
         token: getPrimaryActorToken(actor)
       }, null, String(flag?.chanceOperationId ?? ""))
         .map(change => prepareEffectChangeForApplication(actor, change))
-        .filter(change => change.key && change.value !== "");
-    const signature = JSON.stringify(changes);
-    const update = {};
-    if (signature !== String(flag?.signature ?? "")) {
-      update["system.changes"] = changes;
-      update[`flags.${SYSTEM_ID}.${ACTIVE_APPLICATION_EFFECT_FLAG_KEY}.signature`] = signature;
-    }
+        .filter(change => change.key && change.value !== "")
+    });
+    const update = buildActiveApplicationMarkerChangeUpdate(effect, flag, changes);
     if (effect.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.disposableInstance) {
       update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
         kind: EFFECT_LIFECYCLE_KINDS.disposableInstance
@@ -3025,7 +3052,19 @@ async function syncActorActiveApplicationEffects(actor) {
 
 function hasActiveApplicationEffects(actor = null) {
   for (const effect of actor?.effects ?? []) {
-    if (effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)) return true;
+    const flag = effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY);
+    if (!flag) continue;
+    if (activeApplicationFunctionHasDistributionAura(flag.functionData)) {
+      if (Object.keys(buildActiveApplicationMarkerChangeUpdate(effect, flag, [])).length) return true;
+      if (
+        effect.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind
+        !== EFFECT_LIFECYCLE_KINDS.disposableInstance
+      ) return true;
+      continue;
+    }
+    const abilityFunction = normalizeAbilityFunctions([flag.functionData])[0];
+    if (!abilityFunction) continue;
+    return true;
   }
   return false;
 }
