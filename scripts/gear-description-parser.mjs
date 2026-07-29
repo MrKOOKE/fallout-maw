@@ -453,7 +453,7 @@ export function buildFreeSettingsFunction({ skills = [], characteristics = [] } 
   }
   return {
     enabled: true,
-    useConditionWeakening: false,
+    useConditionWeakening: true,
     entries: [{
       id: migrationRandomId(),
       type: "effectChanges",
@@ -473,7 +473,7 @@ function buildFreeSettingsFunctionFromChanges(changes = []) {
   }
   return {
     enabled: true,
-    useConditionWeakening: false,
+    useConditionWeakening: true,
     entries: [{
       id: migrationRandomId(),
       type: "effectChanges",

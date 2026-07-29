@@ -32,6 +32,16 @@ const ITEM_CONDITION_ROOTS = Object.freeze([
   "system.durability",
   "system.functions.condition"
 ]);
+const ACTOR_EVENT_SNAPSHOT_ROOTS = Object.freeze([
+  "system.resources",
+  "system.needs",
+  "system.currencies",
+  "system.development.experience",
+  "system.experience",
+  "system.attributes.level",
+  "system.level",
+  "system.limbs"
+]);
 
 /**
  * Classify one committed Actor update into non-overlapping semantic events.
@@ -322,17 +332,32 @@ export function registerFoundryDocumentSystemEventHooks({
   const on = (name, callback) => registrations.push({ name, id: hooks.on(name, callback) });
 
   for (const documentName of ["Actor", "Item", "ActiveEffect", "Combat", "Combatant"]) {
-    on(`preUpdate${documentName}`, (document, _changes, options = {}) => {
-      if (!options?.[DOCUMENT_MIGRATION_OPTION]) captureBeforeOperation(document, options, randomId);
+    on(`preUpdate${documentName}`, (document, changes = {}, options = {}) => {
+      if (options?.[DOCUMENT_MIGRATION_OPTION]) return;
+      if (documentName === "Actor") {
+        if (!hasClassifiedActorChanges(changes)) return;
+        captureBeforeOperation(document, options, randomId, captureActorEventSnapshot);
+        return;
+      }
+      captureBeforeOperation(document, options, randomId);
     });
+  }
+  for (const documentName of ["Item", "ActiveEffect", "Combat", "Combatant"]) {
     on(`preDelete${documentName}`, (document, options = {}) => {
       if (!options?.[DOCUMENT_MIGRATION_OPTION]) captureBeforeOperation(document, options, randomId);
     });
   }
 
   on("updateActor", (actor, changes, options = {}, userId = "") => {
-    if (options?.[DOCUMENT_MIGRATION_OPTION] || !isActiveGM()) return;
-    emitAfterCommit(classifyActorUpdate(actor, changes, snapshotOptions(actor, options)), actor, options, userId);
+    if (
+      options?.[DOCUMENT_MIGRATION_OPTION]
+      || !isActiveGM()
+      || !hasClassifiedActorChanges(changes)
+    ) return;
+    emitAfterCommit(classifyActorUpdate(actor, changes, {
+      before: getBeforeSnapshot(actor, options),
+      after: captureActorEventSnapshot(actor)
+    }), actor, options, userId);
   });
   on("createItem", (item, options = {}, userId = "") => {
     if (!isActiveGM()) return;
@@ -423,6 +448,32 @@ export function captureDocumentSnapshot(document) {
       statuses: normalizeStringArray(document.statuses ?? source.statuses),
       started: document.started === undefined ? undefined : Boolean(document.started),
       currentCombatant
+    }
+  };
+}
+
+/**
+ * Capture only Actor source branches which can produce document-system events.
+ *
+ * Actor#toObject includes both embedded Items and ActiveEffects in Foundry. A
+ * full before/after serialization here therefore makes a one-leaf resource
+ * update pay for the Actor's entire inventory twice. The event classifier only
+ * reads the branches below, so retain those directly from the already
+ * materialized source instead.
+ */
+function captureActorEventSnapshot(actor) {
+  if (!actor) return null;
+  const actorSource = actor._source ?? {};
+  const source = {};
+  for (const root of ACTOR_EVENT_SNAPSHOT_ROOTS) {
+    const value = getPath(actorSource, root);
+    if (value !== undefined) setPath(source, root, cloneJson(value));
+  }
+  return {
+    source,
+    meta: {
+      uuid: String(actor.uuid ?? ""),
+      documentName: String(actor.documentName ?? actor.constructor?.documentName ?? "")
     }
   };
 }
@@ -615,11 +666,16 @@ function snapshotOptions(document, options) {
   };
 }
 
-function captureBeforeOperation(document, options = {}, randomId = defaultRandomId) {
+function captureBeforeOperation(
+  document,
+  options = {},
+  randomId = defaultRandomId,
+  captureSnapshot = captureDocumentSnapshot
+) {
   if (!document || !options || typeof options !== "object") return;
   const key = documentSnapshotKey(document);
   const snapshots = isPlainObject(options[BEFORE_SNAPSHOTS_OPTION]) ? options[BEFORE_SNAPSHOTS_OPTION] : {};
-  snapshots[key] = captureDocumentSnapshot(document);
+  snapshots[key] = captureSnapshot(document);
   options[BEFORE_SNAPSHOTS_OPTION] = snapshots;
   ensureOccurrenceBase(options, randomId);
 }
@@ -717,6 +773,44 @@ function pathMatchesRoot(root) {
   return path => path === root || path.startsWith(`${root}.`);
 }
 
+function hasClassifiedActorChanges(changes = {}) {
+  return collectChangePaths(changes).some(isClassifiedActorPath);
+}
+
+function isClassifiedActorPath(path) {
+  return (
+    pathMatchesRoot("system.resources.health")(path)
+    || path.startsWith("system.resources.")
+    || path.startsWith("system.needs.")
+    || path.startsWith("system.currencies.")
+    || pathMatchesRoot("system.development.experience")(path)
+    || pathMatchesRoot("system.experience")(path)
+    || pathMatchesRoot("system.attributes.level")(path)
+    || pathMatchesRoot("system.level")(path)
+    || path.startsWith("system.limbs.")
+  );
+}
+
+function collectChangePaths(changes = {}) {
+  const paths = [];
+  walk(changes, "");
+  return paths;
+
+  function walk(value, prefix) {
+    if (isPlainObject(value) && Object.keys(value).length) {
+      for (const [key, child] of Object.entries(value)) {
+        if (key === "_id") continue;
+        const normalizedKey = key.startsWith("-=") ? key.slice(2) : key;
+        const next = prefix ? `${prefix}.${normalizedKey}` : normalizedKey;
+        if (key.includes(".")) walk(child, prefix ? `${prefix}.${canonicalizePath(key)}` : canonicalizePath(key));
+        else walk(child, next);
+      }
+      return;
+    }
+    if (prefix) paths.push(canonicalizePath(prefix));
+  }
+}
+
 function isAbilityTogglePath(path) {
   if ([
     "system.active",
@@ -752,6 +846,19 @@ function getPath(object, path) {
     current = current[segment];
   }
   return current;
+}
+
+function setPath(object, path, value) {
+  const segments = String(path ?? "").split(".").filter(Boolean);
+  const leaf = segments.pop();
+  if (!leaf) return object;
+  let current = object;
+  for (const segment of segments) {
+    current[segment] ??= {};
+    current = current[segment];
+  }
+  current[leaf] = value;
+  return object;
 }
 
 function getSceneUuid(document) {

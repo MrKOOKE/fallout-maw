@@ -118,6 +118,8 @@ test("T-51d and T-51e receive distinct lore profiles despite equal aggregate bon
   const dFlag = applyEquipmentIndividualization(d, built.plan.get(d._id));
   const eFlag = applyEquipmentIndividualization(e, built.plan.get(e._id));
 
+  assert.equal(d.system.functions.freeSettings.useConditionWeakening, true);
+  assert.equal(e.system.functions.freeSettings.useConditionWeakening, true);
   assert.match(dFlag.lineageId, /t51-d-energy/);
   assert.match(eFlag.lineageId, /t51-e-ceramic/);
   assert.notDeepEqual(
@@ -178,4 +180,3 @@ test("every member of an ordinary clone group receives a distinct capability sig
   const signatures = new Set(rows.map(equipmentCloneSignature));
   assert.equal(signatures.size, rows.length);
 });
-

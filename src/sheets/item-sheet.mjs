@@ -4069,7 +4069,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       if (!entries.length) entries.push(createAbilityFunction(ABILITY_FUNCTION_TYPES.effectChanges));
       return this.item.update({
         "system.functions.freeSettings.enabled": true,
-        "system.functions.freeSettings.useConditionWeakening": Boolean(this.item.system?.functions?.freeSettings?.useConditionWeakening),
+        "system.functions.freeSettings.useConditionWeakening": (
+          this.item.system?.functions?.condition?.enabled === true
+          || Boolean(this.item.system?.functions?.freeSettings?.useConditionWeakening)
+        ),
         "system.functions.freeSettings.entries": entries
       });
     }

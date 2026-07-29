@@ -1,4 +1,9 @@
-import { ITEM_FUNCTIONS, getModuleFunction, hasItemFunction } from "./item-functions.mjs";
+import {
+  ITEM_FUNCTIONS,
+  getConditionWeakeningData,
+  getModuleFunction,
+  hasItemFunction
+} from "./item-functions.mjs";
 import { toInteger } from "./numbers.mjs";
 import { resolveWorldItemSync } from "./world-items.mjs";
 
@@ -78,12 +83,45 @@ export function applyWeaponModuleModifiers(weaponData = {}, options = {}) {
   const result = foundry.utils.deepClone(weaponData);
   let noiseDelta = 0;
   for (const itemData of modules) {
-    const modifiers = getModuleFunction(itemData).weapon ?? {};
+    const sourceModifiers = getModuleFunction(itemData).weapon ?? {};
+    const useWeakening = itemData.system?.functions?.freeSettings?.useConditionWeakening === true;
+    const ratio = useWeakening
+      ? getConditionWeakeningData(itemData).ratio
+      : 1;
+    const modifiers = scaleWeaponModuleModifiers(sourceModifiers, ratio);
     applySingleWeaponModule(result, modifiers);
     noiseDelta += toInteger(modifiers.noiseLevel);
   }
   result.noiseLevel = Math.max(0, getWeaponNoiseLevel(result) + noiseDelta);
   return result;
+}
+
+function scaleWeaponModuleModifiers(modifiers = {}, ratio = 1) {
+  const resolvedRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const integer = value => Math.round((Number(value) || 0) * resolvedRatio);
+  const numeric = value => (Number(value) || 0) * resolvedRatio;
+  return {
+    ...modifiers,
+    damage: integer(modifiers.damage),
+    accuracyBonus: integer(modifiers.accuracyBonus),
+    criticalChanceModifier: integer(modifiers.criticalChanceModifier),
+    criticalDamagePercent: integer(modifiers.criticalDamagePercent),
+    attackConeDegrees: numeric(modifiers.attackConeDegrees),
+    maxRangeMeters: numeric(modifiers.maxRangeMeters),
+    effectiveRange: {
+      value: numeric(modifiers.effectiveRange?.value),
+      max: numeric(modifiers.effectiveRange?.max)
+    },
+    penetration: integer(modifiers.penetration),
+    noiseLevel: integer(modifiers.noiseLevel),
+    magazineMax: integer(modifiers.magazineMax),
+    actionPointCosts: Object.fromEntries(
+      WEAPON_MODULE_ACTION_KEYS.map(actionKey => [
+        actionKey,
+        integer(modifiers.actionPointCosts?.[actionKey])
+      ])
+    )
+  };
 }
 
 function applySingleWeaponModule(weaponData, modifiers = {}) {

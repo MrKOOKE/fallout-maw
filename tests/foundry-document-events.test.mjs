@@ -286,7 +286,17 @@ test("Foundry hook adapter captures pre-state and dispatches post-commit only on
   });
   assert.ok(registrations.length >= 20);
 
-  const actor = createActor({ system: { resources: { health: { value: 10 } } } });
+  const actor = createActor({
+    system: { resources: { health: { value: 10 } } },
+    items: Array.from({ length: 100 }, (_entry, index) => ({ _id: `item-${index}` })),
+    effects: Array.from({ length: 100 }, (_entry, index) => ({ _id: `effect-${index}` }))
+  });
+  let activeActorSerializationCount = 0;
+  const nativeActorToObject = actor.toObject;
+  actor.toObject = function toObject(...args) {
+    activeActorSerializationCount += 1;
+    return nativeActorToObject.apply(this, args);
+  };
   const options = { falloutMawSystemEventChainRef: { version: 1, rootId: "root-1" } };
   callbacks.get("preUpdateActor")(actor, { "system.resources.health.value": 8 }, options, "player-1");
   actor._source.system.resources.health.value = 8;
@@ -305,6 +315,10 @@ test("Foundry hook adapter captures pre-state and dispatches post-commit only on
   assert.equal(dispatchOptions.before["system.resources.health.value"], 10);
   assert.equal(dispatchOptions.after["system.resources.health.value"], 8);
   assert.equal(dispatchOptions.delta["system.resources.health.value"], 8);
+  assert.equal(activeActorSerializationCount, 0);
+  const transmittedOptions = JSON.stringify(options);
+  assert.equal(transmittedOptions.includes("item-99"), false);
+  assert.equal(transmittedOptions.includes("effect-99"), false);
 
   const migrationOptions = { falloutMawDocumentMigration: true };
   callbacks.get("preUpdateActor")(actor, {}, migrationOptions, "player-1");
@@ -326,6 +340,52 @@ test("Foundry hook adapter captures pre-state and dispatches post-commit only on
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.length, 1);
   assert.equal(inactiveSnapshotCount, 0);
+});
+
+test("Actor event hooks skip unclassified updates before allocating operation state", async () => {
+  const callbacks = new Map();
+  const hooks = { on(name, callback) { callbacks.set(name, callback); return callbacks.size; } };
+  let randomIdCalls = 0;
+  let actorSerializations = 0;
+  let roots = 0;
+  registerFoundryDocumentSystemEventHooks({
+    hooks,
+    isActiveGM: () => true,
+    randomId: () => {
+      randomIdCalls += 1;
+      return "unused-operation";
+    },
+    withRoot: async (_meta, operation) => {
+      roots += 1;
+      return operation({ emit: async () => undefined });
+    }
+  });
+
+  const actor = createActor({
+    system: {
+      creature: { raceId: "human" },
+      resources: { health: { value: 10 } }
+    },
+    items: Array.from({ length: 250 }, (_entry, index) => ({ _id: `item-${index}` })),
+    effects: Array.from({ length: 250 }, (_entry, index) => ({ _id: `effect-${index}` }))
+  });
+  const nativeToObject = actor.toObject;
+  actor.toObject = function toObject(...args) {
+    actorSerializations += 1;
+    return nativeToObject.apply(this, args);
+  };
+
+  const options = {};
+  const changes = { "system.creature.raceId": "ghoul" };
+  callbacks.get("preUpdateActor")(actor, changes, options, "player-1");
+  actor._source.system.creature.raceId = "ghoul";
+  callbacks.get("updateActor")(actor, changes, options, "player-1");
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(actorSerializations, 0);
+  assert.equal(randomIdCalls, 0);
+  assert.equal(roots, 0);
+  assert.deepEqual(options, {});
 });
 
 test("one committed document operation emits every descriptor inside one event root", async () => {
