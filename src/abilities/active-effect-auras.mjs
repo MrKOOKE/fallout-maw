@@ -15,6 +15,7 @@ import { executeAbilityTrials, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY } from "./trial-r
 
 export const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 
+const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const indexedAuras = new Map();
 let runtimeQueue = Promise.resolve();
 const FORMULA_IDENTIFIER_PATTERN = /@?[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)*/gu;
@@ -38,6 +39,7 @@ export function registerActiveEffectAuraHooks() {
   Hooks.on("createActiveEffect", (effect, options = {}) => {
     if (
       !game.user?.isActiveGM
+      || options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true
       || options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
@@ -52,6 +54,7 @@ export function registerActiveEffectAuraHooks() {
   Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
     if (
       !game.user?.isActiveGM
+      || options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true
       || options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
@@ -69,13 +72,14 @@ export function registerActiveEffectAuraHooks() {
     if (!entries.length) enqueueAuraRuntime(() => processActorAuraChange(effect?.parent));
   });
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
-    removeIndexedEffect(effect);
     if (
       !game.user?.isActiveGM
+      || options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true
       || options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
     ) return;
+    removeIndexedEffect(effect);
     enqueueAuraRuntime(() => processActorAuraChange(effect?.parent));
   });
   Hooks.on("canvasReady", () => enqueueAuraRuntime(() => rebuildActiveAuraIndex()));

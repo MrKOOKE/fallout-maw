@@ -81,8 +81,11 @@ import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerDroppedItemHooks } from "./items/dropped-items.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
-import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
-import { initializeActiveEffectAuras, registerActiveEffectAuraHooks } from "./abilities/active-effect-auras.mjs";
+import {
+  registerAbilityEffectHooks,
+  syncActiveSceneActorAbilityEffects
+} from "./abilities/effects.mjs";
+import { registerActiveEffectAuraHooks } from "./abilities/active-effect-auras.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerLimitedUseHooks, registerLimitedUseSocket } from "./abilities/limited-uses.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
@@ -221,16 +224,12 @@ Hooks.on("openDetachedWindow", (_id, win) => {
   registerFormFocusDragGuard(win?.document);
 });
 
-Hooks.once("ready", async () => {
-  await initializeSettingsPresets();
-  await finalizeSystemSettings();
-  await finalizeSettingsPresetStartup();
-  await migrateWorldConsciousnessData();
-  await syncLoadedActorNaturalRaceItems();
-  await repairWorldInventories();
+Hooks.once("ready", () => {
+  // Foundry dispatches ready with Hooks.callAll and does not await callback
+  // Promises. Register request handlers before starting any asynchronous
+  // maintenance so the live UI never observes a half-registered system.
   initializeGlobalMapRuntime();
   registerSkillCheckControlSocket();
-  refreshSkillCheckControlButton();
   registerSkillCheckSocket();
   registerDamageSocket();
   registerSystemEventDispatcherSocket();
@@ -258,18 +257,30 @@ Hooks.once("ready", async () => {
   registerFixedAbilityFunctionSocket();
   registerDangerSenseSocket();
   registerCampSocket();
+  void initializeFalloutMawReadyState().catch(error => {
+    console.error(`${FALLOUT_MAW.title} | Ready initialization failed`, error);
+  });
+});
+
+async function initializeFalloutMawReadyState() {
+  await initializeSettingsPresets();
+  await finalizeSystemSettings();
+  await finalizeSettingsPresetStartup();
+  await migrateWorldConsciousnessData();
+  await syncLoadedActorNaturalRaceItems();
+  await repairWorldInventories();
+  refreshSkillCheckControlButton();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
   syncTravelGroupHud();
   initializeCombatCarousel();
-  await syncLoadedActorAbilityEffects();
-  await initializeActiveEffectAuras();
-  await syncPeriodicDamageRegionEffects();
   await recoverFoundrySystemEventEffects();
+  await syncActiveSceneActorAbilityEffects();
+  await syncPeriodicDamageRegionEffects();
   await armFoundryVisionTracking();
   await startConsciousnessStatusSynchronization();
   initializeCraftRecipeWorldIndex();
-});
+}
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {
   if (data?.type === ABILITY_CATALOG_DRAG_TYPE) return dropAbilityOnCanvasToken(canvas, data);

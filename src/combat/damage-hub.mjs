@@ -84,6 +84,10 @@ import {
   hasConsciousnessDepletionTransition,
   isConsciousnessUnconscious
 } from "./consciousness.mjs";
+import {
+  activeEffectChangesEqual,
+  canonicalizeActiveEffectChanges
+} from "../utils/active-effect-source.mjs";
 export {
   getResourceBlockState,
   getResourceLimitState
@@ -276,13 +280,22 @@ export async function startConsciousnessStatusSynchronization() {
 
   const actors = new Map();
   for (const actor of game.actors?.contents ?? []) {
-    if (actor?.uuid && ["character", "construct"].includes(actor.type)) actors.set(actor.uuid, actor);
+    if (
+      actor?.uuid
+      && ["character", "construct"].includes(actor.type)
+      && actorNeedsStartupVitalStatusSync(actor)
+    ) actors.set(actor.uuid, actor);
   }
-  for (const scene of game.scenes?.contents ?? []) {
-    for (const token of scene.tokens ?? []) {
-      const actor = token.actorLink ? null : token.actor;
-      if (actor?.uuid && ["character", "construct"].includes(actor.type)) actors.set(actor.uuid, actor);
-    }
+  // Off-scene synthetic Actors are intentionally not materialized here.
+  // Their persisted state is maintained by document hooks and they are checked
+  // when their Scene becomes active.
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    const actor = token?.actor;
+    if (
+      actor?.uuid
+      && ["character", "construct"].includes(actor.type)
+      && actorNeedsStartupVitalStatusSync(actor)
+    ) actors.set(actor.uuid, actor);
   }
 
   const synchronized = [];
@@ -292,6 +305,17 @@ export async function startConsciousnessStatusSynchronization() {
     synchronized.push(actor);
   }
   return synchronized;
+}
+
+function actorNeedsStartupVitalStatusSync(actor) {
+  const dead = hasDestroyedCriticalLimb(actor);
+  const unconscious = !dead && isActorConsciousnessDepleted(actor);
+  const hasDeadStatus = actor?.statuses?.has?.(STATUS_EFFECTS.dead) === true;
+  const hasUnconsciousStatus = actor?.statuses?.has?.(STATUS_EFFECTS.unconscious) === true;
+  if (dead !== hasDeadStatus || unconscious !== hasUnconsciousStatus) return true;
+  if (dead || unconscious || hasDeadStatus || hasUnconsciousStatus) return true;
+  return toInteger(actor.system?.resources?.[CONSCIOUSNESS_RESOURCE_KEY]?.recoveryTarget)
+    !== toInteger(actor.system?.combat?.consciousnessRecoveryTarget);
 }
 
 export function registerDamageSocket() {
@@ -3818,7 +3842,7 @@ function buildStatusEffectDataUpdate(effect, statusId = "") {
   if (isOverlayStatusEffect(statusId) && !effect.flags?.core?.overlay) update["flags.core.overlay"] = true;
 
   const changes = ensureIncapacitatingDodgeOverrideChanges(effect.system?.changes ?? [], statusId);
-  if (changes && JSON.stringify(changes) !== JSON.stringify(effect.system?.changes ?? [])) {
+  if (changes && !activeEffectChangesEqual(changes, effect.system?.changes ?? [])) {
     update["system.changes"] = changes;
   }
   return Object.keys(update).length > 1 ? update : {};
@@ -3831,7 +3855,7 @@ function prepareIncapacitatingStatusDodgeOverride(effect, statusId = "") {
 
 function ensureIncapacitatingDodgeOverrideChanges(changes = [], statusId = "") {
   if (!INCAPACITATING_DODGE_OVERRIDE_STATUSES.has(statusId)) return null;
-  const retained = (Array.isArray(changes) ? changes : [])
+  const retained = canonicalizeActiveEffectChanges(changes)
     .filter(change => String(change?.key ?? "").trim() !== DODGE_RESOURCE_BONUS_EFFECT_KEY);
   return [
     ...retained,

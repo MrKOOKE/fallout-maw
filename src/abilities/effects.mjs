@@ -75,9 +75,30 @@ import {
   invalidateAbilityConditionLightingCache,
   timeOfDayConditionApplies
 } from "./environment-conditions.mjs";
+import {
+  activeEffectChangesEqual,
+  canonicalizeActiveEffectChanges
+} from "../utils/active-effect-source.mjs";
 const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
+const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+const SOURCE_PROJECTION_OWNED_FLAG_KEYS = Object.freeze([
+  "kind",
+  EFFECT_LIFECYCLE_FLAG_KEY,
+  ADVANCEMENT_PURE_EFFECT_FLAG_KEY,
+  ABILITY_EFFECT_FLAG_KEY,
+  ITEM_EFFECT_FLAG_KEY,
+  EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY
+]);
+const SOURCE_PROJECTION_CONFLICTING_FLAG_KEYS = Object.freeze([
+  ACTIVE_APPLICATION_EFFECT_FLAG_KEY,
+  "abilityItemUseEffect",
+  "eventReaction",
+  "abilityTimedTriggerEffect",
+  AURA_GENERATED_EFFECT_FLAG_KEY,
+  LIMITED_EFFECT_COPY_FLAG_KEY
+]);
 const ACTOR_EFFECT_SYNC_DELAY_MS = 40;
 const AURA_STATE_SYNC_DELAY_MS = 40;
 const ILLUMINATION_CONDITION_SYNC_DELAY_MS = 120;
@@ -99,6 +120,9 @@ let environmentConditionIndexInitialized = false;
 
 export function registerAbilityEffectHooks() {
   registerBulkOperationFlusher(flushDeferredAbilityEffectSyncs);
+  Hooks.on("createActor", actor => {
+    queueActorAbilityEffectSync(actor, {}, { aura: true });
+  });
   Hooks.on("createItem", item => {
     if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (
@@ -163,6 +187,14 @@ export function registerAbilityEffectHooks() {
     queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
   Hooks.on("updateToken", (tokenDocument, changes) => {
+    const changedPaths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
+    if (changedPaths.some(path => path === "actorId" || path === "actorLink")) {
+      queueActorAbilityEffectSync(
+        tokenDocument?.actor,
+        { actorToken: tokenDocument },
+        { aura: true }
+      );
+    }
     const relevant = isAuraTokenUpdateRelevant(changes);
     const movementActionChanged = foundry.utils.hasProperty(changes, "movementAction");
     const positionChanged = isAuraTokenPositionUpdate(changes);
@@ -178,6 +210,11 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("createToken", tokenDocument => {
     invalidateAbilityConditionLightingCache();
+    queueActorAbilityEffectSync(
+      tokenDocument?.actor,
+      { actorToken: tokenDocument },
+      { aura: true }
+    );
     queueIlluminationConditionEffectSync(tokenDocument);
     queueAuraStateSync();
   });
@@ -187,6 +224,7 @@ export function registerAbilityEffectHooks() {
     queueAuraStateSync();
   });
   Hooks.on("createActiveEffect", (effect, options = {}) => {
+    if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
     if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
     if (
       options?.falloutMawActiveAuraRuntime === true
@@ -198,6 +236,7 @@ export function registerAbilityEffectHooks() {
     if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
   });
   Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
+    if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
     if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
     if (options?.falloutMawLimitedUses === true) return;
     if (options?.falloutMawDamageBarrierCommit === true) return;
@@ -218,6 +257,7 @@ export function registerAbilityEffectHooks() {
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
+    if (options?.[ABILITY_EFFECT_SYNC_OPERATION_OPTION] === true) return;
     if (effectMayChangeEquipmentRequirementValues(effect)) queueActorAbilityEffectSync(effect?.parent);
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (options?.falloutMawDamageBarrierCommit === true) return;
@@ -246,9 +286,10 @@ export function registerAbilityEffectHooks() {
     environmentConditionActorIndex.clear();
     environmentConditionCache.clear();
     environmentConditionIndexInitialized = false;
-    // Ready already runs a full sync; avoid overlapping ~300ms work during preset startup.
+    // The initial canvasReady fires before ready. The ready bootstrap handles
+    // that scene once settings and migrations have settled.
     if (!game.ready) return;
-    void syncLoadedActorAbilityEffects();
+    void syncActiveSceneActorAbilityEffects();
   });
   Hooks.on("lightingRefresh", () => {
     invalidateAbilityConditionLightingCache();
@@ -473,6 +514,27 @@ export async function syncLoadedActorAbilityEffects() {
   await syncAuraGeneratedEffects();
 }
 
+/**
+ * Reconcile only Actors which belong to the currently drawn Scene.
+ *
+ * World-wide projection repair is migration/maintenance work, not a canvas or
+ * ordinary-ready responsibility. Document hooks keep other Actors current.
+ */
+export async function syncActiveSceneActorAbilityEffects() {
+  if (!game.user?.isActiveGM) return;
+  const actors = new Map();
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const actor = token?.actor;
+    if (!actor?.uuid) continue;
+    actors.set(actor.uuid, {
+      actor,
+      context: { actorToken: token?.document ?? actor?.token ?? null }
+    });
+  }
+  for (const { actor, context } of actors.values()) await syncActorAbilityEffects(actor, context);
+  await syncAuraGeneratedEffects();
+}
+
 function isExecutingActiveApplicationAuraEffect(effect = null) {
   const flag = effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)
     ?? effect?.flags?.[SYSTEM_ID]?.[ACTIVE_APPLICATION_EFFECT_FLAG_KEY]
@@ -559,16 +621,17 @@ export async function syncActorAbilityEffects(actor, context = {}) {
     const equipmentRequirementItems = activeItemDocuments.filter(item => isActiveDamageMitigationRequirementItem(item));
     const activeEquipmentRequirementItemIds = new Set(equipmentRequirementItems.map(item => item.id));
     const effectIndex = buildActorAbilityEffectSyncIndex(actor);
+    let managedProjectionChanged = false;
 
     for (const item of abilityItems) {
       const descriptor = buildAbilityEffectSourceDescriptor(item.system?.functions ?? []);
-      await syncSingleAbilityEffect(
+      if (await syncSingleAbilityEffect(
         actor,
         item,
         descriptor,
         getLiveIndexedEffects(actor, effectIndex.abilityEffectsByItemId, item.id),
         context
-      );
+      )) managedProjectionChanged = true;
       await syncNormalizedTimedTriggerCostEffects(
         actor,
         item,
@@ -580,13 +643,13 @@ export async function syncActorAbilityEffects(actor, context = {}) {
       const descriptor = buildAbilityEffectSourceDescriptor(
         item.system?.functions?.freeSettings?.entries ?? []
       );
-      await syncSingleItemFreeSettingsEffect(
+      if (await syncSingleItemFreeSettingsEffect(
         actor,
         item,
         descriptor,
         getLiveIndexedEffects(actor, effectIndex.itemEffectsByItemId, item.id),
         context
-      );
+      )) managedProjectionChanged = true;
       await syncNormalizedTimedTriggerCostEffects(
         actor,
         item,
@@ -595,7 +658,7 @@ export async function syncActorAbilityEffects(actor, context = {}) {
       );
     }
     for (const item of equipmentRequirementItems) {
-      await syncSingleEquipmentRequirementEffect(
+      if (await syncSingleEquipmentRequirementEffect(
         actor,
         item,
         getLiveIndexedEffects(
@@ -603,36 +666,39 @@ export async function syncActorAbilityEffects(actor, context = {}) {
           effectIndex.equipmentRequirementEffectsByItemId,
           item.id
         )
-      );
+      )) managedProjectionChanged = true;
     }
 
-    const stale = getLiveStaleIndexedEffects(
+    const staleProjectionEffects = [
+      ...getLiveStaleIndexedEffects(
+        actor,
+        effectIndex.abilityEffectEntries,
+        activeAbilityItemIds
+      ),
+      ...getLiveStaleIndexedEffects(
+        actor,
+        effectIndex.itemEffectEntries,
+        activeItemFreeSettingsItemIds
+      ),
+      ...getLiveStaleIndexedEffects(
+        actor,
+        effectIndex.equipmentRequirementEffectEntries,
+        activeEquipmentRequirementItemIds
+      )
+    ];
+    const staleProjectionChanged = await deleteStaleManagedProjectionEffects(
       actor,
-      effectIndex.abilityEffectEntries,
-      activeAbilityItemIds
-    );
-    await deleteAbilitySyncEffects(actor, stale, ABILITY_EFFECT_FLAG_KEY);
-
-    const staleItemEffects = getLiveStaleIndexedEffects(
-      actor,
-      effectIndex.itemEffectEntries,
-      activeItemFreeSettingsItemIds
-    );
-    await deleteAbilitySyncEffects(actor, staleItemEffects, ITEM_EFFECT_FLAG_KEY);
-    const staleEquipmentRequirementEffects = getLiveStaleIndexedEffects(
-      actor,
-      effectIndex.equipmentRequirementEffectEntries,
-      activeEquipmentRequirementItemIds
-    );
-    await deleteAbilitySyncEffects(
-      actor,
-      staleEquipmentRequirementEffects,
-      EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY
+      staleProjectionEffects
     );
     await pruneManagedBarrierProjectionDepletions(actor, record => (
       (record?.kind === "ability" && !activeAbilityItemIds.has(String(record?.sourceId ?? "")))
       || (record?.kind === "item" && !activeItemFreeSettingsItemIds.has(String(record?.sourceId ?? "")))
     ));
+    if (staleProjectionChanged) {
+      queueActorAbilityEffectSync(actor, context, { aura: true });
+    } else if (managedProjectionChanged) {
+      queueAuraStateSync();
+    }
   } finally {
     processingActors.delete(actor.uuid);
   }
@@ -653,8 +719,9 @@ async function syncSingleAbilityEffect(actor, item, descriptor, existing = [], c
         existing.map(effect => effect.id),
         getAbilityEffectOperationOptions(descriptor)
       );
+      return true;
     }
-    return;
+    return false;
   }
 
   const sourceId = getAbilitySourceId(item);
@@ -666,51 +733,53 @@ async function syncSingleAbilityEffect(actor, item, descriptor, existing = [], c
     showIcon,
     ...(pureChangeIndexes.length ? { pureChangeIndexes } : {})
   });
-  if (isManagedBarrierProjectionDepleted(actor, `ability:${item.id}`, signature)) return;
+  if (isManagedBarrierProjectionDepleted(actor, `ability:${item.id}`, signature)) return false;
   await clearManagedBarrierProjectionDepletion(actor, `ability:${item.id}`);
-  const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
+  const desired = buildAbilityActiveEffectData(
+    actor,
+    item,
+    changes,
+    signature,
+    sourceId,
+    showIcon,
+    pureChangeIndexes,
+    descriptor.hasAuraCondition
+  );
+  const current = selectReusableManagedProjectionEffect(
+    existing,
+    desired,
+    ABILITY_EFFECT_FLAG_KEY,
+    signature
+  );
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
+  let changed = false;
   if (obsolete.length) {
     await actor.deleteEmbeddedDocuments(
       "ActiveEffect",
       obsolete,
       getAbilityEffectOperationOptions(descriptor)
     );
+    changed = true;
   }
 
-  if (current) {
-    const update = {};
-    if (current.disabled) update.disabled = false;
-    if (current.name !== item.name) update.name = item.name;
-    if (current.img !== item.img) update.img = item.img;
-    if (current.origin !== item.uuid) update.origin = item.uuid;
-    if (current.showIcon !== showIcon) update.showIcon = showIcon;
-    if (current.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) {
-      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
-        kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
-      };
+  if (current && isEmbeddedEffectLive(actor, current)) {
+    const update = buildManagedProjectionActiveEffectUpdate(
+      current,
+      desired
+    );
+    if (Object.keys(update).length) {
+      await current.update(update, getAbilityEffectOperationOptions(descriptor));
+      changed = true;
     }
-    const auraCondition = descriptor.hasAuraCondition;
-    if (current.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
-      update[`flags.${SYSTEM_ID}.${ABILITY_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
-    }
-    if (Object.keys(update).length) await current.update(update);
-    return;
+    return changed;
   }
 
   await actor.createEmbeddedDocuments(
     "ActiveEffect",
-    [buildAbilityActiveEffectData(
-      item,
-      changes,
-      signature,
-      sourceId,
-      showIcon,
-      pureChangeIndexes,
-      descriptor.hasAuraCondition
-    )],
+    [desired],
     getAbilityEffectOperationOptions(descriptor)
   );
+  return true;
 }
 
 async function syncSingleItemFreeSettingsEffect(actor, item, descriptor, existing = [], context = {}) {
@@ -728,8 +797,9 @@ async function syncSingleItemFreeSettingsEffect(actor, item, descriptor, existin
         existing.map(effect => effect.id),
         getItemFreeSettingsEffectOperationOptions(descriptor)
       );
+      return true;
     }
-    return;
+    return false;
   }
 
   const showIcon = getItemFreeSettingsEffectShowIcon(actor, item, descriptor, context);
@@ -739,50 +809,52 @@ async function syncSingleItemFreeSettingsEffect(actor, item, descriptor, existin
     showIcon,
     ...(pureChangeIndexes.length ? { pureChangeIndexes } : {})
   });
-  if (isManagedBarrierProjectionDepleted(actor, `item:${item.id}`, signature)) return;
+  if (isManagedBarrierProjectionDepleted(actor, `item:${item.id}`, signature)) return false;
   await clearManagedBarrierProjectionDepletion(actor, `item:${item.id}`);
-  const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.signature === signature);
+  const desired = buildItemFreeSettingsActiveEffectData(
+    actor,
+    item,
+    changes,
+    signature,
+    showIcon,
+    pureChangeIndexes,
+    descriptor.hasAuraCondition
+  );
+  const current = selectReusableManagedProjectionEffect(
+    existing,
+    desired,
+    ITEM_EFFECT_FLAG_KEY,
+    signature
+  );
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
+  let changed = false;
   if (obsolete.length) {
     await actor.deleteEmbeddedDocuments(
       "ActiveEffect",
       obsolete,
       getItemFreeSettingsEffectOperationOptions(descriptor)
     );
+    changed = true;
   }
 
-  if (current) {
-    const update = {};
-    if (current.disabled) update.disabled = false;
-    if (current.name !== item.name) update.name = item.name;
-    if (current.img !== item.img) update.img = item.img;
-    if (current.origin !== item.uuid) update.origin = item.uuid;
-    if (current.showIcon !== showIcon) update.showIcon = showIcon;
-    if (current.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) {
-      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
-        kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
-      };
+  if (current && isEmbeddedEffectLive(actor, current)) {
+    const update = buildManagedProjectionActiveEffectUpdate(
+      current,
+      desired
+    );
+    if (Object.keys(update).length) {
+      await current.update(update, getItemFreeSettingsEffectOperationOptions(descriptor));
+      changed = true;
     }
-    const auraCondition = descriptor.hasAuraCondition;
-    if (current.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
-      update[`flags.${SYSTEM_ID}.${ITEM_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
-    }
-    if (Object.keys(update).length) await current.update(update);
-    return;
+    return changed;
   }
 
   await actor.createEmbeddedDocuments(
     "ActiveEffect",
-    [buildItemFreeSettingsActiveEffectData(
-      item,
-      changes,
-      signature,
-      showIcon,
-      pureChangeIndexes,
-      descriptor.hasAuraCondition
-    )],
+    [desired],
     getItemFreeSettingsEffectOperationOptions(descriptor)
   );
+  return true;
 }
 
 async function syncSingleEquipmentRequirementEffect(actor, item, existing = []) {
@@ -792,44 +864,52 @@ async function syncSingleEquipmentRequirementEffect(actor, item, existing = []) 
       await deleteAbilitySyncEffects(
         actor,
         existing,
-        EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY
+        EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY,
+        { managedProjectionSync: true }
       );
+      return true;
     }
-    return;
+    return false;
   }
 
   const changes = [change];
   const signature = JSON.stringify({ itemId: item.id, changes });
-  const current = existing.find(effect => (
-    effect.getFlag(SYSTEM_ID, EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY)?.signature === signature
-  ));
+  const desired = buildEquipmentRequirementActiveEffectData(actor, item, changes, signature);
+  const current = selectReusableManagedProjectionEffect(
+    existing,
+    desired,
+    EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY,
+    signature
+  );
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
+  let changed = false;
   if (obsolete.length) {
-    await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete);
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      obsolete,
+      getManagedProjectionOperationOptions()
+    );
+    changed = true;
   }
 
-  if (current) {
-    const update = {};
-    if (current.disabled) update.disabled = false;
-    if (current.name !== item.name) update.name = item.name;
-    if (current.img !== item.img) update.img = item.img;
-    if (current.origin !== item.uuid) update.origin = item.uuid;
-    if (current.showIcon !== ACTIVE_EFFECT_SHOW_ICON_ALWAYS) {
-      update.showIcon = ACTIVE_EFFECT_SHOW_ICON_ALWAYS;
+  if (current && isEmbeddedEffectLive(actor, current)) {
+    const update = buildManagedProjectionActiveEffectUpdate(
+      current,
+      desired
+    );
+    if (Object.keys(update).length) {
+      await current.update(update, getManagedProjectionOperationOptions());
+      changed = true;
     }
-    if (current.getFlag(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) {
-      update[`flags.${SYSTEM_ID}.${EFFECT_LIFECYCLE_FLAG_KEY}`] = {
-        kind: EFFECT_LIFECYCLE_KINDS.sourceProjection
-      };
-    }
-    if (Object.keys(update).length) await current.update(update);
-    return;
+    return changed;
   }
 
   await actor.createEmbeddedDocuments(
     "ActiveEffect",
-    [buildEquipmentRequirementActiveEffectData(item, changes, signature)]
+    [desired],
+    getManagedProjectionOperationOptions()
   );
+  return true;
 }
 
 function queueAuraStateSync() {
@@ -1126,7 +1206,7 @@ function buildAuraGeneratedActiveEffectData(
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    system: { changes },
+    system: { changes: buildManagedProjectionActiveEffectChanges(changes) },
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
@@ -1263,6 +1343,7 @@ function isApplicableGeneratedAuraChange(change = {}) {
 }
 
 function buildAbilityActiveEffectData(
+  actor,
   item,
   changes,
   signature,
@@ -1276,11 +1357,11 @@ function buildAbilityActiveEffectData(
     type: "base",
     name: item.name,
     img: item.img || "icons/svg/aura.svg",
-    origin: item.uuid,
+    origin: getAbilityEffectOriginUuid(actor, item),
     transfer: false,
     disabled: false,
     showIcon,
-    system: { changes },
+    system: { changes: buildManagedProjectionActiveEffectChanges(changes) },
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
@@ -1302,6 +1383,7 @@ function buildAbilityActiveEffectData(
 }
 
 function buildItemFreeSettingsActiveEffectData(
+  actor,
   item,
   changes,
   signature,
@@ -1314,11 +1396,11 @@ function buildItemFreeSettingsActiveEffectData(
     type: "base",
     name: item.name,
     img: item.img || "icons/svg/item-bag.svg",
-    origin: item.uuid,
+    origin: getAbilityEffectOriginUuid(actor, item),
     transfer: false,
     disabled: false,
     showIcon,
-    system: { changes },
+    system: { changes: buildManagedProjectionActiveEffectChanges(changes) },
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
@@ -1338,16 +1420,16 @@ function buildItemFreeSettingsActiveEffectData(
   };
 }
 
-function buildEquipmentRequirementActiveEffectData(item, changes, signature) {
+function buildEquipmentRequirementActiveEffectData(actor, item, changes, signature) {
   return {
     type: "base",
     name: item.name,
     img: item.img || "icons/svg/item-bag.svg",
-    origin: item.uuid,
+    origin: getAbilityEffectOriginUuid(actor, item),
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    system: { changes },
+    system: { changes: buildManagedProjectionActiveEffectChanges(changes) },
     flags: {
       [SYSTEM_ID]: {
         kind: "active",
@@ -1361,6 +1443,120 @@ function buildEquipmentRequirementActiveEffectData(item, changes, signature) {
       }
     }
   };
+}
+
+function buildManagedProjectionActiveEffectChanges(changes = []) {
+  return canonicalizeActiveEffectChanges(changes);
+}
+
+function buildManagedProjectionActiveEffectUpdate(effect, desired) {
+  const update = {};
+  const source = effect?._source ?? {};
+  for (const key of ["name", "img", "origin", "transfer", "disabled", "showIcon"]) {
+    const currentValue = Object.hasOwn(source, key) ? source[key] : effect?.[key];
+    if (!projectionValuesEqual(currentValue, desired?.[key])) {
+      update[key] = cloneProjectionValue(desired?.[key]);
+    }
+  }
+
+  const desiredChanges = desired?.system?.changes ?? [];
+  const currentChanges = source?.system?.changes ?? effect?.system?.changes ?? [];
+  if (!activeEffectChangesEqual(currentChanges, desiredChanges)) {
+    update["system.changes"] = cloneProjectionValue(desiredChanges);
+  }
+
+  const currentSystemFlags = source?.flags?.[SYSTEM_ID] ?? effect?.flags?.[SYSTEM_ID] ?? {};
+  const desiredSystemFlags = desired?.flags?.[SYSTEM_ID] ?? {};
+  for (const key of SOURCE_PROJECTION_OWNED_FLAG_KEYS) {
+    const hasCurrent = Object.hasOwn(currentSystemFlags, key);
+    const hasDesired = Object.hasOwn(desiredSystemFlags, key);
+    const path = `flags.${SYSTEM_ID}.${key}`;
+    if (!hasDesired) {
+      if (hasCurrent) update[path] = globalThis._del;
+      continue;
+    }
+    const currentValue = currentSystemFlags[key];
+    const desiredValue = desiredSystemFlags[key];
+    if (!hasCurrent || !projectionValuesEqual(currentValue, desiredValue)) {
+      update[path] = cloneProjectionValue(desiredValue);
+    }
+  }
+
+  return Object.keys(update).length ? { _id: effect.id, ...update } : {};
+}
+
+function selectReusableManagedProjectionEffect(existing, desired, managedFlagKey, signature) {
+  const reusable = existing.filter(effect => (
+    canReuseManagedProjectionEffect(effect, desired, managedFlagKey)
+  ));
+  return reusable.find(effect => (
+    effect.getFlag(SYSTEM_ID, managedFlagKey)?.signature === signature
+  )) ?? reusable[0] ?? null;
+}
+
+function canReuseManagedProjectionEffect(effect, desired, managedFlagKey) {
+  if (!effect || effect.type !== desired?.type) return false;
+  const lifecycleKind = String(
+    effect?.getFlag?.(SYSTEM_ID, EFFECT_LIFECYCLE_FLAG_KEY)?.kind
+      ?? effect?.flags?.[SYSTEM_ID]?.[EFFECT_LIFECYCLE_FLAG_KEY]?.kind
+      ?? ""
+  );
+  if (lifecycleKind && lifecycleKind !== EFFECT_LIFECYCLE_KINDS.sourceProjection) return false;
+  if (SOURCE_PROJECTION_CONFLICTING_FLAG_KEYS.some(flagKey => Boolean(
+    effect?.getFlag?.(SYSTEM_ID, flagKey)
+      ?? effect?.flags?.[SYSTEM_ID]?.[flagKey]
+  ))) return false;
+  if (Number(effect?.statuses?.size) > 0) return false;
+  // Foundry prepares a permanent ActiveEffect's public duration.value from
+  // null to Infinity. Reusability must be decided from persisted source data,
+  // otherwise every permanent projection is mistaken for a timed effect.
+  const sourceDuration = effect?._source?.duration ?? effect?.duration ?? {};
+  if (
+    sourceDuration.value !== null
+    && sourceDuration.value !== undefined
+  ) return false;
+  if (sourceDuration.expiry !== null && sourceDuration.expiry !== undefined) return false;
+  if (sourceDuration.expired === true) return false;
+  const ownedProjectionFlags = [
+    ABILITY_EFFECT_FLAG_KEY,
+    ITEM_EFFECT_FLAG_KEY,
+    EQUIPMENT_REQUIREMENT_EFFECT_FLAG_KEY
+  ].filter(flagKey => Boolean(
+    effect?.getFlag?.(SYSTEM_ID, flagKey)
+    ?? effect?.flags?.[SYSTEM_ID]?.[flagKey]
+  ));
+  return ownedProjectionFlags.length === 1 && ownedProjectionFlags[0] === managedFlagKey;
+}
+
+function cloneProjectionValue(value) {
+  return value && typeof value === "object" ? foundry.utils.deepClone(value) : value;
+}
+
+function projectionValuesEqual(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => projectionValuesEqual(value, right[index]));
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every(key => (
+      Object.hasOwn(right, key)
+      && projectionValuesEqual(left[key], right[key])
+    ));
+}
+
+function isEmbeddedEffectLive(actor, effect) {
+  if (!effect?.id) return false;
+  if (typeof actor?.effects?.has !== "function") return true;
+  return actor.effects.has(effect.id);
 }
 
 function buildAbilityEffectProjection(actor, item, descriptor, context = {}) {
@@ -1434,29 +1630,79 @@ function hasRuntimeConditions(conditions = []) {
   ));
 }
 
-function getAbilityEffectOperationOptions(descriptor) {
-  return descriptor.hasAuraCondition ? { animate: false } : {};
+function getAbilityEffectOperationOptions() {
+  return getManagedProjectionOperationOptions();
 }
 
-function getItemFreeSettingsEffectOperationOptions(descriptor) {
-  return descriptor.hasAuraCondition ? { animate: false } : {};
+function getItemFreeSettingsEffectOperationOptions() {
+  return getManagedProjectionOperationOptions();
+}
+
+function getManagedProjectionOperationOptions() {
+  return {
+    [ABILITY_EFFECT_SYNC_OPERATION_OPTION]: true,
+    animate: false
+  };
 }
 
 function hasAuraPresenceConditionFunction(functions = []) {
   return buildAbilityEffectSourceDescriptor(functions).hasAuraPresenceCondition;
 }
 
-async function deleteAbilitySyncEffects(actor, effects = [], flagKey = "") {
-  if (!actor || !effects.length) return;
-  const auraIds = [];
-  const normalIds = [];
+async function deleteAbilitySyncEffects(
+  actor,
+  effects = [],
+  flagKey = "",
+  { managedProjectionSync = false } = {}
+) {
+  if (!actor || !effects.length) return false;
+  const managedIds = [];
+  const otherIds = [];
   for (const effect of effects) {
-    const data = effect.getFlag(SYSTEM_ID, flagKey);
-    if (data?.auraCondition) auraIds.push(effect.id);
-    else normalIds.push(effect.id);
+    const effectId = String(effect?.id ?? "");
+    if (!effectId) continue;
+    const managed = managedProjectionSync || Boolean(
+      effect?.getFlag?.(SYSTEM_ID, flagKey)
+        ?? effect?.flags?.[SYSTEM_ID]?.[flagKey]
+    );
+    if (managed) managedIds.push(effectId);
+    else otherIds.push(effectId);
   }
-  if (normalIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", normalIds);
-  if (auraIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", auraIds, { animate: false });
+  if (managedIds.length) {
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      managedIds,
+      getManagedProjectionOperationOptions()
+    );
+  }
+  if (otherIds.length) {
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      otherIds,
+      { animate: false }
+    );
+  }
+  return managedIds.length > 0 || otherIds.length > 0;
+}
+
+async function deleteStaleManagedProjectionEffects(actor, effects = []) {
+  if (!actor || !effects.length) return false;
+  const effectIds = [];
+  const seen = new Set();
+  for (const effect of effects) {
+    const effectId = String(effect?.id ?? "");
+    if (!effectId || seen.has(effectId) || !isEmbeddedEffectLive(actor, effect)) continue;
+    seen.add(effectId);
+    effectIds.push(effectId);
+  }
+  if (effectIds.length) {
+    await actor.deleteEmbeddedDocuments(
+      "ActiveEffect",
+      effectIds,
+      getManagedProjectionOperationOptions()
+    );
+  }
+  return effectIds.length > 0;
 }
 
 function hasApplicableAbilityChanges(changes = []) {

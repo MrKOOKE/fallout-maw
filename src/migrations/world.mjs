@@ -22,10 +22,12 @@ export async function migrateWorldConsciousnessData() {
     0,
     Math.trunc(Number(game.settings.get(SYSTEM_ID, DOCUMENT_MIGRATION_VERSION_SETTING)) || 0)
   );
+  const auditAllDocuments = storedVersion < CONSCIOUSNESS_DOCUMENT_MIGRATION_VERSION;
   let migrated = 0;
   let failed = 0;
 
   for (const actor of game.actors?.contents ?? []) {
+    if (!auditAllDocuments && !actorMayNeedConsciousnessMigration(actor)) continue;
     const result = await migrateConsciousnessActor(actor, {
       label: actor?.uuid ?? actor?.name ?? "Actor"
     });
@@ -35,9 +37,12 @@ export async function migrateWorldConsciousnessData() {
 
   for (const scene of game.scenes?.contents ?? []) {
     for (const token of scene.tokens ?? []) {
-      if (token.actorLink || !token.actor) continue;
-      const result = await migrateConsciousnessActor(token.actor, {
-        label: token.actor?.uuid ?? `${scene.name}:${token.name}`
+      if (token.actorLink) continue;
+      if (!auditAllDocuments && !tokenMayNeedConsciousnessMigration(token)) continue;
+      const actor = token.actor;
+      if (!actor) continue;
+      const result = await migrateConsciousnessActor(actor, {
+        label: actor?.uuid ?? `${scene.name}:${token.name}`
       });
       migrated += result.migrated;
       failed += result.failed;
@@ -59,6 +64,29 @@ export async function migrateWorldConsciousnessData() {
     console.info(`${SYSTEM_ID} | Persisted consciousness data for ${migrated} actor document(s).`);
   }
   return { migrated, failed };
+}
+
+function actorMayNeedConsciousnessMigration(actor) {
+  if (getPendingLegacyConsciousnessMigration(actor)) return true;
+  if (hasStoredConsciousness(actor)) return false;
+  const health = actor?.system?.resources?.health;
+  return Boolean(
+    actor?.statuses?.has?.(UNCONSCIOUS_STATUS_ID)
+    && health
+    && Number(health.value) <= Number(health.min)
+  );
+}
+
+function tokenMayNeedConsciousnessMigration(token) {
+  const source = token?.delta?._source ?? token?._source?.delta ?? null;
+  if (!source) return true;
+  const flags = source.flags?.[SYSTEM_ID] ?? {};
+  if (
+    flags[LEGACY_CONSCIOUSNESS_MIGRATION_PENDING_FLAG]
+    || flags[LEGACY_SHOCK_FLAG]
+  ) return true;
+  const resources = source.system?.resources;
+  return !(resources && Object.hasOwn(resources, CONSCIOUSNESS_RESOURCE_KEY));
 }
 
 async function migrateConsciousnessActor(actor, { label = "" } = {}) {

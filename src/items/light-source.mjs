@@ -571,6 +571,12 @@ export async function syncTokenLightSources(tokenOrDocument = null, eventOptions
   if (!tokenDocument || !actor) return;
 
   const entries = getActiveLightSourceEntries(tokenDocument);
+  const base = tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG);
+  // A Token which has never participated in this runtime has no light state
+  // for us to reconcile. Besides avoiding a needless Document update, this
+  // preserves manually configured Token light instead of zeroing it.
+  if (!entries.length && !base) return;
+
   const activeSources = [];
   for (const entry of entries) {
     const item = resolveActorItemOrInstalledModule(actor, entry.itemId);
@@ -595,7 +601,6 @@ export async function syncTokenLightSources(tokenOrDocument = null, eventOptions
     return;
   }
 
-  const base = tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG);
   await tokenDocument.update({
     ...createTokenLightUpdate(base ?? { dim: 0, bright: 0, angle: 360, color: null }),
     [`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`]: globalThis._del

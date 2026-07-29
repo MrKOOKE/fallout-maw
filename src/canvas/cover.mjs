@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { activeEffectChangesEqual } from "../utils/active-effect-source.mjs";
 import { refreshTokenActionHudForActor } from "../apps/token-action-hud.mjs";
 import { getCoverSettings } from "../settings/accessors.mjs";
 import { COVER_SETTINGS_SETTING } from "../settings/constants.mjs";
@@ -430,7 +431,7 @@ function getEffectUpdateData(effect, data, flag = FORCED_COVER_FLAG) {
   }
   const currentChanges = effect.system?.changes ?? [];
   const nextChanges = data.system?.changes ?? [];
-  if (JSON.stringify(currentChanges) !== JSON.stringify(nextChanges)) update["system.changes"] = nextChanges;
+  if (!activeEffectChangesEqual(currentChanges, nextChanges)) update["system.changes"] = nextChanges;
 
   const currentData = effect.getFlag(SYSTEM_ID, flag) ?? {};
   const nextData = data.flags[SYSTEM_ID][flag];

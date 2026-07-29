@@ -5,6 +5,9 @@ const BEFORE_SNAPSHOTS_OPTION = "falloutMawSystemEventBeforeByUuid";
 const OCCURRENCE_BASE_OPTION = "falloutMawSystemEventOccurrenceBase";
 const DOCUMENT_MIGRATION_OPTION = "falloutMawDocumentMigration";
 const MANAGED_REACTION_OPTIONS = Object.freeze([
+  // A source projection is derived state of its Item. Publishing its internal
+  // reconciliation as a new gameplay effect event causes feedback loops.
+  "falloutMawAbilityEffectSync",
   "falloutMawEventReactionEffect",
   "falloutMawEventReactionManaged",
   "falloutMawEventReactionCleanup",

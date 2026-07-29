@@ -8,6 +8,10 @@ import {
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 import { deferActorPosture, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
+import {
+  activeEffectChangesEqual,
+  canonicalizeActiveEffectChanges
+} from "../utils/active-effect-source.mjs";
 import { getActorActiveCombat, isActorInActiveCombat } from "../combat/combat-membership.mjs";
 import { getActorResourceLimitAmount } from "../combat/resource-limits.mjs";
 import {
@@ -350,7 +354,7 @@ function buildPostureEffectChanges(action, posture) {
   if (Number.isFinite(weaponActionPointCostBonus) && Math.abs(weaponActionPointCostBonus) > 0.0001) {
     changes.push(buildPostureEffectChange(action, "weaponActionCost", weaponActionPointCostBonus));
   }
-  return changes;
+  return canonicalizeActiveEffectChanges(changes);
 }
 
 function buildPostureEffectChange(action, key, value, type = "add") {
@@ -370,7 +374,7 @@ function getEffectUpdateData(effect, data) {
   }
   const currentChanges = effect.system?.changes ?? [];
   const nextChanges = data.system?.changes ?? [];
-  if (JSON.stringify(currentChanges) !== JSON.stringify(nextChanges)) update["system.changes"] = nextChanges;
+  if (!activeEffectChangesEqual(currentChanges, nextChanges)) update["system.changes"] = nextChanges;
   const currentData = effect.getFlag(SYSTEM_ID, POSTURE_MOVEMENT_FLAG) ?? {};
   const nextData = data.flags[SYSTEM_ID][POSTURE_MOVEMENT_FLAG];
   if (JSON.stringify(currentData) !== JSON.stringify(nextData)) {

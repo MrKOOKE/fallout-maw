@@ -191,6 +191,7 @@ test("ActiveEffect classifier mirrors status transitions but ignores managed Eve
     "fallout-maw.actor.status.gained"
   ]);
   assert.deepEqual(classifyActiveEffectCreate(effect, { falloutMawEventReactionEffect: true }), []);
+  assert.deepEqual(classifyActiveEffectCreate(effect, { falloutMawAbilityEffectSync: true }), []);
 
   const before = captureDocumentSnapshot(effect);
   effect.statuses = new Set(["dead"]);
@@ -206,10 +207,19 @@ test("ActiveEffect classifier mirrors status transitions but ignores managed Eve
   ]);
   assert.equal(events[1].data.statusId, "dead");
   assert.equal(events[2].data.statusId, "stunned");
+  assert.deepEqual(classifyActiveEffectUpdate(effect, { disabled: true }, {
+    before,
+    after: captureDocumentSnapshot(effect),
+    options: { falloutMawAbilityEffectSync: true }
+  }), []);
   assert.deepEqual(eventKeys(classifyActiveEffectDelete(effect)), [
     "fallout-maw.actor.effect.removed",
     "fallout-maw.actor.status.lost"
   ]);
+  assert.deepEqual(classifyActiveEffectDelete(effect, {
+    before,
+    options: { falloutMawAbilityEffectSync: true }
+  }), []);
 });
 
 test("Combat classifiers emit lifecycle, turn, round, initiative and defeat transitions", () => {
