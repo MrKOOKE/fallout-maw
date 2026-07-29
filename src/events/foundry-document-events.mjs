@@ -1,4 +1,5 @@
 import { withSystemEventRoot } from "./dispatcher.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
 const SYSTEM_EVENT_PREFIX = "fallout-maw.";
 const BEFORE_SNAPSHOTS_OPTION = "falloutMawSystemEventBeforeByUuid";
@@ -143,7 +144,10 @@ export function classifyItemDelete(item, { before = null } = {}) {
 }
 
 export function classifyItemUpdate(item, changes = {}, { before = null, after = null, options = {} } = {}) {
-  if (isManagedReactionOperation(options)) return [];
+  if (
+    isManagedReactionOperation(options)
+    || isDeusExMachinaProgressItemUpdate(changes, options)
+  ) return [];
   const actor = getOwningActor(item);
   if (!actor) return [];
   const previous = normalizeSnapshot(before);
@@ -337,6 +341,14 @@ export function registerFoundryDocumentSystemEventHooks({
   for (const documentName of ["Actor", "Item", "ActiveEffect", "Combat", "Combatant"]) {
     on(`preUpdate${documentName}`, (document, changes = {}, options = {}) => {
       if (options?.[DOCUMENT_MIGRATION_OPTION]) return;
+      if (
+        (documentName === "Item" || documentName === "ActiveEffect")
+        && isManagedReactionOperation(options)
+      ) return;
+      if (
+        documentName === "Item"
+        && isDeusExMachinaProgressItemUpdate(changes, options)
+      ) return;
       if (documentName === "Actor") {
         if (!hasClassifiedActorChanges(changes)) return;
         captureBeforeOperation(document, options, randomId, captureActorEventSnapshot);
@@ -347,6 +359,7 @@ export function registerFoundryDocumentSystemEventHooks({
   }
   for (const documentName of ["Item", "ActiveEffect", "Combat", "Combatant"]) {
     on(`preDelete${documentName}`, (document, options = {}) => {
+      if (documentName === "ActiveEffect" && isManagedReactionOperation(options)) return;
       if (!options?.[DOCUMENT_MIGRATION_OPTION]) captureBeforeOperation(document, options, randomId);
     });
   }
@@ -367,7 +380,11 @@ export function registerFoundryDocumentSystemEventHooks({
     emitAfterCommit(classifyItemCreate(item), item, options, userId);
   });
   on("updateItem", (item, changes, options = {}, userId = "") => {
-    if (!isActiveGM()) return;
+    if (
+      !isActiveGM()
+      || isManagedReactionOperation(options)
+      || isDeusExMachinaProgressItemUpdate(changes, options)
+    ) return;
     emitAfterCommit(classifyItemUpdate(item, changes, {
       ...snapshotOptions(item, options),
       options
@@ -378,15 +395,15 @@ export function registerFoundryDocumentSystemEventHooks({
     emitAfterCommit(classifyItemDelete(item, { before: getBeforeSnapshot(item, options) }), item, options, userId);
   });
   on("createActiveEffect", (effect, options = {}, userId = "") => {
-    if (!isActiveGM()) return;
+    if (!isActiveGM() || isManagedReactionOperation(options)) return;
     emitAfterCommit(classifyActiveEffectCreate(effect, options), effect, options, userId);
   });
   on("updateActiveEffect", (effect, changes, options = {}, userId = "") => {
-    if (!isActiveGM()) return;
+    if (!isActiveGM() || isManagedReactionOperation(options)) return;
     emitAfterCommit(classifyActiveEffectUpdate(effect, changes, { ...snapshotOptions(effect, options), options }), effect, options, userId);
   });
   on("deleteActiveEffect", (effect, options = {}, userId = "") => {
-    if (!isActiveGM()) return;
+    if (!isActiveGM() || isManagedReactionOperation(options)) return;
     emitAfterCommit(classifyActiveEffectDelete(effect, { before: getBeforeSnapshot(effect, options), options }), effect, options, userId);
   });
   on("createCombat", (combat, options = {}, userId = "") => {

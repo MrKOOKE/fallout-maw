@@ -61,6 +61,12 @@ import {
   itemUpdateAffectsActorLoad,
   setCachedActorLoadPreparation
 } from "./actor-load-preparation-cache.mjs";
+import {
+  beginActorEffectPreparation,
+  endActorEffectPreparation,
+  getActorApplicableEffects,
+  markActorEmbeddedEffectsPrepared
+} from "./actor-effect-preparation-index.mjs";
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
 export class FalloutMaWActor extends Actor {
@@ -170,11 +176,13 @@ export class FalloutMaWActor extends Actor {
   }
 
   prepareData() {
-    invalidateActorFormulaData(this);
-    this._falloutMawRoutedFinalEffectKeys = null;
+    const preparationContext = beginActorEffectPreparation(this);
     try {
+      invalidateActorFormulaData(this);
+      this._falloutMawRoutedFinalEffectKeys = null;
       return super.prepareData();
     } finally {
+      endActorEffectPreparation(this, preparationContext);
       invalidateActorFormulaData(this);
     }
   }
@@ -228,6 +236,7 @@ export class FalloutMaWActor extends Actor {
       return;
     }
     this._completedActiveEffectPhases.add(phase);
+    if (phase === "initial") markActorEmbeddedEffectsPrepared(this);
     invalidateActorFormulaData(this);
 
     const formulaStage = phase === "initial" ? "initial-active-effect" : "prepared";
@@ -240,7 +249,7 @@ export class FalloutMaWActor extends Actor {
     const changes = [];
     const tokenChanges = [];
     const suppressedTraumaDiseaseIds = getActorSuppressedTraumaDiseaseIds(this);
-    const applicableEffects = Array.from(this.allApplicableEffects()).filter(effect => (
+    const applicableEffects = Array.from(getActorApplicableEffects(this)).filter(effect => (
       effect.active
       && !isActorTraumaDiseaseEffectSuppressed(this, effect, suppressedTraumaDiseaseIds)
     ));

@@ -13,6 +13,7 @@ import {
   unequipActorItemToInventory
 } from "../utils/equipment-hud-placement.mjs";
 import { getConditionFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
 const SEARCH_ICON = `systems/${FALLOUT_MAW.id}/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp`;
 const TRADE_ICON = `systems/${FALLOUT_MAW.id}/assets/Komandy%20dlya%20upravleniya%20tokenom/torgovlya.webp`;
@@ -23,12 +24,16 @@ const NON_OWNER_CLASS = "fallout-maw-token-equipment-hud-non-owner";
 const SLOT_PICKER_CLASS = "fallout-maw-token-equipment-picker";
 
 let activeSlotPickerCleanup = null;
+let tokenEquipmentHudRefreshTimer = null;
 
 export function registerTokenEquipmentHudHooks() {
   Hooks.on("renderTokenHUD", decorateTokenHudEquipment);
   Hooks.on("updateActor", refreshTokenEquipmentHudForActor);
   Hooks.on("createItem", refreshTokenEquipmentHudForItem);
-  Hooks.on("updateItem", refreshTokenEquipmentHudForItem);
+  Hooks.on("updateItem", (item, changes = {}, options = {}) => {
+    if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
+    refreshTokenEquipmentHudForItem(item);
+  });
   Hooks.on("deleteItem", refreshTokenEquipmentHudForItem);
   Hooks.on("updateToken", refreshTokenEquipmentHudForTokenDocument);
   Hooks.on("deleteToken", refreshTokenEquipmentHudForTokenDocument);
@@ -669,8 +674,11 @@ function refreshBoundTokenHud(token) {
 function refreshTokenEquipmentHud() {
   const hud = canvas?.hud?.token;
   if (!hud?.object) return;
-  window.setTimeout(() => {
-    if (!hud.object) return;
-    void hud.render({ force: true, position: true });
+  if (tokenEquipmentHudRefreshTimer !== null) return;
+  tokenEquipmentHudRefreshTimer = window.setTimeout(() => {
+    tokenEquipmentHudRefreshTimer = null;
+    const currentHud = canvas?.hud?.token;
+    if (!currentHud?.object) return;
+    void currentHud.render({ force: true, position: true });
   }, 0);
 }

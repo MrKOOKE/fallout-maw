@@ -27,15 +27,35 @@ export function getConstructPartSlotId(item = null) {
   return normalizeId(item?.id ?? item?._id);
 }
 
-export function getConstructPartSlots(actor = null) {
+export function getActorGearItems(actorOrSource = null) {
+  const typedGear = actorOrSource?.itemTypes?.gear;
+  if (Array.isArray(typedGear)) return typedGear;
+  return getActorItems(actorOrSource).filter(item => item?.type === "gear");
+}
+
+export function getInstalledConstructPartsBySlot(actor = null) {
+  const partsBySlot = new Map();
+  for (const item of getActorGearItems(actor)) {
+    if (!isInstalledConstructPartItem(item)) continue;
+    const slotId = getConstructPartSlotId(item);
+    if (!slotId || partsBySlot.has(slotId)) continue;
+    partsBySlot.set(slotId, item);
+  }
+  return partsBySlot;
+}
+
+export function getConstructPartSlots(actor = null, { installedPartsBySlot = null } = {}) {
   if (getActorType(actor) !== "construct") return [];
 
   const storedSlots = getStoredConstructPartSlots(actor)
     .map((slot, index) => normalizeConstructPartSlot(slot, index))
     .filter(Boolean);
   const slotsById = new Map(storedSlots.map(slot => [slot.id, slot]));
+  const installedParts = installedPartsBySlot instanceof Map
+    ? installedPartsBySlot
+    : getInstalledConstructPartsBySlot(actor);
 
-  for (const item of getActorItems(actor).filter(isInstalledConstructPartItem)) {
+  for (const item of installedParts.values()) {
     const id = getConstructPartSlotId(item);
     if (!id || slotsById.has(id)) continue;
     const slot = createConstructPartSlotFromItem(item, { id });
@@ -58,7 +78,7 @@ export function getConstructPartSlotForLimb(actor = null, limbKey = "") {
 export function getInstalledConstructPartForSlot(actor = null, slotOrId = "") {
   const id = normalizeId(slotOrId?.id ?? slotOrId);
   if (!id) return null;
-  return getActorItems(actor).find(item => (
+  return getActorGearItems(actor).find(item => (
     isInstalledConstructPartItem(item)
     && getConstructPartSlotId(item) === id
   )) ?? null;
@@ -119,8 +139,9 @@ export async function ensureConstructPartSlots(actorOrSource = null) {
 
   if (!isActorDocument(actorOrSource)) return ensureConstructPartSlotSource(actorOrSource);
 
-  const slots = getConstructPartSlots(actorOrSource).map(slot => {
-    const installed = getInstalledConstructPartForSlot(actorOrSource, slot.id);
+  const installedPartsBySlot = getInstalledConstructPartsBySlot(actorOrSource);
+  const slots = getConstructPartSlots(actorOrSource, { installedPartsBySlot }).map(slot => {
+    const installed = installedPartsBySlot.get(slot.id) ?? null;
     return installed
       ? createConstructPartSlotFromItem(installed, { id: slot.id, order: slot.order }) ?? slot
       : slot;
@@ -131,7 +152,7 @@ export async function ensureConstructPartSlots(actorOrSource = null) {
   }
 
   const slotById = new Map(slots.map(slot => [slot.id, slot]));
-  const itemUpdates = getActorItems(actorOrSource)
+  const itemUpdates = getActorGearItems(actorOrSource)
     .filter(isInstalledConstructPartItem)
     .map(item => {
       const slotId = getConstructPartSlotId(item);
@@ -161,7 +182,7 @@ export function ensureConstructPartSlotSource(actorOrSource = null) {
   if (getActorType(actorOrSource) !== "construct") return [];
 
   const existing = actorOrSource?.system?.constructPartSlots;
-  const items = getActorItems(actorOrSource).filter(isInstalledConstructPartItem);
+  const items = getActorGearItems(actorOrSource).filter(isInstalledConstructPartItem);
   const slotsById = new Map(
     (Array.isArray(existing) ? existing : [])
       .map((slot, index) => normalizeConstructPartSlot(slot, index))

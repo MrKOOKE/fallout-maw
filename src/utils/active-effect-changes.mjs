@@ -13,6 +13,10 @@ import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
 import { isSkillAdvancementMultiplierEffectKey } from "../advancement/skill-multiplier-effects.mjs";
 import {
+  getActorApplicableEffects,
+  getActorEffectChangeEntries
+} from "../documents/actor-effect-preparation-index.mjs";
+import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -215,12 +219,11 @@ function getActorCoverBonusPercent(actor, coverKey, options = {}) {
   if (!effectKey) return 0;
 
   const changes = [];
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  for (const { effect, change } of getActorEffectChangeEntries(actor, effectKey, {
+    snapshot: options.effectSnapshot
+  })) {
     if (effect?.disabled || effect?.active === false) continue;
-    for (const change of effect?.system?.changes ?? []) {
-      if (String(change?.key ?? "").trim() !== effectKey) continue;
-      changes.push({ ...change, effect });
-    }
+    changes.push({ ...change, effect });
   }
 
   changes.sort((left, right) => toInteger(left?.priority) - toInteger(right?.priority));
@@ -264,7 +267,10 @@ export function evaluateActorEffectChangeNumber(actor, change = {}, {
  * the actor acting on that target. These changes are never applied to either
  * Actor document and exist only for the current interaction calculation.
  */
-export function collectActorReverseEffectChanges(actor, acceptedKeys = [], { additionalChanges = [] } = {}) {
+export function collectActorReverseEffectChanges(actor, acceptedKeys = [], {
+  additionalChanges = [],
+  effectSnapshot = null
+} = {}) {
   if (!actor) return [];
   const acceptedKeyValues = typeof acceptedKeys === "string"
     ? [acceptedKeys]
@@ -279,20 +285,21 @@ export function collectActorReverseEffectChanges(actor, acceptedKeys = [], { add
   if (!accepted.size) return [];
 
   const changes = [];
-  const suppressedTraumaDiseaseIds = getActorSuppressedTraumaDiseaseIds(actor);
+  const suppressedTraumaDiseaseIds = getActorSuppressedTraumaDiseaseIds(actor, { effectSnapshot });
   let order = 0;
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  const reverseKeys = new Set(Array.from(accepted, key => getReverseEffectKey(key)));
+  for (const { effect, change } of getActorEffectChangeEntries(actor, reverseKeys, {
+    snapshot: effectSnapshot
+  })) {
     if (effect?.disabled || effect?.active === false) continue;
     if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedTraumaDiseaseIds)) continue;
-    for (const change of effect?.system?.changes ?? effect?.changes ?? []) {
-      const originalKey = getOriginalEffectKeyFromReverse(change?.key);
-      if (!accepted.has(originalKey)) continue;
-      changes.push(prepareActorReverseEffectChange(actor, change, {
-        effect,
-        originalKey,
-        order: order++
-      }));
-    }
+    const originalKey = getOriginalEffectKeyFromReverse(change?.key);
+    if (!accepted.has(originalKey)) continue;
+    changes.push(prepareActorReverseEffectChange(actor, change, {
+      effect,
+      originalKey,
+      order: order++
+    }));
   }
 
   for (const change of additionalChanges ?? []) {
@@ -369,22 +376,27 @@ export function isTraumaDiseaseSuppressionEffectKey(key = "") {
     || path === DISEASE_SUPPRESSION_ALL_EFFECT_KEY;
 }
 
-export function getActorSuppressedTraumaDiseaseIds(actor) {
+export function getActorSuppressedTraumaDiseaseIds(actor, { effectSnapshot = null } = {}) {
   return {
-    trauma: getSuppressedActorItemIds(actor, "trauma"),
-    disease: getSuppressedActorItemIds(actor, "disease")
+    trauma: getSuppressedActorItemIds(actor, "trauma", { effectSnapshot }),
+    disease: getSuppressedActorItemIds(actor, "disease", { effectSnapshot })
   };
 }
 
-export function isActorTraumaDiseaseEffectSuppressed(actor, effect = null, suppressedIds = null) {
+export function isActorTraumaDiseaseEffectSuppressed(
+  actor,
+  effect = null,
+  suppressedIds = null,
+  { effectSnapshot = null } = {}
+) {
   const item = effect?.parent;
   const type = item?.type;
   if (type !== "trauma" && type !== "disease") return false;
-  const ids = suppressedIds ?? getActorSuppressedTraumaDiseaseIds(actor);
+  const ids = suppressedIds ?? getActorSuppressedTraumaDiseaseIds(actor, { effectSnapshot });
   return ids?.[type]?.has?.(item.id) ?? false;
 }
 
-function getSuppressedActorItemIds(actor, type = "") {
+function getSuppressedActorItemIds(actor, type = "", { effectSnapshot = null } = {}) {
   const itemType = type === "disease" ? "disease" : "trauma";
   const typedItems = actor?.itemTypes?.[itemType];
   const items = (Array.isArray(typedItems)
@@ -393,17 +405,24 @@ function getSuppressedActorItemIds(actor, type = "") {
     .filter(item => String(item?.id ?? "").trim());
   if (!items.length) return new Set();
 
-  const allCount = evaluateSuppressionKey(actor, SUPPRESSION_ALL_KEYS[itemType]);
+  const allCount = evaluateSuppressionKey(actor, SUPPRESSION_ALL_KEYS[itemType], { effectSnapshot });
   if (allCount > 0) return new Set(items.map(item => item.id));
 
-  const count = Math.max(0, Math.min(items.length, evaluateSuppressionKey(actor, SUPPRESSION_COUNT_KEYS[itemType])));
+  const count = Math.max(
+    0,
+    Math.min(
+      items.length,
+      evaluateSuppressionKey(actor, SUPPRESSION_COUNT_KEYS[itemType], { effectSnapshot })
+    )
+  );
   if (count <= 0) return new Set();
 
+  const suppressionSeed = getSuppressionSeed(actor, itemType, { effectSnapshot });
   return new Set(
     items
       .map(item => ({
         id: item.id,
-        score: stableHash(`${actor?.uuid ?? actor?.id ?? ""}:${itemType}:${item.id}:${getSuppressionSeed(actor, itemType)}`)
+        score: stableHash(`${actor?.uuid ?? actor?.id ?? ""}:${itemType}:${item.id}:${suppressionSeed}`)
       }))
       .sort((left, right) => left.score - right.score || left.id.localeCompare(right.id))
       .slice(0, count)
@@ -411,20 +430,19 @@ function getSuppressedActorItemIds(actor, type = "") {
   );
 }
 
-function evaluateSuppressionKey(actor, key = "") {
+function evaluateSuppressionKey(actor, key = "", { effectSnapshot = null } = {}) {
   const changes = [];
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  for (const { effect, change } of getActorEffectChangeEntries(actor, key, {
+    snapshot: effectSnapshot
+  })) {
     if (effect?.disabled || effect?.active === false) continue;
     const parentType = effect?.parent?.type;
     if (parentType === "trauma" || parentType === "disease") continue;
-    for (const change of effect?.system?.changes ?? []) {
-      if (String(change?.key ?? "").trim() !== key) continue;
-      changes.push({
-        ...foundry.utils.deepClone(change),
-        effect,
-        priority: getEffectChangePriority(change)
-      });
-    }
+    changes.push({
+      ...foundry.utils.deepClone(change),
+      effect,
+      priority: getEffectChangePriority(change)
+    });
   }
 
   changes.sort((left, right) => getEffectChangePriority(left) - getEffectChangePriority(right));
@@ -442,17 +460,21 @@ function evaluateSuppressionKey(actor, key = "") {
   return Math.max(0, Math.trunc(value));
 }
 
-function getSuppressionSeed(actor, type = "") {
-  return Array.from(actor?.allApplicableEffects?.() ?? actor?.effects ?? [])
-    .filter(effect => {
-      if (effect?.disabled || effect?.active === false) return false;
-      const parentType = effect?.parent?.type;
-      if (parentType === "trauma" || parentType === "disease") return false;
-      return (effect?.system?.changes ?? []).some(change => {
-        const key = String(change?.key ?? "").trim();
-        return key === SUPPRESSION_COUNT_KEYS[type] || key === SUPPRESSION_ALL_KEYS[type];
-      });
-    })
+function getSuppressionSeed(actor, type = "", { effectSnapshot = null } = {}) {
+  const effects = new Set();
+  const acceptedKeys = [
+    SUPPRESSION_COUNT_KEYS[type],
+    SUPPRESSION_ALL_KEYS[type]
+  ];
+  for (const { effect } of getActorEffectChangeEntries(actor, acceptedKeys, {
+    snapshot: effectSnapshot
+  })) {
+    if (effect?.disabled || effect?.active === false) continue;
+    const parentType = effect?.parent?.type;
+    if (parentType === "trauma" || parentType === "disease") continue;
+    effects.add(effect);
+  }
+  return Array.from(effects)
     .map(effect => String(effect?.uuid ?? effect?.id ?? ""))
     .sort()
     .join("|");
@@ -479,17 +501,16 @@ export function getActorSmartFudgeResult(actor, { requester = "", check = null }
 export function getActorSmartFudgeResultValues(actor, { requester = "", check = null } = {}) {
   const resultValues = Object.fromEntries(SMART_FUDGE_RESULT_ORDER.map(result => [result, 0]));
   if (!actor || String(requester ?? "") !== "weaponAttack") return resultValues;
-  for (const effect of actor.allApplicableEffects?.() ?? actor.effects ?? []) {
+  const acceptedKeys = new Set(Object.values(SMART_FUDGE_RESULT_EFFECT_KEYS));
+  for (const { effect, change } of getActorEffectChangeEntries(actor, acceptedKeys)) {
     if (effect?.disabled) continue;
     const allOrNothing = effect.getFlag?.(SYSTEM_ID, "allOrNothing");
     if (allOrNothing?.pending && !isAllOrNothingSmartFudgeApplicable(allOrNothing, check, effect)) continue;
-    for (const change of effect.system?.changes ?? []) {
-      const result = getSmartFudgeResultForEffectKey(change?.key);
-      if (!result) continue;
-      const value = evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 });
-      if (value <= 0) continue;
-      resultValues[result] += value;
-    }
+    const result = getSmartFudgeResultForEffectKey(change?.key);
+    if (!result) continue;
+    const value = evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 });
+    if (value <= 0) continue;
+    resultValues[result] += value;
   }
   return resultValues;
 }
@@ -518,12 +539,9 @@ export function getActorCombatAttackEdgeCount(actor, weaponActionKey = "", kind 
   const allKey = kind === "advantage" ? ALL_COMBAT_ADVANTAGE_EFFECT_KEY : ALL_COMBAT_DISADVANTAGE_EFFECT_KEY;
   const acceptedKeys = new Set([specificKey, allKey]);
   let total = 0;
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  for (const { effect, change } of getActorEffectChangeEntries(actor, acceptedKeys)) {
     if (effect?.disabled || effect?.active === false) continue;
-    for (const change of effect?.system?.changes ?? []) {
-      if (!acceptedKeys.has(String(change?.key ?? "").trim())) continue;
-      total += Math.max(0, toInteger(evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 })));
-    }
+    total += Math.max(0, toInteger(evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 })));
   }
   return total;
 }

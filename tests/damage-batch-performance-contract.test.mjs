@@ -52,3 +52,69 @@ test("damage batch preparation remains synchronous and snapshot-local", () => {
   assert.match(preparation, /getDamageBatchMitigationEquipmentSnapshot\(/);
   assert.match(preparation, /preparationContext\s*\n\s*}\);/);
 });
+
+test("batch feedback waits for document commits, bulk flushers, chat, and resolved events", () => {
+  const application = sliceBetween(
+    "async function applyDamageApplicationsNow",
+    "function createDamageBatchPreparationContext"
+  );
+  const commit = sliceBetween(
+    "async function applyDamageEntriesBatch",
+    "function selectBatchFinishingBlowSource"
+  );
+  const cycle = sliceBetween(
+    "async function applyDamageCycleNow",
+    "function stampDamageRequestsLogicalWorldTime"
+  );
+  const wrapper = sliceBetween(
+    "async function applyDamageCycle(requests",
+    "async function executeDamageSystemEventWorkflow"
+  );
+
+  assert.doesNotMatch(commit, /broadcastDamageNumbers\(/);
+  const chatCommit = application.lastIndexOf("await publishDamageSummaryMessage(results)");
+  const queuedFeedback = application.lastIndexOf("queueDamageFeedback(pendingFeedback");
+  const exceptionBoundary = application.lastIndexOf("} finally {", queuedFeedback);
+  assert.ok(chatCommit >= 0);
+  assert.ok(queuedFeedback > chatCommit);
+  assert.ok(exceptionBoundary >= 0);
+  assert.ok(queuedFeedback > exceptionBoundary);
+  assert.doesNotMatch(application, /broadcastDamage(?:Numbers|MitigationIcon)\(/);
+
+  const bulkFlush = cycle.lastIndexOf("await endBulkOperation()");
+  const directFeedback = cycle.lastIndexOf("flushDamageFeedback(pendingFeedback)");
+  assert.ok(bulkFlush >= 0);
+  assert.ok(directFeedback > bulkFlush);
+
+  const resolvedWorkflow = wrapper.lastIndexOf("await executeDamageSystemEventWorkflow");
+  const workflowFeedback = wrapper.lastIndexOf("flushDamageFeedback(feedbackQueue)");
+  assert.ok(resolvedWorkflow >= 0);
+  assert.ok(workflowFeedback > resolvedWorkflow);
+  assert.match(wrapper, /try\s*\{[\s\S]*await executeDamageSystemEventWorkflow[\s\S]*\}\s*finally\s*\{[\s\S]*flushDamageFeedback/);
+});
+
+test("single-hit feedback also waits for barrier commits and resolved events", () => {
+  const wrapper = sliceBetween(
+    "export async function applyDamageApplication(request",
+    "async function applyDamageApplicationNow"
+  );
+  const application = sliceBetween(
+    "async function applyDamageApplicationNow",
+    "async function applyItemConditionDamageApplicationNow"
+  );
+
+  assert.doesNotMatch(application, /broadcastDamage(?:Numbers|MitigationIcon)\(/);
+  const barrierCommit = application.lastIndexOf("await commitOwnedDamageBarrier()");
+  const queuedFeedback = application.lastIndexOf("queueDamageFeedback(pendingFeedback");
+  const exceptionBoundary = application.lastIndexOf("} finally {", queuedFeedback);
+  assert.ok(barrierCommit >= 0);
+  assert.ok(queuedFeedback > barrierCommit);
+  assert.ok(exceptionBoundary >= 0);
+  assert.ok(queuedFeedback > exceptionBoundary);
+
+  const resolvedWorkflow = wrapper.lastIndexOf("await executeDamageSystemEventWorkflow");
+  const workflowFeedback = wrapper.lastIndexOf("flushDamageFeedback(feedbackQueue)");
+  assert.ok(resolvedWorkflow >= 0);
+  assert.ok(workflowFeedback > resolvedWorkflow);
+  assert.match(wrapper, /try\s*\{[\s\S]*await executeDamageSystemEventWorkflow[\s\S]*\}\s*finally\s*\{[\s\S]*flushDamageFeedback/);
+});

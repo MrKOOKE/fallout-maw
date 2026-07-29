@@ -143,6 +143,8 @@ const {
   buildNormalizedEffectFunctionSnapshot
 } = await import("../src/abilities/effect-lifecycle.mjs");
 const {
+  actorUpdateNeedsAuraStateSync,
+  getItemAbilityEffectSyncPlan,
   registerAbilityEffectHooks,
   syncActorAbilityEffects,
   syncAuraGeneratedEffects
@@ -162,6 +164,158 @@ function change(id, key, value = "1") {
 function condition(id, type, data = {}) {
   return { id, groupId: "", type, ...data };
 }
+
+function gearItem({
+  mode = "equipment",
+  freeSettings = true,
+  mitigationRequirements = true
+} = {}) {
+  return {
+    type: "gear",
+    name: "Test gear",
+    img: "icons/svg/item-bag.svg",
+    system: {
+      equipped: true,
+      placement: { mode },
+      occupiedSlots: {},
+      functions: {
+        condition: {
+          enabled: true,
+          value: 80,
+          max: 100
+        },
+        freeSettings: {
+          enabled: freeSettings,
+          entries: []
+        },
+        damageMitigation: {
+          enabled: mitigationRequirements,
+          requirements: mitigationRequirements
+            ? [{ type: "characteristic", key: "strength", value: 5 }]
+            : []
+        }
+      }
+    }
+  };
+}
+
+test("ordinary equipment condition updates do not rebuild projections or auras", () => {
+  const item = gearItem({
+    mode: "equipment",
+    freeSettings: true,
+    mitigationRequirements: true
+  });
+
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      "system.functions.condition.value": 79
+    }),
+    { actor: false, aura: false }
+  );
+});
+
+test("prosthesis and construct condition updates refresh only Actor projections", () => {
+  for (const mode of ["prosthesis", "constructPart"]) {
+    const item = gearItem({
+      mode,
+      freeSettings: true,
+      mitigationRequirements: true
+    });
+
+    assert.deepEqual(
+      getItemAbilityEffectSyncPlan(item, {
+        system: {
+          functions: {
+            condition: { value: 50 }
+          }
+        }
+      }),
+      { actor: true, aura: false },
+      mode
+    );
+  }
+});
+
+test("item source definition and activation updates retain exact projection fanout", () => {
+  const item = gearItem({
+    mode: "equipment",
+    freeSettings: true,
+    mitigationRequirements: true
+  });
+
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      "system.functions.freeSettings.entries": []
+    }),
+    { actor: true, aura: true }
+  );
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      name: "Renamed aura source"
+    }),
+    { actor: true, aura: true }
+  );
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      "system.functions.damageMitigation.requirements": []
+    }),
+    { actor: true, aura: false }
+  );
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      "system.placement.mode": "inventory"
+    }),
+    { actor: true, aura: true }
+  );
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      "system.functions.weapon.moduleSlots": []
+    }),
+    { actor: true, aura: true }
+  );
+});
+
+test("ordinary Actor damage requests a scene aura pass only for a real aura source", () => {
+  let contentsReads = 0;
+  const ordinaryActor = {
+    itemTypes: { ability: [], gear: [] },
+    items: {
+      get contents() {
+        contentsReads += 1;
+        return [];
+      }
+    }
+  };
+  const healthChange = {
+    "system.resources.health.value": 7
+  };
+
+  assert.equal(actorUpdateNeedsAuraStateSync(ordinaryActor, healthChange), false);
+  const readsAfterFirstLookup = contentsReads;
+  assert.equal(actorUpdateNeedsAuraStateSync(ordinaryActor, healthChange), false);
+  assert.equal(contentsReads, readsAfterFirstLookup, "negative aura-source lookup must stay cached");
+  assert.equal(actorUpdateNeedsAuraStateSync(ordinaryActor, {
+    "system.creature.typeId": "robot"
+  }), true, "target membership changes still require scene reconciliation");
+
+  const auraAbility = {
+    type: "ability",
+    system: {
+      functions: [{
+        type: ABILITY_FUNCTION_TYPES.effectChanges,
+        changes: [change("aura-change", "system.resources.actionPoints.bonus")],
+        conditions: [condition("aura", ABILITY_CONDITION_TYPES.aura, {
+          auraMode: ABILITY_AURA_MODES.applyToTargets
+        })]
+      }]
+    }
+  };
+  const sourceActor = {
+    itemTypes: { ability: [auraAbility], gear: [] },
+    items: { contents: [auraAbility] }
+  };
+  assert.equal(actorUpdateNeedsAuraStateSync(sourceActor, healthChange), true);
+});
 
 test("one source descriptor shares one normalized identity across passive and timed consumers", () => {
   randomIdCalls = 0;

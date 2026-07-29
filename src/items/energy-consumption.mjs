@@ -56,8 +56,14 @@ export function getEnergyConsumptionDisplayName(item = null, condition = {}) {
 }
 
 export function getEnergyConsumptionControlEntries(actor = null, options = {}) {
-  return getActorItemsWithActiveHudModules(actor, options)
-    .filter(item => isActiveEnergyConsumptionCarrier(actor, item, options))
+  const itemDocuments = Array.isArray(options.itemDocuments)
+    ? options.itemDocuments
+    : getActorItemsWithActiveHudModules(actor, options);
+  const activeItemIds = options.activeItemIds instanceof Set
+    ? options.activeItemIds
+    : new Set(itemDocuments.map(item => String(item?.id ?? "")).filter(Boolean));
+  return itemDocuments
+    .filter(item => isActiveEnergyConsumptionCarrier(actor, item, { activeItemIds }))
     .flatMap(item => getEnergyConsumptionConditions(item).map(condition => {
       const active = isEnergyConsumptionActive(item, condition.id);
       return {
@@ -452,12 +458,13 @@ function renderEnergySourceCards(sourceItems = [], selectedSourceUuid = "") {
   }).join("");
 }
 
-function isActiveEnergyConsumptionCarrier(actor = null, item = null) {
+function isActiveEnergyConsumptionCarrier(actor = null, item = null, { activeItemIds = null } = {}) {
   if (!actor || item?.type !== "gear") return false;
   if (!hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return false;
   if (!hasItemFunction(item, ITEM_FUNCTIONS.freeSettings, { ignoreBroken: true })) return false;
   const mode = String(item.system?.placement?.mode ?? "");
   if (mode === "module") {
+    if (activeItemIds instanceof Set) return activeItemIds.has(String(item.id ?? ""));
     return getActorItemsWithActiveHudModules(actor).some(candidate => candidate.id === item.id);
   }
   return Boolean(item.system?.equipped) || ["equipment", "weapon", "constructPart"].includes(mode);

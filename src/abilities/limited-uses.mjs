@@ -5,6 +5,7 @@ import {
   isAbilityFunctionTimedTriggerCost,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "./deus-ex-machina-progress-runtime.mjs";
 import { getOriginalEffectKeyFromReverse } from "../utils/active-effect-keys.mjs";
 import {
   normalizeAttackDistanceMeters,
@@ -84,9 +85,14 @@ export function registerLimitedUseHooks() {
   });
 
   Hooks.on("fallout-maw.weaponActionWillResolve", captureLimitedUsesBeforeWeaponAction);
-  for (const hookName of ["createItem", "updateItem", "deleteItem", "createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
+  for (const hookName of ["createItem", "deleteItem", "createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
     Hooks.on(hookName, document => invalidateActorLimitedUseIndex(document?.parent));
   }
+  Hooks.on("updateItem", (item, changes = {}, options = {}) => {
+    if (!isDeusExMachinaProgressItemUpdate(changes, options)) {
+      invalidateActorLimitedUseIndex(item?.parent);
+    }
+  });
   registerWeaponAttackResolvedHandler("fallout-maw.limitedUses", consumeLimitedUsesForWeaponAttack);
   registerSystemEventObserver({
     id: "fallout-maw.limitedUses.resolvedOperations",

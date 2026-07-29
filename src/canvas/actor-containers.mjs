@@ -7,6 +7,7 @@ import {
   isActorInActorContainer,
   resolveActorContainerPassengerActor
 } from "../utils/actor-containers.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
 const ACTOR_CONTAINER_SOCKET = `system.${SYSTEM_ID}`;
 const ACTOR_CONTAINER_SOCKET_SCOPE = `${SYSTEM_ID}.actorContainers`;
@@ -28,6 +29,7 @@ const BLOCKED_CANVAS_EVENT_TYPES = Object.freeze([
 
 let activeBoardingMode = null;
 let activeExitPlacement = null;
+let actorContainerHighlightsDrawn = false;
 const pendingRequests = new Map();
 let actorContainerRequestQueue = Promise.resolve();
 
@@ -44,7 +46,8 @@ export function registerActorContainerHooks() {
   Hooks.on("createItem", item => {
     if (item?.actor) refreshActorContainerHighlights();
   });
-  Hooks.on("updateItem", item => {
+  Hooks.on("updateItem", (item, changes = {}, options = {}) => {
+    if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
     if (item?.actor) refreshActorContainerHighlights();
   });
   Hooks.on("deleteItem", item => {
@@ -257,12 +260,17 @@ function cancelActorContainerExitPlacement({ notify = false } = {}) {
 }
 
 function refreshActorContainerHighlights() {
+  if (!activeBoardingMode && !actorContainerHighlightsDrawn) return;
   const grid = canvas?.interface?.grid;
-  if (!canvas?.ready || !grid) return;
+  if (!canvas?.ready || !grid) {
+    actorContainerHighlightsDrawn = false;
+    return;
+  }
   const layer = grid.getHighlightLayer?.(ACTOR_CONTAINER_HIGHLIGHT_LAYER)
     ?? grid.addHighlightLayer?.(ACTOR_CONTAINER_HIGHLIGHT_LAYER);
   layer?.clear?.();
-  if (!layer || !activeBoardingMode) return;
+  actorContainerHighlightsDrawn = Boolean(layer && activeBoardingMode);
+  if (!actorContainerHighlightsDrawn) return;
   for (const token of canvas.tokens?.placeables ?? []) {
     if (!isTokenAvailableForBoarding(token, activeBoardingMode)) continue;
     drawTokenOutline(layer, token, ACTOR_CONTAINER_HIGHLIGHT_COLOR);

@@ -1,5 +1,6 @@
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCraftingSettings, getCreatureOptions, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import {
   calculateCraftConsumedQuantity,
   getCraftFailureRefundPercent,
@@ -1072,7 +1073,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
       ["deleteActor", Hooks.on("deleteActor", actor => this.#scheduleRefreshForActor(actor))],
       ["createItem", Hooks.on("createItem", item => this.#scheduleRefreshForItem(item))],
-      ["updateItem", Hooks.on("updateItem", item => this.#scheduleRefreshForItem(item))],
+      ["updateItem", Hooks.on("updateItem", (item, changes = {}, hookOptions = {}) => {
+        if (!isDeusExMachinaProgressItemUpdate(changes, hookOptions)) {
+          this.#scheduleRefreshForItem(item);
+        }
+      })],
       ["deleteItem", Hooks.on("deleteItem", item => this.#scheduleRefreshForItem(item))]
     ];
   }

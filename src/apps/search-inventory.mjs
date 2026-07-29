@@ -1,5 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions, getCurrencySettings, getItemCategorySettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import {
   FALLBACK_ICON,
   escapeHTML,
@@ -668,7 +669,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
       ["deleteActor", Hooks.on("deleteActor", actor => this.#handleActorDeleted(actor))],
       ["createItem", Hooks.on("createItem", item => this.#scheduleRefreshForActor(item?.parent))],
-      ["updateItem", Hooks.on("updateItem", item => this.#scheduleRefreshForActor(item?.parent, item?.id))],
+      ["updateItem", Hooks.on("updateItem", (item, changes = {}, hookOptions = {}) => {
+        if (!isDeusExMachinaProgressItemUpdate(changes, hookOptions)) {
+          this.#scheduleRefreshForActor(item?.parent, item?.id);
+        }
+      })],
       ["deleteItem", Hooks.on("deleteItem", item => this.#scheduleRefreshForActor(item?.parent, item?.id))]
     ];
   }

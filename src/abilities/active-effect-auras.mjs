@@ -10,6 +10,10 @@ import {
   findAuraTriggerConditions,
   getAuraGeneratedTargetTokens
 } from "./aura-conditions.mjs";
+import {
+  isBulkOperationActive,
+  registerBulkOperationFlusher
+} from "../utils/bulk-operation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { executeAbilityTrials, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY } from "./trial-runtime.mjs";
 
@@ -17,7 +21,11 @@ export const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 
 const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const indexedAuras = new Map();
+const indexedAurasBySourceActorUuid = new Map();
+const deferredAuraEntryEvaluations = new Map();
+const deferredAuraActorChanges = new Map();
 let runtimeQueue = Promise.resolve();
+let deferredAuraOperationSequence = 0;
 const FORMULA_IDENTIFIER_PATTERN = /@?[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)*/gu;
 const GENERIC_ACTOR_PATH_SEGMENTS = new Set([
   "system",
@@ -36,6 +44,7 @@ const GENERIC_ACTOR_PATH_SEGMENTS = new Set([
 ]);
 
 export function registerActiveEffectAuraHooks() {
+  registerBulkOperationFlusher(flushDeferredActiveAuraRuntime);
   Hooks.on("createActiveEffect", (effect, options = {}) => {
     if (
       !game.user?.isActiveGM
@@ -45,11 +54,8 @@ export function registerActiveEffectAuraHooks() {
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
     ) return;
     const entries = indexActiveApplicationAuraEffect(effect);
-    for (const entry of entries) enqueueAuraRuntime(() => evaluateAuraEntry(entry, {
-      reason: "create",
-      worldTime: getWorldTime()
-    }));
-    if (!entries.length) enqueueAuraRuntime(() => processActorAuraChange(effect?.parent));
+    for (const entry of entries) queueAuraEntryEvaluation(entry, "create");
+    if (!entries.length) queueActorAuraChange(effect?.parent);
   });
   Hooks.on("updateActiveEffect", (effect, _changes, options = {}) => {
     if (
@@ -64,12 +70,9 @@ export function registerActiveEffectAuraHooks() {
     const entries = indexActiveApplicationAuraEffect(effect);
     for (const entry of entries) {
       entry.states = cloneAuraStates(preservedStates.get(String(entry.condition?.id ?? "")));
-      enqueueAuraRuntime(() => evaluateAuraEntry(entry, {
-        reason: "refresh",
-        worldTime: getWorldTime()
-      }));
+      queueAuraEntryEvaluation(entry, "refresh");
     }
-    if (!entries.length) enqueueAuraRuntime(() => processActorAuraChange(effect?.parent));
+    if (!entries.length) queueActorAuraChange(effect?.parent);
   });
   Hooks.on("deleteActiveEffect", (effect, options = {}) => {
     if (
@@ -80,45 +83,57 @@ export function registerActiveEffectAuraHooks() {
       || effect?.getFlag?.(SYSTEM_ID, TRIAL_CONSTRUCT_EFFECT_FLAG_KEY)
     ) return;
     removeIndexedEffect(effect);
-    enqueueAuraRuntime(() => processActorAuraChange(effect?.parent));
+    queueActorAuraChange(effect?.parent);
   });
   Hooks.on("canvasReady", () => enqueueAuraRuntime(() => rebuildActiveAuraIndex()));
-  Hooks.on("updateWorldTime", worldTime => enqueueAuraRuntime(() => processDueAuras(Number(worldTime) || 0)));
+  Hooks.on("updateWorldTime", worldTime => {
+    if (!indexedAuras.size) return;
+    enqueueAuraRuntime(() => processDueAuras(Number(worldTime) || 0));
+  });
   Hooks.on(`${SYSTEM_ID}.factionSettingsChanged`, () => {
+    if (!indexedAuras.size) return;
     enqueueAuraRuntime(() => evaluateAllIndexedAuras("relations"));
   });
   Hooks.on("createToken", tokenDocument => {
+    if (!indexedAuras.size) return;
     globalThis.setTimeout(() => {
+      if (!indexedAuras.size) return;
       enqueueAuraRuntime(() => processTokenAuraChange(tokenDocument, { sourceMayHaveChanged: true }));
     }, 0);
   });
   Hooks.on("deleteToken", tokenDocument => {
+    if (!indexedAuras.size) return;
     enqueueAuraRuntime(() => processTokenAuraChange(tokenDocument, { sourceMayHaveChanged: true }));
   });
   Hooks.on("updateToken", (tokenDocument, changes = {}) => {
-    if (!isAuraTokenUpdateRelevant(changes)) return;
+    if (!indexedAuras.size || !isAuraTokenUpdateRelevant(changes)) return;
     const movement = tokenDocument?.object?.movementAnimationPromise;
     void Promise.resolve(movement)
       .catch(() => undefined)
-      .then(() => enqueueAuraRuntime(() => processTokenAuraChange(tokenDocument, {
-        sourceMayHaveChanged: isAuraTokenPositionUpdate(changes)
-      })));
+      .then(() => {
+        if (!indexedAuras.size) return;
+        enqueueAuraRuntime(() => processTokenAuraChange(tokenDocument, {
+          sourceMayHaveChanged: isAuraTokenPositionUpdate(changes)
+        }));
+      });
   });
   Hooks.on("updateActor", (actor, changes = {}, options = {}) => {
     if (
       !game.user?.isActiveGM
       || options?.falloutMawActiveAuraRuntime === true
       || options?.falloutMawTrialRuntime === true
-      || (
-        !isIndexedAuraSourceUpdateRelevant(actor, changes)
-        && !isAuraTargetActorUpdateRelevant(changes)
-      )
+      || !indexedAuras.size
     ) return;
-    enqueueAuraRuntime(() => processActorAuraChange(actor));
+    if (
+      !isAuraTargetActorUpdateRelevant(changes)
+      && !isIndexedAuraSourceUpdateRelevant(actor, changes)
+    ) return;
+    queueActorAuraChange(actor);
   });
 }
 
 async function processActorAuraChange(actor = null) {
+  if (!indexedAuras.size) return;
   const actorUuid = String(actor?.uuid ?? "");
   if (!actorUuid) return;
   const token = (canvas?.tokens?.placeables ?? []).find(candidate => candidate?.actor?.uuid === actorUuid);
@@ -138,8 +153,81 @@ function enqueueAuraRuntime(operation) {
   return runtimeQueue;
 }
 
+function queueAuraEntryEvaluation(entry, reason = "refresh") {
+  if (isBulkOperationActive()) {
+    const key = String(entry?.key ?? "");
+    if (key) {
+      deferredAuraEntryEvaluations.set(key, {
+        entry,
+        reason,
+        sequence: ++deferredAuraOperationSequence
+      });
+    }
+    return;
+  }
+  enqueueAuraRuntime(() => evaluateAuraEntry(entry, {
+    reason,
+    worldTime: getWorldTime()
+  }));
+}
+
+function queueActorAuraChange(actor = null) {
+  if (!indexedAuras.size) return;
+  const actorUuid = String(actor?.uuid ?? "");
+  if (!actorUuid) return;
+  if (isBulkOperationActive()) {
+    deferredAuraActorChanges.set(actorUuid, {
+      actor,
+      sequence: ++deferredAuraOperationSequence
+    });
+    return;
+  }
+  enqueueAuraRuntime(() => processActorAuraChange(actor));
+}
+
+function flushDeferredActiveAuraRuntime() {
+  if (!deferredAuraEntryEvaluations.size && !deferredAuraActorChanges.size) return;
+  const operations = [
+    ...Array.from(deferredAuraEntryEvaluations.values(), entry => ({
+      type: "entry",
+      ...entry
+    })),
+    ...Array.from(deferredAuraActorChanges.values(), entry => ({
+      type: "actor",
+      ...entry
+    }))
+  ].sort((left, right) => left.sequence - right.sequence);
+  deferredAuraEntryEvaluations.clear();
+  deferredAuraActorChanges.clear();
+  if (!indexedAuras.size) return;
+
+  // Hooks.callAll does not await hook callbacks. Keep the aura runtime outside
+  // the damage batch lock as well: the bulk flusher publishes one detached,
+  // ordered pass instead of awaiting nested Trial/damage work.
+  void enqueueAuraRuntime(async () => {
+    if (isBulkOperationActive()) {
+      for (const operation of operations) {
+        if (operation.type === "entry") queueAuraEntryEvaluation(operation.entry, operation.reason);
+        else queueActorAuraChange(operation.actor);
+      }
+      return;
+    }
+    for (const operation of operations) {
+      if (operation.type === "entry") {
+        await evaluateAuraEntry(operation.entry, {
+          reason: operation.reason,
+          worldTime: getWorldTime()
+        });
+      } else {
+        await processActorAuraChange(operation.actor);
+      }
+    }
+  });
+}
+
 async function rebuildActiveAuraIndex() {
   indexedAuras.clear();
+  indexedAurasBySourceActorUuid.clear();
   const actors = new Map();
   for (const token of canvas?.tokens?.placeables ?? []) {
     if (token?.actor?.uuid) actors.set(token.actor.uuid, token.actor);
@@ -171,24 +259,50 @@ function indexActiveApplicationAuraEffect(effect = null, { rebuilding = false } 
     const entry = {
       key,
       effect,
+      sourceActorUuid: String(effect?.parent?.uuid ?? ""),
       flag,
       abilityFunction,
       constructs,
       condition,
+      formulaIdentifiers: collectAuraFormulaIdentifiers(condition),
       states: new Map(),
       rebuilding
     };
-    indexedAuras.set(key, entry);
+    addIndexedAuraEntry(entry);
     entries.push(entry);
   }
   return entries;
 }
 
+function addIndexedAuraEntry(entry = null) {
+  const key = String(entry?.key ?? "");
+  if (!key) return;
+  const previous = indexedAuras.get(key);
+  if (previous && previous !== entry) removeIndexedAuraEntry(previous);
+  indexedAuras.set(key, entry);
+  const sourceActorUuid = String(entry?.sourceActorUuid ?? "");
+  if (!sourceActorUuid) return;
+  const sourceEntries = indexedAurasBySourceActorUuid.get(sourceActorUuid) ?? new Set();
+  sourceEntries.add(entry);
+  indexedAurasBySourceActorUuid.set(sourceActorUuid, sourceEntries);
+}
+
+function removeIndexedAuraEntry(entry = null) {
+  if (!entry) return;
+  const key = String(entry.key ?? "");
+  if (indexedAuras.get(key) === entry) indexedAuras.delete(key);
+  const sourceActorUuid = String(entry.sourceActorUuid ?? "");
+  const sourceEntries = indexedAurasBySourceActorUuid.get(sourceActorUuid);
+  if (!sourceEntries) return;
+  sourceEntries.delete(entry);
+  if (!sourceEntries.size) indexedAurasBySourceActorUuid.delete(sourceActorUuid);
+}
+
 function removeIndexedEffect(effect = null) {
   const effectUuid = String(effect?.uuid ?? "");
   if (!effectUuid) return;
-  for (const [key, entry] of indexedAuras.entries()) {
-    if (String(entry.effect?.uuid ?? "") === effectUuid) indexedAuras.delete(key);
+  for (const entry of Array.from(indexedAuras.values())) {
+    if (String(entry.effect?.uuid ?? "") === effectUuid) removeIndexedAuraEntry(entry);
   }
 }
 
@@ -211,10 +325,10 @@ function cloneAuraStates(states = null) {
 }
 
 async function processDueAuras(worldTime = getWorldTime()) {
-  if (!game.user?.isActiveGM) return;
+  if (!game.user?.isActiveGM || !indexedAuras.size) return;
   for (const entry of Array.from(indexedAuras.values())) {
     if (!isAuraEntryLive(entry, worldTime)) {
-      indexedAuras.delete(entry.key);
+      removeIndexedAuraEntry(entry);
       continue;
     }
     if (![...entry.states.values()].some(state => state.inside && state.nextAllowedAt <= worldTime)) continue;
@@ -223,11 +337,11 @@ async function processDueAuras(worldTime = getWorldTime()) {
 }
 
 async function evaluateAllIndexedAuras(reason = "refresh") {
-  if (!game.user?.isActiveGM) return;
+  if (!game.user?.isActiveGM || !indexedAuras.size) return;
   const now = getWorldTime();
   for (const entry of Array.from(indexedAuras.values())) {
     if (!isAuraEntryLive(entry, now)) {
-      indexedAuras.delete(entry.key);
+      removeIndexedAuraEntry(entry);
       continue;
     }
     await evaluateAuraEntry(entry, { reason, worldTime: now });
@@ -235,14 +349,14 @@ async function evaluateAllIndexedAuras(reason = "refresh") {
 }
 
 async function processTokenAuraChange(tokenDocument = null, { sourceMayHaveChanged = false } = {}) {
-  if (!game.user?.isActiveGM) return;
+  if (!game.user?.isActiveGM || !indexedAuras.size) return;
   const token = tokenDocument?.object ?? tokenDocument;
   const tokenUuid = String((tokenDocument?.document ?? tokenDocument)?.uuid ?? "");
   const actorUuid = String(token?.actor?.uuid ?? tokenDocument?.actor?.uuid ?? "");
   const now = getWorldTime();
   for (const entry of Array.from(indexedAuras.values())) {
     if (!isAuraEntryLive(entry, now)) {
-      indexedAuras.delete(entry.key);
+      removeIndexedAuraEntry(entry);
       continue;
     }
     const sourceToken = resolveAuraSourceToken(entry);
@@ -391,19 +505,19 @@ function isAuraTokenUpdateRelevant(changes = {}) {
 function isIndexedAuraSourceUpdateRelevant(actor = null, changes = {}) {
   const actorUuid = String(actor?.uuid ?? "");
   if (!actorUuid) return false;
-  const sourceEntries = [...indexedAuras.values()]
-    .filter(entry => String(entry.effect?.parent?.uuid ?? "") === actorUuid);
-  if (!sourceEntries.length) return false;
-  if (isAuraTargetActorUpdateRelevant(changes)) return true;
+  const sourceEntries = indexedAurasBySourceActorUuid.get(actorUuid);
+  if (!sourceEntries?.size) return false;
 
   const changedPaths = collectChangedActorPaths(changes);
   if (!changedPaths.length) return false;
-  return sourceEntries.some(entry => {
-    const identifiers = collectAuraFormulaIdentifiers(entry.condition);
-    return identifiers.size > 0 && changedPaths.some(path => (
-      formulaIdentifiersMatchActorPath(identifiers, path)
-    ));
-  });
+  for (const entry of sourceEntries) {
+    const identifiers = entry.formulaIdentifiers;
+    if (
+      identifiers?.size > 0
+      && changedPaths.some(path => formulaIdentifiersMatchActorPath(identifiers, path))
+    ) return true;
+  }
+  return false;
 }
 
 function isAuraTargetActorUpdateRelevant(changes = {}) {

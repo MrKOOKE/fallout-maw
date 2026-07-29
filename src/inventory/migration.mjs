@@ -2,14 +2,12 @@ import { getCreatureOptions } from "../settings/accessors.mjs";
 import { executeInventoryMutation } from "./mutation.mjs";
 import { planActorInventoryRepair } from "./repair.mjs";
 import { INVENTORY_ATOMIC_OPTION } from "./constants.mjs";
+import {
+  createdItemRequiresInventoryRepair,
+  isInventoryRelevantActorPath
+} from "./repair-triggers.mjs";
 
 const INVENTORY_REPAIR_REASON = "inventory-repair";
-const LIMB_RUNTIME_STATE_FIELDS = new Set([
-  "value",
-  "spent",
-  "damageAccumulation"
-]);
-
 let hooksRegistered = false;
 let repairQueueRunning = false;
 const queuedActors = new Map();
@@ -24,7 +22,7 @@ export function registerInventoryRepairHooks() {
   hooksRegistered = true;
 
   Hooks.on("createItem", (item, options = {}) => {
-    if (isRepairOperation(options)) return;
+    if (isRepairOperation(options) || !createdItemRequiresInventoryRepair(item, options)) return;
     queueInventoryRepair(item?.parent);
   });
   Hooks.on("updateItem", (item, changes = {}, options = {}) => {
@@ -202,23 +200,7 @@ function isInventoryRelevantItemUpdate(changes = {}) {
 
 export function isInventoryRelevantActorUpdate(changes = {}) {
   const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
-  return paths.some(path => (
-    path === "type"
-    || path.startsWith("system.constructPartSlots")
-    || path.startsWith("system.creature.raceId")
-    || path.startsWith("system.inventory")
-    || isInventoryRelevantLimbPath(path)
-    || path.startsWith("system.trade.infiniteInventory")
-  ));
-}
-
-function isInventoryRelevantLimbPath(path = "") {
-  if (path === "system.limbs") return true;
-  if (!path.startsWith("system.limbs.")) return false;
-
-  const [, , limbKey, field] = path.split(".");
-  if (!limbKey || limbKey.startsWith("-=") || !field) return true;
-  return !LIMB_RUNTIME_STATE_FIELDS.has(field);
+  return paths.some(isInventoryRelevantActorPath);
 }
 
 function isRepairOperation(options = {}) {

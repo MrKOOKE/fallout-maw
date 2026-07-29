@@ -62,10 +62,10 @@ import {
   getWeaponActionBlockState
 } from "./runtime-state.mjs";
 import {
-  DAMAGE_APPLIED_HOOK,
   applyDestroyedLimbConsequences,
   isCriticalLimb,
   isLimbDestroyed,
+  registerDamageAppliedHandler,
   registerLethalDamagePreventionHandler,
   requestDamageApplications,
   restoreActorHealthCost,
@@ -95,6 +95,10 @@ import {
   registerWeaponAttackResolvedHandler,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
+import {
+  DEUS_EX_MACHINA_PROGRESS_FLAG_ROOT,
+  DEUS_EX_MACHINA_PROGRESS_OPTION
+} from "./deus-ex-machina-progress-runtime.mjs";
 import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -609,9 +613,10 @@ export function registerFixedAbilityFunctionHooks() {
   registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
   registerActorTurnStartPreparedHandler(context => deleteDefensiveTacticsEffects(context?.actor));
   registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
-  Hooks.on(DAMAGE_APPLIED_HOOK, context => {
-    void advanceDeusExMachinaProgressFromDamage(context?.results ?? []);
-  });
+  registerDamageAppliedHandler(
+    "fallout-maw.fixed.deusExMachinaProgress",
+    context => advanceDeusExMachinaProgressFromDamage(context?.results ?? [])
+  );
   Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, context => {
     void requestCurseAndBlessingAttackResolution(context);
   });
@@ -2963,11 +2968,13 @@ function abilityFunctionHasTrialConsequences(abilityFunction = {}) {
 
 function queueActiveApplicationEffectSync(actor) {
   const actorUuid = actor?.uuid;
-  if (!actorUuid || !game.user?.isActiveGM) return;
+  if (!actorUuid || !game.user?.isActiveGM || !hasActiveApplicationEffects(actor)) return;
   globalThis.clearTimeout(activeApplicationEffectSyncTimers.get(actorUuid));
   activeApplicationEffectSyncTimers.set(actorUuid, globalThis.setTimeout(() => {
     activeApplicationEffectSyncTimers.delete(actorUuid);
-    void syncActorActiveApplicationEffects(actor);
+    const currentActor = fromUuidSync(actorUuid) ?? actor;
+    if (!hasActiveApplicationEffects(currentActor)) return;
+    void syncActorActiveApplicationEffects(currentActor);
   }, 40));
 }
 
@@ -3014,6 +3021,13 @@ async function syncActorActiveApplicationEffects(actor) {
     }
     if (Object.keys(update).length) await effect.update(update);
   }
+}
+
+function hasActiveApplicationEffects(actor = null) {
+  for (const effect of actor?.effects ?? []) {
+    if (effect?.getFlag?.(SYSTEM_ID, ACTIVE_APPLICATION_EFFECT_FLAG_KEY)) return true;
+  }
+  return false;
 }
 
 function collectCommandBasicsTargetRows(commander, command = "") {
@@ -8694,8 +8708,25 @@ async function advanceDeusExMachinaProgressFromDamage(results = []) {
   for (const [actorUuid, damage] of damageByActorUuid) {
     const actor = fromUuidSync(actorUuid);
     if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
-    for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
-      await advanceDeusExMachinaProgress(actor, abilityItem, damage);
+    const updates = [];
+    const readyMessages = [];
+    const abilityItems = actor.itemTypes?.ability
+      ?? actor.items?.filter(item => item.type === "ability")
+      ?? [];
+    for (const abilityItem of abilityItems) {
+      const plan = prepareDeusExMachinaProgressUpdate(abilityItem, damage);
+      if (!plan.update) continue;
+      updates.push(plan.update);
+      for (let index = 0; index < plan.readyMessageCount; index += 1) {
+        readyMessages.push(abilityItem);
+      }
+    }
+    if (!updates.length) continue;
+    await actor.updateEmbeddedDocuments("Item", updates, {
+      [DEUS_EX_MACHINA_PROGRESS_OPTION]: true
+    });
+    for (const abilityItem of readyMessages) {
+      await createAbilityChatMessage(actor, abilityItem, "Накопление завершено. Способность готова к применению.");
     }
   }
 }
@@ -8706,34 +8737,31 @@ function addActorDamageProgress(progressMap, actorUuid = "", damage = 0) {
   progressMap.set(key, (progressMap.get(key) ?? 0) + damage);
 }
 
-async function advanceDeusExMachinaProgress(actor, abilityItem, damage = 0) {
+function prepareDeusExMachinaProgressUpdate(abilityItem, damage = 0) {
   const entries = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
     .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina);
-  if (!entries.length || damage <= 0) return;
+  if (!entries.length || damage <= 0 || !abilityItem?.id) {
+    return { update: null, readyMessageCount: 0 };
+  }
 
-  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
-  let changed = false;
-  const readyMessages = [];
+  const state = getFixedAbilityState(abilityItem);
+  const update = { _id: abilityItem.id };
+  let readyMessageCount = 0;
   for (const entry of entries) {
     const settings = normalizeDeusExMachinaSettings(entry.fixedSettings);
     const stateKey = getFixedFunctionStateKey(entry);
     const current = state[stateKey] ?? {};
     const nextDamage = Math.max(0, toInteger(current.damage)) + damage;
     const ready = nextDamage >= settings.damageRequired;
-    state[stateKey] = {
+    update[`${DEUS_EX_MACHINA_PROGRESS_FLAG_ROOT}.${stateKey}`] = {
       ...current,
       fixedKey: entry.fixedKey,
       damage: nextDamage,
       readyNotified: Boolean(current.readyNotified) || ready
     };
-    changed = true;
-    if (ready && !current.readyNotified) readyMessages.push(getAbilityDisplayName(abilityItem));
+    if (ready && !current.readyNotified) readyMessageCount += 1;
   }
-
-  if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  for (const _label of readyMessages) {
-    await createAbilityChatMessage(actor, abilityItem, "Накопление завершено. Способность готова к применению.");
-  }
+  return { update, readyMessageCount };
 }
 
 async function useDeusExMachina(actor, abilityItem, abilityFunction) {

@@ -1,5 +1,6 @@
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
@@ -494,7 +495,8 @@ class DualWeaponAttackPreview {
     )));
   }
 
-  onItemUpdate(item = null) {
+  onItemUpdate(item = null, changes = {}, options = {}) {
+    if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
     if (item?.parent?.uuid !== this.token?.actor?.uuid || this.destroyed) return;
     this.noiseLevel = this.getCombinedNoiseLevel();
     if (!this.suppressed) setWeaponNoisePreview(this.token, this.sourceId, this.noiseLevel);
@@ -1535,7 +1537,7 @@ class CommandedWeaponAttackController {
       cancel: event => this.onCancel(event),
       keyDown: event => this.onKeyDown(event),
       tick: () => this.onTick(),
-      itemUpdate: item => this.onItemUpdate(item)
+      itemUpdate: (item, changes, options) => this.onItemUpdate(item, changes, options)
     };
   }
 
@@ -1630,7 +1632,8 @@ class CommandedWeaponAttackController {
     for (const entry of this.entries) this.drawFocusedTargetMarkerForEntry(entry, performance.now());
   }
 
-  onItemUpdate(item = null) {
+  onItemUpdate(item = null, changes = {}, options = {}) {
+    if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
     if (this.processing || this.destroyed) return;
     for (const entry of this.entries) {
       if (item?.parent?.uuid !== entry.token?.actor?.uuid) continue;
@@ -3127,7 +3130,7 @@ class WeaponAttackController {
       cancel: event => this.onCancel(event),
       pointerDown: event => this.onPointerDown(event),
       tick: () => this.onTick(),
-      itemUpdate: item => this.onItemUpdate(item)
+      itemUpdate: (item, changes, options) => this.onItemUpdate(item, changes, options)
     };
   }
 
@@ -4466,7 +4469,8 @@ class WeaponAttackController {
     this.drawFocusedTargetMarkerForPreview(performance.now());
   }
 
-  onItemUpdate(item = null) {
+  onItemUpdate(item = null, changes = {}, options = {}) {
+    if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
     if (
       this.processing
       || this.destroyed

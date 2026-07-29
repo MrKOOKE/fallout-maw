@@ -24,12 +24,14 @@ import { createFoundryEventReactionRuntime } from "./foundry-event-reactions.mjs
 import { serializeLegacyReactionContext } from "./legacy-reaction-context.mjs";
 import {
   collectEventReactionKeysFromItem,
+  configureEventReactionSubscriptionItems,
   eventReactionIndexHasKey,
   registerEventReactionSubscriptionIndexHooks
 } from "./event-reaction-index.mjs";
 import {
   getActorEventReactionSourceItems
 } from "./event-reaction-scanner.mjs";
+import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
   collectAbilityWeaponAttackOptions,
   executeAbilityWeaponAttackOption,
@@ -63,6 +65,7 @@ export function registerFoundrySystemEventIntegration() {
   if (registered) return eventRuntime;
   registered = true;
   registerAbilityActionQueries();
+  configureEventReactionSubscriptionItems(getActorItemsWithActiveHudModules);
 
   eventRuntime = createFoundryEventReactionRuntime({
     registerRootFinalizer: registerSystemEventRootFinalizer,
@@ -184,7 +187,9 @@ async function eventParticipantHasReactionKey(event = {}) {
   for (const actorUuid of actorUuids) {
     const actor = await fromUuid(actorUuid);
     if (!actor) continue;
-    for (const item of getActorEventReactionSourceItems(actor)) {
+    for (const item of getActorEventReactionSourceItems(actor, {
+      getItems: getActorItemsWithActiveHudModules
+    })) {
       if (collectEventReactionKeysFromItem(item).includes(eventKey)) return true;
     }
   }

@@ -5,6 +5,7 @@ import {
   getEventReactionSubscriptionIndex,
   VISION_EVENT_REACTION_KEYS
 } from "./event-reaction-index.mjs";
+import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 
 const TOKEN_VISION_PATHS = [
   "x", "y", "elevation", "width", "height", "hidden", "sight", "detectionModes", "texture.scaleX", "texture.scaleY"
@@ -33,7 +34,7 @@ export function registerFoundryVisionSystemEventHooks() {
   Hooks.on("createToken", token => invalidateToken(token, { silent: true }));
   Hooks.on("deleteToken", token => removeToken(token));
   Hooks.on("updateToken", (token, changes) => {
-    if (hasAnyPath(changes, TOKEN_VISION_PATHS)) invalidateToken(token);
+    if (changedDataIntersectsPaths(changes, TOKEN_VISION_PATHS)) invalidateToken(token);
   });
   for (const documentName of ["Wall", "AmbientLight"]) {
     Hooks.on(`create${documentName}`, document => invalidateSceneFull(document?.parent));
@@ -41,10 +42,10 @@ export function registerFoundryVisionSystemEventHooks() {
     Hooks.on(`delete${documentName}`, document => invalidateSceneFull(document?.parent));
   }
   Hooks.on("updateScene", (scene, changes) => {
-    if (hasAnyPath(changes, SCENE_VISION_PATHS)) invalidateSceneFull(scene);
+    if (changedDataIntersectsPaths(changes, SCENE_VISION_PATHS)) invalidateSceneFull(scene);
   });
   Hooks.on("updateActor", (actor, changes) => {
-    if (hasAnyPath(changes, ACTOR_VISION_PATHS)) invalidateActorTokens(actor);
+    if (changedDataIntersectsPaths(changes, ACTOR_VISION_PATHS)) invalidateActorTokens(actor);
   });
   for (const hook of ["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
     Hooks.on(hook, effect => {
@@ -228,12 +229,6 @@ function getSceneKey(scene) {
 
 function tokenDocumentUuid(token) {
   return String(token?.document?.uuid ?? token?.uuid ?? "").trim();
-}
-
-function hasAnyPath(changes, paths) {
-  if (!changes || typeof changes !== "object") return false;
-  return paths.some(path => globalThis.foundry?.utils?.hasProperty?.(changes, path)
-    || Object.hasOwn(changes, path.split(".")[0]));
 }
 
 function isCurrentActiveGM() {

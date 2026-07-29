@@ -12,6 +12,7 @@ import {
 export { normalizeEventReactionProgressRequired } from "../settings/abilities.mjs";
 
 export const EVENT_REACTION_PROGRESS_FLAG_KEY = "eventReactionProgress";
+export const EVENT_REACTION_PROGRESS_HISTORY_LIMIT = 64;
 
 const PROGRESS_LABELS = Object.freeze({
   "fallout-maw.research.progressed": ["FALLOUTMAW.Events.Reaction.Progress.Research", "Research progress"],
@@ -123,6 +124,16 @@ export function createEventReactionProgressManager({
   logger = console
 } = {}) {
   const queues = new Map();
+  // Event ids are needed only for de-duplication. Keeping history-only changes
+  // here avoids resetting and preparing the parent Actor for every zero-value
+  // event or every event received while the counter is already full.
+  //
+  // The ledger is bounded to the same window as the persisted flag and is
+  // indexed both by Item and root so a root finalizer can durably flush it.
+  const pendingHistoryByItem = new Map();
+  const pendingItemKeysByRoot = new Map();
+  const rootFlushes = new Map();
+  let historySequence = 0;
 
   async function advance({
     item = null,
@@ -135,10 +146,13 @@ export function createEventReactionProgressManager({
       const selected = selectConditions(abilityFunction, conditionIds);
       if (!item || !selected.length) return emptyResult();
       const state = cloneState(getEventReactionProgressState(item));
+      const itemKey = getItemLockKey(item);
+      const rootId = String(envelope?.rootId ?? "").trim();
       const eventId = String(envelope?.eventId ?? "").trim();
       const readyConditionIds = [];
       const advancedConditionIds = [];
-      let changed = false;
+      const acceptedChanges = [];
+      let numericChanged = false;
 
       for (const condition of selected) {
         if (!isEventReactionProgressTracked(condition.eventKey)) {
@@ -149,29 +163,53 @@ export function createEventReactionProgressManager({
         if (!key) continue;
         const required = normalizeEventReactionProgressRequired(condition.progressRequired);
         const previous = objectValue(state[key]);
-        let current = Math.max(0, Math.min(required, finiteNumber(previous.current)));
-        const recentEventIds = normalizeRecentEventIds(previous);
+        const persistedCurrent = finiteNumber(previous.current);
+        let current = Math.max(0, Math.min(required, persistedCurrent));
+        const recentEventIds = mergeRecentEventIds(
+          normalizeRecentEventIds(previous),
+          getPendingEventIds(itemKey, key)
+        );
         if (!eventId || !recentEventIds.includes(eventId)) {
           const increment = getEventReactionProgressIncrement(condition, envelope);
           current = roundProgress(Math.min(required, current + increment));
-          state[key] = {
-            ...previous,
+          acceptedChanges.push({
+            key,
             functionId: String(abilityFunction?.id ?? ""),
             conditionId: String(condition?.id ?? ""),
             eventKey: String(condition?.eventKey ?? envelope?.key ?? ""),
             current,
-            lastEventId: eventId,
-            recentEventIds: eventId
-              ? [...recentEventIds, eventId].slice(-64)
-              : recentEventIds
-          };
-          changed = true;
+            eventId
+          });
+          if (current !== persistedCurrent) numericChanged = true;
           if (increment > 0) advancedConditionIds.push(String(condition.id));
         }
         if (current >= required) readyConditionIds.push(String(condition.id));
       }
 
-      if (changed) await writeState(item, state, chainRef);
+      if (numericChanged) {
+        mergePendingHistoryIntoState(state, itemKey);
+        mergeAcceptedChangesIntoState(state, acceptedChanges);
+        await writeState(item, state, chainRef);
+        clearPendingItemHistory(itemKey);
+      } else if (acceptedChanges.some(change => change.eventId)) {
+        if (rootId && itemKey) {
+          for (const change of acceptedChanges) {
+            if (!change.eventId) continue;
+            recordPendingHistory({
+              item,
+              itemKey,
+              rootId,
+              chainRef,
+              ...change
+            });
+          }
+        } else {
+          // A root-less event has no lifecycle finalizer. Preserve the previous
+          // durable behaviour, but suppress an unnecessary sheet render.
+          mergeAcceptedChangesIntoState(state, acceptedChanges);
+          await writeState(item, state, chainRef, { render: false });
+        }
+      }
       return {
         ready: readyConditionIds.length > 0,
         readyConditionIds,
@@ -215,7 +253,12 @@ export function createEventReactionProgressManager({
         };
         consumed += 1;
       }
-      if (consumed) await writeState(item, state, chainRef);
+      if (consumed) {
+        const itemKey = getItemLockKey(item);
+        mergePendingHistoryIntoState(state, itemKey);
+        await writeState(item, state, chainRef);
+        clearPendingItemHistory(itemKey);
+      }
       return consumed;
     });
   }
@@ -242,13 +285,75 @@ export function createEventReactionProgressManager({
         };
         resetCount += 1;
       }
-      if (resetCount) await writeState(item, state, chainRef);
+      if (resetCount) {
+        const itemKey = getItemLockKey(item);
+        mergePendingHistoryIntoState(state, itemKey);
+        await writeState(item, state, chainRef);
+        clearPendingItemHistory(itemKey);
+      }
       return resetCount;
     });
   }
 
-  function withItemLock(item, operation) {
-    const key = String(item?.uuid ?? item?.id ?? "").trim();
+  /**
+   * Persist history-only event ids for one completed semantic-event root.
+   *
+   * Each Item is serialized through the same lock as advance/reset. Successful
+   * Item writes are removed immediately; failed ones stay in the ledger so a
+   * later cleanup attempt retries only unfinished work. Concurrent calls for
+   * the same root share one promise and therefore cannot double-write.
+   */
+  function flushRoot(rootId = "") {
+    const normalized = String(rootId ?? "").trim();
+    if (!normalized) return Promise.resolve(0);
+    const current = rootFlushes.get(normalized);
+    if (current) return current;
+    const flush = flushRootNow(normalized);
+    rootFlushes.set(normalized, flush);
+    void flush.finally(() => {
+      if (rootFlushes.get(normalized) === flush) rootFlushes.delete(normalized);
+    }).catch(() => undefined);
+    return flush;
+  }
+
+  async function flushRootNow(rootId) {
+    const itemKeys = Array.from(pendingItemKeysByRoot.get(rootId) ?? []);
+    let flushed = 0;
+    const failures = [];
+    for (const itemKey of itemKeys) {
+      try {
+        flushed += await withItemLock(
+          pendingHistoryByItem.get(itemKey)?.item,
+          async () => {
+            const pending = pendingHistoryByItem.get(itemKey);
+            if (!pending || !hasPendingRootHistory(pending, rootId)) {
+              unlinkRootItem(rootId, itemKey);
+              return 0;
+            }
+            const state = cloneState(getEventReactionProgressState(pending.item));
+            const chainRef = mergePendingHistoryIntoState(state, itemKey, { rootId });
+            await writeState(pending.item, state, chainRef, { render: false });
+            clearPendingItemHistory(itemKey, { rootId });
+            return 1;
+          },
+          itemKey
+        );
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length) {
+      throw new AggregateError(
+        failures,
+        `Event Reaction progress history flush failed for root "${rootId}".`
+      );
+    }
+    pendingItemKeysByRoot.delete(rootId);
+    return flushed;
+  }
+
+  function withItemLock(item, operation, explicitKey = "") {
+    const key = String(explicitKey || getItemLockKey(item)).trim();
     if (!key) return operation();
     const previous = queues.get(key) ?? Promise.resolve();
     const current = previous.catch(() => undefined).then(operation);
@@ -259,14 +364,152 @@ export function createEventReactionProgressManager({
     return current;
   }
 
-  function writeState(item, state, chainRef) {
+  function writeState(item, state, chainRef, options = {}) {
     return updateItem(item, state, {
       falloutMawEventReactionProgress: true,
+      ...options,
       ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
     });
   }
 
-  return Object.freeze({ advance, isReady, consume, reset });
+  function recordPendingHistory({
+    item,
+    itemKey,
+    rootId,
+    chainRef,
+    key,
+    functionId,
+    conditionId,
+    eventKey,
+    eventId
+  }) {
+    let pending = pendingHistoryByItem.get(itemKey);
+    if (!pending) {
+      pending = { item, byProgressKey: new Map() };
+      pendingHistoryByItem.set(itemKey, pending);
+    } else {
+      pending.item = item;
+    }
+    let events = pending.byProgressKey.get(key);
+    if (!events) {
+      events = [];
+      pending.byProgressKey.set(key, events);
+    }
+    if (events.some(entry => entry.eventId === eventId)) return;
+    events.push({
+      rootId,
+      chainRef,
+      functionId,
+      conditionId,
+      eventKey,
+      eventId,
+      sequence: ++historySequence
+    });
+    while (events.length > EVENT_REACTION_PROGRESS_HISTORY_LIMIT) {
+      const [removed] = events.splice(0, 1);
+      if (removed) unlinkRootItemIfUnused(removed.rootId, itemKey, pending);
+    }
+    let rootItems = pendingItemKeysByRoot.get(rootId);
+    if (!rootItems) {
+      rootItems = new Set();
+      pendingItemKeysByRoot.set(rootId, rootItems);
+    }
+    rootItems.add(itemKey);
+  }
+
+  function getPendingEventIds(itemKey, progressKey) {
+    if (!itemKey || !progressKey) return [];
+    return (pendingHistoryByItem.get(itemKey)?.byProgressKey.get(progressKey) ?? [])
+      .map(entry => entry.eventId);
+  }
+
+  function mergePendingHistoryIntoState(state, itemKey, { rootId = "" } = {}) {
+    const pending = pendingHistoryByItem.get(itemKey);
+    if (!pending) return null;
+    let latestChainRef = null;
+    for (const [key, allEvents] of pending.byProgressKey) {
+      const events = rootId
+        ? allEvents.filter(entry => entry.rootId === rootId)
+        : allEvents;
+      if (!events.length) continue;
+      const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
+      const latest = ordered.at(-1);
+      const previous = objectValue(state[key]);
+      const recentEventIds = mergeRecentEventIds(
+        normalizeRecentEventIds(previous),
+        ordered.map(entry => entry.eventId)
+      );
+      state[key] = {
+        ...previous,
+        functionId: latest.functionId,
+        conditionId: latest.conditionId,
+        eventKey: latest.eventKey,
+        current: finiteNumber(previous.current),
+        lastEventId: recentEventIds.at(-1) ?? "",
+        recentEventIds
+      };
+      if (latest.chainRef) latestChainRef = latest.chainRef;
+    }
+    return latestChainRef;
+  }
+
+  function mergeAcceptedChangesIntoState(state, changes) {
+    for (const change of changes) {
+      const previous = objectValue(state[change.key]);
+      const recentEventIds = change.eventId
+        ? mergeRecentEventIds(normalizeRecentEventIds(previous), [change.eventId])
+        : normalizeRecentEventIds(previous);
+      state[change.key] = {
+        ...previous,
+        functionId: change.functionId,
+        conditionId: change.conditionId,
+        eventKey: change.eventKey,
+        current: change.current,
+        lastEventId: change.eventId || previous.lastEventId || "",
+        recentEventIds
+      };
+    }
+  }
+
+  function clearPendingItemHistory(itemKey, { rootId = "" } = {}) {
+    const pending = pendingHistoryByItem.get(itemKey);
+    if (!pending) return;
+    const affectedRoots = new Set();
+    for (const [key, events] of pending.byProgressKey) {
+      for (const entry of events) {
+        if (!rootId || entry.rootId === rootId) affectedRoots.add(entry.rootId);
+      }
+      const remaining = rootId
+        ? events.filter(entry => entry.rootId !== rootId)
+        : [];
+      if (remaining.length) pending.byProgressKey.set(key, remaining);
+      else pending.byProgressKey.delete(key);
+    }
+    if (!pending.byProgressKey.size) pendingHistoryByItem.delete(itemKey);
+    for (const affectedRoot of affectedRoots) {
+      unlinkRootItemIfUnused(affectedRoot, itemKey, pendingHistoryByItem.get(itemKey));
+    }
+  }
+
+  function hasPendingRootHistory(pending, rootId) {
+    return Array.from(pending?.byProgressKey?.values?.() ?? [])
+      .some(events => events.some(entry => entry.rootId === rootId));
+  }
+
+  function unlinkRootItemIfUnused(rootId, itemKey, pending) {
+    if (!rootId) return;
+    if (pending && hasPendingRootHistory(pending, rootId)) return;
+    unlinkRootItem(rootId, itemKey);
+  }
+
+  function unlinkRootItem(rootId, itemKey) {
+    const rootItems = pendingItemKeysByRoot.get(rootId);
+    if (!rootItems) return;
+    rootItems.delete(itemKey);
+    if (!rootItems.size) pendingItemKeysByRoot.delete(rootId);
+  }
+
+  return Object.freeze({ advance, isReady, consume, reset, flushRoot });
 }
 
 export function getEventReactionProgressLabel(eventKey = "") {
@@ -311,7 +554,16 @@ function normalizeRecentEventIds(state = {}) {
   const values = normalizeStrings(state?.recentEventIds);
   const legacy = String(state?.lastEventId ?? "").trim();
   if (legacy && !values.includes(legacy)) values.push(legacy);
-  return values.slice(-64);
+  return values.slice(-EVENT_REACTION_PROGRESS_HISTORY_LIMIT);
+}
+
+function mergeRecentEventIds(previous = [], additions = []) {
+  return normalizeStrings([...previous, ...additions])
+    .slice(-EVENT_REACTION_PROGRESS_HISTORY_LIMIT);
+}
+
+function getItemLockKey(item = null) {
+  return String(item?.uuid ?? item?.id ?? "").trim();
 }
 
 function finiteNumber(value) {

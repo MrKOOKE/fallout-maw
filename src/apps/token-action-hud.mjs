@@ -182,6 +182,8 @@ import {
 } from "../utils/damage-source-weapon.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
+import { createTokenActionHudRequestIndex } from "./token-action-hud-request-index.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -717,24 +719,33 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const context = await super._prepareContext(options);
     const actor = this.actor;
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-    const hudWeaponSets = getHudWeaponSetsForActor(actor);
-    const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
-    const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
+    const requestIndex = createTokenActionHudRequestIndex(actor, {
+      getWeaponSets: getHudWeaponSetsForActor,
+      getInstalledModuleItems: getActorInstalledModuleItems,
+      resolveActiveWeaponSetKey: getActiveHudWeaponSetKey
+    });
+    const { hudWeaponSets, activeWeaponSetKey } = requestIndex;
+    const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey, requestIndex);
     const hudIcons = getTokenActionHudIcons();
-    await preloadHudImageAspects(collectHudImageAspectSources(actor, hudWeaponSets, this.#weaponEquipTarget));
-    const weaponSet = prepareHudWeaponSet(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
-    const weaponSets = prepareHudWeaponSets(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
+    await preloadHudImageAspects(collectHudImageAspectSources(actor, hudWeaponSets, this.#weaponEquipTarget, requestIndex));
+    const weaponSets = prepareHudWeaponSets(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons, requestIndex);
+    const weaponSet = weaponSets.find(entry => entry.key === activeWeaponSetKey) ?? null;
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
-    const dualWeaponState = prepareDualWeaponHudState(actor, weaponSet);
+    const dualWeaponState = prepareDualWeaponHudState(actor, weaponSet, requestIndex);
     if (!dualWeaponState.active) this.#dualWeaponActionSelection = null;
     const weaponActionRows = dualWeaponState.active
       ? prepareDualWeaponActionRows(actor, dualWeaponState.weaponSlots, hudIcons, this.#dualWeaponActionSelection)
-      : prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token);
-    const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons);
+      : prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token, requestIndex);
+    const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons, requestIndex);
     const skills = prepareSkillButtons(actor, hudIcons);
-    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true, weaponSet, token: this.token });
-    const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
+    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", {
+      activeOnly: true,
+      weaponSet,
+      token: this.token,
+      requestIndex
+    });
+    const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg", requestIndex);
     const passengers = prepareHudActorContainerPassengers(actor);
     const systemActions = prepareSystemActionButtons(hudIcons);
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
@@ -2732,10 +2743,17 @@ function prepareSkillButtons(actor, hudIcons = {}) {
   });
 }
 
-function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false, weaponSet = null, token = null } = {}) {
+function prepareOwnedItemButtons(actor, type, fallbackIcon, {
+  activeOnly = false,
+  weaponSet = null,
+  token = null,
+  requestIndex = null
+} = {}) {
   const tokenDocument = token?.document ?? token ?? null;
-  const activeItems = actor.items
-    .filter(item => item.type === type)
+  const ownedItems = requestIndex
+    ? (requestIndex.actorItemsByType.get(type) ?? [])
+    : actor.items.filter(item => item.type === type);
+  const activeItems = ownedItems
     .filter(item => !activeOnly || isActiveItem(item))
     .filter(item => !hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true }) || isHudEquipmentLightSource(item))
     .map(item => {
@@ -2760,7 +2778,11 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
   if (!activeOnly || type !== "gear") return activeItems;
   return [
     ...activeItems,
-    ...getEnergyConsumptionControlEntries(actor, { weaponSet }).map(entry => ({
+    ...getEnergyConsumptionControlEntries(actor, {
+      weaponSet,
+      itemDocuments: requestIndex?.itemsWithActiveHudModules,
+      activeItemIds: requestIndex?.activeHudItemIds
+    }).map(entry => ({
       ...entry,
       action: "openEnergyConsumption",
       img: normalizeImagePath(entry.img, fallbackIcon),
@@ -2780,9 +2802,11 @@ function isHudEquipmentLightSource(item = null) {
   );
 }
 
-function prepareOwnedAbilityButtons(actor, fallbackIcon) {
-  return actor.items
-    .filter(item => item.type === "ability")
+function prepareOwnedAbilityButtons(actor, fallbackIcon, requestIndex = null) {
+  const abilityItems = requestIndex
+    ? (requestIndex.actorItemsByType.get("ability") ?? [])
+    : actor.items.filter(item => item.type === "ability");
+  return abilityItems
     .flatMap(item => prepareAbilityItemButtons(item, fallbackIcon));
 }
 
@@ -3079,12 +3103,12 @@ function prepareActions(activeTray, selectedWeapon, items, abilities, actionGrou
     });
 }
 
-function prepareHudWeaponSet(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
-  return prepareHudWeaponSets(actor, weaponSets, activeSetKey, selectedWeaponId, hudIcons)
+function prepareHudWeaponSet(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}, requestIndex = null) {
+  return prepareHudWeaponSets(actor, weaponSets, activeSetKey, selectedWeaponId, hudIcons, requestIndex)
     .find(entry => entry.key === activeSetKey) ?? null;
 }
 
-function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
+function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}, requestIndex = null) {
   return weaponSets.map(set => ({
     ...set,
     active: set.key === activeSetKey,
@@ -3098,7 +3122,10 @@ function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selecte
     weapons: getUniqueHudWeaponSlots(set.slots ?? []).map(slot => ({
       ...slot,
       hudAspectStyle: getHudItemAspectStyle(slot.item),
-      hudStatusBadges: prepareHudWeaponStatusBadges(actor?.items?.get(slot.item?.id ?? "")),
+      hudStatusBadges: prepareHudWeaponStatusBadges(
+        requestIndex?.actorItemById?.get(String(slot.item?.id ?? ""))
+          ?? actor?.items?.get(slot.item?.id ?? "")
+      ),
       weaponSetKey: set.key,
       selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
     })),
@@ -3161,7 +3188,7 @@ function getCachedHudImageAspect(src = "") {
   return 0;
 }
 
-function collectHudImageAspectSources(actor, weaponSets = [], weaponEquipTarget = null) {
+function collectHudImageAspectSources(actor, weaponSets = [], weaponEquipTarget = null, requestIndex = null) {
   const sources = new Set();
   for (const set of weaponSets ?? []) {
     for (const slot of set.slots ?? []) {
@@ -3171,10 +3198,11 @@ function collectHudImageAspectSources(actor, weaponSets = [], weaponEquipTarget 
   }
 
   if (weaponEquipTarget?.weaponSetKey && weaponEquipTarget?.weaponSlotKey) {
-    for (const item of actor?.items?.contents ?? []) {
+    for (const item of requestIndex?.actorItems ?? actor?.items?.contents ?? []) {
       if (!isHudWeaponEquipCandidate(item)) continue;
       if (!canFitHudWeaponInTarget(actor, item, weaponEquipTarget.weaponSetKey, weaponEquipTarget.weaponSlotKey, {
-        replaceItemId: weaponEquipTarget.replaceItemId ?? ""
+        replaceItemId: weaponEquipTarget.replaceItemId ?? "",
+        requestIndex
       })) continue;
       const img = String(item.img ?? "").trim();
       if (img) sources.add(img);
@@ -3231,13 +3259,14 @@ function getSelectedHudWeaponSlot(weaponSet = null, selectedWeaponId = "") {
   return (weaponSet.slots ?? []).find(slot => slot.item?.id === selectedWeaponId && !slot.phantom) ?? null;
 }
 
-function prepareHudWeaponEquipChoices(actor, target = null, hudIcons = {}) {
+function prepareHudWeaponEquipChoices(actor, target = null, hudIcons = {}, requestIndex = null) {
   if (!actor || !target?.weaponSetKey || !target?.weaponSlotKey) return [];
   const cost = getWeaponSwitchActionPointCost(actor);
-  return actor.items.contents
+  return (requestIndex?.actorItems ?? actor.items.contents)
     .filter(item => isHudWeaponEquipCandidate(item))
     .filter(item => canFitHudWeaponInTarget(actor, item, target.weaponSetKey, target.weaponSlotKey, {
-      replaceItemId: target.replaceItemId ?? ""
+      replaceItemId: target.replaceItemId ?? "",
+      requestIndex
     }))
     .map(item => ({
       id: item.id,
@@ -3309,23 +3338,41 @@ async function equipHudWeaponInSlot(actor, item, weaponSetKey = "", weaponSlotKe
   return actor.items.get(item.id) ?? item;
 }
 
-function canFitHudWeaponInTarget(actor, item, weaponSetKey = "", weaponSlotKey = "", { replaceItemId = "" } = {}) {
-  const requiredSlotKeys = getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey, weaponSlotKey);
-  if (!requiredSlotKeys.length) return false;
-  const occupiedItemIds = getHudWeaponOccupiedItemIds(actor, weaponSetKey, requiredSlotKeys);
-  for (const itemId of occupiedItemIds) {
-    if (itemId === item.id || itemId === replaceItemId) continue;
+function canFitHudWeaponInTarget(actor, item, weaponSetKey = "", weaponSlotKey = "", {
+  replaceItemId = "",
+  requestIndex = null
+} = {}) {
+  const cacheKey = requestIndex
+    ? JSON.stringify([item?.id ?? "", weaponSetKey, weaponSlotKey, replaceItemId].map(value => String(value ?? "")))
+    : "";
+  if (cacheKey && requestIndex.weaponFitByTargetAndItemId.has(cacheKey)) {
+    return requestIndex.weaponFitByTargetAndItemId.get(cacheKey);
+  }
+
+  const requiredSlotKeys = getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey, weaponSlotKey, requestIndex);
+  if (!requiredSlotKeys.length) {
+    if (cacheKey) requestIndex.weaponFitByTargetAndItemId.set(cacheKey, false);
     return false;
   }
-  return true;
+  const occupiedItemIds = getHudWeaponOccupiedItemIds(actor, weaponSetKey, requiredSlotKeys, requestIndex);
+  let fits = true;
+  for (const itemId of occupiedItemIds) {
+    if (itemId === item.id || itemId === replaceItemId) continue;
+    fits = false;
+    break;
+  }
+  if (cacheKey) requestIndex.weaponFitByTargetAndItemId.set(cacheKey, fits);
+  return fits;
 }
 
-function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlotKey = "") {
+function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlotKey = "", requestIndex = null) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
   if (!weaponSetKey || !weaponSlotKey) return [];
 
   if (isContainerWeaponSetKey(weaponSetKey)) {
-    const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
+    const set = requestIndex
+      ? requestIndex.hudWeaponSetByKey.get(String(weaponSetKey))
+      : getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
     const slots = set?.slots ?? [];
     const primaryIndex = slots.findIndex(slot => slot.key === weaponSlotKey);
     if (primaryIndex < 0) return [];
@@ -3338,8 +3385,10 @@ function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlo
   return getRequiredWeaponSlotsForItem(race, item, weaponSetKey, weaponSlotKey).map(slot => slot.key);
 }
 
-function getHudWeaponOccupiedItemIds(actor, weaponSetKey = "", slotKeys = []) {
-  const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
+function getHudWeaponOccupiedItemIds(actor, weaponSetKey = "", slotKeys = [], requestIndex = null) {
+  const set = requestIndex
+    ? requestIndex.hudWeaponSetByKey.get(String(weaponSetKey))
+    : getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
   const targetKeys = new Set(slotKeys);
   return Array.from(new Set((set?.slots ?? [])
     .filter(slot => targetKeys.has(slot.key))
@@ -3454,9 +3503,10 @@ function getHudInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID) {
   return getActorRootInventoryDimensions(actor);
 }
 
-function isHudWeaponDisabled(actor, weapon) {
+function isHudWeaponDisabled(actor, weapon, weaponSets = null) {
   const placement = weapon?.system?.placement ?? {};
-  const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === placement.weaponSet);
+  const sets = Array.isArray(weaponSets) ? weaponSets : getHudWeaponSetsForActor(actor);
+  const set = sets.find(entry => entry.key === placement.weaponSet);
   const slot = (set?.slots ?? []).find(entry => entry.item?.id === weapon?.id && !entry.phantom);
   return Boolean(slot?.useDisabled);
 }
@@ -3477,13 +3527,15 @@ function getActiveHudWeaponSetKey(actor, weaponSets = []) {
   return selectedSet?.key ?? weaponSets[0].key;
 }
 
-function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "") {
+function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "", requestIndex = null) {
   const set = weaponSets.find(entry => entry.key === activeSetKey) ?? weaponSets[0] ?? null;
   if (!set) return null;
   const selectedId = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
   const weaponIds = (set.slots ?? []).filter(slot => !slot.phantom).map(slot => slot.item?.id).filter(Boolean);
   const resolvedId = weaponIds.includes(selectedId) ? selectedId : weaponIds[0];
-  return resolvedId ? actor.items.get(resolvedId) ?? null : null;
+  return resolvedId
+    ? requestIndex?.actorItemById?.get(String(resolvedId)) ?? actor.items.get(resolvedId) ?? null
+    : null;
 }
 
 function resolveActivePreparedHudWeaponSet(actor) {
@@ -3506,15 +3558,15 @@ function isWeaponActionBrokenForHud(weapon, weaponFunctionId = "") {
     .some(entry => String(entry.id ?? "") === id && Boolean(entry.sourceBroken));
 }
 
-function prepareDualWeaponHudState(actor, preparedWeaponSet = null) {
+function prepareDualWeaponHudState(actor, preparedWeaponSet = null, requestIndex = null) {
   if (!actor || !hasActorTwoHandsActive(actor)) return { active: false, weaponSlots: [] };
   const weaponSlots = getUniqueHudWeaponSlots(preparedWeaponSet?.slots ?? [])
     .filter(slot => slot?.item?.id && !slot.phantom && !slot.useDisabled)
     .map(slot => ({
       ...slot,
-      weapon: actor.items.get(slot.item.id)
+      weapon: requestIndex?.actorItemById?.get(String(slot.item.id)) ?? actor.items.get(slot.item.id)
     }))
-    .filter(slot => slot.weapon && !isHudWeaponDisabled(actor, slot.weapon));
+    .filter(slot => slot.weapon && !isHudWeaponDisabled(actor, slot.weapon, requestIndex?.hudWeaponSets));
   return {
     active: weaponSlots.length === 2,
     weaponSlots: weaponSlots.length === 2 ? weaponSlots : []
@@ -3551,7 +3603,7 @@ function prepareDualWeaponActionRows(actor, weaponSlots = [], hudIcons = {}, pen
   });
 }
 
-function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, hudIcons = {}, selectedWeaponSlot = null, token = null) {
+function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, hudIcons = {}, selectedWeaponSlot = null, token = null, requestIndex = null) {
   if (!selectedWeapon) return [];
   const weaponBroken = isItemBrokenByCondition(selectedWeapon);
   const rows = getEnabledWeaponFunctions(selectedWeapon, { ignoreBroken: true })
@@ -3579,25 +3631,27 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
       img: normalizeImagePath(hudIcons.weaponActions?.replaceWeapon, "icons/svg/direction.svg")
     });
   }
-  const attachedActionRows = getWeaponAttachedActionRows(actor, selectedWeapon, token, forceDisabled, hudIcons);
+  const attachedActionRows = getWeaponAttachedActionRows(actor, selectedWeapon, token, forceDisabled, hudIcons, requestIndex);
   return [...attachedActionRows, ...rows];
 }
 
-function getWeaponAttachedActionRows(actor = null, weapon = null, token = null, forceDisabled = false, hudIcons = {}) {
-  return getWeaponAttachedActionItems(actor, weapon)
+function getWeaponAttachedActionRows(actor = null, weapon = null, token = null, forceDisabled = false, hudIcons = {}, requestIndex = null) {
+  return getWeaponAttachedActionItems(actor, weapon, requestIndex)
     .flatMap(item => [
       prepareLightSourceActionRow(item, token, forceDisabled, hudIcons)
     ])
     .filter(Boolean);
 }
 
-function getWeaponAttachedActionItems(actor = null, weapon = null) {
+function getWeaponAttachedActionItems(actor = null, weapon = null, requestIndex = null) {
   if (!weapon) return [];
   const items = [];
   if (hasActiveAttachedActionFunction(weapon)) items.push(weapon);
-  items.push(...getActorInstalledModuleItems(actor)
-    .filter(item => String(item.system?.placement?.parentItemId ?? "") === weapon.id)
-    .filter(hasActiveAttachedActionFunction));
+  const installedModules = requestIndex
+    ? (requestIndex.installedModulesByParentItemId.get(String(weapon.id)) ?? [])
+    : getActorInstalledModuleItems(actor)
+      .filter(item => String(item.system?.placement?.parentItemId ?? "") === weapon.id);
+  items.push(...installedModules.filter(hasActiveAttachedActionFunction));
   return dedupeAttachedActionItems(items);
 }
 
@@ -4483,7 +4537,6 @@ function bindReloadDialogLiveUpdates(dialog, actor, weaponId, weaponFunctionId) 
       updateReloadDialogState(dialog, actor, weaponId, weaponFunctionId);
     }, 25);
   };
-  const actorMatches = candidate => candidate?.uuid === actor?.uuid;
   const itemMatches = item => {
     if (!item) return false;
     if (item.parent?.uuid === actor?.uuid) return true;
@@ -4493,10 +4546,8 @@ function bindReloadDialogLiveUpdates(dialog, actor, weaponId, weaponFunctionId) 
   };
 
   const hooks = [
-    ["updateActor", Hooks.on("updateActor", updatedActor => {
-      if (actorMatches(updatedActor)) scheduleRefresh();
-    })],
-    ["updateItem", Hooks.on("updateItem", item => {
+    ["updateItem", Hooks.on("updateItem", (item, changes = {}, options = {}) => {
+      if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
       if (itemMatches(item)) scheduleRefresh();
     })],
     ["createItem", Hooks.on("createItem", item => {

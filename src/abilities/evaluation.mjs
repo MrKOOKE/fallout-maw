@@ -34,6 +34,10 @@ import {
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  createActorEffectSnapshot,
+  getActorApplicableEffects
+} from "../documents/actor-effect-preparation-index.mjs";
+import {
   ALL_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET,
   getSkillAdvancementMultiplierEffectTarget,
   SIGNATURE_SKILL_ADVANCEMENT_MULTIPLIERS_TARGET
@@ -157,7 +161,7 @@ export function getSkillAdvancementMultiplierChanges(actor, skillSettings = []) 
   };
 
   const suppressedIds = getActorSuppressedTraumaDiseaseIds(actor);
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  for (const effect of getActorApplicableEffects(actor)) {
     if (effect?.disabled || effect?.active === false) continue;
     if (isActorTraumaDiseaseEffectSuppressed(actor, effect, suppressedIds)) continue;
     for (const change of effect?.system?.changes ?? []) appendChange(change, effect, { effect });
@@ -721,9 +725,12 @@ function isTokenForActor(token = null, actor = null) {
   return Boolean(tokenActorUuid && actorUuid && tokenActorUuid === actorUuid);
 }
 
-export function getContextualAbilityEffectChanges(actor, context = {}, { targetContextOnly = false } = {}) {
-  if (!actor) return [];
-  const changes = [];
+/**
+ * Build immutable document/function candidates for one synchronous evaluation
+ * scope. Conditions and formulas are intentionally evaluated on every use.
+ */
+export function createContextualAbilityEvaluationSnapshot(actor) {
+  const itemSources = [];
   let contextualOrder = 0;
   for (const item of getActorItemsWithActiveHudModules(actor)) {
     const functions = item?.type === "ability"
@@ -731,8 +738,6 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
       : isActiveFreeSettingsItem(item) ? item.system?.functions?.freeSettings?.entries ?? [] : [];
     for (const [functionIndex, entry] of normalizeAbilityFunctions(functions).entries()) {
       if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
-      // applyToTargets is represented by its reconciled projection, including
-      // when that projection targets the source actor itself.
       if (hasAuraDistributionCondition(entry.conditions)) continue;
       const orderStart = contextualOrder;
       contextualOrder += Math.max(1, entry.changes?.length ?? 0, entry.penalties?.length ?? 0);
@@ -740,30 +745,86 @@ export function getContextualAbilityEffectChanges(actor, context = {}, { targetC
       const hasWeaponContext = hasAbilityWeaponContextCondition(entry.conditions);
       const hasTriggerChance = hasTriggerChanceCondition(entry.conditions);
       if (!hasTargetContext && !hasWeaponContext && !hasTriggerChance) continue;
-      if (targetContextOnly && !hasTargetContext) continue;
-      const selectedChanges = getConditionalFunctionChanges(actor, entry, {
-        ...context,
-        abilityItemId: item.id ?? "",
-        functionId: entry.id ?? "",
-        allowContextual: true,
-        chanceActiveOnly: hasTriggerChance
+      itemSources.push({
+        item,
+        entry,
+        functionIndex,
+        orderStart,
+        hasTargetContext,
+        hasTriggerChance
       });
-      const selectedBranch = selectedChanges === entry.penalties ? "penalties" : "changes";
-      changes.push(...selectedChanges.map((change, index) => ({
-        ...change,
-        contextualOrder: orderStart + index,
-        contextualTargetContext: hasTargetContext,
-        contextualIdentity: [item.id ?? "", entry.id ?? functionIndex, selectedBranch, index].join(":"),
-        contextualSourceItemId: String(item.id ?? ""),
-        contextualSourceItemUuid: String(item.uuid ?? ""),
-        contextualSourceName: String(item.name ?? ""),
-        contextualSourceImg: String(item.img ?? ""),
-        contextualSourceFunctionId: String(entry.id ?? functionIndex)
-      })));
     }
   }
 
-  for (const effect of actor.effects ?? []) {
+  const lateAuraEffects = Array.from(actor?.effects ?? [])
+    .filter(effect => getAuraGeneratedEffectFlag(effect)?.lateContextual === true);
+  return {
+    actor,
+    itemSources,
+    itemContextualOrder: contextualOrder,
+    lateAuraEffects,
+    effectSnapshot: null
+  };
+}
+
+function getContextualAbilityEvaluationSnapshot(actor, context = {}, explicitSnapshot = null) {
+  if (explicitSnapshot?.actor === actor) return explicitSnapshot;
+  const snapshots = context?.contextualAbilitySnapshots;
+  if (!(snapshots instanceof Map)) return createContextualAbilityEvaluationSnapshot(actor);
+  let snapshot = snapshots.get(actor);
+  if (!snapshot) {
+    snapshot = createContextualAbilityEvaluationSnapshot(actor);
+    snapshots.set(actor, snapshot);
+  }
+  return snapshot;
+}
+
+function getContextualActorEffectSnapshot(snapshot) {
+  snapshot.effectSnapshot ??= createActorEffectSnapshot(snapshot.actor);
+  return snapshot.effectSnapshot;
+}
+
+export function getContextualAbilityEffectChanges(
+  actor,
+  context = {},
+  { targetContextOnly = false, evaluationSnapshot = null } = {}
+) {
+  if (!actor) return [];
+  const changes = [];
+  const snapshot = getContextualAbilityEvaluationSnapshot(actor, context, evaluationSnapshot);
+  for (const source of snapshot.itemSources) {
+    const {
+      item,
+      entry,
+      functionIndex,
+      orderStart,
+      hasTargetContext,
+      hasTriggerChance
+    } = source;
+    if (targetContextOnly && !hasTargetContext) continue;
+    const selectedChanges = getConditionalFunctionChanges(actor, entry, {
+      ...context,
+      abilityItemId: item.id ?? "",
+      functionId: entry.id ?? "",
+      allowContextual: true,
+      chanceActiveOnly: hasTriggerChance
+    });
+    const selectedBranch = selectedChanges === entry.penalties ? "penalties" : "changes";
+    changes.push(...selectedChanges.map((change, index) => ({
+      ...change,
+      contextualOrder: orderStart + index,
+      contextualTargetContext: hasTargetContext,
+      contextualIdentity: [item.id ?? "", entry.id ?? functionIndex, selectedBranch, index].join(":"),
+      contextualSourceItemId: String(item.id ?? ""),
+      contextualSourceItemUuid: String(item.uuid ?? ""),
+      contextualSourceName: String(item.name ?? ""),
+      contextualSourceImg: String(item.img ?? ""),
+      contextualSourceFunctionId: String(entry.id ?? functionIndex)
+    })));
+  }
+
+  let contextualOrder = snapshot.itemContextualOrder;
+  for (const effect of snapshot.lateAuraEffects) {
     const selection = getLateAuraContextualSelection(actor, effect, context);
     if (!selection) continue;
     const entry = selection.sourceFunction;
@@ -878,9 +939,15 @@ export function getContextualAbilityChangeValues(actor, specs = [], context = {}
 
   const needsFullContext = list.some(spec => !spec.targetContextOnly);
   const needsTargetOnly = list.some(spec => spec.targetContextOnly);
-  const fullSourceChanges = needsFullContext ? getContextualAbilityEffectChanges(actor, context) : [];
+  const sourceSnapshot = getContextualAbilityEvaluationSnapshot(actor, context);
+  const fullSourceChanges = needsFullContext
+    ? getContextualAbilityEffectChanges(actor, context, { evaluationSnapshot: sourceSnapshot })
+    : [];
   const targetOnlySourceChanges = needsTargetOnly
-    ? getContextualAbilityEffectChanges(actor, context, { targetContextOnly: true })
+    ? getContextualAbilityEffectChanges(actor, context, {
+      targetContextOnly: true,
+      evaluationSnapshot: sourceSnapshot
+    })
     : [];
 
   const targetActor = context?.targetToken?.actor
@@ -888,19 +955,25 @@ export function getContextualAbilityChangeValues(actor, specs = [], context = {}
     ?? context?.targetActor
     ?? null;
   const canReverse = Boolean(targetActor) && !isSameInteractionActor(actor, targetActor);
+  const targetSnapshot = canReverse
+    ? getContextualAbilityEvaluationSnapshot(targetActor, context)
+    : null;
   const reverseChanges = canReverse
     ? getContextualAbilityEffectChanges(targetActor, {
       ...context,
       actorToken: context?.targetToken ?? null,
       targetToken: context?.actorToken ?? null,
       targetActor: actor
-    })
+    }, { evaluationSnapshot: targetSnapshot })
     : [];
   const preparedReverseChanges = canReverse
     ? collectActorReverseEffectChanges(
       targetActor,
       new Set(list.flatMap(spec => Array.from(spec.acceptedKeys))),
-      { additionalChanges: reverseChanges }
+      {
+        additionalChanges: reverseChanges,
+        effectSnapshot: getContextualActorEffectSnapshot(targetSnapshot)
+      }
     )
     : [];
 
@@ -929,9 +1002,15 @@ export function getSourceContextualAbilityChangeValues(actor, specs = [], contex
 
   const needsFullContext = list.some(spec => !spec.targetContextOnly);
   const needsTargetOnly = list.some(spec => spec.targetContextOnly);
-  const fullSourceChanges = needsFullContext ? getContextualAbilityEffectChanges(actor, context) : [];
+  const sourceSnapshot = getContextualAbilityEvaluationSnapshot(actor, context);
+  const fullSourceChanges = needsFullContext
+    ? getContextualAbilityEffectChanges(actor, context, { evaluationSnapshot: sourceSnapshot })
+    : [];
   const targetOnlySourceChanges = needsTargetOnly
-    ? getContextualAbilityEffectChanges(actor, context, { targetContextOnly: true })
+    ? getContextualAbilityEffectChanges(actor, context, {
+      targetContextOnly: true,
+      evaluationSnapshot: sourceSnapshot
+    })
     : [];
 
   return Object.fromEntries(list.map(spec => {

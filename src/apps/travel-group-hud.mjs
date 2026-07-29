@@ -55,8 +55,10 @@ function scheduleTravelGroupHudSync() {
   refreshHud?.();
 }
 
-function scheduleOpenTravelGroupHudRender() {
-  if (travelGroupHud?.rendered) void travelGroupHud.render({ force: true });
+function scheduleOpenTravelGroupHudRender(actor = null) {
+  if (!travelGroupHud?.rendered) return;
+  if (actor?.documentName === "Actor" && !travelGroupHud.tracksActor(actor)) return;
+  refreshHud?.();
 }
 
 function closeTravelGroupHud() {
@@ -83,6 +85,7 @@ function isHudEnabled() {
 class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #openGroupId = "";
+  #trackedActorUuids = new Set();
   #keyHandler = event => {
     if (event.key !== "Escape" || !isTravelMovementArmed(this.#token)) return;
     event.preventDefault();
@@ -109,17 +112,33 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#openGroupId = "";
       if (isTravelMovementArmed(this.#token)) void disarmTravelMovement();
     }
+    if (this.#token?.id !== token?.id) {
+      this.#trackedActorUuids = new Set(
+        [String(token?.actor?.uuid ?? "")].filter(Boolean)
+      );
+    }
     this.#token = token;
+  }
+
+  tracksActor(actor = null) {
+    const actorUuid = String(actor?.uuid ?? "");
+    return Boolean(actorUuid && this.#trackedActorUuids.has(actorUuid));
   }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const actor = this.#token?.actor;
+    const trackedActorUuids = new Set(
+      [String(actor?.uuid ?? "")].filter(Boolean)
+    );
     const group = getTravelGroupData(actor) ?? {};
     const vehicles = [];
     const walkers = [];
     for (const unit of getTravelGroupUnits(actor)) {
+      const storedUnitActorUuid = String(unit?.actorUuid ?? "");
+      if (storedUnitActorUuid) trackedActorUuids.add(storedUnitActorUuid);
       const unitActor = await resolveTravelGroupUnitActor(unit);
+      if (unitActor?.uuid) trackedActorUuids.add(String(unitActor.uuid));
       const speedKmh = evaluateTravelSpeed(unitActor, unit.travelFormulaData, {
         fallback: unit.speedKmh || group.effectiveSpeedKmh
       });
@@ -133,7 +152,9 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
           countLabel: participantCountLabel(passengers.length),
           speedKmh,
           speedLabel: formatSpeed(speedKmh),
-          members: await Promise.all(passengers.map(preparePassengerMember)),
+          members: await Promise.all(passengers.map(passenger => (
+            preparePassengerMember(passenger, trackedActorUuids)
+          ))),
           empty: passengers.length === 0
         });
       } else {
@@ -165,6 +186,7 @@ class TravelGroupHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const speeds = [...vehicles.map(vehicle => vehicle.speedKmh), ...(walkers.length ? [footSpeed] : [])]
       .filter(speed => Number.isFinite(speed));
     const groupSpeed = speeds.length ? Math.min(...speeds) : Math.max(0, Number(group.effectiveSpeedKmh) || 0);
+    this.#trackedActorUuids = trackedActorUuids;
     return {
       ...context,
       actor,
@@ -227,8 +249,11 @@ function prepareBlock(block, openGroupId) {
   return { ...block, open: block.id === openGroupId };
 }
 
-async function preparePassengerMember(passenger) {
+async function preparePassengerMember(passenger, trackedActorUuids = null) {
+  const storedActorUuid = String(passenger?.actorUuid ?? "");
+  if (storedActorUuid) trackedActorUuids?.add?.(storedActorUuid);
   const actor = await resolveTravelPassengerActor(passenger);
+  if (actor?.uuid) trackedActorUuids?.add?.(String(actor.uuid));
   return prepareMember(actor, {
     name: passenger.actorName || actor?.name || "Недоступный участник",
     img: passenger.actorImg || actor?.img || FALLBACK_ICON,

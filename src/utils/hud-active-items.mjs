@@ -5,6 +5,7 @@ import { isTraumaDiseaseSuppressionEffectKey } from "./active-effect-changes.mjs
 import { getItemContainerParentId } from "./inventory-containers.mjs";
 import { getActorInstalledModuleItems } from "./item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
+import { getActorApplicableEffects } from "../documents/actor-effect-preparation-index.mjs";
 
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
@@ -73,6 +74,13 @@ function getHudWeaponSetsCacheSignature(actor) {
       limb?.missing ? 1 : 0
     ].join(":"));
   }
+  for (const [slotKey, slot] of Object.entries(actor.system?.constructPartSlots ?? {})) {
+    parts.push([
+      "construct-slot",
+      slotKey,
+      stableSignatureValue(slot)
+    ].join(":"));
+  }
   for (const item of getActorItemDocuments(actor)) {
     if (item.type === "trauma") {
       parts.push([
@@ -99,7 +107,7 @@ function getHudWeaponSetsCacheSignature(actor) {
       container.extraWeaponSlots ?? 0
     ].join(":"));
   }
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  for (const effect of getActorApplicableEffects(actor)) {
     if (effect?.disabled || effect?.active === false) continue;
     const changes = (effect?.system?.changes ?? [])
       .filter(change => isTraumaDiseaseSuppressionEffectKey(change?.key))
@@ -118,6 +126,14 @@ function getHudWeaponSetsCacheSignature(actor) {
     ].join(":"));
   }
   return parts.join("|");
+}
+
+function stableSignatureValue(value) {
+  if (Array.isArray(value)) return `[${value.map(stableSignatureValue).join(",")}]`;
+  if (!value || typeof value !== "object") return String(value ?? "");
+  return `{${Object.keys(value).sort()
+    .map(key => `${key}:${stableSignatureValue(value[key])}`)
+    .join(",")}}`;
 }
 
 function getActiveHudWeaponSetKey(actor = null, weaponSets = []) {

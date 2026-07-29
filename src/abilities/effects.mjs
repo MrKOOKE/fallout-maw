@@ -79,6 +79,7 @@ import {
   activeEffectChangesEqual,
   canonicalizeActiveEffectChanges
 } from "../utils/active-effect-source.mjs";
+import { isDeusExMachinaProgressItemUpdate } from "./deus-ex-machina-progress-runtime.mjs";
 const ACTIVE_APPLICATION_EFFECT_FLAG_KEY = "activeApplication";
 const ABILITY_EFFECT_SYNC_OPERATION_OPTION = "falloutMawAbilityEffectSync";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
@@ -111,6 +112,7 @@ const actorIlluminationLevelCache = new Map();
 const pendingIlluminationActors = new Map();
 const environmentConditionActorIndex = new Map();
 const environmentConditionCache = new Map();
+let actorPotentialAuraSourceCache = new WeakMap();
 let auraStateSyncTimer = null;
 let illuminationConditionSyncTimer = null;
 let illuminationConditionSyncAll = false;
@@ -124,6 +126,7 @@ export function registerAbilityEffectHooks() {
     queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
   Hooks.on("createItem", item => {
+    if (["ability", "gear"].includes(item?.type)) invalidateActorPotentialAuraSource(item?.parent);
     if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (
       item?.type === "ability"
@@ -137,28 +140,28 @@ export function registerAbilityEffectHooks() {
     }
   });
   Hooks.on("updateItem", (item, changes, options = {}) => {
+    if (isDeusExMachinaProgressItemUpdate(changes, options)) return;
     if (options?.falloutMawEventReactionProgress === true) return;
     if (options?.falloutMawTriggerTransitionState === true) return;
     // The limited-use authority performs an awaited sync only at exhaustion.
     // Intermediate counter updates must not enqueue actor/aura rebuilds.
     if (options?.falloutMawLimitedUses === true) return;
     if (shouldRefreshEnvironmentConditionIndex(item, changes)) refreshEnvironmentConditionActorIndex(item?.parent);
-    if (
-      item?.type === "ability"
-      || isEquipmentItem(item)
-      || isEquipmentItemUpdate(changes)
-      || isItemFreeSettingsUpdate(item, changes)
-      || isDamageMitigationRequirementsUpdate(item, changes)
-    ) {
+    const syncPlan = getItemAbilityEffectSyncPlan(item, changes);
+    if (syncPlan.aura || Object.hasOwn(changes ?? {}, "type")) {
+      invalidateActorPotentialAuraSource(item?.parent);
+    }
+    if (syncPlan.actor) {
       queueActorAbilityEffectSync(item.parent, {}, {
-        aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)
+        aura: syncPlan.aura
       });
     }
-    if (item?.type === "ability" || item?.type === "gear") {
+    if (isEventReactionAccumulatorSourceUpdate(item, changes)) {
       void reconcileEventReactionAccumulatorEffects(item);
     }
   });
   Hooks.on("deleteItem", item => {
+    if (["ability", "gear"].includes(item?.type)) invalidateActorPotentialAuraSource(item?.parent);
     if (shouldRefreshEnvironmentConditionIndex(item)) refreshEnvironmentConditionActorIndex(item?.parent);
     if (item?.type === "ability") {
       void deleteAbilityEffects(item.parent, item.id, item.uuid);
@@ -178,13 +181,17 @@ export function registerAbilityEffectHooks() {
     environmentConditionCache.delete(actorUuid);
     actorIlluminationLevelCache.delete(actorUuid);
     pendingIlluminationActors.delete(actorUuid);
+    actorPotentialAuraSourceCache.delete(actor);
   });
   Hooks.on("updateActor", (actor, changes, options = {}) => {
     if (options?.falloutMawDamageBarrierDepletion === true) return;
     if (options?.falloutMawActiveAuraRuntime === true) return;
     if (options?.falloutMawTrialRuntime === true) return;
-    if (!isAbilityEffectSyncRelevant(changes)) return;
-    queueActorAbilityEffectSync(actor, {}, { aura: true });
+    const changedPaths = getActorAbilityEffectChangedPaths(changes);
+    if (!isAbilityEffectSyncRelevant(changes, changedPaths)) return;
+    queueActorAbilityEffectSync(actor, {}, {
+      aura: actorUpdateNeedsAuraStateSync(actor, changes, changedPaths)
+    });
   });
   Hooks.on("updateToken", (tokenDocument, changes) => {
     const changedPaths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
@@ -274,7 +281,9 @@ export function registerAbilityEffectHooks() {
     queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("fallout-maw.energyConsumptionChanged", actor => {
-    queueActorAbilityEffectSync(actor, {}, { aura: true });
+    queueActorAbilityEffectSync(actor, {}, {
+      aura: actorHasPotentialAuraSourceCached(actor)
+    });
   });
   Hooks.on("canvasReady", () => {
     invalidateAbilityConditionLightingCache();
@@ -286,6 +295,7 @@ export function registerAbilityEffectHooks() {
     environmentConditionActorIndex.clear();
     environmentConditionCache.clear();
     environmentConditionIndexInitialized = false;
+    actorPotentialAuraSourceCache = new WeakMap();
     // The initial canvasReady fires before ready. The ready bootstrap handles
     // that scene once settings and migrations have settled.
     if (!game.ready) return;
@@ -1102,6 +1112,20 @@ function actorHasPotentialAuraSource(actor) {
   return false;
 }
 
+function actorHasPotentialAuraSourceCached(actor) {
+  if (!actor || typeof actor !== "object") return false;
+  if (actorPotentialAuraSourceCache.has(actor)) {
+    return actorPotentialAuraSourceCache.get(actor) === true;
+  }
+  const result = actorHasPotentialAuraSource(actor);
+  actorPotentialAuraSourceCache.set(actor, result);
+  return result;
+}
+
+function invalidateActorPotentialAuraSource(actor = null) {
+  if (actor && typeof actor === "object") actorPotentialAuraSourceCache.delete(actor);
+}
+
 function getPotentialAuraModuleItem(slot = {}) {
   if (slot?.itemData?.system) return slot.itemData;
   const uuid = String(slot?.itemUuid ?? "").trim();
@@ -1722,8 +1746,11 @@ async function deleteAbilityEffects(actor, abilityItemId = "", sourceItemUuid = 
   await deleteAbilitySyncEffects(actor, effects, ABILITY_EFFECT_FLAG_KEY);
 }
 
-function isAbilityEffectSyncRelevant(changes = {}) {
-  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
+function getActorAbilityEffectChangedPaths(changes = {}) {
+  return Object.keys(foundry.utils.flattenObject(changes ?? {}));
+}
+
+function isAbilityEffectSyncRelevant(changes = {}, paths = getActorAbilityEffectChangedPaths(changes)) {
   return paths.some(path => path === "system.resources.health"
     || path.startsWith("system.resources.health.")
     || path === "system.characteristics"
@@ -1737,10 +1764,30 @@ function isAbilityEffectSyncRelevant(changes = {}) {
     || path === "system.limbs"
     || path.startsWith("system.limbs.")
     || path === "system.creature.raceId"
+    || path === "system.creature.typeId"
     || path === `flags.${SYSTEM_ID}.factionBelongs`
     || path.startsWith(`flags.${SYSTEM_ID}.factionBelongs.`)
     || path === `flags.${SYSTEM_ID}.factionRelations`
     || path.startsWith(`flags.${SYSTEM_ID}.factionRelations.`));
+}
+
+export function actorUpdateNeedsAuraStateSync(
+  actor,
+  changes = {},
+  paths = getActorAbilityEffectChangedPaths(changes)
+) {
+  return isAuraTargetMembershipUpdate(paths) || actorHasPotentialAuraSourceCached(actor);
+}
+
+function isAuraTargetMembershipUpdate(paths = []) {
+  return paths.some(path => (
+    path === "system.creature.raceId"
+    || path === "system.creature.typeId"
+    || path === `flags.${SYSTEM_ID}.factionBelongs`
+    || path.startsWith(`flags.${SYSTEM_ID}.factionBelongs.`)
+    || path === `flags.${SYSTEM_ID}.factionRelations`
+    || path.startsWith(`flags.${SYSTEM_ID}.factionRelations.`)
+  ));
 }
 
 function isAuraTokenUpdateRelevant(changes = {}) {
@@ -1837,23 +1884,20 @@ function isEquipmentItem(item) {
     || Object.values(item.system?.occupiedSlots ?? {}).some(Boolean);
 }
 
-function isEquipmentItemUpdate(changes = {}) {
-  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
-  return paths.some(path => path === "system.placement"
-    || path.startsWith("system.placement.")
-    || path === "system.equipped"
-    || path === "system.occupiedSlots"
-    || path.startsWith("system.occupiedSlots."));
+function isEquipmentItemUpdate(changes = {}, paths = getChangedItemPaths(changes)) {
+  return changedPathsAffectAny(paths, [
+    "system.placement",
+    "system.equipped",
+    "system.occupiedSlots"
+  ]);
 }
 
-function isDamageMitigationRequirementsUpdate(item, changes = {}) {
+function isDamageMitigationRequirementsUpdate(item, changes = {}, paths = getChangedItemPaths(changes)) {
   if (item?.type !== "gear") return false;
-  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
-  return hasDamageMitigationRequirements(item)
-    || paths.some(path => (
-      path === "system.functions.damageMitigation"
-      || path.startsWith("system.functions.damageMitigation.")
-    ));
+  return changedPathsAffectAny(paths, [
+    "system.functions.damageMitigation.enabled",
+    "system.functions.damageMitigation.requirements"
+  ]);
 }
 
 function hasItemFreeSettingsFunction(item) {
@@ -1868,17 +1912,103 @@ function isActiveItemFreeSettingsItem(item) {
     || item.system?.placement?.mode === "constructPart";
 }
 
-function isItemFreeSettingsUpdate(item, changes = {}) {
+function isItemFreeSettingsUpdate(item, changes = {}, paths = getChangedItemPaths(changes)) {
   if (item?.type !== "gear") return false;
-  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
-  return hasItemFreeSettingsFunction(item)
-    || paths.some(path => path === "system.functions.freeSettings"
-      || path.startsWith("system.functions.freeSettings.")
-      || path === "system.equipped"
-      || path === "system.placement"
-      || path.startsWith("system.placement.")
-      || path === "system.functions.constructPart"
-      || path.startsWith("system.functions.constructPart."));
+  return changedPathsAffect(paths, "system.functions.freeSettings");
+}
+
+export function getItemAbilityEffectSyncPlan(item, changes = {}) {
+  const paths = getChangedItemPaths(changes);
+  if (!paths.length) return { actor: false, aura: false };
+
+  // Ability projections and their distributed aura copies are both sourced
+  // from the complete ability document. Preserve that broad contract here;
+  // high-frequency limited-use writes are filtered by operation options above.
+  if (item?.type === "ability") return { actor: true, aura: true };
+  if (item?.type !== "gear") return { actor: false, aura: false };
+
+  // Placement and installed-module changes alter which item sources are active.
+  // They can therefore affect both the owning Actor projection and aura copies.
+  const activeSourceSetChanged = isEquipmentItemUpdate(changes, paths)
+    || changedPathsAffectAny(paths, [
+      "system.functions.weapon.moduleSlots",
+      "system.functions.constructPart"
+    ]);
+  const freeSettingsChanged = isItemFreeSettingsUpdate(item, changes, paths);
+
+  // Names and images are persisted in managed projection documents. They only
+  // matter for items which can actually own such a projection. Aura copies
+  // also carry the source name and image, so free-settings sources refresh both.
+  const itemPresentationChanged = changedPathsAffectAny(paths, ["name", "img"]);
+  const freeSettingsPresentationChanged = itemPresentationChanged
+    && hasItemFreeSettingsFunction(item);
+  const presentationChanged = freeSettingsPresentationChanged
+    || (itemPresentationChanged && hasDamageMitigationRequirements(item));
+  const aura = activeSourceSetChanged
+    || freeSettingsChanged
+    || freeSettingsPresentationChanged;
+
+  // Requirement projections depend on their configuration, but are not aura
+  // sources. Ordinary mitigation and condition values are prepared directly
+  // from the Item during Actor.reset and do not need a projection rebuild.
+  const equipmentRequirementsChanged = isDamageMitigationRequirementsUpdate(item, changes, paths);
+
+  // Installed prostheses and construct parts contribute to aggregate limb and
+  // health values. A condition-only Item update can cross an Actor condition
+  // threshold without producing updateActor, so refresh Actor projections once.
+  // It still cannot alter the source definition or distribution of an aura.
+  const derivedActorHealthChanged = isActorHealthBearingItem(item)
+    && changedPathsAffectAny(paths, [
+      "system.functions.condition",
+      "system.functions.prosthesis"
+    ]);
+
+  return {
+    actor: aura || presentationChanged || equipmentRequirementsChanged || derivedActorHealthChanged,
+    aura
+  };
+}
+
+function isActorHealthBearingItem(item) {
+  const mode = String(item?.system?.placement?.mode ?? "");
+  return mode === "prosthesis" || mode === "constructPart";
+}
+
+function getChangedItemPaths(changes = {}) {
+  return Object.keys(foundry.utils.flattenObject(changes ?? {}))
+    .map(normalizeChangedItemPath)
+    .filter(Boolean);
+}
+
+function normalizeChangedItemPath(path = "") {
+  return String(path ?? "")
+    .split(".")
+    .map(segment => segment.startsWith("-=") ? segment.slice(2) : segment)
+    .filter(Boolean)
+    .join(".");
+}
+
+function changedPathsAffectAny(paths = [], roots = []) {
+  return roots.some(root => changedPathsAffect(paths, root));
+}
+
+function changedPathsAffect(paths = [], root = "") {
+  const normalizedRoot = String(root ?? "").trim();
+  if (!normalizedRoot) return false;
+  return paths.some(path => (
+    path === normalizedRoot
+    || path.startsWith(`${normalizedRoot}.`)
+    || normalizedRoot.startsWith(`${path}.`)
+  ));
+}
+
+function isEventReactionAccumulatorSourceUpdate(item, changes = {}) {
+  if (item?.type !== "ability" && item?.type !== "gear") return false;
+  const root = item.type === "ability"
+    ? "system.functions"
+    : "system.functions.freeSettings";
+  return Object.keys(foundry.utils.flattenObject(changes ?? {}))
+    .some(path => path === root || path.startsWith(`${root}.`));
 }
 
 function isManagedProjectionEffect(effect = null) {

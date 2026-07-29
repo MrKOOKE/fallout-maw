@@ -3,6 +3,7 @@ import {
   expandActorEffectChangeKeys,
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
+import { getActorApplicableEffects } from "../documents/actor-effect-preparation-index.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getAdvancementPureValueEffectTarget } from "./pure-value-keys.mjs";
 
@@ -157,10 +158,8 @@ function getAdvancementPureEffectChangeIndexes(effect = null, changeCount = 0) {
 }
 
 function getApplicableActorEffects(actor = null) {
-  const effects = typeof actor?.allApplicableEffects === "function"
-    ? actor.allApplicableEffects()
-    : actor?.effects ?? [];
-  return Array.from(effects).filter(effect => effect?.disabled !== true && effect?.active !== false);
+  return Array.from(getActorApplicableEffects(actor))
+    .filter(effect => effect?.disabled !== true && effect?.active !== false);
 }
 
 function getEffectChangePriority(change = {}) {

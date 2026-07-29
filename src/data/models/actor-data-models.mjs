@@ -46,12 +46,14 @@ import {
 } from "../../advancement/pure-value-effects.mjs";
 import { prepareActorEffectChangeForApplication } from "../../utils/active-effect-changes.mjs";
 import { getActorFormulaApplicationPhase } from "../../utils/actor-formulas.mjs";
+import { getActorEffectChangeEntries } from "../../documents/actor-effect-preparation-index.mjs";
 import {
+  getActorGearItems,
   getConstructPartLimbKey,
   getConstructPartSlotId,
   getConstructPartSlots,
   getConstructPartTypeLabel,
-  getInstalledConstructPartForSlot
+  getInstalledConstructPartsBySlot
 } from "../../utils/construct-parts.mjs";
 import { SKILL_CHECK_ACTIONS } from "../../rolls/skill-check-action-effects.mjs";
 import {
@@ -383,7 +385,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       characteristics: this.characteristics,
       skills: skillValues
     });
-    const itemMitigation = buildEquippedItemDamageMitigation(this.parent?.items, this.limbs, damageTypeSettings);
+    const itemMitigation = buildEquippedItemDamageMitigation(
+      getActorGearItems(this.parent),
+      this.limbs,
+      damageTypeSettings
+    );
     const damageDefenseBonuses = expandLimbDamageMapSelectors(this.damageDefenseBonuses, this.limbs, damageTypeSettings);
     const damageResistanceBonuses = expandLimbDamageMapSelectors(this.damageResistanceBonuses, this.limbs, damageTypeSettings);
     replaceObjectContents(this.damageDefenses, mergeLimbDamageMaps(baseDamageDefenses, itemMitigation.defenses, damageDefenseBonuses));
@@ -780,18 +786,16 @@ function collectInitialResourceBonusChangesByKey(actor, resourceKeys = []) {
   }
   if (!actor || !resourceKeyByEffectKey.size) return changesByResourceKey;
 
-  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+  for (const { effect, change } of getActorEffectChangeEntries(actor, resourceKeyByEffectKey.keys())) {
     if (!effect?.active || effect.disabled) continue;
-    for (const change of effect.system?.changes ?? []) {
-      const resourceKey = resourceKeyByEffectKey.get(String(change?.key ?? "").trim());
-      if (!resourceKey) continue;
-      if (getActorFormulaApplicationPhase(change, actor) !== "initial") continue;
-      changesByResourceKey.get(resourceKey).push({
-        ...foundry.utils.deepClone(change),
-        effect,
-        priority: getEffectChangePriority(change)
-      });
-    }
+    const resourceKey = resourceKeyByEffectKey.get(String(change?.key ?? "").trim());
+    if (!resourceKey) continue;
+    if (getActorFormulaApplicationPhase(change, actor) !== "initial") continue;
+    changesByResourceKey.get(resourceKey).push({
+      ...foundry.utils.deepClone(change),
+      effect,
+      priority: getEffectChangePriority(change)
+    });
   }
   for (const changes of changesByResourceKey.values()) {
     changes.sort((left, right) => getEffectChangePriority(left) - getEffectChangePriority(right));
@@ -1005,7 +1009,7 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
   const limbKeys = new Set(Object.keys(limbs ?? {}));
   const damageTypeKeys = new Set(damageTypeSettings.map(damageType => damageType.key));
 
-  for (const item of items?.contents ?? Array.from(items ?? [])) {
+  for (const item of items ?? []) {
     const isConstructPart = item.type === "gear"
       && hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
       && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart;
@@ -1055,9 +1059,10 @@ function mergeLimbDamageMaps(base = {}, ...bonuses) {
 function getConstructPartLimbData(actor) {
   const settings = [];
   const source = {};
+  const installedPartsBySlot = getInstalledConstructPartsBySlot(actor);
 
-  for (const slot of getConstructPartSlots(actor)) {
-    const item = getInstalledConstructPartForSlot(actor, slot.id);
+  for (const slot of getConstructPartSlots(actor, { installedPartsBySlot })) {
+    const item = installedPartsBySlot.get(slot.id) ?? null;
     const key = getConstructPartLimbKey(slot.id);
     if (!key) continue;
     const part = item ? getConstructPartFunction(item) : slot.profile?.constructPart ?? {};

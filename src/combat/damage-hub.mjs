@@ -30,6 +30,10 @@ import {
   getActorSuppressedTraumaDiseaseIds
 } from "../utils/active-effect-changes.mjs";
 import {
+  createActorEffectSnapshot,
+  getActorEffectChangeEntries
+} from "../documents/actor-effect-preparation-index.mjs";
+import {
   absorbDamageWithBarrier,
   commitDamageBarrierLedger,
   createDamageBarrierLedger
@@ -193,6 +197,7 @@ const actorDamageStatusSyncQueue = new Map();
 const actorDamageMutationQueue = new Map();
 const pendingDamageSocketRequests = new Map();
 const lethalDamagePreventionHandlers = new Set();
+const damageAppliedHandlers = new Map();
 let damageHubOperationQueue = Promise.resolve();
 let activeDamageHubOperation = null;
 
@@ -200,6 +205,21 @@ export function registerLethalDamagePreventionHandler(handler) {
   if (typeof handler !== "function") return () => undefined;
   lethalDamagePreventionHandlers.add(handler);
   return () => lethalDamagePreventionHandlers.delete(handler);
+}
+
+/**
+ * Register system-owned post-damage work which must complete before the damage
+ * workflow releases its bulk boundary and starts visual feedback. Public
+ * DAMAGE_APPLIED_HOOK listeners remain observational because Foundry does not
+ * await Promises returned by Hooks.callAll callbacks.
+ */
+export function registerDamageAppliedHandler(id = "", handler = null) {
+  const key = String(id ?? "").trim();
+  if (!key || typeof handler !== "function") return () => undefined;
+  damageAppliedHandlers.set(key, handler);
+  return () => {
+    if (damageAppliedHandlers.get(key) === handler) damageAppliedHandlers.delete(key);
+  };
 }
 
 export function registerDamageHubConfig() {
@@ -648,11 +668,21 @@ export async function requestFirstAidRemoveEffects({
 
 async function applyDamageCycle(requests = []) {
   const operationRef = getDamageHubOperationRefFromRequests(requests);
-  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
-    requests,
-    (allowedRequests, scope) => applyDamageCycleNow(allowedRequests, { chainRef: scope?.chainRef ?? null }),
-    { batch: true }
-  ), { operationRef });
+  return runDamageHubOperation(async () => {
+    const feedbackQueue = [];
+    try {
+      return await executeDamageSystemEventWorkflow(
+        requests,
+        (allowedRequests, scope) => applyDamageCycleNow(allowedRequests, {
+          chainRef: scope?.chainRef ?? null,
+          feedbackQueue
+        }),
+        { batch: true }
+      );
+    } finally {
+      flushDamageFeedback(feedbackQueue);
+    }
+  }, { operationRef });
 }
 
 async function executeDamageSystemEventWorkflow(requests = [], operation, {
@@ -1076,7 +1106,7 @@ function getDamageRequestsSceneUuid(requests = []) {
   return String(canvas?.scene?.uuid ?? "");
 }
 
-async function applyDamageCycleNow(requests = [], { chainRef = null } = {}) {
+async function applyDamageCycleNow(requests = [], { chainRef = null, feedbackQueue = null } = {}) {
   const grouped = new Map();
   for (const request of requests) {
     const data = normalizeDamageRequest(request);
@@ -1087,6 +1117,8 @@ async function applyDamageCycleNow(requests = [], { chainRef = null } = {}) {
   }
   if (!grouped.size) return [];
 
+  const ownsFeedbackQueue = !Array.isArray(feedbackQueue);
+  const pendingFeedback = ownsFeedbackQueue ? [] : feedbackQueue;
   beginBulkOperation();
 
   const results = [];
@@ -1096,7 +1128,11 @@ async function applyDamageCycleNow(requests = [], { chainRef = null } = {}) {
       const actor = await fromUuid(actorUuid);
       if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
       const actorResults = await queueActorDamageMutation(actorUuid, () => (
-        applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, { createSummary: false, deferredShockChecks })
+        applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, {
+          createSummary: false,
+          deferredShockChecks,
+          feedbackQueue: pendingFeedback
+        })
       ));
       if (Array.isArray(actorResults)) results.push(...actorResults);
     }
@@ -1106,11 +1142,15 @@ async function applyDamageCycleNow(requests = [], { chainRef = null } = {}) {
       damageHubOperationRef: getCurrentDamageHubOperationRef()
     });
     await publishDamageSummaryMessage(results);
-    notifyDamageApplied(results);
-    return results;
+    await notifyDamageApplied(results);
   } finally {
-    await endBulkOperation();
+    try {
+      await endBulkOperation();
+    } finally {
+      if (ownsFeedbackQueue) flushDamageFeedback(pendingFeedback);
+    }
   }
+  return results;
 }
 
 function stampDamageRequestsLogicalWorldTime(requests = [], logicalWorldTime) {
@@ -1129,11 +1169,19 @@ export async function applyDamageRequestsInCurrentHubOperation(requests = [], lo
   const stamped = Number.isFinite(Number(logicalWorldTime))
     ? stampDamageRequestsLogicalWorldTime(requests, Number(logicalWorldTime))
     : requests;
-  return executeDamageSystemEventWorkflow(
-    stamped,
-    (allowedRequests, scope) => applyDamageCycleNow(allowedRequests, { chainRef: scope?.chainRef ?? null }),
-    { batch: true }
-  );
+  const feedbackQueue = [];
+  try {
+    return await executeDamageSystemEventWorkflow(
+      stamped,
+      (allowedRequests, scope) => applyDamageCycleNow(allowedRequests, {
+        chainRef: scope?.chainRef ?? null,
+        feedbackQueue
+      }),
+      { batch: true }
+    );
+  } finally {
+    flushDamageFeedback(feedbackQueue);
+  }
 }
 
 function serializeDamageCycleSocketResults(results = []) {
@@ -1180,24 +1228,33 @@ export async function applyDamageApplication(request = {}, options = {}) {
   const data = normalizeDamageRequest(request);
   if (!data.actorUuid) return undefined;
   const operationRef = getDamageHubOperationRefFromRequests([data]);
-  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
-    [data],
-    async (allowedRequests, scope) => {
-      const allowed = allowedRequests[0];
-      if (!allowed) return undefined;
-      return queueActorDamageMutation(allowed.actorUuid, () => applyDamageApplicationNow(allowed, {
-        ...options,
-        chainRef: scope?.chainRef ?? null
-      }));
-    },
-    { single: true }
-  ), { operationRef });
+  return runDamageHubOperation(async () => {
+    const feedbackQueue = [];
+    try {
+      return await executeDamageSystemEventWorkflow(
+        [data],
+        async (allowedRequests, scope) => {
+          const allowed = allowedRequests[0];
+          if (!allowed) return undefined;
+          return queueActorDamageMutation(allowed.actorUuid, () => applyDamageApplicationNow(allowed, {
+            ...options,
+            chainRef: scope?.chainRef ?? null,
+            feedbackQueue
+          }));
+        },
+        { single: true }
+      );
+    } finally {
+      flushDamageFeedback(feedbackQueue);
+    }
+  }, { operationRef });
 }
 
 async function applyDamageApplicationNow(request = {}, {
   createSummary = true,
   damageBarrierLedger: suppliedDamageBarrierLedger = null,
-  damageBarrierCommit: suppliedDamageBarrierCommit = null
+  damageBarrierCommit: suppliedDamageBarrierCommit = null,
+  feedbackQueue = null
 } = {}) {
   const data = normalizeDamageRequest(request);
   const actor = await fromUuid(data.actorUuid);
@@ -1227,6 +1284,10 @@ async function applyDamageApplicationNow(request = {}, {
     await commitDamageBarrierLedger(actor, damageBarrierLedger);
     damageBarrierCommitted = true;
   };
+  const ownsFeedbackQueue = !Array.isArray(feedbackQueue);
+  const pendingFeedback = ownsFeedbackQueue ? [] : feedbackQueue;
+  let mitigationDisplay = null;
+  let damageNumberEntries = [];
   try {
   const requestedAmount = mode === MODE_HEALING
     ? applyHealingModifierPercent(data.amount, getActorHealingModifierPercent(actor, "incoming", {
@@ -1242,7 +1303,8 @@ async function applyDamageApplicationNow(request = {}, {
       periodic,
       scope,
       damageBarrierLedger,
-      damageBarrierCommit: commitOwnedDamageBarrier
+      damageBarrierCommit: commitOwnedDamageBarrier,
+      feedbackQueue: pendingFeedback
     });
   }
 
@@ -1260,10 +1322,9 @@ async function applyDamageApplicationNow(request = {}, {
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
-  const mitigationDisplay = mode === MODE_DAMAGE && data.applyMitigation
+  mitigationDisplay = mode === MODE_DAMAGE && data.applyMitigation
     ? buildDamageMitigationDisplay(data.amount, mitigatedAmount)
     : null;
-  if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
   if (effectiveAmountBeforeBarrier <= 0) {
     return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
   }
@@ -1305,7 +1366,7 @@ async function applyDamageApplicationNow(request = {}, {
     };
     if (createSummary) {
       await publishDamageSummaryMessage([result]);
-      notifyDamageApplied([result]);
+      await notifyDamageApplied([result]);
     }
     return result;
   }
@@ -1374,7 +1435,7 @@ async function applyDamageApplicationNow(request = {}, {
       };
       if (createSummary && result.barrierAbsorbed > 0) {
         await publishDamageSummaryMessage([result]);
-        notifyDamageApplied([result]);
+        await notifyDamageApplied([result]);
       }
       return result;
     }
@@ -1410,28 +1471,37 @@ async function applyDamageApplicationNow(request = {}, {
     }
   }
   if (mode === MODE_DAMAGE && result.healthDelta > 0) {
-    broadcastDamageNumbers(actor, [{
+    damageNumberEntries = [{
       amount: result.healthDelta,
       damageTypeKey: damageType?.key ?? data.damageTypeKey
-    }]);
+    }];
   }
   const healingNumberAmount = mode === MODE_HEALING ? getHealingNumberAmount(result) : 0;
   if (healingNumberAmount > 0) {
-    broadcastDamageNumbers(actor, [{
+    damageNumberEntries = [{
       amount: healingNumberAmount,
       mode: MODE_HEALING
-    }]);
+    }];
   }
   if (mode === MODE_DAMAGE && result?.amount > 0) {
     result.finishingBlow = await applyFinishingBlowIfEligible(actor, data);
   }
   if (createSummary) {
     await publishDamageSummaryMessage([result]);
-    notifyDamageApplied([result]);
+    await notifyDamageApplied([result]);
   }
   return result;
   } finally {
-    await commitOwnedDamageBarrier();
+    try {
+      await commitOwnedDamageBarrier();
+    } finally {
+      queueDamageFeedback(pendingFeedback, {
+        actor,
+        mitigationDisplay,
+        damageEntries: damageNumberEntries
+      });
+      if (ownsFeedbackQueue) flushDamageFeedback(pendingFeedback);
+    }
   }
 }
 
@@ -1479,7 +1549,7 @@ async function applyItemConditionDamageApplicationNow(actor, data = {}, { create
   };
   if (createSummary) {
     await publishDamageSummaryMessage([result]);
-    notifyDamageApplied([result]);
+    await notifyDamageApplied([result]);
   }
   return result;
 }
@@ -1490,7 +1560,8 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, {
   periodic = {},
   scope = SCOPE_HEALTH,
   damageBarrierLedger = null,
-  damageBarrierCommit = null
+  damageBarrierCommit = null,
+  feedbackQueue = null
 } = {}) {
   const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
   const source = markPeriodicDamageSplitSource(data.source);
@@ -1500,7 +1571,12 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, {
       amount: immediateAmount,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       source
-    }, { createSummary: false, damageBarrierLedger, damageBarrierCommit })
+    }, {
+      createSummary: false,
+      damageBarrierLedger,
+      damageBarrierCommit,
+      feedbackQueue
+    })
     : { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode: MODE_DAMAGE, scope, createdTraumas: [] };
 
   if (delayedAmount > 0 && !immediateResult?.lethalDamagePrevented) await createPeriodicDamageEffect(actor, {
@@ -1521,7 +1597,7 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, {
   };
   if (createSummary) {
     await publishDamageSummaryMessage([result]);
-    notifyDamageApplied([result]);
+    await notifyDamageApplied([result]);
   }
   return result;
 }
@@ -1606,16 +1682,29 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   const targetActorUuid = String(actorUuid ?? "").trim();
   if (!targetActorUuid) return undefined;
   const normalizedRequests = requests.map(request => normalizeDamageRequest({ ...request, actorUuid: targetActorUuid }));
-  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
-    normalizedRequests,
-    allowedRequests => queueActorDamageMutation(targetActorUuid, () => (
-      applyDamageApplicationsNow({ actorUuid: targetActorUuid, requests: allowedRequests }, options)
-    )),
-    { batch: normalizedRequests.length > 1 }
-  ));
+  return runDamageHubOperation(async () => {
+    const feedbackQueue = [];
+    try {
+      return await executeDamageSystemEventWorkflow(
+        normalizedRequests,
+        allowedRequests => queueActorDamageMutation(targetActorUuid, () => (
+          applyDamageApplicationsNow(
+            { actorUuid: targetActorUuid, requests: allowedRequests },
+            { ...options, feedbackQueue }
+          )
+        )),
+        { batch: normalizedRequests.length > 1 }
+      );
+    } finally {
+      flushDamageFeedback(feedbackQueue);
+    }
+  });
 }
 
-async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}, { createSummary = true, deferredShockChecks = null } = {}) {
+async function applyDamageApplicationsNow(
+  { actorUuid = "", requests = [] } = {},
+  { createSummary = true, deferredShockChecks = null, feedbackQueue = null } = {}
+) {
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
@@ -1630,8 +1719,12 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     await commitDamageBarrierLedger(actor, damageBarrierLedger);
     damageBarrierCommitted = true;
   };
-  try {
+  const ownsFeedbackQueue = !Array.isArray(feedbackQueue);
+  const pendingFeedback = ownsFeedbackQueue ? [] : feedbackQueue;
   let results = [];
+  let mitigationDisplay = null;
+  let batchResult = null;
+  try {
   const resourceHealthBefore = calculateAggregateHealth(actor).value;
 
   const batchRequests = [];
@@ -1647,7 +1740,8 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     if (data.mode !== MODE_DAMAGE) {
       singleResults.push(await applyDamageApplicationNow(data, {
         createSummary: false,
-        damageBarrierLedger
+        damageBarrierLedger,
+        feedbackQueue: pendingFeedback
       }));
       preparationContext = null;
       continue;
@@ -1676,8 +1770,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     await applyNeedIncrease(actor, entry.needIncreaseApplication);
   }
 
-  const mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
-  if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
+  mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
 
   const batchPotentialAmount = batchRequests.reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.amount)), 0);
   const batchPreBarrierAmount = damageApplications
@@ -1698,7 +1791,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       requests: batchRequests
     })
     : false;
-  let batchResult = batchPrevented
+  batchResult = batchPrevented
     ? {
       actor,
       amount: 0,
@@ -1775,12 +1868,21 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   results = [batchResult, ...singleResults].filter(Boolean);
   if (createSummary) {
     await publishDamageSummaryMessage(results);
-    notifyDamageApplied(results);
+    await notifyDamageApplied(results);
+  }
+  } finally {
+    try {
+      await commitDamageBarrier();
+    } finally {
+      queueDamageFeedback(pendingFeedback, {
+        actor,
+        mitigationDisplay,
+        damageEntries: batchResult?.healthDelta > 0 ? batchResult.healthDeltasByType : []
+      });
+      if (ownsFeedbackQueue) flushDamageFeedback(pendingFeedback);
+    }
   }
   return results;
-  } finally {
-    await commitDamageBarrier();
-  }
 }
 
 export function createDamageBatchPreparationContext(actor) {
@@ -1788,7 +1890,8 @@ export function createDamageBatchPreparationContext(actor) {
     actor,
     prosthesisContext: null,
     mitigationEquipmentByTarget: new Map(),
-    timedDamageBlockedByTarget: new Map()
+    timedDamageBlockedByTarget: new Map(),
+    contextualAbilitySnapshots: new Map()
   };
 }
 
@@ -1925,7 +2028,8 @@ function prepareDamageBatchEntry(actor, data = {}, {
       includeEquipmentConditionDamage,
       equipmentSources: includeEquipmentConditionDamage ? equipmentSnapshot?.sources : null,
       includeResistanceOverheat: data.processDamageTypeSettings,
-      equipmentConditionDamageState: includeEquipmentConditionDamage ? equipmentConditionDamageState : null
+      equipmentConditionDamageState: includeEquipmentConditionDamage ? equipmentConditionDamageState : null,
+      contextualAbilitySnapshots: preparationContext?.contextualAbilitySnapshots
     })
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
@@ -2601,10 +2705,15 @@ export async function restoreActorHealthCost(actor, amount = 0, { chainRef = nul
 }
 
 export function getDamageCostModifierState(actor, { actionKey = "" } = {}) {
-  const action = collectCostModifier(actor, COST_EFFECT_KEYS.action);
-  const specificAction = collectCostModifier(actor, COST_EFFECT_KEYS.actions[String(actionKey ?? "").trim()]);
+  const effectSnapshot = createActorEffectSnapshot(actor);
+  const action = collectCostModifier(actor, COST_EFFECT_KEYS.action, { effectSnapshot });
+  const specificAction = collectCostModifier(
+    actor,
+    COST_EFFECT_KEYS.actions[String(actionKey ?? "").trim()],
+    { effectSnapshot }
+  );
   return {
-    movement: collectCostModifier(actor, COST_EFFECT_KEYS.movement),
+    movement: collectCostModifier(actor, COST_EFFECT_KEYS.movement, { effectSnapshot }),
     action: mergeCostModifiers(action, specificAction)
   };
 }
@@ -4087,19 +4196,18 @@ function isTruthyEffectValue(value) {
   return !["", "0", "false", "no", "off"].includes(text);
 }
 
-function collectCostModifier(actor, key = "") {
+function collectCostModifier(actor, key = "", { effectSnapshot = null } = {}) {
   const modifier = { add: 0, multiplier: 1, override: null };
   if (!key) return modifier;
-  for (const effect of getActorApplicableEffects(actor)) {
+  for (const { effect, change } of getActorEffectChangeEntries(actor, key, {
+    snapshot: effectSnapshot
+  })) {
     if (effect.disabled) continue;
-    for (const change of effect.system?.changes ?? effect.changes ?? []) {
-      if (String(change.key ?? "").trim() !== key) continue;
-      const value = evaluateActorEffectChangeNumber(actor, { ...change, effect });
-      if (!Number.isFinite(value)) continue;
-      if (change.type === "override") modifier.override = value;
-      else if (change.type === "multiply") modifier.multiplier *= value;
-      else modifier.add += value;
-    }
+    const value = evaluateActorEffectChangeNumber(actor, { ...change, effect });
+    if (!Number.isFinite(value)) continue;
+    if (change.type === "override") modifier.override = value;
+    else if (change.type === "multiply") modifier.multiplier *= value;
+    else modifier.add += value;
   }
   return modifier;
 }
@@ -4112,11 +4220,6 @@ function mergeCostModifiers(...modifiers) {
       ? modifier.override
       : result.override
   }), { add: 0, multiplier: 1, override: null });
-}
-
-function getActorApplicableEffects(actor) {
-  if (typeof actor?.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
-  return Array.from(actor?.effects ?? []);
 }
 
 async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {}, worldTime = null } = {}) {
@@ -5819,10 +5922,6 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     actualHealthDelta,
     requestedHealthDamage
   );
-  if (actualHealthDelta > 0) {
-    broadcastDamageNumbers(actor, healthDeltasByType);
-  }
-
   const createdTraumas = [];
   const traumaPlans = [];
   for (const [limbKey, state] of limbStates) {
@@ -6105,10 +6204,18 @@ async function publishDamageSummaryMessage(results = []) {
   });
 }
 
-function notifyDamageApplied(results = []) {
+async function notifyDamageApplied(results = []) {
   const flatResults = results.flat(Infinity).filter(Boolean);
   if (!flatResults.length) return;
-  Hooks.callAll(DAMAGE_APPLIED_HOOK, { results: flatResults });
+  const context = { results: flatResults };
+  for (const [id, handler] of damageAppliedHandlers) {
+    try {
+      await handler(context);
+    } catch (error) {
+      console.error(`Fallout MaW | Damage-applied handler "${id}" failed`, error);
+    }
+  }
+  Hooks.callAll(DAMAGE_APPLIED_HOOK, context);
 }
 
 function buildDamageSummaryViewContext(results = []) {
@@ -7216,6 +7323,37 @@ function hasTimedEffectReachedEnd(effect, data = {}, now = 0) {
   return Number.isFinite(remaining) && remaining <= 0;
 }
 
+function queueDamageFeedback(queue, {
+  actor = null,
+  mitigationDisplay = null,
+  damageEntries = []
+} = {}) {
+  const descriptor = {
+    actor,
+    mitigationDisplay,
+    damageEntries: Array.isArray(damageEntries) ? damageEntries : []
+  };
+  if (!descriptor.actor?.uuid) return;
+  if (!descriptor.mitigationDisplay && !descriptor.damageEntries.length) return;
+  if (Array.isArray(queue)) {
+    queue.push(descriptor);
+    return;
+  }
+  flushDamageFeedback([descriptor]);
+}
+
+function flushDamageFeedback(queue = []) {
+  for (const descriptor of queue) {
+    if (descriptor?.mitigationDisplay) {
+      broadcastDamageMitigationIcon(descriptor.actor, descriptor.mitigationDisplay);
+    }
+    if (descriptor?.damageEntries?.length) {
+      broadcastDamageNumbers(descriptor.actor, descriptor.damageEntries);
+    }
+  }
+  if (Array.isArray(queue)) queue.length = 0;
+}
+
 function broadcastDamageNumbers(actor, entries = []) {
   const payloadEntries = prepareDamageNumberEntries(entries);
   if (!actor?.uuid || !payloadEntries.length) return;
@@ -7260,7 +7398,10 @@ function prepareDamageNumberEntries(entries = []) {
 
 function displayDamageNumbersForActor(actorUuid = "", entries = []) {
   if (!canvas?.ready || !actorUuid || !entries?.length) return;
-  const tokens = (canvas.tokens?.placeables ?? []).filter(token => token.actor?.uuid === actorUuid);
+  const tokens = (canvas.tokens?.placeables ?? []).filter(token => (
+    token.actor?.uuid === actorUuid
+    && isTokenVisibleToCurrentUser(token)
+  ));
   for (const token of tokens) {
     entries.forEach((entry, index) => animateDamageNumber(token, entry, index, entries.length));
   }
@@ -7741,7 +7882,7 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
       ? Math.max(0, Number(itemMitigationTotals[DAMAGE_MITIGATION_MODES.resistance]) || 0)
       : getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.resistance)
     : Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
-  const mitigationContext = getDamageMitigationChanceContext(actor, source);
+  const mitigationContext = getDamageMitigationChanceContext(actor, source, options);
   const contextual = options.itemOnlyMitigation ? {} : getContextualAbilityChangeValues(actor, [{
     id: "defense",
     key: `system.damageDefenseBonuses.${limbKey}.${damageTypeKey}`,
@@ -7813,7 +7954,7 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
   };
 }
 
-function getDamageMitigationChanceContext(actor, source = {}) {
+function getDamageMitigationChanceContext(actor, source = {}, options = {}) {
   const attackerActorUuid = String(
     source?.attackerActorUuid
     ?? source?.attackerUuid
@@ -7837,7 +7978,8 @@ function getDamageMitigationChanceContext(actor, source = {}) {
       : null,
     attackDistanceMeters: source?.attackDistanceMeters ?? null,
     effectiveRange: source?.effectiveRange ?? null,
-    chanceOperationId: getActiveUseOperationId(source, getCurrentDamageHubOperationRef())
+    chanceOperationId: getActiveUseOperationId(source, getCurrentDamageHubOperationRef()),
+    contextualAbilitySnapshots: options.contextualAbilitySnapshots ?? null
   };
 }
 

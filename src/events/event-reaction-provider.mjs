@@ -401,7 +401,28 @@ export function createGenericEventReactionProvider({
       if (chance.startsWith(`${normalized}|`)) consumedChances.delete(chance);
     }
     registeredRootCleanups.delete(normalized);
-    return effectManager.cleanupRoot(normalized);
+    let progressFailure = null;
+    let effectFailure = null;
+    let cleanedEffects = 0;
+    try {
+      await progressManager.flushRoot?.(normalized);
+    } catch (error) {
+      progressFailure = error;
+    }
+    try {
+      cleanedEffects = await effectManager.cleanupRoot(normalized);
+    } catch (error) {
+      effectFailure = error;
+    }
+    if (progressFailure && effectFailure) {
+      throw new AggregateError(
+        [progressFailure, effectFailure],
+        `Event Reaction root cleanup failed for "${normalized}".`
+      );
+    }
+    if (progressFailure) throw progressFailure;
+    if (effectFailure) throw effectFailure;
+    return cleanedEffects;
   }
 
   function ensureRootCleanup(rootId) {

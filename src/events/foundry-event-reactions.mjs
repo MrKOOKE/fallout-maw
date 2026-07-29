@@ -3,6 +3,7 @@ import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs
 import { abilityConditionApplies } from "../abilities/evaluation.mjs";
 import { getSystemEventDescriptor } from "./catalog.mjs";
 import { createGenericEventReactionProvider } from "./event-reaction-provider.mjs";
+import { collectIndexedEventReactionReactorActors } from "./event-reaction-index.mjs";
 import { createEventReactionEffectManager } from "./reaction-effects.mjs";
 import { createFoundryReactionCostRegistry } from "./foundry-reaction-costs.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
@@ -39,6 +40,7 @@ export function createFoundryEventReactionRuntime({
   const provider = createGenericEventReactionProvider({
     costRegistry,
     effectManager,
+    getReactorActors: envelope => collectIndexedEventReactionReactorActors(envelope),
     getItems: getActorItemsWithActiveHudModules,
     conditionEvaluator: abilityConditionApplies,
     evaluateEffectCopyLimit,
