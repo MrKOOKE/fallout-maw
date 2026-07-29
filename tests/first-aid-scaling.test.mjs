@@ -30,7 +30,7 @@ test("first aid effectiveness and withdrawal resistance use clamped percent mult
   assert.equal(getFirstAidWithdrawalResistanceMultiplier(150), 0);
 });
 
-test("first aid scaling combines result, source, recipient, duration, healing, and withdrawal", () => {
+test("first aid scaling combines main modifiers while withdrawal depends only on resistance", () => {
   const scaling = calculateFirstAidScalingMultipliers({
     resultMultiplier: 0.5,
     outgoingEffectivenessPercent: 20,
@@ -43,9 +43,27 @@ test("first aid scaling combines result, source, recipient, duration, healing, a
   assert.ok(Math.abs(scaling.effect - 0.45) < Number.EPSILON);
   assert.ok(Math.abs(scaling.healing - 0.495) < Number.EPSILON);
   assert.equal(scaling.duration, 1.5);
-  assert.ok(Math.abs(scaling.withdrawalEffect - 0.27) < Number.EPSILON);
-  assert.ok(Math.abs(scaling.withdrawalHealing - 0.297) < Number.EPSILON);
+  assert.ok(Math.abs(scaling.withdrawalEffect - 0.6) < Number.EPSILON);
+  assert.ok(Math.abs(scaling.withdrawalHealing - 0.6) < Number.EPSILON);
   assert.ok(Math.abs(scaling.withdrawalDuration - 0.6) < Number.EPSILON);
+});
+
+test("zero main effectiveness and duration do not cancel unresisted withdrawal", () => {
+  const scaling = calculateFirstAidScalingMultipliers({
+    resultMultiplier: 0,
+    outgoingEffectivenessPercent: -100,
+    incomingEffectivenessPercent: -100,
+    outgoingHealingPercent: -100,
+    durationPercent: -100,
+    withdrawalResistancePercent: 0
+  });
+
+  assert.equal(scaling.effect, 0);
+  assert.equal(scaling.healing, 0);
+  assert.equal(scaling.duration, 0);
+  assert.equal(scaling.withdrawalEffect, 1);
+  assert.equal(scaling.withdrawalHealing, 1);
+  assert.equal(scaling.withdrawalDuration, 1);
 });
 
 test("incoming effectiveness scales direct first aid healing and can fully block it", () => {
@@ -90,5 +108,14 @@ test("first aid effect keys are exact and participate in active-use accounting",
   assert.equal(
     Object.values(FIRST_AID_EFFECT_KEYS).every(key => isActiveUseEffectKey(key)),
     true
+  );
+  assert.deepEqual(
+    Array.from(getFirstAidResolutionActiveUseKeys({
+      direction: "incoming",
+      includeEffectiveness: false,
+      includeDuration: false,
+      includeWithdrawalResistance: true
+    })),
+    [FIRST_AID_EFFECT_KEYS.withdrawalResistancePercent]
   );
 });

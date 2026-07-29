@@ -243,13 +243,15 @@ export function getHealingResolutionActiveUseKeys({ direction = "incoming" } = {
 /** Effect keys read while resolving one first-aid application. */
 export function getFirstAidResolutionActiveUseKeys({
   direction = "incoming",
+  includeEffectiveness = true,
   includeDuration = true,
   includeWithdrawalResistance = true
 } = {}) {
   if (direction === "outgoing") {
-    return new Set([FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent]);
+    return new Set(includeEffectiveness ? [FIRST_AID_EFFECT_KEYS.outgoingEffectivenessPercent] : []);
   }
-  const keys = new Set([FIRST_AID_EFFECT_KEYS.incomingEffectivenessPercent]);
+  const keys = new Set();
+  if (includeEffectiveness) keys.add(FIRST_AID_EFFECT_KEYS.incomingEffectivenessPercent);
   if (includeDuration) keys.add(FIRST_AID_EFFECT_KEYS.durationPercent);
   if (includeWithdrawalResistance) keys.add(FIRST_AID_EFFECT_KEYS.withdrawalResistancePercent);
   return keys;

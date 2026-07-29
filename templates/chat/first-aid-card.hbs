@@ -1,0 +1,97 @@
+<article class="fallout-maw-chat-card fallout-maw-first-aid-card {{tone}}">
+  <header class="fallout-maw-first-aid-card-header">
+    <img src="{{item.img}}" alt="{{item.name}}">
+    <div class="fallout-maw-first-aid-card-title">
+      <span class="fallout-maw-first-aid-card-kicker">{{localize "FALLOUTMAW.Item.FirstAidChatKicker"}}</span>
+      <h2>{{item.name}}</h2>
+      <strong class="fallout-maw-first-aid-card-result">{{result.label}}</strong>
+    </div>
+  </header>
+
+  <section class="fallout-maw-first-aid-card-route">
+    <span>
+      <small>{{localize "FALLOUTMAW.Item.FirstAidChatUser"}}</small>
+      <strong>{{source.name}}</strong>
+    </span>
+    <i class="fa-solid fa-arrow-right"></i>
+    <span>
+      <small>{{localize "FALLOUTMAW.Item.FirstAidChatTarget"}}</small>
+      <strong>{{target.name}}</strong>
+    </span>
+  </section>
+
+  <section class="fallout-maw-first-aid-card-facts">
+    <div class="fallout-maw-first-aid-card-fact">
+      <span>{{localize "FALLOUTMAW.Item.FirstAidChatEffectiveness"}}</span>
+      <strong>{{effectiveness}}</strong>
+    </div>
+    {{#if healingEffectiveness}}
+    <div class="fallout-maw-first-aid-card-fact">
+      <span>{{localize "FALLOUTMAW.Item.FirstAidChatHealingEffectiveness"}}</span>
+      <strong>{{healingEffectiveness}}</strong>
+    </div>
+    {{/if}}
+    <div class="fallout-maw-first-aid-card-fact">
+      <span>{{localize "FALLOUTMAW.Item.FirstAidChatDuration"}}</span>
+      <span class="fallout-maw-first-aid-card-fact-value">
+        <strong class="{{#if duration.appliedZero}}zero{{/if}}">{{duration.applied}}</strong>
+        <small>{{localize "FALLOUTMAW.Item.FirstAidChatConfigured"}}: {{duration.configured}}</small>
+      </span>
+    </div>
+    <div class="fallout-maw-first-aid-card-fact">
+      <span>{{localize "FALLOUTMAW.Item.FirstAidChatChargesSpent"}}</span>
+      <strong>{{spentCharges}}</strong>
+    </div>
+  </section>
+
+  <section class="fallout-maw-first-aid-card-effects">
+    <h3>{{localize "FALLOUTMAW.Item.FirstAidChatEffects"}}</h3>
+    {{#each mainEffects}}
+    <div class="fallout-maw-first-aid-card-effect">
+      <strong class="fallout-maw-first-aid-card-effect-name">{{label}}</strong>
+      <div class="fallout-maw-first-aid-card-comparison">
+        <span>
+          <small>{{localize "FALLOUTMAW.Item.FirstAidChatConfigured"}}</small>
+          <strong>{{configured}}</strong>
+        </span>
+        <i class="fa-solid fa-arrow-right-long"></i>
+        <span>
+          <small>{{localize "FALLOUTMAW.Item.FirstAidChatApplied"}}</small>
+          <strong class="{{#if appliedZero}}zero{{/if}}">{{applied}}</strong>
+        </span>
+      </div>
+    </div>
+    {{else}}
+    <p>{{localize "FALLOUTMAW.Item.FirstAidChatNoEffects"}}</p>
+    {{/each}}
+  </section>
+
+  {{#if withdrawalDuration}}
+  <section class="fallout-maw-first-aid-card-withdrawal">
+    <header>
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalChanges"}}</h3>
+      <span class="fallout-maw-first-aid-card-withdrawal-duration">
+        <small>{{localize "FALLOUTMAW.Item.FirstAidChatDuration"}}</small>
+        <strong class="{{#if withdrawalDuration.appliedZero}}zero{{/if}}">{{withdrawalDuration.applied}}</strong>
+        <small>{{localize "FALLOUTMAW.Item.FirstAidChatConfigured"}}: {{withdrawalDuration.configured}}</small>
+      </span>
+    </header>
+    {{#each withdrawalEffects}}
+    <div class="fallout-maw-first-aid-card-effect">
+      <strong class="fallout-maw-first-aid-card-effect-name">{{label}}</strong>
+      <div class="fallout-maw-first-aid-card-comparison">
+        <span>
+          <small>{{localize "FALLOUTMAW.Item.FirstAidChatConfigured"}}</small>
+          <strong>{{configured}}</strong>
+        </span>
+        <i class="fa-solid fa-arrow-right-long"></i>
+        <span>
+          <small>{{localize "FALLOUTMAW.Item.FirstAidChatApplied"}}</small>
+          <strong class="{{#if appliedZero}}zero{{/if}}">{{applied}}</strong>
+        </span>
+      </div>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+</article>

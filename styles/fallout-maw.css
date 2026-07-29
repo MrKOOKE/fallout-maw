@@ -5173,6 +5173,263 @@ body #prosemirror-dropdown {
   grid-template-columns: minmax(130px, 0.8fr) minmax(140px, 1fr) minmax(100px, 0.8fr) 2.5rem;
 }
 
+.fallout-maw-chat-card.fallout-maw-first-aid-card {
+  --fallout-maw-first-aid-accent: #79c65d;
+  --fallout-maw-first-aid-ink: #fff1b6;
+  --fallout-maw-first-aid-muted: #d5c98b;
+  --fallout-maw-first-aid-paper: #10130d;
+  --fallout-maw-first-aid-paper-deep: #1b1d16;
+  --fallout-maw-first-aid-line: rgba(216, 192, 94, 0.3);
+  background:
+    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.035) 0 1px, transparent 1px 4px),
+    radial-gradient(circle at 14% 8%, color-mix(in srgb, var(--fallout-maw-first-aid-accent) 10%, transparent), transparent 44%),
+    linear-gradient(180deg, var(--fallout-maw-first-aid-paper-deep), var(--fallout-maw-first-aid-paper));
+  border: 2px solid color-mix(in srgb, var(--fallout-maw-first-aid-accent) 58%, #c7b25f);
+  border-left: 5px solid var(--fallout-maw-first-aid-accent);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 0 18px rgba(0, 0, 0, 0.45),
+    0 0 8px color-mix(in srgb, var(--fallout-maw-first-aid-accent) 18%, transparent);
+  color: var(--fallout-maw-first-aid-ink);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
+  font-size: 0.9rem;
+  line-height: 1.2;
+  overflow: hidden;
+  padding: 0;
+}
+
+.fallout-maw-chat-card.fallout-maw-first-aid-card.failure {
+  --fallout-maw-first-aid-accent: #e08e3d;
+}
+
+.fallout-maw-chat-card.fallout-maw-first-aid-card.critical-failure {
+  --fallout-maw-first-aid-accent: #e65345;
+}
+
+.fallout-maw-chat-card.fallout-maw-first-aid-card.critical-success {
+  --fallout-maw-first-aid-accent: #35c9e8;
+}
+
+.fallout-maw-first-aid-card-header {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 2.6rem minmax(0, 1fr);
+  padding: 0.62rem;
+}
+
+.fallout-maw-first-aid-card-header > img {
+  background: var(--fallout-maw-first-aid-paper-deep);
+  border: 2px solid var(--fallout-maw-first-aid-accent);
+  border-radius: 2px;
+  height: 2.6rem;
+  object-fit: cover;
+  width: 2.6rem;
+}
+
+.fallout-maw-first-aid-card-title {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.fallout-maw-first-aid-card-kicker {
+  color: var(--fallout-maw-first-aid-accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+}
+
+.fallout-maw-first-aid-card-header h2 {
+  color: var(--fallout-maw-first-aid-ink);
+  font-size: 1.16rem;
+  line-height: 1.08;
+  margin: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.fallout-maw-first-aid-card-result {
+  color: var(--fallout-maw-first-aid-accent);
+  font-size: 0.8rem;
+}
+
+.fallout-maw-first-aid-card-route {
+  align-items: center;
+  background: color-mix(in srgb, var(--fallout-maw-first-aid-accent) 11%, rgba(0, 0, 0, 0.38));
+  border-block: 1px solid color-mix(in srgb, var(--fallout-maw-first-aid-accent) 48%, transparent);
+  color: var(--fallout-maw-first-aid-ink);
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  padding: 0.45rem 0.62rem;
+}
+
+.fallout-maw-first-aid-card-route > span {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.fallout-maw-first-aid-card-route > span:last-child {
+  text-align: right;
+}
+
+.fallout-maw-first-aid-card-route small {
+  color: var(--fallout-maw-first-aid-muted);
+  font-size: 0.65rem;
+}
+
+.fallout-maw-first-aid-card-route strong {
+  color: var(--fallout-maw-first-aid-ink);
+  font-size: 0.82rem;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.fallout-maw-first-aid-card-route > i {
+  color: var(--fallout-maw-first-aid-accent);
+}
+
+.fallout-maw-first-aid-card-facts {
+  display: grid;
+  padding: 0.48rem 0.62rem;
+}
+
+.fallout-maw-first-aid-card-fact {
+  align-items: start;
+  border-bottom: 1px dotted var(--fallout-maw-first-aid-line);
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+}
+
+.fallout-maw-first-aid-card-fact:last-child {
+  border-bottom: 0;
+}
+
+.fallout-maw-first-aid-card-fact > span:first-child {
+  color: var(--fallout-maw-first-aid-muted);
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.fallout-maw-first-aid-card-fact strong {
+  color: var(--fallout-maw-first-aid-accent);
+  font-family: var(--font-monospace, monospace);
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.fallout-maw-first-aid-card-fact-value {
+  display: grid;
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.fallout-maw-first-aid-card-fact-value small,
+.fallout-maw-first-aid-card-withdrawal-duration small {
+  color: var(--fallout-maw-first-aid-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.fallout-maw-first-aid-card-effects,
+.fallout-maw-first-aid-card-withdrawal {
+  border-top: 2px solid var(--fallout-maw-first-aid-line);
+  display: grid;
+  gap: 0.38rem;
+  padding: 0.55rem 0.62rem 0.62rem;
+}
+
+.fallout-maw-first-aid-card-effects h3,
+.fallout-maw-first-aid-card-withdrawal h3 {
+  color: var(--fallout-maw-first-aid-accent);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.fallout-maw-first-aid-card-effects > p {
+  color: var(--fallout-maw-first-aid-muted);
+  margin: 0;
+}
+
+.fallout-maw-first-aid-card-effect {
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--fallout-maw-first-aid-line);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.42rem 0.48rem;
+}
+
+.fallout-maw-first-aid-card-effect-name {
+  color: var(--fallout-maw-first-aid-ink);
+  line-height: 1.16;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.fallout-maw-first-aid-card-comparison {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.fallout-maw-first-aid-card-comparison > span {
+  display: grid;
+  gap: 0.04rem;
+}
+
+.fallout-maw-first-aid-card-comparison > span:last-child {
+  text-align: right;
+}
+
+.fallout-maw-first-aid-card-comparison small {
+  color: var(--fallout-maw-first-aid-muted);
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.fallout-maw-first-aid-card-comparison strong {
+  color: var(--fallout-maw-first-aid-ink);
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.92rem;
+}
+
+.fallout-maw-first-aid-card-comparison > i {
+  color: var(--fallout-maw-first-aid-accent);
+  font-size: 0.75rem;
+}
+
+.fallout-maw-first-aid-card .zero {
+  color: #e65345;
+}
+
+.fallout-maw-first-aid-card-withdrawal > header {
+  align-items: start;
+  display: grid;
+  gap: 0.3rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fallout-maw-first-aid-card-withdrawal-duration {
+  display: grid;
+  text-align: right;
+}
+
+.fallout-maw-first-aid-card-withdrawal-duration strong {
+  color: var(--fallout-maw-first-aid-accent);
+  font-family: var(--font-monospace, monospace);
+  white-space: nowrap;
+}
+
 .fallout-maw-weapon-resource-costs.without-actor-resource-costs .fallout-maw-settings-row {
   grid-template-columns: minmax(130px, 1fr) minmax(100px, 1fr) 2.5rem;
 }

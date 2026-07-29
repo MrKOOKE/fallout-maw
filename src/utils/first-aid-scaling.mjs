@@ -32,8 +32,8 @@ export function calculateFirstAidScalingMultipliers({
     effect,
     healing,
     duration,
-    withdrawalEffect: effect * withdrawalResistance,
-    withdrawalHealing: healing * withdrawalResistance,
+    withdrawalEffect: withdrawalResistance,
+    withdrawalHealing: withdrawalResistance,
     withdrawalDuration: withdrawalResistance
   };
 }

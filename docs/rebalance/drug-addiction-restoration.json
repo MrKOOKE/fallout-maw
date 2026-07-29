@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-29T16:13:12.730Z",
+  "mode": "dry-run",
+  "status": "validated-dry-run",
+  "source": {
+    "world": "fallout-old",
+    "folderId": "xToBlPjNM9M0HiK1",
+    "totalDrugItems": 26,
+    "explicitValues": 25,
+    "withoutExplicitValue": [
+      {
+        "oldId": "xjCyTsmAsmzv8xGH",
+        "name": "План-D",
+        "value": null
+      }
+    ]
+  },
+  "target": {
+    "databasePath": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\data\\items",
+    "matched": 25,
+    "changed": 0
+  },
+  "items": [
+    {
+      "oldId": "1VMXiOwS1gJsSMsO",
+      "itemId": "qNgSwbhQUGla5fw9",
+      "name": "Глюконавт",
+      "before": 260,
+      "after": 260,
+      "changed": false
+    },
+    {
+      "oldId": "5drYt52xaJWQJ1y7",
+      "itemId": "3ONVixA9thmmzamV",
+      "name": "Рикошет",
+      "before": 400,
+      "after": 400,
+      "changed": false
+    },
+    {
+      "oldId": "5qZqgYQzgkXEFibS",
+      "itemId": "lAPX5RSIQypm8Sa2",
+      "name": "Психо-Бафф",
+      "before": 680,
+      "after": 680,
+      "changed": false
+    },
+    {
+      "oldId": "8OpTi4AaN3lPzcok",
+      "itemId": "9JfCZd48PaHig9Uu",
+      "name": "Турбо",
+      "before": 490,
+      "after": 490,
+      "changed": false
+    },
+    {
+      "oldId": "9bcUxw4IQPzxqwo4",
+      "itemId": "NDgWwZLINCL2S3Cq",
+      "name": "Винт",
+      "before": 280,
+      "after": 280,
+      "changed": false
+    },
+    {
+      "oldId": "AyecYIqF5oQWXMLc",
+      "itemId": "eImeXzCkVFEv7Qwb",
+      "name": "Ультра Винт",
+      "before": 630,
+      "after": 630,
+      "changed": false
+    },
+    {
+      "oldId": "CGjxHpg80wlIzsOM",
+      "itemId": "F9T9lmtCoxfPKLEH",
+      "name": "Виноградные Ментаты",
+      "before": 150,
+      "after": 150,
+      "changed": false
+    },
+    {
+      "oldId": "NsikfmTzgfmNKBgt",
+      "itemId": "1tr3HqNJr2DQqwVG",
+      "name": "Психо-Таты",
+      "before": 350,
+      "after": 350,
+      "changed": false
+    },
+    {
+      "oldId": "O7qZl4NcAD9C0foq",
+      "itemId": "VP6CMm2tCNlLN0De",
+      "name": "Праздничные Ментаты",
+      "before": 150,
+      "after": 150,
+      "changed": false
+    },
+    {
+      "oldId": "PcPQNKG4egABLGsH",
+      "itemId": "IyMkFYVoLbWyGOZ0",
+      "name": "Мед-Икс",
+      "before": 130,
+      "after": 130,
+      "changed": false
+    },
+    {
+      "oldId": "QV9NiMTWFPEprZ42",
+      "itemId": "JOAz3kw6DJnvLYb9",
+      "name": "Бафф-Винт",
+      "before": 400,
+      "after": 400,
+      "changed": false
+    },
+    {
+      "oldId": "S0avJfWwboPkgJL1",
+      "itemId": "wJZuSe0zyOm9RP8f",
+      "name": "Спок",
+      "before": 250,
+      "after": 250,
+      "changed": false
+    },
+    {
+      "oldId": "UvhExmiiNGhWl5MC",
+      "itemId": "xsyuHwNlIqiXfXi9",
+      "name": "Психо-Винт",
+      "before": 650,
+      "after": 650,
+      "changed": false
+    },
+    {
+      "oldId": "WLfRjDLyWpix6OZf",
+      "itemId": "tSpcs2wA1hohM3xp",
+      "name": "Ягодные Ментаты",
+      "before": 150,
+      "after": 150,
+      "changed": false
+    },
+    {
+      "oldId": "Ze5OfJpdE6BLlrZu",
+      "itemId": "4SkvbBNaTIfHWuYq",
+      "name": "Манипулятор",
+      "before": 200,
+      "after": 200,
+      "changed": false
+    },
+    {
+      "oldId": "ajmNG8h2dEHLG0rn",
+      "itemId": "h3JjQHteCv2DG5EU",
+      "name": "Психо",
+      "before": 380,
+      "after": 380,
+      "changed": false
+    },
+    {
+      "oldId": "ckNsJijrBCQ135WJ",
+      "itemId": "ZS80v9gzOXemdkid",
+      "name": "Баффаут",
+      "before": 300,
+      "after": 300,
+      "changed": false
+    },
+    {
+      "oldId": "e6iwlE4d246kJJWw",
+      "itemId": "0yp0TWBt6fGxhTWT",
+      "name": "Ментаты",
+      "before": 150,
+      "after": 150,
+      "changed": false
+    },
+    {
+      "oldId": "eR8MFZseyxErPio4",
+      "itemId": "6WdhYWvkKSQzm2Al",
+      "name": "Огненное нутро",
+      "before": 300,
+      "after": 300,
+      "changed": false
+    },
+    {
+      "oldId": "gt0EMFw8JqQSNxnz",
+      "itemId": "rdLud75Wnff1mAkU",
+      "name": "Реактивное топливо",
+      "before": 500,
+      "after": 500,
+      "changed": false
+    },
+    {
+      "oldId": "nzkiQM3wOcpYgJp7",
+      "itemId": "aiLBn3z2ep9EC9nd",
+      "name": "Боевой Адреналин",
+      "before": 460,
+      "after": 460,
+      "changed": false
+    },
+    {
+      "oldId": "pFPK6XQ81Fonst67",
+      "itemId": "9G3zQu8tBeeJKOgA",
+      "name": "Вуду",
+      "before": 390,
+      "after": 390,
+      "changed": false
+    },
+    {
+      "oldId": "s8xCpVFCmk1dZbdZ",
+      "itemId": "MWtjFZa78rSLUaep",
+      "name": "Бафф-Таты",
+      "before": 400,
+      "after": 400,
+      "changed": false
+    },
+    {
+      "oldId": "ww5apRsVqmwNxUY5",
+      "itemId": "ElEiQxspklE4IPiw",
+      "name": "Апельсиновые Ментаты",
+      "before": 150,
+      "after": 150,
+      "changed": false
+    },
+    {
+      "oldId": "ys74Exl6jYA92YPv",
+      "itemId": "8t9v8qF7vvTOrJYr",
+      "name": "Кошеглаз",
+      "before": 160,
+      "after": 160,
+      "changed": false
+    }
+  ]
+}
