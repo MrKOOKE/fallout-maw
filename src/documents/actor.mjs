@@ -55,7 +55,12 @@ import {
   getActorFormulaApplicationPhase,
   invalidateActorFormulaData
 } from "../utils/actor-formulas.mjs";
-const actorLoadPreparationCache = new WeakMap();
+import {
+  getCachedActorLoadPreparation,
+  invalidateActorLoadPreparation,
+  itemUpdateAffectsActorLoad,
+  setCachedActorLoadPreparation
+} from "./actor-load-preparation-cache.mjs";
 const INITIALIZE_ACTOR_DEFAULTS_OPTION = "falloutMawInitializeActorDefaults";
 
 export class FalloutMaWActor extends Actor {
@@ -131,6 +136,30 @@ export class FalloutMaWActor extends Actor {
       && !options?.falloutMawConsciousnessStateSync
     ) syncTrackedResourceValueUpdates(this, changes);
     return undefined;
+  }
+
+  _preCreateDescendantDocuments(parent, collection, data, options, userId) {
+    super._preCreateDescendantDocuments(parent, collection, data, options, userId);
+    if (isActorItemCollection(this, parent, collection)) {
+      invalidateActorLoadPreparation(this);
+    }
+  }
+
+  _preUpdateDescendantDocuments(parent, collection, changes, options, userId) {
+    super._preUpdateDescendantDocuments(parent, collection, changes, options, userId);
+    if (
+      isActorItemCollection(this, parent, collection)
+      && (changes ?? []).some(itemUpdateAffectsActorLoad)
+    ) {
+      invalidateActorLoadPreparation(this);
+    }
+  }
+
+  _preDeleteDescendantDocuments(parent, collection, ids, options, userId) {
+    super._preDeleteDescendantDocuments(parent, collection, ids, options, userId);
+    if (isActorItemCollection(this, parent, collection)) {
+      invalidateActorLoadPreparation(this);
+    }
   }
 
   _onUpdate(changes, options, userId) {
@@ -513,19 +542,20 @@ function applyNewActorResourceDefaults(actor) {
 }
 
 function prepareActorLoadData(actor) {
+  const runtimeSettings = getPreparedRuntimeSettings();
   const {
     creatureOptions,
     characteristicSettings,
     skillSettings
-  } = getPreparedRuntimeSettings();
+  } = runtimeSettings;
   const race = creatureOptions.races.find(entry => entry.id === actor.system?.creature?.raceId);
   const characteristics = actor.system?.characteristics ?? {};
   const skills = getSkillValues(actor.system?.skills ?? {});
   const bonus = Math.trunc(Number(actor.system?.load?.bonus) || 0);
-  const signature = getActorLoadPreparationSignature(actor, race, characteristics, skills, bonus);
-  const cached = actorLoadPreparationCache.get(actor);
-  if (cached?.signature === signature) {
-    actor.system.load = { ...cached.load };
+  const signature = getActorLoadPreparationSignature(race, characteristics, skills, bonus);
+  const cached = getCachedActorLoadPreparation(actor, signature, runtimeSettings);
+  if (cached) {
+    actor.system.load = { ...cached };
     return;
   }
 
@@ -553,14 +583,11 @@ function prepareActorLoadData(actor) {
   );
   const load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
   actor.system.load = load;
-  actorLoadPreparationCache.set(actor, {
-    signature,
-    load: { ...load }
-  });
+  setCachedActorLoadPreparation(actor, signature, runtimeSettings, load);
 }
 
-function getActorLoadPreparationSignature(actor, race, characteristics = {}, skills = {}, bonus = 0) {
-  const actorSignature = JSON.stringify({
+function getActorLoadPreparationSignature(race, characteristics = {}, skills = {}, bonus = 0) {
+  return JSON.stringify({
     raceId: race?.id ?? "",
     loadFormula: race?.baseParameters?.loadFormula ?? "",
     loadLimitPercent: race?.baseParameters?.loadLimitPercent ?? 0,
@@ -568,23 +595,10 @@ function getActorLoadPreparationSignature(actor, race, characteristics = {}, ski
     characteristics,
     skills
   });
-  const itemSignature = actor.items.map(item => {
-    const system = item.system ?? {};
-    const placement = system.placement ?? {};
-    const container = system.functions?.container ?? {};
-    return [
-      item.id,
-      item.type,
-      Number(system.quantity) || 0,
-      Number(system.weight) || 0,
-      getItemContainerParentId(item),
-      String(placement.mode ?? ""),
-      Boolean(system.equipped) ? 1 : 0,
-      Number(container.loadReduction) || 0,
-      isNaturalRaceItem(item) ? 1 : 0
-    ].join(":");
-  }).join("|");
-  return `${actorSignature}#${itemSignature}`;
+}
+
+function isActorItemCollection(actor, parent, collection) {
+  return parent === actor && collection === "items";
 }
 
 function clearCreatureSelection(actor) {

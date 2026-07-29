@@ -198,6 +198,7 @@ import {
 } from "../utils/weapon-modules.mjs";
 import {
   getDamageSourceAdjustedNoiseLevel,
+  mergeDamageSourceSpecialProperties,
   resolveDamageSourceAnimationKey
 } from "../utils/damage-source-weapon.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -614,6 +615,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       canAddProsthesisBlockedEffect: canAddProsthesisBlockedEffect(item, damageTypeSettings),
       prosthesisSkillChoices: buildSkillChoices(item.system?.functions?.prosthesis?.skillKey, skillSettings),
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
+      damageSourceSpecialPropertyEditor: {
+        path: "system.functions.damageSource",
+        specialProperties: buildWeaponSpecialPropertyRowsForData(item.system?.functions?.damageSource)
+      },
       damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
       energyClassChoices: buildEnergyClassChoices(item.system?.functions?.energySource?.class),
       energyConsumerInstalledSource: getEnergyConsumerInstalledSourceRow(item.system?.functions?.energyConsumer),
@@ -9187,6 +9192,7 @@ function normalizeWeaponSpecialPropertiesInSubmitData(submitData = {}, currentIt
   const functions = submitData?.system?.functions;
   if (!functions || typeof functions !== "object") return;
   const currentFunctions = currentItem?.system?.functions ?? {};
+  normalizeSubmittedWeaponFunctionData(functions.damageSource, currentFunctions.damageSource);
   normalizeSubmittedWeaponFunctionData(functions.weapon, currentFunctions.weapon);
 
   const additionalWeapons = functions.additionalWeapons;
@@ -10822,6 +10828,7 @@ function getWeaponDisplayData(weaponData = {}) {
     },
     penetration: addFormulaTexts(weaponData.penetration, source.penetration),
     noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source),
+    specialProperties: mergeDamageSourceSpecialProperties(weaponData, source),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
@@ -11306,6 +11313,7 @@ function createDefaultDamageSourceFunctionData(source = {}) {
     },
     penetration: 0,
     noiseLevel: 0,
+    specialProperties: [],
     volley: createDefaultDamageSourceVolleyData()
   }, foundry.utils.deepClone(source), { inplace: false });
 }

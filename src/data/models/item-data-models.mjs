@@ -744,6 +744,7 @@ function damageSourceFunctionField(options = {}) {
     }),
     penetration: new StringField({ required: true, blank: true, initial: "0" }),
     noiseLevel: new NumberField({ required: true, integer: true, initial: 0 }),
+    specialProperties: new ArrayField(weaponSpecialPropertyField(), { required: true, initial: [] }),
     volley: damageSourceVolleyField()
   }, options);
 }

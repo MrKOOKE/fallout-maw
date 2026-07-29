@@ -92,6 +92,7 @@ import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers, getWeaponNoiseLevel } from "../utils/weapon-modules.mjs";
 import {
   getDamageSourceAdjustedNoiseLevel,
+  mergeDamageSourceSpecialProperties,
   resolveDamageSourceAnimationKey
 } from "../utils/damage-source-weapon.mjs";
 import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natural-items.mjs";
@@ -7276,6 +7277,7 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
     },
     penetration: addFormulaTexts(weaponData.penetration, source.penetration),
     noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source),
+    specialProperties: mergeDamageSourceSpecialProperties(weaponData, source),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }

@@ -176,7 +176,10 @@ import {
   getWeaponModuleSlotItemData,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
-import { getDamageSourceAdjustedNoiseLevel } from "../utils/damage-source-weapon.mjs";
+import {
+  getDamageSourceAdjustedNoiseLevel,
+  mergeDamageSourceSpecialProperties
+} from "../utils/damage-source-weapon.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
@@ -3969,7 +3972,8 @@ function applyDamageSourceWeaponDialogModifiers(weaponData = {}) {
       max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
     penetration: addFormulaTexts(weaponData.penetration, source.penetration),
-    noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source)
+    noiseLevel: getDamageSourceAdjustedNoiseLevel(weaponData, source),
+    specialProperties: mergeDamageSourceSpecialProperties(weaponData, source)
   };
 }
 

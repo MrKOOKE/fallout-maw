@@ -299,6 +299,7 @@ import {
 } from "../utils/weapon-modules.mjs";
 import {
   getDamageSourceAdjustedNoiseLevel,
+  mergeDamageSourceSpecialProperties,
   resolveDamageSourceAnimationKey
 } from "../utils/damage-source-weapon.mjs";
 import {
@@ -8003,6 +8004,7 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
     },
     penetration: addFormulaTexts(data.penetration, source.penetration),
     noiseLevel: getDamageSourceAdjustedNoiseLevel(data, source),
+    specialProperties: mergeDamageSourceSpecialProperties(data, source),
     volley: mergeDamageSourceVolleyData(data.volley, source.volley)
   };
 }

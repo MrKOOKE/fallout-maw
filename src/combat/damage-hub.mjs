@@ -35,6 +35,11 @@ import {
   createDamageBarrierLedger
 } from "./damage-barriers.mjs";
 import {
+  buildDamageApplicationBreakdownIndex,
+  buildDamageApplicationDeltaIndex,
+  getDamageEventIndexEntry
+} from "./damage-batch-index.mjs";
+import {
   PERIODIC_HEALING_INTERVAL_SECONDS,
   countPeriodicHealingTicks,
   evaluatePeriodicHealingPerTick,
@@ -744,10 +749,23 @@ async function executeDamageSystemEventWorkflow(requests = [], operation, {
     }
 
     const flatResults = flattenDamageEventResults(operationResult);
+    const applicationBreakdownIndexes = new WeakMap();
     for (const request of allowed) {
       const metadata = beforeSnapshots.get(request);
       const result = findDamageEventResult(request, flatResults) ?? createFailedDamageResult(request, operationError);
-      await emitDamageResolvedSystemEvent(scope, request, result, metadata);
+      const applications = result?.damageApplications;
+      let applicationBreakdownIndex = null;
+      if (Array.isArray(applications)) {
+        applicationBreakdownIndex = applicationBreakdownIndexes.get(applications);
+        if (!applicationBreakdownIndex) {
+          applicationBreakdownIndex = buildDamageApplicationBreakdownIndex(applications);
+          applicationBreakdownIndexes.set(applications, applicationBreakdownIndex);
+        }
+      }
+      await emitDamageResolvedSystemEvent(scope, request, result, {
+        ...metadata,
+        applicationBreakdownIndex
+      });
     }
 
     if (batch || normalized.length > 1) {
@@ -784,11 +802,12 @@ async function emitDamageResolvedSystemEvent(scope, request, result = {}, {
   index = 0,
   before = null,
   occurrenceBase = `damage:${scope?.rootId}:${index}`,
-  cancelled = false
+  cancelled = false,
+  applicationBreakdownIndex = null
 } = {}) {
   const actor = result?.actor ?? await fromUuid(request.actorUuid);
   const after = getDamageEventActorSnapshot(actor, request);
-  const barrierResult = getDamageRequestBarrierResult(result, index);
+  const barrierResult = getDamageRequestBarrierResult(result, index, applicationBreakdownIndex);
   const serializedResult = serializeDamageEventResult({
     ...result,
     ...barrierResult
@@ -905,12 +924,15 @@ function serializeDamageEventResult(result = {}) {
   };
 }
 
-function getDamageRequestBarrierResult(result = {}, eventIndex = 0) {
+function getDamageRequestBarrierResult(result = {}, eventIndex = 0, applicationBreakdownIndex = null) {
   const hasApplicationBreakdown = Array.isArray(result?.damageApplications);
-  const applications = hasApplicationBreakdown
-    ? result.damageApplications.filter(entry => Number(entry?.damageEventIndex) === Number(eventIndex))
-    : [];
-  if (!applications.length) {
+  const application = hasApplicationBreakdown
+    ? getDamageEventIndexEntry(
+      applicationBreakdownIndex ?? buildDamageApplicationBreakdownIndex(result.damageApplications),
+      eventIndex
+    )
+    : null;
+  if (!application) {
     if (hasApplicationBreakdown) {
       return {
         preBarrierAmount: 0,
@@ -936,29 +958,15 @@ function getDamageRequestBarrierResult(result = {}, eventIndex = 0) {
       barrierDepleted: Array.isArray(result?.barrierDepleted) ? result.barrierDepleted : []
     };
   }
-  const depleted = applications.flatMap(entry => entry?.barrierDepleted ?? []);
+  const depleted = application.depleted;
   return {
-    preBarrierAmount: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.preBarrierAmount) || 0)
-    ), 0),
-    barrierAbsorbed: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.barrierAbsorbed) || 0)
-    ), 0),
-    amountAfterBarrier: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.amountAfterBarrier ?? entry?.amount) || 0)
-    ), 0),
-    actualHealthDelta: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.actualHealthDelta) || 0)
-    ), 0),
-    actualLimbDelta: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.actualLimbDelta) || 0)
-    ), 0),
-    healthDelta: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.actualHealthDelta) || 0)
-    ), 0),
-    limbDelta: applications.reduce((sum, entry) => (
-      sum + Math.max(0, Number(entry?.actualLimbDelta) || 0)
-    ), 0),
+    preBarrierAmount: application.preBarrierAmount,
+    barrierAbsorbed: application.barrierAbsorbed,
+    amountAfterBarrier: application.amountAfterBarrier,
+    actualHealthDelta: application.actualHealthDelta,
+    actualLimbDelta: application.actualLimbDelta,
+    healthDelta: application.actualHealthDelta,
+    limbDelta: application.actualLimbDelta,
     hasApplicationBreakdown: true,
     depleted,
     barrierDepleted: depleted
@@ -1633,6 +1641,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const resistanceOverheats = [];
   const pendingPeriodicDamageEffects = [];
   const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
+  let preparationContext = null;
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
@@ -1640,17 +1649,21 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
         createSummary: false,
         damageBarrierLedger
       }));
+      preparationContext = null;
       continue;
     }
     if (data.scope === SCOPE_ITEM_CONDITION) {
       singleResults.push(await applyItemConditionDamageApplicationNow(actor, data));
+      preparationContext = null;
       continue;
     }
 
-    const entry = await prepareDamageBatchEntry(actor, data, {
+    preparationContext ??= createDamageBatchPreparationContext(actor);
+    const entry = prepareDamageBatchEntry(actor, data, {
       equipmentConditionDamageState,
       pendingPeriodicDamageEffects,
-      damageBarrierLedger
+      damageBarrierLedger,
+      preparationContext
     });
     if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
     if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
@@ -1711,25 +1724,25 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
           source: batchSource
         }
         : undefined;
+  const applicationDeltaIndex = buildDamageApplicationDeltaIndex(batchResult?.applicationDeltas);
   if (batchResult && (batchPreBarrierAmount > 0 || batchBarrierAbsorbed > 0)) {
     batchResult.preBarrierAmount = batchPreBarrierAmount;
     batchResult.barrierAbsorbed = batchBarrierAbsorbed;
     batchResult.amountAfterBarrier = batchAmountAfterBarrier;
     batchResult.barrierDepleted = batchBarrierDepleted;
-    batchResult.damageApplications = damageApplications.map(entry => ({
-      damageEventIndex: entry.damageEventIndex,
-      damageTypeKey: entry.damageTypeKey,
-      preBarrierAmount: entry.preBarrierAmount,
-      barrierAbsorbed: entry.barrierAbsorbed,
-      amountAfterBarrier: entry.amount,
-      actualHealthDelta: batchResult.applicationDeltas
-        ?.filter(delta => Number(delta?.damageEventIndex) === Number(entry.damageEventIndex))
-        .reduce((sum, delta) => sum + Math.max(0, Number(delta?.healthDelta) || 0), 0) ?? 0,
-      actualLimbDelta: batchResult.applicationDeltas
-        ?.filter(delta => Number(delta?.damageEventIndex) === Number(entry.damageEventIndex))
-        .reduce((sum, delta) => sum + Math.max(0, Number(delta?.limbDelta) || 0), 0) ?? 0,
-      barrierDepleted: entry.barrierDepleted
-    }));
+    batchResult.damageApplications = damageApplications.map(entry => {
+      const deltas = getDamageEventIndexEntry(applicationDeltaIndex, entry.damageEventIndex);
+      return {
+        damageEventIndex: entry.damageEventIndex,
+        damageTypeKey: entry.damageTypeKey,
+        preBarrierAmount: entry.preBarrierAmount,
+        barrierAbsorbed: entry.barrierAbsorbed,
+        amountAfterBarrier: entry.amount,
+        actualHealthDelta: deltas?.healthDelta ?? 0,
+        actualLimbDelta: deltas?.limbDelta ?? 0,
+        barrierDepleted: entry.barrierDepleted
+      };
+    });
   }
   if (!batchPrevented) {
     await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
@@ -1770,15 +1783,96 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   }
 }
 
-async function prepareDamageBatchEntry(actor, data = {}, {
+export function createDamageBatchPreparationContext(actor) {
+  return {
+    actor,
+    prosthesisContext: null,
+    mitigationEquipmentByTarget: new Map(),
+    timedDamageBlockedByTarget: new Map()
+  };
+}
+
+function getDamageBatchProsthesisContext(context, actor) {
+  if (context?.actor !== actor) return buildActorProsthesisContext(actor);
+  context.prosthesisContext ??= buildActorProsthesisContext(actor);
+  return context.prosthesisContext;
+}
+
+function getDamageBatchPreparationKey(...parts) {
+  return JSON.stringify(parts.map(part => String(part ?? "")));
+}
+
+export function getDamageBatchMitigationEquipmentSnapshot(
+  context,
+  actor,
+  damageTypeKey = "",
+  limbKey = ""
+) {
+  if (context?.actor !== actor || !(context.mitigationEquipmentByTarget instanceof Map)) {
+    return buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey, limbKey);
+  }
+  const key = getDamageBatchPreparationKey(limbKey, damageTypeKey);
+  let snapshot = context.mitigationEquipmentByTarget.get(key);
+  if (!snapshot) {
+    snapshot = buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey, limbKey);
+    context.mitigationEquipmentByTarget.set(key, snapshot);
+  }
+  return snapshot;
+}
+
+export function buildDamageMitigationEquipmentSnapshot(actor, damageTypeKey = "", limbKey = "") {
+  const totals = {
+    [DAMAGE_MITIGATION_MODES.defense]: 0,
+    [DAMAGE_MITIGATION_MODES.resistance]: 0
+  };
+  const sources = [];
+  if (!actor || !damageTypeKey || !limbKey) return { totals, sources };
+
+  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
+    if (item.type !== "gear" || !item.system?.equipped) continue;
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
+
+    const mitigation = getDamageMitigationFunction(item);
+    const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
+    const entry = mitigation.entries?.[limbKey]?.[damageTypeKey];
+    const baseValue = toInteger(entry?.value);
+    if (baseValue <= 0) continue;
+
+    const weakening = getConditionWeakeningData(item);
+    const value = Math.max(0, Math.floor(baseValue * (weakening.active ? weakening.ratio : 1)));
+    if (value <= 0) continue;
+    if (Object.hasOwn(totals, mode)) totals[mode] += value;
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    sources.push({
+      item,
+      itemId: item.id,
+      mode,
+      mitigation: value
+    });
+  }
+
+  return { totals, sources };
+}
+
+function shouldCalculateEquipmentConditionDamage(damageType = null, requested = false) {
+  if (!requested) return false;
+  const settings = damageType?.settings?.equipmentConditionDamage;
+  return Boolean(settings?.enabled && String(settings.formula ?? "").trim());
+}
+
+function prepareDamageBatchEntry(actor, data = {}, {
   equipmentConditionDamageState = null,
   pendingPeriodicDamageEffects = null,
-  damageBarrierLedger = null
+  damageBarrierLedger = null,
+  preparationContext = null
 } = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getPreparedRuntimeSettings().damageTypeSettings.find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
-  if (shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic) && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic")) {
+  if (
+    shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic)
+    && !isLimbTimedDamageBlocked(actor, data.limbKey, damageType, "periodic", preparationContext)
+  ) {
     const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
     if (delayedAmount > 0) pendingPeriodicDamageEffects?.push({
       damageType,
@@ -1795,21 +1889,48 @@ async function prepareDamageBatchEntry(actor, data = {}, {
       amount: immediateAmount,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       source: markPeriodicDamageSplitSource(data.source)
-    }, { equipmentConditionDamageState, pendingPeriodicDamageEffects, damageBarrierLedger });
+    }, {
+      equipmentConditionDamageState,
+      pendingPeriodicDamageEffects,
+      damageBarrierLedger,
+      preparationContext
+    });
   }
 
+  const needsProsthesisLookup = data.applyMitigation || data.processDamageTypeSettings;
+  const prosthesis = needsProsthesisLookup
+    ? getInstalledProsthesis(
+      actor,
+      data.limbKey,
+      getDamageBatchProsthesisContext(preparationContext, actor)
+    )
+    : null;
+  const includeEquipmentConditionDamage = shouldCalculateEquipmentConditionDamage(
+    damageType,
+    data.processDamageTypeSettings
+  );
+  const equipmentSnapshot = data.applyMitigation && (prosthesis || includeEquipmentConditionDamage)
+    ? getDamageBatchMitigationEquipmentSnapshot(
+      preparationContext,
+      actor,
+      damageType?.key ?? "",
+      data.limbKey
+    )
+    : null;
   const mitigationResult = data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
-      itemOnlyMitigation: hasInstalledProsthesis(actor, data.limbKey),
-      includeEquipmentConditionDamage: data.processDamageTypeSettings,
+      itemOnlyMitigation: Boolean(prosthesis),
+      itemMitigationTotals: equipmentSnapshot?.totals,
+      includeEquipmentConditionDamage,
+      equipmentSources: includeEquipmentConditionDamage ? equipmentSnapshot?.sources : null,
       includeResistanceOverheat: data.processDamageTypeSettings,
-      equipmentConditionDamageState: data.processDamageTypeSettings ? equipmentConditionDamageState : null
+      equipmentConditionDamageState: includeEquipmentConditionDamage ? equipmentConditionDamageState : null
     })
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
   const effectiveAmountBeforeBarrier = data.processDamageTypeSettings
-    ? hasInstalledProsthesis(actor, data.limbKey)
+    ? prosthesis
       ? mitigatedAmount
       : applyLimbDamageMultiplier(actor, mitigatedAmount, data.limbKey)
     : mitigatedAmount;
@@ -2196,7 +2317,7 @@ export function getActorTraumas(actor) {
  * Build item-dependent limb lookups for one synchronous Actor snapshot.
  * Rebuild after any Actor or embedded Item mutation; never retain across await.
  */
-export function buildActorLimbHealthContext(actor) {
+function buildActorProsthesisContext(actor) {
   const prosthesesByLimb = new Map();
   for (const item of getActorItemsByType(actor, "gear")) {
     if (
@@ -2208,7 +2329,11 @@ export function buildActorLimbHealthContext(actor) {
     if (!limbKey || prosthesesByLimb.has(limbKey)) continue;
     prosthesesByLimb.set(limbKey, item);
   }
+  return { actor, prosthesesByLimb };
+}
 
+export function buildActorLimbHealthContext(actor) {
+  const { prosthesesByLimb } = buildActorProsthesisContext(actor);
   const traumas = getActorTraumas(actor);
   const suppressedTraumaIds = traumas.length
     ? getActorSuppressedTraumaDiseaseIds(actor).trauma
@@ -3421,15 +3546,44 @@ function hasInstalledProsthesis(actor, limbKey = "", context = null) {
   return Boolean(getInstalledProsthesis(actor, limbKey, context));
 }
 
-function isLimbTimedDamageBlocked(actor, limbKey = "", damageType = {}, kind = "") {
-  const prosthesis = getInstalledProsthesis(actor, limbKey);
+function isLimbTimedDamageBlocked(actor, limbKey = "", damageType = {}, kind = "", context = null) {
+  const cache = context?.actor === actor && context.timedDamageBlockedByTarget instanceof Map
+    ? context.timedDamageBlockedByTarget
+    : null;
+  const cacheKey = cache
+    ? getDamageBatchPreparationKey(kind, limbKey, damageType?.key)
+    : "";
+  if (cache?.has(cacheKey)) return cache.get(cacheKey);
+
+  let blocked = false;
+  const prosthesis = getInstalledProsthesis(
+    actor,
+    limbKey,
+    context ? getDamageBatchProsthesisContext(context, actor) : null
+  );
   if (prosthesis) {
-    if (kind === "bleeding") return true;
-    if (isTimedDamageKeyBlocked(getProsthesisFunction(prosthesis).blockedPeriodicEffects, damageType, kind)) return true;
+    if (kind === "bleeding") blocked = true;
+    else if (
+      isTimedDamageKeyBlocked(
+        getProsthesisFunction(prosthesis).blockedPeriodicEffects,
+        damageType,
+        kind
+      )
+    ) blocked = true;
   }
-  const constructPart = getConstructPartItemForLimb(actor, limbKey);
-  if (constructPart && isTimedDamageKeyBlocked(getConstructPartBlockedPeriodicEffects(constructPart), damageType, kind)) return true;
-  return false;
+  if (!blocked) {
+    const constructPart = getConstructPartItemForLimb(actor, limbKey);
+    blocked = Boolean(
+      constructPart
+      && isTimedDamageKeyBlocked(
+        getConstructPartBlockedPeriodicEffects(constructPart),
+        damageType,
+        kind
+      )
+    );
+  }
+  cache?.set(cacheKey, blocked);
+  return blocked;
 }
 
 function getConstructPartBlockedPeriodicEffects(itemOrData = null) {
@@ -3454,7 +3608,7 @@ function isTimedDamageKeyBlocked(blockedKeys = [], damageType = {}, kind = "") {
 function getInstalledProsthesis(actor, limbKey = "", context = null) {
   const key = String(limbKey ?? "").trim();
   if (!key) return null;
-  if (isActorLimbHealthContextFor(context, actor)) {
+  if (isActorProsthesisContextFor(context, actor)) {
     return context.prosthesesByLimb.get(key) ?? null;
   }
   return getActorItemsByType(actor, "gear")
@@ -3473,8 +3627,19 @@ function getActorItemsByType(actor, type = "") {
     ?? Array.from(actor?.items ?? []).filter(item => item?.type === type);
 }
 
+function isActorProsthesisContextFor(context, actor) {
+  return Boolean(
+    context
+    && context.actor === actor
+    && context.prosthesesByLimb instanceof Map
+  );
+}
+
 function isActorLimbHealthContextFor(context, actor) {
-  return Boolean(context && context.actor === actor);
+  return Boolean(
+    isActorProsthesisContextFor(context, actor)
+    && context.activeTraumasByLimb instanceof Map
+  );
 }
 
 export function isCriticalLimb(actor, limbKey = "") {
@@ -7553,17 +7718,28 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
   if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
   if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
 
-  const equipmentSources = options.includeEquipmentConditionDamage
-    ? getEquipmentConditionDamageSources(actor, damageTypeKey, limbKey)
+  const includeEquipmentConditionDamage = shouldCalculateEquipmentConditionDamage(
+    options.damageType,
+    options.includeEquipmentConditionDamage
+  );
+  const equipmentSources = includeEquipmentConditionDamage
+    ? Array.isArray(options.equipmentSources)
+      ? options.equipmentSources
+      : getEquipmentConditionDamageSources(actor, damageTypeKey, limbKey)
     : [];
   const itemWear = new Map();
   const defenseSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.defense);
   const resistanceSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.resistance);
+  const itemMitigationTotals = options.itemMitigationTotals;
   const preparedDefense = options.itemOnlyMitigation
-    ? getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.defense)
+    ? itemMitigationTotals && Object.hasOwn(itemMitigationTotals, DAMAGE_MITIGATION_MODES.defense)
+      ? Math.max(0, Number(itemMitigationTotals[DAMAGE_MITIGATION_MODES.defense]) || 0)
+      : getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.defense)
     : Math.max(0, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
   const preparedResistance = options.itemOnlyMitigation
-    ? getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.resistance)
+    ? itemMitigationTotals && Object.hasOwn(itemMitigationTotals, DAMAGE_MITIGATION_MODES.resistance)
+      ? Math.max(0, Number(itemMitigationTotals[DAMAGE_MITIGATION_MODES.resistance]) || 0)
+      : getItemDamageMitigationTotal(actor, damageTypeKey, limbKey, DAMAGE_MITIGATION_MODES.resistance)
     : Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
   const mitigationContext = getDamageMitigationChanceContext(actor, source);
   const contextual = options.itemOnlyMitigation ? {} : getContextualAbilityChangeValues(actor, [{
@@ -7624,7 +7800,7 @@ export function calculateDamageMitigation(actor, amount, damageTypeKey = "", lim
       amount: overheatAmount,
       blocked: resistanceBlocked
     } : null,
-    equipmentConditionDamage: options.includeEquipmentConditionDamage
+    equipmentConditionDamage: includeEquipmentConditionDamage
       ? calculateEquipmentConditionDamage(actor, itemWear, {
         damageType: options.damageType,
         damageTypeKey,
