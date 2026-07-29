@@ -38,6 +38,8 @@ const {
   DEFERRED_MODULE_IMAGES,
   MODULE_CATALOG,
   MODULE_SLOT_KEYS,
+  MODULE_TRADEOFF_POLICY_V3,
+  analyzeModuleValue,
   buildModuleRecipeSpec,
   validateModuleCatalog
 } = await import("../scripts/rebalance/module-catalog.mjs");
@@ -66,7 +68,7 @@ function auditRecords() {
     .map(JSON.parse);
 }
 
-function moduleItem(modifiers, current = 100, maximum = 100) {
+function moduleItem(modifiers, current = 100, maximum = 100, hasAttack = false) {
   return {
     name: "Test module",
     system: {
@@ -77,14 +79,14 @@ function moduleItem(modifiers, current = 100, maximum = 100) {
           weapon: modifiers
         },
         condition: {
-          enabled: true,
+          enabled: hasAttack,
           value: current,
           max: maximum,
-          weakeningThreshold: 20
+          weakeningThreshold: hasAttack ? 20 : 0
         },
         freeSettings: {
           enabled: false,
-          useConditionWeakening: true,
+          useConditionWeakening: hasAttack,
           entries: []
         }
       }
@@ -105,9 +107,14 @@ test("module catalogue is complete, source-first, and respects AP limits", () =>
 
   for (const definition of MODULE_CATALOG) {
     assert.equal(definition.modifiers.damage, 0, definition.name);
-    for (const value of Object.values(definition.modifiers.actionPointCosts)) {
+    const actionPointChanges = Object.values(definition.modifiers.actionPointCosts)
+      .filter(value => value !== 0);
+    for (const value of actionPointChanges) {
       assert.ok(Math.abs(value) <= 1, `${definition.name}: ${value}`);
+      assert.equal(value, -1, `${definition.name}: ${value}`);
     }
+    if (definition.class !== "S") assert.equal(actionPointChanges.length, 0, definition.name);
+    assert.ok(actionPointChanges.length <= 1, definition.name);
     const imagePath = path.join(dataRoot, definition.img);
     assert.equal(fs.existsSync(imagePath), true, imagePath);
     const recipe = buildModuleRecipeSpec(definition);
@@ -117,6 +124,112 @@ test("module catalogue is complete, source-first, and respects AP limits", () =>
 
   for (const image of DEFERRED_MODULE_IMAGES) {
     assert.equal(fs.existsSync(path.join(dataRoot, image)), true, image);
+  }
+});
+
+test("module value scale is material and Gauss keeps the penetration extreme", () => {
+  const originalBlade = MODULE_CATALOG.find(module => module.id === "blade-original-d");
+  const reinforcedChain = MODULE_CATALOG.find(module => module.id === "blade-chain-c");
+  const corkCore = MODULE_CATALOG.find(module => module.id === "impact-cork-d");
+  const gaussB = MODULE_CATALOG.find(module => module.id === "gauss-accelerator-b");
+  const gaussA = MODULE_CATALOG.find(module => module.id === "gauss-accelerator-a");
+  const gaussS = MODULE_CATALOG.find(module => module.id === "gauss-accelerator-s");
+
+  assert.deepEqual(
+    {
+      accuracy: originalBlade.modifiers.accuracyBonus,
+      penetration: originalBlade.modifiers.penetration
+    },
+    { accuracy: 6, penetration: 7 }
+  );
+  assert.deepEqual(
+    {
+      accuracy: reinforcedChain.modifiers.accuracyBonus,
+      penetration: reinforcedChain.modifiers.penetration
+    },
+    { accuracy: 8, penetration: 14 }
+  );
+  assert.equal(corkCore.modifiers.accuracyBonus, 10);
+  assert.equal(corkCore.modifiers.criticalDamagePercent, 0);
+  assert.equal(corkCore.modifiers.actionPointCosts.meleeAttack, 0);
+  assert.ok(gaussB.modifiers.penetration >= 40);
+  assert.ok(gaussA.modifiers.penetration >= 90);
+  assert.ok(gaussS.modifiers.penetration >= 200);
+});
+
+test("ordinary modules are pure upgrades and every rare tradeoff is strongly favorable", () => {
+  for (const definition of MODULE_CATALOG) {
+    const analysis = analyzeModuleValue(definition);
+    const benefitUnits = analysis.channels.reduce(
+      (sum, channel) => sum + channel.benefitUnits,
+      0
+    );
+    const penaltyUnits = analysis.channels.reduce(
+      (sum, channel) => sum + channel.penaltyUnits,
+      0
+    );
+    if (!penaltyUnits) {
+      assert.equal(
+        Object.hasOwn(MODULE_TRADEOFF_POLICY_V3, definition.id),
+        false,
+        `${definition.name}: unused tradeoff policy`
+      );
+      continue;
+    }
+    const policy = MODULE_TRADEOFF_POLICY_V3[definition.id];
+    assert.ok(policy, `${definition.name}: penalty without explicit policy`);
+    assert.ok(benefitUnits >= 1, `${definition.name}: weak module received a penalty`);
+    assert.ok(
+      benefitUnits >= penaltyUnits * policy.minimumBenefitToPenaltyRatio,
+      `${definition.name}: benefit ${benefitUnits} / penalty ${penaltyUnits}`
+    );
+    for (const channel of analysis.channels) {
+      assert.equal(
+        channel.paidUnits,
+        channel.benefitUnits,
+        `${definition.name}/${channel.id}: penalty discounted the recipe`
+      );
+    }
+  }
+});
+
+test("module recipes pay separately for each real benefit channel", () => {
+  const reinforcedChain = MODULE_CATALOG.find(module => module.id === "blade-chain-c");
+  const recipe = buildModuleRecipeSpec(reinforcedChain);
+  const channels = new Set(recipe.deviationPayments.map(payment => payment.channel));
+  assert.ok(channels.has("accuracy"));
+  assert.ok(channels.has("penetration"));
+  assert.ok(recipe.ingredients.some(ingredient => (
+    ingredient.kind === "properties" && ingredient.class === "D"
+  )));
+  assert.ok(recipe.ingredients.some(ingredient => (
+    ingredient.kind === "armor" && ingredient.class === "C"
+  )));
+});
+
+test("S-class action discounts cannot stack on one action through different slots", () => {
+  const discountedModules = MODULE_CATALOG.flatMap(module => (
+    Object.entries(module.modifiers.actionPointCosts)
+      .filter(([, value]) => value < 0)
+      .map(([action]) => ({
+        action,
+        slotKey: module.slotKey,
+        name: module.name
+      }))
+  ));
+  for (const record of auditRecords()) {
+    const slotKeys = allocateWeaponSlotKeys(record);
+    for (const action of new Set(discountedModules.map(module => module.action))) {
+      const compatibleSlotKeys = new Set(
+        discountedModules
+          .filter(module => module.action === action && slotKeys.includes(module.slotKey))
+          .map(module => module.slotKey)
+      );
+      assert.ok(
+        compatibleSlotKeys.size <= 1,
+        `${record.itemName}: ${action} through ${[...compatibleSlotKeys].join(", ")}`
+      );
+    }
   }
 });
 
@@ -148,7 +261,58 @@ test("every audited platform receives valid slots and ballistic fist stays a sho
   assert.ok(!slotKeys.includes(MODULE_SLOT_KEYS.specialFeed));
 });
 
-test("module bonuses weaken with module condition", () => {
+test("weapon module bonuses do not depend on condition", () => {
+  const modifiers = {
+    damage: 0,
+    accuracyBonus: 10,
+    criticalChanceModifier: 5,
+    criticalDamagePercent: 20,
+    attackConeDegrees: 10,
+    maxRangeMeters: 20,
+    effectiveRange: { value: 5, max: 10 },
+    penetration: 10,
+    noiseLevel: -5,
+    magazineMax: 10,
+    actionPointCosts: {
+      aimedShot: -1,
+      snapshot: 0,
+      burst: 0,
+      volley: 0,
+      meleeAttack: 0,
+      aimedMeleeAttack: 0,
+      push: 0,
+      reload: 0
+    }
+  };
+  const base = {
+    accuracyBonus: "0",
+    criticalChanceModifier: "0",
+    criticalDamagePercent: "150",
+    attackConeDegrees: 3,
+    maxRangeMeters: "40",
+    effectiveRange: { value: "1", max: "10" },
+    penetration: "0",
+    noiseLevel: 10,
+    magazine: { value: 5, max: 5 },
+    aimedShot: { actionPointCost: 5 }
+  };
+  const used = applyWeaponModuleModifiers(base, {
+    moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 60, 100) }]
+  });
+  assert.equal(used.accuracyBonus, 10);
+  assert.equal(used.maxRangeMeters, 60);
+  assert.equal(used.penetration, 10);
+  assert.equal(used.magazine.max, 15);
+  assert.equal(used.noiseLevel, 5);
+  assert.equal(used.aimedShot.actionPointCost, 4);
+
+  const zeroCondition = applyWeaponModuleModifiers(base, {
+    moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 0, 100) }]
+  });
+  assert.deepEqual(zeroCondition, used);
+});
+
+test("attacking module bonuses weaken with their condition", () => {
   const modifiers = {
     damage: 0,
     accuracyBonus: 10,
@@ -184,7 +348,7 @@ test("module bonuses weaken with module condition", () => {
     aimedShot: { actionPointCost: 5 }
   };
   const weakened = applyWeaponModuleModifiers(base, {
-    moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 60, 100) }]
+    moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 60, 100, true) }]
   });
   assert.equal(weakened.accuracyBonus, 8);
   assert.equal(weakened.maxRangeMeters, 56);
@@ -194,7 +358,7 @@ test("module bonuses weaken with module condition", () => {
   assert.equal(weakened.aimedShot.actionPointCost, 4);
 
   const broken = applyWeaponModuleModifiers(base, {
-    moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 0, 100) }]
+    moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 0, 100, true) }]
   });
   assert.deepEqual(broken, base);
 });

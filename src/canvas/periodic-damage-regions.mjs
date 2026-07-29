@@ -5,57 +5,169 @@ import { evaluateFormulaVariables } from "../formulas/evaluation.mjs";
 import { getCombatSettings, getDamageTypeSettings } from "../settings/accessors.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { createPeriodicDamageEffectSyncScheduler } from "./periodic-damage-effect-sync-scheduler.mjs";
 
 const BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const CLOCK_FLAG_KEY = "periodicDamage";
 const MOVEMENT_FLAG_KEY = "periodicDamageMovement";
 const EFFECT_FLAG_KEY = "periodicDamageRegion";
+const PREVIOUS_TOKEN_ACTORS_OPTION = "falloutMawPeriodicDamagePreviousTokenActors";
+const PREVIOUS_SCENE_ACTORS_OPTION = "falloutMawPeriodicDamagePreviousSceneActors";
+const ACTOR_SYNC_TARGET = Symbol("periodicDamageActorSyncTarget");
 const MOVEMENT_HISTORY_LIMIT = 50;
 const EFFECT_SYNC_DELAY_MS = 50;
 const EFFECT_IMG = "icons/svg/fire.svg";
+const ACTOR_EXPANSION_RANK = Object.freeze({
+  none: 0,
+  linked: 1,
+  all: 2
+});
+const TOKEN_EFFECT_PATHS = [
+  "_regions",
+  "actorId",
+  "actorLink",
+  "delta",
+  "x",
+  "y",
+  "elevation",
+  "width",
+  "height",
+  "depth",
+  "shape",
+  "level"
+];
+const REGION_EFFECT_PATHS = [
+  "behaviors",
+  "hidden",
+  "shapes",
+  "elevation",
+  "levels",
+  "_shapeConstraints",
+  "restriction"
+];
+const BEHAVIOR_EFFECT_PATHS = [
+  "type",
+  "disabled",
+  "system",
+  `flags.${SYSTEM_ID}.${CLOCK_FLAG_KEY}.activateAt`,
+  `flags.${SYSTEM_ID}.${CLOCK_FLAG_KEY}.expiresAt`
+];
+const SCENE_EFFECT_PATHS = [
+  "grid.type",
+  "grid.size",
+  "grid.distance",
+  "width",
+  "height",
+  "padding",
+  "levels",
+  "lights",
+  "regions",
+  "tokens",
+  "walls"
+];
 
 let movementQueue = Promise.resolve();
-let effectSyncTimeout = 0;
+let effectSyncScheduler = null;
+let hooksRegistered = false;
+let periodicSceneIndex = null;
+let lastActiveGmId = null;
+const periodicBehaviorsByScene = new WeakMap();
 const pendingDamageGroups = new Map();
 
 export function registerPeriodicDamageRegionHooks() {
+  if (hooksRegistered) return;
+  hooksRegistered = true;
   Hooks.on("moveToken", onMoveToken);
-  for (const hook of [
-    "createToken", "updateToken", "deleteToken",
-    "createRegion", "updateRegion", "deleteRegion",
-    "createRegionBehavior", "updateRegionBehavior", "deleteRegionBehavior",
-    "updateActor", "updateWorldTime"
-  ]) Hooks.on(hook, queuePeriodicDamageRegionEffectSync);
+  Hooks.on("preUpdateToken", onPreUpdatePeriodicDamageToken);
+  Hooks.on("createToken", onCreatePeriodicDamageToken);
+  Hooks.on("updateToken", onUpdatePeriodicDamageToken);
+  Hooks.on("deleteToken", onDeletePeriodicDamageToken);
+  Hooks.on("createRegion", onCreatePeriodicDamageRegion);
+  Hooks.on("updateRegion", onUpdatePeriodicDamageRegion);
+  Hooks.on("deleteRegion", onDeletePeriodicDamageRegion);
+  Hooks.on("createRegionBehavior", onCreatePeriodicDamageRegionBehavior);
+  Hooks.on("updateRegionBehavior", onUpdatePeriodicDamageRegionBehavior);
+  Hooks.on("deleteRegionBehavior", onDeletePeriodicDamageRegionBehavior);
+  Hooks.on("createScene", onCreatePeriodicDamageScene);
+  Hooks.on("preUpdateScene", onPreUpdatePeriodicDamageScene);
+  Hooks.on("updateScene", onUpdatePeriodicDamageScene);
+  Hooks.on("deleteScene", onDeletePeriodicDamageScene);
+  Hooks.on("updateActor", onUpdatePeriodicDamageActor);
+  Hooks.on("updateWorldTime", onPeriodicDamageWorldTimeUpdate);
+  Hooks.on("userConnected", onPeriodicDamageUserConnection);
+  Hooks.on("updateUser", onPeriodicDamageUserUpdate);
 }
 
 export async function syncPeriodicDamageRegionEffects() {
-  if (!game.user?.isActiveGM) return;
-  const actors = collectLoadedActors();
-  const desiredByActor = collectDesiredRegionEffects();
+  lastActiveGmId = getActiveGmId();
+  return syncPeriodicDamageRegionEffectScopes({
+    actors: game.actors?.contents ?? [],
+    scenes: game.scenes?.contents ?? []
+  });
+}
 
-  for (const actor of actors.values()) {
+export async function syncPeriodicDamageRegionEffectsForActors(actors = []) {
+  return syncPeriodicDamageRegionEffectScopes({ actors });
+}
+
+export async function syncPeriodicDamageRegionEffectsForScenes(scenes = []) {
+  return syncPeriodicDamageRegionEffectScopes({ scenes });
+}
+
+export async function syncPeriodicDamageRegionEffectScopes({ actors = [], scenes = [] } = {}) {
+  if (!game.user?.isActiveGM) return;
+  const {
+    actors: affectedActors,
+    tokensByScene
+  } = collectPeriodicDamageEffectScope({ actors, scenes });
+  if (!affectedActors.size) return;
+  const desiredByActor = collectDesiredRegionEffects(tokensByScene);
+  await reconcilePeriodicDamageRegionEffects(affectedActors, desiredByActor);
+}
+
+export function flushPeriodicDamageRegionEffectSync() {
+  return effectSyncScheduler?.flushNow() ?? Promise.resolve();
+}
+
+async function reconcilePeriodicDamageRegionEffects(actors, desiredByActor) {
+  for (const candidate of actors.values()) {
+    if (!game.user?.isActiveGM) return;
+    const actor = resolveCurrentActor(candidate);
     if (!actor?.isOwner) continue;
     const desired = desiredByActor.get(actor.uuid) ?? new Map();
     const existing = Array.from(actor.effects ?? []).filter(effect => effect.getFlag?.(SYSTEM_ID, EFFECT_FLAG_KEY));
-    const existingByBehavior = new Map(existing.map(effect => [
-      String(effect.getFlag(SYSTEM_ID, EFFECT_FLAG_KEY)?.behaviorUuid ?? ""),
-      effect
-    ]));
+    const existingByBehavior = new Map();
+    for (const effect of existing) {
+      const behaviorUuid = String(effect.getFlag(SYSTEM_ID, EFFECT_FLAG_KEY)?.behaviorUuid ?? "");
+      const effects = existingByBehavior.get(behaviorUuid) ?? [];
+      effects.push(effect);
+      existingByBehavior.set(behaviorUuid, effects);
+    }
 
     const creates = [];
     const updates = [];
+    const deleteIds = [];
     for (const [behaviorUuid, entry] of desired) {
       const effectData = buildRegionEffectData(entry.region, entry.behavior, actor);
-      const effect = existingByBehavior.get(behaviorUuid);
+      const [effect, ...duplicates] = existingByBehavior.get(behaviorUuid) ?? [];
       if (!effect) creates.push(effectData);
       else if (regionEffectNeedsUpdate(effect, effectData)) updates.push({ _id: effect.id, ...effectData });
+      deleteIds.push(...duplicates.map(duplicate => duplicate.id));
       existingByBehavior.delete(behaviorUuid);
     }
+    for (const effects of existingByBehavior.values()) {
+      deleteIds.push(...effects.map(effect => effect.id));
+    }
 
-    if (creates.length) await actor.createEmbeddedDocuments("ActiveEffect", creates, { animate: false });
-    if (updates.length) await actor.updateEmbeddedDocuments("ActiveEffect", updates, { animate: false });
-    const deleteIds = Array.from(existingByBehavior.values()).map(effect => effect.id);
-    if (deleteIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", deleteIds, { animate: false });
+    if (creates.length && game.user?.isActiveGM && documentIsCurrent(actor)) {
+      await actor.createEmbeddedDocuments("ActiveEffect", creates, { animate: false });
+    }
+    if (updates.length && game.user?.isActiveGM && documentIsCurrent(actor)) {
+      await actor.updateEmbeddedDocuments("ActiveEffect", updates, { animate: false });
+    }
+    if (deleteIds.length && game.user?.isActiveGM && documentIsCurrent(actor)) {
+      await actor.deleteEmbeddedDocuments("ActiveEffect", deleteIds, { animate: false });
+    }
   }
 }
 
@@ -73,7 +185,7 @@ async function processTokenMovement(tokenDocument, movement, { documentMovement 
   if (movement.method === "undo") {
     clearPendingMovementDamage(tokenDocument);
     await restorePeriodicDamageRegionMovement(tokenDocument);
-    queuePeriodicDamageRegionEffectSync();
+    requestPeriodicDamageTokenEffectSync(tokenDocument);
     return;
   }
   const movementKey = getMovementKey(tokenDocument, movement);
@@ -161,7 +273,7 @@ async function processTokenMovement(tokenDocument, movement, { documentMovement 
     await waitForCompletedMovementAnimation(tokenDocument, documentMovement);
     await flushPendingMovementDamage(movementKey);
   }
-  queuePeriodicDamageRegionEffectSync();
+  requestPeriodicDamageTokenEffectSync(tokenDocument);
 }
 
 function getMovementKey(tokenDocument, movement) {
@@ -294,32 +406,179 @@ function isBehaviorCurrentlyActive(region, behavior) {
   return !Number.isFinite(expiresAt) || now < expiresAt;
 }
 
-function collectDesiredRegionEffects() {
+function collectDesiredRegionEffects(tokensByScene) {
   const desired = new Map();
-  for (const scene of game.scenes?.contents ?? []) {
-    for (const region of scene.regions?.contents ?? []) {
-      for (const behavior of region.behaviors?.contents ?? []) {
-        if (!isBehaviorCurrentlyActive(region, behavior) || !getDamageEntries(behavior.system).length) continue;
-        for (const token of scene.tokens?.contents ?? []) {
-          if (!token.actor || !isTokenInsideRegion(token, region)) continue;
-          const actorEffects = desired.get(token.actor.uuid) ?? new Map();
-          actorEffects.set(behavior.uuid, { region, behavior });
-          desired.set(token.actor.uuid, actorEffects);
-        }
+  for (const [scene, tokens] of tokensByScene) {
+    if (!tokens.length) continue;
+    for (const { region, behavior } of getPeriodicDamageBehaviors(scene)) {
+      if (!isBehaviorCurrentlyActive(region, behavior) || !getDamageEntries(behavior.system).length) continue;
+      for (const token of tokens) {
+        const actor = token.actor;
+        if (!actor?.uuid || !isTokenInsideRegion(token, region)) continue;
+        const actorEffects = desired.get(actor.uuid) ?? new Map();
+        actorEffects.set(behavior.uuid, { region, behavior });
+        desired.set(actor.uuid, actorEffects);
       }
     }
   }
   return desired;
 }
 
-function collectLoadedActors() {
-  const actors = new Map((game.actors?.contents ?? []).map(actor => [actor.uuid, actor]));
-  for (const scene of game.scenes?.contents ?? []) {
-    for (const token of scene.tokens?.contents ?? []) {
-      if (token.actor?.uuid) actors.set(token.actor.uuid, token.actor);
+function collectPeriodicDamageEffectScope({ actors = [], scenes = [] } = {}) {
+  const affectedActors = new Map();
+  const tokensBySceneKey = new Map();
+  const actorExpansionQueue = [];
+  const expandedActorRanks = new Map();
+
+  const addActor = candidate => {
+    const target = normalizeActorSyncTarget(candidate);
+    const actor = resolveCurrentActor(target.actor);
+    if (!actor?.uuid) return null;
+    affectedActors.set(actor.uuid, actor);
+    const requestedRank = ACTOR_EXPANSION_RANK[target.expansion] ?? ACTOR_EXPANSION_RANK.all;
+    if (requestedRank > (expandedActorRanks.get(actor.uuid) ?? -1)) {
+      actorExpansionQueue.push({ actor, expansion: target.expansion });
+    }
+    return actor;
+  };
+
+  const addToken = token => {
+    const scene = resolveCurrentScene(token?.parent);
+    if (!scene || !sceneContainsToken(scene, token)) return;
+    const actor = token?.actor;
+    if (!actor?.uuid) return;
+    addActor(createActorSyncTarget(actor, token.actorLink ? "linked" : "none"));
+    const sceneKey = scene.uuid ?? scene.id ?? scene;
+    const entry = tokensBySceneKey.get(sceneKey) ?? {
+      scene,
+      tokens: new Map()
+    };
+    entry.scene = scene;
+    entry.tokens.set(token.uuid ?? token.id ?? token, token);
+    tokensBySceneKey.set(sceneKey, entry);
+  };
+
+  for (const candidate of asDocumentArray(actors)) addActor(candidate);
+  for (const candidate of asDocumentArray(scenes)) {
+    const scene = resolveCurrentScene(candidate);
+    if (!scene) continue;
+    for (const token of scene.tokens?.contents ?? scene.tokens ?? []) addToken(token);
+  }
+
+  for (let index = 0; index < actorExpansionQueue.length; index += 1) {
+    const { actor, expansion } = actorExpansionQueue[index];
+    const requestedRank = ACTOR_EXPANSION_RANK[expansion] ?? ACTOR_EXPANSION_RANK.all;
+    if (!actor?.uuid || requestedRank <= (expandedActorRanks.get(actor.uuid) ?? -1)) continue;
+    expandedActorRanks.set(actor.uuid, requestedRank);
+    if (requestedRank === ACTOR_EXPANSION_RANK.none) continue;
+    const options = requestedRank === ACTOR_EXPANSION_RANK.linked ? { linked: true } : {};
+    for (const token of actor.getDependentTokens?.(options) ?? []) addToken(token);
+  }
+
+  const tokensByScene = new Map();
+  for (const { scene, tokens } of tokensBySceneKey.values()) {
+    tokensByScene.set(scene, Array.from(tokens.values()));
+  }
+  return { actors: affectedActors, tokensByScene };
+}
+
+function resolveCurrentDocument(candidate) {
+  if (!candidate) return null;
+  const uuid = typeof candidate === "string" ? candidate : candidate.uuid;
+  if (!uuid) return candidate;
+  if (typeof globalThis.fromUuidSync === "function") return globalThis.fromUuidSync(uuid) ?? null;
+  return typeof candidate === "string" ? null : candidate;
+}
+
+function resolveCurrentActor(candidate) {
+  const actor = resolveCurrentDocument(candidate);
+  if (!actor || actor.pack || actor.inCompendium) return null;
+  if (actor.isToken) return tokenActorIsCurrent(actor) ? actor : null;
+  const id = actor.id ?? actor._id;
+  if (!id) return null;
+  if (game.actors?.get) return game.actors.get(id) === actor ? actor : null;
+  return (game.actors?.contents ?? []).includes(actor) ? actor : null;
+}
+
+function resolveCurrentScene(candidate) {
+  const resolved = resolveCurrentDocument(candidate);
+  if (!resolved) return null;
+  const id = resolved.id ?? resolved._id;
+  if (!id) return null;
+  if (game.scenes?.get) return game.scenes.get(id) === resolved ? resolved : null;
+  return (game.scenes?.contents ?? []).includes(resolved) ? resolved : null;
+}
+
+function tokenActorIsCurrent(actor) {
+  const token = actor.token;
+  return Boolean(token && token.actor === actor && sceneContainsToken(resolveCurrentScene(token.parent), token));
+}
+
+function sceneContainsToken(scene, token) {
+  if (!scene || !token?.id) return false;
+  if (scene.tokens?.get) return scene.tokens.get(token.id) === token;
+  return (scene.tokens?.contents ?? []).includes(token);
+}
+
+function documentIsCurrent(actor) {
+  return resolveCurrentActor(actor) === actor;
+}
+
+function createActorSyncTarget(actor, expansion = "all") {
+  const normalizedExpansion = expansion in ACTOR_EXPANSION_RANK ? expansion : "all";
+  return {
+    [ACTOR_SYNC_TARGET]: true,
+    id: `${actor?.uuid ?? actor?.id ?? ""}::${normalizedExpansion}`,
+    actor,
+    expansion: normalizedExpansion
+  };
+}
+
+function normalizeActorSyncTarget(candidate) {
+  if (candidate?.[ACTOR_SYNC_TARGET]) return candidate;
+  return {
+    actor: candidate,
+    expansion: "all"
+  };
+}
+
+function asDocumentArray(value) {
+  if (value === null || value === undefined) return [];
+  if (typeof value !== "string" && typeof value[Symbol.iterator] === "function") return value;
+  return [value];
+}
+
+function getPeriodicDamageBehaviors(scene) {
+  if (!scene) return [];
+  const cached = periodicBehaviorsByScene.get(scene);
+  if (cached) return cached;
+  const behaviors = [];
+  for (const region of scene.regions?.contents ?? scene.regions ?? []) {
+    for (const behavior of region.behaviors?.contents ?? region.behaviors ?? []) {
+      if (behavior.type === BEHAVIOR_TYPE) behaviors.push({ region, behavior });
     }
   }
-  return actors;
+  periodicBehaviorsByScene.set(scene, behaviors);
+  return behaviors;
+}
+
+function getPeriodicDamageScenes() {
+  return Array.from(getPeriodicDamageSceneSet());
+}
+
+function getPeriodicDamageSceneSet() {
+  if (!periodicSceneIndex) {
+    periodicSceneIndex = new Set();
+    for (const scene of game.scenes?.contents ?? game.scenes ?? []) {
+      if (getPeriodicDamageBehaviors(scene).length) periodicSceneIndex.add(scene);
+    }
+  }
+  return periodicSceneIndex;
+}
+
+function invalidatePeriodicDamageScene(scene) {
+  if (scene) periodicBehaviorsByScene.delete(scene);
+  periodicSceneIndex = null;
 }
 
 function buildRegionEffectData(region, behavior, actor) {
@@ -377,14 +636,269 @@ function isTokenInsideRegion(token, region) {
   }
 }
 
-function queuePeriodicDamageRegionEffectSync() {
-  if (!game.user?.isActiveGM) return;
-  window.clearTimeout(effectSyncTimeout);
-  effectSyncTimeout = window.setTimeout(() => {
-    void syncPeriodicDamageRegionEffects().catch(error => (
-      console.error(`${SYSTEM_ID} | Periodic damage region effect sync failed`, error)
-    ));
-  }, EFFECT_SYNC_DELAY_MS);
+function onPreUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
+  if (!hasChangedPath(changes, ["actorId", "actorLink"])) return;
+  const snapshots = options[PREVIOUS_TOKEN_ACTORS_OPTION] ??= {};
+  snapshots[token.uuid ?? token.id] = {
+    actorId: token.actorId ?? token.baseActor?.id ?? null,
+    actorLink: Boolean(token.actorLink)
+  };
+}
+
+function onCreatePeriodicDamageToken(token) {
+  requestPeriodicDamageTokenEffectSync(token);
+}
+
+function onUpdatePeriodicDamageToken(token, changes = {}, options = {}) {
+  if (!hasChangedPath(changes, TOKEN_EFFECT_PATHS)) return;
+  const associationChanged = hasChangedPath(changes, ["actorId", "actorLink"]);
+  const sceneIsPeriodic = sceneHasPeriodicDamageBehavior(token?.parent);
+  if (!sceneIsPeriodic && !associationChanged) return;
+  const actors = [];
+  if (token?.actor) actors.push(token.actor);
+
+  if (associationChanged) {
+    if (token?.baseActor) actors.push(token.baseActor);
+    const snapshot = options[PREVIOUS_TOKEN_ACTORS_OPTION]?.[token.uuid ?? token.id];
+    const previousActorId = snapshot?.actorId ?? options.previousActorId;
+    const previousBaseActor = previousActorId ? game.actors?.get?.(previousActorId) : null;
+    if (previousBaseActor && snapshot?.actorLink !== false) actors.push(previousBaseActor);
+  }
+
+  requestPeriodicDamageActorEffectSync(actors, {
+    force: true,
+    expansion: "linked"
+  });
+}
+
+function onDeletePeriodicDamageToken(token) {
+  const baseActor = token?.baseActor;
+  if (!baseActor) return;
+  if (!sceneHasPeriodicDamageBehavior(token.parent)
+    && !actorHasManagedPeriodicDamageEffect(baseActor)) return;
+  requestPeriodicDamageActorEffectSync([baseActor], { force: true, expansion: "linked" });
+}
+
+function onCreatePeriodicDamageRegion(region) {
+  const scene = region?.parent;
+  invalidatePeriodicDamageScene(scene);
+  if (regionHasPeriodicDamageBehavior(region)) requestPeriodicDamageSceneEffectSync([scene]);
+}
+
+function onUpdatePeriodicDamageRegion(region, changes = {}) {
+  if (!hasChangedPath(changes, REGION_EFFECT_PATHS)) return;
+  const behaviorsChanged = hasChangedPath(changes, ["behaviors"]);
+  if (behaviorsChanged) invalidatePeriodicDamageScene(region?.parent);
+  if (!behaviorsChanged && !regionHasPeriodicDamageBehavior(region)) return;
+  requestPeriodicDamageSceneEffectSync([region.parent]);
+}
+
+function onDeletePeriodicDamageRegion(region) {
+  const scene = region?.parent;
+  const affected = regionHasPeriodicDamageBehavior(region);
+  invalidatePeriodicDamageScene(scene);
+  if (affected) requestPeriodicDamageSceneEffectSync([scene]);
+}
+
+function onCreatePeriodicDamageRegionBehavior(behavior) {
+  if (behavior?.type !== BEHAVIOR_TYPE) return;
+  invalidatePeriodicDamageScene(behavior.scene);
+  requestPeriodicDamageSceneEffectSync([behavior.scene]);
+}
+
+function onUpdatePeriodicDamageRegionBehavior(behavior, changes = {}) {
+  const typeChanged = hasChangedPath(changes, ["type"]);
+  if ((behavior?.type !== BEHAVIOR_TYPE && !typeChanged)
+    || !hasChangedPath(changes, BEHAVIOR_EFFECT_PATHS)) return;
+  if (typeChanged) invalidatePeriodicDamageScene(behavior.scene);
+  requestPeriodicDamageSceneEffectSync([behavior.scene]);
+}
+
+function onDeletePeriodicDamageRegionBehavior(behavior) {
+  if (behavior?.type !== BEHAVIOR_TYPE) return;
+  invalidatePeriodicDamageScene(behavior.scene);
+  requestPeriodicDamageSceneEffectSync([behavior.scene]);
+}
+
+function onCreatePeriodicDamageScene(scene) {
+  invalidatePeriodicDamageScene(scene);
+  if (sceneHasPeriodicDamageBehavior(scene)) requestPeriodicDamageSceneEffectSync([scene]);
+}
+
+function onPreUpdatePeriodicDamageScene(scene, changes = {}, options = {}) {
+  if (!hasChangedPath(changes, ["tokens"])) return;
+  const actorIds = new Set();
+  for (const token of scene.tokens?.contents ?? scene.tokens ?? []) {
+    const actorId = token.baseActor?.id ?? token.actorId;
+    if (actorId) actorIds.add(actorId);
+  }
+  const snapshots = options[PREVIOUS_SCENE_ACTORS_OPTION] ??= {};
+  snapshots[scene.uuid ?? scene.id] = Array.from(actorIds);
+}
+
+function onUpdatePeriodicDamageScene(scene, changes = {}, options = {}) {
+  if (!hasChangedPath(changes, SCENE_EFFECT_PATHS)) return;
+  const regionsChanged = hasChangedPath(changes, ["regions"]);
+  if (regionsChanged) invalidatePeriodicDamageScene(scene);
+
+  const previousActors = (
+    options[PREVIOUS_SCENE_ACTORS_OPTION]?.[scene.uuid ?? scene.id] ?? []
+  ).map(actorId => game.actors?.get?.(actorId)).filter(Boolean);
+  const currentPeriodic = sceneHasPeriodicDamageBehavior(scene);
+  if (!currentPeriodic && !regionsChanged && !previousActors.some(actorHasManagedPeriodicDamageEffect)) return;
+  requestPeriodicDamageEffectSync({
+    actors: previousActors,
+    actorExpansion: "linked",
+    scenes: [scene]
+  });
+}
+
+function onDeletePeriodicDamageScene(scene) {
+  const affected = sceneHasPeriodicDamageBehavior(scene);
+  const actors = [];
+  for (const token of scene.tokens?.contents ?? scene.tokens ?? []) {
+    const baseActor = token.baseActor;
+    if (baseActor && (affected || actorHasManagedPeriodicDamageEffect(baseActor))) {
+      actors.push(baseActor);
+    }
+  }
+  invalidatePeriodicDamageScene(scene);
+  if (actors.length) {
+    requestPeriodicDamageActorEffectSync(actors, { force: true, expansion: "linked" });
+  }
+}
+
+function onUpdatePeriodicDamageActor(actor) {
+  requestPeriodicDamageActorEffectSync([actor]);
+}
+
+function onPeriodicDamageWorldTimeUpdate() {
+  requestPeriodicDamageSceneEffectSync(getPeriodicDamageScenes());
+}
+
+function onPeriodicDamageUserConnection() {
+  recoverPeriodicDamageAuthorityTransition();
+}
+
+function onPeriodicDamageUserUpdate() {
+  recoverPeriodicDamageAuthorityTransition();
+}
+
+function recoverPeriodicDamageAuthorityTransition() {
+  const activeGmId = getActiveGmId();
+  const authorityChanged = activeGmId !== lastActiveGmId;
+  lastActiveGmId = activeGmId;
+  if (game.ready === false
+    || !authorityChanged
+    || !activeGmId
+    || game.user?.id !== activeGmId) return;
+  requestPeriodicDamageEffectSync({
+    actors: game.actors?.contents ?? [],
+    scenes: game.scenes?.contents ?? []
+  });
+}
+
+function getActiveGmId() {
+  return game.users?.activeGM?.id ?? (game.user?.isActiveGM ? game.user.id : null);
+}
+
+function requestPeriodicDamageTokenEffectSync(token) {
+  if (token?.parent?.tokens?.get && token.parent.tokens.get(token.id) !== token) return false;
+  if (!sceneHasPeriodicDamageBehavior(token?.parent)) return false;
+  const actor = token?.actor;
+  if (!actor) return false;
+  return requestPeriodicDamageActorEffectSync([actor], {
+    force: true,
+    expansion: "linked"
+  });
+}
+
+function requestPeriodicDamageActorEffectSync(actors, {
+  force = false,
+  expansion = "all"
+} = {}) {
+  if (!game.user?.isActiveGM) return false;
+  const relevantActors = asDocumentArray(actors)
+    .map(resolveCurrentActor)
+    .filter(actor => actor?.uuid && (force || actorIsPeriodicDamageRelevant(actor)));
+  return relevantActors.length
+    ? getPeriodicDamageEffectSyncScheduler().requestActors(
+      relevantActors.map(actor => createActorSyncTarget(actor, expansion))
+    )
+    : false;
+}
+
+function requestPeriodicDamageSceneEffectSync(scenes) {
+  return requestPeriodicDamageEffectSync({ scenes });
+}
+
+function requestPeriodicDamageEffectSync({
+  actors = [],
+  actorExpansion = "all",
+  scenes = []
+} = {}) {
+  if (!game.user?.isActiveGM) return false;
+  const validActors = asDocumentArray(actors).map(resolveCurrentActor).filter(actor => actor?.uuid);
+  const validScenes = asDocumentArray(scenes).filter(scene => scene?.uuid || scene?.id);
+  if (!validActors.length && !validScenes.length) return false;
+  return getPeriodicDamageEffectSyncScheduler().request({
+    actors: validActors.map(actor => createActorSyncTarget(actor, actorExpansion)),
+    scenes: validScenes
+  });
+}
+
+function getPeriodicDamageEffectSyncScheduler() {
+  effectSyncScheduler ??= createPeriodicDamageEffectSyncScheduler({
+    debounceMs: EFFECT_SYNC_DELAY_MS,
+    sync: syncPeriodicDamageRegionEffectScopes,
+    onError: error => console.error(`${SYSTEM_ID} | Periodic damage region effect sync failed`, error)
+  });
+  return effectSyncScheduler;
+}
+
+function actorIsPeriodicDamageRelevant(actor) {
+  if (actorHasManagedPeriodicDamageEffect(actor)) return true;
+  const periodicScenes = getPeriodicDamageSceneSet();
+  if (!periodicScenes.size) return false;
+  return (actor.getDependentTokens?.() ?? []).some(token => periodicScenes.has(token?.parent));
+}
+
+function actorHasManagedPeriodicDamageEffect(actor) {
+  return Array.from(actor?.effects ?? [])
+    .some(effect => Boolean(effect.getFlag?.(SYSTEM_ID, EFFECT_FLAG_KEY)));
+}
+
+function sceneHasPeriodicDamageBehavior(scene) {
+  return getPeriodicDamageBehaviors(scene).length > 0;
+}
+
+function regionHasPeriodicDamageBehavior(region) {
+  return Array.from(region?.behaviors?.contents ?? region?.behaviors ?? [])
+    .some(behavior => behavior?.type === BEHAVIOR_TYPE);
+}
+
+function hasChangedPath(changes, roots) {
+  if (!changes || typeof changes !== "object") return false;
+  const flattened = foundry.utils.flattenObject?.(changes);
+  const paths = flattened ? Object.keys(flattened) : collectLeafPaths(changes);
+  return paths.some(path => roots.some(root => (
+    path === root
+    || path.startsWith(`${root}.`)
+    || root.startsWith(`${path}.`)
+  )));
+}
+
+function collectLeafPaths(value, prefix = "", result = []) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    if (prefix) result.push(prefix);
+    return result;
+  }
+  const entries = Object.entries(value);
+  if (!entries.length && prefix) result.push(prefix);
+  for (const [key, entry] of entries) {
+    collectLeafPaths(entry, prefix ? `${prefix}.${key}` : key, result);
+  }
+  return result;
 }
 
 function escapeHtml(value) {
