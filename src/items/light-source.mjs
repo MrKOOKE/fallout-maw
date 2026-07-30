@@ -8,12 +8,15 @@ import {
   getEnergyConsumerFunction,
   getEnergySourceFunction,
   getLightSourceFunction,
+  getWeaponFunction,
   hasItemFunction,
   isItemBrokenByCondition,
   createActorItemOrInstalledModuleUpdate,
   resolveActorItemOrInstalledModule
 } from "../utils/item-functions.mjs";
+import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getWeaponModuleSlotItemData } from "../utils/weapon-modules.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import {
@@ -35,41 +38,282 @@ const RESOURCE_REMAINDERS_FLAG = "lightSourceResourceRemainders";
 const ENERGY_SOURCE_PROTOTYPE_FLAG = "energySourcePrototypeUuid";
 const EPSILON = 0.000001;
 const RESERVE_PERSISTENCE_STEP = 0.01;
+const LIGHT_SOURCE_BEFORE_SIGNATURES_OPTION = "falloutMawLightSourceBeforeSignatures";
+const LIGHT_SOURCE_ITEM_RUNTIME_PATHS = Object.freeze([
+  "system.functions.lightSource",
+  "system.functions.energyConsumer",
+  "system.functions.condition.enabled",
+  "system.functions.condition.value",
+  "system.functions.condition.max",
+  "system.functions.weapon.moduleSlots",
+  "system.functions.weapon.enabled",
+  "system.equipped",
+  "system.placement",
+  "system.occupiedSlots"
+]);
+const LIGHT_SOURCE_CARRIER_REMOVAL_PATHS = Object.freeze([
+  "system.functions.lightSource",
+  "system.functions.weapon.moduleSlots"
+]);
 const lightSourceResourceRemainderCache = new Map();
 const lightSourceEnergyReserveCache = new Map();
+const tokenLightSourceOperationTails = new Map();
+const actorLightSourceSyncQueue = createActorLightSourceSyncQueue();
 
 export function registerLightSourceHooks() {
   registerQueuedWorldTimeProcessor(processLightSourceWorldTime, { priority: -20 });
-  Hooks.on("updateItem", (item, changes) => {
+  Hooks.on("preUpdateItem", (item, changes, options = {}) => {
+    if (!item?.parent || !lightSourceItemChangesRuntimeState(changes)) return;
+    captureLightSourceItemBeforeSignature(item, options);
+  });
+  Hooks.on("createItem", item => {
+    if (!item?.parent || !isLightSourceCarrierItem(item)) return;
+    scheduleActorLightSourceTokenSync(item.parent);
+  });
+  Hooks.on("updateItem", (item, changes, options = {}) => {
     if (!item?.parent) return;
-    if (!isLightSourceItemUpdateRelevant(item, changes)) return;
-    void syncActorLightSourceTokens(item.parent);
+    if (!isLightSourceItemUpdateRelevant(item, changes, options)) return;
+    invalidateChangedLightSourceCaches(item, changes);
+    scheduleActorLightSourceTokenSync(item.parent);
   });
   Hooks.on("deleteItem", item => {
     if (!item?.parent) return;
-    if (!isLightSourceRelevantItem(item)) return;
-    void syncActorLightSourceTokens(item.parent);
+    clearLightSourceCachesForItem(item, { includeInstalledModules: true });
+    if (!isLightSourceCarrierItem(item)) return;
+    scheduleActorLightSourceTokenSync(item.parent);
+  });
+  Hooks.on("deleteActor", actor => {
+    clearLightSourceCachesForActor(actor);
   });
   Hooks.on("canvasReady", () => {
-    void syncSceneLightSources(canvas?.scene);
+    if (!isAutomaticLightSourceSyncAuthority()) return;
+    void syncSceneLightSources(canvas?.scene).catch(error => {
+      console.error("Fallout MaW | Scene light source reconciliation failed", error);
+    });
   });
 }
 
-function isLightSourceItemUpdateRelevant(item = null, changes = {}) {
-  if (isLightSourceRelevantItem(item)) return true;
-  return Object.keys(foundry.utils.flattenObject(changes ?? {})).some(path => (
-    path.startsWith("system.functions.lightSource")
-    || path.startsWith("system.functions.energyConsumer")
-    || path.startsWith("system.functions.energySource")
-  ));
+export function isLightSourceItemUpdateRelevant(item = null, changes = {}, options = {}) {
+  if (!lightSourceItemChangesRuntimeState(changes)) return false;
+  const after = createLightSourceItemRuntimeSignature(item);
+  const before = getLightSourceItemBeforeSignature(item, options);
+  if (before !== undefined) return before !== after;
+  if (after) return true;
+  return changedDataIntersectsPaths(changes, LIGHT_SOURCE_CARRIER_REMOVAL_PATHS);
 }
 
-function isLightSourceRelevantItem(item = null) {
-  return Boolean(
-    hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true })
-    || hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })
-    || hasItemFunction(item, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })
-  );
+function lightSourceItemChangesRuntimeState(changes = {}) {
+  return changedDataIntersectsPaths(changes, LIGHT_SOURCE_ITEM_RUNTIME_PATHS);
+}
+
+function captureLightSourceItemBeforeSignature(item = null, options = {}) {
+  if (!item || !options || typeof options !== "object") return;
+  const signatures = options[LIGHT_SOURCE_BEFORE_SIGNATURES_OPTION] ?? {};
+  signatures[getDocumentCacheKey(item)] = createLightSourceItemRuntimeSignature(item);
+  options[LIGHT_SOURCE_BEFORE_SIGNATURES_OPTION] = signatures;
+}
+
+function getLightSourceItemBeforeSignature(item = null, options = {}) {
+  const signatures = options?.[LIGHT_SOURCE_BEFORE_SIGNATURES_OPTION];
+  if (!signatures || typeof signatures !== "object") return undefined;
+  const key = getDocumentCacheKey(item);
+  return Object.hasOwn(signatures, key) ? signatures[key] : undefined;
+}
+
+function isLightSourceCarrierItem(item = null) {
+  return Boolean(createLightSourceItemRuntimeSignature(item));
+}
+
+export function createLightSourceItemRuntimeSignature(item = null) {
+  if (!item?.system) return "";
+  const carriers = [];
+  const direct = createLightSourceCarrierRuntimeState(item, {
+    identity: `item:${String(item.id ?? item._id ?? "")}`,
+    available: true
+  });
+  if (direct) carriers.push(direct);
+
+  const hostAvailable = isRuntimeInstalledModuleHost(item);
+  const slots = Array.isArray(getWeaponFunction(item)?.moduleSlots)
+    ? getWeaponFunction(item).moduleSlots
+    : [];
+  slots.forEach((slot, index) => {
+    const moduleData = getWeaponModuleSlotItemData(slot);
+    if (!moduleData?.system) return;
+    const slotId = String(slot?.id ?? "") || `slot-${index + 1}`;
+    const state = createLightSourceCarrierRuntimeState(moduleData, {
+      identity: `module:${slotId}`,
+      available: hostAvailable && hasItemFunction(moduleData, ITEM_FUNCTIONS.module)
+    });
+    if (state) carriers.push(state);
+  });
+  if (!carriers.length) return "";
+  carriers.sort((left, right) => left.identity.localeCompare(right.identity));
+  return JSON.stringify(carriers);
+}
+
+function createLightSourceCarrierRuntimeState(itemOrData = null, { identity = "", available = true } = {}) {
+  if (!hasItemFunction(itemOrData, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true })) return null;
+  const light = getLightSourceFunction(itemOrData);
+  const activatable = Boolean(available && canActivateLightSource(itemOrData));
+  return {
+    identity,
+    available: activatable,
+    light: activatable ? {
+      enabled: light?.enabled === true,
+      dim: Math.max(0, Number(light?.dim) || 0),
+      bright: Math.max(0, Number(light?.bright) || 0),
+      angle: Math.max(0, Math.min(360, Number(light?.angle) || 360)),
+      color: String(light?.color ?? "").trim() || null
+    } : null
+  };
+}
+
+function isRuntimeInstalledModuleHost(item = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return false;
+  const mode = String(item.system?.placement?.mode ?? "").trim();
+  return Boolean(item.system?.equipped)
+    || ["equipment", "weapon", "constructPart"].includes(mode)
+    || Object.values(item.system?.occupiedSlots ?? {}).some(Boolean);
+}
+
+export function createActorLightSourceSyncQueue({
+  syncActor = syncActorLightSourceTokens,
+  resolveActor = resolveCurrentLightSourceActor,
+  onError = error => console.error("Fallout MaW | Actor light source reconciliation failed", error)
+} = {}) {
+  const states = new Map();
+  return {
+    enqueue(actor = null, eventOptions = {}) {
+      const key = getDocumentCacheKey(actor);
+      if (!key) return Promise.resolve(false);
+      const pending = states.get(key);
+      if (pending) {
+        pending.actor = actor;
+        pending.eventOptions = { ...pending.eventOptions, ...eventOptions };
+        pending.dirty = true;
+        return pending.promise;
+      }
+
+      const state = {
+        actor,
+        eventOptions: { ...eventOptions },
+        dirty: true,
+        promise: null
+      };
+      states.set(key, state);
+      state.promise = Promise.resolve()
+        .then(async () => {
+          while (state.dirty) {
+            state.dirty = false;
+            const freshActor = resolveActor(state.actor);
+            if (!freshActor) continue;
+            state.actor = freshActor;
+            await syncActor(freshActor, state.eventOptions);
+          }
+          return true;
+        })
+        .catch(error => {
+          try {
+            onError?.(error);
+          } catch {
+            // Error reporting must not poison later reconciliations.
+          }
+          return false;
+        })
+        .finally(() => {
+          if (states.get(key) === state) states.delete(key);
+        });
+      return state.promise;
+    },
+    get pendingCount() {
+      return states.size;
+    }
+  };
+}
+
+export function queueActorLightSourceTokenSync(actor = null, eventOptions = {}) {
+  return actorLightSourceSyncQueue.enqueue(actor, eventOptions);
+}
+
+function scheduleActorLightSourceTokenSync(actor = null, eventOptions = {}) {
+  if (!actor || !isAutomaticLightSourceSyncAuthority()) return;
+  void queueActorLightSourceTokenSync(actor, eventOptions);
+}
+
+function resolveCurrentLightSourceActor(actor = null) {
+  const uuid = String(actor?.uuid ?? "").trim();
+  if (!uuid || typeof globalThis.fromUuidSync !== "function") return actor;
+  return globalThis.fromUuidSync(uuid);
+}
+
+function runTokenLightSourceOperation(tokenOrDocument = null, operation) {
+  const tokenDocument = getTokenDocument(tokenOrDocument);
+  if (!tokenDocument || typeof operation !== "function") return Promise.resolve(false);
+  const key = getDocumentCacheKey(tokenDocument)
+    || `${getDocumentCacheKey(tokenDocument.parent)}.Token.${String(tokenDocument.id ?? "")}`;
+  const previous = tokenLightSourceOperationTails.get(key) ?? Promise.resolve();
+  const result = previous
+    .catch(() => undefined)
+    .then(() => operation(resolveCurrentLightSourceToken(tokenDocument)));
+  const tail = result
+    .catch(() => undefined)
+    .finally(() => {
+      if (tokenLightSourceOperationTails.get(key) === tail) {
+        tokenLightSourceOperationTails.delete(key);
+      }
+    });
+  tokenLightSourceOperationTails.set(key, tail);
+  return result;
+}
+
+function resolveCurrentLightSourceToken(tokenDocument = null) {
+  const uuid = String(tokenDocument?.uuid ?? "").trim();
+  if (!uuid || typeof globalThis.fromUuidSync !== "function") return tokenDocument;
+  return globalThis.fromUuidSync(uuid);
+}
+
+function isAutomaticLightSourceSyncAuthority() {
+  const activeGMId = String(globalThis.game?.users?.activeGM?.id ?? "").trim();
+  const currentUserId = String(globalThis.game?.user?.id ?? "").trim();
+  if (activeGMId) return activeGMId === currentUserId;
+  return Boolean(globalThis.game?.user?.isActiveGM || globalThis.game?.user?.isGM);
+}
+
+function invalidateChangedLightSourceCaches(item = null, changes = {}) {
+  if (changedDataIntersectsPaths(changes, ["system.functions.weapon.moduleSlots"])) {
+    clearCacheEntriesWithPrefix(lightSourceResourceRemainderCache, `${getDocumentCacheKey(item)}.Module.`);
+    clearCacheEntriesWithPrefix(lightSourceEnergyReserveCache, `${getDocumentCacheKey(item)}.Module.`);
+  }
+  if (changedDataIntersectsPaths(changes, [
+    "system.functions.energyConsumer.installedSource.sourceItemUuid"
+  ])) {
+    clearCacheEntriesWithPrefix(lightSourceEnergyReserveCache, `${getDocumentCacheKey(item)}:`);
+  }
+}
+
+function clearLightSourceCachesForItem(item = null, { includeInstalledModules = false } = {}) {
+  const key = getDocumentCacheKey(item);
+  if (!key) return;
+  lightSourceResourceRemainderCache.delete(key);
+  clearCacheEntriesWithPrefix(lightSourceEnergyReserveCache, `${key}:`);
+  if (!includeInstalledModules) return;
+  clearCacheEntriesWithPrefix(lightSourceResourceRemainderCache, `${key}.Module.`);
+  clearCacheEntriesWithPrefix(lightSourceEnergyReserveCache, `${key}.Module.`);
+}
+
+function clearLightSourceCachesForActor(actor = null) {
+  const key = getDocumentCacheKey(actor);
+  if (!key) return;
+  clearCacheEntriesWithPrefix(lightSourceResourceRemainderCache, `${key}.`);
+  clearCacheEntriesWithPrefix(lightSourceEnergyReserveCache, `${key}.`);
+}
+
+function clearCacheEntriesWithPrefix(cache, prefix = "") {
+  if (!prefix) return;
+  for (const key of cache.keys()) {
+    if (String(key).startsWith(prefix)) cache.delete(key);
+  }
 }
 
 export function getLightSourceDisplayName(item = null) {
@@ -257,11 +501,31 @@ export function isLightSourceActive(tokenOrDocument = null, item = null) {
 }
 
 export async function toggleLightSource(tokenOrDocument = null, item = null, eventOptions = {}) {
-  return setLightSourceActive(tokenOrDocument, item, !isLightSourceActive(tokenOrDocument, item), eventOptions);
+  const tokenDocument = getTokenDocument(tokenOrDocument);
+  if (!tokenDocument) return false;
+  return runTokenLightSourceOperation(tokenDocument, freshToken => {
+    const freshItem = resolveActorItemOrInstalledModule(freshToken?.actor, item?.id);
+    if (!freshItem) return false;
+    return setLightSourceActiveOperation(
+      freshToken,
+      freshItem,
+      !isLightSourceActive(freshToken, freshItem),
+      eventOptions
+    );
+  });
 }
 
 export async function setLightSourceActive(tokenOrDocument = null, item = null, active = false, eventOptions = {}) {
   const tokenDocument = getTokenDocument(tokenOrDocument);
+  if (!tokenDocument) return false;
+  return runTokenLightSourceOperation(tokenDocument, freshToken => {
+    const freshItem = resolveActorItemOrInstalledModule(freshToken?.actor, item?.id);
+    if (!freshItem) return false;
+    return setLightSourceActiveOperation(freshToken, freshItem, active, eventOptions);
+  });
+}
+
+async function setLightSourceActiveOperation(tokenDocument = null, item = null, active = false, eventOptions = {}) {
   if (!tokenDocument || !item?.id || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource)) return false;
   if (active && !canActivateLightSource(item)) {
     ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
@@ -337,19 +601,22 @@ export async function setLightSourceActive(tokenOrDocument = null, item = null, 
 
 async function setLightSourceActiveNow(tokenDocument, item, active = false, chainRef = null) {
   let entries = getActiveLightSourceEntries(tokenDocument).filter(entry => entry.itemId !== item.id);
+  let baseLight;
   if (active) {
     if (!entries.length && !tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG)) {
-      await tokenDocument.update({
-        [`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`]: getTokenLightObject(tokenDocument)
-      }, createLightSourceDocumentOptions(chainRef));
+      baseLight = getTokenLightObject(tokenDocument);
     }
     entries.push({ itemId: item.id });
   }
   entries = normalizeActiveLightSourceEntries(entries);
-  await tokenDocument.update({
-    [`flags.${SYSTEM_ID}.${ACTIVE_LIGHT_SOURCES_FLAG}`]: entries.length ? entries : globalThis._del
-  }, createLightSourceDocumentOptions(chainRef));
-  await syncTokenLightSources(tokenDocument, createLightSourceDocumentOptions(chainRef));
+  await syncTokenLightSourcesNow(
+    tokenDocument,
+    createLightSourceDocumentOptions(chainRef),
+    {
+      entries,
+      ...(baseLight ? { baseLight } : {})
+    }
+  );
   tokenDocument.actor?.render(false, {
     renderContext: "fallout-maw.lightSourceState",
     renderData: { itemId: item.id, active: Boolean(active), tokenId: tokenDocument.id }
@@ -567,94 +834,139 @@ export async function extractEnergyConsumerSource(actor = null, consumerItem = n
 
 export async function syncTokenLightSources(tokenOrDocument = null, eventOptions = {}) {
   const tokenDocument = getTokenDocument(tokenOrDocument);
-  const actor = tokenDocument?.actor;
-  if (!tokenDocument || !actor) return;
+  if (!tokenDocument) return false;
+  return runTokenLightSourceOperation(
+    tokenDocument,
+    freshToken => syncTokenLightSourcesNow(freshToken, eventOptions)
+  );
+}
 
-  const entries = getActiveLightSourceEntries(tokenDocument);
-  const base = tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG);
+async function syncTokenLightSourcesNow(tokenOrDocument = null, eventOptions = {}, state = {}) {
+  const tokenDocument = getTokenDocument(tokenOrDocument);
+  const actor = tokenDocument?.actor;
+  if (!tokenDocument || !actor) return false;
+
+  const existingEntries = getActiveLightSourceEntries(tokenDocument);
+  const entries = Object.hasOwn(state, "entries")
+    ? normalizeActiveLightSourceEntries(state.entries)
+    : existingEntries;
+  const storedBase = tokenDocument.getFlag(SYSTEM_ID, BASE_LIGHT_FLAG);
+  const hasStoredBase = storedBase !== undefined && storedBase !== null;
+  const hasBaseOverride = Object.hasOwn(state, "baseLight");
+  const base = hasBaseOverride ? state.baseLight : storedBase;
   // A Token which has never participated in this runtime has no light state
   // for us to reconcile. Besides avoiding a needless Document update, this
   // preserves manually configured Token light instead of zeroing it.
-  if (!entries.length && !base) return;
+  if (!entries.length && !hasStoredBase && !hasBaseOverride) return false;
 
+  const actorItems = resolveActiveLightSourceItems(actor, entries);
   const activeSources = [];
   for (const entry of entries) {
-    const item = resolveActorItemOrInstalledModule(actor, entry.itemId);
+    const item = actorItems.get(entry.itemId);
     if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource) || isItemBrokenByCondition(item)) continue;
     if (!canActivateLightSource(item)) continue;
     activeSources.push({ item, light: getLightSourceFunction(item) });
   }
 
-  const normalizedEntries = activeSources.map(source => ({ itemId: source.item.id }));
-  if (normalizedEntries.length !== entries.length) {
-    await tokenDocument.update({
-      [`flags.${SYSTEM_ID}.${ACTIVE_LIGHT_SOURCES_FLAG}`]: normalizedEntries.length ? normalizedEntries : globalThis._del
-    }, eventOptions);
+  const normalizedEntries = activeSources.map(source => ({ itemId: String(source.item.id) }));
+  const update = {};
+  if (!activeLightSourceEntriesEqual(existingEntries, normalizedEntries)) {
+    update[`flags.${SYSTEM_ID}.${ACTIVE_LIGHT_SOURCES_FLAG}`] = normalizedEntries.length
+      ? normalizedEntries
+      : globalThis._del;
   }
 
-  const selected = activeSources.sort(compareLightSourcesForToken).at(0) ?? null;
+  const selected = [...activeSources].sort(compareLightSourcesForToken).at(0) ?? null;
   if (selected) {
-    await tokenDocument.update(createTokenLightUpdate(selected.light), {
-      falloutMawLightSourceSync: true,
-      ...eventOptions
-    });
-    return;
+    if (hasBaseOverride && !hasStoredBase) {
+      update[`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`] = foundry.utils.deepClone(base ?? {});
+    }
+    Object.assign(update, createTokenLightDelta(tokenDocument, selected.light));
+  } else {
+    Object.assign(
+      update,
+      createTokenLightDelta(tokenDocument, base ?? { dim: 0, bright: 0, angle: 360, color: null })
+    );
+    if (hasStoredBase) update[`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`] = globalThis._del;
   }
 
-  await tokenDocument.update({
-    ...createTokenLightUpdate(base ?? { dim: 0, bright: 0, angle: 360, color: null }),
-    [`flags.${SYSTEM_ID}.${BASE_LIGHT_FLAG}`]: globalThis._del
-  }, {
-    falloutMawLightSourceSync: true,
-    ...eventOptions
+  if (!Object.keys(update).length) return false;
+  await tokenDocument.update(update, {
+    ...eventOptions,
+    falloutMawLightSourceSync: true
   });
+  return true;
 }
 
-export async function syncActorLightSourceTokens(actor = null) {
-  if (!actor) return;
-  for (const scene of game.scenes?.contents ?? []) {
-    for (const tokenDocument of scene.tokens?.contents ?? []) {
-      const tokenActor = tokenDocument.actor;
-      if (!tokenActor) continue;
-      if (tokenActor.uuid !== actor.uuid && tokenActor.id !== actor.id) continue;
-      await syncTokenLightSources(tokenDocument);
-    }
+export function getActorLightSourceTokenDocuments(actor = null) {
+  if (!actor) return [];
+  let tokenDocuments = [];
+  if (typeof actor.getDependentTokens === "function") {
+    tokenDocuments = actor.getDependentTokens() ?? [];
+  } else if (actor.token) {
+    tokenDocuments = [actor.token];
   }
+  const seenKeys = new Set();
+  const seenDocuments = new Set();
+  return Array.from(tokenDocuments)
+    .map(getTokenDocument)
+    .filter(tokenDocument => {
+      if (!tokenDocument || seenDocuments.has(tokenDocument)) return false;
+      seenDocuments.add(tokenDocument);
+      const key = getDocumentCacheKey(tokenDocument)
+        || `${getDocumentCacheKey(tokenDocument.parent)}.Token.${String(tokenDocument.id ?? "")}`;
+      if (!key || seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+}
+
+export async function syncActorLightSourceTokens(actor = null, eventOptions = {}) {
+  if (!actor) return 0;
+  let updates = 0;
+  for (const tokenDocument of getActorLightSourceTokenDocuments(actor)) {
+    if (await syncTokenLightSources(tokenDocument, eventOptions)) updates += 1;
+  }
+  return updates;
 }
 
 async function processLightSourceWorldTime(_worldTime, deltaSeconds) {
-  if (!game.user?.isGM) return;
+  if (!isAutomaticLightSourceSyncAuthority()) return;
   const seconds = Number(deltaSeconds) || 0;
   if (seconds <= 0) return;
+  const consumedSources = new Map();
   for (const scene of game.scenes?.contents ?? []) {
-    await processSceneLightSourceWorldTime(scene, seconds);
+    await processSceneLightSourceWorldTime(scene, seconds, consumedSources);
   }
 }
 
-async function processSceneLightSourceWorldTime(scene = null, deltaSeconds = 0) {
+async function processSceneLightSourceWorldTime(scene = null, deltaSeconds = 0, consumedSources = new Map()) {
   for (const tokenDocument of scene?.tokens?.contents ?? []) {
-    const actor = tokenDocument.actor;
-    if (!actor) continue;
-    const entries = getActiveLightSourceEntries(tokenDocument);
-    if (!entries.length) continue;
-    const remaining = [];
-    let changed = false;
-    for (const entry of entries) {
-      const item = resolveActorItemOrInstalledModule(actor, entry.itemId);
-      if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource) || isItemBrokenByCondition(item)) {
-        changed = true;
-        continue;
-      }
-      const consumed = await consumeLightSourceResources(actor, item, deltaSeconds);
-      if (consumed) remaining.push(entry);
-      else changed = true;
-    }
-    if (changed) {
-      if (remaining.length) await tokenDocument.setFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG, remaining);
-      else await tokenDocument.unsetFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG);
-    }
-    await syncTokenLightSources(tokenDocument);
+    await runTokenLightSourceOperation(tokenDocument, freshToken => (
+      processTokenLightSourceWorldTime(freshToken, deltaSeconds, consumedSources)
+    ));
   }
+}
+
+async function processTokenLightSourceWorldTime(tokenDocument = null, deltaSeconds = 0, consumedSources = new Map()) {
+  const actor = tokenDocument?.actor;
+  if (!actor) return false;
+  const entries = getActiveLightSourceEntries(tokenDocument);
+  if (!entries.length) return false;
+  const actorItems = resolveActiveLightSourceItems(actor, entries);
+  const remaining = [];
+  for (const entry of entries) {
+    const item = actorItems.get(entry.itemId);
+    if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource) || isItemBrokenByCondition(item)) continue;
+    const key = `${getDocumentCacheKey(actor)}:${String(item.id)}`;
+    let consumed = consumedSources.get(key);
+    if (!consumed) {
+      consumed = consumeLightSourceResources(actor, item, deltaSeconds);
+      consumedSources.set(key, consumed);
+    }
+    if (await consumed) remaining.push(entry);
+  }
+  return syncTokenLightSourcesNow(tokenDocument, {}, { entries: remaining });
 }
 
 async function consumeLightSourceResources(actor = null, item = null, deltaSeconds = 0) {
@@ -809,6 +1121,32 @@ function normalizeActiveLightSourceEntries(entries = []) {
   return normalized;
 }
 
+function resolveActiveLightSourceItems(actor = null, entries = []) {
+  const resolved = new Map();
+  const unresolved = new Set();
+  for (const entry of normalizeActiveLightSourceEntries(entries)) {
+    const ownedItem = actor?.items?.get?.(entry.itemId);
+    if (ownedItem) resolved.set(entry.itemId, ownedItem);
+    else unresolved.add(entry.itemId);
+  }
+  if (!unresolved.size) return resolved;
+  for (const item of getActorItemsWithInstalledModules(actor)) {
+    const id = String(item?.id ?? "");
+    if (!unresolved.has(id)) continue;
+    resolved.set(id, item);
+    unresolved.delete(id);
+    if (!unresolved.size) break;
+  }
+  return resolved;
+}
+
+function activeLightSourceEntriesEqual(left = [], right = []) {
+  const normalizedLeft = normalizeActiveLightSourceEntries(left);
+  const normalizedRight = normalizeActiveLightSourceEntries(right);
+  if (normalizedLeft.length !== normalizedRight.length) return false;
+  return normalizedLeft.every((entry, index) => entry.itemId === normalizedRight[index]?.itemId);
+}
+
 function compareLightSourcesForToken(left, right) {
   const leftBright = Math.max(0, Number(left?.light?.bright) || 0);
   const rightBright = Math.max(0, Number(right?.light?.bright) || 0);
@@ -829,6 +1167,24 @@ function createTokenLightUpdate(light = {}) {
     "light.angle": angle,
     "light.color": color || null
   };
+}
+
+function createTokenLightDelta(tokenDocument = null, light = {}) {
+  const desired = createTokenLightUpdate(light);
+  const update = {};
+  for (const [path, value] of Object.entries(desired)) {
+    const field = path.slice("light.".length);
+    const current = normalizeTokenLightField(field, tokenDocument?.light?.[field]);
+    const next = normalizeTokenLightField(field, value);
+    if (current !== next) update[path] = value;
+  }
+  return update;
+}
+
+function normalizeTokenLightField(field = "", value = null) {
+  if (field === "color") return String(value ?? "").trim() || null;
+  if (field === "angle") return Math.max(0, Math.min(360, Number(value) || 360));
+  return Math.max(0, Number(value) || 0);
 }
 
 function getTokenLightObject(tokenDocument = null) {
