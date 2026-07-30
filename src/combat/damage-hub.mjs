@@ -98,6 +98,7 @@ import {
   canonicalizeActiveEffectChanges
 } from "../utils/active-effect-source.mjs";
 import { applyActorNeedChanges } from "../needs/need-change-runtime.mjs";
+import { mergeMatchingTraumaEffectChanges } from "./trauma-effect-merging.mjs";
 export {
   getResourceBlockState,
   getResourceLimitState
@@ -8867,9 +8868,11 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
   const limbLabel = String(limb.label ?? limbKey);
   const name = profileEntry.profile.name || `${limbLabel}: ${damageType?.label ?? profileEntry.damageTypeKey}`;
   const img = profileEntry.profile.img || "icons/svg/blood.svg";
-  const effectEntries = (profileEntry.profile.effects ?? [])
-    .map(prepareEffectChange)
-    .filter(change => change.key);
+  const effectEntries = mergeMatchingTraumaEffectChanges(
+    (profileEntry.profile.effects ?? [])
+      .map(prepareEffectChange)
+      .filter(change => change.key)
+  );
   const { changes: activeEffectChanges, statuses } = splitSpecialEffectChanges(effectEntries);
 
   return {
@@ -8947,11 +8950,11 @@ function prepareEffectChange(effect = {}) {
 }
 
 function mergeEscalatedTraumaData({ finalTraumaData, previousTraumas = [], intermediateTraumaData = [], damageTypes = [] } = {}) {
-  const effectChanges = [
+  const effectChanges = mergeMatchingTraumaEffectChanges([
     ...previousTraumas.flatMap(item => item.system?.effects ?? []),
     ...intermediateTraumaData.flatMap(data => data.system?.effects ?? []),
     ...(finalTraumaData.system?.effects ?? [])
-  ].map(prepareEffectChange).filter(change => change.key);
+  ].map(prepareEffectChange).filter(change => change.key));
   const damageTypeEntries = [
     ...previousTraumas.flatMap(item => getTraumaDamageTypeEntries(item, damageTypes)),
     ...intermediateTraumaData.map(data => ({
