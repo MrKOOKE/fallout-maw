@@ -54,6 +54,7 @@ test("ability copy names stay readable and unique across repeated copies", () =>
 
 test("ability settings list exposes and handles the copy action", () => {
   const appSource = fs.readFileSync(path.join(ROOT, "src/apps/ability-settings-config.mjs"), "utf8");
+  const stylesheetSource = fs.readFileSync(path.join(ROOT, "styles/fallout-maw.css"), "utf8");
   const templateSource = fs.readFileSync(path.join(ROOT, "templates/settings/ability-settings-config.hbs"), "utf8");
 
   assert.match(appSource, /copyAbility:\s*this\.#onCopyAbility/);
@@ -61,4 +62,8 @@ test("ability settings list exposes and handles the copy action", () => {
   assert.match(appSource, /new AbilityCatalogItemEditor\(this,\s*categoryId,\s*copy\.id\)\.render\(true\)/);
   assert.match(templateSource, /data-action="copyAbility"/);
   assert.match(templateSource, /fa-solid fa-copy/);
+  assert.match(
+    stylesheetSource,
+    /\.ability-settings-config \.fallout-maw-ability-compact-row\s*\{[\s\S]*?grid-template-columns:\s*2\.5rem minmax\(180px, 1fr\) repeat\(5, 2\.25rem\);/
+  );
 });

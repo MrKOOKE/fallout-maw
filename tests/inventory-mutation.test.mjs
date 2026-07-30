@@ -332,6 +332,92 @@ test("an incomplete Actor result restores both currency and inventory Items", as
   assert.ok(actor.items.get("spent"));
 });
 
+test("a partial medicine limb batch restores both patient state and medical-tool supply", async () => {
+  const instrument = createItem({ id: "doctor-bag" });
+  instrument.system.functions.tools = {
+    medical: {
+      enabled: true,
+      supply: { value: 12, max: 20 }
+    }
+  };
+  const healer = createActor("medicine-healer", [instrument]);
+  const patient = createActor("medicine-patient");
+  patient.system.limbs = {
+    arm: {
+      value: 20,
+      min: 0,
+      max: 80,
+      spent: 60,
+      damageAccumulation: { ballistic: 30, fire: 10 }
+    }
+  };
+  patient.system.resources = {
+    health: { value: 20, max: 80, spent: 60 },
+    consciousness: { value: 0, max: 100 }
+  };
+  patient.parent = { actor: patient };
+  const beforePatient = structuredClone(patient.system);
+  const beforeInstrument = structuredClone(healer.items.get("doctor-bag").system);
+  const batches = [];
+  let callIndex = 0;
+  installFoundryMock({
+    randomIds: ["medicine-limb-operation"],
+    modifyBatch: async operations => {
+      batches.push(structuredCloneBatch(operations));
+      callIndex += 1;
+      const results = applyBatchOperations(operations);
+      if (callIndex !== 1) return results;
+
+      assert.equal(patient.system.limbs.arm.value, 45);
+      assert.equal(healer.items.get("doctor-bag").system.functions.tools.medical.supply.value, 7);
+      patient.system.resources.consciousness.value = 0;
+      return results;
+    }
+  });
+
+  await assert.rejects(
+    executeInventoryMutation([
+      {
+        actor: patient,
+        actorUpdates: [{
+          "system.limbs.arm.value": 45,
+          "system.limbs.arm.spent": 35,
+          "system.limbs.arm.damageAccumulation": { ballistic: 5 },
+          "system.resources.health.value": 45,
+          "system.resources.health.spent": 35,
+          "system.resources.consciousness.value": 25
+        }]
+      },
+      {
+        actor: healer,
+        updates: [{
+          _id: "doctor-bag",
+          "system.functions.tools.medical.supply.value": 7
+        }]
+      }
+    ], {
+      reason: "medicine-treatment-with-tool",
+      documentOptions: {
+        falloutMawSkipDamageStatusSync: true,
+        falloutMawLimbCapSync: true
+      }
+    }),
+    /did not persist Actor inventory field/
+  );
+
+  assert.equal(callIndex, 2, "one compensation batch must follow the partial medicine commit");
+  assert.deepEqual(patient.system, beforePatient);
+  assert.deepEqual(healer.items.get("doctor-bag").system, beforeInstrument);
+  assert.ok(
+    batches[1].some(operation => operation.documentName === "Actor" && operation.falloutMawInventoryRecovery),
+    "the complete coupled limb state must be restored as one Actor recovery update"
+  );
+  assert.ok(
+    batches[1].some(operation => operation.documentName === "Item" && operation.falloutMawInventoryRecovery),
+    "the spent medical supply must be restored in the same recovery batch"
+  );
+});
+
 test("a queued stale plan is rejected without undoing the mutation ahead of it", async () => {
   const actor = createActor("serialized", [
     createItem({ id: "moving", x: 1 })

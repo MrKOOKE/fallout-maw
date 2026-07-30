@@ -2,9 +2,14 @@
 import { requestCustomActorTokenSelection } from "../canvas/custom-token-selection.mjs";
 import {
   applyDestroyedLimbConsequences,
+  buildActorLimbHealthContext,
+  canActorReceiveHealing,
   clearLimbLossState,
   getActorHealingModifierPercent,
+  getLimbHealingCap,
+  prepareTargetedLimbHealingActorUpdate,
   requestDamageApplication,
+  runExternalHealingSystemEventWorkflow,
   setLimbMissingState,
   synchronizeActorDamageStatusesAfterInventoryMutation
 } from "../combat/damage-hub.mjs";
@@ -18,8 +23,9 @@ import {
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
-import { getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, hasToolFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import { createToolFunctionKey, getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
 import { planActorInventoryGrant } from "../utils/inventory-grants.mjs";
 import {
   createItemStackPartRemovalUpdate,
@@ -27,15 +33,35 @@ import {
   usesVirtualInventoryStacks
 } from "../utils/inventory-containers.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { executeAtomicActorItemUpdates } from "../utils/atomic-actor-item-updates.mjs";
+import {
+  groupToolSelectionOptions,
+  selectToolByPolicy
+} from "../utils/tool-selection-policy.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 import { transferItemBetweenActors } from "./search-inventory.mjs";
+import {
+  getMassTreatmentTargetCounts,
+  getMassTreatmentTargets,
+  normalizeMassTreatmentOptions,
+  runSequentialMassTreatment
+} from "./medicine-mass-treatment.mjs";
 
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MEDICINE_SOCKET = `system.${SYSTEM_ID}`;
 const MEDICINE_SOCKET_SCOPE = "fallout-maw.medicine";
-const MEDICINE_SOCKET_TIMEOUT = 10000;
+const MEDICINE_SOCKET_TIMEOUT = 12 * 60 * 1000;
+const MEDICINE_SOCKET_RECEIPT_TTL = 30 * 60 * 1000;
+const MAX_HANDLED_MEDICINE_SOCKET_REQUESTS = 256;
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 const TREATMENT_PROGRESS_STEP_RATIO = 0.25;
+const LIMB_TREATMENT_DIFFICULTY = 60;
+const LIMB_TREATMENT_TOOL_CLASS = "D";
+const LIMB_TREATMENT_SKILL_KEY = "doctor";
 const pendingMedicineSocketRequests = new Map();
+const handledMedicineSocketRequests = new Map();
+const medicineAuthorityLock = createActorOperationLock();
 
 export function registerMedicineSocket() {
   game.socket.on(MEDICINE_SOCKET, handleMedicineSocketMessage);
@@ -57,7 +83,7 @@ export async function requestMedicineTarget(sourceToken) {
   const targetToken = selected?.token ?? null;
   if (!selected?.actor || !targetToken) return undefined;
 
-  const targetContext = await getMedicineTargetContext(targetToken);
+  const targetContext = await getMedicineTargetContext(targetToken, sourceActor);
   if (!targetContext) return undefined;
 
   return new MedicineTreatmentDialog({
@@ -80,6 +106,8 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   #activeTab = "trauma";
   #activeImplantLimbKey = "";
   #activeProsthesisLimbKey = "";
+  #mutationInFlight = false;
+  #pendingMassTreatment = null;
 
   constructor({ sourceActor, sourceToken, targetContext, targetToken, toolKey = "medical" } = {}, options = {}) {
     super(options);
@@ -109,13 +137,15 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       setImplantLimb: this.#onSetImplantLimb,
       setProsthesisLimb: this.#onSetProsthesisLimb,
       setMedicineTab: this.#onSetMedicineTab,
-      treatWithInstrument: this.#onTreatWithInstrument
+      treatWithInstrument: this.#onTreatWithInstrument,
+      treatAll: this.#onTreatAll
     }
   };
 
   static PARTS = {
     body: {
-      template: TEMPLATES.medicineDialog
+      template: TEMPLATES.medicineDialog,
+      templates: [TEMPLATES.medicineTreatmentRow]
     }
   };
 
@@ -128,13 +158,50 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const instruments = prepareMedicalInstruments(this.#sourceActor, this.#toolKey);
-    const traumas = prepareTargetTreatments(this.#targetContext?.traumas ?? [], instruments, this.#activeTreatmentType === "trauma" ? this.#activeTreatmentId : "");
-    const diseases = prepareTargetTreatments(this.#targetContext?.diseases ?? [], instruments, this.#activeTreatmentType === "disease" ? this.#activeTreatmentId : "");
-    const implants = prepareImplantMedicineContext(this.#sourceActor, this.#targetContext, this.#activeImplantLimbKey);
-    const prostheses = prepareProsthesisMedicineContext(this.#sourceActor, this.#targetContext, this.#activeProsthesisLimbKey);
-    this.#activeImplantLimbKey = implants.activeLimbKey;
-    this.#activeProsthesisLimbKey = prostheses.activeLimbKey;
+    let traumaTreatmentContext = { limbGroups: [], unassignedTraumas: [], hasTreatments: false };
+    let diseases = [];
+    let implants = {};
+    let prostheses = {};
+    let hasMassTreatments = false;
+
+    if (this.#activeTab === "trauma" || this.#activeTab === "disease") {
+      const instruments = prepareMedicalInstruments(this.#sourceActor, this.#toolKey);
+      const instrumentRowsByClass = new Map();
+      if (this.#activeTab === "trauma") {
+        traumaTreatmentContext = prepareLimbTreatmentGroups(
+          this.#targetContext,
+          instruments,
+          this.#activeTreatmentType,
+          this.#activeTreatmentId,
+          instrumentRowsByClass
+        );
+        hasMassTreatments = hasAvailableMassTreatment(
+          this.#targetContext,
+          instruments
+        );
+      } else {
+        diseases = prepareTargetTreatments(
+          this.#targetContext?.diseases ?? [],
+          instruments,
+          this.#activeTreatmentType === "disease" ? this.#activeTreatmentId : "",
+          instrumentRowsByClass
+        );
+      }
+    } else if (this.#activeTab === "implant") {
+      implants = prepareImplantMedicineContext(
+        this.#sourceActor,
+        this.#targetContext,
+        this.#activeImplantLimbKey
+      );
+      this.#activeImplantLimbKey = implants.activeLimbKey;
+    } else if (this.#activeTab === "prosthesis") {
+      prostheses = prepareProsthesisMedicineContext(
+        this.#sourceActor,
+        this.#targetContext,
+        this.#activeProsthesisLimbKey
+      );
+      this.#activeProsthesisLimbKey = prostheses.activeLimbKey;
+    }
     return {
       ...context,
       sourceActor: this.#sourceActor,
@@ -144,11 +211,13 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       },
       targetToken: this.#targetToken,
       toolLabel: getToolSettings().find(tool => tool.key === this.#toolKey)?.label ?? this.#toolKey,
-      traumas,
+      limbGroups: traumaTreatmentContext.limbGroups,
+      unassignedTraumas: traumaTreatmentContext.unassignedTraumas,
       diseases,
       implants,
       prostheses,
-      hasTraumas: traumas.length > 0,
+      hasTraumaTreatments: traumaTreatmentContext.hasTreatments,
+      hasMassTreatments,
       hasDiseases: diseases.length > 0,
       tabs: {
         trauma: {
@@ -175,21 +244,24 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#syncWindowTitle();
+    this.#setMutationBusyState(this.#mutationInFlight);
   }
 
   static #onStartTreatment(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const treatmentType = String(target.dataset.treatmentType ?? "trauma");
     const treatmentId = String(target.dataset.treatmentId ?? target.dataset.traumaId ?? "");
     const alreadyActive = this.#activeTreatmentType === treatmentType && this.#activeTreatmentId === treatmentId;
     this.#activeTreatmentType = treatmentType;
     this.#activeTreatmentId = alreadyActive ? "" : treatmentId;
-    this.#activeTab = treatmentType;
+    this.#activeTab = treatmentType === "limb" ? "trauma" : treatmentType;
     return this.render({ force: true });
   }
 
   static #onSetMedicineTab(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const tab = String(target.dataset.medicineTab ?? "trauma");
     if (!["trauma", "disease", "implant", "prosthesis"].includes(tab)) return undefined;
     this.#activeTab = tab;
@@ -198,6 +270,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
   static #onSetImplantLimb(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const limbKey = String(target.dataset.limbKey ?? "");
     if (!limbKey) return undefined;
     this.#activeImplantLimbKey = limbKey;
@@ -207,6 +280,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
   static #onSetProsthesisLimb(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const limbKey = String(target.dataset.limbKey ?? "");
     if (!limbKey) return undefined;
     this.#activeProsthesisLimbKey = limbKey;
@@ -234,109 +308,216 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     if (titleElement) titleElement.textContent = title;
   }
 
+  #setMutationBusyState(active) {
+    const element = this.element;
+    if (!element) return;
+    element.classList.toggle("is-mutation-busy", active);
+    if (active) element.setAttribute("aria-busy", "true");
+    else element.removeAttribute("aria-busy");
+
+    for (const button of element.querySelectorAll("button[data-action]")) {
+      if (active) {
+        if (button.disabled) continue;
+        button.disabled = true;
+        button.dataset.medicineBusyDisabled = "true";
+      } else if (button.dataset.medicineBusyDisabled === "true") {
+        button.disabled = false;
+        delete button.dataset.medicineBusyDisabled;
+      }
+    }
+  }
+
+  async #runMutation(operation) {
+    if (this.#mutationInFlight) return undefined;
+    this.#mutationInFlight = true;
+    this.#setMutationBusyState(true);
+    try {
+      return await operation();
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Medicine dialog mutation failed`, error);
+      ui.notifications.error(`Медицинская операция не выполнена: ${error.message}`);
+      return undefined;
+    } finally {
+      this.#mutationInFlight = false;
+      this.#setMutationBusyState(false);
+    }
+  }
+
   static async #onTreatWithInstrument(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const treatmentType = String(target.dataset.treatmentType ?? "trauma");
     const treatmentId = String(target.dataset.treatmentId ?? target.dataset.traumaId ?? "");
     const instrumentId = String(target.dataset.instrumentId ?? "");
     if (!treatmentId || !instrumentId) return undefined;
 
-    const result = await performTreatment({
-      sourceActor: this.#sourceActor,
-      sourceToken: this.#sourceToken,
-      targetContext: this.#targetContext,
-      targetToken: this.#targetToken,
-      treatmentType,
-      treatmentId,
-      instrumentId,
-      toolKey: this.#toolKey
+    return this.#runMutation(async () => {
+      const result = await performTreatment({
+        sourceActor: this.#sourceActor,
+        sourceToken: this.#sourceToken,
+        targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
+        treatmentType,
+        treatmentId,
+        instrumentId,
+        toolKey: this.#toolKey
+      });
+      if (result?.targetContext) {
+        this.#targetContext = result.targetContext;
+        const refreshedTarget = getTargetTreatments(this.#targetContext, treatmentType)
+          .find(item => item.id === treatmentId);
+        if (
+          !refreshedTarget
+          || refreshedTarget.treatable === false
+          || toInteger(refreshedTarget.healingProgress) >= Math.max(1, toInteger(refreshedTarget.healingProgressMax))
+        ) {
+          if (
+            this.#activeTreatmentType === treatmentType
+            && this.#activeTreatmentId === treatmentId
+          ) this.#activeTreatmentId = "";
+        }
+      }
+      return await this.render({ force: true });
     });
-    if (result?.targetContext) this.#targetContext = result.targetContext;
-    return this.render({ force: true });
+  }
+
+  static async #onTreatAll(event) {
+    event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
+    return this.#runMutation(async () => {
+      let pending = this.#pendingMassTreatment;
+      if (!pending) {
+        const options = await promptMassTreatmentOptions({
+          sourceActor: this.#sourceActor,
+          targetContext: this.#targetContext,
+          toolKey: this.#toolKey
+        });
+        if (!options || options === "cancel") return undefined;
+        pending = {
+          requestId: foundry.utils.randomID(),
+          options
+        };
+        this.#pendingMassTreatment = pending;
+      } else {
+        ui.notifications.info("Повторное ожидание уже запущенного массового лечения.");
+      }
+      const result = await performMassTreatment({
+        sourceActor: this.#sourceActor,
+        sourceToken: this.#sourceToken,
+        targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
+        toolKey: this.#toolKey,
+        options: pending.options,
+        requestId: pending.requestId
+      });
+      if (result?.pending) return undefined;
+      this.#pendingMassTreatment = null;
+      if (result?.targetContext) this.#targetContext = result.targetContext;
+      if (this.#activeTreatmentId) {
+        const activeTarget = getTargetTreatments(this.#targetContext, this.#activeTreatmentType)
+          .find(item => item.id === this.#activeTreatmentId);
+        if (!activeTarget || activeTarget.treatable === false) this.#activeTreatmentId = "";
+      }
+      return await this.render({ force: true });
+    });
   }
 
   static async #onInstallImplant(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const limbKey = String(target.dataset.limbKey ?? "");
     const source = String(target.dataset.implantSource ?? "");
     const itemId = String(target.dataset.implantItemId ?? "");
     if (!limbKey || !source || !itemId) return undefined;
 
-    const result = await performImplantInstallation({
-      sourceActor: this.#sourceActor,
-      sourceToken: this.#sourceToken,
-      targetContext: this.#targetContext,
-      targetToken: this.#targetToken,
-      limbKey,
-      implantSource: source,
-      itemId
+    return this.#runMutation(async () => {
+      const result = await performImplantInstallation({
+        sourceActor: this.#sourceActor,
+        sourceToken: this.#sourceToken,
+        targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
+        limbKey,
+        implantSource: source,
+        itemId
+      });
+      if (result?.targetContext) this.#targetContext = result.targetContext;
+      this.#activeImplantLimbKey = limbKey;
+      this.#activeTab = "implant";
+      return this.render({ force: true });
     });
-    if (result?.targetContext) this.#targetContext = result.targetContext;
-    this.#activeImplantLimbKey = limbKey;
-    this.#activeTab = "implant";
-    return this.render({ force: true });
   }
 
   static async #onInstallProsthesis(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const limbKey = String(target.dataset.limbKey ?? "");
     const source = String(target.dataset.prosthesisSource ?? "");
     const itemId = String(target.dataset.prosthesisItemId ?? "");
     if (!limbKey || !source || !itemId) return undefined;
 
-    const result = await performProsthesisInstallation({
-      sourceActor: this.#sourceActor,
-      sourceToken: this.#sourceToken,
-      targetContext: this.#targetContext,
-      targetToken: this.#targetToken,
-      limbKey,
-      prosthesisSource: source,
-      itemId
+    return this.#runMutation(async () => {
+      const result = await performProsthesisInstallation({
+        sourceActor: this.#sourceActor,
+        sourceToken: this.#sourceToken,
+        targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
+        limbKey,
+        prosthesisSource: source,
+        itemId
+      });
+      if (result?.targetContext) this.#targetContext = result.targetContext;
+      this.#activeProsthesisLimbKey = limbKey;
+      this.#activeTab = "prosthesis";
+      return this.render({ force: true });
     });
-    if (result?.targetContext) this.#targetContext = result.targetContext;
-    this.#activeProsthesisLimbKey = limbKey;
-    this.#activeTab = "prosthesis";
-    return this.render({ force: true });
   }
 
   static async #onRemoveImplant(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const limbKey = String(target.dataset.limbKey ?? "");
     const itemId = String(target.dataset.implantItemId ?? "");
     if (!limbKey || !itemId) return undefined;
 
-    const updatedTargetContext = await applyImplantRemoval({
-      sourceActor: this.#sourceActor,
-      targetContext: this.#targetContext,
-      limbKey,
-      itemId
+    return this.#runMutation(async () => {
+      const updatedTargetContext = await applyImplantRemoval({
+        sourceActor: this.#sourceActor,
+        targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
+        limbKey,
+        itemId
+      });
+      if (updatedTargetContext) this.#targetContext = updatedTargetContext;
+      this.#activeImplantLimbKey = limbKey;
+      this.#activeTab = "implant";
+      return this.render({ force: true });
     });
-    if (updatedTargetContext) this.#targetContext = updatedTargetContext;
-    this.#activeImplantLimbKey = limbKey;
-    this.#activeTab = "implant";
-    return this.render({ force: true });
   }
 
   static async #onRemoveProsthesis(event, target) {
     event.preventDefault();
+    if (this.#mutationInFlight) return undefined;
     const limbKey = String(target.dataset.limbKey ?? "");
     const itemId = String(target.dataset.prosthesisItemId ?? "");
     if (!limbKey || !itemId) return undefined;
 
-    const updatedTargetContext = await applyProsthesisRemoval({
-      sourceActor: this.#sourceActor,
-      targetContext: this.#targetContext,
-      limbKey,
-      itemId
+    return this.#runMutation(async () => {
+      const updatedTargetContext = await applyProsthesisRemoval({
+        sourceActor: this.#sourceActor,
+        targetContext: this.#targetContext,
+        targetToken: this.#targetToken,
+        limbKey,
+        itemId
+      });
+      if (updatedTargetContext) this.#targetContext = updatedTargetContext;
+      this.#activeProsthesisLimbKey = limbKey;
+      this.#activeTab = "prosthesis";
+      return this.render({ force: true });
     });
-    if (updatedTargetContext) this.#targetContext = updatedTargetContext;
-    this.#activeProsthesisLimbKey = limbKey;
-    this.#activeTab = "prosthesis";
-    return this.render({ force: true });
   }
 }
 
-async function getMedicineTargetContext(targetToken) {
+async function getMedicineTargetContext(targetToken, sourceActor = null) {
   const actor = targetToken?.actor;
   if (!actor) return null;
   if (canUseActorLocally(actor)) return buildTargetContext(actor, targetToken);
@@ -350,7 +531,8 @@ async function getMedicineTargetContext(targetToken) {
   try {
     const result = await requestMedicineSocket("getTargetContext", {
       actorUuid: actor.uuid,
-      tokenName: targetToken.name
+      sourceActorUuid: sourceActor?.uuid ?? "",
+      targetTokenUuid: getMedicineTokenUuid(targetToken)
     }, gm);
     return result?.targetContext ?? null;
   } catch (error) {
@@ -360,47 +542,134 @@ async function getMedicineTargetContext(targetToken) {
   }
 }
 
-function prepareTargetTreatments(treatments, instruments, activeTreatmentId) {
+function prepareLimbTreatmentGroups(
+  targetContext,
+  instruments,
+  activeTreatmentType = "trauma",
+  activeTreatmentId = "",
+  instrumentRowsByClass = new Map()
+) {
+  const targetLimbKeys = new Set((targetContext?.limbs ?? []).map(limb => limb.key));
+  const traumasByLimb = new Map();
+  const unassigned = [];
+  for (const trauma of targetContext?.traumas ?? []) {
+    const limbKey = getTraumaTreatmentLimbKey(trauma, targetLimbKeys);
+    if (!limbKey) {
+      unassigned.push(trauma);
+      continue;
+    }
+    const entries = traumasByLimb.get(limbKey) ?? [];
+    entries.push(trauma);
+    traumasByLimb.set(limbKey, entries);
+  }
+
+  const limbGroups = [];
+  for (const limb of targetContext?.limbs ?? []) {
+    const traumas = prepareTargetTreatments(
+      traumasByLimb.get(limb.key) ?? [],
+      instruments,
+      activeTreatmentType === "trauma" ? activeTreatmentId : "",
+      instrumentRowsByClass
+    );
+    const [limbTreatment] = prepareTargetTreatments(
+      [limb],
+      instruments,
+      activeTreatmentType === "limb" ? activeTreatmentId : "",
+      instrumentRowsByClass
+    );
+    if (!limbTreatment || (!limb.damaged && !traumas.length)) continue;
+    limbGroups.push({
+      key: limb.key,
+      label: limb.label,
+      value: limb.value,
+      max: limb.max,
+      healingCap: limb.healingCap,
+      hasHealingLimit: limb.healingCap < limb.max,
+      statusLabel: limb.statusLabel,
+      limbTreatment,
+      traumas
+    });
+  }
+
+  const unassignedTraumas = prepareTargetTreatments(
+    unassigned,
+    instruments,
+    activeTreatmentType === "trauma" ? activeTreatmentId : "",
+    instrumentRowsByClass
+  );
+  return {
+    limbGroups,
+    unassignedTraumas,
+    hasTreatments: limbGroups.length > 0 || unassignedTraumas.length > 0
+  };
+}
+
+function getTraumaTreatmentLimbKey(trauma, targetLimbKeys) {
+  const keys = Array.from(new Set([trauma?.limbKey, ...(trauma?.limbKeys ?? [])]
+    .map(key => String(key ?? "").trim())
+    .filter(key => key && targetLimbKeys.has(key))));
+  return keys.length === 1 ? keys[0] : "";
+}
+
+function prepareTargetTreatments(treatments, instruments, activeTreatmentId, instrumentRowsByClass = new Map()) {
   return treatments.map(treatment => {
     const requiredClass = String(treatment.healingToolClass ?? "D");
-    const availableInstruments = instruments.map(instrument => {
-      const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
-      const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
-      return {
-        ...instrument,
-        efficiency,
-        efficiencyLabel: `${formatNumber(efficiency)}%`,
-        classAccepted,
-        usable: classAccepted && instrument.supplyValue > 0 && instrument.requirementMet
-      };
-    });
+    let availableInstruments = instrumentRowsByClass.get(requiredClass);
+    if (!availableInstruments) {
+      availableInstruments = instruments.map(instrument => {
+        const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
+        const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
+        return {
+          ...instrument,
+          efficiency,
+          efficiencyLabel: `${formatNumber(efficiency)}%`,
+          classAccepted,
+          usable: classAccepted && instrument.supplyValue > 0 && instrument.requirementMet
+        };
+      });
+      instrumentRowsByClass.set(requiredClass, availableInstruments);
+    }
+    const treatable = treatment.treatable !== false
+      && toInteger(treatment.healingProgress) < Math.max(1, toInteger(treatment.healingProgressMax));
     return {
       ...treatment,
       active: treatment.id === activeTreatmentId,
-      availableInstruments
+      treatable,
+      progressValue: treatment.displayProgressValue ?? treatment.healingProgress,
+      progressMax: treatment.displayProgressMax ?? treatment.healingProgressMax,
+      availableInstruments: treatable
+        ? availableInstruments
+        : availableInstruments.map(instrument => ({ ...instrument, usable: false }))
     };
   });
 }
 
 function getTargetTreatments(targetContext, treatmentType) {
-  return treatmentType === "disease" ? (targetContext?.diseases ?? []) : (targetContext?.traumas ?? []);
+  if (treatmentType === "limb") return targetContext?.limbs ?? [];
+  if (treatmentType === "disease") return targetContext?.diseases ?? [];
+  return targetContext?.traumas ?? [];
 }
 
 function prepareMedicalInstruments(actor, toolKey) {
   const skills = getSkillSettings();
-  return actor.items
-    .filter(item => item.type === "gear" && hasToolFunction(item, toolKey))
+  const skillLabels = new Map(skills.map(skill => [skill.key, skill.label]));
+  const toolLabel = getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
+  const functionKey = createToolFunctionKey(toolKey);
+  return getActorItemsByType(actor, "gear")
+    .filter(item => hasItemFunction(item, functionKey))
     .map(item => {
       const data = getToolFunction(item, toolKey);
       const skillKey = String(data.skillKey ?? "");
       const skillValue = toInteger(data.skillValue);
-      const skillLabel = skillKey ? (skills.find(skill => skill.key === skillKey)?.label ?? skillKey) : "";
+      const skillLabel = skillKey ? (skillLabels.get(skillKey) ?? skillKey) : "";
       const actorSkillValue = skillKey ? toInteger(actor.system?.skills?.[skillKey]?.value) : 0;
       const requirementMet = !skillKey || actorSkillValue >= skillValue;
       return {
         id: item.id,
         name: item.name,
         img: normalizeImagePath(item.img, "icons/svg/item-bag.svg"),
+        toolKey,
+        toolLabel,
         toolClass: String(data.toolClass ?? "D"),
         supplyValue: toInteger(data.supply?.value),
         supplyMax: toInteger(data.supply?.max),
@@ -411,6 +680,147 @@ function prepareMedicalInstruments(actor, toolKey) {
         requirementMet
       };
     });
+}
+
+function hasAvailableMassTreatment(targetContext, instruments = []) {
+  const counts = getMassTreatmentTargetCounts(targetContext);
+  if (counts.traumas + counts.limbHealth <= 0) return false;
+  const targets = getMassTreatmentTargets(targetContext);
+  const treatments = [...targets.traumas, ...targets.limbHealth];
+  return instruments.some(instrument => (
+    instrument.supplyValue > 0
+    && instrument.requirementMet
+    && treatments.some(treatment => isToolClassAccepted(
+      instrument.toolClass,
+      treatment.healingToolClass
+    ))
+  ));
+}
+
+async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey = "medical" } = {}) {
+  const counts = getMassTreatmentTargetCounts(targetContext);
+  if (counts.traumas + counts.limbHealth <= 0) {
+    ui.notifications.warn("Нет травм или повреждённых частей тела для массового лечения.");
+    return null;
+  }
+
+  const instruments = collectMassTreatmentInstrumentOptions(sourceActor, targetContext, toolKey);
+  if (!instruments.length) {
+    ui.notifications.warn("Нет подходящих инструментов для массового лечения.");
+    return null;
+  }
+
+  const toolGroups = groupToolSelectionOptions(instruments);
+  const instrumentRows = toolGroups.map(group => `
+    <label class="fallout-maw-mass-operation-instrument">
+      <input type="checkbox" name="toolGroup" value="${escapeAttribute(group.key)}" checked>
+      <span>${escapeHtml(group.toolLabel)}</span>
+      <strong>Класс ${escapeHtml(group.toolClass)}</strong>
+      <em>${group.count} шт., общий запас ${group.supplyValue}/${group.supplyMax}</em>
+    </label>
+  `).join("");
+  const content = `
+    <div class="fallout-maw-mass-operation-dialog fallout-maw-mass-treatment-dialog">
+      <p>Лечение выполняется последовательно: сначала травмы, затем здоровье частей тела.</p>
+      <div class="fallout-maw-mass-operation-categories">
+        <label>
+          <input type="checkbox" name="includeTraumas" ${counts.traumas > 0 ? "checked" : "disabled"}>
+          <span>Лечить травмы</span>
+          <strong>${counts.traumas}</strong>
+        </label>
+        <label>
+          <input type="checkbox" name="includeLimbHealth" ${counts.limbHealth > 0 ? "checked" : "disabled"}>
+          <span>Восстанавливать здоровье частей тела</span>
+          <strong>${counts.limbHealth}</strong>
+        </label>
+      </div>
+      <fieldset class="fallout-maw-mass-operation-modes">
+        <legend>Выбор класса</legend>
+        <label>
+          <input type="radio" name="qualityMode" value="matched" checked>
+          <span>Минимально достаточный класс</span>
+        </label>
+        <label>
+          <input type="radio" name="qualityMode" value="best">
+          <span>Лучший доступный класс</span>
+        </label>
+      </fieldset>
+      <fieldset class="fallout-maw-mass-operation-modes">
+        <legend>Распределение запаса</legend>
+        <label>
+          <input type="radio" name="supplyMode" value="depleted" checked>
+          <span>Сначала наиболее израсходованные наборы</span>
+        </label>
+        <label>
+          <input type="radio" name="supplyMode" value="balanced">
+          <span>Выравнивать остаток между наборами</span>
+        </label>
+      </fieldset>
+      <div class="fallout-maw-mass-operation-instruments">
+        ${instrumentRows}
+      </div>
+    </div>
+  `;
+
+  return DialogV2.input({
+    modal: true,
+    window: { title: "Массовое лечение" },
+    content,
+    ok: {
+      label: "Начать лечение",
+      icon: "fa-solid fa-kit-medical",
+      callback: (_event, button) => {
+        const form = button.form;
+        const includeTraumas = Boolean(form.querySelector("input[name='includeTraumas']")?.checked);
+        const includeLimbHealth = Boolean(form.querySelector("input[name='includeLimbHealth']")?.checked);
+        if (!includeTraumas && !includeLimbHealth) {
+          ui.notifications.warn("Выберите травмы, здоровье частей тела или оба варианта.");
+          return false;
+        }
+        const allowedToolGroupKeys = Array.from(form.querySelectorAll("input[name='toolGroup']:checked"))
+          .map(input => String(input.value ?? "").trim())
+          .filter(Boolean);
+        if (!allowedToolGroupKeys.length) {
+          ui.notifications.warn("Выберите хотя бы одну группу медицинских инструментов.");
+          return false;
+        }
+        return normalizeMassTreatmentOptions({
+          includeTraumas,
+          includeLimbHealth,
+          qualityMode: form.querySelector("input[name='qualityMode']:checked")?.value,
+          supplyMode: form.querySelector("input[name='supplyMode']:checked")?.value,
+          allowedToolGroupKeys
+        });
+      }
+    },
+    buttons: [{ action: "cancel", label: "Отмена" }],
+    position: { width: 580 },
+    rejectClose: false
+  });
+}
+
+function collectMassTreatmentInstrumentOptions(sourceActor, targetContext, toolKey = "medical") {
+  const targets = getMassTreatmentTargets(targetContext);
+  const treatments = [...targets.traumas, ...targets.limbHealth];
+  return prepareMedicalInstruments(sourceActor, toolKey)
+    .filter(instrument => instrument.supplyValue > 0 && instrument.requirementMet)
+    .filter(instrument => treatments.some(treatment => isToolClassAccepted(
+      instrument.toolClass,
+      treatment.healingToolClass
+    )))
+    .sort((left, right) => (
+      toToolClassRank(right.toolClass) - toToolClassRank(left.toolClass)
+      || right.supplyValue - left.supplyValue
+      || left.name.localeCompare(right.name)
+    ));
+}
+
+function chooseBestTreatmentInstrument(sourceActor, treatment, toolKey, options = {}) {
+  const selected = selectToolByPolicy(prepareMedicalInstruments(sourceActor, toolKey), {
+    requiredToolKey: toolKey,
+    requiredToolClass: treatment?.healingToolClass
+  }, normalizeMassTreatmentOptions(options));
+  return selected ? { instrumentId: selected.id } : null;
 }
 
 function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimbKey = "") {
@@ -548,80 +958,289 @@ async function performTreatment({ sourceActor, sourceToken = null, targetContext
     ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
     return undefined;
   }
-
-  const trauma = getTargetTreatments(targetContext, treatmentType).find(item => item.id === treatmentId);
-  const instrument = sourceActor?.items?.get(instrumentId);
-  if (!trauma || !instrument || instrument.type !== "gear") {
-    ui.notifications.warn("Не удалось найти травму или инструмент лечения.");
-    return undefined;
-  }
-
-  const tool = getToolFunction(instrument, toolKey);
-  const validation = validateInstrumentForTreatment(sourceActor, trauma, tool);
-  if (!validation.ok) {
-    ui.notifications.warn(validation.message);
-    return undefined;
-  }
-
-  const maxProgress = Math.max(1, toInteger(trauma.healingProgressMax));
-  const initialProgress = Math.min(maxProgress, Math.max(0, toInteger(trauma.healingProgress)));
-  const missingProgress = Math.max(0, maxProgress - initialProgress);
-  if (!missingProgress) {
-    await postMedicineChat(sourceActor, {
-      title: "Медицина",
-      tone: "success",
-      lines: [`"${trauma.name}" уже вылечено.`]
-    });
-    return undefined;
-  }
-
-  const result = await runTreatmentChecks({
+  const resolution = await applyTreatmentToTarget(targetContext, {
     sourceActor,
     sourceToken,
-    targetContext,
     targetToken,
-    trauma,
-    tool,
-    initialProgress,
-    maxProgress
-  });
-
-  if (!result.entries.length) {
-    await postMedicineChat(sourceActor, {
-      title: `Лечение: ${trauma.name}`,
-      tone: "failure",
-      lines: [result.reason || "Лечение не выполнено."]
-    });
-    return undefined;
-  }
-
-  const completed = result.finalProgress >= maxProgress;
-  const finalProgress = Math.min(maxProgress, result.finalProgress);
-  const updatedTargetContext = await applyTreatmentToTarget(targetContext, {
-    sourceActor,
     treatmentType,
     treatmentId,
-    instrumentId: instrument.id,
-    toolKey,
-    expectedProgress: initialProgress,
-    finalProgress,
-    completed,
-    expectedSupply: toInteger(tool.supply?.value),
-    remainingSupply: result.remainingCharges
+    instrumentId,
+    toolKey
   });
-  if (!updatedTargetContext) return undefined;
+  if (!resolution) return undefined;
 
-  await postTreatmentResultChat(sourceActor, {
-    trauma,
+  const {
+    targetContext: updatedTargetContext,
+    treatment,
     instrument,
     initialProgress,
     finalProgress,
     maxProgress,
-    spentCharges: result.spentCharges,
-    entries: result.entries,
+    spentCharges,
+    entries = [],
+    completed,
+    reason = "",
+    alreadyHealed = false
+  } = resolution;
+  if (alreadyHealed) {
+    await postMedicineChat(sourceActor, {
+      title: "Медицина",
+      tone: "success",
+      lines: [`"${treatment?.name ?? "Цель лечения"}" уже вылечено.`]
+    });
+    return { targetContext: updatedTargetContext ?? targetContext };
+  }
+  if (!entries.length) {
+    await postMedicineChat(sourceActor, {
+      title: `Лечение: ${treatment?.name ?? "цель"}`,
+      tone: "failure",
+      lines: [reason || "Лечение не выполнено."]
+    });
+    return undefined;
+  }
+
+  await postTreatmentResultChat(sourceActor, {
+    treatment,
+    instrument,
+    initialProgress,
+    finalProgress,
+    maxProgress,
+    spentCharges,
+    entries,
     completed
   });
   return { targetContext: updatedTargetContext };
+}
+
+async function performMassTreatment({
+  sourceActor,
+  sourceToken = null,
+  targetContext,
+  targetToken = null,
+  toolKey = "medical",
+  options = {},
+  requestId = ""
+} = {}) {
+  if (!sourceActor?.isOwner && !game.user?.isGM) {
+    ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
+    return undefined;
+  }
+  const resolution = await applyMassTreatmentToTarget(targetContext, {
+    sourceActor,
+    sourceToken,
+    targetToken,
+    toolKey,
+    options,
+    requestId
+  });
+  if (!resolution) return undefined;
+  if (resolution.pending) return resolution;
+  await postMassTreatmentChat(sourceActor, resolution.summary);
+  return resolution;
+}
+
+async function applyMassTreatmentToTarget(targetContext, {
+  sourceActor,
+  sourceToken = null,
+  targetToken = null,
+  toolKey = "medical",
+  options = {},
+  requestId = ""
+} = {}) {
+  const actorUuid = String(targetContext?.actorUuid ?? "");
+  const sourceActorUuid = String(sourceActor?.uuid ?? "");
+  if (!actorUuid || !sourceActorUuid) {
+    ui.notifications.warn("Не удалось определить цель массового лечения.");
+    return null;
+  }
+  const normalizedOptions = normalizeMassTreatmentOptions(options);
+  const stableRequestId = String(requestId ?? "").trim();
+  const actor = targetToken?.actor ?? await fromUuid(actorUuid);
+  if (actor && String(actor.uuid ?? "") === actorUuid && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
+    try {
+      return await resolveMassTreatmentOnAuthority({
+        sourceActor,
+        sourceToken,
+        targetActor: actor,
+        targetToken,
+        toolKey,
+        options: normalizedOptions,
+        operationId: stableRequestId
+          ? `medicine-mass-treatment:${game.user?.id ?? "local"}:${stableRequestId}`
+          : `medicine-mass-treatment:${foundry.utils.randomID()}`
+      });
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Medicine local mass treatment failed`, error);
+      ui.notifications.error(`Не удалось выполнить массовое лечение: ${error.message}`);
+      return null;
+    }
+  }
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для массового лечения.");
+    return null;
+  }
+  try {
+    const result = await requestMedicineSocket("performMassTreatment", {
+      actorUuid,
+      sourceActorUuid,
+      sourceTokenUuid: getMedicineTokenUuid(sourceToken),
+      targetTokenUuid: getMedicineTokenUuid(targetToken),
+      toolKey,
+      options: normalizedOptions
+    }, gm, { requestId: stableRequestId });
+    return result?.resolution ?? null;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Medicine mass treatment socket failed`, error);
+    if (error?.code === "authority-timeout") {
+      ui.notifications.warn("GM продолжает массовое лечение. Повторное нажатие будет ожидать ту же операцию.");
+      return { pending: true, requestId: stableRequestId };
+    }
+    ui.notifications.error(`Не удалось выполнить массовое лечение: ${error.message}`);
+    return null;
+  }
+}
+
+async function resolveMassTreatmentOnAuthority(args = {}) {
+  const operationId = String(args.operationId ?? "").trim()
+    || `medicine-mass-treatment:${foundry.utils.randomID()}`;
+  const sourceToken = args.sourceToken?.document ?? args.sourceToken ?? null;
+  const targetToken = args.targetToken?.document ?? args.targetToken ?? null;
+  assertMedicineTokenMatchesActor(sourceToken, args.sourceActor);
+  assertMedicineTokenMatchesActor(targetToken, args.targetActor);
+  return resolveMassTreatmentOnAuthorityOperation({
+    ...args,
+    sourceToken,
+    targetToken,
+    operationId
+  });
+}
+
+async function resolveMassTreatmentOnAuthorityOperation({
+  sourceActor,
+  sourceToken = null,
+  targetActor,
+  targetToken = null,
+  toolKey = "medical",
+  options = {},
+  operationId = `medicine-mass-treatment:${foundry.utils.randomID()}`
+} = {}) {
+  if (!sourceActor || !targetActor) throw new Error("участники массового лечения не найдены");
+  const normalizedToolKey = validateConfiguredMedicineToolKey(toolKey);
+
+  const normalizedOptions = normalizeMassTreatmentOptions(options);
+  if (!normalizedOptions.includeTraumas && !normalizedOptions.includeLimbHealth) {
+    throw new Error("Выберите хотя бы один вид массового лечения.");
+  }
+  if (!normalizedOptions.allowedToolGroupKeys.length) {
+    throw new Error("Выберите хотя бы одну группу медицинских инструментов.");
+  }
+
+  const initialContext = buildTargetContext(targetActor, targetToken);
+  if (!canActorReceiveHealing(targetActor)) {
+    return {
+      targetContext: initialContext,
+      summary: createEmptyMassTreatmentSummary(initialContext, normalizedOptions, {
+        stopped: true,
+        reason: "Цель сейчас не может получать лечение."
+      })
+    };
+  }
+  const compatibleGroupKeys = new Set(groupToolSelectionOptions(
+    collectMassTreatmentInstrumentOptions(sourceActor, initialContext, normalizedToolKey)
+  ).map(group => group.key));
+  if (!normalizedOptions.allowedToolGroupKeys.some(key => compatibleGroupKeys.has(key))) {
+    throw new Error("Выбранные группы медицинских инструментов больше недоступны.");
+  }
+
+  const result = await runSequentialMassTreatment({
+    initialContext,
+    options: normalizedOptions,
+    chooseInstrument: ({ treatment, options: currentOptions }) => chooseBestTreatmentInstrument(
+      sourceActor,
+      treatment,
+      normalizedToolKey,
+      currentOptions
+    ),
+    resolveTreatment: async ({ treatmentType, treatmentId, instrumentId, step }) => {
+      try {
+        return await resolveTreatmentOnAuthority({
+          sourceActor,
+          sourceToken,
+          targetActor,
+          targetToken,
+          treatmentType,
+          treatmentId,
+          instrumentId,
+          toolKey: normalizedToolKey,
+          operationId: `${operationId}:step:${step}`
+        });
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Medicine mass treatment step failed`, error);
+        return createFailedMassTreatmentReceipt({
+          targetActor,
+          targetToken,
+          treatmentType,
+          treatmentId,
+          operationId: `${operationId}:step:${step}`,
+          reason: error.message
+        });
+      }
+    }
+  });
+  return {
+    targetContext: buildTargetContext(targetActor, targetToken),
+    summary: result.summary
+  };
+}
+
+function createEmptyMassTreatmentSummary(targetContext, options, { stopped = false, reason = "" } = {}) {
+  const normalized = normalizeMassTreatmentOptions(options);
+  const counts = getMassTreatmentTargetCounts(targetContext);
+  return {
+    targetName: String(targetContext?.name ?? ""),
+    requestedTraumas: normalized.includeTraumas ? counts.traumas : 0,
+    requestedLimbHealth: normalized.includeLimbHealth ? counts.limbHealth : 0,
+    attempted: 0,
+    completedTraumas: 0,
+    completedLimbs: 0,
+    restoredTraumaProgress: 0,
+    restoredLimbHealth: 0,
+    charges: 0,
+    skipped: 0,
+    stopped: Boolean(stopped),
+    reasons: reason ? [String(reason)] : []
+  };
+}
+
+function createFailedMassTreatmentReceipt({
+  targetActor,
+  targetToken = null,
+  treatmentType = "trauma",
+  treatmentId = "",
+  operationId = "",
+  reason = "Лечение не выполнено."
+} = {}) {
+  const targetContext = buildTargetContext(targetActor, targetToken);
+  const treatment = getTargetTreatments(targetContext, treatmentType)
+    .find(entry => entry.id === String(treatmentId ?? "")) ?? null;
+  const maxProgress = Math.max(1, toInteger(treatment?.healingProgressMax));
+  const initialProgress = Math.min(maxProgress, Math.max(0, toInteger(treatment?.healingProgress)));
+  return {
+    version: 1,
+    status: "failed",
+    operationId,
+    targetContext,
+    treatment,
+    initialProgress,
+    finalProgress: initialProgress,
+    maxProgress,
+    spentCharges: 0,
+    entries: [],
+    completed: initialProgress >= maxProgress,
+    reason: String(reason || "Лечение не выполнено.")
+  };
 }
 
 async function performImplantInstallation({ sourceActor, sourceToken = null, targetContext, targetToken = null, limbKey = "", implantSource = "", itemId = "" } = {}) {
@@ -631,33 +1250,131 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
   }
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
   if (!targetActorUuid || !limbKey || !itemId) return undefined;
+  const resolution = await requestImplantInstallation({
+    sourceActor,
+    sourceToken,
+    targetActorUuid,
+    targetToken,
+    limbKey,
+    implantSource,
+    itemId
+  });
+  if (!resolution || resolution.cancelled) return undefined;
 
-  const targetLimb = (targetContext?.limbs ?? []).find(limb => limb.key === limbKey);
-  if (!targetLimb) {
-    ui.notifications.warn("Часть тела для установки импланта не найдена.");
-    return undefined;
+  const title = `Установка импланта: ${resolution.itemName ?? "имплант"}`;
+  if (resolution.resultKey === "criticalFailure") {
+    await postMedicineChat(sourceActor, {
+      title,
+      tone: "failure",
+      lines: [resolution.criticalDamage > 0
+        ? `Критический провал. Имплант повреждён на ${resolution.criticalDamage} и не установлен.`
+        : "Критический провал. Имплант не установлен."]
+    });
+    return { targetContext: resolution.targetContext ?? targetContext };
   }
+  if (!isSuccessfulSkillResult(resolution.resultKey)) {
+    await postMedicineChat(sourceActor, {
+      title,
+      tone: "failure",
+      lines: ["Проверка провалена. Имплант не установлен."]
+    });
+    return { targetContext: resolution.targetContext ?? targetContext };
+  }
+
+  await postMedicineChat(sourceActor, {
+    title,
+    tone: "success",
+    lines: [`${resolution.targetName ?? targetContext?.name ?? "Цель"}: ${resolution.limbLabel ?? getTargetLimbLabel(targetContext, limbKey)} получила имплант.`]
+  });
+  return { targetContext: resolution.targetContext ?? targetContext };
+}
+
+async function requestImplantInstallation({
+  sourceActor,
+  sourceToken = null,
+  targetActorUuid = "",
+  targetToken = null,
+  limbKey = "",
+  implantSource = "",
+  itemId = ""
+} = {}) {
+  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
+  if (
+    targetActor
+    && String(targetActor.uuid ?? "") === String(targetActorUuid)
+    && canUseActorLocally(targetActor)
+    && canUseActorLocally(sourceActor)
+  ) {
+    return resolveImplantInstallationOnAuthority({
+      sourceActor,
+      sourceToken,
+      targetActor,
+      targetToken,
+      limbKey,
+      implantSource,
+      itemId
+    });
+  }
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для установки импланта.");
+    return null;
+  }
+  try {
+    const result = await requestMedicineSocket("performImplantInstallation", {
+      actorUuid: targetActorUuid,
+      sourceActorUuid: sourceActor?.uuid ?? "",
+      sourceTokenUuid: getMedicineTokenUuid(sourceToken),
+      targetTokenUuid: getMedicineTokenUuid(targetToken),
+      limbKey,
+      implantSource,
+      itemId
+    }, gm);
+    return result?.resolution ?? null;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Medicine implant socket failed`, error);
+    ui.notifications.error(`Не удалось выполнить установку импланта: ${error.message}`);
+    return null;
+  }
+}
+
+async function resolveImplantInstallationOnAuthority(args = {}) {
+  return runWithMedicineAuthorityLocks(
+    [args.sourceActor, args.targetActor],
+    () => resolveImplantInstallationOnAuthorityLocked(args)
+  );
+}
+
+async function resolveImplantInstallationOnAuthorityLocked({
+  sourceActor,
+  sourceToken = null,
+  targetActor,
+  targetToken = null,
+  limbKey = "",
+  implantSource = "",
+  itemId = ""
+} = {}) {
+  if (!sourceActor || !targetActor) throw new Error("участники установки импланта не найдены");
+  if (!["source", "target"].includes(implantSource)) throw new Error("некорректный источник импланта");
+
+  const targetContext = buildTargetContext(targetActor, targetToken);
+  const targetLimb = targetContext.limbs.find(limb => limb.key === limbKey);
+  if (!targetLimb) throw new Error("часть тела для установки импланта не найдена");
   const implantLimit = Math.max(0, toInteger(targetLimb.implantLimit));
   if ((targetLimb.implants ?? []).length >= implantLimit) {
-    ui.notifications.warn("На выбранной части тела нет свободного места для импланта.");
-    return undefined;
+    throw new Error("на выбранной части тела нет свободного места для импланта");
   }
 
-  const implant = await resolveImplantInstallItem({ sourceActor, targetActorUuid, implantSource, itemId })
-    ?? createImplantPseudoItem((targetContext?.implantItems ?? []).find(item => item.id === itemId && item.source === implantSource));
-  if (!implant || !isImplantForLimb(implant, limbKey)) {
-    ui.notifications.warn("Имплант не найден или не подходит к выбранной части тела.");
-    return undefined;
+  const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
+  const implant = sourceContainer.items?.get(String(itemId ?? ""));
+  if (!implant || implant.type !== "gear" || !isImplantForLimb(implant, limbKey)) {
+    throw new Error("имплант не найден или не подходит к выбранной части тела");
   }
-  if (!isImplantItemInstallable(implant)) {
-    ui.notifications.warn("Этот имплант сломан и не может быть установлен.");
-    return undefined;
-  }
+  if (!isImplantItemInstallable(implant)) throw new Error("сломанный имплант нельзя установить");
 
   const data = getImplantFunction(implant);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
-  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
   const outcome = skillKey
     ? await requestSkillCheck({
       actor: sourceActor,
@@ -666,7 +1383,8 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
         difficulty,
         actorToken: sourceToken?.object ?? sourceToken,
         targetActor,
-        targetToken: targetToken?.object ?? targetToken
+        targetToken: targetToken?.object ?? targetToken,
+        allowImplicitTarget: false
       },
       animate: false,
       createMessage: true,
@@ -674,133 +1392,57 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
       requester: "medicineImplant"
     })
     : { result: { key: "success" } };
-  if (!outcome) return undefined;
+  if (!outcome) return { targetContext, cancelled: true };
 
   const resultKey = String(outcome.result?.key ?? "failure");
-  if (resultKey !== "success" && resultKey !== "criticalSuccess") {
-    if (resultKey === "criticalFailure") {
-      const updatedTargetContext = await applyImplantCriticalFailure({
-        sourceActor,
-        targetActorUuid,
-        limbKey,
-        implantSource,
-        itemId
-      });
-      await postMedicineChat(sourceActor, {
-        title: `Установка импланта: ${implant.name}`,
-        tone: "failure",
-        lines: ["Критический провал. Имплант повреждён и не установлен."]
-      });
-      return { targetContext: updatedTargetContext ?? targetContext };
-    }
-    await postMedicineChat(sourceActor, {
-      title: `Установка импланта: ${implant.name}`,
-      tone: "failure",
-      lines: ["Проверка провалена. Имплант не установлен."]
+  let updatedTargetContext = targetContext;
+  let criticalDamage = 0;
+  if (resultKey === "criticalFailure") {
+    const criticalResult = await applyImplantCriticalFailureLocally({
+      sourceActor,
+      targetActor,
+      limbKey,
+      implantSource,
+      itemId
     });
-    return undefined;
+    criticalDamage = criticalResult.appliedDamage;
+    updatedTargetContext = buildTargetContext(targetActor, targetToken);
+  } else if (isSuccessfulSkillResult(resultKey)) {
+    await applyImplantInstallLocally({
+      sourceActor,
+      targetActor,
+      limbKey,
+      implantSource,
+      itemId
+    });
+    updatedTargetContext = buildTargetContext(targetActor, targetToken);
   }
-
-  const updatedTargetContext = await applyImplantInstall({
-    sourceActor,
-    targetActorUuid,
-    limbKey,
-    implantSource,
-    itemId
-  });
-  await postMedicineChat(sourceActor, {
-    title: `Установка импланта: ${implant.name}`,
-    tone: "success",
-    lines: [`${targetContext?.name ?? "Цель"}: ${getTargetLimbLabel(targetContext, limbKey)} получила имплант.`]
-  });
-  return { targetContext: updatedTargetContext ?? targetContext };
-}
-
-async function resolveImplantInstallItem({ sourceActor, targetActorUuid = "", implantSource = "", itemId = "" } = {}) {
-  if (implantSource === "source") return sourceActor?.items?.get(itemId) ?? null;
-  const targetActor = await fromUuid(targetActorUuid);
-  if (targetActor && canUseActorLocally(targetActor)) return targetActor.items?.get(itemId) ?? null;
-  if (sourceActor?.uuid === targetActorUuid) return sourceActor.items?.get(itemId) ?? null;
-  return null;
-}
-
-function createImplantPseudoItem(snapshot = null) {
-  if (!snapshot) return null;
   return {
-    id: snapshot.id,
-    name: snapshot.name,
-    system: {
-      functions: {
-        condition: {
-          enabled: Boolean(snapshot.hasCondition),
-          value: snapshot.conditionValue ?? 0,
-          max: snapshot.conditionMax ?? 0
-        },
-        implant: {
-          enabled: true,
-          limbKeys: snapshot.limbKeys ?? [],
-          difficulty: snapshot.difficulty,
-          skillKey: snapshot.skillKey
-        }
-      }
-    }
+    targetContext: updatedTargetContext,
+    resultKey,
+    itemName: implant.name,
+    targetName: targetContext.name,
+    limbLabel: targetLimb.label,
+    criticalDamage
   };
 }
 
-async function applyImplantInstall({ sourceActor, targetActorUuid = "", limbKey = "", implantSource = "", itemId = "" } = {}) {
-  const targetActor = await fromUuid(targetActorUuid);
-  const sourceActorUuid = sourceActor?.uuid ?? "";
-  if (targetActor && canUseActorLocally(targetActor) && (implantSource === "target" || sourceActor?.isOwner || game.user?.isGM)) {
-    return applyImplantInstallLocally({ sourceActor, targetActor, limbKey, implantSource, itemId });
-  }
-  const gm = getResponsibleGM();
-  if (!gm) {
-    ui.notifications.warn("Нет активного GM для установки импланта.");
-    return null;
-  }
-  const result = await requestMedicineSocket("installImplant", {
-    sourceActorUuid,
-    targetActorUuid,
-    limbKey,
-    implantSource,
-    itemId
-  }, gm);
-  return result?.targetContext ?? null;
-}
-
-async function applyImplantCriticalFailure({ sourceActor, targetActorUuid = "", limbKey = "", implantSource = "", itemId = "" } = {}) {
-  const targetActor = await fromUuid(targetActorUuid);
-  const sourceActorUuid = sourceActor?.uuid ?? "";
-  if (targetActor && canUseActorLocally(targetActor) && (implantSource === "target" || sourceActor?.isOwner || game.user?.isGM)) {
-    return applyImplantCriticalFailureLocally({ sourceActor, targetActor, limbKey, implantSource, itemId });
-  }
-  const gm = getResponsibleGM();
-  if (!gm) {
-    ui.notifications.warn("Нет активного GM для повреждения импланта.");
-    return null;
-  }
-  const result = await requestMedicineSocket("implantCriticalFailure", {
-    sourceActorUuid,
-    targetActorUuid,
-    limbKey,
-    implantSource,
-    itemId
-  }, gm);
-  return result?.targetContext ?? null;
-}
-
-async function applyImplantRemoval({ sourceActor, targetContext, limbKey = "", itemId = "" } = {}) {
+async function applyImplantRemoval({ sourceActor, targetContext, targetToken = null, limbKey = "", itemId = "" } = {}) {
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
-  const targetActor = await fromUuid(targetActorUuid);
+  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
   const sourceActorUuid = sourceActor?.uuid ?? "";
   const sourceActorDocument = sourceActorUuid ? await fromUuid(sourceActorUuid) : sourceActor;
   if (
     targetActor
+    && String(targetActor.uuid ?? "") === targetActorUuid
     && sourceActorDocument
     && canUseActorLocally(targetActor)
     && canUseActorLocally(sourceActorDocument)
   ) {
-    return applyImplantRemovalLocally({ sourceActor: sourceActorDocument, targetActor, limbKey, itemId });
+    return runWithMedicineAuthorityLocks(
+      [sourceActorDocument, targetActor],
+      () => applyImplantRemovalLocally({ sourceActor: sourceActorDocument, targetActor, targetToken, limbKey, itemId })
+    );
   }
   const gm = getResponsibleGM();
   if (!gm) {
@@ -810,6 +1452,7 @@ async function applyImplantRemoval({ sourceActor, targetContext, limbKey = "", i
   const result = await requestMedicineSocket("removeImplant", {
     sourceActorUuid,
     targetActorUuid,
+    targetTokenUuid: getMedicineTokenUuid(targetToken),
     limbKey,
     itemId
   }, gm);
@@ -819,11 +1462,18 @@ async function applyImplantRemoval({ sourceActor, targetContext, limbKey = "", i
 async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = "", implantSource = "", itemId = "" } = {}) {
   const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
-  if (!item || item.type !== "gear" || !isImplantForLimb(item, limbKey)) return buildTargetContext(targetActor);
-  if (!isImplantItemInstallable(item)) return buildTargetContext(targetActor);
+  if (!item || item.type !== "gear" || !isImplantForLimb(item, limbKey)) {
+    throw createTreatmentStaleError("Имплант изменился или больше не доступен.");
+  }
+  if (!isImplantItemInstallable(item)) {
+    throw createTreatmentStaleError("Имплант сломан до завершения установки.");
+  }
 
   const implantLimit = getActorLimbImplantLimit(targetActor, limbKey);
-  if (getInstalledTargetImplants(targetActor, limbKey).length >= implantLimit) return buildTargetContext(targetActor);
+  const installedBefore = getInstalledTargetImplants(targetActor, limbKey).length;
+  if (installedBefore >= implantLimit) {
+    throw createTreatmentStaleError("Свободное место для импланта уже занято.");
+  }
   if (sourceContainer?.uuid !== targetActor.uuid && isContainerItem(item)) {
     await transferItemBetweenActors({
       sourceActor: sourceContainer,
@@ -835,7 +1485,10 @@ async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = 
       allowLocked: true,
       spendWeaponSwitchCost: false
     });
-    return buildTargetContext(targetActor);
+    if (getInstalledTargetImplants(targetActor, limbKey).length <= installedBefore) {
+      throw new Error("Foundry не подтвердил установку импланта.");
+    }
+    return true;
   }
 
   const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
@@ -859,21 +1512,27 @@ async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = 
     ], { reason: "implant-install" });
   }
 
-  return buildTargetContext(targetActor);
+  if (getInstalledTargetImplants(targetActor, limbKey).length <= installedBefore) {
+    throw new Error("Foundry не подтвердил установку импланта.");
+  }
+  return true;
 }
 
-async function applyImplantRemovalLocally({ sourceActor, targetActor, limbKey = "", itemId = "" } = {}) {
+async function applyImplantRemovalLocally({ sourceActor, targetActor, targetToken = null, limbKey = "", itemId = "" } = {}) {
   const item = targetActor?.items?.get(itemId);
-  if (!item || item.type !== "gear") return buildTargetContext(targetActor);
-  if (String(item.system?.placement?.mode ?? "") !== "implant") return buildTargetContext(targetActor);
-  if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
+  if (
+    !item
+    || item.type !== "gear"
+    || String(item.system?.placement?.mode ?? "") !== "implant"
+    || String(item.system?.placement?.limbKey ?? "") !== limbKey
+  ) throw createTreatmentStaleError("Установленный имплант изменился или уже снят.");
 
   const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
   const returnPlan = planActorInventoryGrant(receivingActor, createReturnedImplantItemData(item), {
     quantity: 1,
     merge: false
   });
-  if (!returnPlan) return buildTargetContext(targetActor);
+  if (!returnPlan) throw new Error("В инвентаре получателя нет места для снятого импланта.");
   await executeInventoryMutation([
     {
       actor: receivingActor,
@@ -885,13 +1544,15 @@ async function applyImplantRemovalLocally({ sourceActor, targetActor, limbKey = 
       deletes: [item.id]
     }
   ], { reason: "implant-remove" });
-  return buildTargetContext(targetActor);
+  return buildTargetContext(targetActor, targetToken);
 }
 
 async function applyImplantCriticalFailureLocally({ sourceActor, targetActor, limbKey = "", implantSource = "", itemId = "" } = {}) {
   const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
-  if (!item) return buildTargetContext(targetActor);
+  if (!item || item.type !== "gear" || !isImplantForLimb(item, limbKey)) {
+    throw createTreatmentStaleError("Имплант изменился до применения критического провала.");
+  }
 
   const applied = await damageImplantForCriticalFailure(item);
   if (applied > 0) {
@@ -908,7 +1569,9 @@ async function applyImplantCriticalFailureLocally({ sourceActor, targetActor, li
       }
     });
   }
-  return buildTargetContext(targetActor);
+  return {
+    appliedDamage: applied
+  };
 }
 
 async function damageImplantForCriticalFailure(item) {
@@ -1031,22 +1694,130 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
   }
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
   if (!targetActorUuid || !limbKey || !itemId) return undefined;
+  const resolution = await requestProsthesisInstallation({
+    sourceActor,
+    sourceToken,
+    targetActorUuid,
+    targetToken,
+    limbKey,
+    prosthesisSource,
+    itemId
+  });
+  if (!resolution || resolution.cancelled) return undefined;
 
-  const prosthesis = await resolveProsthesisInstallItem({ sourceActor, targetActorUuid, prosthesisSource, itemId })
-    ?? createProsthesisPseudoItem((targetContext?.prosthesisItems ?? []).find(item => item.id === itemId && item.source === prosthesisSource));
-  if (!prosthesis || !isProsthesisForLimb(prosthesis, limbKey)) {
-    ui.notifications.warn("Протез не найден или не подходит к выбранной части тела.");
-    return undefined;
+  const title = `Установка протеза: ${resolution.itemName ?? "протез"}`;
+  if (resolution.resultKey === "criticalFailure") {
+    await postMedicineChat(sourceActor, {
+      title,
+      tone: "failure",
+      lines: [resolution.criticalDamage > 0
+        ? `Критический провал. Протез повреждён на ${resolution.criticalDamage} и не установлен.`
+        : "Критический провал. Протез не установлен."]
+    });
+    return { targetContext: resolution.targetContext ?? targetContext };
   }
-  if (!isProsthesisItemInstallable(prosthesis)) {
-    ui.notifications.warn("Этот протез сломан и не может быть установлен.");
-    return undefined;
+  if (!isSuccessfulSkillResult(resolution.resultKey)) {
+    await postMedicineChat(sourceActor, {
+      title,
+      tone: "failure",
+      lines: ["Проверка провалена. Протез не установлен."]
+    });
+    return { targetContext: resolution.targetContext ?? targetContext };
   }
+
+  await postMedicineChat(sourceActor, {
+    title,
+    tone: "success",
+    lines: [`${resolution.targetName ?? targetContext?.name ?? "Цель"}: ${resolution.limbLabel ?? getTargetLimbLabel(targetContext, limbKey)} заменена протезом.`]
+  });
+  return { targetContext: resolution.targetContext ?? targetContext };
+}
+
+async function requestProsthesisInstallation({
+  sourceActor,
+  sourceToken = null,
+  targetActorUuid = "",
+  targetToken = null,
+  limbKey = "",
+  prosthesisSource = "",
+  itemId = ""
+} = {}) {
+  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
+  if (
+    targetActor
+    && String(targetActor.uuid ?? "") === String(targetActorUuid)
+    && canUseActorLocally(targetActor)
+    && canUseActorLocally(sourceActor)
+  ) {
+    return resolveProsthesisInstallationOnAuthority({
+      sourceActor,
+      sourceToken,
+      targetActor,
+      targetToken,
+      limbKey,
+      prosthesisSource,
+      itemId
+    });
+  }
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для установки протеза.");
+    return null;
+  }
+  try {
+    const result = await requestMedicineSocket("performProsthesisInstallation", {
+      actorUuid: targetActorUuid,
+      sourceActorUuid: sourceActor?.uuid ?? "",
+      sourceTokenUuid: getMedicineTokenUuid(sourceToken),
+      targetTokenUuid: getMedicineTokenUuid(targetToken),
+      limbKey,
+      prosthesisSource,
+      itemId
+    }, gm);
+    return result?.resolution ?? null;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Medicine prosthesis socket failed`, error);
+    ui.notifications.error(`Не удалось выполнить установку протеза: ${error.message}`);
+    return null;
+  }
+}
+
+async function resolveProsthesisInstallationOnAuthority(args = {}) {
+  return runWithMedicineAuthorityLocks(
+    [args.sourceActor, args.targetActor],
+    () => resolveProsthesisInstallationOnAuthorityLocked(args)
+  );
+}
+
+async function resolveProsthesisInstallationOnAuthorityLocked({
+  sourceActor,
+  sourceToken = null,
+  targetActor,
+  targetToken = null,
+  limbKey = "",
+  prosthesisSource = "",
+  itemId = ""
+} = {}) {
+  if (!sourceActor || !targetActor) throw new Error("участники установки протеза не найдены");
+  if (!["source", "target"].includes(prosthesisSource)) throw new Error("некорректный источник протеза");
+
+  const targetContext = buildTargetContext(targetActor, targetToken);
+  const targetLimb = targetContext.limbs.find(limb => limb.key === limbKey);
+  if (!targetLimb) throw new Error("часть тела для установки протеза не найдена");
+  if (!targetLimb.missing || targetLimb.prosthesis) {
+    throw new Error("протез можно установить только на отсутствующую свободную часть тела");
+  }
+
+  const sourceContainer = prosthesisSource === "source" ? sourceActor : targetActor;
+  const prosthesis = sourceContainer.items?.get(String(itemId ?? ""));
+  if (!prosthesis || prosthesis.type !== "gear" || !isProsthesisForLimb(prosthesis, limbKey)) {
+    throw new Error("протез не найден или не подходит к выбранной части тела");
+  }
+  if (!isProsthesisItemInstallable(prosthesis)) throw new Error("сломанный протез нельзя установить");
 
   const data = getProsthesisFunction(prosthesis);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
-  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
   const outcome = skillKey
     ? await requestSkillCheck({
       actor: sourceActor,
@@ -1055,7 +1826,8 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
         difficulty,
         actorToken: sourceToken?.object ?? sourceToken,
         targetActor,
-        targetToken: targetToken?.object ?? targetToken
+        targetToken: targetToken?.object ?? targetToken,
+        allowImplicitTarget: false
       },
       animate: false,
       createMessage: true,
@@ -1063,134 +1835,57 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
       requester: "medicineProsthesis"
     })
     : { result: { key: "success" } };
-  if (!outcome) return undefined;
+  if (!outcome) return { targetContext, cancelled: true };
 
   const resultKey = String(outcome.result?.key ?? "failure");
-  if (resultKey !== "success" && resultKey !== "criticalSuccess") {
-    if (resultKey === "criticalFailure") {
-      const updatedTargetContext = await applyProsthesisCriticalFailure({
-        sourceActor,
-        targetActorUuid,
-        limbKey,
-        prosthesisSource,
-        itemId
-      });
-      await postMedicineChat(sourceActor, {
-        title: `Установка протеза: ${prosthesis.name}`,
-        tone: "failure",
-        lines: ["Критический провал. Протез поврежден и не установлен."]
-      });
-      return { targetContext: updatedTargetContext ?? targetContext };
-    }
-    await postMedicineChat(sourceActor, {
-      title: `Установка протеза: ${prosthesis.name}`,
-      tone: "failure",
-      lines: ["Проверка провалена. Протез не установлен."]
+  let updatedTargetContext = targetContext;
+  let criticalDamage = 0;
+  if (resultKey === "criticalFailure") {
+    const criticalResult = await applyProsthesisCriticalFailureLocally({
+      sourceActor,
+      targetActor,
+      limbKey,
+      prosthesisSource,
+      itemId
     });
-    return undefined;
+    criticalDamage = criticalResult.appliedDamage;
+    updatedTargetContext = buildTargetContext(targetActor, targetToken);
+  } else if (isSuccessfulSkillResult(resultKey)) {
+    await applyProsthesisInstallLocally({
+      sourceActor,
+      targetActor,
+      limbKey,
+      prosthesisSource,
+      itemId
+    });
+    updatedTargetContext = buildTargetContext(targetActor, targetToken);
   }
-
-  const updatedTargetContext = await applyProsthesisInstall({
-    sourceActor,
-    targetActorUuid,
-    limbKey,
-    prosthesisSource,
-    itemId
-  });
-  await postMedicineChat(sourceActor, {
-    title: `Установка протеза: ${prosthesis.name}`,
-    tone: "success",
-    lines: [`${targetContext?.name ?? "Цель"}: ${getTargetLimbLabel(targetContext, limbKey)} заменена протезом.`]
-  });
-  return { targetContext: updatedTargetContext ?? targetContext };
-}
-
-async function resolveProsthesisInstallItem({ sourceActor, targetActorUuid = "", prosthesisSource = "", itemId = "" } = {}) {
-  if (prosthesisSource === "source") return sourceActor?.items?.get(itemId) ?? null;
-  const targetActor = await fromUuid(targetActorUuid);
-  if (targetActor && canUseActorLocally(targetActor)) return targetActor.items?.get(itemId) ?? null;
-  if (sourceActor?.uuid === targetActorUuid) return sourceActor.items?.get(itemId) ?? null;
-  return null;
-}
-
-function createProsthesisPseudoItem(snapshot = null) {
-  if (!snapshot) return null;
   return {
-    id: snapshot.id,
-    name: snapshot.name,
-    system: {
-      functions: {
-        condition: {
-          enabled: Boolean(snapshot.hasCondition),
-          value: snapshot.conditionValue ?? 0,
-          max: snapshot.conditionMax ?? 0
-        },
-        prosthesis: {
-          enabled: true,
-          limbKeys: snapshot.limbKeys ?? [],
-          integrationPercent: snapshot.integrationPercent,
-          difficulty: snapshot.difficulty,
-          skillKey: snapshot.skillKey
-        }
-      }
-    }
+    targetContext: updatedTargetContext,
+    resultKey,
+    itemName: prosthesis.name,
+    targetName: targetContext.name,
+    limbLabel: targetLimb.label,
+    criticalDamage
   };
 }
 
-async function applyProsthesisInstall({ sourceActor, targetActorUuid = "", limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
-  const targetActor = await fromUuid(targetActorUuid);
-  const sourceActorUuid = sourceActor?.uuid ?? "";
-  if (targetActor && canUseActorLocally(targetActor) && (prosthesisSource === "target" || sourceActor?.isOwner || game.user?.isGM)) {
-    return applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey, prosthesisSource, itemId });
-  }
-  const gm = getResponsibleGM();
-  if (!gm) {
-    ui.notifications.warn("Нет активного GM для установки протеза.");
-    return null;
-  }
-  const result = await requestMedicineSocket("installProsthesis", {
-    sourceActorUuid,
-    targetActorUuid,
-    limbKey,
-    prosthesisSource,
-    itemId
-  }, gm);
-  return result?.targetContext ?? null;
-}
-
-async function applyProsthesisCriticalFailure({ sourceActor, targetActorUuid = "", limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
-  const targetActor = await fromUuid(targetActorUuid);
-  const sourceActorUuid = sourceActor?.uuid ?? "";
-  if (targetActor && canUseActorLocally(targetActor) && (prosthesisSource === "target" || sourceActor?.isOwner || game.user?.isGM)) {
-    return applyProsthesisCriticalFailureLocally({ sourceActor, targetActor, limbKey, prosthesisSource, itemId });
-  }
-  const gm = getResponsibleGM();
-  if (!gm) {
-    ui.notifications.warn("Нет активного GM для повреждения протеза.");
-    return null;
-  }
-  const result = await requestMedicineSocket("prosthesisCriticalFailure", {
-    sourceActorUuid,
-    targetActorUuid,
-    limbKey,
-    prosthesisSource,
-    itemId
-  }, gm);
-  return result?.targetContext ?? null;
-}
-
-async function applyProsthesisRemoval({ sourceActor, targetContext, limbKey = "", itemId = "" } = {}) {
+async function applyProsthesisRemoval({ sourceActor, targetContext, targetToken = null, limbKey = "", itemId = "" } = {}) {
   const targetActorUuid = String(targetContext?.actorUuid ?? "");
-  const targetActor = await fromUuid(targetActorUuid);
+  const targetActor = targetToken?.actor ?? await fromUuid(targetActorUuid);
   const sourceActorUuid = sourceActor?.uuid ?? "";
   const sourceActorDocument = sourceActorUuid ? await fromUuid(sourceActorUuid) : sourceActor;
   if (
     targetActor
+    && String(targetActor.uuid ?? "") === targetActorUuid
     && sourceActorDocument
     && canUseActorLocally(targetActor)
     && canUseActorLocally(sourceActorDocument)
   ) {
-    return applyProsthesisRemovalLocally({ sourceActor: sourceActorDocument, targetActor, limbKey, itemId });
+    return runWithMedicineAuthorityLocks(
+      [sourceActorDocument, targetActor],
+      () => applyProsthesisRemovalLocally({ sourceActor: sourceActorDocument, targetActor, targetToken, limbKey, itemId })
+    );
   }
   const gm = getResponsibleGM();
   if (!gm) {
@@ -1200,6 +1895,7 @@ async function applyProsthesisRemoval({ sourceActor, targetContext, limbKey = ""
   const result = await requestMedicineSocket("removeProsthesis", {
     sourceActorUuid,
     targetActorUuid,
+    targetTokenUuid: getMedicineTokenUuid(targetToken),
     limbKey,
     itemId
   }, gm);
@@ -1209,14 +1905,19 @@ async function applyProsthesisRemoval({ sourceActor, targetContext, limbKey = ""
 async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
   const sourceContainer = prosthesisSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
-  if (!item || item.type !== "gear" || !isProsthesisForLimb(item, limbKey)) return buildTargetContext(targetActor);
-  if (!isProsthesisItemInstallable(item)) return buildTargetContext(targetActor);
+  if (!item || item.type !== "gear" || !isProsthesisForLimb(item, limbKey)) {
+    throw createTreatmentStaleError("Протез изменился или больше не доступен.");
+  }
+  if (!isProsthesisItemInstallable(item)) {
+    throw createTreatmentStaleError("Протез сломан до завершения установки.");
+  }
 
+  if (!targetActor?.system?.limbs?.[limbKey]?.missing) {
+    throw createTreatmentStaleError("Часть тела больше не отсутствует.");
+  }
   const existing = getInstalledTargetProsthesis(targetActor, limbKey);
+  if (existing) throw createTreatmentStaleError("На части тела уже установлен протез.");
   if (sourceContainer?.uuid !== targetActor.uuid && isContainerItem(item)) {
-    if (existing) {
-      throw new Error("Сначала снимите установленный протез: безопасная замена контейнера требует свободного слота.");
-    }
     await transferItemBetweenActors({
       sourceActor: sourceContainer,
       targetActor,
@@ -1229,20 +1930,15 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
     });
     await clearLimbLossState(targetActor, limbKey);
     await setLimbMissingState(targetActor, limbKey);
-    return buildTargetContext(targetActor);
+    if (!getInstalledTargetProsthesis(targetActor, limbKey)) {
+      throw new Error("Foundry не подтвердил установку протеза.");
+    }
+    return true;
   }
-  const returnPlan = existing
-    ? planActorInventoryGrant(targetActor, createReturnedProsthesisItemData(existing), {
-      quantity: 1,
-      merge: false
-    })
-    : { updates: [], creates: [] };
-  if (!returnPlan) return buildTargetContext(targetActor);
-
   const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
-  const targetUpdates = [...returnPlan.updates];
-  const targetDeletes = existing ? [existing.id] : [];
-  const targetCreates = [...returnPlan.creates];
+  const targetUpdates = [];
+  const targetDeletes = [];
+  const targetCreates = [];
   const mutationPlans = [];
 
   if (sourceContainer?.uuid === targetActor.uuid && quantity <= 1) {
@@ -1266,21 +1962,27 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
 
   await clearLimbLossState(targetActor, limbKey);
   await setLimbMissingState(targetActor, limbKey);
-  return buildTargetContext(targetActor);
+  if (!getInstalledTargetProsthesis(targetActor, limbKey)) {
+    throw new Error("Foundry не подтвердил установку протеза.");
+  }
+  return true;
 }
 
-async function applyProsthesisRemovalLocally({ sourceActor, targetActor, limbKey = "", itemId = "" } = {}) {
+async function applyProsthesisRemovalLocally({ sourceActor, targetActor, targetToken = null, limbKey = "", itemId = "" } = {}) {
   const item = targetActor?.items?.get(itemId);
-  if (!item || item.type !== "gear") return buildTargetContext(targetActor);
-  if (String(item.system?.placement?.mode ?? "") !== "prosthesis") return buildTargetContext(targetActor);
-  if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
+  if (
+    !item
+    || item.type !== "gear"
+    || String(item.system?.placement?.mode ?? "") !== "prosthesis"
+    || String(item.system?.placement?.limbKey ?? "") !== limbKey
+  ) throw createTreatmentStaleError("Установленный протез изменился или уже снят.");
 
   const receivingActor = sourceActor && sourceActor.uuid !== targetActor.uuid ? sourceActor : targetActor;
   const returnPlan = planActorInventoryGrant(receivingActor, createReturnedProsthesisItemData(item), {
     quantity: 1,
     merge: false
   });
-  if (!returnPlan) return buildTargetContext(targetActor);
+  if (!returnPlan) throw new Error("В инвентаре получателя нет места для снятого протеза.");
   await executeInventoryMutation([
     {
       actor: receivingActor,
@@ -1294,13 +1996,15 @@ async function applyProsthesisRemovalLocally({ sourceActor, targetActor, limbKey
   ], { reason: "prosthesis-remove" });
   await setLimbMissingState(targetActor, limbKey);
   await applyDestroyedLimbConsequences(targetActor, [limbKey], { ignoreInstalledProsthesis: true });
-  return buildTargetContext(targetActor);
+  return buildTargetContext(targetActor, targetToken);
 }
 
 async function applyProsthesisCriticalFailureLocally({ sourceActor, targetActor, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
   const sourceContainer = prosthesisSource === "source" ? sourceActor : targetActor;
   const item = sourceContainer?.items?.get(itemId);
-  if (!item) return buildTargetContext(targetActor);
+  if (!item || item.type !== "gear" || !isProsthesisForLimb(item, limbKey)) {
+    throw createTreatmentStaleError("Протез изменился до применения критического провала.");
+  }
 
   const applied = await damageProsthesisForCriticalFailure(item);
   if (applied > 0) {
@@ -1317,7 +2021,9 @@ async function applyProsthesisCriticalFailureLocally({ sourceActor, targetActor,
       }
     });
   }
-  return buildTargetContext(targetActor);
+  return {
+    appliedDamage: applied
+  };
 }
 
 async function damageProsthesisForCriticalFailure(item) {
@@ -1447,9 +2153,20 @@ function isProsthesisSnapshotInstallable(item) {
   return Math.max(0, toInteger(item.conditionMax)) > 0 && Math.max(0, toInteger(item.conditionValue)) > 0;
 }
 
-async function runTreatmentChecks({ sourceActor, sourceToken = null, targetContext = null, targetToken = null, trauma, tool, initialProgress, maxProgress }) {
-  const skillKey = String(trauma.healingSkillKey ?? "");
-  const difficulty = Math.max(1, toInteger(trauma.healingDifficulty));
+async function runTreatmentChecks({
+  sourceActor,
+  sourceToken = null,
+  targetContext = null,
+  targetToken = null,
+  treatment,
+  tool,
+  initialProgress,
+  maxProgress,
+  operationId = `medicine-treatment:${foundry.utils.randomID()}`,
+  chainRef = null
+}) {
+  const skillKey = String(treatment.healingSkillKey ?? "");
+  const difficulty = Math.max(1, toInteger(treatment.healingDifficulty));
   const progressPerCheck = Math.max(1, Math.ceil(maxProgress * TREATMENT_PROGRESS_STEP_RATIO));
   const missingProgress = Math.max(0, maxProgress - initialProgress);
   const totalChecks = Math.max(1, Math.ceil(missingProgress / progressPerCheck));
@@ -1467,20 +2184,26 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
     if (availableCharges <= 0) break;
 
     const progressForCheck = Math.min(progressPerCheck, remainingProgress);
+    const checkOperationId = `${operationId}:check:${index}`;
     const outcome = skillKey
       ? await requestSkillCheck({
         actor: sourceActor,
         skillKey,
+        chainRef,
         data: {
           difficulty,
           actorToken: sourceToken?.object ?? sourceToken,
           targetActor,
-          targetToken: targetToken?.object ?? targetToken
+          targetToken: targetToken?.object ?? targetToken,
+          allowImplicitTarget: false,
+          chanceOperationId: checkOperationId,
+          systemEventOperationId: operationId
         },
         animate: false,
         createMessage: true,
         prompt: false,
-        requester: "medicine"
+        requester: "medicine",
+        options: { operationId: checkOperationId }
       })
       : { result: { key: "success" } };
     if (!outcome) {
@@ -1489,13 +2212,12 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
         spentCharges,
         remainingCharges: availableCharges,
         finalProgress: currentProgress,
+        halted: true,
         reason: "Проверка навыка лечения не выполнена."
       };
     }
 
-    const healingOperationId = `medicine-treatment:${String(sourceActor?.uuid ?? sourceActor?.id ?? "")}:${String(
-      trauma?.uuid ?? trauma?.id ?? ""
-    )}:${index}:${foundry.utils.randomID()}`;
+    const healingOperationId = `${operationId}:healing:${index}`;
     const activeUsePreparations = prepareTreatmentHealingActiveUses({
       sourceActor,
       sourceToken,
@@ -1503,8 +2225,8 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
       targetToken,
       chanceOperationId: healingOperationId
     });
-    const treatment = calculateTreatmentResult({
-      trauma,
+    const treatmentResult = calculateTreatmentResult({
+      treatmentTarget: treatment,
       tool,
       availableCharges,
       progressForCheck,
@@ -1516,7 +2238,7 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
         chanceOperationId: healingOperationId
       })
     });
-    if (treatment.chargesUsed <= 0) break;
+    if (treatmentResult.chargesUsed <= 0) break;
 
     if (activeUsePreparations.length) {
       try {
@@ -1528,17 +2250,19 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
       }
     }
 
-    availableCharges -= treatment.chargesUsed;
-    spentCharges += treatment.chargesUsed;
-    currentProgress = Math.min(maxProgress, currentProgress + treatment.progress);
+    availableCharges -= treatmentResult.chargesUsed;
+    spentCharges += treatmentResult.chargesUsed;
+    currentProgress = Math.min(maxProgress, currentProgress + treatmentResult.progress);
     entries.push({
       index,
       total: totalChecks,
       resultLabel: getTreatmentResultLabel(outcome.result?.key),
-      progress: treatment.progress,
-      charges: treatment.chargesUsed,
-      efficiency: treatment.efficiency,
-      currentProgress
+      progress: treatmentResult.progress,
+      charges: treatmentResult.chargesUsed,
+      efficiency: treatmentResult.efficiency,
+      currentProgress,
+      resultKey: String(outcome.result?.key ?? "failure"),
+      skillCheckMessageUuid: String(outcome.message?.uuid ?? "")
     });
   }
 
@@ -1547,15 +2271,19 @@ async function runTreatmentChecks({ sourceActor, sourceToken = null, targetConte
     spentCharges,
     remainingCharges: availableCharges,
     finalProgress: currentProgress,
+    halted: false,
     reason: availableCharges <= 0 ? "Запаса инструмента не хватило для лечения." : ""
   };
 }
 
-function validateInstrumentForTreatment(actor, trauma, tool) {
+function validateInstrumentForTreatment(actor, treatment, tool) {
+  if (treatment?.treatable === false) {
+    return { ok: false, message: treatment.unavailableReason || "Эту цель сейчас нельзя лечить." };
+  }
   if (!tool?.enabled) return { ok: false, message: "Инструмент не подходит для лечения." };
   if (toInteger(tool.supply?.value) <= 0) return { ok: false, message: "У инструмента нет запаса." };
 
-  const requiredClass = String(trauma.healingToolClass ?? "D");
+  const requiredClass = String(treatment.healingToolClass ?? "D");
   const toolClass = String(tool.toolClass ?? "D");
   if (!isToolClassAccepted(toolClass, requiredClass)) {
     return { ok: false, message: `Нужен инструмент класса ${requiredClass} или выше.` };
@@ -1571,9 +2299,9 @@ function validateInstrumentForTreatment(actor, trauma, tool) {
   return { ok: true, message: "" };
 }
 
-function calculateTreatmentResult({ trauma, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1 }) {
+function calculateTreatmentResult({ treatmentTarget, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1 }) {
   const targetProgress = Math.min(progressForCheck, missingProgress);
-  let efficiency = calculateBaseEfficiency(tool.toolClass, trauma.healingToolClass);
+  let efficiency = calculateBaseEfficiency(tool.toolClass, treatmentTarget.healingToolClass);
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
   else if (resultKey === "failure") efficiency *= 0.5;
 
@@ -1644,15 +2372,12 @@ function getTreatmentHealingMultiplier(sourceActor, targetActor = null, targetCo
 
 async function applyTreatmentToTarget(targetContext, {
   sourceActor,
+  sourceToken = null,
+  targetToken = null,
   treatmentType = "trauma",
   treatmentId,
   instrumentId,
-  toolKey,
-  expectedProgress,
-  finalProgress,
-  completed,
-  expectedSupply,
-  remainingSupply
+  toolKey
 }) {
   const actorUuid = String(targetContext?.actorUuid ?? "");
   const sourceActorUuid = String(sourceActor?.uuid ?? "");
@@ -1661,24 +2386,22 @@ async function applyTreatmentToTarget(targetContext, {
     return null;
   }
 
-  const actor = await fromUuid(actorUuid);
-  if (actor && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
+  const actor = targetToken?.actor ?? await fromUuid(actorUuid);
+  if (actor && String(actor.uuid ?? "") === actorUuid && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
     try {
-      return await commitTreatmentToActors({
+      return await resolveTreatmentOnAuthority({
         sourceActor,
+        sourceToken,
         targetActor: actor,
+        targetToken,
         treatmentType,
         treatmentId,
         instrumentId,
         toolKey,
-        expectedProgress,
-        finalProgress,
-        completed,
-        expectedSupply,
-        remainingSupply
+        operationId: `medicine-treatment:${foundry.utils.randomID()}`
       });
     } catch (error) {
-      console.error(`${SYSTEM_ID} | Medicine local apply failed`, error);
+      console.error(`${SYSTEM_ID} | Medicine local treatment failed`, error);
       ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
       return null;
     }
@@ -1691,30 +2414,395 @@ async function applyTreatmentToTarget(targetContext, {
   }
 
   try {
-    const result = await requestMedicineSocket("applyTreatment", {
+    const result = await requestMedicineSocket("performTreatment", {
       actorUuid,
       sourceActorUuid,
+      sourceTokenUuid: getMedicineTokenUuid(sourceToken),
+      targetTokenUuid: getMedicineTokenUuid(targetToken),
       treatmentType,
       treatmentId,
       instrumentId,
-      toolKey,
-      expectedProgress,
-      finalProgress,
-      completed,
-      expectedSupply,
-      remainingSupply
+      toolKey
     }, gm);
-    return result?.targetContext ?? null;
+    return result?.resolution ?? null;
   } catch (error) {
-    console.error(`${SYSTEM_ID} | Medicine apply socket failed`, error);
+    console.error(`${SYSTEM_ID} | Medicine treatment socket failed`, error);
     ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
     return null;
   }
 }
 
+async function resolveTreatmentOnAuthority(args = {}) {
+  const operationId = String(args.operationId ?? "").trim()
+    || `medicine-treatment:${foundry.utils.randomID()}`;
+  const sourceToken = args.sourceToken?.document ?? args.sourceToken ?? null;
+  const targetToken = args.targetToken?.document ?? args.targetToken ?? null;
+  assertMedicineTokenMatchesActor(sourceToken, args.sourceActor);
+  assertMedicineTokenMatchesActor(targetToken, args.targetActor);
+  return withSystemEventRoot({
+    kind: "medicineTreatment",
+    operationId,
+    sceneUuid: String(targetToken?.parent?.uuid ?? sourceToken?.parent?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: args.chainRef ?? null,
+    data: { systemEventOperationId: operationId }
+  }, scope => runWithMedicineAuthorityLocks(
+    [args.sourceActor, args.targetActor],
+    () => runMedicineTreatmentLifecycle({ ...args, operationId }, scope),
+    scope.chainRef
+  ));
+}
+
+async function runMedicineTreatmentLifecycle(args = {}, scope) {
+  const occurrenceBase = `medicine-treatment:${scope.rootId}:${args.operationId}`;
+  const participants = buildMedicineTreatmentParticipants(args);
+  const workflow = await runTerminalSystemEventWorkflow({
+    scope,
+    beforeEventKey: "fallout-maw.medicine.treatment.before",
+    resolvedEventKey: "fallout-maw.medicine.treatment.resolved",
+    occurrenceBase,
+    participants,
+    beforeData: buildMedicineTreatmentEventData(args, { status: "pending" }),
+    resolvedData: ({ value, status, reason }) => buildMedicineTreatmentEventData(args, {
+      receipt: value,
+      status,
+      reason
+    }),
+    before: () => buildMedicineTreatmentStateSnapshot(args),
+    after: () => buildMedicineTreatmentStateSnapshot(args),
+    operation: () => resolveTreatmentOnAuthorityOperation({
+      ...args,
+      chainRef: scope.chainRef
+    }),
+    getResultStatus: result => getMedicineTreatmentTerminalStatus(result),
+    getResultReason: (result, status) => String(result?.reason ?? "").trim()
+      || (status === "success" ? String(result?.status ?? "committed") : status)
+  });
+  if (!workflow.cancelled) return workflow.value;
+  return createCancelledMedicineTreatmentReceipt(args, workflow.reason);
+}
+
+function getMedicineTreatmentTerminalStatus(result = null) {
+  const status = String(result?.status ?? "").trim();
+  if (["committed", "alreadyComplete"].includes(status)) return "success";
+  if (status === "cancelled") return "cancelled";
+  return "failed";
+}
+
+function buildMedicineTreatmentParticipants({
+  sourceActor = null,
+  sourceToken = null,
+  targetActor = null,
+  targetToken = null,
+  treatmentType = "trauma",
+  treatmentId = "",
+  instrumentId = ""
+} = {}) {
+  const instrument = sourceActor?.items?.get?.(String(instrumentId ?? "")) ?? null;
+  const treatmentItem = treatmentType === "limb"
+    ? null
+    : targetActor?.items?.get?.(String(treatmentId ?? "")) ?? null;
+  return {
+    source: createMedicineEventParticipant(sourceActor, sourceToken, instrument),
+    target: createMedicineEventParticipant(targetActor, targetToken, treatmentItem),
+    related: []
+  };
+}
+
+function createMedicineEventParticipant(actor = null, token = null, item = null) {
+  const tokenDocument = token?.document ?? token;
+  const participant = {
+    actorUuid: String(actor?.uuid ?? tokenDocument?.actor?.uuid ?? ""),
+    tokenUuid: String(tokenDocument?.uuid ?? ""),
+    itemUuid: String(item?.uuid ?? "")
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function buildMedicineTreatmentEventData(args = {}, {
+  receipt = null,
+  status = "pending",
+  reason = ""
+} = {}) {
+  const sourceActor = args.sourceActor ?? null;
+  const targetActor = args.targetActor ?? null;
+  const instrument = sourceActor?.items?.get?.(String(args.instrumentId ?? "")) ?? null;
+  const treatmentItem = args.treatmentType === "limb"
+    ? null
+    : targetActor?.items?.get?.(String(args.treatmentId ?? "")) ?? null;
+  const entries = Array.isArray(receipt?.entries)
+    ? receipt.entries.map(entry => ({
+        index: toInteger(entry?.index),
+        total: toInteger(entry?.total),
+        resultKey: String(entry?.resultKey ?? ""),
+        progress: Math.max(0, toInteger(entry?.progress)),
+        charges: Math.max(0, toInteger(entry?.charges)),
+        currentProgress: Math.max(0, toInteger(entry?.currentProgress)),
+        skillCheckMessageUuid: String(entry?.skillCheckMessageUuid ?? "")
+      }))
+    : [];
+  return {
+    schemaVersion: 1,
+    operationId: String(args.operationId ?? receipt?.operationId ?? ""),
+    sourceActorUuid: String(sourceActor?.uuid ?? ""),
+    targetActorUuid: String(targetActor?.uuid ?? ""),
+    sourceTokenUuid: getMedicineTokenUuid(args.sourceToken),
+    targetTokenUuid: getMedicineTokenUuid(args.targetToken),
+    treatmentType: String(args.treatmentType ?? "trauma"),
+    treatmentId: String(args.treatmentId ?? ""),
+    treatmentItemUuid: String(treatmentItem?.uuid ?? ""),
+    treatmentName: String(receipt?.treatment?.name ?? treatmentItem?.name ?? ""),
+    instrumentId: String(args.instrumentId ?? ""),
+    instrumentItemUuid: String(instrument?.uuid ?? ""),
+    instrumentName: String(receipt?.instrument?.name ?? instrument?.name ?? ""),
+    toolKey: String(args.toolKey ?? ""),
+    status: String(receipt?.status ?? status),
+    reason: String(receipt?.reason ?? reason),
+    initialProgress: Math.max(0, toInteger(receipt?.initialProgress)),
+    finalProgress: Math.max(0, toInteger(receipt?.finalProgress)),
+    maxProgress: Math.max(0, toInteger(receipt?.maxProgress)),
+    spentCharges: Math.max(0, toInteger(receipt?.spentCharges)),
+    completed: Boolean(receipt?.completed),
+    entries
+  };
+}
+
+function buildMedicineTreatmentStateSnapshot({
+  sourceActor = null,
+  targetActor = null,
+  treatmentType = "trauma",
+  treatmentId = "",
+  instrumentId = "",
+  toolKey = ""
+} = {}) {
+  const instrument = sourceActor?.items?.get?.(String(instrumentId ?? "")) ?? null;
+  const supply = getToolFunction(instrument, String(toolKey ?? "").trim())?.supply?.value;
+  if (treatmentType === "limb") {
+    const limb = targetActor?.system?.limbs?.[String(treatmentId ?? "")];
+    return {
+      progress: limb ? toInteger(limb.value) - toInteger(limb.min) : null,
+      maxProgress: limb ? Math.max(0, toInteger(limb.max) - toInteger(limb.min)) : null,
+      supply: supply === undefined ? null : Math.max(0, toInteger(supply)),
+      limbValue: limb ? toInteger(limb.value) : null
+    };
+  }
+  const treatment = targetActor?.items?.get?.(String(treatmentId ?? "")) ?? null;
+  return {
+    progress: treatment ? Math.max(0, toInteger(treatment.system?.healingProgress)) : null,
+    maxProgress: treatment ? Math.max(1, toInteger(treatment.system?.healingProgressMax)) : null,
+    supply: supply === undefined ? null : Math.max(0, toInteger(supply)),
+    limbValue: null
+  };
+}
+
+function createCancelledMedicineTreatmentReceipt(args = {}, reason = "cancelled") {
+  const targetContext = args.targetActor ? buildTargetContext(args.targetActor, args.targetToken) : null;
+  const treatment = getTargetTreatments(targetContext, args.treatmentType)
+    .find(entry => entry.id === String(args.treatmentId ?? "")) ?? null;
+  const instrument = args.sourceActor?.items?.get?.(String(args.instrumentId ?? "")) ?? null;
+  const maxProgress = Math.max(1, toInteger(treatment?.healingProgressMax));
+  const initialProgress = Math.min(maxProgress, Math.max(0, toInteger(treatment?.healingProgress)));
+  return {
+    version: 1,
+    status: "cancelled",
+    operationId: String(args.operationId ?? ""),
+    targetContext,
+    treatment,
+    instrument: instrument ? {
+      id: instrument.id,
+      name: instrument.name,
+      img: normalizeImagePath(instrument.img, "icons/svg/item-bag.svg")
+    } : null,
+    initialProgress,
+    finalProgress: initialProgress,
+    maxProgress,
+    spentCharges: 0,
+    entries: [],
+    completed: initialProgress >= maxProgress,
+    reason: String(reason || "Лечение отменено.")
+  };
+}
+
+function getExternalMedicineHealingFailureReason(result = {}) {
+  if (result.cancelled) return "Лечение отменено до применения.";
+  if (result.reason === "healing-blocked") return "Цель сейчас не может получать лечение.";
+  return "Лечение не удалось применить.";
+}
+
+async function resolveTreatmentOnAuthorityOperation({
+  sourceActor,
+  sourceToken = null,
+  targetActor,
+  targetToken = null,
+  treatmentType = "trauma",
+  treatmentId,
+  instrumentId,
+  toolKey,
+  operationId = `medicine-treatment:${foundry.utils.randomID()}`,
+  chainRef = null
+} = {}) {
+  if (!sourceActor || !targetActor) throw new Error("участники лечения не найдены");
+  if (!["limb", "trauma", "disease"].includes(treatmentType)) {
+    throw new Error("некорректный тип цели лечения");
+  }
+  if (!String(treatmentId ?? "").trim() || !String(instrumentId ?? "").trim()) {
+    throw new Error("цель или инструмент лечения не указаны");
+  }
+
+  const currentTargetContext = buildTargetContext(targetActor, targetToken);
+  const treatment = getTargetTreatments(currentTargetContext, treatmentType)
+    .find(item => item.id === String(treatmentId ?? ""));
+  const instrument = sourceActor.items?.get(String(instrumentId ?? ""));
+  const normalizedToolKey = validateConfiguredMedicineToolKey(toolKey);
+  if (
+    !treatment
+    || !instrument
+    || instrument.type !== "gear"
+    || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
+  ) {
+    throw new Error("цель или исправный инструмент лечения не найдены");
+  }
+
+  const tool = getToolFunction(instrument, normalizedToolKey);
+  const validation = validateInstrumentForTreatment(sourceActor, treatment, tool);
+  if (!validation.ok) throw new Error(validation.message);
+
+  const maxProgress = Math.max(1, toInteger(treatment.healingProgressMax));
+  const initialProgress = Math.min(maxProgress, Math.max(0, toInteger(treatment.healingProgress)));
+  const receiptBase = {
+    version: 1,
+    status: "pending",
+    operationId,
+    targetContext: currentTargetContext,
+    treatment,
+    instrument: {
+      id: instrument.id,
+      name: instrument.name,
+      img: normalizeImagePath(instrument.img, "icons/svg/item-bag.svg")
+    },
+    initialProgress,
+    finalProgress: initialProgress,
+    maxProgress,
+    spentCharges: 0,
+    entries: [],
+    completed: initialProgress >= maxProgress,
+    reason: ""
+  };
+  if (!canActorReceiveHealing(targetActor)) {
+    return {
+      ...receiptBase,
+      status: "failed",
+      reason: "Цель сейчас не может получать лечение."
+    };
+  }
+  if (initialProgress >= maxProgress) {
+    return { ...receiptBase, status: "alreadyComplete", alreadyHealed: true };
+  }
+
+  const result = await runTreatmentChecks({
+    sourceActor,
+    sourceToken,
+    targetContext: currentTargetContext,
+    targetToken,
+    treatment,
+    tool,
+    initialProgress,
+    maxProgress,
+    operationId,
+    chainRef
+  });
+  if (!result.entries.length) {
+    return {
+      ...receiptBase,
+      status: "failed",
+      reason: result.reason || "Лечение не выполнено."
+    };
+  }
+
+  const finalProgress = Math.min(maxProgress, result.finalProgress);
+  const completed = finalProgress >= maxProgress;
+  const commitRequest = {
+    sourceActor,
+    targetActor,
+    targetToken,
+    treatmentType,
+    treatmentId,
+    instrumentId: instrument.id,
+    toolKey: normalizedToolKey,
+    expectedProgress: initialProgress,
+    finalProgress,
+    completed,
+    expectedSupply: toInteger(tool.supply?.value),
+    remainingSupply: result.remainingCharges,
+    chainRef
+  };
+  let commitResult;
+  if (treatmentType === "limb" && finalProgress > initialProgress) {
+    const healingResult = await runExternalHealingSystemEventWorkflow({
+      actorUuid: targetActor.uuid,
+      amount: finalProgress - initialProgress,
+      mode: "healing",
+      scope: "limb",
+      limbKey: String(treatmentId ?? ""),
+      source: {
+        kind: "medicineTreatment",
+        operationId,
+        sourceActorUuid: String(sourceActor.uuid ?? ""),
+        sourceTokenUuid: getMedicineTokenUuid(sourceToken),
+        targetTokenUuid: getMedicineTokenUuid(targetToken),
+        sourceItemUuid: String(instrument.uuid ?? ""),
+        limitedUseSkipOutgoing: true,
+        limitedUseSkipIncoming: true,
+        chainRef
+      }
+    }, async ({ actor, chainRef: healingChainRef }) => {
+      const committed = await commitTreatmentToActors({
+        ...commitRequest,
+        targetActor: actor,
+        chainRef: healingChainRef ?? chainRef
+      });
+      return {
+        actor,
+        amount: committed.healing?.appliedHealing ?? 0,
+        healthDelta: committed.healing?.healthDelta ?? 0,
+        limbDelta: committed.healing?.appliedHealing ?? 0,
+        mode: "healing",
+        scope: "limb",
+        limbKey: String(treatmentId ?? ""),
+        targetContext: committed.targetContext
+      };
+    });
+    if (healingResult?.cancelled || healingResult?.failed) {
+      return {
+        ...receiptBase,
+        status: healingResult.cancelled ? "cancelled" : "failed",
+        reason: getExternalMedicineHealingFailureReason(healingResult)
+      };
+    }
+    commitResult = {
+      targetContext: healingResult?.targetContext ?? buildTargetContext(targetActor, targetToken),
+      healing: healingResult
+    };
+  } else {
+    commitResult = await commitTreatmentToActors(commitRequest);
+  }
+  return {
+    ...receiptBase,
+    status: "committed",
+    targetContext: commitResult.targetContext,
+    finalProgress,
+    spentCharges: result.spentCharges,
+    entries: result.entries,
+    completed,
+    halted: Boolean(result.halted),
+    reason: String(result.reason ?? "")
+  };
+}
+
 async function commitTreatmentToActors({
   sourceActor,
   targetActor,
+  targetToken = null,
   treatmentType = "trauma",
   treatmentId,
   instrumentId,
@@ -1723,30 +2811,21 @@ async function commitTreatmentToActors({
   finalProgress,
   completed,
   expectedSupply,
-  remainingSupply
+  remainingSupply,
+  chainRef = null
 }) {
-  const trauma = targetActor?.items?.get(String(treatmentId ?? ""));
-  if (!trauma || trauma.type !== treatmentType) throw new Error("цель лечения не найдена");
-
-  const maxProgress = Math.max(1, toInteger(trauma.system?.healingProgressMax));
-  const currentProgress = Math.min(maxProgress, Math.max(0, toInteger(trauma.system?.healingProgress)));
-  const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
-  if (currentProgress !== toInteger(expectedProgress)) {
-    throw createTreatmentStaleError("Прогресс лечения изменился.");
-  }
-  if (nextProgress < currentProgress) throw new Error("Лечение не может уменьшать прогресс.");
-  const treatmentCompleted = nextProgress >= maxProgress;
-  if (Boolean(completed) !== treatmentCompleted) {
-    throw createTreatmentStaleError("Результат лечения больше не соответствует состоянию цели.");
-  }
-
   const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
   const normalizedToolKey = String(toolKey ?? "").trim();
   const tool = getToolFunction(instrument, normalizedToolKey);
   const currentSupply = Math.max(0, toInteger(tool?.supply?.value));
   const expected = Math.max(0, toInteger(expectedSupply));
   const remaining = Math.max(0, toInteger(remainingSupply));
-  if (!instrument || instrument.type !== "gear" || !tool?.enabled) {
+  if (
+    !instrument
+    || instrument.type !== "gear"
+    || !hasItemFunction(instrument, createToolFunctionKey(normalizedToolKey))
+    || !tool?.enabled
+  ) {
     throw new Error("инструмент лечения не найден");
   }
   if (currentSupply !== expected) {
@@ -1754,54 +2833,207 @@ async function commitTreatmentToActors({
   }
   if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
 
-  const targetPlan = {
-    actor: targetActor,
-    updates: [],
-    deletes: [],
-    actorUpdates: []
+  const treatmentCommit = treatmentType === "limb"
+    ? prepareLimbTreatmentCommit(targetActor, {
+        treatmentId,
+        expectedProgress,
+        finalProgress,
+        completed
+      })
+    : prepareItemTreatmentCommit(targetActor, {
+        treatmentType,
+        treatmentId,
+        expectedProgress,
+        finalProgress,
+        completed
+      });
+  const authoritativeValidation = validateInstrumentForTreatment(
+    sourceActor,
+    treatmentCommit.treatmentTarget,
+    tool
+  );
+  if (!authoritativeValidation.ok) throw new Error(authoritativeValidation.message);
+  const instrumentUpdate = {
+    [`system.functions.tools.${normalizedToolKey}.supply.value`]: remaining
   };
-  if (treatmentCompleted) {
-    targetPlan.deletes.push(trauma.id);
-    if (trauma.type === "trauma") {
-      const actorUpdate = createHealedTraumaActorUpdate(targetActor, trauma);
-      if (Object.keys(actorUpdate).length) targetPlan.actorUpdates.push(actorUpdate);
-    }
+  if (treatmentType === "limb") {
+    await executeAtomicActorItemUpdates([
+      ...treatmentCommit.targetPlan.actorUpdates.map(updates => ({
+        document: targetActor,
+        updates,
+        documentOptions: {
+          falloutMawSkipDamageStatusSync: true,
+          falloutMawLimbCapSync: true
+        }
+      })),
+      { document: instrument, updates: instrumentUpdate }
+    ], {
+      reason: "medicine-limb-treatment-with-tool",
+      chainRef
+    });
   } else {
-    targetPlan.updates.push({
-      _id: trauma.id,
-      "system.healingProgress": nextProgress
+    await executeInventoryMutation([
+      treatmentCommit.targetPlan,
+      {
+        actor: sourceActor,
+        updates: [{ _id: instrument.id, ...instrumentUpdate }]
+      }
+    ], {
+      reason: "medicine-treatment-with-tool",
+      documentOptions: {
+        falloutMawSkipDamageStatusSync: true,
+        falloutMawLimbCapSync: true,
+        ...(chainRef ? { chainRef, falloutMawSystemEventChainRef: chainRef } : {})
+      }
     });
   }
 
-  const diseaseSnapshot = trauma.type === "disease" && treatmentCompleted
-    ? trauma.toObject()
-    : null;
-  await executeInventoryMutation([
-    targetPlan,
-    {
-      actor: sourceActor,
-      updates: [{
-        _id: instrument.id,
-        [`system.functions.tools.${normalizedToolKey}.supply.value`]: remaining
-      }]
-    }
-  ], { reason: "medicine-treatment-with-tool" });
-
-  if (trauma.type === "trauma" && treatmentCompleted) {
+  if (treatmentCommit.syncDamageStatuses) {
     try {
       await synchronizeActorDamageStatusesAfterInventoryMutation(targetActor);
     } catch (error) {
       console.error(`${SYSTEM_ID} | Damage status sync failed after treatment commit`, error);
     }
-  } else if (diseaseSnapshot) {
+  }
+  if (treatmentCommit.diseaseSnapshot) {
     try {
-      await createDiseaseImmunityEffect(targetActor, diseaseSnapshot);
+      await createDiseaseImmunityEffect(targetActor, treatmentCommit.diseaseSnapshot, chainRef
+        ? { chainRef, falloutMawSystemEventChainRef: chainRef }
+        : {});
     } catch (error) {
       console.error(`${SYSTEM_ID} | Disease immunity effect creation failed after treatment commit`, error);
       ui.notifications.warn("Болезнь вылечена, но эффект иммунитета создать не удалось.");
     }
   }
-  return buildTargetContext(targetActor);
+  return {
+    targetContext: buildTargetContext(targetActor, targetToken),
+    healing: treatmentCommit.healing ?? null
+  };
+}
+
+function prepareLimbTreatmentCommit(targetActor, {
+  treatmentId,
+  expectedProgress,
+  finalProgress,
+  completed
+} = {}) {
+  const limbKey = String(treatmentId ?? "").trim();
+  const limb = targetActor?.system?.limbs?.[limbKey];
+  if (!limb || targetActor?.type === "construct") throw new Error("цель лечения не найдена");
+
+  const limbHealthContext = buildActorLimbHealthContext(targetActor);
+  const min = toInteger(limb.min);
+  const currentLimbValue = toInteger(limb.value);
+  const healingCap = Math.min(
+    Math.max(0, toInteger(limb.max)),
+    getLimbHealingCap(targetActor, limbKey, limbHealthContext)
+  );
+  if (
+    limb.missing
+    || limbHealthContext.prosthesesByLimb.has(limbKey)
+    || currentLimbValue >= healingCap
+  ) {
+    throw createTreatmentStaleError("Конечность больше не подлежит лечению.");
+  }
+  const maxProgress = Math.max(1, healingCap - min);
+  const currentProgress = Math.min(maxProgress, Math.max(0, currentLimbValue - min));
+  const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
+  assertTreatmentProgressIsCurrent(currentProgress, expectedProgress);
+  if (nextProgress < currentProgress) throw new Error("Лечение не может уменьшать здоровье конечности.");
+  assertTreatmentCompletionIsCurrent(nextProgress, maxProgress, completed);
+
+  const expectedLimbValue = Math.min(healingCap, min + nextProgress);
+  const healing = prepareTargetedLimbHealingActorUpdate(
+    targetActor,
+    limbKey,
+    expectedLimbValue - currentLimbValue,
+    limbHealthContext
+  );
+  if (healing.previousValue !== currentLimbValue || healing.finalValue !== expectedLimbValue) {
+    throw createTreatmentStaleError("Состояние конечности изменилось или она больше не подлежит лечению.");
+  }
+
+  const targetPlan = createEmptyTreatmentPlan(targetActor);
+  if (Object.keys(healing.updateData).length) targetPlan.actorUpdates.push(healing.updateData);
+  return {
+    targetPlan,
+    treatmentTarget: {
+      type: "limb",
+      healingToolClass: LIMB_TREATMENT_TOOL_CLASS,
+      treatable: true
+    },
+    diseaseSnapshot: null,
+    syncDamageStatuses: healing.appliedHealing > 0,
+    healing
+  };
+}
+
+function prepareItemTreatmentCommit(targetActor, {
+  treatmentType = "trauma",
+  treatmentId,
+  expectedProgress,
+  finalProgress,
+  completed
+} = {}) {
+  const treatment = targetActor?.items?.get(String(treatmentId ?? ""));
+  if (!treatment || treatment.type !== treatmentType || !["trauma", "disease"].includes(treatmentType)) {
+    throw new Error("цель лечения не найдена");
+  }
+
+  const maxProgress = Math.max(1, toInteger(treatment.system?.healingProgressMax));
+  const currentProgress = Math.min(maxProgress, Math.max(0, toInteger(treatment.system?.healingProgress)));
+  const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
+  assertTreatmentProgressIsCurrent(currentProgress, expectedProgress);
+  if (nextProgress < currentProgress) throw new Error("Лечение не может уменьшать прогресс.");
+  const treatmentCompleted = assertTreatmentCompletionIsCurrent(nextProgress, maxProgress, completed);
+
+  const targetPlan = createEmptyTreatmentPlan(targetActor);
+  if (treatmentCompleted) {
+    targetPlan.deletes.push(treatment.id);
+    if (treatment.type === "trauma") {
+      const actorUpdate = createHealedTraumaActorUpdate(targetActor, treatment);
+      if (Object.keys(actorUpdate).length) targetPlan.actorUpdates.push(actorUpdate);
+    }
+  } else {
+    targetPlan.updates.push({
+      _id: treatment.id,
+      "system.healingProgress": nextProgress
+    });
+  }
+  return {
+    targetPlan,
+    treatmentTarget: {
+      type: treatment.type,
+      healingToolClass: String(treatment.system?.healingToolClass ?? "D"),
+      treatable: true
+    },
+    diseaseSnapshot: treatment.type === "disease" && treatmentCompleted ? treatment.toObject() : null,
+    syncDamageStatuses: treatment.type === "trauma" && treatmentCompleted,
+    healing: null
+  };
+}
+
+function createEmptyTreatmentPlan(actor) {
+  return {
+    actor,
+    updates: [],
+    deletes: [],
+    actorUpdates: []
+  };
+}
+
+function assertTreatmentProgressIsCurrent(currentProgress, expectedProgress) {
+  if (currentProgress !== toInteger(expectedProgress)) {
+    throw createTreatmentStaleError("Прогресс лечения изменился.");
+  }
+}
+
+function assertTreatmentCompletionIsCurrent(nextProgress, maxProgress, completed) {
+  const treatmentCompleted = nextProgress >= maxProgress;
+  if (Boolean(completed) !== treatmentCompleted) {
+    throw createTreatmentStaleError("Результат лечения больше не соответствует состоянию цели.");
+  }
+  return treatmentCompleted;
 }
 
 function createHealedTraumaActorUpdate(actor, trauma) {
@@ -1830,40 +3062,70 @@ function createTreatmentStaleError(message) {
 
 function buildTargetContext(actor, token = null) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId) ?? null;
+  const limbHealthContext = buildActorLimbHealthContext(actor);
   return {
     actorUuid: actor.uuid,
+    actorType: actor.type,
     name: token?.name ?? actor.name,
     actorName: actor.name,
     tokenName: token?.name ?? "",
     incomingHealingPercent: getActorHealingModifierPercent(actor, "incoming"),
-    limbs: snapshotActorLimbs(actor),
+    limbs: snapshotActorLimbs(actor, limbHealthContext),
     limbSilhouette: actor.system?.limbSilhouetteOverride
       ? (actor.system?.limbSilhouette ?? null)
       : (race?.limbSilhouette ?? null),
     implantItems: snapshotImplantItems(actor, "target"),
     prosthesisItems: snapshotProsthesisItems(actor, "target"),
-    traumas: actor.items
-      .filter(item => item.type === "trauma")
-      .map(snapshotTrauma),
-    diseases: actor.items
-      .filter(item => item.type === "disease")
-      .map(snapshotDisease)
+    traumas: getActorItemsByType(actor, "trauma").map(snapshotTrauma),
+    diseases: getActorItemsByType(actor, "disease").map(snapshotDisease)
   };
 }
 
-function snapshotActorLimbs(actor) {
+function snapshotActorLimbs(actor, limbHealthContext = buildActorLimbHealthContext(actor)) {
   const installedImplants = getInstalledImplantsByLimb(actor);
-  const installed = getInstalledProsthesesByLimb(actor);
+  const installed = limbHealthContext?.prosthesesByLimb ?? getInstalledProsthesesByLimb(actor);
   return Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => {
     const implants = installedImplants.get(key) ?? [];
     const prosthesis = installed.get(key) ?? null;
     const missing = Boolean(limb?.missing);
+    const value = toInteger(limb?.value);
+    const min = toInteger(limb?.min);
+    const max = Math.max(0, toInteger(limb?.max));
+    const healingCap = Math.min(max, Math.max(min, toInteger(getLimbHealingCap(actor, key, limbHealthContext))));
+    const healable = actor.type !== "construct" && !missing && !prosthesis && value < healingCap;
+    const unavailableReason = getLimbTreatmentUnavailableReason({
+      actorType: actor.type,
+      value,
+      max,
+      healingCap,
+      missing,
+      prosthesis
+    });
     return {
+      id: key,
+      type: "limb",
       key,
+      limbKey: key,
+      name: `Здоровье: ${String(limb?.label ?? key)}`,
       label: String(limb?.label ?? key),
-      value: toInteger(limb?.value),
-      min: toInteger(limb?.min),
-      max: toInteger(limb?.max),
+      img: "icons/svg/heal.svg",
+      value,
+      min,
+      max,
+      healingCap,
+      damaged: value < max,
+      healable,
+      treatable: healable,
+      unavailableReason,
+      statusLabel: unavailableReason || (healingCap < max ? `Доступный предел: ${healingCap}` : "Можно лечить"),
+      healingDifficulty: LIMB_TREATMENT_DIFFICULTY,
+      healingToolClass: LIMB_TREATMENT_TOOL_CLASS,
+      healingSkillKey: LIMB_TREATMENT_SKILL_KEY,
+      healingSkillLabel: getHealingSkillLabel(LIMB_TREATMENT_SKILL_KEY),
+      healingProgress: Math.max(0, value - min),
+      healingProgressMax: Math.max(1, healingCap - min),
+      displayProgressValue: value,
+      displayProgressMax: healingCap,
       implantLimit: Math.max(0, toInteger(limb?.implantLimit ?? 1)),
       implants: implants.map(item => snapshotImplantItem(item, "target")),
       missing,
@@ -1872,9 +3134,18 @@ function snapshotActorLimbs(actor) {
   });
 }
 
+function getLimbTreatmentUnavailableReason({ actorType = "", value = 0, max = 0, healingCap = 0, missing = false, prosthesis = null } = {}) {
+  if (actorType === "construct") return "Для механизмов используется ремонт.";
+  if (missing) return "Конечность отсутствует.";
+  if (prosthesis) return "Установленный протез лечению не подлежит.";
+  if (value >= healingCap && healingCap < max) return "Сначала вылечите ограничивающую травму.";
+  if (value >= healingCap) return "Здоровье уже восстановлено до доступного предела.";
+  return "";
+}
+
 function snapshotImplantItems(actor, source = "target") {
-  return actor.items
-    .filter(item => item.type === "gear" && hasItemFunction(item, ITEM_FUNCTIONS.implant))
+  return getActorItemsByType(actor, "gear")
+    .filter(item => hasItemFunction(item, ITEM_FUNCTIONS.implant))
     .map(item => snapshotImplantItem(item, source));
 }
 
@@ -1903,8 +3174,8 @@ function snapshotImplantItem(item, source = "target") {
 }
 
 function snapshotProsthesisItems(actor, source = "target") {
-  return actor.items
-    .filter(item => item.type === "gear" && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis))
+  return getActorItemsByType(actor, "gear")
+    .filter(item => hasItemFunction(item, ITEM_FUNCTIONS.prosthesis))
     .map(item => snapshotProsthesisItem(item, source));
 }
 
@@ -1935,8 +3206,8 @@ function snapshotProsthesisItem(item, source = "target") {
 
 function getInstalledImplantsByLimb(actor) {
   const map = new Map();
-  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
-    if (item.type !== "gear" || !item.system?.equipped) continue;
+  for (const item of getActorItemsByType(actor, "gear")) {
+    if (!item.system?.equipped) continue;
     if (!hasItemFunction(item, ITEM_FUNCTIONS.implant)) continue;
     if (String(item.system?.placement?.mode ?? "") !== "implant") continue;
     const limbKey = String(item.system?.placement?.limbKey ?? "");
@@ -1950,8 +3221,8 @@ function getInstalledImplantsByLimb(actor) {
 
 function getInstalledProsthesesByLimb(actor) {
   const map = new Map();
-  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
-    if (item.type !== "gear" || !item.system?.equipped) continue;
+  for (const item of getActorItemsByType(actor, "gear")) {
+    if (!item.system?.equipped) continue;
     if (!hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)) continue;
     if (String(item.system?.placement?.mode ?? "") !== "prosthesis") continue;
     const limbKey = String(item.system?.placement?.limbKey ?? "");
@@ -1962,10 +3233,17 @@ function getInstalledProsthesesByLimb(actor) {
 
 function snapshotTrauma(item) {
   const system = item.system ?? {};
+  const limbKeys = Array.from(new Set([
+    system.limbKey,
+    ...(Array.isArray(system.sources) ? system.sources : []).map(source => source?.limbKey)
+  ].map(key => String(key ?? "").trim()).filter(Boolean)));
   return {
     id: item.id,
+    type: "trauma",
     name: item.name,
     img: normalizeImagePath(item.img, "icons/svg/blood.svg"),
+    limbKey: String(system.limbKey ?? "").trim(),
+    limbKeys,
     limbLabel: system.limbLabel ?? "",
     damageTypeLabel: system.damageTypeLabel ?? "",
     sources: prepareTraumaSourceEntries(item),
@@ -2021,24 +3299,31 @@ function prepareTraumaSourceEntries(item) {
   });
 }
 
-async function requestMedicineSocket(action, payload = {}, gm = getResponsibleGM()) {
+async function requestMedicineSocket(action, payload = {}, gm = getResponsibleGM(), { requestId = "" } = {}) {
   if (!gm) throw new Error("нет активного GM");
-  const requestId = foundry.utils.randomID();
+  const resolvedRequestId = String(requestId ?? "").trim() || foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      pendingMedicineSocketRequests.delete(requestId);
-      reject(new Error("GM не ответил на запрос медицины"));
+      pendingMedicineSocketRequests.delete(resolvedRequestId);
+      const error = new Error("GM не ответил на запрос медицины");
+      error.code = "authority-timeout";
+      reject(error);
     }, MEDICINE_SOCKET_TIMEOUT);
-    pendingMedicineSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingMedicineSocketRequests.set(resolvedRequestId, {
+      resolve,
+      reject,
+      timeout,
+      gmUserId: String(gm.id ?? "")
+    });
   });
 
   game.socket.emit(MEDICINE_SOCKET, {
     scope: MEDICINE_SOCKET_SCOPE,
     type: "request",
     action,
-    requestId,
+    requestId: resolvedRequestId,
     requesterUserId,
     gmUserId: gm.id,
     payload
@@ -2046,13 +3331,15 @@ async function requestMedicineSocket(action, payload = {}, gm = getResponsibleGM
   return promise;
 }
 
-async function handleMedicineSocketMessage(message = {}) {
+async function handleMedicineSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== MEDICINE_SOCKET_SCOPE) return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
 
   if (message.type === "response") {
     if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
     const pending = pendingMedicineSocketRequests.get(message.requestId);
     if (!pending) return;
+    if (!authenticatedSenderId || authenticatedSenderId !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingMedicineSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
@@ -2062,13 +3349,10 @@ async function handleMedicineSocketMessage(message = {}) {
 
   if (message.type !== "request") return;
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+  if (!authenticatedSenderId || authenticatedSenderId !== String(message.requesterUserId ?? "")) return;
 
   try {
-    const result = await handleMedicineSocketRequest(
-      message.action,
-      message.payload ?? {},
-      message.requesterUserId
-    );
+    const result = await handleMedicineSocketRequestOnce(message);
     game.socket.emit(MEDICINE_SOCKET, {
       scope: MEDICINE_SOCKET_SCOPE,
       type: "response",
@@ -2090,60 +3374,111 @@ async function handleMedicineSocketMessage(message = {}) {
   }
 }
 
-async function handleMedicineSocketRequest(action, payload = {}, requesterUserId = "") {
+function handleMedicineSocketRequestOnce(message = {}) {
+  const requestId = String(message.requestId ?? "").trim();
+  const requesterUserId = String(message.requesterUserId ?? "").trim();
+  if (!requestId || !requesterUserId) throw new Error("некорректный запрос медицины");
+  const key = `${requesterUserId}:${requestId}`;
+  const existing = handledMedicineSocketRequests.get(key);
+  if (existing) return existing.promise;
+
+  const entry = { promise: null, settled: false };
+  entry.promise = Promise.resolve().then(() => handleMedicineSocketRequest(
+    message.action,
+    message.payload ?? {},
+    requesterUserId,
+    `medicine-socket:${requesterUserId}:${requestId}`
+  ));
+  handledMedicineSocketRequests.set(key, entry);
+  entry.promise.then(
+    () => settleHandledMedicineSocketRequest(key, entry),
+    () => settleHandledMedicineSocketRequest(key, entry)
+  );
+  pruneHandledMedicineSocketRequests();
+  return entry.promise;
+}
+
+function settleHandledMedicineSocketRequest(key, entry) {
+  entry.settled = true;
+  window.setTimeout(() => {
+    if (handledMedicineSocketRequests.get(key) === entry) handledMedicineSocketRequests.delete(key);
+  }, MEDICINE_SOCKET_RECEIPT_TTL);
+}
+
+function pruneHandledMedicineSocketRequests() {
+  if (handledMedicineSocketRequests.size <= MAX_HANDLED_MEDICINE_SOCKET_REQUESTS) return;
+  for (const [key, entry] of handledMedicineSocketRequests) {
+    if (!entry.settled) continue;
+    handledMedicineSocketRequests.delete(key);
+    if (handledMedicineSocketRequests.size <= MAX_HANDLED_MEDICINE_SOCKET_REQUESTS) break;
+  }
+}
+
+async function handleMedicineSocketRequest(action, payload = {}, requesterUserId = "", operationId = "") {
   const actor = await fromUuid(String(payload.actorUuid ?? payload.targetActorUuid ?? ""));
   if (!actor) throw new Error("цель не найдена");
 
   if (action === "getTargetContext") {
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const targetToken = await resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true });
     return {
-      targetContext: {
-        ...buildTargetContext(actor),
-        name: String(payload.tokenName ?? "") || actor.name,
-        tokenName: String(payload.tokenName ?? "")
-      }
+      targetContext: buildTargetContext(actor, targetToken),
+      sourceActorUuid: sourceActor.uuid
     };
   }
 
-  if (action === "applyTreatment") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? ""));
-    if (!sourceActor) throw new Error("источник инструмента не найден");
-    assertMedicineSocketActorOwner(sourceActor, requesterUserId);
+  if (action === "performTreatment") {
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const [sourceToken, targetToken] = await Promise.all([
+      resolveMedicineTokenForActor(payload.sourceTokenUuid, sourceActor, { required: true }),
+      resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true })
+    ]);
     return {
-      targetContext: await commitTreatmentToActors({
+      resolution: await resolveTreatmentOnAuthority({
         sourceActor,
+        sourceToken,
         targetActor: actor,
+        targetToken,
         treatmentType: payload.treatmentType ?? "trauma",
         treatmentId: payload.treatmentId ?? payload.traumaId,
         instrumentId: payload.instrumentId,
         toolKey: payload.toolKey,
-        expectedProgress: payload.expectedProgress,
-        finalProgress: payload.finalProgress,
-        completed: payload.completed,
-        expectedSupply: payload.expectedSupply,
-        remainingSupply: payload.remainingSupply
+        operationId
       })
     };
   }
 
-  if (action === "installImplant") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+  if (action === "performMassTreatment") {
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const [sourceToken, targetToken] = await Promise.all([
+      resolveMedicineTokenForActor(payload.sourceTokenUuid, sourceActor, { required: true }),
+      resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true })
+    ]);
     return {
-      targetContext: await applyImplantInstallLocally({
+      resolution: await resolveMassTreatmentOnAuthority({
         sourceActor,
+        sourceToken,
         targetActor: actor,
-        limbKey: payload.limbKey,
-        implantSource: payload.implantSource,
-        itemId: payload.itemId
+        targetToken,
+        toolKey: payload.toolKey,
+        options: payload.options,
+        operationId
       })
     };
   }
 
-  if (action === "implantCriticalFailure") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+  if (action === "performImplantInstallation") {
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const [sourceToken, targetToken] = await Promise.all([
+      resolveMedicineTokenForActor(payload.sourceTokenUuid, sourceActor, { required: true }),
+      resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true })
+    ]);
     return {
-      targetContext: await applyImplantCriticalFailureLocally({
+      resolution: await resolveImplantInstallationOnAuthority({
         sourceActor,
+        sourceToken,
         targetActor: actor,
+        targetToken,
         limbKey: payload.limbKey,
         implantSource: payload.implantSource,
         itemId: payload.itemId
@@ -2152,36 +3487,34 @@ async function handleMedicineSocketRequest(action, payload = {}, requesterUserId
   }
 
   if (action === "removeImplant") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const targetToken = await resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true });
     return {
-      targetContext: await applyImplantRemovalLocally({
-        sourceActor,
-        targetActor: actor,
-        limbKey: payload.limbKey,
-        itemId: payload.itemId
-      })
+      targetContext: await runWithMedicineAuthorityLocks(
+        [sourceActor, actor],
+        () => applyImplantRemovalLocally({
+          sourceActor,
+          targetActor: actor,
+          targetToken,
+          limbKey: payload.limbKey,
+          itemId: payload.itemId
+        })
+      )
     };
   }
 
-  if (action === "installProsthesis") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+  if (action === "performProsthesisInstallation") {
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const [sourceToken, targetToken] = await Promise.all([
+      resolveMedicineTokenForActor(payload.sourceTokenUuid, sourceActor, { required: true }),
+      resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true })
+    ]);
     return {
-      targetContext: await applyProsthesisInstallLocally({
+      resolution: await resolveProsthesisInstallationOnAuthority({
         sourceActor,
+        sourceToken,
         targetActor: actor,
-        limbKey: payload.limbKey,
-        prosthesisSource: payload.prosthesisSource,
-        itemId: payload.itemId
-      })
-    };
-  }
-
-  if (action === "prosthesisCriticalFailure") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
-    return {
-      targetContext: await applyProsthesisCriticalFailureLocally({
-        sourceActor,
-        targetActor: actor,
+        targetToken,
         limbKey: payload.limbKey,
         prosthesisSource: payload.prosthesisSource,
         itemId: payload.itemId
@@ -2190,14 +3523,19 @@ async function handleMedicineSocketRequest(action, payload = {}, requesterUserId
   }
 
   if (action === "removeProsthesis") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+    const sourceActor = await getMedicineSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const targetToken = await resolveMedicineTokenForActor(payload.targetTokenUuid, actor, { required: true });
     return {
-      targetContext: await applyProsthesisRemovalLocally({
-        sourceActor,
-        targetActor: actor,
-        limbKey: payload.limbKey,
-        itemId: payload.itemId
-      })
+      targetContext: await runWithMedicineAuthorityLocks(
+        [sourceActor, actor],
+        () => applyProsthesisRemovalLocally({
+          sourceActor,
+          targetActor: actor,
+          targetToken,
+          limbKey: payload.limbKey,
+          itemId: payload.itemId
+        })
+      )
     };
   }
 
@@ -2212,6 +3550,35 @@ function assertMedicineSocketActorOwner(actor, requesterUserId) {
   }
 }
 
+async function getMedicineSocketSourceActor(actorUuid = "", requesterUserId = "") {
+  const actor = await fromUuid(String(actorUuid ?? "").trim());
+  if (!actor || actor.documentName !== "Actor") throw new Error("источник медицины не найден");
+  assertMedicineSocketActorOwner(actor, requesterUserId);
+  return actor;
+}
+
+function getMedicineTokenUuid(token = null) {
+  const document = token?.document ?? token;
+  return document?.documentName === "Token" ? String(document.uuid ?? "") : "";
+}
+
+async function resolveMedicineTokenForActor(tokenUuid = "", actor = null, { required = false } = {}) {
+  const uuid = String(tokenUuid ?? "").trim();
+  if (!uuid) {
+    if (required) throw new Error("токен участника медицины не найден");
+    return null;
+  }
+  const token = await fromUuid(uuid);
+  if (
+    token?.documentName !== "Token"
+    || !token.actor
+    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+  ) {
+    throw new Error("токен не соответствует участнику медицины");
+  }
+  return token;
+}
+
 function getTargetLimbLabel(targetContext, limbKey = "") {
   return targetContext?.limbs?.find(limb => limb.key === limbKey)?.label ?? limbKey;
 }
@@ -2222,26 +3589,54 @@ function mixRgb(from, to, ratio) {
   return `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
 }
 
-async function postTreatmentResultChat(actor, { trauma, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed }) {
-  const completionLabel = trauma.type === "disease" ? "Болезнь вылечена." : "Травма полностью вылечена.";
+async function postTreatmentResultChat(actor, { treatment, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed }) {
+  const progressOffset = treatment.type === "limb" ? toInteger(treatment.min) : 0;
+  const displayProgress = value => toInteger(value) + progressOffset;
+  const completionLabel = treatment.type === "disease"
+    ? "Болезнь вылечена."
+    : treatment.type === "limb"
+      ? "Конечность восстановлена до доступного предела."
+      : "Травма полностью вылечена.";
   const rows = entries.map(entry => `
     <li>
       Проверка ${entry.index}/${entry.total}: ${entry.resultLabel},
       +${entry.progress} прогресса,
       запас ${entry.charges},
       эффективность ${formatNumber(entry.efficiency)}%,
-      итог ${entry.currentProgress}/${maxProgress}
+      итог ${displayProgress(entry.currentProgress)}/${displayProgress(maxProgress)}
     </li>
   `).join("");
   await postMedicineChat(actor, {
-    title: `Лечение: ${trauma.name}`,
+    title: `Лечение: ${treatment.name}`,
     tone: completed ? "success" : "standard",
     lines: [
       `Инструмент: ${instrument.name}`,
-      `Прогресс: ${initialProgress}/${maxProgress} -> ${finalProgress}/${maxProgress}`,
+      `Прогресс: ${displayProgress(initialProgress)}/${displayProgress(maxProgress)} -> ${displayProgress(finalProgress)}/${displayProgress(maxProgress)}`,
       `Потрачено запаса: ${spentCharges}`,
       `<ul>${rows}</ul>`,
       completed ? completionLabel : ""
+    ].filter(Boolean)
+  });
+}
+
+async function postMassTreatmentChat(actor, summary = {}) {
+  const reasons = Array.isArray(summary.reasons) ? summary.reasons.filter(Boolean) : [];
+  const reasonList = reasons.length
+    ? `<ul>${reasons.map(reason => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>`
+    : "";
+  await postMedicineChat(actor, {
+    title: "Массовое лечение",
+    tone: summary.stopped ? "failure" : toInteger(summary.skipped) > 0 ? "standard" : "success",
+    lines: [
+      summary.targetName ? `Цель: ${summary.targetName}` : "",
+      `Последовательных операций: ${Math.max(0, toInteger(summary.attempted))}`,
+      `Полностью вылечено травм: ${Math.max(0, toInteger(summary.completedTraumas))}`,
+      `Получено прогресса лечения травм: ${Math.max(0, toInteger(summary.restoredTraumaProgress))}`,
+      `Частей тела восстановлено до доступного предела: ${Math.max(0, toInteger(summary.completedLimbs))}`,
+      `Восстановлено здоровья частей тела: ${Math.max(0, toInteger(summary.restoredLimbHealth))}`,
+      `Потрачено запаса инструментов: ${Math.max(0, toInteger(summary.charges))}`,
+      `Пропущено целей: ${Math.max(0, toInteger(summary.skipped))}`,
+      reasonList
     ].filter(Boolean)
   });
 }
@@ -2268,11 +3663,19 @@ function escapeHtml(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
 }
 
+function escapeAttribute(value) {
+  return escapeHtml(value);
+}
+
 function getTreatmentResultLabel(resultKey) {
   if (resultKey === "criticalSuccess") return "критический успех";
   if (resultKey === "success") return "успех";
   if (resultKey === "criticalFailure") return "критический провал";
   return "провал";
+}
+
+function isSuccessfulSkillResult(resultKey = "") {
+  return resultKey === "success" || resultKey === "criticalSuccess";
 }
 
 function formatNumber(value) {
@@ -2289,6 +3692,13 @@ function getHealingSkillLabel(skillKey) {
   return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
 }
 
+function getActorItemsByType(actor, type = "") {
+  const typed = actor?.itemTypes?.[type];
+  if (Array.isArray(typed)) return typed;
+  return actor?.items?.filter?.(item => item?.type === type)
+    ?? Array.from(actor?.items ?? []).filter(item => item?.type === type);
+}
+
 function isToolClassAccepted(actual, required) {
   return toToolClassRank(actual) >= toToolClassRank(required);
 }
@@ -2299,6 +3709,50 @@ function toToolClassRank(value) {
 
 function canUseActorLocally(actor) {
   return Boolean(game.user?.isGM || actor?.isOwner);
+}
+
+function validateConfiguredMedicineToolKey(value = "") {
+  const configured = String(
+    getSystemActionSettings().find(entry => entry.key === "medicine")?.toolKey ?? "medical"
+  ).trim() || "medical";
+  if (
+    configured.includes(".")
+    || !getToolSettings().some(entry => entry.key === configured)
+  ) {
+    throw new Error("в настройках медицины указан некорректный тип инструмента");
+  }
+  const requested = String(value ?? configured).trim() || configured;
+  if (requested !== configured) {
+    throw new Error("тип медицинского инструмента не соответствует настройкам действия");
+  }
+  return configured;
+}
+
+function assertMedicineTokenMatchesActor(token = null, actor = null) {
+  if (!token) return;
+  if (
+    token.documentName !== "Token"
+    || !token.actor
+    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+  ) {
+    throw new Error("токен не соответствует участнику медицины");
+  }
+}
+
+function runWithMedicineAuthorityLocks(actors, operation, chainRef = null, index = 0) {
+  const ordered = index === 0
+    ? Array.from(new Map((actors ?? [])
+      .filter(Boolean)
+      .map(actor => [String(actor.uuid ?? actor.id ?? ""), actor]))
+      .values())
+      .sort((left, right) => String(left.uuid ?? left.id ?? "").localeCompare(String(right.uuid ?? right.id ?? "")))
+    : actors;
+  if (index >= ordered.length) return operation();
+  return medicineAuthorityLock.run(
+    ordered[index],
+    chainRef,
+    () => runWithMedicineAuthorityLocks(ordered, operation, chainRef, index + 1)
+  );
 }
 
 function getResponsibleGM() {

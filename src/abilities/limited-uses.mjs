@@ -309,12 +309,14 @@ async function captureLimitedUsesBeforeDamage(event = {}) {
   const captures = [];
 
   if (String(event?.key ?? "") === "fallout-maw.healing.beforeApply") {
-    captures.push(...captureActorLimitedUseCandidates(
-      targetActor,
-      getHealingResolutionActiveUseKeys({ direction: "incoming" }),
-      [targetContext],
-      false
-    ));
+    if (sourceData?.limitedUseSkipIncoming !== true) {
+      captures.push(...captureActorLimitedUseCandidates(
+        targetActor,
+        getHealingResolutionActiveUseKeys({ direction: "incoming" }),
+        [targetContext],
+        false
+      ));
+    }
     if (sourceActor && sourceData?.limitedUseSkipOutgoing !== true) {
       captures.push(...captureActorLimitedUseCandidates(
         sourceActor,

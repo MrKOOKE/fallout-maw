@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T08:26:00.614Z",
+  "generatedAt": "2026-07-30T09:22:27.363Z",
   "world": "fallout",
   "group": "weapons",
   "writeRequested": false,
@@ -169902,7 +169902,7 @@
         "magazine": 30,
         "burstCount": 0,
         "moduleSlots": 6,
-        "sourceOptions": 5,
+        "sourceOptions": 2,
         "noise": 15,
         "weight": 2.268,
         "actionModeCount": 2,

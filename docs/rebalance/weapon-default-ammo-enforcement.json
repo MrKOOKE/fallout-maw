@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-30T09:22:27.879Z",
+  "rule": "Source-mode weapons default to the declared general-purpose damage source of their own platform class. Compatible specialty ammunition remains available.",
+  "writeRequested": false,
+  "changedWeaponCount": 0,
+  "blockedWeaponCount": 0,
+  "adjustments": [],
+  "blocked": []
+}

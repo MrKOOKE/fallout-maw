@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T08:26:00.686Z",
+  "generatedAt": "2026-07-30T09:22:27.446Z",
   "mode": "dry-run",
   "status": "ready-to-write",
   "scope": {
@@ -14,6 +14,8 @@
     "hybridDamageEnergySourcesAdjusted": 0,
     "energyConsumersExactClassAdjusted": 0,
     "energyConsumersExactClassBlocked": 0,
+    "standardMagazineSourcesAdjusted": 0,
+    "standardMagazineSourcesBlocked": 0,
     "conditionOnlyArmorItems": 0,
     "weaponContentAdjusted": 1,
     "persistentDamageAreas": 14,
@@ -307,6 +309,11 @@
   },
   "energyConsumerClassCompatibility": {
     "rule": "exact-platform-class-only",
+    "adjusted": [],
+    "blocked": []
+  },
+  "standardMagazineSourceCompatibility": {
+    "rule": "own-class-general-purpose-default",
     "adjusted": [],
     "blocked": []
   },

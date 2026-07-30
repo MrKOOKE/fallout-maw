@@ -1260,6 +1260,90 @@ export async function applyDamageApplication(request = {}, options = {}) {
   }, { operationRef });
 }
 
+/**
+ * Join an externally-owned healing mutation to the damage-hub lifecycle.
+ *
+ * Medicine and similar transactional subsystems already own their document
+ * batch, so routing them through applyDamageApplication would calculate and
+ * write the healing a second time. This adapter supplies the normal awaited
+ * healing gates, actor serialization and terminal event while leaving the
+ * actual mutation to the caller.
+ */
+export async function runExternalHealingSystemEventWorkflow(request = {}, operation) {
+  if (typeof operation !== "function") {
+    throw new TypeError("An external healing operation is required.");
+  }
+
+  const data = normalizeDamageRequest({
+    ...request,
+    mode: MODE_HEALING,
+    scope: request.scope ?? (request.limbKey ? SCOPE_LIMB : SCOPE_HEALTH),
+    applyMitigation: false,
+    processDamageTypeSettings: false,
+    bypassBarrier: true
+  });
+  if (!data.actorUuid || data.amount <= 0) return undefined;
+
+  const operationRef = getDamageHubOperationRefFromRequests([data]);
+  return runDamageHubOperation(() => executeDamageSystemEventWorkflow(
+    [data],
+    async (allowedRequests, scope) => {
+      const allowed = allowedRequests[0];
+      if (!allowed) return undefined;
+      return queueActorDamageMutation(allowed.actorUuid, async freshActor => {
+        if (!freshActor || (!game.user?.isGM && !freshActor.isOwner)) {
+          return createFailedExternalHealingResult(freshActor, allowed, "healing-authority-unavailable");
+        }
+        if (isHealingBlocked(freshActor)) {
+          await queueActorDamageStatusSync(freshActor);
+          return createFailedExternalHealingResult(freshActor, allowed, "healing-blocked");
+        }
+
+        const result = await operation({
+          actor: freshActor,
+          request: allowed,
+          scope,
+          chainRef: scope?.chainRef ?? null
+        });
+        return normalizeExternalHealingResult(result, freshActor, allowed);
+      });
+    },
+    { single: true }
+  ), { operationRef });
+}
+
+function normalizeExternalHealingResult(result, actor, request) {
+  if (!result || typeof result !== "object") {
+    return createFailedExternalHealingResult(actor, request, "healing-not-committed");
+  }
+  return {
+    ...result,
+    actor: result.actor ?? actor,
+    amount: Math.max(0, Number(result.amount ?? request.amount) || 0),
+    healthDelta: Math.max(0, Number(result.healthDelta) || 0),
+    limbDelta: Math.max(0, Number(result.limbDelta) || 0),
+    mode: MODE_HEALING,
+    scope: normalizeScope(result.scope ?? request.scope, result.limbKey ?? request.limbKey),
+    limbKey: String(result.limbKey ?? request.limbKey ?? ""),
+    damageTypeKey: HEALING_DAMAGE_TYPE_KEY
+  };
+}
+
+function createFailedExternalHealingResult(actor, request = {}, reason = "healing-failed") {
+  return {
+    actor,
+    amount: 0,
+    healthDelta: 0,
+    limbDelta: 0,
+    mode: MODE_HEALING,
+    scope: normalizeScope(request.scope, request.limbKey),
+    limbKey: String(request.limbKey ?? ""),
+    damageTypeKey: HEALING_DAMAGE_TYPE_KEY,
+    failed: true,
+    reason
+  };
+}
+
 async function applyDamageApplicationNow(request = {}, {
   createSummary = true,
   damageBarrierLedger: suppliedDamageBarrierLedger = null,
@@ -2490,6 +2574,59 @@ export function getLimbEffectiveMaximum(actor, limbKey = "", context = null) {
   if (!limb) return 0;
   const max = Math.max(0, toInteger(limb.max));
   return Math.min(max, getLimbHealingCap(actor, limbKey, context));
+}
+
+/**
+ * Prepare the complete Actor update for a targeted limb-healing operation
+ * without writing it. Transactional callers can batch this update with their
+ * own resource costs while reusing the same caps, accumulation dilution and
+ * consciousness recovery as the normal damage hub.
+ */
+export function prepareTargetedLimbHealingActorUpdate(
+  actor,
+  limbKey = "",
+  amount = 0,
+  context = buildActorLimbHealthContext(actor)
+) {
+  const key = String(limbKey ?? "").trim();
+  const limb = actor?.system?.limbs?.[key];
+  const previousValue = limb ? getEffectiveLimbStateValue(actor, key, null, context) : 0;
+  const empty = {
+    updateData: {},
+    previousValue,
+    finalValue: previousValue,
+    appliedHealing: 0,
+    healthDelta: 0,
+    healingCap: limb ? getLimbEffectiveMaximum(actor, key, context) : 0
+  };
+  if (!limb || actor?.type === "construct" || isConstructPartLimb(actor, key)) return empty;
+
+  const result = calculateTargetedLimbHealing(actor, key, amount, { context });
+  const state = result.limbStates.get(key);
+  if (!state?.totalDelta) return empty;
+
+  const updateData = {};
+  setLimbValueUpdate(updateData, actor, key, state.nextValue);
+  const accumulation = result.damageAccumulation.get(key);
+  if (accumulation) {
+    updateData[`system.limbs.${key}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
+  }
+  if (result.limbDelta > 0) mergeConsciousnessRecoveryUpdate(updateData, actor, result.limbDelta);
+
+  return {
+    // This plan is consumed both by ordinary Document#update calls and by
+    // exact-leaf atomic batches. Foundry accepts dotted update paths in both
+    // cases, while a nested root such as {system: {...}} is deliberately not
+    // a safe atomic update. Flatten only after every coupled limb and
+    // consciousness field has been assembled so the public plan has one
+    // unambiguous representation.
+    updateData: foundry.utils.flattenObject(updateData),
+    previousValue: state.previousValue,
+    finalValue: state.nextValue,
+    appliedHealing: result.limbDelta,
+    healthDelta: Math.max(0, state.nextValue) - Math.max(0, state.previousValue),
+    healingCap: getLimbEffectiveMaximum(actor, key, context)
+  };
 }
 
 export function clampActorLimbValuesToCurrentCaps(
@@ -3772,6 +3909,10 @@ export function isCriticalLimb(actor, limbKey = "") {
 function hasDestroyedCriticalLimb(actor) {
   return Object.keys(actor?.system?.limbs ?? {})
     .some(limbKey => isCriticalLimb(actor, limbKey) && isLimbDestroyed(actor, limbKey));
+}
+
+export function canActorReceiveHealing(actor) {
+  return Boolean(actor) && !isHealingBlocked(actor);
 }
 
 function isHealingBlocked(actor) {
@@ -6742,7 +6883,7 @@ function estimateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTyp
   if (!limb || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
   if (isLimbPhysicallyMissing(actor, limbKey)) return createLimbMutationResult(limbStates, damageAccumulation);
 
-  const currentValue = getLimbStateValue(actor, limbKey, limbStates);
+  const currentValue = getLimbStateValue(actor, limbKey, limbStates, context);
   if (currentValue <= toInteger(limb.min)) return createLimbMutationResult(limbStates, damageAccumulation);
   if (currentValue < 0) {
     const limbResult = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
@@ -6973,16 +7114,24 @@ function calculateEvenLimbHealing(actor, amount = 0, { limbStates = new Map(), d
   return applyHealingAllocations(actor, allocations, { limbStates, damageAccumulation });
 }
 
-function calculateTargetedLimbHealing(actor, limbKey = "", amount = 0, { limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+function calculateTargetedLimbHealing(actor, limbKey = "", amount = 0, {
+  limbStates = new Map(),
+  damageAccumulation = new Map(),
+  context = buildActorLimbHealthContext(actor)
+} = {}) {
   const limb = actor?.system?.limbs?.[limbKey];
   const healing = roundDamageAmount(amount);
   if (!limb || healing <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
   if (isLimbPhysicallyMissing(actor, limbKey)) return createLimbMutationResult(limbStates, damageAccumulation);
 
   const currentValue = getLimbStateValue(actor, limbKey, limbStates);
-  const cap = Math.min(Math.max(0, toInteger(limb.max)), getLimbHealingCap(actor, limbKey));
+  const cap = Math.min(Math.max(0, toInteger(limb.max)), getLimbHealingCap(actor, limbKey, context));
   const capacity = Math.max(0, cap - currentValue);
-  return applyHealingAllocations(actor, new Map([[limbKey, Math.min(healing, capacity)]]), { limbStates, damageAccumulation });
+  return applyHealingAllocations(actor, new Map([[limbKey, Math.min(healing, capacity)]]), {
+    limbStates,
+    damageAccumulation,
+    context
+  });
 }
 
 async function applyHealthDamageTargetAllocations(actor, allocations = new Map(), targets = [], { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
@@ -7093,7 +7242,11 @@ function getTraumaDamageTypeKey(damageTypeKey = "") {
   return key === BLEEDING_DAMAGE_TYPE_KEY ? "" : key;
 }
 
-function applyHealingAllocations(actor, allocations = new Map(), { limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+function applyHealingAllocations(actor, allocations = new Map(), {
+  limbStates = new Map(),
+  damageAccumulation = new Map(),
+  context = buildActorLimbHealthContext(actor)
+} = {}) {
   let healthDelta = 0;
   for (const [limbKey, amount] of allocations) {
     const limb = actor?.system?.limbs?.[limbKey];
@@ -7101,7 +7254,7 @@ function applyHealingAllocations(actor, allocations = new Map(), { limbStates = 
     if (!limb || healing <= 0) continue;
 
     const state = getBatchLimbState(limbStates, actor, limbKey, limb);
-    const cap = Math.min(Math.max(0, toInteger(limb.max)), getLimbHealingCap(actor, limbKey));
+    const cap = Math.min(Math.max(0, toInteger(limb.max)), getLimbHealingCap(actor, limbKey, context));
     const previousRunningValue = state.nextValue;
     state.nextValue = Math.min(cap, state.nextValue + healing);
     const actualLimbDelta = calculateConsciousnessHealingGain(previousRunningValue, state.nextValue);

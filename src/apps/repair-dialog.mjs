@@ -11,21 +11,34 @@ import { getRepairToolCostMultiplier, isSkillThresholdMode } from "../settings/c
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   ITEM_FUNCTIONS,
+  createToolFunctionKey,
   getConditionFunction,
   getToolFunction,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { executeInventoryMutation } from "../inventory/mutation.mjs";
+import { createActorOperationLock } from "../utils/actor-operation-lock.mjs";
+import { executeAtomicActorItemUpdates } from "../utils/atomic-actor-item-updates.mjs";
+import {
+  groupToolSelectionOptions,
+  normalizeToolSelectionPolicy,
+  selectToolByPolicy
+} from "../utils/tool-selection-policy.mjs";
+import { withSystemEventRoot } from "../events/dispatcher.mjs";
+import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const REPAIR_SOCKET = `system.${SYSTEM_ID}`;
 const REPAIR_SOCKET_SCOPE = "fallout-maw.repair";
-const REPAIR_SOCKET_TIMEOUT = 10000;
+const REPAIR_SOCKET_TIMEOUT = 12 * 60 * 1000;
+const REPAIR_SOCKET_RECEIPT_TTL = 30 * 60 * 1000;
+const MAX_HANDLED_REPAIR_SOCKET_REQUESTS = 256;
 const TOOL_CLASS_RANK = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 const REPAIR_PROGRESS_STEP_RATIO = 0.25;
 const DEFAULT_REPAIR_SKILL_KEY = "repair";
 const pendingRepairSocketRequests = new Map();
+const handledRepairSocketRequests = new Map();
+const repairAuthorityLock = createActorOperationLock();
 
 export function registerRepairSocket() {
   game.socket.on(REPAIR_SOCKET, handleRepairSocketMessage);
@@ -48,7 +61,7 @@ export async function requestRepairTarget(sourceToken) {
   const targetToken = selected?.token ?? null;
   if (!selected?.actor || !targetToken) return undefined;
 
-  const targetContext = await getRepairTargetContext(targetToken, toolKey);
+  const targetContext = await getRepairTargetContext(targetToken, toolKey, sourceActor);
   if (!targetContext) return undefined;
 
   return new RepairDialog({
@@ -68,6 +81,8 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   #toolKey = "repair";
   #activeItemId = "";
   #repairInFlight = false;
+  #disabledRepairActionStates = null;
+  #pendingMassRepair = null;
 
   constructor({ sourceActor, sourceToken, targetContext, targetToken, toolKey = "repair" } = {}, options = {}) {
     super(options);
@@ -139,6 +154,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static #onStartRepair(event, target) {
     event.preventDefault();
+    if (this.#repairInFlight) return false;
     const itemId = String(target.dataset.itemId ?? "");
     this.#activeItemId = this.#activeItemId === itemId ? "" : itemId;
     return this.render({ force: true });
@@ -153,6 +169,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!itemId || !instrumentId) return undefined;
 
     this.#repairInFlight = true;
+    this.#setRepairActionsDisabled(true);
     try {
       const result = await performRepair({
         sourceActor: this.#sourceActor,
@@ -167,6 +184,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       if (result?.targetContext) this.#targetContext = result.targetContext;
     } finally {
       this.#repairInFlight = false;
+      this.#setRepairActionsDisabled(false);
     }
     return this.render({ force: true });
   }
@@ -174,27 +192,41 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onRepairAll(event) {
     event.preventDefault();
     if (this.#repairInFlight) return undefined;
-    const options = await promptMassRepairOptions({
-      sourceActor: this.#sourceActor,
-      targetContext: this.#targetContext,
-      toolKey: this.#toolKey
-    });
-    if (!options || options === "cancel") return undefined;
-
     this.#repairInFlight = true;
+    this.#setRepairActionsDisabled(true);
     try {
+      let pending = this.#pendingMassRepair;
+      if (!pending) {
+        const options = await promptMassRepairOptions({
+          sourceActor: this.#sourceActor,
+          targetContext: this.#targetContext,
+          toolKey: this.#toolKey
+        });
+        if (!options || options === "cancel") return false;
+        pending = {
+          requestId: foundry.utils.randomID(),
+          options
+        };
+        this.#pendingMassRepair = pending;
+      } else {
+        ui.notifications.info("Повторное ожидание уже запущенного массового ремонта.");
+      }
       const result = await performMassRepair({
         sourceActor: this.#sourceActor,
         sourceToken: this.#sourceToken,
         targetContext: this.#targetContext,
         targetToken: this.#targetToken,
         toolKey: this.#toolKey,
-        options
+        options: pending.options,
+        requestId: pending.requestId
       });
+      if (result?.pending) return false;
+      this.#pendingMassRepair = null;
       if (result?.targetContext) this.#targetContext = result.targetContext;
       if (result?.summary) await postMassRepairChat(this.#sourceActor, result.summary);
     } finally {
       this.#repairInFlight = false;
+      this.#setRepairActionsDisabled(false);
     }
     return this.render({ force: true });
   }
@@ -218,9 +250,23 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const titleElement = this.element?.querySelector(".window-title");
     if (titleElement) titleElement.textContent = title;
   }
+
+  #setRepairActionsDisabled(disabled) {
+    const selector = "[data-action='startRepair'], [data-action='repairWithInstrument'], [data-action='repairAll']";
+    if (disabled) {
+      this.#disabledRepairActionStates = new Map();
+      for (const button of this.element?.querySelectorAll?.(selector) ?? []) {
+        this.#disabledRepairActionStates.set(button, Boolean(button.disabled));
+        button.disabled = true;
+      }
+      return;
+    }
+    for (const [button, wasDisabled] of this.#disabledRepairActionStates ?? []) button.disabled = wasDisabled;
+    this.#disabledRepairActionStates = null;
+  }
 }
 
-async function getRepairTargetContext(targetToken, toolKey = "repair") {
+async function getRepairTargetContext(targetToken, toolKey = "repair", sourceActor = null) {
   const actor = targetToken?.actor;
   if (!actor) return null;
   if (canUseActorLocally(actor)) return buildTargetContext(actor, targetToken, toolKey);
@@ -234,7 +280,8 @@ async function getRepairTargetContext(targetToken, toolKey = "repair") {
   try {
     const result = await requestRepairSocket("getTargetContext", {
       actorUuid: actor.uuid,
-      tokenName: targetToken.name,
+      sourceActorUuid: sourceActor?.uuid ?? "",
+      targetTokenUuid: getRepairTokenUuid(targetToken),
       toolKey
     }, gm);
     return result?.targetContext ?? null;
@@ -254,7 +301,10 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
     .flatMap(item => {
       const tools = item.system?.functions?.tools ?? {};
       return Object.entries(tools)
-        .filter(([_toolKey, data]) => data?.enabled)
+        .filter(([toolKey, data]) => (
+          data?.enabled
+          && hasItemFunction(item, createToolFunctionKey(toolKey))
+        ))
         .map(([toolKey, data]) => {
           const skillKey = String(data.skillKey ?? "");
           const skillValue = toInteger(data.skillValue);
@@ -325,40 +375,51 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
     return null;
   }
 
-  const instruments = collectMassRepairInstrumentOptions(sourceActor, targetContext);
-  if (!instruments.length) {
+  const groups = groupToolSelectionOptions(collectMassRepairInstrumentOptions(sourceActor, targetContext));
+  if (!groups.length) {
     ui.notifications.warn("Нет подходящих инструментов для массового ремонта.");
     return null;
   }
 
-  const rows = instruments.map(instrument => `
-    <label class="fallout-maw-mass-repair-instrument">
-      <input type="checkbox" name="instrument" value="${escapeAttribute(instrument.uid)}" checked>
-      <span>${escapeHtml(instrument.name)}</span>
-      <strong>${escapeHtml(instrument.toolLabel)} ${escapeHtml(instrument.toolClass)}</strong>
-      <em>${instrument.supplyValue}/${instrument.supplyMax}</em>
+  const rows = groups.map(group => `
+    <label class="fallout-maw-mass-operation-instrument">
+      <input type="checkbox" name="toolGroup" value="${escapeAttribute(group.key)}" checked>
+      <span>${escapeHtml(group.toolLabel)}</span>
+      <strong>Класс ${escapeHtml(group.toolClass)}</strong>
+      <em>${group.count} шт., запас ${group.supplyValue}/${group.supplyMax}</em>
     </label>
   `).join("");
   const content = `
-    <div class="fallout-maw-mass-repair-dialog">
+    <div class="fallout-maw-mass-operation-dialog fallout-maw-mass-repair-dialog">
       <p><strong>Предметов для ремонта:</strong> ${items.length}</p>
-      <div class="fallout-maw-mass-repair-modes">
+      <div class="fallout-maw-mass-operation-modes">
+        <strong>Качество инструмента</strong>
         <label>
-          <input type="radio" name="mode" value="even" checked>
-          <span>Равномерное использование</span>
+          <input type="radio" name="qualityMode" value="matched" checked>
+          <span>Подходящий класс — не тратить лучший без необходимости</span>
         </label>
         <label>
-          <input type="radio" name="mode" value="max">
-          <span>Максимально эффективно</span>
+          <input type="radio" name="qualityMode" value="best">
+          <span>Лучший доступный — максимальная эффективность</span>
+        </label>
+        <strong>Распределение запаса</strong>
+        <label>
+          <input type="radio" name="supplyMode" value="depleted" checked>
+          <span>Добивать начатые — сначала наиболее израсходованные</span>
+        </label>
+        <label>
+          <input type="radio" name="supplyMode" value="balanced">
+          <span>Равномерно — сначала наиболее наполненные</span>
         </label>
       </div>
-      <div class="fallout-maw-mass-repair-instruments">
+      <div class="fallout-maw-mass-operation-instruments">
         ${rows}
       </div>
     </div>
   `;
 
   return DialogV2.input({
+    modal: true,
     window: {
       title: "Массовый ремонт"
     },
@@ -368,16 +429,17 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
       icon: "fa-solid fa-screwdriver-wrench",
       callback: (_event, button) => {
         const form = button.form;
-        const selectedInstrumentUids = new Set(Array.from(form.querySelectorAll("input[name='instrument']:checked"))
+        const allowedToolGroupKeys = Array.from(form.querySelectorAll("input[name='toolGroup']:checked"))
           .map(input => String(input.value ?? ""))
-          .filter(Boolean));
-        if (!selectedInstrumentUids.size) {
-          ui.notifications.warn("Выберите хотя бы один инструмент.");
-          return null;
+          .filter(Boolean);
+        if (!allowedToolGroupKeys.length) {
+          ui.notifications.warn("Выберите хотя бы одну группу инструментов.");
+          return false;
         }
         return {
-          mode: String(form.querySelector("input[name='mode']:checked")?.value ?? "even"),
-          selectedInstrumentUids
+          qualityMode: String(form.querySelector("input[name='qualityMode']:checked")?.value ?? "matched"),
+          supplyMode: String(form.querySelector("input[name='supplyMode']:checked")?.value ?? "depleted"),
+          allowedToolGroupKeys
         };
       }
     },
@@ -415,99 +477,63 @@ async function performMassRepair({
   targetContext,
   targetToken = null,
   toolKey = "repair",
-  options = {}
+  options = {},
+  requestId = ""
 } = {}) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
     return undefined;
   }
-
-  let workingContext = targetContext;
-  const summary = {
-    targetName: targetContext?.name ?? "",
-    attempted: 0,
-    completed: 0,
-    repaired: 0,
-    charges: 0,
-    skipped: 0
-  };
-
-  const sortedItems = [...(workingContext?.items ?? [])].sort((left, right) => left.conditionRatio - right.conditionRatio);
-  for (const item of sortedItems) {
-    while (true) {
-      const currentItem = workingContext?.items?.find(entry => entry.id === item.id);
-      if (!currentItem || currentItem.conditionValue >= currentItem.conditionMax) break;
-      const selection = chooseBestRepairOption(sourceActor, currentItem, options);
-      if (!selection) {
-        summary.skipped += 1;
-        break;
-      }
-
-      summary.attempted += 1;
-      const result = await performRepair({
-        sourceActor,
-        sourceToken,
-        targetContext: workingContext,
-        targetToken,
-        itemId: currentItem.id,
-        instrumentId: selection.instrumentId,
-        methodIndex: selection.methodIndex,
-        toolKey,
-        quietWarnings: true
-      });
-      if (!result?.targetContext) break;
-
-      workingContext = result.targetContext;
-      summary.repaired += result.repairedCondition;
-      summary.charges += result.spentCharges;
-      if (result.repairedCondition <= 0) break;
-      if (result.completed) {
-        summary.completed += 1;
-        break;
-      }
-    }
+  const normalizedOptions = normalizeToolSelectionPolicy(options);
+  if (!normalizedOptions.allowedToolGroupKeys.length) {
+    ui.notifications.warn("Выберите хотя бы одну группу инструментов.");
+    return undefined;
   }
-
-  return {
-    targetContext: workingContext,
-    summary
-  };
+  return requestRepairResolution("performMassRepair", {
+    sourceActor,
+    sourceToken,
+    targetContext,
+    targetToken,
+    toolKey,
+    intent: { options: normalizedOptions },
+    requestId
+  });
 }
 
 function chooseBestRepairOption(sourceActor, item, options = {}) {
-  const selectedInstrumentUids = options.selectedInstrumentUids instanceof Set ? options.selectedInstrumentUids : null;
-  const mode = String(options.mode ?? "even");
+  const policy = normalizeToolSelectionPolicy(options);
   const instruments = prepareRepairInstruments(sourceActor);
   const choices = item.recoveryMethods.flatMap((method, methodIndex) => {
-    const requiredClass = String(method.toolClass ?? "D");
-    return instruments
-      .filter(instrument => !selectedInstrumentUids || selectedInstrumentUids.has(instrument.uid))
-      .filter(instrument => instrument.toolKey === method.toolKey)
-      .filter(instrument => instrument.supplyValue > 0 && instrument.requirementMet)
-      .filter(instrument => isToolClassAccepted(instrument.toolClass, requiredClass))
-      .filter(() => getRepairSkillThreshold(sourceActor, method, item.conditionValue).met)
-      .map(instrument => ({
-        methodIndex,
-        instrumentId: instrument.id,
-        instrument,
-        method,
-        rank: toToolClassRank(instrument.toolClass),
-        classSurplus: toToolClassRank(instrument.toolClass) - toToolClassRank(requiredClass)
-      }));
+    if (!getRepairSkillThreshold(sourceActor, method, item.conditionValue).met) return [];
+    const instrument = selectToolByPolicy(instruments, {
+      requiredToolKey: method.toolKey,
+      requiredToolClass: method.toolClass
+    }, policy);
+    if (!instrument) return [];
+    const supplyMax = Math.max(0, toInteger(instrument.supplyMax));
+    return [{
+      methodIndex,
+      instrumentId: instrument.id,
+      instrument,
+      method,
+      rank: toToolClassRank(instrument.toolClass),
+      classSurplus: toToolClassRank(instrument.toolClass) - toToolClassRank(method.toolClass),
+      supplyRatio: supplyMax > 0 ? instrument.supplyValue / supplyMax : instrument.supplyValue
+    }];
   });
-  if (mode === "max") {
-    choices.sort((left, right) => (
-      right.classSurplus - left.classSurplus
-      || right.rank - left.rank
-      || right.instrument.supplyValue - left.instrument.supplyValue
-    ));
-  } else {
-    choices.sort((left, right) => (
-      left.classSurplus - right.classSurplus
-      || left.rank - right.rank
-      || right.instrument.supplyValue - left.instrument.supplyValue
-    ));
-  }
+  choices.sort((left, right) => {
+    const qualityOrder = policy.qualityMode === "best"
+      ? right.classSurplus - left.classSurplus
+      : left.classSurplus - right.classSurplus;
+    if (qualityOrder) return qualityOrder;
+    const supplyOrder = policy.supplyMode === "balanced"
+      ? right.supplyRatio - left.supplyRatio || right.instrument.supplyValue - left.instrument.supplyValue
+      : left.supplyRatio - right.supplyRatio || left.instrument.supplyValue - right.instrument.supplyValue;
+    if (supplyOrder) return supplyOrder;
+    return left.instrument.name.localeCompare(right.instrument.name)
+      || String(left.instrumentId).localeCompare(String(right.instrumentId))
+      || left.methodIndex - right.methodIndex;
+  });
   return choices.at(0) ?? null;
 }
 
@@ -526,91 +552,21 @@ async function performRepair({
     if (!quietWarnings) ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
     return undefined;
   }
-
-  const repairItem = targetContext?.items?.find(item => item.id === itemId);
-  const method = repairItem?.recoveryMethods?.[methodIndex];
-  const instrument = sourceActor?.items?.get(instrumentId);
-  if (!repairItem || !method || !instrument || instrument.type !== "gear") {
-    if (!quietWarnings) ui.notifications.warn("Не удалось найти предмет или инструмент ремонта.");
-    return undefined;
-  }
-
-  const tool = getToolFunction(instrument, method.toolKey);
-  const validation = validateInstrumentForRepair(sourceActor, method, tool);
-  if (!validation.ok) {
-    if (!quietWarnings) ui.notifications.warn(validation.message);
-    return undefined;
-  }
-
-  const maxValue = Math.max(1, toInteger(repairItem.conditionMax));
-  const initialValue = Math.min(maxValue, Math.max(0, toInteger(repairItem.conditionValue)));
-  const missingValue = Math.max(0, maxValue - initialValue);
-  if (!missingValue) {
-    if (!quietWarnings) {
-      await postRepairChat(sourceActor, {
-        title: "Ремонт",
-        tone: "success",
-        lines: [`"${repairItem.name}" уже полностью отремонтирован.`]
-      });
-    }
-    return undefined;
-  }
-
-  const result = await runRepairChecks({
+  const resolution = await requestRepairResolution("performRepair", {
     sourceActor,
     sourceToken,
     targetContext,
     targetToken,
-    repairItem,
-    method,
-    tool,
-    initialValue,
-    maxValue
-  });
-
-  if (!result.entries.length) {
-    if (!quietWarnings) {
-      await postRepairChat(sourceActor, {
-        title: `Ремонт: ${repairItem.name}`,
-        tone: "failure",
-        lines: [result.reason || "Ремонт не выполнен."]
-      });
+    toolKey,
+    intent: {
+      itemId,
+      instrumentId,
+      methodIndex: Math.max(0, toInteger(methodIndex))
     }
-    return undefined;
-  }
-
-  const completed = result.finalValue >= maxValue;
-  const finalValue = Math.min(maxValue, result.finalValue);
-  const updatedTargetContext = await applyRepairToTarget(targetContext, {
-    sourceActor,
-    itemId,
-    instrumentId: instrument.id,
-    instrumentToolKey: method.toolKey,
-    expectedCondition: initialValue,
-    finalValue,
-    expectedSupply: toInteger(tool.supply?.value),
-    remainingSupply: result.remainingCharges,
-    toolKey
   });
-  if (!updatedTargetContext) return undefined;
-
-  await postRepairResultChat(sourceActor, {
-    repairItem,
-    instrument,
-    method,
-    initialValue,
-    finalValue,
-    maxValue,
-    spentCharges: result.spentCharges,
-    entries: result.entries,
-    completed
-  });
-  return {
-    targetContext: updatedTargetContext,
-    repairedCondition: Math.max(0, finalValue - initialValue),
-    spentCharges: result.spentCharges,
-    completed
-  };
+  if (!resolution) return undefined;
+  if (!quietWarnings) await postRepairResolutionChat(sourceActor, resolution);
+  return resolution;
 }
 
 async function runRepairChecks({
@@ -622,7 +578,9 @@ async function runRepairChecks({
   method,
   tool,
   initialValue,
-  maxValue
+  maxValue,
+  operationId = `repair-checks:${foundry.utils.randomID()}`,
+  chainRef = null
 }) {
   const progressPerCheck = Math.max(1, Math.ceil(maxValue * REPAIR_PROGRESS_STEP_RATIO));
   const missingValue = Math.max(0, maxValue - initialValue);
@@ -659,19 +617,25 @@ async function runRepairChecks({
         };
       }
     } else {
+      const checkOperationId = `${operationId}:check:${index}`;
       const outcome = await requestSkillCheck({
         actor: sourceActor,
         skillKey: DEFAULT_REPAIR_SKILL_KEY,
+        chainRef,
         data: {
           difficulty,
           actorToken: sourceToken?.object ?? sourceToken,
           targetActor,
-          targetToken: targetToken?.object ?? targetToken
+          targetToken: targetToken?.object ?? targetToken,
+          allowImplicitTarget: false,
+          chanceOperationId: checkOperationId,
+          systemEventOperationId: operationId
         },
         animate: false,
         createMessage: true,
         prompt: false,
-        requester: "repair"
+        requester: "repair",
+        options: { operationId: checkOperationId }
       });
       if (!outcome) {
         return {
@@ -679,6 +643,7 @@ async function runRepairChecks({
           spentCharges,
           remainingCharges: availableCharges,
           finalValue: currentValue,
+          halted: true,
           reason: "Проверка навыка ремонта не выполнена."
         };
       }
@@ -716,6 +681,7 @@ async function runRepairChecks({
     spentCharges,
     remainingCharges: availableCharges,
     finalValue: currentValue,
+    halted: false,
     reason: availableCharges <= 0 ? "Запаса инструмента не хватило для ремонта." : ""
   };
 }
@@ -790,131 +756,604 @@ function getRepairSkillThreshold(actor, method = {}, currentValue = 1) {
   };
 }
 
-async function applyRepairToTarget(targetContext, {
+async function requestRepairResolution(action, {
   sourceActor,
-  itemId,
-  instrumentId,
-  instrumentToolKey,
-  expectedCondition,
-  finalValue,
-  expectedSupply,
-  remainingSupply,
-  toolKey = "repair"
-}) {
-  const actorUuid = String(targetContext?.actorUuid ?? "");
+  sourceToken = null,
+  targetContext,
+  targetToken = null,
+  toolKey = "repair",
+  intent = {},
+  requestId = ""
+} = {}) {
+  const actorUuid = String(targetContext?.actorUuid ?? targetToken?.actor?.uuid ?? "");
   const sourceActorUuid = String(sourceActor?.uuid ?? "");
   if (!actorUuid || !sourceActorUuid) {
-    ui.notifications.warn("Не удалось определить цель ремонта.");
+    ui.notifications.warn("Не удалось определить участников ремонта.");
     return null;
   }
-
-  const actor = await fromUuid(actorUuid);
-  if (actor && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
-    try {
-      return await commitRepairToActors({
-        sourceActor,
-        targetActor: actor,
-        itemId,
-        instrumentId,
-        instrumentToolKey,
-        expectedCondition,
-        finalValue,
-        expectedSupply,
-        remainingSupply,
-        contextToolKey: toolKey
-      });
-    } catch (error) {
-      console.error(`${SYSTEM_ID} | Repair local apply failed`, error);
-      ui.notifications.error(`Не удалось применить ремонт: ${error.message}`);
-      return null;
-    }
-  }
-
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для применения ремонта.");
+    ui.notifications.warn("Нет активного GM для выполнения ремонта.");
     return null;
   }
-
+  const stableRequestId = String(requestId ?? "").trim();
   try {
-    const result = await requestRepairSocket("applyRepair", {
+    if (game.user?.isGM && game.user.id === gm.id) {
+      const targetActor = await fromUuid(actorUuid);
+      if (!targetActor) throw new Error("цель ремонта не найдена");
+      return action === "performMassRepair"
+        ? await resolveMassRepairOnAuthority({
+            sourceActor,
+            sourceToken: sourceToken?.document ?? sourceToken,
+            targetActor,
+            targetToken: targetToken?.document ?? targetToken,
+            toolKey,
+            options: intent.options,
+            operationId: stableRequestId
+              ? `repair-mass:${game.user?.id ?? "gm"}:${stableRequestId}`
+              : `repair-mass:${foundry.utils.randomID()}`
+          })
+        : await resolveRepairOnAuthority({
+            sourceActor,
+            sourceToken: sourceToken?.document ?? sourceToken,
+            targetActor,
+            targetToken: targetToken?.document ?? targetToken,
+            toolKey,
+            itemId: intent.itemId,
+            instrumentId: intent.instrumentId,
+            methodIndex: intent.methodIndex,
+            operationId: `repair:${foundry.utils.randomID()}`
+          });
+    }
+    const result = await requestRepairSocket(action, {
       actorUuid,
       sourceActorUuid,
-      itemId,
-      instrumentId,
-      instrumentToolKey,
-      expectedCondition,
-      finalValue,
-      expectedSupply,
-      remainingSupply,
-      toolKey
-    }, gm);
-    return result?.targetContext ?? null;
+      sourceTokenUuid: getRepairTokenUuid(sourceToken),
+      targetTokenUuid: getRepairTokenUuid(targetToken),
+      toolKey,
+      ...intent
+    }, gm, { requestId: stableRequestId });
+    return result?.resolution ?? null;
   } catch (error) {
-    console.error(`${SYSTEM_ID} | Repair apply socket failed`, error);
-    ui.notifications.error(`Не удалось применить ремонт: ${error.message}`);
+    console.error(`${SYSTEM_ID} | Repair authority request failed`, error);
+    if (error?.code === "authority-timeout" && action === "performMassRepair") {
+      ui.notifications.warn("GM продолжает массовый ремонт. Повторное нажатие будет ожидать ту же операцию.");
+      return { pending: true, requestId: stableRequestId };
+    }
+    ui.notifications.error(`Не удалось выполнить ремонт: ${error.message}`);
     return null;
   }
 }
 
-async function commitRepairToActors({
+async function resolveRepairOnAuthority(args = {}) {
+  const operationId = String(args.operationId ?? "").trim() || `repair:${foundry.utils.randomID()}`;
+  const sourceToken = args.sourceToken?.document ?? args.sourceToken ?? null;
+  const targetToken = args.targetToken?.document ?? args.targetToken ?? null;
+  assertRepairTokenMatchesActor(sourceToken, args.sourceActor);
+  assertRepairTokenMatchesActor(targetToken, args.targetActor);
+  return withSystemEventRoot({
+    kind: "repair",
+    operationId,
+    sceneUuid: String(targetToken?.parent?.uuid ?? sourceToken?.parent?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef: args.chainRef ?? null,
+    data: { systemEventOperationId: operationId }
+  }, scope => runWithRepairAuthorityLocks(
+    [args.sourceActor, args.targetActor],
+    () => runRepairLifecycle({ ...args, sourceToken, targetToken, operationId }, scope),
+    scope.chainRef
+  ));
+}
+
+async function runRepairLifecycle(args, scope) {
+  const workflow = await runTerminalSystemEventWorkflow({
+    scope,
+    beforeEventKey: "fallout-maw.repair.before",
+    resolvedEventKey: "fallout-maw.repair.resolved",
+    occurrenceBase: `repair:${scope.rootId}:${args.operationId}`,
+    participants: buildRepairParticipants(args),
+    beforeData: buildRepairEventData(args, null, "pending"),
+    resolvedData: ({ value, status, reason }) => buildRepairEventData(args, value, status, reason),
+    before: () => buildRepairStateSnapshot(args),
+    after: () => buildRepairStateSnapshot(args),
+    operation: () => resolveRepairOnAuthorityOperation({ ...args, chainRef: scope.chainRef }),
+    getResultStatus: result => {
+      if (["committed", "alreadyComplete"].includes(result?.status)) return "success";
+      if (result?.status === "cancelled") return "cancelled";
+      return "failed";
+    },
+    getResultReason: result => String(result?.reason ?? result?.status ?? "")
+  });
+  if (!workflow.cancelled) return workflow.value;
+  return createRepairReceipt(args, {
+    status: "cancelled",
+    reason: workflow.reason || "Ремонт отменён событием системы."
+  });
+}
+
+async function resolveRepairOnAuthorityOperation({
   sourceActor,
+  sourceToken = null,
   targetActor,
+  targetToken = null,
   itemId,
   instrumentId,
-  instrumentToolKey,
-  expectedCondition,
-  finalValue,
-  expectedSupply,
-  remainingSupply,
-  contextToolKey = "repair"
-}) {
+  methodIndex = 0,
+  toolKey = "repair",
+  operationId = "",
+  chainRef = null
+} = {}) {
+  if (!sourceActor || !targetActor) throw new Error("участники ремонта не найдены");
+  const contextToolKey = validateRepairToolKey(toolKey);
   const item = targetActor?.items?.get(String(itemId ?? ""));
   if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) throw new Error("предмет ремонта не найден");
-
   const condition = getConditionFunction(item);
-  const maxValue = Math.max(0, toInteger(condition.max));
-  const currentValue = Math.min(maxValue, Math.max(0, toInteger(condition.value)));
-  const nextValue = Math.min(maxValue, Math.max(0, toInteger(finalValue)));
-  if (currentValue !== toInteger(expectedCondition)) {
-    throw createRepairStaleError("Состояние ремонтируемого предмета изменилось.");
-  }
-  if (nextValue < currentValue) throw new Error("Ремонт не может уменьшать состояние предмета.");
-
+  const methods = normalizeRecoveryMethods(condition.recoveryMethods, contextToolKey);
+  const method = methods[Math.max(0, toInteger(methodIndex))];
+  if (!method) throw new Error("метод ремонта не найден");
   const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
-  const toolKey = String(instrumentToolKey ?? "").trim();
-  const tool = getToolFunction(instrument, toolKey);
-  const currentSupply = Math.max(0, toInteger(tool?.supply?.value));
-  const expected = Math.max(0, toInteger(expectedSupply));
-  const remaining = Math.max(0, toInteger(remainingSupply));
-  if (!instrument || instrument.type !== "gear" || !tool?.enabled) {
-    throw new Error("инструмент ремонта не найден");
-  }
-  if (currentSupply !== expected) {
-    throw createRepairStaleError("Запас инструмента изменился.");
-  }
-  if (remaining >= currentSupply) throw new Error("Ремонт должен расходовать запас инструмента.");
+  if (
+    !instrument
+    || instrument.type !== "gear"
+    || !hasItemFunction(instrument, createToolFunctionKey(method.toolKey))
+  ) throw new Error("инструмент ремонта не найден или сломан");
+  const tool = getToolFunction(instrument, method.toolKey);
+  const validation = validateInstrumentForRepair(sourceActor, method, tool);
+  if (!validation.ok) throw new Error(validation.message);
 
-  await executeInventoryMutation([
-    {
-      actor: targetActor,
-      updates: [{ _id: item.id, "system.functions.condition.value": nextValue }]
+  const maxValue = Math.max(1, toInteger(condition.max));
+  const initialValue = Math.min(maxValue, Math.max(0, toInteger(condition.value)));
+  const initialSupply = Math.max(0, toInteger(tool.supply?.value));
+  const expectedInputFingerprint = createRepairInputFingerprint({
+    sourceActor,
+    targetItem: item,
+    instrument,
+    contextToolKey,
+    methodIndex
+  });
+  if (initialValue >= maxValue) {
+    return createRepairReceipt({ operationId, targetActor, targetToken }, {
+      status: "alreadyComplete",
+      reason: `«${item.name}» уже полностью отремонтирован.`,
+      targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
+      repairItem: snapshotRepairableItem(item, contextToolKey),
+      instrument: snapshotRepairInstrument(instrument, method.toolKey),
+      method,
+      initialValue,
+      finalValue: initialValue,
+      maxValue,
+      completed: true
+    });
+  }
+  const result = await runRepairChecks({
+    sourceActor,
+    sourceToken,
+    targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
+    targetToken,
+    repairItem: snapshotRepairableItem(item, contextToolKey),
+    method,
+    tool,
+    initialValue,
+    maxValue,
+    operationId,
+    chainRef
+  });
+  if (!result.entries.length) {
+    return createRepairReceipt({ operationId, targetActor, targetToken }, {
+      status: result.halted ? "cancelled" : "failed",
+      reason: result.reason || "Ремонт не выполнен.",
+      targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
+      repairItem: snapshotRepairableItem(item, contextToolKey),
+      instrument: snapshotRepairInstrument(instrument, method.toolKey),
+      method,
+      initialValue,
+      finalValue: initialValue,
+      maxValue
+    });
+  }
+
+  const finalValue = Math.min(maxValue, Math.max(initialValue, toInteger(result.finalValue)));
+  await commitRepairToActors({
+    targetItem: item,
+    instrument,
+    sourceActor,
+    contextToolKey,
+    methodIndex,
+    expectedInputFingerprint,
+    instrumentToolKey: method.toolKey,
+    expectedCondition: initialValue,
+    expectedSupply: initialSupply,
+    finalValue,
+    remainingSupply: result.remainingCharges,
+    chainRef
+  });
+  return createRepairReceipt({ operationId, targetActor, targetToken }, {
+    status: "committed",
+    targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
+    repairItem: snapshotRepairableItem(item, contextToolKey),
+    instrument: snapshotRepairInstrument(instrument, method.toolKey),
+    method,
+    initialValue,
+    finalValue,
+    maxValue,
+    spentCharges: result.spentCharges,
+    repairedCondition: Math.max(0, finalValue - initialValue),
+    entries: result.entries,
+    completed: finalValue >= maxValue,
+    halted: Boolean(result.halted),
+    reason: String(result.reason ?? "")
+  });
+}
+
+async function commitRepairToActors({
+  targetItem,
+  instrument,
+  sourceActor,
+  contextToolKey,
+  methodIndex,
+  expectedInputFingerprint,
+  instrumentToolKey,
+  expectedCondition,
+  expectedSupply,
+  finalValue,
+  remainingSupply,
+  chainRef = null
+} = {}) {
+  if (!targetItem || !hasItemFunction(targetItem, ITEM_FUNCTIONS.condition)) {
+    throw createRepairStaleError("Ремонтируемый предмет больше недоступен.");
+  }
+  if (
+    !instrument
+    || !hasItemFunction(instrument, createToolFunctionKey(instrumentToolKey))
+    || !getToolFunction(instrument, instrumentToolKey)?.enabled
+  ) throw createRepairStaleError("Инструмент ремонта больше недоступен или сломан.");
+  const currentInputFingerprint = createRepairInputFingerprint({
+    sourceActor,
+    targetItem,
+    instrument,
+    contextToolKey,
+    methodIndex
+  });
+  if (currentInputFingerprint !== expectedInputFingerprint) {
+    throw createRepairStaleError("Правила, требования или навык ремонта изменились во время проверок.");
+  }
+  const currentCondition = Math.max(0, toInteger(getConditionFunction(targetItem).value));
+  const currentSupply = Math.max(0, toInteger(getToolFunction(instrument, instrumentToolKey).supply?.value));
+  if (currentCondition !== Math.max(0, toInteger(expectedCondition))) {
+    throw createRepairStaleError("Состояние ремонтируемого предмета изменилось во время проверок.");
+  }
+  if (currentSupply !== Math.max(0, toInteger(expectedSupply))) {
+    throw createRepairStaleError("Запас инструмента изменился во время проверок.");
+  }
+  if (toInteger(finalValue) < currentCondition) throw new Error("Ремонт не может уменьшать состояние предмета.");
+  if (toInteger(remainingSupply) >= currentSupply) throw new Error("Ремонт должен расходовать запас инструмента.");
+  const conditionUpdate = { "system.functions.condition.value": Math.max(0, toInteger(finalValue)) };
+  const supplyUpdate = {
+    [`system.functions.tools.${instrumentToolKey}.supply.value`]: Math.max(0, toInteger(remainingSupply))
+  };
+  const updates = targetItem === instrument
+    ? [{ document: targetItem, updates: { ...conditionUpdate, ...supplyUpdate } }]
+    : [
+        { document: targetItem, updates: conditionUpdate },
+        { document: instrument, updates: supplyUpdate }
+      ];
+  await executeAtomicActorItemUpdates(updates, {
+    chainRef,
+    reason: "repair-with-tool"
+  });
+}
+
+function createRepairInputFingerprint({
+  sourceActor,
+  targetItem,
+  instrument,
+  contextToolKey = "repair",
+  methodIndex = 0
+} = {}) {
+  const condition = getConditionFunction(targetItem);
+  const methods = normalizeRecoveryMethods(condition.recoveryMethods, contextToolKey);
+  const method = methods[Math.max(0, toInteger(methodIndex))] ?? null;
+  const tool = getToolFunction(instrument, method?.toolKey);
+  const toolSkillKey = String(tool?.skillKey ?? "");
+  const repairSettings = getCraftingSettings().repair ?? {};
+  return JSON.stringify({
+    conditionMax: Math.max(0, toInteger(condition.max)),
+    method: method ? {
+      toolKey: String(method.toolKey ?? ""),
+      toolClass: normalizeToolClass(method.toolClass),
+      difficulty: Math.max(0, toInteger(method.difficulty)),
+      skillKey: String(method.skillKey ?? "")
+    } : null,
+    tool: {
+      enabled: Boolean(tool?.enabled),
+      toolClass: normalizeToolClass(tool?.toolClass),
+      skillKey: toolSkillKey,
+      skillValue: Math.max(0, toInteger(tool?.skillValue))
     },
-    {
-      actor: sourceActor,
-      updates: [{
-        _id: instrument.id,
-        [`system.functions.tools.${toolKey}.supply.value`]: remaining
-      }]
+    toolRequirementSkillValue: toolSkillKey
+      ? toInteger(sourceActor?.system?.skills?.[toolSkillKey]?.value)
+      : null,
+    repairSkillValue: toInteger(sourceActor?.system?.skills?.[DEFAULT_REPAIR_SKILL_KEY]?.value),
+    repairSettings: {
+      mode: String(repairSettings.mode ?? ""),
+      failureToolCostIncreasePercent: toInteger(repairSettings.failureToolCostIncreasePercent),
+      criticalFailureToolCostIncreasePercent: toInteger(repairSettings.criticalFailureToolCostIncreasePercent)
     }
-  ], { reason: "repair-with-tool" });
-  return buildTargetContext(targetActor, null, contextToolKey);
+  });
 }
 
 function createRepairStaleError(message) {
   const error = new Error(message);
   error.code = "inventory-stale";
   return error;
+}
+
+function createRepairReceipt(args = {}, values = {}) {
+  return {
+    operationId: String(args.operationId ?? ""),
+    status: String(values.status ?? "failed"),
+    reason: String(values.reason ?? ""),
+    targetContext: values.targetContext ?? buildTargetContext(args.targetActor, args.targetToken),
+    repairItem: values.repairItem ?? null,
+    instrument: values.instrument ?? null,
+    method: values.method ?? null,
+    initialValue: Math.max(0, toInteger(values.initialValue)),
+    finalValue: Math.max(0, toInteger(values.finalValue)),
+    maxValue: Math.max(0, toInteger(values.maxValue)),
+    spentCharges: Math.max(0, toInteger(values.spentCharges)),
+    repairedCondition: Math.max(0, toInteger(values.repairedCondition)),
+    entries: Array.isArray(values.entries) ? values.entries : [],
+    completed: Boolean(values.completed),
+    halted: Boolean(values.halted)
+  };
+}
+
+function snapshotRepairInstrument(item, toolKey) {
+  const tool = getToolFunction(item, toolKey);
+  return {
+    id: String(item?.id ?? ""),
+    name: String(item?.name ?? ""),
+    toolKey: String(toolKey ?? ""),
+    toolClass: String(tool?.toolClass ?? "D"),
+    supplyValue: Math.max(0, toInteger(tool?.supply?.value)),
+    supplyMax: Math.max(0, toInteger(tool?.supply?.max))
+  };
+}
+
+async function resolveMassRepairOnAuthority(args = {}) {
+  const operationId = String(args.operationId ?? "").trim() || `repair-mass:${foundry.utils.randomID()}`;
+  const sourceToken = args.sourceToken?.document ?? args.sourceToken ?? null;
+  const targetToken = args.targetToken?.document ?? args.targetToken ?? null;
+  assertRepairTokenMatchesActor(sourceToken, args.sourceActor);
+  assertRepairTokenMatchesActor(targetToken, args.targetActor);
+  const result = await resolveMassRepairOnAuthorityOperation({
+    ...args,
+    sourceToken,
+    targetToken,
+    operationId
+  });
+  await emitMassRepairResolved({
+    ...args,
+    sourceToken,
+    targetToken,
+    operationId,
+    result
+  });
+  return result;
+}
+
+async function resolveMassRepairOnAuthorityOperation({
+  sourceActor,
+  sourceToken = null,
+  targetActor,
+  targetToken = null,
+  toolKey = "repair",
+  options = {},
+  operationId = ""
+} = {}) {
+  if (!sourceActor || !targetActor) throw new Error("участники массового ремонта не найдены");
+  const contextToolKey = validateRepairToolKey(toolKey);
+  const policy = normalizeToolSelectionPolicy(options);
+  if (!policy.allowedToolGroupKeys.length) throw new Error("Выберите хотя бы одну группу инструментов.");
+
+  const initialContext = buildTargetContext(targetActor, targetToken, contextToolKey);
+  const compatibleGroups = new Set(groupToolSelectionOptions(
+    collectMassRepairInstrumentOptions(sourceActor, initialContext)
+  ).map(group => group.key));
+  if (!policy.allowedToolGroupKeys.some(key => compatibleGroups.has(key))) {
+    throw new Error("Выбранные группы инструментов больше недоступны.");
+  }
+
+  const summary = {
+    targetName: initialContext.name,
+    attempted: 0,
+    completed: 0,
+    repaired: 0,
+    charges: 0,
+    skipped: 0,
+    stopped: false,
+    stopStatus: "",
+    reason: ""
+  };
+  const itemIds = [...initialContext.items]
+    .sort((left, right) => left.conditionRatio - right.conditionRatio || left.name.localeCompare(right.name))
+    .map(item => item.id);
+  let step = 0;
+  repairItems: for (const itemId of itemIds) {
+    while (step < 1000) {
+      const currentContext = buildTargetContext(targetActor, targetToken, contextToolKey);
+      const repairItem = currentContext.items.find(item => item.id === itemId);
+      if (!repairItem) break;
+      const selection = chooseBestRepairOption(sourceActor, repairItem, policy);
+      if (!selection) {
+        summary.skipped += 1;
+        break;
+      }
+      step += 1;
+      summary.attempted += 1;
+      let resolution;
+      try {
+        resolution = await resolveRepairOnAuthority({
+          sourceActor,
+          sourceToken,
+          targetActor,
+          targetToken,
+          itemId,
+          instrumentId: selection.instrumentId,
+          methodIndex: selection.methodIndex,
+          toolKey: contextToolKey,
+          operationId: `${operationId}:step:${step}`
+        });
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Mass repair step failed`, error);
+        summary.stopped = true;
+        summary.stopStatus = "failed";
+        summary.reason = String(error?.message ?? "Массовый ремонт остановлен.");
+        break repairItems;
+      }
+      summary.repaired += Math.max(0, toInteger(resolution?.repairedCondition));
+      summary.charges += Math.max(0, toInteger(resolution?.spentCharges));
+      if (["failed", "cancelled"].includes(String(resolution?.status ?? ""))) {
+        summary.stopped = true;
+        summary.stopStatus = String(resolution.status);
+        summary.reason = String(resolution?.reason ?? "Массовый ремонт остановлен.");
+        break repairItems;
+      }
+      if (resolution?.halted) {
+        summary.stopped = true;
+        summary.stopStatus = "cancelled";
+        summary.reason = String(resolution?.reason ?? "Проверка ремонта остановлена.");
+        break repairItems;
+      }
+      if (resolution?.completed) {
+        summary.completed += 1;
+        break;
+      }
+      if (resolution?.status !== "committed" || resolution.repairedCondition <= 0) {
+        summary.reason ||= String(resolution?.reason ?? "");
+        break;
+      }
+    }
+    if (step >= 1000) {
+      summary.stopped = true;
+      summary.stopStatus = "failed";
+      summary.reason = "Массовый ремонт остановлен защитным лимитом операций.";
+      break;
+    }
+  }
+  return {
+    targetContext: buildTargetContext(targetActor, targetToken, contextToolKey),
+    summary
+  };
+}
+
+async function emitMassRepairResolved({
+  sourceActor,
+  sourceToken = null,
+  targetActor,
+  targetToken = null,
+  toolKey = "repair",
+  options = {},
+  operationId = "",
+  chainRef = null,
+  result = {}
+} = {}) {
+  const contextToolKey = validateRepairToolKey(toolKey);
+  const policy = normalizeToolSelectionPolicy(options);
+  const summary = result.summary ?? {};
+  const batchCancelled = summary.stopStatus === "cancelled";
+  const batchFailed = summary.stopStatus === "failed" || (!summary.repaired && !batchCancelled);
+  const batchStatus = batchCancelled ? "cancelled" : batchFailed ? "failed" : "success";
+  return withSystemEventRoot({
+    kind: "repairBatch",
+    operationId,
+    sceneUuid: String(targetToken?.parent?.uuid ?? sourceToken?.parent?.uuid ?? ""),
+    combatUuid: String(game.combat?.uuid ?? ""),
+    chainRef,
+    data: { systemEventOperationId: operationId }
+  }, scope => scope.emit("fallout-maw.repair.batch.resolved", {
+    data: {
+      schemaVersion: 1,
+      operationId,
+      ...summary,
+      qualityMode: policy.qualityMode,
+      supplyMode: policy.supplyMode,
+      allowedToolGroupKeys: policy.allowedToolGroupKeys
+    },
+    after: { targetContext: buildTargetContext(targetActor, targetToken, contextToolKey) },
+    outcome: {
+      success: batchStatus === "success",
+      cancelled: batchCancelled,
+      failed: batchFailed,
+      status: batchStatus
+    },
+    reason: summary.reason || (batchStatus === "success" ? "resolved" : "noRepair")
+  }, {
+    occurrenceKey: `repair-batch:${scope.rootId}:${operationId}:resolved`,
+    participants: {
+      source: createRepairParticipant(sourceActor, sourceToken),
+      target: createRepairParticipant(targetActor, targetToken),
+      related: []
+    }
+  }));
+}
+
+function buildRepairParticipants({ sourceActor, sourceToken, targetActor, targetToken, itemId, instrumentId } = {}) {
+  return {
+    source: createRepairParticipant(sourceActor, sourceToken, sourceActor?.items?.get?.(String(instrumentId ?? ""))),
+    target: createRepairParticipant(targetActor, targetToken, targetActor?.items?.get?.(String(itemId ?? ""))),
+    related: []
+  };
+}
+
+function createRepairParticipant(actor = null, token = null, item = null) {
+  const tokenDocument = token?.document ?? token;
+  const participant = {
+    actorUuid: String(actor?.uuid ?? tokenDocument?.actor?.uuid ?? ""),
+    tokenUuid: String(tokenDocument?.uuid ?? ""),
+    itemUuid: String(item?.uuid ?? "")
+  };
+  return Object.values(participant).some(Boolean) ? participant : null;
+}
+
+function buildRepairEventData(args = {}, receipt = null, status = "pending", reason = "") {
+  const item = args.targetActor?.items?.get?.(String(args.itemId ?? ""));
+  const instrument = args.sourceActor?.items?.get?.(String(args.instrumentId ?? ""));
+  return {
+    schemaVersion: 1,
+    operationId: String(args.operationId ?? receipt?.operationId ?? ""),
+    sourceActorUuid: String(args.sourceActor?.uuid ?? ""),
+    targetActorUuid: String(args.targetActor?.uuid ?? ""),
+    sourceTokenUuid: getRepairTokenUuid(args.sourceToken),
+    targetTokenUuid: getRepairTokenUuid(args.targetToken),
+    itemId: String(args.itemId ?? ""),
+    itemUuid: String(item?.uuid ?? ""),
+    itemName: String(receipt?.repairItem?.name ?? item?.name ?? ""),
+    instrumentId: String(args.instrumentId ?? ""),
+    instrumentItemUuid: String(instrument?.uuid ?? ""),
+    instrumentName: String(receipt?.instrument?.name ?? instrument?.name ?? ""),
+    methodIndex: Math.max(0, toInteger(args.methodIndex)),
+    toolKey: String(args.toolKey ?? ""),
+    status: String(receipt?.status ?? status),
+    reason: String(receipt?.reason ?? reason),
+    initialValue: Math.max(0, toInteger(receipt?.initialValue)),
+    finalValue: Math.max(0, toInteger(receipt?.finalValue)),
+    maxValue: Math.max(0, toInteger(receipt?.maxValue)),
+    spentCharges: Math.max(0, toInteger(receipt?.spentCharges)),
+    repairedCondition: Math.max(0, toInteger(receipt?.repairedCondition)),
+    completed: Boolean(receipt?.completed)
+  };
+}
+
+function buildRepairStateSnapshot({ sourceActor, targetActor, itemId, instrumentId } = {}) {
+  const item = targetActor?.items?.get?.(String(itemId ?? ""));
+  const instrument = sourceActor?.items?.get?.(String(instrumentId ?? ""));
+  const condition = getConditionFunction(item);
+  const tools = instrument?.system?.functions?.tools ?? {};
+  return {
+    condition: item ? Math.max(0, toInteger(condition.value)) : null,
+    supplies: Object.fromEntries(Object.entries(tools).map(([key, value]) => [key, Math.max(0, toInteger(value?.supply?.value))]))
+  };
 }
 
 function buildTargetContext(actor, token = null, defaultToolKey = "repair") {
@@ -984,24 +1423,31 @@ function normalizeRecoveryMethod(method = {}, defaultToolKey = "repair") {
   };
 }
 
-async function requestRepairSocket(action, payload = {}, gm = getResponsibleGM()) {
+async function requestRepairSocket(action, payload = {}, gm = getResponsibleGM(), { requestId = "" } = {}) {
   if (!gm) throw new Error("нет активного GM");
-  const requestId = foundry.utils.randomID();
+  const resolvedRequestId = String(requestId ?? "").trim() || foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
 
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      pendingRepairSocketRequests.delete(requestId);
-      reject(new Error("GM не ответил на запрос ремонта"));
+      pendingRepairSocketRequests.delete(resolvedRequestId);
+      const error = new Error("GM не ответил на запрос ремонта");
+      error.code = "authority-timeout";
+      reject(error);
     }, REPAIR_SOCKET_TIMEOUT);
-    pendingRepairSocketRequests.set(requestId, { resolve, reject, timeout });
+    pendingRepairSocketRequests.set(resolvedRequestId, {
+      resolve,
+      reject,
+      timeout,
+      gmUserId: String(gm.id ?? "")
+    });
   });
 
   game.socket.emit(REPAIR_SOCKET, {
     scope: REPAIR_SOCKET_SCOPE,
     type: "request",
     action,
-    requestId,
+    requestId: resolvedRequestId,
     requesterUserId,
     gmUserId: gm.id,
     payload
@@ -1009,13 +1455,15 @@ async function requestRepairSocket(action, payload = {}, gm = getResponsibleGM()
   return promise;
 }
 
-async function handleRepairSocketMessage(message = {}) {
+async function handleRepairSocketMessage(message = {}, senderUserId = "") {
   if (message?.scope !== REPAIR_SOCKET_SCOPE) return;
+  const authenticatedSenderId = String(senderUserId ?? "").trim();
 
   if (message.type === "response") {
     if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
     const pending = pendingRepairSocketRequests.get(message.requestId);
     if (!pending) return;
+    if (!authenticatedSenderId || authenticatedSenderId !== pending.gmUserId) return;
     window.clearTimeout(pending.timeout);
     pendingRepairSocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
@@ -1025,13 +1473,10 @@ async function handleRepairSocketMessage(message = {}) {
 
   if (message.type !== "request") return;
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+  if (!authenticatedSenderId || authenticatedSenderId !== String(message.requesterUserId ?? "")) return;
 
   try {
-    const result = await handleRepairSocketRequest(
-      message.action,
-      message.payload ?? {},
-      message.requesterUserId
-    );
+    const result = await handleRepairSocketRequestOnce(message);
     game.socket.emit(REPAIR_SOCKET, {
       scope: REPAIR_SOCKET_SCOPE,
       type: "response",
@@ -1053,38 +1498,87 @@ async function handleRepairSocketMessage(message = {}) {
   }
 }
 
-async function handleRepairSocketRequest(action, payload = {}, requesterUserId = "") {
+function handleRepairSocketRequestOnce(message = {}) {
+  const requestId = String(message.requestId ?? "").trim();
+  const requesterUserId = String(message.requesterUserId ?? "").trim();
+  if (!requestId || !requesterUserId) throw new Error("некорректный запрос ремонта");
+  const key = `${requesterUserId}:${requestId}`;
+  const existing = handledRepairSocketRequests.get(key);
+  if (existing) return existing.promise;
+
+  const entry = { promise: null, settled: false };
+  entry.promise = Promise.resolve().then(() => handleRepairSocketRequest(
+    message.action,
+    message.payload ?? {},
+    requesterUserId,
+    `repair-socket:${requesterUserId}:${requestId}`
+  ));
+  handledRepairSocketRequests.set(key, entry);
+  entry.promise.then(
+    () => settleHandledRepairSocketRequest(key, entry),
+    () => settleHandledRepairSocketRequest(key, entry)
+  );
+  pruneHandledRepairSocketRequests();
+  return entry.promise;
+}
+
+function settleHandledRepairSocketRequest(key, entry) {
+  entry.settled = true;
+  window.setTimeout(() => {
+    if (handledRepairSocketRequests.get(key) === entry) handledRepairSocketRequests.delete(key);
+  }, REPAIR_SOCKET_RECEIPT_TTL);
+}
+
+function pruneHandledRepairSocketRequests() {
+  if (handledRepairSocketRequests.size <= MAX_HANDLED_REPAIR_SOCKET_REQUESTS) return;
+  for (const [key, entry] of handledRepairSocketRequests) {
+    if (!entry.settled) continue;
+    handledRepairSocketRequests.delete(key);
+    if (handledRepairSocketRequests.size <= MAX_HANDLED_REPAIR_SOCKET_REQUESTS) break;
+  }
+}
+
+async function handleRepairSocketRequest(action, payload = {}, requesterUserId = "", operationId = "") {
   const actor = await fromUuid(String(payload.actorUuid ?? ""));
-  if (!actor) throw new Error("цель не найдена");
-  const toolKey = String(payload.toolKey ?? "repair") || "repair";
+  if (!actor || actor.documentName !== "Actor") throw new Error("цель не найдена");
+  const toolKey = validateRepairToolKey(payload.toolKey);
 
   if (action === "getTargetContext") {
+    await getRepairSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const targetToken = await resolveRepairTokenForActor(payload.targetTokenUuid, actor, { required: true });
     return {
-      targetContext: {
-        ...buildTargetContext(actor, null, toolKey),
-        name: String(payload.tokenName ?? "") || actor.name,
-        tokenName: String(payload.tokenName ?? "")
-      }
+      targetContext: buildTargetContext(actor, targetToken, toolKey)
     };
   }
 
-  if (action === "applyRepair") {
-    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? ""));
-    if (!sourceActor) throw new Error("источник инструмента не найден");
-    assertSocketActorOwner(sourceActor, requesterUserId);
+  if (action === "performRepair" || action === "performMassRepair") {
+    const sourceActor = await getRepairSocketSourceActor(payload.sourceActorUuid, requesterUserId);
+    const [sourceToken, targetToken] = await Promise.all([
+      resolveRepairTokenForActor(payload.sourceTokenUuid, sourceActor, { required: true }),
+      resolveRepairTokenForActor(payload.targetTokenUuid, actor, { required: true })
+    ]);
     return {
-      targetContext: await commitRepairToActors({
-        sourceActor,
-        targetActor: actor,
-        itemId: payload.itemId,
-        instrumentId: payload.instrumentId,
-        instrumentToolKey: payload.instrumentToolKey,
-        expectedCondition: payload.expectedCondition,
-        finalValue: payload.finalValue,
-        expectedSupply: payload.expectedSupply,
-        remainingSupply: payload.remainingSupply,
-        contextToolKey: toolKey
-      })
+      resolution: action === "performMassRepair"
+        ? await resolveMassRepairOnAuthority({
+            sourceActor,
+            sourceToken,
+            targetActor: actor,
+            targetToken,
+            toolKey,
+            options: payload.options,
+            operationId
+          })
+        : await resolveRepairOnAuthority({
+            sourceActor,
+            sourceToken,
+            targetActor: actor,
+            targetToken,
+            itemId: payload.itemId,
+            instrumentId: payload.instrumentId,
+            methodIndex: payload.methodIndex,
+            toolKey,
+            operationId
+          })
     };
   }
 
@@ -1099,7 +1593,70 @@ function assertSocketActorOwner(actor, requesterUserId) {
   }
 }
 
-async function postRepairResultChat(actor, { repairItem, instrument, method, initialValue, finalValue, maxValue, spentCharges, entries, completed }) {
+async function getRepairSocketSourceActor(actorUuid = "", requesterUserId = "") {
+  const actor = await fromUuid(String(actorUuid ?? "").trim());
+  if (!actor || actor.documentName !== "Actor") throw new Error("источник ремонта не найден");
+  assertSocketActorOwner(actor, requesterUserId);
+  return actor;
+}
+
+function validateRepairToolKey(value = "repair") {
+  const configured = String(
+    getSystemActionSettings().find(entry => entry.key === "repair")?.toolKey ?? "repair"
+  ).trim() || "repair";
+  if (configured.includes(".") || !getToolSettings().some(entry => entry.key === configured)) {
+    throw new Error("в настройках ремонта указан некорректный тип инструмента");
+  }
+  const requested = String(value ?? configured).trim() || configured;
+  if (requested !== configured) {
+    throw new Error("тип инструмента не соответствует настройкам действия ремонта");
+  }
+  return configured;
+}
+
+function assertRepairTokenMatchesActor(token = null, actor = null) {
+  if (!token) return;
+  if (
+    token.documentName !== "Token"
+    || !token.actor
+    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+  ) {
+    throw new Error("токен не соответствует участнику ремонта");
+  }
+}
+
+function getRepairTokenUuid(token = null) {
+  const document = token?.document ?? token;
+  return document?.documentName === "Token" ? String(document.uuid ?? "") : "";
+}
+
+async function resolveRepairTokenForActor(tokenUuid = "", actor = null, { required = false } = {}) {
+  const uuid = String(tokenUuid ?? "").trim();
+  if (!uuid) {
+    if (required) throw new Error("токен участника ремонта не найден");
+    return null;
+  }
+  const token = await fromUuid(uuid);
+  if (
+    token?.documentName !== "Token"
+    || !token.actor
+    || String(token.actor.uuid ?? "") !== String(actor?.uuid ?? "")
+  ) throw new Error("токен не соответствует участнику ремонта");
+  return token;
+}
+
+async function postRepairResolutionChat(actor, resolution = {}) {
+  if (resolution.status === "committed") {
+    return postRepairResultChat(actor, resolution);
+  }
+  return postRepairChat(actor, {
+    title: resolution.repairItem?.name ? `Ремонт: ${resolution.repairItem.name}` : "Ремонт",
+    tone: resolution.status === "alreadyComplete" ? "success" : "failure",
+    lines: [resolution.reason || "Ремонт не выполнен."]
+  });
+}
+
+async function postRepairResultChat(actor, { repairItem, instrument, method, initialValue, finalValue, maxValue, spentCharges, entries, completed, halted = false, reason = "" }) {
   const rows = entries.map(entry => `
     <li>
       Проверка ${entry.index}/${entry.total}: ${entry.resultLabel},
@@ -1111,13 +1668,14 @@ async function postRepairResultChat(actor, { repairItem, instrument, method, ini
   `).join("");
   await postRepairChat(actor, {
     title: `Ремонт: ${repairItem.name}`,
-    tone: completed ? "success" : "standard",
+    tone: halted ? "failure" : completed ? "success" : "standard",
     lines: [
       `Инструмент: ${instrument.name}`,
       `Метод: ${method.toolLabel}, класс ${method.toolClass}, сложность ${method.difficulty}`,
       `Состояние: ${initialValue}/${maxValue} -> ${finalValue}/${maxValue}`,
       `Потрачено запаса: ${spentCharges}`,
       `<ul>${rows}</ul>`,
+      halted ? `Остановлено: ${reason || "проверка ремонта не завершена"}` : "",
       completed ? "Предмет полностью отремонтирован." : ""
     ].filter(Boolean)
   });
@@ -1126,14 +1684,15 @@ async function postRepairResultChat(actor, { repairItem, instrument, method, ini
 async function postMassRepairChat(actor, summary) {
   await postRepairChat(actor, {
     title: "Массовый ремонт",
-    tone: summary.completed > 0 ? "success" : "standard",
+    tone: summary.stopped ? "failure" : summary.completed > 0 ? "success" : "standard",
     lines: [
       summary.targetName ? `Цель: ${summary.targetName}` : "",
       `Попыток ремонта: ${summary.attempted}`,
       `Полностью отремонтировано: ${summary.completed}`,
       `Восстановлено состояния: ${summary.repaired}`,
       `Потрачено запаса: ${summary.charges}`,
-      summary.skipped ? `Пропущено без подходящих инструментов: ${summary.skipped}` : ""
+      summary.skipped ? `Пропущено без подходящих инструментов: ${summary.skipped}` : "",
+      summary.stopped ? `Остановлено: ${summary.reason || "дальнейший ремонт невозможен"}` : ""
     ].filter(Boolean)
   });
 }
@@ -1199,6 +1758,22 @@ function normalizeToolClass(value) {
 
 function canUseActorLocally(actor) {
   return Boolean(game.user?.isGM || actor?.isOwner);
+}
+
+function runWithRepairAuthorityLocks(actors, operation, chainRef = null, index = 0) {
+  const ordered = index === 0
+    ? Array.from(new Map((actors ?? [])
+      .filter(Boolean)
+      .map(actor => [String(actor.uuid ?? actor.id ?? ""), actor]))
+      .values())
+      .sort((left, right) => String(left.uuid ?? left.id ?? "").localeCompare(String(right.uuid ?? right.id ?? "")))
+    : actors;
+  if (index >= ordered.length) return operation();
+  return repairAuthorityLock.run(
+    ordered[index],
+    chainRef,
+    () => runWithRepairAuthorityLocks(ordered, operation, chainRef, index + 1)
+  );
 }
 
 function getResponsibleGM() {

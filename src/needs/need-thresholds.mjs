@@ -558,7 +558,7 @@ function normalizeProgress(value) {
   return Math.round(number * 100) / 100;
 }
 
-export async function createDiseaseImmunityEffect(actor, disease) {
+export async function createDiseaseImmunityEffect(actor, disease, documentOptions = {}) {
   if (!actor) return [];
   const activeLevel = Math.max(1, toInteger(disease?.system?.level));
   const existingLevels = [];
@@ -571,7 +571,9 @@ export async function createDiseaseImmunityEffect(actor, disease) {
       return true;
     })
     .map(effect => effect.id);
-  if (existingIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existingIds);
+  if (existingIds.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", existingIds, documentOptions);
+  }
 
   const maxLevel = Math.max(activeLevel, ...existingLevels);
   const startTime = Number(game.time?.worldTime) || 0;
@@ -595,7 +597,7 @@ export async function createDiseaseImmunityEffect(actor, disease) {
         }
       }
     }
-  }]);
+  }], documentOptions);
 }
 
 function hasDiseaseImmunity(actor, diseaseLevel) {
