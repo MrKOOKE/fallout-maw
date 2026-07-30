@@ -38,6 +38,7 @@ import {
   clearWeaponNoiseDetectionQueues,
   configureWeaponNoiseDetection
 } from "./weapon-noise.mjs";
+import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import {
   canRenderDetectionVisualizationForLocalUser,
   cleanupAllStealthVisualizations,
@@ -102,7 +103,7 @@ export function registerStealthHooks() {
   Hooks.on("updateToken", onTokenUpdated);
   Hooks.on("deleteToken", onTokenDeleted);
   Hooks.on("drawToken", synchronizePersistentDetectionVisualization);
-  Hooks.on("refreshToken", synchronizePersistentDetectionVisualization);
+  Hooks.on("refreshToken", onTokenRefreshed);
   Hooks.on("controlToken", () => queueStealthRefresh({ visualization: true }));
   Hooks.on("canvasReady", onCanvasReady);
   Hooks.on("canvasTearDown", cleanupAllStealthUi);
@@ -300,7 +301,7 @@ function startTargetingMode(sourceToken, app) {
   const view = globalThis.canvas?.app?.view;
   if (!sourceToken?.actor || !view) return;
   const tooltip = getTargetTooltip();
-  targetMode = {
+  const mode = {
     sourceTokenId: sourceToken.id,
     app,
     tooltip,
@@ -310,35 +311,62 @@ function startTargetingMode(sourceToken, app) {
     checking: false,
     pointerFrame: null,
     latestPointer: null,
+    targetSelectionSession: null,
     pointerMove: event => queueTargetPointerMove(event),
     pointerDown: event => onTargetPointerDown(event),
     contextMenu: event => {
       event.preventDefault();
-      stopTargetingMode();
+      stopTargetingMode({ mode });
     },
     keyDown: event => {
-      if (event.key === "Escape") stopTargetingMode();
+      if (event.key === "Escape") stopTargetingMode({ mode });
     }
   };
-  view.addEventListener("pointermove", targetMode.pointerMove, { capture: true, passive: true });
-  view.addEventListener("pointerdown", targetMode.pointerDown, { capture: true });
-  view.addEventListener("contextmenu", targetMode.contextMenu, { capture: true });
-  document.addEventListener("keydown", targetMode.keyDown);
+  targetMode = mode;
+  mode.targetSelectionSession = startCanvasTargetSelectionSession({
+    kind: "stealthTarget",
+    sourceTokenUuid: String(sourceToken?.document?.uuid ?? sourceToken?.uuid ?? "")
+  }, {
+    onCancel: () => stopTargetingMode({
+      mode,
+      fromLifecycle: true
+    })
+  });
+  if (mode.targetSelectionSession.finished || targetMode !== mode) {
+    mode.targetSelectionSession = null;
+    return;
+  }
+  view.addEventListener("pointermove", mode.pointerMove, { capture: true, passive: true });
+  view.addEventListener("pointerdown", mode.pointerDown, { capture: true });
+  view.addEventListener("contextmenu", mode.contextMenu, { capture: true });
+  document.addEventListener("keydown", mode.keyDown);
   view.classList.add("fallout-maw-stealth-targeting");
   ui.notifications.info("Выберите цель проверки скрытности.");
 }
 
-function stopTargetingMode() {
-  if (!targetMode) return;
+function stopTargetingMode({
+  mode = targetMode,
+  fromLifecycle = false,
+  cancelled = true
+} = {}) {
+  if (!mode) return;
+  const ownsActiveMode = targetMode === mode;
+  if (ownsActiveMode) targetMode = null;
   const view = globalThis.canvas?.app?.view;
-  view?.removeEventListener("pointermove", targetMode.pointerMove, { capture: true });
-  view?.removeEventListener("pointerdown", targetMode.pointerDown, { capture: true });
-  view?.removeEventListener("contextmenu", targetMode.contextMenu, { capture: true });
-  view?.classList.remove("fallout-maw-stealth-targeting");
-  document.removeEventListener("keydown", targetMode.keyDown);
-  if (targetMode.pointerFrame !== null) cancelFrame(targetMode.pointerFrame);
-  targetMode.tooltip?.remove();
-  targetMode = null;
+  view?.removeEventListener("pointermove", mode.pointerMove, { capture: true });
+  view?.removeEventListener("pointerdown", mode.pointerDown, { capture: true });
+  view?.removeEventListener("contextmenu", mode.contextMenu, { capture: true });
+  if (ownsActiveMode) view?.classList.remove("fallout-maw-stealth-targeting");
+  document.removeEventListener("keydown", mode.keyDown);
+  if (mode.pointerFrame !== null) cancelFrame(mode.pointerFrame);
+  mode.pointerFrame = null;
+  mode.tooltip?.remove();
+  if (!fromLifecycle) {
+    mode.targetSelectionSession?.finish({
+      cancelled: Boolean(cancelled)
+    });
+  }
+  mode.targetSelectionSession = null;
 }
 
 function queueTargetPointerMove(event) {
@@ -404,7 +432,7 @@ async function onTargetPointerDown(event) {
   } finally {
     if (targetMode === mode) {
       mode.checking = false;
-      if (!event.shiftKey) stopTargetingMode();
+      if (!event.shiftKey) stopTargetingMode({ mode, cancelled: false });
     }
   }
 }
@@ -457,6 +485,18 @@ function onTokenCreated(tokenDocument) {
   queueStealthRefresh({ allWindows: emitsLight, visualization: true });
 }
 
+function onTokenRefreshed(token, flags = {}) {
+  synchronizePersistentDetectionVisualization(token);
+  if (
+    flags.refreshPosition
+    || flags.refreshSize
+    || flags.refreshShape
+    || flags.refreshVisibility
+  ) {
+    invalidateTargetDifficultyPreview();
+  }
+}
+
 function onTokenUpdated(tokenDocument, changes = {}) {
   if (!isDocumentInActiveScene(tokenDocument)) return;
   synchronizePersistentDetectionVisualization(tokenDocument?.object);
@@ -487,6 +527,7 @@ function onTokenMoved(tokenDocument, movement = {}) {
   if (!isDocumentInActiveScene(tokenDocument)) return;
   const token = tokenDocument?.object;
   const emitsLight = tokenEmitsLight(tokenDocument);
+  invalidateTargetDifficultyPreview();
   // Cache keys already include exact token positions. Ordinary movement can
   // therefore reuse every unaffected observer zone; a moving light source is
   // the one case which changes lighting for arbitrary points in the scene.

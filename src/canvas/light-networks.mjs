@@ -1,5 +1,9 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { withSystemEventRoot } from "../events/foundry-world-events.mjs";
+import {
+  cancelActiveCanvasTargetSelection,
+  startCanvasTargetSelectionSession
+} from "./target-selection-lifecycle.mjs";
 
 const CoreAmbientLightConfig = foundry.applications.sheets.AmbientLightConfig;
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -318,6 +322,7 @@ function onLightNetworkCanvasDoubleClick(event) {
 }
 
 async function startLightNetworkInteractionPlacement({ sourceLight, networkName = "", image = "", scale = DEFAULT_INTERACTION_SCALE, parentConfig = null, networkConfig = null } = {}) {
+  cancelActiveCanvasTargetSelection({ reason: "superseded" });
   if (!game.user?.isGM) {
     ui.notifications.warn("Размещать источник взаимодействия сети может только GM.");
     return false;
@@ -327,32 +332,66 @@ async function startLightNetworkInteractionPlacement({ sourceLight, networkName 
     return false;
   }
   cancelLightNetworkInteractionPlacement();
-  activePlacement = {
+  const placement = activePlacement = {
     sourceLightUuid: sourceLight.uuid,
     networkName: normalizeNetworkName(networkName),
     image: normalizeInteractionImage(image),
     scale: normalizeInteractionScale(scale),
     parentConfig,
     networkConfig,
-    inputShield: createPlacementInputShield()
+    inputShield: null,
+    preview: null,
+    targetSelectionSession: null,
+    cleaned: false
   };
-  await createLightNetworkPlacementPreview(activePlacement);
-  bindPlacementInput(activePlacement);
+  const targetSelectionSession = startCanvasTargetSelectionSession({
+    kind: "lightNetworkInteractionPlacement",
+    sourceLightUuid: placement.sourceLightUuid,
+    sceneId: canvas.scene.id
+  }, {
+    onCancel: () => cancelLightNetworkInteractionPlacement({
+      placement,
+      fromLifecycle: true
+    })
+  });
+  placement.targetSelectionSession = targetSelectionSession;
+  if (targetSelectionSession.finished || activePlacement !== placement) {
+    placement.targetSelectionSession = null;
+    return false;
+  }
+  placement.inputShield = createPlacementInputShield();
+  await createLightNetworkPlacementPreview(placement);
+  if (!targetSelectionSession.active || activePlacement !== placement || placement.cleaned) return false;
+  bindPlacementInput(placement);
   window.addEventListener("keydown", onPlacementKeyDown, { capture: true });
   ui.notifications.info("Выберите место для источника взаимодействия сети. Esc/ПКМ отменяет.");
   return true;
 }
 
-function cancelLightNetworkInteractionPlacement({ notify = false, reopen = false } = {}) {
-  if (!activePlacement) return;
-  const placement = activePlacement;
-  activePlacement = null;
+function cancelLightNetworkInteractionPlacement({
+  notify = false,
+  reopen = false,
+  placement = activePlacement,
+  fromLifecycle = false,
+  cancelled = true
+} = {}) {
+  if (!placement) return false;
+  if (activePlacement === placement) activePlacement = null;
+  if (placement.cleaned) return false;
+  placement.cleaned = true;
   unbindPlacementInput(placement);
   window.removeEventListener("keydown", onPlacementKeyDown, { capture: true });
   destroyLightNetworkPlacementPreview(placement);
-  placement.inputShield?.remove?.();
+  const targetSelectionSession = placement.targetSelectionSession;
+  placement.targetSelectionSession = null;
+  if (!fromLifecycle) {
+    targetSelectionSession?.finish({
+      cancelled: Boolean(cancelled)
+    });
+  }
   if (notify) ui.notifications.info("Размещение источника взаимодействия сети отменено.");
   if (reopen) void reopenLightNetworkConfigWindows(placement);
+  return true;
 }
 
 function bindPlacementInput(placement) {
@@ -372,6 +411,8 @@ function unbindPlacementInput(placement) {
     }
   }
   placement.targets = [];
+  placement.inputShield?.remove?.();
+  placement.inputShield = null;
 }
 
 function createPlacementInputShield() {
@@ -407,11 +448,11 @@ function onPlacementCanvasEvent(event) {
 }
 
 function onPlacementKeyDown(event) {
-  if (!activePlacement) return;
+  if (!activePlacement || event.key !== "Escape") return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  if (event.key === "Escape") cancelLightNetworkInteractionPlacement({ notify: true, reopen: true });
+  cancelLightNetworkInteractionPlacement({ notify: true, reopen: true });
 }
 
 async function finishLightNetworkInteractionPlacement(event) {
@@ -420,7 +461,7 @@ async function finishLightNetworkInteractionPlacement(event) {
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
   const size = getSceneGridSize(canvas.scene);
   const center = getSnappedTileCenter(point, canvas.scene, size, size);
-  cancelLightNetworkInteractionPlacement();
+  cancelLightNetworkInteractionPlacement({ placement, cancelled: false });
   await canvas.scene.createEmbeddedDocuments("Tile", [{
     name: `Сеть: ${getNetworkDisplayName(placement.networkName)}`,
     x: Math.round(center.x),
@@ -461,25 +502,33 @@ async function reopenLightNetworkConfigWindows(placement) {
 }
 
 async function createLightNetworkPlacementPreview(placement) {
-  const layer = canvas?.stage;
+  const layer = canvas?.interface?.addChild ? canvas.interface : canvas?.stage;
   if (!layer || !placement) return;
   const container = new PIXI.Container();
   container.eventMode = "none";
+  container.interactive = false;
+  container.interactiveChildren = false;
+  container.zIndex = Number.MAX_SAFE_INTEGER;
   const graphics = new PIXI.Graphics();
   container.addChild(graphics);
-  let sprite = null;
+  layer.addChild(container);
+  placement.preview = { container, graphics, sprite: null };
   try {
     const texture = await foundry.canvas.loadTexture(placement.image);
-    if (texture?.valid) {
-      sprite = new PIXI.Sprite(texture);
-      sprite.alpha = 0.55;
-      container.addChild(sprite);
-    }
+    if (
+      activePlacement !== placement
+      || placement.cleaned
+      || placement.preview?.container !== container
+      || container.destroyed
+      || !texture?.valid
+    ) return;
+    const sprite = new PIXI.Sprite(texture);
+    sprite.alpha = 0.55;
+    placement.preview.sprite = sprite;
+    container.addChild(sprite);
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Light network placement preview texture failed to load: ${placement.image}`, error);
   }
-  layer.addChild(container);
-  placement.preview = { container, graphics, sprite };
 }
 
 function updateLightNetworkPlacementPreview(placement, point) {
@@ -504,9 +553,9 @@ function updateLightNetworkPlacementPreview(placement, point) {
 
 function destroyLightNetworkPlacementPreview(placement) {
   const preview = placement?.preview;
-  if (!preview?.container) return;
+  if (placement) placement.preview = null;
+  if (!preview?.container || preview.container.destroyed) return;
   preview.container.destroy({ children: true, texture: false, baseTexture: false });
-  placement.preview = null;
 }
 
 async function requestLightNetworkState({ sceneId = "", networkName = "", sourceLightUuid = "", enabled = false } = {}) {

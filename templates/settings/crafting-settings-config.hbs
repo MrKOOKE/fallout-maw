@@ -27,6 +27,14 @@
           {{/each}}
         </select>
       </label>
+      <label>
+        <span>Медицина</span>
+        <select name="medicine.mode" data-crafting-mode="medicine">
+          {{#each medicineModeChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
     </div>
   </section>
 

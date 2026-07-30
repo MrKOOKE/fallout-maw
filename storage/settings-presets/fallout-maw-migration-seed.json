@@ -4,7 +4,7 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw-migration-seed",
   "name": "Fallout-MaW Migration Seed",
-  "revision": "abc710733953406e129037d748c3dd8069bb82343aee56705f4d912ba869148f",
+  "revision": "36c07fad6fa8d0817350cd95c70618ce32f776598dca8b7eac5a66bea0869ea6",
   "updatedAt": "2026-07-06T13:42:33.540Z",
   "seedPending": false,
   "deleted": false,
@@ -3729,6 +3729,9 @@
           "mode": "skillChecks",
           "failureToolCostIncreasePercent": 100,
           "criticalFailureToolCostIncreasePercent": 0
+        },
+        "medicine": {
+          "mode": "skillChecks"
         }
       }
     },

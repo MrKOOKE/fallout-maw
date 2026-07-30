@@ -100,6 +100,7 @@ import {
 } from "./deus-ex-machina-progress-runtime.mjs";
 import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
@@ -179,7 +180,10 @@ import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
 import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
-import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
+import {
+  requestCustomActorTokenSelection,
+  requestCustomTokenSelection
+} from "../canvas/custom-token-selection.mjs";
 import { createRightClickPanGuard } from "../canvas/right-click-pan-guard.mjs";
 import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
@@ -1206,13 +1210,16 @@ async function requestCommandBasicsChoice({ abilityName = "Основы кома
 }
 
 function selectCommandBasicsTargets({ commander = null, command = "", limit = 1, abilityName = "Основы командования" } = {}) {
-  const rows = collectCommandBasicsTargetRows(commander, command);
+  const collectRows = () => collectCommandBasicsTargetRows(commander, command);
+  const sourceToken = getActorSceneToken(commander);
   return requestCustomTokenSelection({
-    rows,
+    rows: collectRows(),
     limit,
     title: abilityName,
     noneWarning: `${abilityName}: нет подходящих исполнителей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`
+    instructions: `${abilityName}: выберите до ${limit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`,
+    sourceToken,
+    refreshRows: collectRows
   });
 }
 
@@ -2104,7 +2111,13 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     }
     return [{ actor, token: sourcePlaceable, selected: true }];
   }
-  const rows = collectActiveApplicationTargetRows(actor, abilityFunction, settings, sourcePlaceable);
+  const collectRows = () => collectActiveApplicationTargetRows(
+    actor,
+    abilityFunction,
+    settings,
+    sourcePlaceable
+  );
+  const rows = collectRows();
   if (settings.targetSelectionMode === "all") {
     const seen = new Set();
     const targets = rows
@@ -2128,6 +2141,8 @@ async function resolveActiveApplicationTargets(actor, abilityItem, abilityFuncti
     title: getAbilityDisplayName(abilityItem),
     noneWarning: `${getAbilityDisplayName(abilityItem)}: нет подходящих целей.`,
     instructions: `${getAbilityDisplayName(abilityItem)}: выберите до ${targetLimit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, ПКМ снимает последнюю цель, Esc отменяет.`,
+    sourceToken: sourcePlaceable,
+    refreshRows: collectRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? row?.actorUuid ?? "")
   });
   const seen = new Set();
@@ -3281,13 +3296,15 @@ async function useKnockOffBalance(actor, abilityItem, abilityFunction, { onInter
 }
 
 function selectKnockOffBalanceTargets({ actor = null, limit = 1, abilityName = "Выбить из колеи" } = {}) {
-  const rows = collectKnockOffBalanceTargetRows(actor);
+  const collectRows = () => collectKnockOffBalanceTargetRows(actor);
   return requestCustomTokenSelection({
-    rows,
+    rows: collectRows(),
     limit,
     title: abilityName,
     noneWarning: `${abilityName}: нет подходящих целей.`,
-    instructions: `${abilityName}: выберите до ${limit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.`
+    instructions: `${abilityName}: выберите до ${limit} целей. ЛКМ на последней цели сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.`,
+    sourceToken: getActorSceneToken(actor),
+    refreshRows: collectRows
   });
 }
 
@@ -3593,32 +3610,14 @@ async function useLook(actor, abilityItem, abilityFunction) {
 }
 
 function selectLookTarget({ actor = null, sourceToken = null, abilityName = "Смотри!" } = {}) {
-  const rows = (canvas.tokens?.placeables ?? [])
-    .filter(token => token?.actor && token.visible !== false && token.renderable !== false)
-    .filter(token => token.actor.uuid !== actor?.uuid)
-    .map(token => createLookTargetRow(token, sourceToken));
-  return requestCustomTokenSelection({
-    rows,
-    limit: 1,
+  return requestCustomActorTokenSelection({
+    sourceActor: actor,
+    sourceToken,
+    includeSelf: false,
     title: abilityName,
     noneWarning: `${abilityName}: нет видимых целей.`,
     instructions: `${abilityName}: выберите одну цель в пределах видимости. ЛКМ сразу подтверждает, Enter тоже, Esc/ПКМ отменяет.`
-  });
-}
-
-function createLookTargetRow(token, sourceToken = null) {
-  const row = {
-    token,
-    actorUuid: token?.actor?.uuid ?? "",
-    selectable: false,
-    reason: ""
-  };
-  if (!sourceToken || !canTokenPhysicallySeeTarget(sourceToken, token)) {
-    row.reason = "цель не видна.";
-    return row;
-  }
-  row.selectable = true;
-  return row;
+  }).then(selection => selection ? [selection] : []);
 }
 
 async function useToTheEnd(actor, abilityItem, abilityFunction) {
@@ -5279,55 +5278,71 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
 
   return new Promise(resolve => {
     const graphics = new PIXI.Graphics();
-    let tokenPositionSignature = getLungeTokenPositionSignature(token);
-    const layer = canvas.controls?._rulerPaths;
+    graphics.eventMode = "none";
+    graphics.interactive = false;
+    graphics.zIndex = Number.MAX_SAFE_INTEGER;
+    const layer = canvas.interface ?? canvas.tokens ?? null;
     if (!layer) {
       graphics.destroy();
       ui.notifications.warn(`${abilityName}: слой предпросмотра атаки недоступен.`);
       resolve(null);
       return;
     }
-    layer.addChild(graphics);
-    drawLungeDestinationCandidates(graphics, candidates);
-    const targetSelectionSession = startCanvasTargetSelectionSession({
-      kind: "destination",
-      token,
-      abilityName
-    });
-    ui.notifications.info(`${abilityName}: выберите клетку перемещения. ПКМ отменяет, зажатие ПКМ двигает камеру.`);
-
+    let targetSelectionSession = null;
+    let finished = false;
+    let refreshTimerId = null;
+    let refreshPending = false;
+    const hookBindings = [];
+    const sourceTokenUuid = String(token?.document?.uuid ?? token?.uuid ?? "");
+    const isCanvasEvent = event => {
+      const view = canvas.app?.view;
+      if (!view || !event) return false;
+      return event.target === view || Array.from(event.composedPath?.() ?? []).includes(view);
+    };
     const refreshCandidates = () => {
-      const nextSignature = getLungeTokenPositionSignature(token);
-      if (nextSignature === tokenPositionSignature) return;
-      tokenPositionSignature = nextSignature;
+      if (refreshTimerId !== null) globalThis.clearTimeout(refreshTimerId);
+      refreshTimerId = null;
+      refreshPending = false;
+      if (finished) return;
       candidates = buildLungeDestinationCandidates(token, settings);
       drawLungeDestinationCandidates(graphics, candidates);
     };
+    const scheduleCandidateRefresh = () => {
+      if (finished) return;
+      refreshPending = true;
+      if (refreshTimerId === null) {
+        refreshTimerId = globalThis.setTimeout(refreshCandidates, 50);
+      }
+    };
     const cleanup = () => {
-      canvas.app?.ticker?.remove?.(refreshCandidates);
+      if (refreshTimerId !== null) globalThis.clearTimeout(refreshTimerId);
+      refreshTimerId = null;
+      refreshPending = false;
+      for (const [hook, id] of hookBindings.splice(0)) Hooks.off(hook, id);
       document.removeEventListener("pointerdown", onPointerDown, { capture: true });
       rightClickGuard.deactivate();
-      graphics.destroy();
+      graphics.parent?.removeChild?.(graphics);
+      if (!graphics.destroyed) graphics.destroy();
     };
-    const finish = value => {
+    const finish = (value, { fromLifecycle = false } = {}) => {
+      if (finished) return;
+      finished = true;
       cleanup();
-      targetSelectionSession.finish({ cancelled: !value });
+      if (!fromLifecycle) targetSelectionSession?.finish({ cancelled: !value });
       resolve(value);
     };
     const rightClickGuard = createRightClickPanGuard({
-      isCanvasEvent: event => {
-        const view = canvas.app?.view;
-        if (!view || !event) return false;
-        return event.target === view || Array.from(event.composedPath?.() ?? []).includes(view);
-      },
+      isCanvasEvent,
       onClick: () => finish(null)
     });
     const onPointerDown = event => {
+      if (!isCanvasEvent(event)) return;
       if (![0, 2].includes(event.button)) return;
       if (event.button === 2) {
         rightClickGuard.onPointerDown(event);
         return;
       }
+      if (refreshPending) refreshCandidates();
       const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
       const candidate = candidates.find(entry => (
         point.x >= entry.x && point.x <= entry.x + entry.width
@@ -5339,9 +5354,54 @@ async function selectLungeDestination(token, settings, abilityName = "Спосо
       event.stopImmediatePropagation?.();
       finish({ x: candidate.x, y: candidate.y });
     };
-    canvas.app?.ticker?.add?.(refreshCandidates);
+    const bindHook = (hook, callback) => {
+      const id = Hooks.on(hook, callback);
+      hookBindings.push([hook, id]);
+    };
+
+    layer.addChild(graphics);
+    drawLungeDestinationCandidates(graphics, candidates);
+    targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "destination",
+      token,
+      abilityName
+    }, {
+      onCancel: () => finish(null, { fromLifecycle: true })
+    });
+    if (targetSelectionSession.finished || finished) return;
+
+    bindHook("refreshToken", (_updatedToken, flags = {}) => {
+      if (flags.refreshPosition || flags.refreshSize || flags.refreshShape) {
+        scheduleCandidateRefresh();
+      }
+    });
+    bindHook("updateToken", (_tokenDocument, changes = {}) => {
+      if (changedDataIntersectsPaths(changes, [
+        "x", "y", "elevation", "width", "height", "depth", "hidden", "shape"
+      ])) scheduleCandidateRefresh();
+    });
+    for (const hook of ["createToken", "drawToken"]) {
+      bindHook(hook, scheduleCandidateRefresh);
+    }
+    for (const hook of ["deleteToken", "destroyToken"]) {
+      bindHook(hook, removedToken => {
+        const removedUuid = String(removedToken?.document?.uuid ?? removedToken?.uuid ?? "");
+        if (sourceTokenUuid && removedUuid === sourceTokenUuid) {
+          targetSelectionSession?.cancel({ reason: "sourceTokenDeleted" });
+          return;
+        }
+        scheduleCandidateRefresh();
+      });
+    }
+    for (const operation of ["create", "update", "delete"]) {
+      bindHook(`${operation}Wall`, scheduleCandidateRefresh);
+    }
+    bindHook("updateScene", (_scene, changes = {}) => {
+      if (changedDataIntersectsPaths(changes, ["grid"])) scheduleCandidateRefresh();
+    });
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
     rightClickGuard.activate();
+    ui.notifications.info(`${abilityName}: выберите клетку перемещения. ПКМ отменяет, зажатие ПКМ двигает камеру.`);
   });
 }
 
@@ -5380,11 +5440,6 @@ function getLungeTokenCurrentPosition(token) {
     x: Number(object?.x ?? document?.x ?? document?._source?.x ?? 0),
     y: Number(object?.y ?? document?.y ?? document?._source?.y ?? 0)
   };
-}
-
-function getLungeTokenPositionSignature(token) {
-  const position = getLungeTokenCurrentPosition(token);
-  return `${Math.round(position.x * 100) / 100}:${Math.round(position.y * 100) / 100}`;
 }
 
 function isLungeDestinationAvailable(token, position, { width = 0, height = 0 } = {}) {
@@ -5452,7 +5507,7 @@ function drawLungeDestinationCandidates(graphics, candidates = []) {
 }
 
 function createLungePhantom(token, position) {
-  const layer = canvas.controls?._rulerPaths;
+  const layer = canvas.interface ?? canvas.tokens ?? null;
   const texture = token?.texture ?? token?.mesh?.texture;
   if (!layer || !texture) return null;
 

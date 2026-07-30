@@ -70,21 +70,7 @@ export async function requestAbilityMovementRoute({
     return { cancelled: false, failed: true, reason: "nativePlanningOriginUnavailable" };
   }
 
-  if (typeof planAuthority.authorize === "function") {
-    const authorized = await planAuthority.authorize({
-      token: tokenObject,
-      tokenDocument,
-      origin: copyWaypoint(routeOrigin),
-      maxBudget: normalizedMaxBudget,
-      budgetMode: normalizedBudgetMode,
-      movementAction: action,
-      autoRotate: Boolean(autoRotate),
-      showRuler: Boolean(showRuler)
-    });
-    if (!authorized) return { cancelled: false, failed: true, reason: "movementAuthorityUnavailable" };
-  }
-
-  const userId = String(game?.user?.id ?? "");
+  let lifecycleCancelled = false;
   const targetSelectionSession = startCanvasTargetSelectionSession({
     kind: "movementRoute",
     token,
@@ -92,7 +78,60 @@ export async function requestAbilityMovementRoute({
     maxBudget: normalizedMaxBudget,
     budgetMode: normalizedBudgetMode,
     ...sessionContext
+  }, {
+    onCancel: () => {
+      lifecycleCancelled = true;
+      tokenObject.layer?._cancelMovementPlanning?.();
+    }
   });
+  if (targetSelectionSession.finished) {
+    return { cancelled: true, failed: false, reason: "targetSelectionSuperseded" };
+  }
+
+  // Claim the canvas interaction before asking a remote authority. Otherwise an
+  // older request whose authorization resolves late can supersede a newer
+  // selector which the user opened while that request was waiting.
+  if (typeof planAuthority.authorize === "function") {
+    let authorized = false;
+    try {
+      authorized = await planAuthority.authorize({
+        token: tokenObject,
+        tokenDocument,
+        origin: copyWaypoint(routeOrigin),
+        maxBudget: normalizedMaxBudget,
+        budgetMode: normalizedBudgetMode,
+        movementAction: action,
+        autoRotate: Boolean(autoRotate),
+        showRuler: Boolean(showRuler)
+      });
+    } catch (error) {
+      console.warn("fallout-maw | Ability movement authorization failed", error);
+      targetSelectionSession.finish({
+        cancelled: false,
+        failed: true,
+        reason: "movementAuthorityUnavailable"
+      });
+      return { cancelled: false, failed: true, reason: "movementAuthorityUnavailable" };
+    }
+    if (lifecycleCancelled) {
+      targetSelectionSession.finish({
+        cancelled: true,
+        failed: false,
+        reason: "targetSelectionCancelled"
+      });
+      return { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+    }
+    if (!authorized) {
+      targetSelectionSession.finish({
+        cancelled: false,
+        failed: true,
+        reason: "movementAuthorityUnavailable"
+      });
+      return { cancelled: false, failed: true, reason: "movementAuthorityUnavailable" };
+    }
+  }
+
+  const userId = String(game?.user?.id ?? "");
   let nativePlan = null;
   let authorityPlan = null;
   let commitPromise = null;
@@ -152,6 +191,7 @@ export async function requestAbilityMovementRoute({
   const commitPlan = ({ options = {} } = {}) => {
     if (commitPromise) return commitPromise;
     commitPromise = (async () => {
+      if (lifecycleCancelled) return false;
       const movement = options?.movement?.[tokenDocument.id];
       const plannedResult = tokenObject.layer?._movementPlanningContext?.result;
       const nativePlanId = String(movement?.id ?? plannedResult?.id ?? "").trim();
@@ -176,7 +216,7 @@ export async function requestAbilityMovementRoute({
       });
       if (!retainedPlan) return false;
       authorityPlan = retainedPlan?.plan ?? retainedPlan;
-      return true;
+      return !lifecycleCancelled;
     })();
     return commitPromise;
   };
@@ -199,19 +239,42 @@ export async function requestAbilityMovementRoute({
         showRuler: Boolean(showRuler)
       }
     });
-    if (!(await tokenObject.startMovementPlanningDrag?.())) {
+    const dragStarted = await tokenObject.startMovementPlanningDrag?.();
+    if (lifecycleCancelled) {
+      outcome = { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+      return outcome;
+    }
+    if (!dragStarted) {
       tokenObject.layer?._cancelMovementPlanning?.();
       await planning;
+      if (lifecycleCancelled) {
+        outcome = { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+        return outcome;
+      }
       outcome = { cancelled: false, failed: true, reason: "movementPlanningStartFailed" };
       return outcome;
     }
     nativePlan = await planning;
-    if (commitPromise && !(await commitPromise)) nativePlan = null;
+    if (lifecycleCancelled) {
+      outcome = { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+      return outcome;
+    }
+    if (commitPromise) {
+      if (!(await commitPromise)) nativePlan = null;
+      if (lifecycleCancelled) {
+        outcome = { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+        return outcome;
+      }
+    }
     updateAbilityRoutePreviewBudget(tokenObject, { interactive: false }, userId);
     if (nativePlan && authorityPlan) nativePlan = authorityPlan;
 
     if (!nativePlan) {
-      outcome = { cancelled: true, failed: false, reason: "routeCancelled" };
+      outcome = {
+        cancelled: true,
+        failed: false,
+        reason: lifecycleCancelled ? "targetSelectionCancelled" : "routeCancelled"
+      };
       return outcome;
     }
     if (
@@ -251,6 +314,10 @@ export async function requestAbilityMovementRoute({
         history: Array.isArray(history) ? history : null
       }
     );
+    if (lifecycleCancelled) {
+      outcome = { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+      return outcome;
+    }
     if (!result.ok) {
       notifyRouteValidationFailure(title, result.reason, 0, normalizedMaxBudget, normalizedBudgetMode);
       outcome = { cancelled: false, failed: true, reason: String(result.reason ?? "routePreparationFailed") };
@@ -313,6 +380,17 @@ export async function requestAbilityMovementRoute({
     rightClickGuard.deactivate();
     clearAbilityRoutePlanCommitter(tokenObject, commitPlan);
     updateAbilityRoutePreviewBudget(tokenObject, { interactive: false }, userId);
+    // Foundry resolves native drag planning before the system's fire-and-forget
+    // authority committer necessarily settles. Cancellation can therefore reach
+    // this block while retain() is still pending. Never compute cleanup from a
+    // half-committed snapshot or the retained plan can appear after disposal.
+    if (commitPromise) {
+      try {
+        await commitPromise;
+      } catch (error) {
+        console.warn("fallout-maw | Ability movement plan commit failed during cleanup", error);
+      }
+    }
     if (!retained) {
       await stopAbilityMovementRoutePreviews([{
         nativePlanId: String(authorityPlan?.id ?? nativePlan?.id ?? ""),

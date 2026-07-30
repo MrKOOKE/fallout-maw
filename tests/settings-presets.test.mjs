@@ -143,9 +143,29 @@ test("bundled main and migration seed preserve the managed settings contract", (
     assert.equal(Number.isFinite(showSystemIcons), true);
     assert.equal(Number.isInteger(showSystemIcons), true);
     assert.ok(showSystemIcons >= 0 && showSystemIcons <= 3);
+
+    const craftingSettings = document.settings.find(entry => (
+      entry.id === "fallout-maw.craftingSettings"
+    ))?.value;
+    assert.equal(craftingSettings?.medicine?.mode, "skillChecks");
   }
 
   assert.deepEqual(documentIdSets[0], documentIdSets[1]);
+});
+
+test("bundled threshold preset keeps medicine in the same no-roll mode", () => {
+  const document = JSON.parse(fs.readFileSync(
+    new URL("../storage/settings-presets/preset-29RLMkIuBBuzp9eClV99Sxcj.json", import.meta.url),
+    "utf8"
+  ));
+  const normalized = normalizePresetDocument(document);
+  const craftingSettings = normalized.settings.find(entry => (
+    entry.id === "fallout-maw.craftingSettings"
+  ))?.value;
+
+  assert.equal(craftingSettings?.craft?.mode, "skillThreshold");
+  assert.equal(craftingSettings?.repair?.mode, "skillThreshold");
+  assert.equal(craftingSettings?.medicine?.mode, "skillThreshold");
 });
 
 test("canonicalStringify recursively sorts object keys and preserves array order", () => {

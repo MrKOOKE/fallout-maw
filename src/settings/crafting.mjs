@@ -13,6 +13,9 @@ export const DEFAULT_CRAFTING_SETTINGS = Object.freeze({
     mode: CRAFTING_RESOLUTION_MODES.skillChecks,
     failureToolCostIncreasePercent: 100,
     criticalFailureToolCostIncreasePercent: 0
+  }),
+  medicine: Object.freeze({
+    mode: CRAFTING_RESOLUTION_MODES.skillChecks
   })
 });
 
@@ -22,7 +25,8 @@ const MAX_TOOL_COST_INCREASE_PERCENT = 1000;
 export function createDefaultCraftingSettings() {
   return {
     craft: { ...DEFAULT_CRAFTING_SETTINGS.craft },
-    repair: { ...DEFAULT_CRAFTING_SETTINGS.repair }
+    repair: { ...DEFAULT_CRAFTING_SETTINGS.repair },
+    medicine: { ...DEFAULT_CRAFTING_SETTINGS.medicine }
   };
 }
 
@@ -30,6 +34,7 @@ export function normalizeCraftingSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   const craft = source.craft && typeof source.craft === "object" ? source.craft : {};
   const repair = source.repair && typeof source.repair === "object" ? source.repair : {};
+  const medicine = source.medicine && typeof source.medicine === "object" ? source.medicine : {};
   return {
     craft: {
       mode: normalizeResolutionMode(craft.mode, DEFAULT_CRAFTING_SETTINGS.craft.mode),
@@ -56,6 +61,9 @@ export function normalizeCraftingSettings(value = {}) {
         MAX_TOOL_COST_INCREASE_PERCENT,
         DEFAULT_CRAFTING_SETTINGS.repair.criticalFailureToolCostIncreasePercent
       )
+    },
+    medicine: {
+      mode: normalizeResolutionMode(medicine.mode, DEFAULT_CRAFTING_SETTINGS.medicine.mode)
     }
   };
 }

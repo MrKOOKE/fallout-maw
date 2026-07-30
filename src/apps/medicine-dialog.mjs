@@ -15,7 +15,14 @@ import {
 } from "../combat/damage-hub.mjs";
 import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getCreatureOptions, getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
+import {
+  getCraftingSettings,
+  getCreatureOptions,
+  getSkillSettings,
+  getSystemActionSettings,
+  getToolSettings
+} from "../settings/accessors.mjs";
+import { isSkillThresholdMode } from "../settings/crafting.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { getHealingResolutionActiveUseKeys } from "../abilities/active-use-keys.mjs";
 import {
@@ -47,6 +54,15 @@ import {
   normalizeMassTreatmentOptions,
   runSequentialMassTreatment
 } from "./medicine-mass-treatment.mjs";
+import {
+  evaluateMedicineSkillResolution,
+  resolveMedicineSkillAction
+} from "./medicine-skill-resolution.mjs";
+import { analyzeMedicineToolAvailability } from "./medicine-tool-availability.mjs";
+import {
+  bindMassOperationDialogSubmitState,
+  getMassOperationDialogSelectionState
+} from "./mass-operation-dialog-state.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MEDICINE_SOCKET = `system.${SYSTEM_ID}`;
@@ -165,6 +181,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     let hasMassTreatments = false;
 
     if (this.#activeTab === "trauma" || this.#activeTab === "disease") {
+      const medicineMode = getMedicineResolutionMode();
       const instruments = prepareMedicalInstruments(this.#sourceActor, this.#toolKey);
       const instrumentRowsByClass = new Map();
       if (this.#activeTab === "trauma") {
@@ -173,18 +190,19 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
           instruments,
           this.#activeTreatmentType,
           this.#activeTreatmentId,
-          instrumentRowsByClass
+          instrumentRowsByClass,
+          this.#sourceActor,
+          medicineMode
         );
-        hasMassTreatments = hasAvailableMassTreatment(
-          this.#targetContext,
-          instruments
-        );
+        hasMassTreatments = hasMassTreatmentTargets(this.#targetContext);
       } else {
         diseases = prepareTargetTreatments(
           this.#targetContext?.diseases ?? [],
           instruments,
           this.#activeTreatmentType === "disease" ? this.#activeTreatmentId : "",
-          instrumentRowsByClass
+          instrumentRowsByClass,
+          this.#sourceActor,
+          medicineMode
         );
       }
     } else if (this.#activeTab === "implant") {
@@ -547,7 +565,9 @@ function prepareLimbTreatmentGroups(
   instruments,
   activeTreatmentType = "trauma",
   activeTreatmentId = "",
-  instrumentRowsByClass = new Map()
+  instrumentRowsByClass = new Map(),
+  sourceActor = null,
+  medicineMode = getMedicineResolutionMode()
 ) {
   const targetLimbKeys = new Set((targetContext?.limbs ?? []).map(limb => limb.key));
   const traumasByLimb = new Map();
@@ -569,13 +589,17 @@ function prepareLimbTreatmentGroups(
       traumasByLimb.get(limb.key) ?? [],
       instruments,
       activeTreatmentType === "trauma" ? activeTreatmentId : "",
-      instrumentRowsByClass
+      instrumentRowsByClass,
+      sourceActor,
+      medicineMode
     );
     const [limbTreatment] = prepareTargetTreatments(
       [limb],
       instruments,
       activeTreatmentType === "limb" ? activeTreatmentId : "",
-      instrumentRowsByClass
+      instrumentRowsByClass,
+      sourceActor,
+      medicineMode
     );
     if (!limbTreatment || (!limb.damaged && !traumas.length)) continue;
     limbGroups.push({
@@ -595,7 +619,9 @@ function prepareLimbTreatmentGroups(
     unassigned,
     instruments,
     activeTreatmentType === "trauma" ? activeTreatmentId : "",
-    instrumentRowsByClass
+    instrumentRowsByClass,
+    sourceActor,
+    medicineMode
   );
   return {
     limbGroups,
@@ -611,12 +637,19 @@ function getTraumaTreatmentLimbKey(trauma, targetLimbKeys) {
   return keys.length === 1 ? keys[0] : "";
 }
 
-function prepareTargetTreatments(treatments, instruments, activeTreatmentId, instrumentRowsByClass = new Map()) {
+function prepareTargetTreatments(
+  treatments,
+  instruments,
+  activeTreatmentId,
+  instrumentRowsByClass = new Map(),
+  sourceActor = null,
+  medicineMode = getMedicineResolutionMode()
+) {
   return treatments.map(treatment => {
     const requiredClass = String(treatment.healingToolClass ?? "D");
-    let availableInstruments = instrumentRowsByClass.get(requiredClass);
-    if (!availableInstruments) {
-      availableInstruments = instruments.map(instrument => {
+    let baseInstrumentRows = instrumentRowsByClass.get(requiredClass);
+    if (!baseInstrumentRows) {
+      baseInstrumentRows = instruments.map(instrument => {
         const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
         const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
         return {
@@ -627,14 +660,24 @@ function prepareTargetTreatments(treatments, instruments, activeTreatmentId, ins
           usable: classAccepted && instrument.supplyValue > 0 && instrument.requirementMet
         };
       });
-      instrumentRowsByClass.set(requiredClass, availableInstruments);
+      instrumentRowsByClass.set(requiredClass, baseInstrumentRows);
     }
+    const skillResolution = getMedicineSkillResolution(sourceActor, treatment, medicineMode);
+    const availableInstruments = baseInstrumentRows.map(instrument => ({
+      ...instrument,
+      treatmentSkillThresholdMet: skillResolution.met,
+      usable: instrument.usable && skillResolution.met
+    }));
     const treatable = treatment.treatable !== false
       && toInteger(treatment.healingProgress) < Math.max(1, toInteger(treatment.healingProgressMax));
     return {
       ...treatment,
       active: treatment.id === activeTreatmentId,
       treatable,
+      treatmentSkillThresholdMet: skillResolution.met,
+      treatmentSkillRequirement: skillResolution.usesThreshold
+        ? getMedicineSkillThresholdMessage(skillResolution)
+        : "",
       progressValue: treatment.displayProgressValue ?? treatment.healingProgress,
       progressMax: treatment.displayProgressMax ?? treatment.healingProgressMax,
       availableInstruments: treatable
@@ -675,6 +718,7 @@ function prepareMedicalInstruments(actor, toolKey) {
         supplyMax: toInteger(data.supply?.max),
         skillValue,
         skillLabel,
+        actorSkillValue,
         skillRequirement: skillKey ? `${skillValue} ${skillLabel}` : "Без навыка",
         hasSkill: Boolean(skillKey),
         requirementMet
@@ -682,19 +726,9 @@ function prepareMedicalInstruments(actor, toolKey) {
     });
 }
 
-function hasAvailableMassTreatment(targetContext, instruments = []) {
+function hasMassTreatmentTargets(targetContext) {
   const counts = getMassTreatmentTargetCounts(targetContext);
-  if (counts.traumas + counts.limbHealth <= 0) return false;
-  const targets = getMassTreatmentTargets(targetContext);
-  const treatments = [...targets.traumas, ...targets.limbHealth];
-  return instruments.some(instrument => (
-    instrument.supplyValue > 0
-    && instrument.requirementMet
-    && treatments.some(treatment => isToolClassAccepted(
-      instrument.toolClass,
-      treatment.healingToolClass
-    ))
-  ));
+  return counts.traumas + counts.limbHealth > 0;
 }
 
 async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey = "medical" } = {}) {
@@ -704,11 +738,12 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
     return null;
   }
 
-  const instruments = collectMassTreatmentInstrumentOptions(sourceActor, targetContext, toolKey);
-  if (!instruments.length) {
-    ui.notifications.warn("Нет подходящих инструментов для массового лечения.");
+  const availability = getMassTreatmentAvailability(sourceActor, targetContext, toolKey);
+  if (!availability.ok) {
+    ui.notifications.warn(availability.message);
     return null;
   }
+  const instruments = availability.instruments;
 
   const toolGroups = groupToolSelectionOptions(instruments);
   const instrumentRows = toolGroups.map(group => `
@@ -766,31 +801,48 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
     modal: true,
     window: { title: "Массовое лечение" },
     content,
+    render: (_event, dialog) => bindMassOperationDialogSubmitState(dialog, {
+      categoryNames: ["includeTraumas", "includeLimbHealth"]
+    }),
     ok: {
       label: "Начать лечение",
       icon: "fa-solid fa-kit-medical",
       callback: (_event, button) => {
         const form = button.form;
+        const selectionState = getMassOperationDialogSelectionState(form, {
+          categoryNames: ["includeTraumas", "includeLimbHealth"]
+        });
+        if (!selectionState.hasCategorySelection) {
+          ui.notifications.warn("Выберите травмы, здоровье частей тела или оба варианта.");
+          return "cancel";
+        }
         const includeTraumas = Boolean(form.querySelector("input[name='includeTraumas']")?.checked);
         const includeLimbHealth = Boolean(form.querySelector("input[name='includeLimbHealth']")?.checked);
-        if (!includeTraumas && !includeLimbHealth) {
-          ui.notifications.warn("Выберите травмы, здоровье частей тела или оба варианта.");
-          return false;
-        }
         const allowedToolGroupKeys = Array.from(form.querySelectorAll("input[name='toolGroup']:checked"))
           .map(input => String(input.value ?? "").trim())
           .filter(Boolean);
-        if (!allowedToolGroupKeys.length) {
+        if (!selectionState.hasToolGroupSelection || !allowedToolGroupKeys.length) {
           ui.notifications.warn("Выберите хотя бы одну группу медицинских инструментов.");
-          return false;
+          return "cancel";
         }
-        return normalizeMassTreatmentOptions({
+        const options = normalizeMassTreatmentOptions({
           includeTraumas,
           includeLimbHealth,
           qualityMode: form.querySelector("input[name='qualityMode']:checked")?.value,
           supplyMode: form.querySelector("input[name='supplyMode']:checked")?.value,
           allowedToolGroupKeys
         });
+        const currentAvailability = getMassTreatmentAvailability(
+          sourceActor,
+          targetContext,
+          toolKey,
+          options
+        );
+        if (!currentAvailability.ok) {
+          ui.notifications.warn(currentAvailability.message);
+          return "cancel";
+        }
+        return options;
       }
     },
     buttons: [{ action: "cancel", label: "Отмена" }],
@@ -799,28 +851,66 @@ async function promptMassTreatmentOptions({ sourceActor, targetContext, toolKey 
   });
 }
 
-function collectMassTreatmentInstrumentOptions(sourceActor, targetContext, toolKey = "medical") {
-  const targets = getMassTreatmentTargets(targetContext);
-  const treatments = [...targets.traumas, ...targets.limbHealth];
-  return prepareMedicalInstruments(sourceActor, toolKey)
-    .filter(instrument => instrument.supplyValue > 0 && instrument.requirementMet)
-    .filter(instrument => treatments.some(treatment => isToolClassAccepted(
-      instrument.toolClass,
-      treatment.healingToolClass
-    )))
-    .sort((left, right) => (
-      toToolClassRank(right.toolClass) - toToolClassRank(left.toolClass)
-      || right.supplyValue - left.supplyValue
-      || left.name.localeCompare(right.name)
-    ));
-}
-
 function chooseBestTreatmentInstrument(sourceActor, treatment, toolKey, options = {}) {
-  const selected = selectToolByPolicy(prepareMedicalInstruments(sourceActor, toolKey), {
+  const normalizedOptions = normalizeMassTreatmentOptions(options);
+  const medicineMode = getMedicineResolutionMode();
+  const availability = analyzeMedicineToolAvailability({
+    instruments: prepareMedicalInstruments(sourceActor, toolKey),
+    treatments: [prepareMedicineTreatmentRequirement(sourceActor, treatment, medicineMode)],
+    toolKey,
+    toolLabel: getMedicineToolLabel(toolKey),
+    allowedToolGroupKeys: normalizedOptions.allowedToolGroupKeys
+  });
+  if (!availability.ok) return { reason: availability.message };
+  const selected = selectToolByPolicy(availability.instruments, {
     requiredToolKey: toolKey,
     requiredToolClass: treatment?.healingToolClass
-  }, normalizeMassTreatmentOptions(options));
-  return selected ? { instrumentId: selected.id } : null;
+  }, normalizedOptions);
+  return selected
+    ? { instrumentId: selected.id }
+    : { reason: "Выбранные медицинские инструменты больше не подходят для этой цели." };
+}
+
+function getMassTreatmentAvailability(
+  sourceActor,
+  targetContext,
+  toolKey = "medical",
+  options = {}
+) {
+  const normalizedOptions = normalizeMassTreatmentOptions(options);
+  const medicineMode = getMedicineResolutionMode();
+  const targets = getMassTreatmentTargets(targetContext);
+  const treatments = [
+    ...(normalizedOptions.includeTraumas ? targets.traumas : []),
+    ...(normalizedOptions.includeLimbHealth ? targets.limbHealth : [])
+  ].map(treatment => prepareMedicineTreatmentRequirement(sourceActor, treatment, medicineMode));
+  return analyzeMedicineToolAvailability({
+    instruments: prepareMedicalInstruments(sourceActor, toolKey),
+    treatments,
+    toolKey,
+    toolLabel: getMedicineToolLabel(toolKey),
+    allowedToolGroupKeys: normalizedOptions.allowedToolGroupKeys
+  });
+}
+
+function prepareMedicineTreatmentRequirement(
+  sourceActor,
+  treatment,
+  medicineMode = getMedicineResolutionMode()
+) {
+  const skillResolution = getMedicineSkillResolution(sourceActor, treatment, medicineMode);
+  return {
+    ...treatment,
+    skillThreshold: {
+      ...skillResolution,
+      skillLabel: getHealingSkillLabel(skillResolution.skillKey)
+    }
+  };
+}
+
+function getMedicineToolLabel(toolKey = "medical") {
+  const normalized = String(toolKey ?? "").trim();
+  return getToolSettings().find(tool => tool.key === normalized)?.label ?? normalized;
 }
 
 function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimbKey = "") {
@@ -1147,12 +1237,13 @@ async function resolveMassTreatmentOnAuthorityOperation({
       })
     };
   }
-  const compatibleGroupKeys = new Set(groupToolSelectionOptions(
-    collectMassTreatmentInstrumentOptions(sourceActor, initialContext, normalizedToolKey)
-  ).map(group => group.key));
-  if (!normalizedOptions.allowedToolGroupKeys.some(key => compatibleGroupKeys.has(key))) {
-    throw new Error("Выбранные группы медицинских инструментов больше недоступны.");
-  }
+  const availability = getMassTreatmentAvailability(
+    sourceActor,
+    initialContext,
+    normalizedToolKey,
+    normalizedOptions
+  );
+  if (!availability.ok) throw new Error(availability.message);
 
   const result = await runSequentialMassTreatment({
     initialContext,
@@ -1276,7 +1367,7 @@ async function performImplantInstallation({ sourceActor, sourceToken = null, tar
     await postMedicineChat(sourceActor, {
       title,
       tone: "failure",
-      lines: ["Проверка провалена. Имплант не установлен."]
+      lines: [resolution.reason || "Проверка провалена. Имплант не установлен."]
     });
     return { targetContext: resolution.targetContext ?? targetContext };
   }
@@ -1375,8 +1466,12 @@ async function resolveImplantInstallationOnAuthorityLocked({
   const data = getImplantFunction(implant);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
-  const outcome = skillKey
-    ? await requestSkillCheck({
+  const skillResolution = await resolveMedicineSkillAction(sourceActor, {
+    skillKey,
+    difficulty,
+    thresholdMode: isSkillThresholdMode(getMedicineResolutionMode())
+  }, {
+    requestCheck: () => requestSkillCheck({
       actor: sourceActor,
       skillKey,
       data: {
@@ -1391,7 +1486,23 @@ async function resolveImplantInstallationOnAuthorityLocked({
       prompt: false,
       requester: "medicineImplant"
     })
-    : { result: { key: "success" } };
+  });
+  if (!skillResolution.met) {
+    return {
+      targetContext,
+      resultKey: "failure",
+      itemName: implant.name,
+      targetName: targetContext.name,
+      limbLabel: targetLimb.label,
+      criticalDamage: 0,
+      reason: getMedicineInstallationSkillThresholdMessage(
+        skillResolution,
+        "импланта",
+        implant.name
+      )
+    };
+  }
+  const outcome = skillResolution.outcome;
   if (!outcome) return { targetContext, cancelled: true };
 
   const resultKey = String(outcome.result?.key ?? "failure");
@@ -1720,7 +1831,7 @@ async function performProsthesisInstallation({ sourceActor, sourceToken = null, 
     await postMedicineChat(sourceActor, {
       title,
       tone: "failure",
-      lines: ["Проверка провалена. Протез не установлен."]
+      lines: [resolution.reason || "Проверка провалена. Протез не установлен."]
     });
     return { targetContext: resolution.targetContext ?? targetContext };
   }
@@ -1818,8 +1929,12 @@ async function resolveProsthesisInstallationOnAuthorityLocked({
   const data = getProsthesisFunction(prosthesis);
   const skillKey = String(data.skillKey ?? "doctor") || "doctor";
   const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
-  const outcome = skillKey
-    ? await requestSkillCheck({
+  const skillResolution = await resolveMedicineSkillAction(sourceActor, {
+    skillKey,
+    difficulty,
+    thresholdMode: isSkillThresholdMode(getMedicineResolutionMode())
+  }, {
+    requestCheck: () => requestSkillCheck({
       actor: sourceActor,
       skillKey,
       data: {
@@ -1834,7 +1949,23 @@ async function resolveProsthesisInstallationOnAuthorityLocked({
       prompt: false,
       requester: "medicineProsthesis"
     })
-    : { result: { key: "success" } };
+  });
+  if (!skillResolution.met) {
+    return {
+      targetContext,
+      resultKey: "failure",
+      itemName: prosthesis.name,
+      targetName: targetContext.name,
+      limbLabel: targetLimb.label,
+      criticalDamage: 0,
+      reason: getMedicineInstallationSkillThresholdMessage(
+        skillResolution,
+        "протеза",
+        prosthesis.name
+      )
+    };
+  }
+  const outcome = skillResolution.outcome;
   if (!outcome) return { targetContext, cancelled: true };
 
   const resultKey = String(outcome.result?.key ?? "failure");
@@ -2163,10 +2294,27 @@ async function runTreatmentChecks({
   initialProgress,
   maxProgress,
   operationId = `medicine-treatment:${foundry.utils.randomID()}`,
-  chainRef = null
+  chainRef = null,
+  medicineMode = getMedicineResolutionMode()
 }) {
   const skillKey = String(treatment.healingSkillKey ?? "");
   const difficulty = Math.max(1, toInteger(treatment.healingDifficulty));
+  const skillOptions = {
+    skillKey,
+    difficulty,
+    thresholdMode: isSkillThresholdMode(medicineMode)
+  };
+  const skillResolution = evaluateMedicineSkillResolution(sourceActor, skillOptions);
+  if (!skillResolution.met) {
+    return {
+      entries: [],
+      spentCharges: 0,
+      remainingCharges: toInteger(tool.supply?.value),
+      finalProgress: initialProgress,
+      halted: false,
+      reason: getMedicineSkillThresholdMessage(skillResolution, treatment?.name)
+    };
+  }
   const progressPerCheck = Math.max(1, Math.ceil(maxProgress * TREATMENT_PROGRESS_STEP_RATIO));
   const missingProgress = Math.max(0, maxProgress - initialProgress);
   const totalChecks = Math.max(1, Math.ceil(missingProgress / progressPerCheck));
@@ -2185,8 +2333,8 @@ async function runTreatmentChecks({
 
     const progressForCheck = Math.min(progressPerCheck, remainingProgress);
     const checkOperationId = `${operationId}:check:${index}`;
-    const outcome = skillKey
-      ? await requestSkillCheck({
+    const resolvedSkill = await resolveMedicineSkillAction(sourceActor, skillOptions, {
+      requestCheck: () => requestSkillCheck({
         actor: sourceActor,
         skillKey,
         chainRef,
@@ -2205,7 +2353,11 @@ async function runTreatmentChecks({
         requester: "medicine",
         options: { operationId: checkOperationId }
       })
-      : { result: { key: "success" } };
+    });
+    const outcome = resolvedSkill.outcome;
+    const resultLabel = resolvedSkill.usesThreshold
+      ? resolvedSkill.resultLabel
+      : getTreatmentResultLabel(outcome?.result?.key);
     if (!outcome) {
       return {
         entries,
@@ -2256,7 +2408,7 @@ async function runTreatmentChecks({
     entries.push({
       index,
       total: totalChecks,
-      resultLabel: getTreatmentResultLabel(outcome.result?.key),
+      resultLabel,
       progress: treatmentResult.progress,
       charges: treatmentResult.chargesUsed,
       efficiency: treatmentResult.efficiency,
@@ -2699,6 +2851,7 @@ async function resolveTreatmentOnAuthorityOperation({
     return { ...receiptBase, status: "alreadyComplete", alreadyHealed: true };
   }
 
+  const medicineMode = getMedicineResolutionMode();
   const result = await runTreatmentChecks({
     sourceActor,
     sourceToken,
@@ -2709,7 +2862,8 @@ async function resolveTreatmentOnAuthorityOperation({
     initialProgress,
     maxProgress,
     operationId,
-    chainRef
+    chainRef,
+    medicineMode
   });
   if (!result.entries.length) {
     return {
@@ -2734,6 +2888,7 @@ async function resolveTreatmentOnAuthorityOperation({
     completed,
     expectedSupply: toInteger(tool.supply?.value),
     remainingSupply: result.remainingCharges,
+    expectedMedicineMode: medicineMode,
     chainRef
   };
   let commitResult;
@@ -2812,6 +2967,7 @@ async function commitTreatmentToActors({
   completed,
   expectedSupply,
   remainingSupply,
+  expectedMedicineMode,
   chainRef = null
 }) {
   const instrument = sourceActor?.items?.get(String(instrumentId ?? ""));
@@ -2832,6 +2988,9 @@ async function commitTreatmentToActors({
     throw createTreatmentStaleError("Запас инструмента изменился.");
   }
   if (remaining >= currentSupply) throw new Error("Лечение должно расходовать запас инструмента.");
+  if (getMedicineResolutionMode() !== expectedMedicineMode) {
+    throw createTreatmentStaleError("Режим медицины изменился во время лечения.");
+  }
 
   const treatmentCommit = treatmentType === "limb"
     ? prepareLimbTreatmentCommit(targetActor, {
@@ -2853,6 +3012,19 @@ async function commitTreatmentToActors({
     tool
   );
   if (!authoritativeValidation.ok) throw new Error(authoritativeValidation.message);
+  const authoritativeSkill = getMedicineSkillResolution(
+    sourceActor,
+    treatmentCommit.treatmentTarget,
+    expectedMedicineMode
+  );
+  if (!authoritativeSkill.met) {
+    throw createTreatmentStaleError(
+      getMedicineSkillThresholdMessage(
+        authoritativeSkill,
+        treatmentCommit.treatmentTarget?.name
+      )
+    );
+  }
   const instrumentUpdate = {
     [`system.functions.tools.${normalizedToolKey}.supply.value`]: remaining
   };
@@ -2959,7 +3131,10 @@ function prepareLimbTreatmentCommit(targetActor, {
     targetPlan,
     treatmentTarget: {
       type: "limb",
+      name: String(limb.label ?? limbKey),
       healingToolClass: LIMB_TREATMENT_TOOL_CLASS,
+      healingDifficulty: LIMB_TREATMENT_DIFFICULTY,
+      healingSkillKey: LIMB_TREATMENT_SKILL_KEY,
       treatable: true
     },
     diseaseSnapshot: null,
@@ -3004,7 +3179,10 @@ function prepareItemTreatmentCommit(targetActor, {
     targetPlan,
     treatmentTarget: {
       type: treatment.type,
+      name: String(treatment.name ?? ""),
       healingToolClass: String(treatment.system?.healingToolClass ?? "D"),
+      healingDifficulty: toInteger(treatment.system?.healingDifficulty),
+      healingSkillKey: String(treatment.system?.healingSkillKey ?? ""),
       treatable: true
     },
     diseaseSnapshot: treatment.type === "disease" && treatmentCompleted ? treatment.toObject() : null,
@@ -3690,6 +3868,39 @@ function getHealingSkillLabel(skillKey) {
   const key = String(skillKey ?? "");
   if (!key) return "";
   return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
+}
+
+function getMedicineResolutionMode() {
+  return getCraftingSettings().medicine.mode;
+}
+
+function getMedicineSkillResolution(
+  actor,
+  treatment = {},
+  medicineMode = getMedicineResolutionMode()
+) {
+  return evaluateMedicineSkillResolution(actor, {
+    skillKey: treatment.healingSkillKey,
+    difficulty: Math.max(1, toInteger(treatment.healingDifficulty)),
+    thresholdMode: isSkillThresholdMode(medicineMode)
+  });
+}
+
+function getMedicineSkillThresholdMessage(resolution = {}, treatmentName = "") {
+  const name = String(treatmentName ?? "").trim();
+  const skillLabel = getHealingSkillLabel(resolution.skillKey) || "требуемого навыка";
+  return `Для лечения${name ? ` «${name}»` : ""} нужно ${toInteger(resolution.difficulty)} ${skillLabel} (сейчас ${toInteger(resolution.skillValue)}).`;
+}
+
+function getMedicineInstallationSkillThresholdMessage(
+  resolution = {},
+  installationType = "",
+  itemName = ""
+) {
+  const type = String(installationType ?? "").trim();
+  const name = String(itemName ?? "").trim();
+  const skillLabel = getHealingSkillLabel(resolution.skillKey) || "требуемого навыка";
+  return `Для установки${type ? ` ${type}` : ""}${name ? ` «${name}»` : ""} нужно ${toInteger(resolution.difficulty)} ${skillLabel} (сейчас ${toInteger(resolution.skillValue)}).`;
 }
 
 function getActorItemsByType(actor, type = "") {

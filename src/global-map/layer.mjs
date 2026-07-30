@@ -37,11 +37,13 @@ import {
   updateSceneState
 } from "./storage.mjs";
 import { canCreateChildLocations } from "./structure.mjs";
+import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
 
 const InteractionLayer = foundry.canvas.layers.InteractionLayer;
 
 export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   #refreshCycle = 0;
+  #arrivalSelectionSession = null;
 
   mode = "select";
   editor = null;
@@ -138,6 +140,12 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   }
 
   async _tearDown(options) {
+    this.#arrivalSelectionSession?.cancel?.({
+      reason: "layerTearDown"
+    });
+    this.#arrivalSelectionSession = null;
+    this.arrivalSelection = null;
+    if (this.mode === "arrivalSelect") this.mode = "select";
     this.#clearLocationHover();
     this.#destroyDiscoveredLocationOverlay();
     return super._tearDown(options);
@@ -213,19 +221,32 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   async startArrivalSelection(payload) {
     if (!payload?.groupId || payload.targetSceneId !== canvas.scene?.id) return false;
     if (payload.transferId && this.completedArrivalTransferIds.has(payload.transferId)) return false;
-    this.arrivalSelection = foundry.utils.deepClone(payload);
+    const selection = foundry.utils.deepClone(payload);
+    let targetSelectionSession = null;
+    targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "arrivalSelect",
+      groupId: String(selection.groupId ?? ""),
+      transferId: String(selection.transferId ?? ""),
+      targetSceneId: String(selection.targetSceneId ?? "")
+    }, {
+      onCancel: outcome => this.#onArrivalSelectionCancelled(targetSelectionSession, outcome)
+    });
+    if (targetSelectionSession.finished) return false;
+
+    this.#arrivalSelectionSession = targetSelectionSession;
+    this.arrivalSelection = selection;
     this.mode = "arrivalSelect";
     this.activate();
     await this.refresh();
-    return true;
+    return this.#arrivalSelectionSession === targetSelectionSession
+      && targetSelectionSession.active;
   }
 
   async clearArrivalSelection(groupId = null, transferId = null) {
-    if (groupId && this.arrivalSelection?.groupId !== groupId) return;
-    if (transferId && this.arrivalSelection?.transferId && this.arrivalSelection.transferId !== transferId) return;
-    this.arrivalSelection = null;
-    if (this.mode === "arrivalSelect") this.mode = "select";
-    await this.refresh();
+    return this.#settleArrivalSelection(groupId, transferId, {
+      cancelled: true,
+      reason: "cleared"
+    });
   }
 
   async completeArrivalSelection(groupId = null, transferId = null) {
@@ -235,7 +256,10 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
         this.completedArrivalTransferIds.delete(this.completedArrivalTransferIds.values().next().value);
       }
     }
-    return this.clearArrivalSelection(groupId, transferId);
+    return this.#settleArrivalSelection(groupId, transferId, {
+      cancelled: false,
+      reason: "completed"
+    });
   }
 
   async startEntryDrawingFor(sourceSceneId, transitionId) {
@@ -431,6 +455,35 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       .find(location => locationContainsPoint(canvas.scene, location, point)) ?? null;
   }
 
+  #onArrivalSelectionCancelled(targetSelectionSession, outcome = {}) {
+    if (!targetSelectionSession || this.#arrivalSelectionSession !== targetSelectionSession) return false;
+    this.#arrivalSelectionSession = null;
+    this.arrivalSelection = null;
+    if (this.mode === "arrivalSelect") this.mode = "select";
+    if (!["canvasTearDown", "layerTearDown"].includes(String(outcome?.reason ?? ""))) {
+      void this.refresh();
+    }
+    return true;
+  }
+
+  async #settleArrivalSelection(groupId = null, transferId = null, outcome = {}) {
+    const selection = this.arrivalSelection;
+    if (groupId && selection?.groupId !== groupId) return false;
+    if (transferId && selection?.transferId && selection.transferId !== transferId) return false;
+
+    const targetSelectionSession = this.#arrivalSelectionSession;
+    this.#arrivalSelectionSession = null;
+    this.arrivalSelection = null;
+    if (this.mode === "arrivalSelect") this.mode = "select";
+    targetSelectionSession?.finish?.({
+      ...outcome,
+      groupId: String(selection?.groupId ?? groupId ?? ""),
+      transferId: String(selection?.transferId ?? transferId ?? "")
+    });
+    await this.refresh();
+    return true;
+  }
+
   async #selectArrivalZoneAt(point) {
     if (!this.arrivalSelection) return false;
     const key = cellKey(pointToCell(canvas.scene, point));
@@ -441,7 +494,11 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const selection = foundry.utils.deepClone(this.arrivalSelection);
     const validExitZoneIds = Array.isArray(selection.validExitZoneIds) ? selection.validExitZoneIds : [];
     if (validExitZoneIds.length && !validExitZoneIds.includes(zone.id)) return false;
-    await this.clearArrivalSelection(selection.groupId);
+    await this.#settleArrivalSelection(selection.groupId, selection.transferId, {
+      cancelled: false,
+      reason: "selected",
+      exitZoneId: String(zone.id ?? "")
+    });
     const submitted = await game.falloutMaW?.globalMap?.selectArrivalZone?.({
       originSceneId: selection.originSceneId,
       tokenId: selection.tokenId,

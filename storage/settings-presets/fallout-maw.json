@@ -4,7 +4,7 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "1300b713cded2f3ad36b1b7263e72962c11a0150a07e3c6319bc147b890f3eb9",
+  "revision": "0523daab002b7613dc6e71a947442405d8d5c6a384b0c43a2e50c5b4ff582a47",
   "updatedAt": "2026-07-30T11:00:53.660Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
@@ -9502,6 +9502,9 @@
         "repair": {
           "criticalFailureToolCostIncreasePercent": 0,
           "failureToolCostIncreasePercent": 100,
+          "mode": "skillChecks"
+        },
+        "medicine": {
           "mode": "skillChecks"
         }
       }

@@ -8,6 +8,10 @@ import {
   resolveActorContainerPassengerActor
 } from "../utils/actor-containers.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
+import {
+  cancelActiveCanvasTargetSelection,
+  startCanvasTargetSelectionSession
+} from "./target-selection-lifecycle.mjs";
 
 const ACTOR_CONTAINER_SOCKET = `system.${SYSTEM_ID}`;
 const ACTOR_CONTAINER_SOCKET_SCOPE = `${SYSTEM_ID}.actorContainers`;
@@ -16,6 +20,7 @@ const ACTOR_CONTAINER_HIGHLIGHT_LAYER = "fallout-maw-actor-container-targets";
 const ACTOR_CONTAINER_PLACEMENT_LAYER = "fallout-maw-actor-container-placement";
 const ACTOR_CONTAINER_HIGHLIGHT_COLOR = 0x4fb6ff;
 const ACTOR_CONTAINER_PLACEMENT_COLOR = 0x6fdc7a;
+const ACTOR_CONTAINER_HIGHLIGHT_REFRESH_DELAY_MS = 50;
 const BLOCKED_CANVAS_EVENT_TYPES = Object.freeze([
   "pointerdown",
   "pointerup",
@@ -42,6 +47,19 @@ export function registerActorContainerHooks() {
   Hooks.on("createToken", refreshActorContainerHighlights);
   Hooks.on("updateToken", refreshActorContainerHighlights);
   Hooks.on("deleteToken", refreshActorContainerHighlights);
+  Hooks.on("refreshToken", (token, flags = {}) => {
+    const mode = activeBoardingMode;
+    if (!mode || mode.cleaned) return;
+    if (!(
+      flags.refreshPosition
+      || flags.refreshSize
+      || flags.refreshShape
+      || flags.refreshVisibility
+      || flags.refreshState
+    )) return;
+    if (!hasActorContainer(token?.actor)) return;
+    scheduleActorContainerHighlightRefresh(mode);
+  });
   Hooks.on("updateActor", refreshActorContainerHighlights);
   Hooks.on("createItem", item => {
     if (item?.actor) refreshActorContainerHighlights();
@@ -64,6 +82,7 @@ export function registerActorContainerSocket() {
 }
 
 export function startActorContainerBoardingMode({ actor = null, token = null } = {}) {
+  cancelActiveCanvasTargetSelection({ reason: "superseded" });
   const passengerActor = actor ?? token?.actor ?? token?.document?.actor ?? null;
   const passengerToken = token?.document ?? token ?? null;
   if (!passengerActor?.isOwner || !passengerToken?.id) {
@@ -85,15 +104,35 @@ export function startActorContainerBoardingMode({ actor = null, token = null } =
 
   cancelActorContainerExitPlacement();
   cancelActorContainerBoardingMode();
-  activeBoardingMode = {
+  const mode = activeBoardingMode = {
     actor: passengerActor,
     token: passengerToken,
     actorUuid: passengerActor.uuid,
     tokenId: passengerToken.id,
     sceneId: canvas.scene.id,
-    inputShield: createCanvasInputShield("pointer")
+    inputShield: null,
+    targetSelectionSession: null,
+    highlightRefreshTimerId: null,
+    cleaned: false
   };
-  bindCanvasInput(activeBoardingMode, onBoardingCanvasEvent);
+  const targetSelectionSession = startCanvasTargetSelectionSession({
+    kind: "actorContainerBoarding",
+    actorUuid: mode.actorUuid,
+    tokenUuid: String(passengerToken.uuid ?? ""),
+    sceneId: mode.sceneId
+  }, {
+    onCancel: () => cancelActorContainerBoardingMode({
+      mode,
+      fromLifecycle: true
+    })
+  });
+  mode.targetSelectionSession = targetSelectionSession;
+  if (targetSelectionSession.finished || activeBoardingMode !== mode) {
+    mode.targetSelectionSession = null;
+    return false;
+  }
+  mode.inputShield = createCanvasInputShield("pointer");
+  bindCanvasInput(mode, onBoardingCanvasEvent);
   window.addEventListener("keydown", onBoardingKeyDown, { capture: true });
   refreshActorContainerHighlights();
   ui.notifications.info("Посадка в транспорт: выберите подсвеченный транспорт. Esc/ПКМ отменяет.");
@@ -101,6 +140,7 @@ export function startActorContainerBoardingMode({ actor = null, token = null } =
 }
 
 export function startActorContainerPassengerExitPlacement({ vehicleActor = null, passengerId = "" } = {}) {
+  cancelActiveCanvasTargetSelection({ reason: "superseded" });
   const passenger = getActorContainerFlag(vehicleActor).passengers.find(entry => entry.id === passengerId);
   if (!vehicleActor?.isOwner || !passenger) return false;
   if (!canvas?.ready || !canvas.scene) {
@@ -114,17 +154,36 @@ export function startActorContainerPassengerExitPlacement({ vehicleActor = null,
 
   cancelActorContainerBoardingMode();
   cancelActorContainerExitPlacement();
-  activeExitPlacement = {
+  const placement = activeExitPlacement = {
     vehicleActorUuid: vehicleActor.uuid,
     passengerId,
     tokenData: foundry.utils.deepClone(passenger.tokenData ?? {}),
     previewImage: String(passenger.tokenData?.texture?.src ?? passenger.actorImg ?? "icons/svg/mystery-man.svg"),
     preview: null,
-    inputShield: createCanvasInputShield("crosshair"),
-    previewPoint: null
+    inputShield: null,
+    previewPoint: null,
+    targetSelectionSession: null,
+    cleaned: false
   };
-  void createActorContainerExitPreview(activeExitPlacement);
-  bindCanvasInput(activeExitPlacement, onExitPlacementCanvasEvent, { pointerMove: true });
+  const targetSelectionSession = startCanvasTargetSelectionSession({
+    kind: "actorContainerExitPlacement",
+    vehicleActorUuid: placement.vehicleActorUuid,
+    passengerId: placement.passengerId,
+    sceneId: canvas.scene.id
+  }, {
+    onCancel: () => cancelActorContainerExitPlacement({
+      placement,
+      fromLifecycle: true
+    })
+  });
+  placement.targetSelectionSession = targetSelectionSession;
+  if (targetSelectionSession.finished || activeExitPlacement !== placement) {
+    placement.targetSelectionSession = null;
+    return false;
+  }
+  placement.inputShield = createCanvasInputShield("crosshair");
+  void createActorContainerExitPreview(placement);
+  bindCanvasInput(placement, onExitPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onExitPlacementKeyDown, { capture: true });
   refreshActorContainerExitPreview();
   ui.notifications.info("Выход из транспорта: выберите точку размещения. Esc/ПКМ отменяет.");
@@ -159,20 +218,21 @@ export async function openActorContainerPassengerSheet({ vehicleActor = null, pa
 }
 
 async function onBoardingPointerDown(event) {
-  if (!activeBoardingMode || event.button !== 0) return;
+  const mode = activeBoardingMode;
+  if (!mode || event.button !== 0) return;
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-  const vehicleToken = getActorContainerTokenAtPoint(point, activeBoardingMode);
+  const vehicleToken = getActorContainerTokenAtPoint(point, mode);
   if (!vehicleToken) {
     ui.notifications.warn("Выберите подсвеченный транспорт.");
     return;
   }
   const request = {
-    sceneId: activeBoardingMode.sceneId,
-    passengerActorUuid: activeBoardingMode.actorUuid,
-    passengerTokenId: activeBoardingMode.tokenId,
+    sceneId: mode.sceneId,
+    passengerActorUuid: mode.actorUuid,
+    passengerTokenId: mode.tokenId,
     vehicleActorUuid: vehicleToken.actor.uuid
   };
-  cancelActorContainerBoardingMode();
+  cancelActorContainerBoardingMode({ mode, cancelled: false });
   try {
     await requestActorContainerSocket("boardPassenger", request);
   } catch (error) {
@@ -197,42 +257,61 @@ function onBoardingKeyDown(event) {
   cancelActorContainerBoardingMode({ notify: true });
 }
 
-function cancelActorContainerBoardingMode({ notify = false } = {}) {
-  if (!activeBoardingMode) {
+function cancelActorContainerBoardingMode({
+  notify = false,
+  mode = activeBoardingMode,
+  fromLifecycle = false,
+  cancelled = true
+} = {}) {
+  if (!mode) {
     refreshActorContainerHighlights();
-    return;
+    return false;
   }
-  const mode = activeBoardingMode;
-  activeBoardingMode = null;
+  if (activeBoardingMode === mode) activeBoardingMode = null;
+  if (mode.cleaned) {
+    refreshActorContainerHighlights();
+    return false;
+  }
+  mode.cleaned = true;
+  clearActorContainerHighlightRefresh(mode);
   unbindCanvasInput(mode);
   window.removeEventListener("keydown", onBoardingKeyDown, { capture: true });
   refreshActorContainerHighlights();
+  const targetSelectionSession = mode.targetSelectionSession;
+  mode.targetSelectionSession = null;
+  if (!fromLifecycle) {
+    targetSelectionSession?.finish({
+      cancelled: Boolean(cancelled)
+    });
+  }
   if (notify) ui.notifications.info("Посадка в транспорт отменена.");
+  return true;
 }
 
 function onExitPlacementCanvasEvent(event) {
-  if (!activeExitPlacement) return;
+  const session = activeExitPlacement;
+  if (!session) return;
   stopCanvasInputEvent(event);
   if (event.type === "contextmenu" || event.button === 2) {
     cancelActorContainerExitPlacement({ notify: true });
     return;
   }
   if (event.type === "pointermove") {
-    activeExitPlacement.previewPoint = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+    session.previewPoint = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
     refreshActorContainerExitPreview();
     return;
   }
   if (event.type !== "pointerdown" && event.type !== "mousedown") return;
   if (event.button !== 0) return;
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-  const placement = getTokenPlacementAtPoint(activeExitPlacement.tokenData, point);
+  const placement = getTokenPlacementAtPoint(session.tokenData, point);
   const request = {
     sceneId: canvas.scene.id,
-    vehicleActorUuid: activeExitPlacement.vehicleActorUuid,
-    passengerId: activeExitPlacement.passengerId,
+    vehicleActorUuid: session.vehicleActorUuid,
+    passengerId: session.passengerId,
     placement
   };
-  cancelActorContainerExitPlacement();
+  cancelActorContainerExitPlacement({ placement: session, cancelled: false });
   void requestActorContainerSocket("exitPassenger", request).catch(error => {
     ui.notifications.warn(error.message);
   });
@@ -245,18 +324,35 @@ function onExitPlacementKeyDown(event) {
   cancelActorContainerExitPlacement({ notify: true });
 }
 
-function cancelActorContainerExitPlacement({ notify = false } = {}) {
-  if (!activeExitPlacement) {
+function cancelActorContainerExitPlacement({
+  notify = false,
+  placement = activeExitPlacement,
+  fromLifecycle = false,
+  cancelled = true
+} = {}) {
+  if (!placement) {
     refreshActorContainerExitPreview();
-    return;
+    return false;
   }
-  const placement = activeExitPlacement;
-  activeExitPlacement = null;
+  if (activeExitPlacement === placement) activeExitPlacement = null;
+  if (placement.cleaned) {
+    refreshActorContainerExitPreview();
+    return false;
+  }
+  placement.cleaned = true;
   unbindCanvasInput(placement);
   window.removeEventListener("keydown", onExitPlacementKeyDown, { capture: true });
   destroyActorContainerExitPreview(placement);
   refreshActorContainerExitPreview();
+  const targetSelectionSession = placement.targetSelectionSession;
+  placement.targetSelectionSession = null;
+  if (!fromLifecycle) {
+    targetSelectionSession?.finish({
+      cancelled: Boolean(cancelled)
+    });
+  }
   if (notify) ui.notifications.info("Выход из транспорта отменен.");
+  return true;
 }
 
 function refreshActorContainerHighlights() {
@@ -277,6 +373,22 @@ function refreshActorContainerHighlights() {
   }
 }
 
+function scheduleActorContainerHighlightRefresh(mode = activeBoardingMode) {
+  if (!mode || mode !== activeBoardingMode || mode.cleaned) return;
+  if (mode.highlightRefreshTimerId !== null) return;
+  mode.highlightRefreshTimerId = globalThis.setTimeout(() => {
+    mode.highlightRefreshTimerId = null;
+    if (mode !== activeBoardingMode || mode.cleaned) return;
+    refreshActorContainerHighlights();
+  }, ACTOR_CONTAINER_HIGHLIGHT_REFRESH_DELAY_MS);
+}
+
+function clearActorContainerHighlightRefresh(mode) {
+  if (!mode || mode.highlightRefreshTimerId === null) return;
+  globalThis.clearTimeout(mode.highlightRefreshTimerId);
+  mode.highlightRefreshTimerId = null;
+}
+
 function refreshActorContainerExitPreview() {
   const grid = canvas?.interface?.grid;
   const layer = canvas?.ready && grid
@@ -294,13 +406,14 @@ function refreshActorContainerExitPreview() {
 }
 
 async function createActorContainerExitPreview(session) {
-  const layer = canvas?.controls?._rulerPaths ?? canvas?.stage;
+  const layer = canvas?.interface?.addChild ? canvas.interface : canvas?.stage;
   if (!layer || !session) return;
   const container = new PIXI.Container();
   container.eventMode = "none";
   container.interactive = false;
   container.interactiveChildren = false;
   container.visible = false;
+  container.zIndex = Number.MAX_SAFE_INTEGER;
   const frame = new PIXI.Graphics();
   container.addChild(frame);
   layer.addChild(container);
@@ -368,9 +481,9 @@ function resizeActorContainerExitPreviewSprite(sprite, tokenData = {}, size = {}
 
 function destroyActorContainerExitPreview(session) {
   const preview = session?.preview;
-  if (!preview?.container) return;
+  if (session) session.preview = null;
+  if (!preview?.container || preview.container.destroyed) return;
   preview.container.destroy({ children: true, texture: false, baseTexture: false });
-  session.preview = null;
 }
 
 function isTokenAvailableForBoarding(token, session) {
@@ -413,6 +526,20 @@ function drawTokenOutline(layer, token, color) {
 }
 
 function getTokenRect(token) {
+  const bounds = token?.bounds;
+  if (
+    Number.isFinite(Number(bounds?.x))
+    && Number.isFinite(Number(bounds?.y))
+    && Number.isFinite(Number(bounds?.width))
+    && Number.isFinite(Number(bounds?.height))
+  ) {
+    return {
+      x: Number(bounds.x),
+      y: Number(bounds.y),
+      width: Math.max(1, Number(bounds.width)),
+      height: Math.max(1, Number(bounds.height))
+    };
+  }
   const document = token?.document ?? token;
   const size = document?.getSize?.() ?? {
     width: Math.max(1, Number(document?.width) || 1) * canvas.grid.size,
@@ -674,23 +801,19 @@ function bindCanvasInput(session, listener, { pointerMove = false } = {}) {
   session.canvasInputBinding = { targets, types, listener };
 }
 
-function unbindCanvasInput(session, { delay = 300 } = {}) {
+function unbindCanvasInput(session) {
   const binding = session?.canvasInputBinding;
   const shield = session?.inputShield;
   if (session) {
     session.canvasInputBinding = null;
     session.inputShield = null;
   }
-  const cleanup = () => {
-    if (binding) {
-      for (const target of binding.targets) {
-        for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
-      }
+  if (binding) {
+    for (const target of binding.targets) {
+      for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
     }
-    shield?.remove?.();
-  };
-  if (delay > 0) window.setTimeout(cleanup, delay);
-  else cleanup();
+  }
+  shield?.remove?.();
 }
 
 function stopCanvasInputEvent(event) {

@@ -37,6 +37,12 @@ import {
   getRelationTo
 } from "../settings/factions.mjs";
 import { shouldPauseAfterTrapDetection } from "./trap-pause-policy.mjs";
+import {
+  CANVAS_TARGET_SELECTION_STARTED_HOOK,
+  cancelActiveCanvasTargetSelection,
+  startCanvasTargetSelectionSession
+} from "./target-selection-lifecycle.mjs";
+import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 
 const TRAP_SOCKET = `system.${SYSTEM_ID}`;
 const TRAP_SOCKET_SCOPE = "fallout-maw.traps";
@@ -57,6 +63,20 @@ const TRAP_INTERACTION_HIGHLIGHT_LAYER = "fallout-maw-interaction-traps";
 const TRAP_INTERACTION_HIGHLIGHT_COLOR = 0xf0c84b;
 const TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER = "fallout-maw-linked-actor-tokens";
 const TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR = 0xe34fcb;
+const TRAP_LINKED_ACTOR_REFRESH_DELAY_MS = 50;
+const TRAP_LINKED_ACTOR_TOKEN_PATHS = Object.freeze([
+  "x",
+  "y",
+  "elevation",
+  "width",
+  "height",
+  "depth",
+  "hidden",
+  "actorId",
+  "actorLink",
+  "texture.scaleX",
+  "texture.scaleY"
+]);
 const TRAP_LINKED_ACTION_MODE = "linkedAction";
 const TRAP_EFFECT_EXPLOSION_MODE = "explosion";
 const TRAP_EFFECT_ATTACK_MODE = "attack";
@@ -160,6 +180,9 @@ export function registerTrapHooks() {
 }
 
 export async function startTrapPlacement({ actor = null, token = null, item = null, application = null } = {}) {
+  cancelActiveCanvasTargetSelection({
+    reason: "superseded"
+  });
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.trap)) return false;
   if (isContainerItem(item)) {
@@ -195,6 +218,9 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
 }
 
 export async function startWorldTrapPlacement({ item = null, factionName = "", application = null } = {}) {
+  cancelActiveCanvasTargetSelection({
+    reason: "superseded"
+  });
   if (!game.user?.isGM || !item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.trap, { ignoreBroken: true })) return false;
   if (isContainerItem(item)) {
     ui.notifications.warn(`${item.name}: контейнер нельзя использовать как шаблон ловушки.`);
@@ -234,23 +260,32 @@ export function cancelWorldTrapPlacement({ notify = false, refreshApplication = 
 }
 
 async function beginTrapPlacement(source = {}) {
-  cancelActiveTrapPlacement({ refreshApplication: false });
-  activeTrapPlacement = {
+  const placement = {
     ...source,
     preview: null,
     rotation: 0,
     lastPoint: null,
     documentInput: source.mode === "world",
     passthroughElement: source.mode === "world" ? source.application?.element : null,
-    inputShield: null
+    inputShield: null,
+    targetSelectionSession: null,
+    linkedActorHandoffId: "",
+    linkedActorHandoffHookId: null,
+    cleaned: false,
+    suspended: false
   };
-  activeTrapPlacement.inputShield = activeTrapPlacement.documentInput ? null : createTrapCanvasInputShield("crosshair");
-  if (activeTrapPlacement.documentInput) setTrapPlacementDocumentCursor(activeTrapPlacement, "crosshair");
-  await createTrapPlacementPreview(activeTrapPlacement);
-  bindTrapCanvasInput(activeTrapPlacement, onTrapPlacementCanvasEvent, { pointerMove: true });
+  activeTrapPlacement = placement;
+  if (!startTrapPlacementTargetSelectionSession(placement)) return false;
+
+  placement.inputShield = placement.documentInput ? null : createTrapCanvasInputShield("crosshair");
+  if (placement.documentInput) setTrapPlacementDocumentCursor(placement, "crosshair");
+  await createTrapPlacementPreview(placement);
+  if (placement.cleaned || activeTrapPlacement !== placement) return false;
+
+  bindTrapCanvasInput(placement, onTrapPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
-  const name = activeTrapPlacement.itemData?.name ?? "Ловушка";
-  const instruction = activeTrapPlacement.mode === "world"
+  const name = placement.itemData?.name ?? "Ловушка";
+  const instruction = placement.mode === "world"
     ? "размещайте ловушки кликами. Esc или кнопка «Остановить» завершает установку."
     : "выберите точку установки. Esc/ПКМ завершает.";
   ui.notifications.info(`${name}: ${instruction}`);
@@ -258,6 +293,9 @@ async function beginTrapPlacement(source = {}) {
 }
 
 export function startTrapInteractionMode({ actor = null, token = null } = {}) {
+  cancelActiveCanvasTargetSelection({
+    reason: "superseded"
+  });
   const sourceActor = actor ?? token?.actor ?? token?.document?.actor ?? getTrapViewerActor();
   if (!sourceActor?.isOwner) {
     ui.notifications.warn("Для работы с ловушками нужен выбранный актёр.");
@@ -268,15 +306,31 @@ export function startTrapInteractionMode({ actor = null, token = null } = {}) {
     return false;
   }
 
-  cancelActiveTrapPlacement();
-  cancelTrapInteractionMode();
-  activeTrapInteraction = {
+  const interaction = {
     actorUuid: sourceActor.uuid,
     tokenId: token?.id ?? token?.document?.id ?? "",
     sceneId: canvas.scene.id,
-    inputShield: createTrapCanvasInputShield("pointer")
+    inputShield: null,
+    targetSelectionSession: null,
+    cleaned: false
   };
-  bindTrapCanvasInput(activeTrapInteraction, onTrapInteractionCanvasEvent);
+  activeTrapInteraction = interaction;
+  interaction.targetSelectionSession = startCanvasTargetSelectionSession({
+    kind: "trapInteraction",
+    actorUuid: interaction.actorUuid,
+    tokenId: interaction.tokenId,
+    sceneId: interaction.sceneId
+  }, {
+    onCancel: outcome => cancelTrapInteractionMode({
+      interaction,
+      fromLifecycle: true,
+      reason: outcome?.reason
+    })
+  });
+  if (interaction.cleaned || interaction.targetSelectionSession.finished || activeTrapInteraction !== interaction) return false;
+
+  interaction.inputShield = createTrapCanvasInputShield("pointer");
+  bindTrapCanvasInput(interaction, onTrapInteractionCanvasEvent);
   window.addEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
   refreshTrapInteractionHighlights();
   ui.notifications.info("Режим ловушек: выберите подсвеченную ловушку. Esc/ПКМ отменяет.");
@@ -607,7 +661,10 @@ async function onTrapPlacementPointerDown(event) {
     ui.notifications.warn(`${item.name}: стены полностью отсекают область установки.`);
     return;
   }
-  cancelActiveTrapPlacement();
+  cancelActiveTrapPlacement({
+    cancelled: false,
+    reason: "pointSelected"
+  });
   await spendCombatActionPoints(actor, apCost);
 
   const outcome = await requestSkillCheck({
@@ -677,10 +734,12 @@ async function placeWorldTrapAtPointer(placement, event) {
 
   let linkedAction = null;
   if (trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE) {
-    suspendTrapPlacement(placement);
-    linkedAction = await selectTrapLinkedAction();
+    if (!suspendTrapPlacement(placement)) return;
+    linkedAction = await selectTrapLinkedAction({
+      parentPlacement: placement
+    });
     if (activeTrapPlacement !== placement) return;
-    resumeTrapPlacement(placement);
+    if (!resumeTrapPlacement(placement)) return;
     if (!linkedAction) return;
   }
 
@@ -759,10 +818,14 @@ function onTrapPlacementPointerMove(event) {
 
 function onTrapPlacementKeyDown(event) {
   if (!activeTrapPlacement) return;
+  const rotates = event.code === "KeyR"
+    || String(event.key ?? "").toLowerCase() === "r"
+    || String(event.key ?? "").toLowerCase() === "к";
+  if (!rotates && event.key !== "Escape") return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  if (event.code === "KeyR" || String(event.key ?? "").toLowerCase() === "r" || String(event.key ?? "").toLowerCase() === "к") {
+  if (rotates) {
     if (event.repeat) return;
     rotateActiveTrapPlacement();
     return;
@@ -778,14 +841,35 @@ function rotateActiveTrapPlacement() {
 }
 
 function suspendTrapPlacement(placement) {
-  if (!placement || activeTrapPlacement !== placement) return;
-  unbindTrapCanvasInput(placement, { delay: 0 });
+  if (!placement || placement.cleaned || activeTrapPlacement !== placement) return false;
+  unbindTrapCanvasInput(placement);
   window.removeEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   if (placement.preview?.container) placement.preview.container.visible = false;
+  placement.suspended = true;
+  const targetSelectionSession = placement.targetSelectionSession;
+  placement.linkedActorHandoffId = `${targetSelectionSession?.sessionId ?? foundry.utils.randomID()}.linkedActor`;
+  placement.linkedActorHandoffHookId = Hooks.on(CANVAS_TARGET_SELECTION_STARTED_HOOK, context => {
+    if (
+      context?.kind === "trapLinkedActorSelection"
+      && context?.parentPlacementHandoffId === placement.linkedActorHandoffId
+    ) return;
+    cancelActiveTrapPlacement({
+      placement,
+      reason: "supersededDuringLinkedAction"
+    });
+  });
+  targetSelectionSession?.finish({
+    cancelled: false,
+    reason: "linkedActorSelection"
+  });
+  placement.targetSelectionSession = null;
+  return !placement.cleaned && activeTrapPlacement === placement;
 }
 
 function resumeTrapPlacement(placement) {
-  if (!placement || activeTrapPlacement !== placement) return;
+  if (!placement || placement.cleaned || activeTrapPlacement !== placement) return false;
+  clearTrapPlacementLinkedActorHandoff(placement);
+  if (!startTrapPlacementTargetSelectionSession(placement)) return false;
   placement.documentInput = placement.mode === "world";
   placement.passthroughElement = placement.documentInput ? placement.application?.element : null;
   placement.inputShield = placement.documentInput ? null : createTrapCanvasInputShield("crosshair");
@@ -794,19 +878,65 @@ function resumeTrapPlacement(placement) {
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   if (placement.preview?.container) placement.preview.container.visible = true;
   if (placement.lastPoint) updateTrapPlacementPreview(placement, placement.lastPoint);
+  placement.suspended = false;
+  return true;
 }
 
-function cancelActiveTrapPlacement({ notify = false, refreshApplication = true } = {}) {
-  if (!activeTrapPlacement) return;
-  const placement = activeTrapPlacement;
+function clearTrapPlacementLinkedActorHandoff(placement) {
+  if (!placement) return;
+  if (placement.linkedActorHandoffHookId !== null) {
+    Hooks.off(CANVAS_TARGET_SELECTION_STARTED_HOOK, placement.linkedActorHandoffHookId);
+  }
+  placement.linkedActorHandoffHookId = null;
+  placement.linkedActorHandoffId = "";
+}
+
+function startTrapPlacementTargetSelectionSession(placement) {
+  if (!placement || placement.cleaned || activeTrapPlacement !== placement) return false;
+  const session = startCanvasTargetSelectionSession({
+    kind: placement.mode === "world" ? "trapWorldPlacement" : "trapPlacement",
+    actorUuid: placement.actorUuid,
+    tokenId: placement.tokenId,
+    itemId: placement.itemId,
+    sceneId: placement.sceneId
+  }, {
+    onCancel: outcome => cancelActiveTrapPlacement({
+      placement,
+      fromLifecycle: true,
+      reason: outcome?.reason
+    })
+  });
+  placement.targetSelectionSession = session;
+  return !placement.cleaned && !session.finished && activeTrapPlacement === placement;
+}
+
+function cancelActiveTrapPlacement({
+  notify = false,
+  refreshApplication = true,
+  placement = activeTrapPlacement,
+  fromLifecycle = false,
+  cancelled = true,
+  reason = "cancelled"
+} = {}) {
+  if (!placement || placement.cleaned) return false;
+  placement.cleaned = true;
+  if (activeTrapPlacement === placement) activeTrapPlacement = null;
+  clearTrapPlacementLinkedActorHandoff(placement);
   unbindTrapCanvasInput(placement);
   window.removeEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   destroyTrapPlacementPreview(placement);
-  activeTrapPlacement = null;
+  if (!fromLifecycle) {
+    placement.targetSelectionSession?.finish({
+      cancelled,
+      reason
+    });
+  }
+  placement.targetSelectionSession = null;
   if (refreshApplication && placement.mode === "world" && placement.application?.rendered) {
     void placement.application.render({ force: true });
   }
   if (notify) ui.notifications.info("Установка ловушки отменена.");
+  return true;
 }
 
 function createTrapCanvasInputShield(cursor = "crosshair") {
@@ -855,24 +985,20 @@ function bindTrapCanvasInput(session, listener, { pointerMove = false } = {}) {
   session.canvasInputBinding = { targets, types, listener };
 }
 
-function unbindTrapCanvasInput(session, { delay = 300 } = {}) {
+function unbindTrapCanvasInput(session) {
   const binding = session?.canvasInputBinding;
   const shield = session?.inputShield;
   if (session) {
     session.canvasInputBinding = null;
     session.inputShield = null;
   }
-  const cleanup = () => {
-    if (binding) {
-      for (const target of binding.targets) {
-        for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
-      }
+  if (binding) {
+    for (const target of binding.targets) {
+      for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
     }
-    restoreTrapPlacementDocumentCursor(session);
-    shield?.remove?.();
-  };
-  if (delay > 0) window.setTimeout(cleanup, delay);
-  else cleanup();
+  }
+  restoreTrapPlacementDocumentCursor(session);
+  shield?.remove?.();
 }
 
 function stopTrapCanvasInputEvent(event) {
@@ -881,92 +1007,396 @@ function stopTrapCanvasInputEvent(event) {
   event.stopImmediatePropagation?.();
 }
 
-async function selectTrapLinkedAction() {
-  const token = await waitForTrapLinkedActorSelection();
+async function selectTrapLinkedAction({ parentPlacement = null } = {}) {
+  const selected = await waitForTrapLinkedActorSelection({
+    parentPlacement
+  });
+  const token = selected?.token ?? null;
+  const selection = selected?.selection ?? null;
   if (!token?.actor) return null;
   const dialog = new TrapLinkedActionDialog({ token });
-  return dialog.wait();
+  if (selection?.cleaned) return null;
+  if (selection) selection.dialog = dialog;
+  let linkedAction = null;
+  try {
+    linkedAction = await dialog.wait();
+    return linkedAction;
+  } finally {
+    if (selection?.dialog === dialog) selection.dialog = null;
+    finishTrapLinkedActorSelection(linkedAction ? token : null, {
+      selection,
+      reason: linkedAction ? "linkedActionSelected" : "linkedActionCancelled"
+    });
+  }
 }
 
-function waitForTrapLinkedActorSelection() {
-  cancelTrapLinkedActorSelection();
-  if (!canvas?.ready || !canvas.app?.view) return Promise.resolve(null);
+function waitForTrapLinkedActorSelection({ parentPlacement = null } = {}) {
+  cancelActiveCanvasTargetSelection({
+    reason: "superseded"
+  });
+  if (!canvas?.ready || !canvas.app?.view) return Promise.resolve({
+    token: null,
+    selection: null
+  });
   return new Promise(resolve => {
-    activeTrapLinkedActorSelection = {
+    const selection = {
       resolve,
-      inputShield: createTrapCanvasInputShield("crosshair")
+      sceneId: canvas.scene?.id ?? "",
+      parentPlacement,
+      inputShield: null,
+      targetSelectionSession: null,
+      overlay: null,
+      graphicsByTokenUuid: new Map(),
+      tokensByUuid: new Map(),
+      hookBindings: [],
+      refreshTimerId: null,
+      pendingFullRefresh: false,
+      pendingChangedTokens: new Map(),
+      pendingRemovedTokenUuids: new Set(),
+      selectedToken: null,
+      canvasResourcesReleased: false,
+      dialog: null,
+      cleaned: false
     };
-    bindTrapCanvasInput(activeTrapLinkedActorSelection, onTrapLinkedActorCanvasEvent);
+    activeTrapLinkedActorSelection = selection;
+    const targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: "trapLinkedActorSelection",
+      sceneId: selection.sceneId,
+      parentPlacementMode: parentPlacement?.mode ?? "",
+      parentPlacementHandoffId: parentPlacement?.linkedActorHandoffId ?? ""
+    }, {
+      onCancel: outcome => finishTrapLinkedActorSelection(null, {
+        selection,
+        fromLifecycle: true,
+        cancelParentPlacement: true,
+        reason: outcome?.reason
+      })
+    });
+    if (selection.cleaned || targetSelectionSession.finished || activeTrapLinkedActorSelection !== selection) return;
+    selection.targetSelectionSession = targetSelectionSession;
+
+    const layer = getTrapLinkedActorOverlayLayer();
+    if (!layer?.addChild) {
+      ui.notifications.warn("Слой выбора связанного актёра недоступен.");
+      finishTrapLinkedActorSelection(null, {
+        selection,
+        reason: "overlayUnavailable"
+      });
+      return;
+    }
+    const overlay = new PIXI.Container();
+    overlay.name = `${TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER}.${targetSelectionSession.sessionId}`;
+    overlay.eventMode = "none";
+    overlay.interactiveChildren = false;
+    overlay.zIndex = Number.MAX_SAFE_INTEGER;
+    layer.addChild(overlay);
+    selection.overlay = overlay;
+
+    bindTrapLinkedActorSelectionHooks(selection);
+    selection.inputShield = createTrapCanvasInputShield("crosshair");
+    bindTrapCanvasInput(selection, onTrapLinkedActorCanvasEvent);
     window.addEventListener("keydown", onTrapLinkedActorKeyDown, { capture: true });
-    refreshTrapLinkedActorHighlights();
+    refreshTrapLinkedActorHighlights(selection);
     ui.notifications.info("Выберите подсвеченного актёра для связи с ловушкой. Esc/ПКМ отменяет.");
   });
 }
 
 function onTrapLinkedActorCanvasEvent(event) {
-  if (!activeTrapLinkedActorSelection) return;
+  const selection = activeTrapLinkedActorSelection;
+  if (!selection) return;
   stopTrapCanvasInputEvent(event);
   if (event.type === "contextmenu" || event.type === "auxclick" || event.button === 2) {
     cancelTrapLinkedActorSelection();
     return;
   }
   if (!["pointerdown", "mousedown"].includes(event.type) || event.button !== 0) return;
-  const token = getTrapLinkedActorTokenAtEvent(event);
-  if (token) finishTrapLinkedActorSelection(token);
+  selection.pendingFullRefresh = true;
+  flushTrapLinkedActorHighlights(selection);
+  const token = getTrapLinkedActorTokenAtEvent(event, selection);
+  if (token) selectTrapLinkedActorToken(token, selection);
 }
 
 function onTrapLinkedActorKeyDown(event) {
-  if (!activeTrapLinkedActorSelection) return;
+  if (!activeTrapLinkedActorSelection || event.key !== "Escape") return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  if (event.key === "Escape") cancelTrapLinkedActorSelection();
+  cancelTrapLinkedActorSelection();
 }
 
-function finishTrapLinkedActorSelection(token = null) {
-  const selection = activeTrapLinkedActorSelection;
-  if (!selection) return;
-  cleanupTrapLinkedActorSelection();
-  selection.resolve(token);
+function finishTrapLinkedActorSelection(token = null, {
+  selection = activeTrapLinkedActorSelection,
+  fromLifecycle = false,
+  cancelParentPlacement = false,
+  reason = token ? "actorSelected" : "cancelled"
+} = {}) {
+  if (!selection || selection.cleaned) return false;
+  const targetSelectionSession = selection.targetSelectionSession;
+  cleanupTrapLinkedActorSelection(selection);
+  if (!fromLifecycle) {
+    targetSelectionSession?.finish({
+      cancelled: !token,
+      reason
+    });
+  }
+  selection.resolve({
+    token,
+    selection
+  });
+  if (cancelParentPlacement && selection.parentPlacement) {
+    cancelActiveTrapPlacement({
+      placement: selection.parentPlacement,
+      reason: "linkedActorSelectionCancelled"
+    });
+  }
+  return true;
+}
+
+function selectTrapLinkedActorToken(token, selection = activeTrapLinkedActorSelection) {
+  if (!selection || selection.cleaned || selection.selectedToken || !token?.actor) return false;
+  selection.selectedToken = token;
+  releaseTrapLinkedActorCanvasResources(selection);
+  selection.resolve({
+    token,
+    selection
+  });
+  return true;
 }
 
 function cancelTrapLinkedActorSelection() {
-  finishTrapLinkedActorSelection(null);
-  refreshTrapLinkedActorHighlights();
+  return finishTrapLinkedActorSelection(null);
 }
 
-function cleanupTrapLinkedActorSelection() {
-  const selection = activeTrapLinkedActorSelection;
+function cleanupTrapLinkedActorSelection(selection = activeTrapLinkedActorSelection) {
+  if (!selection || selection.cleaned) return false;
+  selection.cleaned = true;
+  releaseTrapLinkedActorCanvasResources(selection);
+  const dialog = selection.dialog;
+  selection.dialog = null;
+  if (dialog?.rendered) void dialog.close();
+  selection.targetSelectionSession = null;
+  if (activeTrapLinkedActorSelection === selection) activeTrapLinkedActorSelection = null;
+  return true;
+}
+
+function releaseTrapLinkedActorCanvasResources(selection) {
+  if (!selection || selection.canvasResourcesReleased) return false;
+  selection.canvasResourcesReleased = true;
+  if (selection.refreshTimerId !== null) globalThis.clearTimeout(selection.refreshTimerId);
+  selection.refreshTimerId = null;
+  selection.pendingFullRefresh = false;
+  selection.pendingChangedTokens.clear();
+  selection.pendingRemovedTokenUuids.clear();
+  for (const [hook, id] of selection.hookBindings.splice(0)) Hooks.off(hook, id);
   unbindTrapCanvasInput(selection);
   window.removeEventListener("keydown", onTrapLinkedActorKeyDown, { capture: true });
-  activeTrapLinkedActorSelection = null;
-  refreshTrapLinkedActorHighlights();
+  selection.overlay?.parent?.removeChild?.(selection.overlay);
+  if (selection.overlay && !selection.overlay.destroyed) selection.overlay.destroy({ children: true });
+  selection.overlay = null;
+  selection.graphicsByTokenUuid.clear();
+  selection.tokensByUuid.clear();
+  clearLegacyTrapLinkedActorHighlightLayer();
+  return true;
 }
 
-function getTrapLinkedActorTokenAtEvent(event) {
+function getTrapLinkedActorTokenAtEvent(event, selection = activeTrapLinkedActorSelection) {
   if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return null;
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-  return [...(canvas.tokens?.placeables ?? [])]
-    .filter(token => token.actor && token.visible !== false && token.renderable !== false)
+  return [...(selection?.tokensByUuid.values() ?? [])]
     .sort((left, right) => (right._lastSortedIndex ?? 0) - (left._lastSortedIndex ?? 0))
     .find(token => token.bounds?.contains?.(point.x, point.y) || token.hitArea?.contains?.(point.x - token.x, point.y - token.y)) ?? null;
 }
 
-function refreshTrapLinkedActorHighlights() {
-  const grid = canvas?.interface?.grid;
-  if (!canvas?.ready || !grid) return;
-  const layer = grid.getHighlightLayer?.(TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER)
-    ?? grid.addHighlightLayer?.(TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER);
-  layer?.clear?.();
-  if (!layer || !activeTrapLinkedActorSelection) return;
-  for (const token of canvas.tokens?.placeables ?? []) {
-    if (!token.actor || token.visible === false || token.renderable === false) continue;
-    const bounds = token.bounds;
-    if (!bounds) continue;
-    const width = Math.max(3, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
-    layer.lineStyle(width, TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR, 0.95);
-    layer.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
+function bindTrapLinkedActorSelectionHooks(selection) {
+  const bindHook = (hook, callback) => {
+    const id = Hooks.on(hook, callback);
+    selection.hookBindings.push([hook, id]);
+  };
+  bindHook("refreshToken", (token, flags = {}) => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(token, selection)) return;
+    if (
+      flags.refreshPosition
+      || flags.refreshSize
+      || flags.refreshShape
+      || flags.refreshVisibility
+      || flags.refreshState
+    ) {
+      syncTrapLinkedActorHighlight(selection, token);
+      queueTrapLinkedActorHighlightRefresh(selection, { token });
+    }
+  });
+  bindHook("updateToken", (tokenDocument, changes = {}) => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(tokenDocument, selection)) return;
+    if (changedDataIntersectsPaths(changes, TRAP_LINKED_ACTOR_TOKEN_PATHS)) {
+      queueTrapLinkedActorHighlightRefresh(selection, { token: tokenDocument });
+    }
+  });
+  bindHook("moveToken", tokenDocument => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(tokenDocument, selection)) return;
+    syncTrapLinkedActorHighlight(selection, tokenDocument);
+    queueTrapLinkedActorHighlightRefresh(selection, { token: tokenDocument });
+  });
+  bindHook("createToken", tokenDocument => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(tokenDocument, selection)) return;
+    queueTrapLinkedActorHighlightRefresh(selection, { token: tokenDocument });
+  });
+  bindHook("drawToken", token => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(token, selection)) return;
+    queueTrapLinkedActorHighlightRefresh(selection, { token });
+  });
+  bindHook("deleteToken", tokenDocument => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(tokenDocument, selection)) return;
+    queueTrapLinkedActorHighlightRefresh(selection, {
+      token: tokenDocument,
+      removed: true
+    });
+  });
+  bindHook("destroyToken", token => {
+    if (!isTrapLinkedActorTokenOnSelectionScene(token, selection)) return;
+    queueTrapLinkedActorHighlightRefresh(selection, {
+      token,
+      removed: true
+    });
+  });
+}
+
+function queueTrapLinkedActorHighlightRefresh(selection, {
+  token = null,
+  removed = false,
+  full = false
+} = {}) {
+  if (!selection || selection.cleaned) return;
+  if (full) selection.pendingFullRefresh = true;
+  const tokenUuid = getTrapLinkedActorTokenUuid(token);
+  if (tokenUuid) {
+    if (removed) {
+      selection.pendingChangedTokens.delete(tokenUuid);
+      selection.pendingRemovedTokenUuids.add(tokenUuid);
+      removeTrapLinkedActorHighlight(selection, tokenUuid);
+    } else if (!selection.pendingRemovedTokenUuids.has(tokenUuid)) {
+      selection.pendingChangedTokens.set(tokenUuid, token);
+    }
   }
+  if (selection.refreshTimerId === null) {
+    selection.refreshTimerId = globalThis.setTimeout(
+      () => flushTrapLinkedActorHighlights(selection),
+      TRAP_LINKED_ACTOR_REFRESH_DELAY_MS
+    );
+  }
+}
+
+function flushTrapLinkedActorHighlights(selection = activeTrapLinkedActorSelection) {
+  if (!selection || selection.cleaned) return;
+  if (selection.refreshTimerId !== null) globalThis.clearTimeout(selection.refreshTimerId);
+  selection.refreshTimerId = null;
+  const full = selection.pendingFullRefresh;
+  const changedTokens = [...selection.pendingChangedTokens.values()];
+  const removedTokenUuids = [...selection.pendingRemovedTokenUuids];
+  selection.pendingFullRefresh = false;
+  selection.pendingChangedTokens.clear();
+  selection.pendingRemovedTokenUuids.clear();
+
+  if (full) {
+    refreshTrapLinkedActorHighlights(selection);
+    return;
+  }
+  for (const tokenUuid of removedTokenUuids) removeTrapLinkedActorHighlight(selection, tokenUuid);
+  for (const token of changedTokens) syncTrapLinkedActorHighlight(selection, token);
+}
+
+function refreshTrapLinkedActorHighlights(selection = activeTrapLinkedActorSelection) {
+  if (!selection || selection.cleaned || !selection.overlay) return;
+  clearLegacyTrapLinkedActorHighlightLayer();
+  const currentTokenUuids = new Set();
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    if (!isTrapLinkedActorTokenOnSelectionScene(token, selection)) continue;
+    const tokenUuid = getTrapLinkedActorTokenUuid(token);
+    if (!tokenUuid) continue;
+    currentTokenUuids.add(tokenUuid);
+    syncTrapLinkedActorHighlight(selection, token);
+  }
+  for (const tokenUuid of selection.graphicsByTokenUuid.keys()) {
+    if (!currentTokenUuids.has(tokenUuid)) removeTrapLinkedActorHighlight(selection, tokenUuid);
+  }
+}
+
+function syncTrapLinkedActorHighlight(selection, token) {
+  if (!selection || selection.cleaned || !selection.overlay) return;
+  const tokenUuid = getTrapLinkedActorTokenUuid(token);
+  if (!tokenUuid) return;
+  const tokenObject = getTrapLinkedActorTokenObject(token);
+  const bounds = tokenObject?.bounds;
+  if (
+    !tokenObject?.actor
+    || tokenObject.visible === false
+    || tokenObject.renderable === false
+    || !bounds
+  ) {
+    removeTrapLinkedActorHighlight(selection, tokenUuid);
+    return;
+  }
+
+  let graphics = selection.graphicsByTokenUuid.get(tokenUuid);
+  if (!graphics || graphics.destroyed) {
+    graphics = new PIXI.Graphics();
+    graphics.name = `${TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER}.${tokenUuid}`;
+    graphics.eventMode = "none";
+    graphics.interactive = false;
+    selection.graphicsByTokenUuid.set(tokenUuid, graphics);
+    selection.overlay.addChild(graphics);
+  }
+  const width = Math.max(3, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
+  const boundsWidth = Math.max(1, Number(bounds.width) || 1);
+  const boundsHeight = Math.max(1, Number(bounds.height) || 1);
+  const styleSignature = `${boundsWidth}:${boundsHeight}:${width}`;
+  if (graphics.falloutMawStyleSignature !== styleSignature) {
+    graphics.clear();
+    graphics.lineStyle(width, TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR, 0.95);
+    graphics.drawRect(0, 0, boundsWidth, boundsHeight);
+    graphics.falloutMawStyleSignature = styleSignature;
+  }
+  graphics.position.set(Number(bounds.x) || 0, Number(bounds.y) || 0);
+  selection.tokensByUuid.set(tokenUuid, tokenObject);
+}
+
+function removeTrapLinkedActorHighlight(selection, tokenUuid) {
+  const normalizedUuid = String(tokenUuid ?? "").trim();
+  if (!selection || !normalizedUuid) return;
+  const graphics = selection.graphicsByTokenUuid.get(normalizedUuid);
+  selection.graphicsByTokenUuid.delete(normalizedUuid);
+  selection.tokensByUuid.delete(normalizedUuid);
+  graphics?.parent?.removeChild?.(graphics);
+  if (graphics && !graphics.destroyed) graphics.destroy();
+}
+
+function getTrapLinkedActorTokenObject(token) {
+  return token?.object ?? (token?.document ? token : null);
+}
+
+function getTrapLinkedActorTokenUuid(token) {
+  const tokenObject = getTrapLinkedActorTokenObject(token);
+  return String(
+    tokenObject?.document?.uuid
+    ?? token?.document?.uuid
+    ?? tokenObject?.uuid
+    ?? token?.uuid
+    ?? ""
+  ).trim();
+}
+
+function isTrapLinkedActorTokenOnSelectionScene(token, selection) {
+  const tokenObject = getTrapLinkedActorTokenObject(token);
+  const tokenDocument = tokenObject?.document ?? token;
+  const sceneId = String(tokenDocument?.parent?.id ?? tokenDocument?.parent?._id ?? "");
+  return !selection?.sceneId || !sceneId || sceneId === selection.sceneId;
+}
+
+function getTrapLinkedActorOverlayLayer() {
+  return canvas?.interface ?? canvas?.tokens ?? null;
+}
+
+function clearLegacyTrapLinkedActorHighlightLayer() {
+  canvas?.interface?.grid?.clearHighlightLayer?.(TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER);
 }
 
 class TrapLinkedActionDialog extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -1127,10 +1557,13 @@ function prepareTrapLinkedWeaponSets(actor, { expandedWeaponId = "", selectedAct
 }
 
 async function createTrapPlacementPreview(placement) {
-  const layer = canvas?.stage;
-  if (!layer || !placement) return;
+  const layer = canvas?.interface?.addChild ? canvas.interface : canvas?.stage;
+  if (!layer || !placement || placement.cleaned) return;
   const container = new PIXI.Container();
   container.eventMode = "none";
+  container.interactive = false;
+  container.interactiveChildren = false;
+  container.zIndex = Number.MAX_SAFE_INTEGER;
   const detectionGraphics = new PIXI.Graphics();
   const graphics = new PIXI.Graphics();
   container.addChild(detectionGraphics);
@@ -1146,6 +1579,10 @@ async function createTrapPlacementPreview(placement) {
     }
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Trap placement preview texture failed to load: ${image}`, error);
+  }
+  if (placement.cleaned || activeTrapPlacement !== placement) {
+    container.destroy({ children: true, texture: false, baseTexture: false });
+    return;
   }
   layer.addChild(container);
   placement.preview = { container, detectionGraphics, graphics, sprite };
@@ -1263,7 +1700,10 @@ async function onTrapInteractionPointerDown(event) {
   event.stopImmediatePropagation?.();
 
   const actor = getActiveTrapInteractionActor();
-  cancelTrapInteractionMode();
+  cancelTrapInteractionMode({
+    cancelled: false,
+    reason: "trapSelected"
+  });
   if (!actor?.isOwner) {
     ui.notifications.warn("Для работы с ловушкой нужен выбранный актёр.");
     return;
@@ -1291,24 +1731,40 @@ function onTrapInteractionContextMenu(event) {
 }
 
 function onTrapInteractionKeyDown(event) {
-  if (!activeTrapInteraction) return;
+  if (!activeTrapInteraction || event.key !== "Escape") return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  if (event.key === "Escape") cancelTrapInteractionMode({ notify: true });
+  cancelTrapInteractionMode({ notify: true });
 }
 
-function cancelTrapInteractionMode({ notify = false } = {}) {
-  if (!activeTrapInteraction) {
+function cancelTrapInteractionMode({
+  notify = false,
+  interaction = activeTrapInteraction,
+  fromLifecycle = false,
+  cancelled = true,
+  reason = "cancelled"
+} = {}) {
+  if (!interaction || interaction.cleaned) {
     refreshTrapInteractionHighlights();
-    return;
+    return false;
   }
-  const interaction = activeTrapInteraction;
+  interaction.cleaned = true;
   unbindTrapCanvasInput(interaction);
   window.removeEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
-  activeTrapInteraction = null;
-  refreshTrapInteractionHighlights();
+  if (!fromLifecycle) {
+    interaction.targetSelectionSession?.finish({
+      cancelled,
+      reason
+    });
+  }
+  interaction.targetSelectionSession = null;
+  if (activeTrapInteraction === interaction) {
+    activeTrapInteraction = null;
+    refreshTrapInteractionHighlights();
+  }
   if (notify) ui.notifications.info("Режим ловушек отменён.");
+  return true;
 }
 
 function getActiveTrapInteractionActor() {

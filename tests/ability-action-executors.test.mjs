@@ -27,6 +27,7 @@ const {
   normalizeAbilityConstructs
 } = await import("../src/settings/abilities.mjs");
 const {
+  requestAbilityMovementRoute,
   resolveNativeMovementPath,
   stopAbilityMovementRoutePreviews
 } = await import("../src/canvas/ability-movement-route.mjs");
@@ -37,8 +38,12 @@ const {
 const {
   clearAbilityRoutePreviewStop,
   consumeAbilityRoutePreviewStop,
+  getAbilityRoutePlanCommitter,
   markAbilityRoutePreviewStop
 } = await import("../src/canvas/ability-route-preview-state.mjs");
+const {
+  startCanvasTargetSelectionSession
+} = await import("../src/canvas/target-selection-lifecycle.mjs");
 const { createActorOperationLock } = await import("../src/utils/actor-operation-lock.mjs");
 const {
   trackSystemMovementOperation,
@@ -573,7 +578,7 @@ test("right click unwinds canvas selections before cancelling their workflow", (
     import.meta.url
   ), "utf8");
 
-  assert.match(tokenSelection, /const undoLastSelection = \(\) => \{[\s\S]*?selected\.at\(-1\)[\s\S]*?selected\.pop\(\)[\s\S]*?drawCustomTokenSelectionRows/);
+  assert.match(tokenSelection, /const undoLastSelection = \(\) => \{[\s\S]*?selected\.at\(-1\)[\s\S]*?selected\.pop\(\)[\s\S]*?syncCustomTokenSelectionRowGraphic[\s\S]*?selected\.includes\(selectionId\)/);
   assert.match(tokenSelection, /createRightClickPanGuard\(/);
   assert.match(tokenSelection, /if \(undoLastSelection\(\)\) return;\s*finish\(\[\]\)/);
   assert.match(tokenSelection, /else if \(selected\.length < selectionLimit\) selected\.push\(row\.selectionId\);/);
@@ -661,7 +666,7 @@ test("movement route previews use native Token drag visuals, socket-retained pla
   assert.match(requestRoute, /maxDistance:\s*Infinity/);
   assert.match(requestRoute, /preventDrop:\s*false/);
   assert.match(requestRoute, /planAuthority\.retain\(\{/);
-  assert.match(requestRoute, /if \(commitPromise && !\(await commitPromise\)\) nativePlan = null/);
+  assert.match(requestRoute, /if \(commitPromise\) \{[\s\S]*?await commitPromise[\s\S]*?lifecycleCancelled/);
   assert.match(requestRoute, /moveOptions:\s*\{[\s\S]*?showRuler/);
   assert.match(requestRoute, /\[ABILITY_ROUTE_PREVIEW_MOVEMENT_OPTION\]:\s*true/);
   assert.match(requestRoute, /nativePlanId:\s*String\(nativePlan\?\.id/);
@@ -796,6 +801,14 @@ test("every shared canvas target-selection mode collapses an open abilities tray
     "../src/canvas/ability-movement-route.mjs",
     import.meta.url
   ), "utf8");
+  const activeActions = fs.readFileSync(new URL(
+    "../src/combat/active-actions.mjs",
+    import.meta.url
+  ), "utf8");
+  const stealth = fs.readFileSync(new URL(
+    "../src/stealth/controller.mjs",
+    import.meta.url
+  ), "utf8");
   const hud = fs.readFileSync(new URL(
     "../src/apps/token-action-hud.mjs",
     import.meta.url
@@ -804,7 +817,7 @@ test("every shared canvas target-selection mode collapses an open abilities tray
   assert.match(lifecycle, /Hooks\.callAll\(CANVAS_TARGET_SELECTION_STARTED_HOOK, sessionContext\)/);
   assert.match(lifecycle, /Hooks\.callAll\(CANVAS_TARGET_SELECTION_FINISHED_HOOK,/);
   assert.match(tokenSelection, /startCanvasTargetSelectionSession\(\{\s*kind:\s*"tokens"/);
-  assert.match(tokenSelection, /targetSelectionSession\.finish\(\{\s*cancelled:\s*!Array\.isArray\(value\) \|\| !value\.length/);
+  assert.match(tokenSelection, /targetSelectionSession\?\.finish\(\{\s*cancelled:\s*!Array\.isArray\(value\) \|\| !value\.length/);
   assert.match(movementRoute, /startCanvasTargetSelectionSession\(\{\s*kind:\s*"movementRoute"/);
   assert.match(movementRoute, /targetSelectionSession\.finish\(\{\s*cancelled:\s*Boolean\(outcome\?\.cancelled\)/);
   assert.match(weaponAttacks, /startCanvasTargetSelectionSession\(\{\s*kind:\s*"weaponAttack"/);
@@ -817,7 +830,13 @@ test("every shared canvas target-selection mode collapses an open abilities tray
   ));
   assert.equal(destroySelectionFinishes.length, 2);
   assert.ok(destroySelectionFinishes.every(match => !match[1].includes("cancelled")));
-  assert.match(fixedAbilities, /drawLungeDestinationCandidates\(graphics, candidates\);\s*const targetSelectionSession = startCanvasTargetSelectionSession\(\{\s*kind:\s*"destination"/);
+  assert.match(fixedAbilities, /drawLungeDestinationCandidates\(graphics, candidates\);[\s\S]*?targetSelectionSession = startCanvasTargetSelectionSession\(\{\s*kind:\s*"destination"/);
+  assert.match(activeActions, /startCanvasTargetSelectionSession\(\{\s*kind:\s*selectionKind/);
+  assert.match(activeActions, /onCancel:\s*\(\) => finish\(null, \{ fromLifecycle: true \}\)/);
+  assert.match(activeActions, /refreshPending[\s\S]*?flushPreviewRefresh\(\)[\s\S]*?resolvePoint\(point, event\)/);
+  assert.doesNotMatch(activeActions, /controls\?\._rulerPaths/);
+  assert.match(stealth, /startCanvasTargetSelectionSession\(\{\s*kind:\s*"stealthTarget"/);
+  assert.match(stealth, /onCancel:\s*\(\) => stopTargetingMode\(\{[\s\S]*?fromLifecycle:\s*true/);
   assert.match(fixedAbilities, /workflow\.cancelled \|\| workflow\.value\?\.cancelled[\s\S]*?notifyAbilityInteractionCancelled\(onInteractionCancelled/);
   assert.match(fixedAbilities, /changeSelection = \{ changes: \[\], ids: \[\], cancelled: false, failed: true \}/);
   assert.match(fixedAbilities, /if \(changeSelection\.failed\)[\s\S]*?status: "failed"[\s\S]*?cancelled: false, reason: "changeSelectionFailed"/);
@@ -863,6 +882,152 @@ test("canvas target-selection sessions finish once and preserve the cancellation
     assert.equal(calls[1].context.cancelled, true);
   } finally {
     globalThis.Hooks = previousHooks;
+  }
+});
+
+test("superseding a movement route while its authority commit is pending releases the old plan", async () => {
+  const previousGlobals = new Map();
+  const installGlobal = (key, value) => {
+    previousGlobals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value
+    });
+  };
+  const eventTarget = {
+    addEventListener() {},
+    removeEventListener() {}
+  };
+  let resolvePlanning;
+  const planning = new Promise(resolve => {
+    resolvePlanning = resolve;
+  });
+  let resolveRetain;
+  const retained = new Promise(resolve => {
+    resolveRetain = resolve;
+  });
+  let retainStarted;
+  const retainStartedPromise = new Promise(resolve => {
+    retainStarted = resolve;
+  });
+  let replacementSession = null;
+  let cancelledPlanning = 0;
+  let releases = 0;
+
+  const origin = explicitMovementWaypoint({
+    x: 0,
+    y: 0,
+    explicit: false
+  });
+  const destination = explicitMovementWaypoint({ x: 100, y: 0 });
+  const nativePlan = {
+    id: "native-plan",
+    origin,
+    destination,
+    waypoints: [destination]
+  };
+  const tokenDocument = {
+    id: "token",
+    uuid: "Scene.scene.Token.token",
+    actor: {},
+    movementAction: "walk",
+    movement: {},
+    movementHistory: [],
+    _source: movementSource(),
+    measureMovementPath: () => ({ distance: 1, cost: 0 })
+  };
+  const tokenObject = {
+    actor: tokenDocument.actor,
+    document: tokenDocument,
+    isDragged: true,
+    layer: {
+      _cancelMovementPlanning() {
+        cancelledPlanning += 1;
+      }
+    },
+    planAbilityMovement() {
+      return planning;
+    },
+    async startMovementPlanningDrag() {
+      const committer = getAbilityRoutePlanCommitter(this);
+      assert.equal(typeof committer, "function");
+      void committer({
+        options: {
+          movement: {
+            [tokenDocument.id]: nativePlan
+          }
+        }
+      });
+      resolvePlanning(nativePlan);
+      return true;
+    },
+    findMovementPath: waypoints => ({ result: waypoints }),
+    measureMovementPath: () => ({ distance: 1, cost: 0 })
+  };
+  tokenDocument.object = tokenObject;
+  const planAuthority = {
+    async retain() {
+      retainStarted();
+      return retained;
+    },
+    async release() {
+      releases += 1;
+      return true;
+    }
+  };
+
+  installGlobal("Hooks", { callAll() {} });
+  installGlobal("window", eventTarget);
+  installGlobal("document", eventTarget);
+  installGlobal("game", {
+    user: { id: "user" },
+    i18n: { lang: "ru" }
+  });
+  installGlobal("ui", {
+    notifications: {
+      info() {},
+      warn() {}
+    }
+  });
+  installGlobal("canvas", {
+    app: { view: eventTarget },
+    stage: {
+      on() {},
+      off() {}
+    },
+    grid: {
+      isGridless: false,
+      units: "м"
+    },
+    mouseInteractionManager: {
+      cancel() {}
+    },
+    canvasCoordinatesFromClient: point => point
+  });
+
+  try {
+    const routePromise = requestAbilityMovementRoute({
+      token: tokenObject,
+      planAuthority
+    });
+    await retainStartedPromise;
+    replacementSession = startCanvasTargetSelectionSession({ kind: "replacement" });
+    resolveRetain({ plan: nativePlan });
+
+    const result = await routePromise;
+    assert.equal(result.cancelled, true);
+    assert.equal(result.failed, false);
+    assert.equal(result.reason, "targetSelectionCancelled");
+    assert.equal(cancelledPlanning, 1);
+    assert.equal(releases, 1);
+    assert.equal(replacementSession.active, true);
+  } finally {
+    replacementSession?.finish();
+    for (const [key, descriptor] of previousGlobals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
   }
 });
 

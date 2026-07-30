@@ -94,7 +94,11 @@ export async function runSequentialMassTreatment({
       const instrumentId = String(selection?.instrumentId ?? selection?.id ?? "").trim();
       if (!instrumentId) {
         summary.skipped += 1;
-        addSummaryReason(summary, `Нет подходящего выбранного инструмента: ${treatment.name ?? treatmentId}.`);
+        addSummaryReason(
+          summary,
+          selection?.reason
+            || `Нет подходящего выбранного инструмента: ${treatment.name ?? treatmentId}.`
+        );
         return;
       }
 
@@ -188,9 +192,8 @@ function isIncompleteTreatment(treatment) {
 function isPotentialLimbHealthTarget(limb, actorType = "") {
   if (String(actorType ?? "") === "construct") return false;
   if (limb?.missing || limb?.prosthesis) return false;
-  const value = Number.parseInt(limb?.value, 10) || 0;
-  const maximum = Math.max(0, Number.parseInt(limb?.max, 10) || 0);
-  return value < maximum;
+  if (limb?.treatable === false) return false;
+  return isIncompleteTreatment(limb);
 }
 
 function addSummaryReason(summary, reason) {

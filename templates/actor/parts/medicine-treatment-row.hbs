@@ -6,6 +6,7 @@
     <strong>{{name}}</strong>
     {{#each sources}}<small>{{summary}}</small>{{/each}}
     {{#if unavailableReason}}<small class="fallout-maw-treatment-unavailable">{{unavailableReason}}</small>{{/if}}
+    {{#unless treatmentSkillThresholdMet}}<small class="fallout-maw-treatment-unavailable">{{treatmentSkillRequirement}}</small>{{/unless}}
   </div>
   <div class="fallout-maw-action-cell"><strong>{{progressValue}} / {{progressMax}}</strong></div>
   <div class="fallout-maw-action-cell"><strong>{{healingToolClass}}</strong></div>
@@ -42,7 +43,7 @@
     <div class="fallout-maw-action-cell"><small>{{skillRequirement}}</small></div>
     <div class="fallout-maw-action-cell fallout-maw-action-cell--button">
       <button type="button" data-action="treatWithInstrument" data-treatment-type="{{../type}}" data-treatment-id="{{../id}}" data-instrument-id="{{id}}" {{#unless usable}}disabled{{/unless}}>
-        Лечить
+        Выбрать
       </button>
     </div>
   </div>

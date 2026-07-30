@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("../src/apps/repair-dialog.mjs", import.meta.url), "utf8");
+const template = await readFile(
+  new URL("../templates/actor/repair-dialog.hbs", import.meta.url),
+  "utf8"
+);
 
 function sliceFunction(name) {
   const match = new RegExp(`^(?:async\\s+)?function\\s+${name}\\s*\\(`, "m").exec(source);
@@ -70,16 +74,44 @@ test("mass repair selects tool groups and policies, then runs as one sequential 
   assert.match(prompt, /name="qualityMode"[\s\S]*value="matched"[\s\S]*value="best"/);
   assert.match(prompt, /name="supplyMode"[\s\S]*value="depleted"[\s\S]*value="balanced"/);
   assert.match(prompt, /modal:\s*true/);
-  assert.match(prompt, /return false/);
+  assert.match(prompt, /render:\s*\(_event,\s*dialog\)\s*=>\s*bindMassOperationDialogSubmitState/);
+  assert.match(prompt, /getMassOperationDialogSelectionState\(form/);
+  assert.doesNotMatch(prompt, /return false/);
   assert.match(client, /requestRepairResolution\("performMassRepair"/);
   assert.doesNotMatch(client, /performRepair\(/);
   assert.match(authority, /chooseBestRepairOption/);
+  assert.match(authority, /const currentAvailability = getMassRepairAvailability\(/);
+  assert.match(authority, /if\s*\(\s*!currentAvailability\.ok\s*\)\s*throw new Error\(currentAvailability\.message\)/);
   assert.match(authority, /resolveRepairOnAuthority/);
   assert.doesNotMatch(authority, /runRepairLifecycle|withSystemEventRoot/);
   assert.doesNotMatch(resolver, /runWithRepairAuthorityLocks/);
   assert.match(authority, /buildTargetContext\(targetActor, targetToken, contextToolKey\)/);
   assert.match(emitter, /fallout-maw\.repair\.batch\.resolved/);
   assert.doesNotMatch(authority, /postRepairResultChat|postRepairChat/);
+});
+
+test("mass repair remains selectable for damaged targets and explains unavailable tools", () => {
+  const prompt = sliceFunction("promptMassRepairOptions");
+  const availability = sliceFunction("getMassRepairAvailability");
+
+  assert.match(source, /hasRepairableItems:\s*items\.length\s*>\s*0/);
+  assert.doesNotMatch(source, /hasRepairableItems:\s*items\.some\([^)]*usableInstrumentCount/);
+  assert.match(prompt, /const availability = getMassRepairAvailability\(/);
+  assert.match(prompt, /if\s*\(\s*!availability\.ok\s*\)/);
+  assert.match(prompt, /ui\.notifications\.warn\(availability\.message\)/);
+  assert.match(availability, /analyzeMassRepairToolAvailability\(\{/);
+  assert.match(availability, /getRepairSkillThreshold\(/);
+});
+
+test("repair target opens tool selection while the selected instrument says choose", () => {
+  assert.match(
+    template,
+    /data-action="startRepair"[\s\S]*?\{\{#if active\}\}Скрыть\{\{else\}\}Ремонт\{\{\/if\}\}/
+  );
+  assert.match(
+    template,
+    /data-action="repairWithInstrument"[\s\S]*?>\s*Выбрать\s*<\/button>/
+  );
 });
 
 test("broken tool functions never enter repair selection", () => {

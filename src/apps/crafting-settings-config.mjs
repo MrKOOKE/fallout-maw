@@ -40,6 +40,7 @@ export class CraftingSettingsConfig extends FalloutMaWFormApplicationV2 {
       settings: this.settings,
       craftModeChoices: createModeChoices(this.settings.craft.mode),
       repairModeChoices: createModeChoices(this.settings.repair.mode),
+      medicineModeChoices: createModeChoices(this.settings.medicine.mode),
       craftSkillChecks: this.settings.craft.mode === CRAFTING_RESOLUTION_MODES.skillChecks,
       repairSkillChecks: this.settings.repair.mode === CRAFTING_RESOLUTION_MODES.skillChecks
     };

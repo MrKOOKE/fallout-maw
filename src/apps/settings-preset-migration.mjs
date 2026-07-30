@@ -12,6 +12,7 @@ const APP_SETTINGS = Object.freeze({
   AbilitySettingsConfig: ["abilitiesCatalog"],
   TraumaSettingsConfig: ["traumaSettings"],
   DiseaseSettingsConfig: ["diseaseSettings"],
+  CraftingSettingsConfig: ["craftingSettings"],
   ToolSettingsConfig: ["toolSettings"],
   SystemActionSettingsConfig: ["systemActionSettings"],
   StealthSettingsConfig: ["stealthSettings"],

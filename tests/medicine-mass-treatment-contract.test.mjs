@@ -10,6 +10,10 @@ const medicineTemplate = await readFile(
   new URL("../templates/actor/medicine-dialog.hbs", import.meta.url),
   "utf8"
 );
+const treatmentRowTemplate = await readFile(
+  new URL("../templates/actor/parts/medicine-treatment-row.hbs", import.meta.url),
+  "utf8"
+);
 
 function collectNamedFunctions(source) {
   const matches = [...source.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)];
@@ -71,7 +75,50 @@ test("mass-treatment prompt selects categories and tool policies, never concrete
   assert.match(prompt, /name="supplyMode"\s+value="balanced"/);
   assert.doesNotMatch(prompt, /name="instrument"/);
   assert.doesNotMatch(prompt, /selectedInstrumentIds/);
-  assert.match(prompt, /return false;[\s\S]*?allowedToolGroupKeys/);
+  assert.match(prompt, /render:\s*\(_event,\s*dialog\)\s*=>\s*bindMassOperationDialogSubmitState/);
+  assert.match(prompt, /getMassOperationDialogSelectionState\(form/);
+  assert.doesNotMatch(prompt, /return false/);
+});
+
+test("mass medicine stays clickable for real targets and explains unavailable tools", () => {
+  const targetGate = sliceFunction("hasMassTreatmentTargets");
+  const prompt = sliceFunction("promptMassTreatmentOptions");
+  const availability = sliceFunction("getMassTreatmentAvailability");
+  const authority = sliceFunction("resolveMassTreatmentOnAuthorityOperation");
+
+  assert.match(targetGate, /counts\.traumas\s*\+\s*counts\.limbHealth\s*>\s*0/);
+  assert.doesNotMatch(targetGate, /instrument/);
+  assert.match(prompt, /const availability = getMassTreatmentAvailability\(/);
+  assert.match(prompt, /ui\.notifications\.warn\(availability\.message\)/);
+  assert.match(availability, /analyzeMedicineToolAvailability\(\{/);
+  assert.match(authority, /if\s*\(\s*!availability\.ok\s*\)\s*throw new Error\(availability\.message\)/);
+});
+
+test("a medical target opens selection while the instrument action says choose", () => {
+  assert.match(
+    treatmentRowTemplate,
+    /data-action="startTreatment"[\s\S]*?\{\{#if active\}\}Скрыть\{\{else\}\}Лечение\{\{\/if\}\}/
+  );
+  assert.match(
+    treatmentRowTemplate,
+    /data-action="treatWithInstrument"[\s\S]*?>\s*Выбрать\s*<\/button>/
+  );
+});
+
+test("medicine threshold mode covers treatment, implant and prosthesis authority paths", () => {
+  const checks = sliceFunction("runTreatmentChecks");
+  const implant = sliceFunction("resolveImplantInstallationOnAuthorityLocked");
+  const prosthesis = sliceFunction("resolveProsthesisInstallationOnAuthorityLocked");
+  const commit = sliceFunction("commitTreatmentToActors");
+
+  assert.match(checks, /resolveMedicineSkillAction\(/);
+  assert.match(checks, /resolvedSkill\.resultLabel/);
+  assert.match(implant, /resolveMedicineSkillAction\(/);
+  assert.match(implant, /skillResolution\.outcome/);
+  assert.match(prosthesis, /resolveMedicineSkillAction\(/);
+  assert.match(prosthesis, /skillResolution\.outcome/);
+  assert.match(commit, /getMedicineResolutionMode\(\)\s*!==\s*expectedMedicineMode/);
+  assert.match(commit, /const authoritativeSkill = getMedicineSkillResolution\(/);
 });
 
 test("mass-treatment socket sends one intent and the GM rebuilds every outcome", () => {

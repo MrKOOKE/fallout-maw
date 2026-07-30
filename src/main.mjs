@@ -10,6 +10,7 @@ import { registerTrapHooks } from "./canvas/traps.mjs";
 import { registerLightNetworkHooks, registerLightNetworkSocket } from "./canvas/light-networks.mjs";
 import { registerActorContainerHooks, registerActorContainerSocket } from "./canvas/actor-containers.mjs";
 import { registerMovementInterruptionHooks } from "./canvas/movement-interruptions.mjs";
+import { registerCanvasTargetSelectionLifecycleHooks } from "./canvas/target-selection-lifecycle.mjs";
 import {
   registerPeriodicDamageRegionHooks,
   syncPeriodicDamageRegionEffects
@@ -183,6 +184,7 @@ Hooks.once("init", () => {
   registerCoverHooks();
   registerTokenEquipmentHudHooks();
   registerMovementInterruptionHooks();
+  registerCanvasTargetSelectionLifecycleHooks();
   registerPeriodicDamageRegionHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();

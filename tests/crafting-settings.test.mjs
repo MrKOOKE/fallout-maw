@@ -20,6 +20,10 @@ const repairSource = await readFile(
   new URL("../src/apps/repair-dialog.mjs", import.meta.url),
   "utf8"
 );
+const medicineSource = await readFile(
+  new URL("../src/apps/medicine-dialog.mjs", import.meta.url),
+  "utf8"
+);
 const settingsTemplate = await readFile(
   new URL("../templates/settings/crafting-settings-config.hbs", import.meta.url),
   "utf8"
@@ -36,6 +40,9 @@ test("crafting settings defaults preserve skill checks and requested failure ref
       mode: CRAFTING_RESOLUTION_MODES.skillChecks,
       failureToolCostIncreasePercent: 100,
       criticalFailureToolCostIncreasePercent: 0
+    },
+    medicine: {
+      mode: CRAFTING_RESOLUTION_MODES.skillChecks
     }
   });
 });
@@ -51,6 +58,9 @@ test("crafting settings normalization accepts both modes and clamps percentages"
       mode: CRAFTING_RESOLUTION_MODES.skillThreshold,
       failureToolCostIncreasePercent: 1200,
       criticalFailureToolCostIncreasePercent: "250"
+    },
+    medicine: {
+      mode: CRAFTING_RESOLUTION_MODES.skillThreshold
     }
   }), {
     craft: {
@@ -62,11 +72,25 @@ test("crafting settings normalization accepts both modes and clamps percentages"
       mode: CRAFTING_RESOLUTION_MODES.skillThreshold,
       failureToolCostIncreasePercent: 1000,
       criticalFailureToolCostIncreasePercent: 250
+    },
+    medicine: {
+      mode: CRAFTING_RESOLUTION_MODES.skillThreshold
     }
   });
 
   assert.equal(isSkillThresholdMode(CRAFTING_RESOLUTION_MODES.skillThreshold), true);
   assert.equal(isSkillThresholdMode("unknown"), false);
+});
+
+test("legacy craft and repair settings gain the default medicine mode", () => {
+  const normalized = normalizeCraftingSettings({
+    craft: { mode: CRAFTING_RESOLUTION_MODES.skillThreshold },
+    repair: { mode: CRAFTING_RESOLUTION_MODES.skillThreshold }
+  });
+
+  assert.deepEqual(normalized.medicine, {
+    mode: CRAFTING_RESOLUTION_MODES.skillChecks
+  });
 });
 
 test("craft failure refunds use critical failure priority and whole-item rounding", () => {
@@ -89,7 +113,7 @@ test("repair failure settings increase total tool cost", () => {
   assert.equal(getRepairToolCostMultiplier(settings, "criticalFailure"), 1);
 });
 
-test("craft and repair runtime contracts include threshold mode and configured failure consequences", () => {
+test("craft, repair and medicine runtime contracts include threshold mode", () => {
   assert.match(craftSource, /getUnmetCraftSkillThreshold/);
   assert.match(craftSource, /resultKey:\s*"skillThreshold"/);
   assert.match(craftSource, /calculateCraftConsumedQuantity/);
@@ -99,11 +123,18 @@ test("craft and repair runtime contracts include threshold mode and configured f
   assert.match(repairSource, /isSkillThresholdMode\(craftingSettings\.repair\.mode\)/);
   assert.match(repairSource, /навык соответствует порогу/);
   assert.match(repairSource, /getRepairToolCostMultiplier/);
+
+  assert.match(medicineSource, /getMedicineSkillResolution/);
+  assert.match(medicineSource, /resolveMedicineSkillAction/);
+  assert.match(medicineSource, /resolveImplantInstallationOnAuthorityLocked/);
+  assert.match(medicineSource, /resolveProsthesisInstallationOnAuthorityLocked/);
+  assert.match(medicineSource, /expectedMedicineMode/);
 });
 
 test("crafting settings template conditionally groups skill-check-only options", () => {
   assert.match(settingsTemplate, /name="craft\.mode"/);
   assert.match(settingsTemplate, /name="repair\.mode"/);
+  assert.match(settingsTemplate, /name="medicine\.mode"/);
   assert.match(settingsTemplate, /data-crafting-check-options="craft"/);
   assert.match(settingsTemplate, /data-crafting-check-options="repair"/);
   assert.match(settingsTemplate, /craft\.failureRefundPercent/);

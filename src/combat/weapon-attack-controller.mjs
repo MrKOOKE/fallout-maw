@@ -159,7 +159,10 @@ import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { emitWeaponAttackCheckResolved } from "../events/foundry-compatibility-events.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
 import { requestCustomTokenSelection } from "../canvas/custom-token-selection.mjs";
-import { startCanvasTargetSelectionSession } from "../canvas/target-selection-lifecycle.mjs";
+import {
+  getActiveCanvasTargetSelectionSession,
+  startCanvasTargetSelectionSession
+} from "../canvas/target-selection-lifecycle.mjs";
 import { createLatestFrameScheduler } from "../canvas/latest-frame-scheduler.mjs";
 import { getActiveUseOperationId } from "../abilities/active-use-runtime.mjs";
 import { planInventoryItemConsumption } from "../inventory/consume.mjs";
@@ -600,27 +603,50 @@ export function startWeaponAttack({
   return activeAttack;
 }
 
+function suspendWeaponAttackForNestedSelection(controller = activeAttack) {
+  if (!controller || controller.destroyed) return null;
+  if (!controller.suspendForNestedTargetSelection()) return null;
+  if (activeAttack === controller) activeAttack = null;
+  return controller;
+}
+
+function restoreWeaponAttackAfterNestedSelection(controller = null) {
+  if (!controller || controller.destroyed || activeAttack) return false;
+  if (getActiveCanvasTargetSelectionSession()) {
+    // A newer user interaction owns the canvas. The older attack must not
+    // reclaim it after an asynchronous nested attack completes.
+    if (!controller.processing) controller.destroy();
+    return false;
+  }
+  activeAttack = controller;
+  if (controller.resumeFromNestedTargetSelection()) return true;
+  if (activeAttack === controller) activeAttack = null;
+  if (!controller.processing && !controller.destroyed) controller.destroy();
+  return false;
+}
+
 export function startWeaponAttackAndWait(options = {}) {
   const timeoutMs = Math.max(1000, Math.trunc(Number(options?.timeoutMs) || 120000));
   return new Promise(resolve => {
     let completed = false;
     let timeoutId = null;
-    const suspendedAttack = options?.suspendActiveAttack ? activeAttack : null;
-    if (suspendedAttack) {
-      suspendedAttack.suppressPreview();
-      activeAttack = null;
-    }
+    const suspendedAttack = options?.suspendActiveAttack
+      ? suspendWeaponAttackForNestedSelection()
+      : null;
     const restoreSuspendedAttack = () => {
-      if (!suspendedAttack || suspendedAttack.destroyed || activeAttack) return;
-      activeAttack = suspendedAttack;
-      if (!suspendedAttack.processing && !suspendedAttack.finishRequested) suspendedAttack.resumePreview();
+      restoreWeaponAttackAfterNestedSelection(suspendedAttack);
     };
     const finish = value => {
       if (completed) return;
       completed = true;
       if (timeoutId) window.clearTimeout(timeoutId);
-      restoreSuspendedAttack();
-      resolve(Boolean(value));
+      // WeaponAttackController invokes onDestroy before it detaches its canvas
+      // handlers. Resume on the next microtask so the old controller never
+      // captures the nested controller's context-menu callback.
+      Promise.resolve().then(() => {
+        restoreSuspendedAttack();
+        resolve(Boolean(value));
+      });
     };
     const onProcessingStarted = payload => {
       if (timeoutId) window.clearTimeout(timeoutId);
@@ -636,7 +662,6 @@ export function startWeaponAttackAndWait(options = {}) {
       )
     });
     if (!controller) {
-      restoreSuspendedAttack();
       return finish(false);
     }
     timeoutId = window.setTimeout(() => {
@@ -787,7 +812,7 @@ async function executeAbilityAttackTargetSequence({
       context: "ability attack selected-target range"
     }
   ));
-  const targetRows = collectAbilityAttackTargetSelectionRows({
+  const collectTargetRows = () => collectAbilityAttackTargetSelectionRows({
     token,
     item,
     abilityFunction,
@@ -795,12 +820,14 @@ async function executeAbilityAttackTargetSequence({
     maxRangeMeters
   });
   const selectedRows = await requestCustomTokenSelection({
-    rows: targetRows,
+    rows: collectTargetRows(),
     limit,
     allowRepeated: allowRepeatedTargets,
     title: label,
     noneWarning: `${label}: нет доступных целей в пределах ${formatAbilityAttackRange(maxRangeMeters)}.`,
     instructions: `${label}: выберите до ${limit} целей в пределах ${formatAbilityAttackRange(maxRangeMeters)}. Enter подтверждает неполный выбор, ПКМ снимает последнюю цель, Esc отменяет.`,
+    sourceToken: token,
+    refreshRows: collectTargetRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? ""),
     getRowLabel: row => String(row?.token?.name ?? row?.token?.actor?.name ?? "Цель")
   });
@@ -1589,10 +1616,17 @@ class CommandedWeaponAttackController {
     for (const entry of this.entries) {
       setWeaponNoisePreview(entry.token, entry.noisePreviewSourceId, entry.noiseLevel);
     }
-    this.targetSelectionSession = startCanvasTargetSelectionSession({
+    const session = startCanvasTargetSelectionSession({
       kind: "commandedWeaponAttacks",
       controller: this
+    }, {
+      onCancel: outcome => this.cancelFromTargetSelectionLifecycle(outcome)
     });
+    this.targetSelectionSession = session;
+    if (session.finished || this.destroyed) {
+      this.targetSelectionSession = null;
+      return;
+    }
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     document.addEventListener("keydown", this.events.keyDown, { capture: true });
@@ -1602,6 +1636,18 @@ class CommandedWeaponAttackController {
     this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     if (canvasView) canvasView.oncontextmenu = this.events.cancel;
     ui.notifications.info(`${this.label}: ЛКМ фиксирует лучи; после последнего атака начнётся автоматически. ПКМ размораживает последний, Esc отменяет.`);
+  }
+
+  cancelFromTargetSelectionLifecycle(outcome = {}) {
+    this.targetSelectionSession = null;
+    this.targetSelectionOutcome = {
+      ...outcome,
+      cancelled: true
+    };
+    if (activeCommandedAttack === this) activeCommandedAttack = null;
+    if (this.destroyed) return;
+    this.destroy();
+    this.onCancelled?.();
   }
 
   destroy() {
@@ -2619,11 +2665,10 @@ export async function executeWeaponAttackAgainstToken({
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
   if (isWeaponActionBlocked(attackerToken.actor, actionKey)) return false;
   if (isWeaponPlacementDisabled(attackerToken.actor, weapon)) return false;
-  const suspendedAttack = suspendActiveAttack ? activeAttack : null;
-  if (suspendedAttack) {
-    suspendedAttack.suppressPreview();
-    activeAttack = null;
-  } else if (activeAttack && !cancelWeaponAttack({ ignoreReactionLock })) {
+  const suspendedAttack = suspendActiveAttack
+    ? suspendWeaponAttackForNestedSelection()
+    : null;
+  if (!suspendedAttack && activeAttack && !cancelWeaponAttack({ ignoreReactionLock })) {
     return false;
   }
   const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId, attackModifier, {
@@ -2638,10 +2683,7 @@ export async function executeWeaponAttackAgainstToken({
     suppressGenericEventReactions
   });
   if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) {
-    if (suspendedAttack && !suspendedAttack.destroyed && !activeAttack) {
-      activeAttack = suspendedAttack;
-      if (!suspendedAttack.processing && !suspendedAttack.finishRequested) suspendedAttack.resumePreview();
-    }
+    restoreWeaponAttackAfterNestedSelection(suspendedAttack);
     return false;
   }
   try {
@@ -2654,10 +2696,7 @@ export async function executeWeaponAttackAgainstToken({
   } finally {
     if (activeAttack === controller) activeAttack = null;
     controller.destroy();
-    if (suspendedAttack && !suspendedAttack.destroyed && !activeAttack) {
-      activeAttack = suspendedAttack;
-      if (!suspendedAttack.processing && !suspendedAttack.finishRequested) suspendedAttack.resumePreview();
-    }
+    restoreWeaponAttackAfterNestedSelection(suspendedAttack);
   }
 }
 
@@ -2741,11 +2780,7 @@ export async function startConstrainedAimedAttackSelection({
   if (!normalizedActionKey || !isAttackSource(weapon, weaponFunctionId) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
   if (isWeaponActionBlocked(attackerToken.actor, normalizedActionKey)) return false;
   if (isWeaponPlacementDisabled(attackerToken.actor, weapon)) return false;
-  const suspendedAttack = activeAttack;
-  if (suspendedAttack) {
-    suspendedAttack.suppressPreview();
-    activeAttack = null;
-  }
+  const suspendedAttack = suspendWeaponAttackForNestedSelection();
 
   return new Promise(resolve => {
     let completed = false;
@@ -2754,11 +2789,13 @@ export async function startConstrainedAimedAttackSelection({
       if (completed) return;
       completed = true;
       if (timeoutId) window.clearTimeout(timeoutId);
-      if (suspendedAttack && !suspendedAttack.destroyed && (!activeAttack || activeAttack === controller)) {
-        activeAttack = suspendedAttack;
-        if (!suspendedAttack.processing && !suspendedAttack.finishRequested) suspendedAttack.resumePreview();
-      }
-      resolve(Boolean(value));
+      Promise.resolve().then(() => {
+        if (!activeAttack || activeAttack === controller) {
+          if (activeAttack === controller) activeAttack = null;
+          restoreWeaponAttackAfterNestedSelection(suspendedAttack);
+        }
+        resolve(Boolean(value));
+      });
     };
     const controller = new WeaponAttackController(attackerToken, weapon, normalizedActionKey, weaponFunctionId, attackModifier, {
       chainRef,
@@ -3103,6 +3140,8 @@ class WeaponAttackController {
     this.rightClickCancelCandidate = null;
     this.targetSelectionSession = null;
     this.targetSelectionOutcome = null;
+    this.nestedTargetSelectionSuspended = false;
+    this.interactiveHandlersAttached = false;
     this.previousViewContextMenu = null;
     this.autoCoverActorUuids = new Set();
     this.lastAutoCoverSignature = "";
@@ -3140,16 +3179,38 @@ class WeaponAttackController {
   }
 
   activate() {
+    if (this.destroyed) return false;
     this.attachPreview();
     this.syncWeaponNoisePreview();
     if (isWhirlwindAttackModifier(this.attackModifier)) this.pointer = getTokenAimPoint(this.token);
-    this.targetSelectionSession = startCanvasTargetSelectionSession({
+    if (!this.startTargetSelectionLifecycle()) return false;
+    this.attachInteractiveHandlers();
+    return true;
+  }
+
+  startTargetSelectionLifecycle({ supersede = true } = {}) {
+    if (this.targetSelectionSession?.active) return true;
+    if (!supersede && getActiveCanvasTargetSelectionSession()) return false;
+    const session = startCanvasTargetSelectionSession({
       kind: "weaponAttack",
       controller: this,
       token: this.token,
       weapon: this.weapon,
       actionKey: this.actionKey
+    }, {
+      onCancel: outcome => this.cancelFromTargetSelectionLifecycle(outcome)
     });
+    this.targetSelectionSession = session;
+    if (session.finished || this.destroyed) {
+      this.targetSelectionSession = null;
+      return false;
+    }
+    return true;
+  }
+
+  attachInteractiveHandlers() {
+    if (this.interactiveHandlersAttached || this.destroyed) return false;
+    this.interactiveHandlersAttached = true;
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app.ticker.add(this.events.tick);
@@ -3157,6 +3218,58 @@ class WeaponAttackController {
     const canvasView = canvas.app?.view ?? null;
     this.previousViewContextMenu = canvasView?.oncontextmenu ?? null;
     if (canvasView) canvasView.oncontextmenu = this.events.cancel;
+    return true;
+  }
+
+  detachInteractiveHandlers() {
+    if (!this.interactiveHandlersAttached) return false;
+    this.interactiveHandlersAttached = false;
+    canvas.stage.off("mousemove", this.events.move);
+    document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
+    canvas.app?.ticker?.remove?.(this.events.tick);
+    Hooks.off("updateItem", this.events.itemUpdate);
+    const canvasView = canvas.app?.view ?? null;
+    if (canvasView?.oncontextmenu === this.events.cancel) canvasView.oncontextmenu = this.previousViewContextMenu;
+    this.previousViewContextMenu = null;
+    return true;
+  }
+
+  suspendForNestedTargetSelection() {
+    if (this.destroyed) return false;
+    if (this.nestedTargetSelectionSuspended) return true;
+    this.nestedTargetSelectionSuspended = true;
+    this.finishTargetSelection({
+      cancelled: false,
+      reason: "nestedSelectionSuspended"
+    });
+    this.detachInteractiveHandlers();
+    this.suppressPreview();
+    return true;
+  }
+
+  resumeFromNestedTargetSelection() {
+    if (!this.nestedTargetSelectionSuspended || this.destroyed || this.finishRequested) return false;
+    this.nestedTargetSelectionSuspended = false;
+    this.attachInteractiveHandlers();
+    if (this.processing) return true;
+    if (!this.startTargetSelectionLifecycle({ supersede: false })) {
+      this.detachInteractiveHandlers();
+      return false;
+    }
+    this.resumePreview();
+    return true;
+  }
+
+  cancelFromTargetSelectionLifecycle(outcome = {}) {
+    this.targetSelectionSession = null;
+    this.targetSelectionOutcome = {
+      ...outcome,
+      cancelled: true
+    };
+    if (activeAttack === this) activeAttack = null;
+    activeDualWeaponAttack?.destroy();
+    activeDualWeaponAttack = null;
+    this.destroy();
   }
 
   attachPreview() {
@@ -3862,8 +3975,12 @@ class WeaponAttackController {
       return true;
     }
     if (refresh) {
-      this.syncWeaponNoisePreview();
-      this.refresh(true);
+      if (!this.startTargetSelectionLifecycle({ supersede: false })) {
+        if (activeAttack === this) activeAttack = null;
+        this.destroy();
+        return true;
+      }
+      this.resumePreview();
     }
     return false;
   }
@@ -4227,13 +4344,7 @@ class WeaponAttackController {
     }
     clearAttackAutoCoverSync(this.attackId);
     this.autoCoverActorUuids.clear();
-    canvas.stage.off("mousemove", this.events.move);
-    document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
-    canvas.app?.ticker?.remove?.(this.events.tick);
-    Hooks.off("updateItem", this.events.itemUpdate);
-    const canvasView = canvas.app?.view ?? null;
-    if (canvasView?.oncontextmenu === this.events.cancel) canvasView.oncontextmenu = this.previousViewContextMenu;
-    this.previousViewContextMenu = null;
+    this.detachInteractiveHandlers();
     this.removeLimbMenu();
     this.removeChanceMenu();
     this.clearBurstTargetPreviewTimer();
@@ -4524,11 +4635,14 @@ class WeaponAttackController {
     return true;
   }
 
-  finishTargetSelection({ cancelled = false } = {}) {
+  finishTargetSelection({ cancelled = false, ...outcome } = {}) {
     const session = this.targetSelectionSession;
     if (!session) return false;
     this.targetSelectionSession = null;
-    this.targetSelectionOutcome = { cancelled: Boolean(cancelled) };
+    this.targetSelectionOutcome = {
+      ...outcome,
+      cancelled: Boolean(cancelled)
+    };
     return session.finish(this.targetSelectionOutcome);
   }
 
@@ -13814,7 +13928,7 @@ function getFoundryDragResistance() {
 }
 
 function getAttackPreviewLayer() {
-  return canvas.controls._rulerPaths;
+  return canvas.interface ?? canvas.tokens ?? canvas.stage;
 }
 
 export async function spendWeaponReloadActionPoints(actor, weapon, weaponFunctionId = "") {

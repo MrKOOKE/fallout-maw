@@ -24,8 +24,13 @@ import {
   normalizeToolSelectionPolicy,
   selectToolByPolicy
 } from "../utils/tool-selection-policy.mjs";
+import { analyzeMassRepairToolAvailability } from "../utils/repair-tool-availability.mjs";
 import { withSystemEventRoot } from "../events/dispatcher.mjs";
 import { runTerminalSystemEventWorkflow } from "../utils/system-event-workflow.mjs";
+import {
+  bindMassOperationDialogSubmitState,
+  getMassOperationDialogSelectionState
+} from "./mass-operation-dialog-state.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const REPAIR_SOCKET = `system.${SYSTEM_ID}`;
@@ -142,7 +147,7 @@ class RepairDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       targetToken: this.#targetToken,
       toolLabel: getToolSettings().find(tool => tool.key === this.#toolKey)?.label ?? this.#toolKey,
       items,
-      hasRepairableItems: items.some(item => item.usableInstrumentCount > 0),
+      hasRepairableItems: items.length > 0,
       fallbackIcon: "icons/svg/item-bag.svg"
     };
   }
@@ -324,6 +329,7 @@ function prepareRepairInstruments(actor, fallbackToolKey = "repair") {
             supplyMax: toInteger(data.supply?.max),
             skillValue,
             skillLabel,
+            actorSkillValue,
             skillRequirement: skillKey ? `${skillValue} ${skillLabel}` : "Без навыка",
             hasSkill: Boolean(skillKey),
             requirementMet
@@ -375,11 +381,12 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
     return null;
   }
 
-  const groups = groupToolSelectionOptions(collectMassRepairInstrumentOptions(sourceActor, targetContext));
-  if (!groups.length) {
-    ui.notifications.warn("Нет подходящих инструментов для массового ремонта.");
+  const availability = getMassRepairAvailability(sourceActor, targetContext);
+  if (!availability.ok) {
+    ui.notifications.warn(availability.message);
     return null;
   }
+  const groups = groupToolSelectionOptions(availability.instruments);
 
   const rows = groups.map(group => `
     <label class="fallout-maw-mass-operation-instrument">
@@ -424,17 +431,19 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
       title: "Массовый ремонт"
     },
     content,
+    render: (_event, dialog) => bindMassOperationDialogSubmitState(dialog),
     ok: {
       label: "Начать ремонт",
       icon: "fa-solid fa-screwdriver-wrench",
       callback: (_event, button) => {
         const form = button.form;
+        const selectionState = getMassOperationDialogSelectionState(form);
         const allowedToolGroupKeys = Array.from(form.querySelectorAll("input[name='toolGroup']:checked"))
           .map(input => String(input.value ?? ""))
           .filter(Boolean);
-        if (!allowedToolGroupKeys.length) {
+        if (!selectionState.hasToolGroupSelection || !allowedToolGroupKeys.length) {
           ui.notifications.warn("Выберите хотя бы одну группу инструментов.");
-          return false;
+          return "cancel";
         }
         return {
           qualityMode: String(form.querySelector("input[name='qualityMode']:checked")?.value ?? "matched"),
@@ -455,20 +464,30 @@ async function promptMassRepairOptions({ sourceActor, targetContext, toolKey = "
 }
 
 function collectMassRepairInstrumentOptions(sourceActor, targetContext) {
-  return prepareRepairInstruments(sourceActor)
-    .filter(instrument => instrument.supplyValue > 0 && instrument.requirementMet)
-    .filter(instrument => targetContext.items.some(item => (
-      item.recoveryMethods ?? []
-    ).some(method => (
-      method.toolKey === instrument.toolKey
-      && isToolClassAccepted(instrument.toolClass, method.toolClass)
-      && getRepairSkillThreshold(sourceActor, method, item.conditionValue).met
-    ))))
+  return getMassRepairAvailability(sourceActor, targetContext).instruments
     .sort((left, right) => (
       toToolClassRank(right.toolClass) - toToolClassRank(left.toolClass)
       || right.supplyValue - left.supplyValue
       || left.name.localeCompare(right.name)
     ));
+}
+
+function getMassRepairAvailability(sourceActor, targetContext) {
+  const requirements = (targetContext?.items ?? []).flatMap(item => (
+    item.recoveryMethods ?? []
+  ).map((method, methodIndex) => ({
+    itemId: String(item.id ?? ""),
+    itemName: String(item.name ?? ""),
+    methodIndex,
+    toolKey: String(method.toolKey ?? ""),
+    toolLabel: String(method.toolLabel ?? method.toolKey ?? ""),
+    toolClass: String(method.toolClass ?? "D"),
+    skillThreshold: getRepairSkillThreshold(sourceActor, method, item.conditionValue)
+  })));
+  return analyzeMassRepairToolAvailability({
+    instruments: prepareRepairInstruments(sourceActor),
+    requirements
+  });
 }
 
 async function performMassRepair({
@@ -1157,9 +1176,11 @@ async function resolveMassRepairOnAuthorityOperation({
   if (!policy.allowedToolGroupKeys.length) throw new Error("Выберите хотя бы одну группу инструментов.");
 
   const initialContext = buildTargetContext(targetActor, targetToken, contextToolKey);
-  const compatibleGroups = new Set(groupToolSelectionOptions(
-    collectMassRepairInstrumentOptions(sourceActor, initialContext)
-  ).map(group => group.key));
+  const currentAvailability = getMassRepairAvailability(sourceActor, initialContext);
+  if (!currentAvailability.ok) throw new Error(currentAvailability.message);
+  const compatibleGroups = new Set(
+    groupToolSelectionOptions(currentAvailability.instruments).map(group => group.key)
+  );
   if (!policy.allowedToolGroupKeys.some(key => compatibleGroups.has(key))) {
     throw new Error("Выбранные группы инструментов больше недоступны.");
   }

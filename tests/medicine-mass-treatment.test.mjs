@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getMassTreatmentTargetCounts,
   normalizeMassTreatmentOptions,
   runSequentialMassTreatment
 } from "../src/apps/medicine-mass-treatment.mjs";
@@ -175,7 +176,24 @@ test("missing, prosthetic, healthy, and trauma-capped limbs never reach treatmen
 
   assert.deepEqual(calls, ["healable"]);
   assert.equal(result.summary.completedLimbs, 1);
-  assert.equal(result.summary.skipped, 1);
+  assert.equal(result.summary.skipped, 0);
+});
+
+test("a limb already at its trauma healing cap is not advertised as a mass target", () => {
+  const context = createContext({
+    traumas: [],
+    limbs: [createLimb("capped", 5, 10, {
+      healingCap: 5,
+      healingProgress: 5,
+      healingProgressMax: 5,
+      treatable: false
+    })]
+  });
+
+  assert.deepEqual(getMassTreatmentTargetCounts(context), {
+    traumas: 0,
+    limbHealth: 0
+  });
 });
 
 test("mass treatment is strictly sequential with maximum treatment concurrency of one", async () => {
@@ -290,6 +308,41 @@ test("a committed step without progress is guarded against an infinite retry", a
   assert.equal(result.summary.stopped, false);
   assert.equal(result.summary.charges, 1);
   assert.equal(result.summary.reasons.length, 1);
+});
+
+test("an unavailable instrument preserves its concrete reason and skips only that target", async () => {
+  const resolved = [];
+  const initialContext = createContext({
+    traumas: [
+      createTrauma("blocked", 0, 1),
+      createTrauma("available", 0, 1)
+    ],
+    limbs: []
+  });
+
+  const result = await runSequentialMassTreatment({
+    initialContext,
+    options: { includeTraumas: true },
+    chooseInstrument: ({ treatment }) => treatment.id === "blocked"
+      ? { reason: "Для использования «Аптечка» нужно 80 Доктор (сейчас 50)." }
+      : { instrumentId: "doctor-bag" },
+    resolveTreatment: async ({ targetContext, treatment }) => {
+      resolved.push(treatment.id);
+      return committedReceipt({
+        initialProgress: treatment.healingProgress,
+        finalProgress: treatment.healingProgressMax,
+        maxProgress: treatment.healingProgressMax,
+        targetContext: completeTreatment(targetContext, "trauma", treatment.id)
+      });
+    }
+  });
+
+  assert.deepEqual(resolved, ["available"]);
+  assert.equal(result.summary.skipped, 1);
+  assert.equal(result.summary.stopped, false);
+  assert.deepEqual(result.summary.reasons, [
+    "Для использования «Аптечка» нужно 80 Доктор (сейчас 50)."
+  ]);
 });
 
 test("a hard failure stops later work without discarding the completed summary", async () => {

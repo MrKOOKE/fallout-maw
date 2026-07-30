@@ -16,6 +16,11 @@ import {
 import { isActorUnableToAct } from "./reaction-hub.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
 import { isActorInActiveCombat } from "./combat-membership.mjs";
+import {
+  cancelActiveCanvasTargetSelection,
+  startCanvasTargetSelectionSession
+} from "../canvas/target-selection-lifecycle.mjs";
+import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
@@ -148,14 +153,22 @@ export async function startGrappleReposition(token) {
     return undefined;
   }
 
-  const candidates = getAdjacentTokenPositions(grapplerDocument, targetDocument)
-    .filter(position => validateTokenDestination(targetDocument, position, { ignoreIds: [grapplerDocument.id, targetDocument.id] }));
+  const collectCandidates = () => getAdjacentTokenPositions(grapplerDocument, targetDocument)
+    .filter(position => validateTokenDestination(
+      targetDocument,
+      position,
+      { ignoreIds: [grapplerDocument.id, targetDocument.id] }
+    ));
+  const candidates = collectCandidates();
   if (!candidates.length) {
     ui.notifications.warn(localizeHud("NoDragCell"));
     return undefined;
   }
 
-  const destination = await chooseTokenDestination(candidates, targetDocument);
+  const destination = await chooseTokenDestination(candidates, targetDocument, {
+    getCandidates: collectCandidates,
+    sourceTokenDocuments: [grapplerDocument, targetDocument]
+  });
   if (!destination) return undefined;
 
   const cost = getGrappleDragCost(grapplerDocument, targetDocument, destination);
@@ -245,22 +258,28 @@ export async function resolveKnockback({
 }
 
 async function startGrappleTargetSelection(grapplerDocument) {
-  const candidates = (canvas.tokens?.placeables ?? [])
+  const collectCandidates = () => (canvas.tokens?.placeables ?? [])
     .map(token => token.document)
     .filter(document => document?.id !== grapplerDocument.id && document.actor && areTokensAdjacent(grapplerDocument, document));
+  const candidates = collectCandidates();
   if (!candidates.length) {
     ui.notifications.warn(localizeHud("NoAdjacentGrappleTarget"));
     return undefined;
   }
-  const targetDocument = await chooseGrappleTarget(candidates, { restoreControlledToken: grapplerDocument });
+  const targetDocument = await chooseGrappleTarget(candidates, {
+    restoreControlledToken: grapplerDocument,
+    getCandidates: collectCandidates,
+    sourceTokenDocuments: [grapplerDocument]
+  });
   if (!targetDocument) return undefined;
   return requestAttemptGrapple(grapplerDocument, targetDocument);
 }
 
 async function startPushTargetSelection(attackerDocument) {
-  const candidates = (canvas.tokens?.placeables ?? [])
+  const collectCandidates = () => (canvas.tokens?.placeables ?? [])
     .map(token => token.document)
     .filter(document => document?.id !== attackerDocument.id && document.actor && areTokensAdjacent(attackerDocument, document));
+  const candidates = collectCandidates();
   if (!candidates.length) {
     ui.notifications.warn(localizeHud("NoAdjacentPushTarget"));
     return undefined;
@@ -268,7 +287,9 @@ async function startPushTargetSelection(attackerDocument) {
   const targetDocument = await chooseTokenTarget(candidates, {
     restoreControlledToken: attackerDocument,
     previewName: PUSH_TARGET_PREVIEW_NAME,
-    color: 0xff8f3d
+    color: 0xff8f3d,
+    getCandidates: collectCandidates,
+    sourceTokenDocuments: [attackerDocument]
   });
   if (!targetDocument) return undefined;
   if (!canSpendActionPoints(attackerDocument.actor, PUSH_ACTION_POINT_COST)) return undefined;
@@ -1015,21 +1036,51 @@ function getAdjacentTokenPositions(grapplerDocument, targetDocument) {
   });
 }
 
-function chooseTokenDestination(candidates = [], tokenDocument = null) {
+function chooseTokenDestination(candidates = [], tokenDocument = null, {
+  getCandidates = null,
+  sourceTokenDocuments = []
+} = {}) {
   const layer = getDragPreviewLayer();
   const graphics = new PIXI.Graphics();
   graphics.name = GRAPPLE_DRAG_PREVIEW_NAME;
-  if (tokenDocument) drawDestinationGridPreview(graphics, candidates, tokenDocument);
-  else drawDestinationPointPreview(graphics, candidates);
+  graphics.eventMode = "none";
+  graphics.interactive = false;
+  graphics.zIndex = Number.MAX_SAFE_INTEGER;
+  let currentCandidates = candidates;
+  const refreshPreview = () => {
+    currentCandidates = typeof getCandidates === "function"
+      ? (getCandidates() ?? [])
+      : currentCandidates;
+    graphics.clear();
+    if (tokenDocument) drawDestinationGridPreview(graphics, currentCandidates, tokenDocument);
+    else drawDestinationPointPreview(graphics, currentCandidates);
+  };
+  refreshPreview();
+  if (!layer?.addChild) {
+    graphics.destroy();
+    return Promise.resolve(null);
+  }
   layer.addChild(graphics);
   return chooseCanvasPoint({
     preview: graphics,
+    refreshPreview,
+    sourceTokenDocuments,
+    selectionKind: "grappleDestination",
     resolvePoint: point => {
       if (tokenDocument) {
-        const byRect = getNearestTokenDestination(candidates.filter(candidate => isPointInRect(point, getTokenRect(tokenDocument, candidate))), point, tokenDocument);
+        const byRect = getNearestTokenDestination(
+          currentCandidates.filter(candidate => isPointInRect(point, getTokenRect(tokenDocument, candidate))),
+          point,
+          tokenDocument
+        );
         if (byRect) return byRect;
       }
-      const destination = getNearestTokenDestination(candidates, point, tokenDocument, { includeDistance: true });
+      const destination = getNearestTokenDestination(
+        currentCandidates,
+        point,
+        tokenDocument,
+        { includeDistance: true }
+      );
       const step = getTokenGridStep(tokenDocument);
       if (!destination || destination.distance > Math.max(24, Math.min(step.x, step.y) * 0.5)) return undefined;
       return destination.candidate;
@@ -1127,30 +1178,50 @@ function getDestinationPreviewCells(candidates = [], tokenDocument) {
   return cells;
 }
 
-function chooseGrappleTarget(candidates = [], { restoreControlledToken = null } = {}) {
-  return chooseTokenTarget(candidates, { restoreControlledToken });
+function chooseGrappleTarget(candidates = [], options = {}) {
+  return chooseTokenTarget(candidates, options);
 }
 
 function chooseTokenTarget(candidates = [], {
   restoreControlledToken = null,
   previewName = GRAPPLE_TARGET_PREVIEW_NAME,
-  color = 0xffd166
+  color = 0xffd166,
+  getCandidates = null,
+  sourceTokenDocuments = []
 } = {}) {
   const layer = getDragPreviewLayer();
   const graphics = new PIXI.Graphics();
   graphics.name = previewName;
-  for (const candidate of candidates) {
-    const rect = getTokenRect(candidate);
-    graphics.lineStyle(3, color, 0.95);
-    graphics.beginFill(color, 0.16);
-    graphics.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
-    graphics.endFill();
+  graphics.eventMode = "none";
+  graphics.interactive = false;
+  graphics.zIndex = Number.MAX_SAFE_INTEGER;
+  let currentCandidates = candidates;
+  const refreshPreview = () => {
+    currentCandidates = typeof getCandidates === "function"
+      ? (getCandidates() ?? [])
+      : currentCandidates;
+    graphics.clear();
+    for (const candidate of currentCandidates) {
+      const rect = getTokenRect(candidate);
+      graphics.lineStyle(3, color, 0.95);
+      graphics.beginFill(color, 0.16);
+      graphics.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 6);
+      graphics.endFill();
+    }
+  };
+  refreshPreview();
+  if (!layer?.addChild) {
+    graphics.destroy();
+    return Promise.resolve(null);
   }
   layer.addChild(graphics);
   return chooseCanvasPoint({
     preview: graphics,
     restoreControlledToken,
-    resolvePoint: point => candidates.find(document => isPointInRect(point, getTokenRect(document)))
+    refreshPreview,
+    sourceTokenDocuments,
+    selectionKind: previewName === PUSH_TARGET_PREVIEW_NAME ? "pushTarget" : "grappleTarget",
+    resolvePoint: point => currentCandidates.find(document => isPointInRect(point, getTokenRect(document)))
   });
 }
 
@@ -1181,9 +1252,20 @@ async function choosePushStrength(maximumStrength = 1) {
   return Math.max(0, Math.min(max, toInteger(result)));
 }
 
-function chooseCanvasPoint({ preview = null, restoreControlledToken = null, resolvePoint } = {}) {
+function chooseCanvasPoint({
+  preview = null,
+  restoreControlledToken = null,
+  resolvePoint,
+  refreshPreview = null,
+  sourceTokenDocuments = [],
+  selectionKind = "canvasPoint"
+} = {}) {
+  cancelActiveCanvasTargetSelection({
+    reason: "superseded"
+  });
   const view = canvas.app?.view;
   if (!view || typeof resolvePoint !== "function") {
+    preview?.parent?.removeChild?.(preview);
     preview?.destroy?.();
     return Promise.resolve(null);
   }
@@ -1191,6 +1273,15 @@ function chooseCanvasPoint({ preview = null, restoreControlledToken = null, reso
   return new Promise(resolve => {
     let finished = false;
     let previewDestroyed = false;
+    let targetSelectionSession = null;
+    let refreshTimerId = null;
+    let refreshPending = false;
+    const hookBindings = [];
+    const sourceTokenUuids = new Set(
+      sourceTokenDocuments
+        .map(document => String(getTokenDocument(document)?.uuid ?? ""))
+        .filter(Boolean)
+    );
     const shield = createCanvasClickShield();
     const stopCanvasEvent = event => {
       event.preventDefault();
@@ -1198,6 +1289,10 @@ function chooseCanvasPoint({ preview = null, restoreControlledToken = null, reso
       event.stopImmediatePropagation?.();
     };
     const removeListeners = () => {
+      if (refreshTimerId !== null) globalThis.clearTimeout(refreshTimerId);
+      refreshTimerId = null;
+      refreshPending = false;
+      for (const [hook, id] of hookBindings.splice(0)) Hooks.off(hook, id);
       for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "contextmenu"]) {
         view.removeEventListener(type, onCanvasEvent, true);
         shield?.removeEventListener(type, onCanvasEvent, true);
@@ -1207,16 +1302,36 @@ function chooseCanvasPoint({ preview = null, restoreControlledToken = null, reso
     const destroyPreview = () => {
       if (previewDestroyed) return;
       previewDestroyed = true;
+      preview?.parent?.removeChild?.(preview);
       preview?.destroy?.();
     };
-    const finish = value => {
+    const finish = (value, { fromLifecycle = false } = {}) => {
       if (finished) return;
       finished = true;
+      removeListeners();
       restoreTokenControl(restoreControlledToken);
       destroyPreview();
+      if (!fromLifecycle) {
+        targetSelectionSession?.finish({
+          cancelled: value === null || value === undefined
+        });
+      }
       resolve(value);
       for (const delay of [0, 50, 200]) window.setTimeout(() => restoreTokenControl(restoreControlledToken), delay);
-      window.setTimeout(removeListeners, 300);
+    };
+    const flushPreviewRefresh = () => {
+      if (refreshTimerId !== null) globalThis.clearTimeout(refreshTimerId);
+      refreshTimerId = null;
+      refreshPending = false;
+      if (finished || typeof refreshPreview !== "function") return;
+      refreshPreview();
+    };
+    const schedulePreviewRefresh = () => {
+      if (finished || typeof refreshPreview !== "function") return;
+      refreshPending = true;
+      if (refreshTimerId === null) {
+        refreshTimerId = globalThis.setTimeout(flushPreviewRefresh, 50);
+      }
     };
     const onCanvasEvent = event => {
       stopCanvasEvent(event);
@@ -1227,14 +1342,57 @@ function chooseCanvasPoint({ preview = null, restoreControlledToken = null, reso
       }
       if (event.type !== "pointerdown" && event.type !== "mousedown") return;
       if (event.button !== 0) return;
+      if (refreshPending) flushPreviewRefresh();
       const point = getCanvasPointFromClientEvent(event);
       const value = point ? resolvePoint(point, event) : undefined;
       if (value !== undefined) finish(value ?? null);
     };
+    const bindHook = (hook, callback) => {
+      const id = Hooks.on(hook, callback);
+      hookBindings.push([hook, id]);
+    };
+
+    targetSelectionSession = startCanvasTargetSelectionSession({
+      kind: selectionKind,
+      sourceTokenUuids: Array.from(sourceTokenUuids)
+    }, {
+      onCancel: () => finish(null, { fromLifecycle: true })
+    });
+    if (targetSelectionSession.finished || finished) return;
 
     for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "contextmenu"]) {
       view.addEventListener(type, onCanvasEvent, true);
       shield?.addEventListener(type, onCanvasEvent, true);
+    }
+    if (typeof refreshPreview === "function") {
+      bindHook("refreshToken", (_token, flags = {}) => {
+        if (flags.refreshPosition || flags.refreshSize || flags.refreshShape || flags.refreshVisibility) {
+          schedulePreviewRefresh();
+        }
+      });
+      bindHook("updateToken", (_tokenDocument, changes = {}) => {
+        if (changedDataIntersectsPaths(changes, [
+          "x", "y", "elevation", "width", "height", "depth", "shape", "hidden"
+        ])) schedulePreviewRefresh();
+      });
+      bindHook("moveToken", schedulePreviewRefresh);
+      for (const hook of ["createToken", "drawToken"]) bindHook(hook, schedulePreviewRefresh);
+      for (const hook of ["deleteToken", "destroyToken"]) {
+        bindHook(hook, removedToken => {
+          const removedUuid = String(getTokenDocument(removedToken)?.uuid ?? "");
+          if (removedUuid && sourceTokenUuids.has(removedUuid)) {
+            targetSelectionSession?.cancel({ reason: "sourceTokenDeleted" });
+            return;
+          }
+          schedulePreviewRefresh();
+        });
+      }
+      for (const operation of ["create", "update", "delete"]) {
+        bindHook(`${operation}Wall`, schedulePreviewRefresh);
+      }
+      bindHook("updateScene", (_scene, changes = {}) => {
+        if (changedDataIntersectsPaths(changes, ["grid"])) schedulePreviewRefresh();
+      });
     }
   });
 }
@@ -1645,7 +1803,7 @@ function getResponsibleOwner(actor) {
 }
 
 function getDragPreviewLayer() {
-  return canvas.controls?._rulerPaths ?? canvas.controls ?? canvas.stage;
+  return canvas.interface ?? canvas.tokens ?? canvas.stage;
 }
 
 function mergeTokenUpdates(updates = []) {
