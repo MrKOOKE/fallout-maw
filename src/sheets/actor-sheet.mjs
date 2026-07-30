@@ -43,6 +43,7 @@ import {
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
@@ -56,6 +57,7 @@ import {
   getResourceKeyFromOverloadEffectKey,
   getActorSuppressedTraumaDiseaseIds,
   isActorTraumaDiseaseEffectSuppressed,
+  isSkillBonusPercentEffectKey,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
@@ -212,6 +214,7 @@ import {
   getWeaponTooltipDamageSourceEntries,
   hasWeaponTooltipDamageSourceReferences
 } from "../utils/weapon-tooltip-damage-sources.mjs";
+import { getEnergyConsumerTooltipSourceEntries } from "../utils/energy-consumer-tooltip-sources.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
@@ -659,7 +662,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           data: {
             min: current.min,
             value: current.value,
-            max: current.max ?? skillAdvancementSettings.developmentLimit
+            max: current.max ?? skillAdvancementSettings.developmentLimit,
+            scaleMax: current.developmentLimitPureOnly !== false
+              ? Math.max(
+                toInteger(current.max ?? skillAdvancementSettings.developmentLimit),
+                toInteger(current.value)
+              )
+              : current.max ?? skillAdvancementSettings.developmentLimit
           },
           base: toInteger(current.base),
           bonus: toInteger(source.bonus),
@@ -5431,7 +5440,7 @@ function buildInventoryTooltipFunctionSections(item, sourceActor, {
     buildDamageMitigationTooltipSection(item, evaluatingActor),
     buildDamageSourceTooltipSection(item, evaluatingActor),
     buildEnergySourceTooltipSection(item),
-    buildEnergyConsumerTooltipSection(item),
+    buildEnergyConsumerTooltipSection(item, { sourceActor, evaluatingActor }),
     buildLightSourceTooltipSection(item),
     buildModuleTooltipSection(item, evaluatingActor),
     buildConstructPartTooltipSection(item),
@@ -5981,21 +5990,17 @@ function buildEnergySourceTooltipSection(item) {
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource"), rows);
 }
 
-function buildEnergyConsumerTooltipSection(item) {
+function buildEnergyConsumerTooltipSection(item, {
+  sourceActor = null,
+  evaluatingActor = sourceActor
+} = {}) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return "";
   const consumer = getEnergyConsumerFunction(item);
-  const installed = normalizeTooltipInstalledEnergySource(consumer.installedSource);
-  const acceptedLabels = getTooltipAcceptedEnergySourceLabels(consumer);
   const rows = [
     [
-      game.i18n.localize("FALLOUTMAW.Item.LightSourceCurrentEnergySource"),
-      installed.sourceItemUuid ? (installed.name || game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource")) : game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource")
-    ],
-    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceClass"), installed.class],
-    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceReserve"), installed.sourceItemUuid ? formatReserveTooltipValue(installed.reserve) : ""],
-    [game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"), acceptedLabels.length
-      ? { html: renderTooltipValueTokens(acceptedLabels) }
-      : ""]
+      game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource"),
+      renderEnergyConsumerSourceChips(consumer, { sourceActor, evaluatingActor })
+    ]
   ];
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer"), rows);
 }
@@ -6020,29 +6025,6 @@ function formatReserveTooltipValue(reserve = {}) {
   const max = Math.max(0, Number(reserve?.max) || 0);
   const value = Math.max(0, Math.min(max || Number.POSITIVE_INFINITY, Number(reserve?.value) || 0));
   return max ? `${formatNumber(value)} / ${formatNumber(max)}` : formatNumber(value);
-}
-
-function normalizeTooltipInstalledEnergySource(source = {}) {
-  const max = Math.max(0, Number(source?.reserve?.max) || 0);
-  const value = Math.max(0, Math.min(max || Number.POSITIVE_INFINITY, Number(source?.reserve?.value) || 0));
-  return {
-    sourceItemUuid: String(source?.sourceItemUuid ?? "").trim(),
-    name: String(source?.name ?? "").trim(),
-    class: String(source?.class ?? "").trim(),
-    reserve: { value, max }
-  };
-}
-
-function getTooltipAcceptedEnergySourceLabels(consumer = {}) {
-  const uuids = Array.from(new Set([
-    ...(Array.isArray(consumer?.sourceItemUuids) ? consumer.sourceItemUuids : []),
-    String(consumer?.sourceItemUuid ?? "")
-  ].map(value => String(value ?? "").trim()).filter(Boolean)));
-  return uuids.map(uuid => {
-    const source = resolveWorldItemSync(uuid);
-    const data = getEnergySourceFunction(source);
-    return String(data?.name ?? "").trim() || source?.name || uuid;
-  }).filter(Boolean);
 }
 
 function getLightSourceCostTooltipLabel(costs = []) {
@@ -6350,7 +6332,7 @@ function buildInstalledWeaponModuleTooltipSections(item, sourceActor = null, eva
     buildDamageMitigationTooltipSection(item, evaluatingActor),
     buildDamageSourceTooltipSection(item, evaluatingActor),
     buildEnergySourceTooltipSection(item),
-    buildEnergyConsumerTooltipSection(item),
+    buildEnergyConsumerTooltipSection(item, { sourceActor, evaluatingActor }),
     buildLightSourceTooltipSection(item),
     buildModuleTooltipSection(item, evaluatingActor),
     buildConstructPartTooltipSection(item),
@@ -8204,7 +8186,7 @@ function renderWeaponMagazineSourceChips(data = {}, {
       <span class="fallout-maw-tooltip-item-chip-list tooltip-damage-source-list" role="list">
         ${entries.map(entry => {
           const tooltipAttributes = entry.item
-            ? renderWeaponDamageSourceTooltipAttributes(entry.item, sourceActor, evaluatingActor)
+            ? renderTooltipItemAttributes(entry.item, sourceActor, evaluatingActor)
             : `title="${escapeAttribute(entry.label)}"`;
           return `
             <span class="fallout-maw-tooltip-item-chip tooltip-damage-source-chip${entry.active ? " active" : ""}"
@@ -8221,15 +8203,50 @@ function renderWeaponMagazineSourceChips(data = {}, {
   };
 }
 
-const weaponDamageSourceTooltipRenderStack = new Set();
+function renderEnergyConsumerSourceChips(consumer = {}, {
+  evaluatingActor = null,
+  sourceActor = evaluatingActor
+} = {}) {
+  const entries = getEnergyConsumerTooltipSourceEntries(consumer, {
+    resolveItem: resolveWorldItemSync,
+    getLabel: sourceItem => {
+      const source = getEnergySourceFunction(sourceItem);
+      return String(source?.name ?? "").trim() || sourceItem?.name;
+    }
+  });
+  if (!entries.length) return "—";
 
-function renderWeaponDamageSourceTooltipAttributes(sourceItem, sourceActor = null, evaluatingActor = sourceActor) {
+  return {
+    html: `
+      <span class="fallout-maw-tooltip-item-chip-list tooltip-energy-source-list" role="list">
+        ${entries.map(entry => {
+          const tooltipAttributes = entry.item
+            ? renderTooltipItemAttributes(entry.item, sourceActor, evaluatingActor)
+            : `title="${escapeAttribute(entry.label)}"`;
+          return `
+            <span class="fallout-maw-tooltip-item-chip tooltip-energy-source-chip${entry.active ? " active" : ""}"
+              role="listitem"
+              ${entry.active ? `aria-current="true"` : ""}
+              ${tooltipAttributes}>
+              <img src="${escapeAttribute(entry.img || "icons/svg/item-bag.svg")}" alt="">
+              <span>${escapeHTML(entry.label)}</span>
+            </span>
+          `;
+        }).join("")}
+      </span>
+    `
+  };
+}
+
+const tooltipItemRenderStack = new Set();
+
+function renderTooltipItemAttributes(sourceItem, sourceActor = null, evaluatingActor = sourceActor) {
   const sourceKey = String(sourceItem?.uuid ?? sourceItem?.id ?? "").trim();
-  if (sourceKey && weaponDamageSourceTooltipRenderStack.has(sourceKey)) {
+  if (sourceKey && tooltipItemRenderStack.has(sourceKey)) {
     return `title="${escapeAttribute(sourceItem?.name ?? sourceKey)}"`;
   }
 
-  if (sourceKey) weaponDamageSourceTooltipRenderStack.add(sourceKey);
+  if (sourceKey) tooltipItemRenderStack.add(sourceKey);
   let html = "";
   try {
     html = renderInventoryItemTooltipContentHTML(sourceItem, sourceActor, {
@@ -8237,7 +8254,7 @@ function renderWeaponDamageSourceTooltipAttributes(sourceItem, sourceActor = nul
       includeRecipeKnowledge: false
     });
   } finally {
-    if (sourceKey) weaponDamageSourceTooltipRenderStack.delete(sourceKey);
+    if (sourceKey) tooltipItemRenderStack.delete(sourceKey);
   }
   return [
     `data-tooltip-html="${escapeAttribute(html)}"`,
@@ -8410,9 +8427,15 @@ function buildWeaponSkillRequirementAttribution(item, actor, { key = "", label =
   const skill = actor?.system?.skills?.[key] ?? {};
   const prepared = decomposePreparedSkillValue(skill);
   const bonusPath = `system.skills.${key}.bonus`;
+  const bonusPercentPath = `system.skills.${key}.bonusPercent`;
   const rawBonus = toInteger(foundry.utils.getProperty(actor?._source ?? {}, bonusPath));
   const bonusAttribution = collectActorPreparedPathAttribution(actor, bonusPath, {
     preparedValue: skill.bonus,
+    expandEffectKeys: true
+  });
+  const bonusPercentAttribution = collectActorPreparedPathAttribution(actor, bonusPercentPath, {
+    preparedValue: prepared.bonusPercent,
+    suffix: "%",
     expandEffectKeys: true
   });
   const breakdown = {
@@ -8451,7 +8474,7 @@ function buildWeaponSkillRequirementAttribution(item, actor, { key = "", label =
     value: prepared.abilityBonus
   });
 
-  const clamped = Math.min(Math.max(breakdown.total, prepared.min), prepared.max);
+  const clamped = prepared.valueBeforePercent;
   if (clamped !== breakdown.total) appendBreakdownStep(breakdown, {
     name: `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownSkillLimit", "Предел навыка")} (${formatNumber(prepared.min)}–${formatNumber(prepared.max)})`,
     img: actor?.img,
@@ -8459,6 +8482,16 @@ function buildWeaponSkillRequirementAttribution(item, actor, { key = "", label =
     value: clamped
   });
 
+  appendParallelPercentSources(breakdown, bonusPercentAttribution.sources, {
+    expectedPercent: prepared.bonusPercent,
+    round: Math.round
+  });
+  if (prepared.value !== prepared.unclamped) appendBreakdownStep(breakdown, {
+    name: `${localizeOrFallback("FALLOUTMAW.Item.TooltipBreakdownSkillLimit", "Предел навыка")} (${formatNumber(prepared.min)}–${formatNumber(prepared.max)})`,
+    img: actor?.img,
+    operation: "override",
+    value: prepared.value
+  });
   reconcileBreakdownTotal(breakdown, current, item);
   return breakdown;
 }
@@ -9157,7 +9190,7 @@ function prepareTraumaEffectEntries(effects = [], pathLabels = new Map()) {
   return effectList.map(effect => {
     const pathLabel = getEffectPathLabel(effect?.key, pathLabels);
     const type = String(effect?.type || "add");
-    const value = formatEffectChangeValue(type, effect?.value);
+    const value = formatEffectChangeValue(type, effect?.value, effect?.key);
     const typeLabel = getEffectTypeLabel(type);
     return {
       pathLabel,
@@ -9198,6 +9231,7 @@ function buildEffectPathLabelMap({
     value: valueLabel,
     max: maximumLabel,
     bonus: bonusLabel,
+    bonusPercent: game.i18n.localize("FALLOUTMAW.Effects.SkillBonusPercent"),
     advantage: "Преимущество",
     disadvantage: "Помеха",
     base: baseLabel,
@@ -9213,6 +9247,7 @@ function buildEffectPathLabelMap({
     map.set(`system.skills.${skillKey}.criticalFailureChance`, `${criticalFailureChanceLabel}: ${skillLabel}`);
   }
   map.set(ALL_SKILLS_BONUS_EFFECT_KEY, "Все навыки");
+  map.set(ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsBonusPercent"));
   map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, "Преимущество: все навыки");
   map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, "Помеха: все навыки");
   map.set(ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY, game.i18n.localize("FALLOUTMAW.Effects.AllSkillsCriticalSuccessChance"));
@@ -9374,12 +9409,13 @@ function getEffectTypeLabel(type) {
   return game.i18n.localize(type === "override" ? "FALLOUTMAW.Effects.ChangeOverride" : "FALLOUTMAW.Effects.ChangeAdd");
 }
 
-function formatEffectChangeValue(type, value) {
+function formatEffectChangeValue(type, value, key = "") {
   const text = String(value ?? "").trim() || "0";
-  if (type === "override") return `= ${text}`;
-  if (type === "multiply") return `x ${text}`;
-  if (/^-/.test(text) || /^\+/.test(text)) return text;
-  return `+${text}`;
+  const suffix = isSkillBonusPercentEffectKey(key) && type !== "multiply" ? "%" : "";
+  if (type === "override") return `= ${text}${suffix}`;
+  if (type === "multiply") return `x ${text}${suffix}`;
+  if (/^-/.test(text) || /^\+/.test(text)) return `${text}${suffix}`;
+  return `+${text}${suffix}`;
 }
 
 function localizeOrFallback(key, fallback) {

@@ -1,35 +1,27 @@
 <div class="fallout-maw-config-body fallout-maw-trauma-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Настройка травм</h2>
+      <div>
+        <h2>Конечности</h2>
+        <p class="fallout-maw-help-text">Для каждого уникального ключа конечности используется одна общая настройка травм.</p>
+      </div>
       <div class="fallout-maw-button-row">
         <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
       </div>
     </header>
-    {{#unless hasGroups}}
-    <p class="fallout-maw-empty-list">Нет рас с наборами конечностей.</p>
-    {{/unless}}
-  </section>
 
-  {{#each groups}}
-  <section class="fallout-maw-panel fallout-maw-trauma-group-summary" data-trauma-group="{{id}}">
-    <header class="fallout-maw-panel-header">
-      <div>
-        <h2>{{raceNames}}</h2>
-        <p class="fallout-maw-help-text">{{limbsLabel}}</p>
+    <div class="fallout-maw-trauma-limb-summary-list">
+      {{#each limbs}}
+      <div class="fallout-maw-trauma-limb-summary-row" data-trauma-limb="{{key}}">
+        <div class="fallout-maw-trauma-limb-summary-name">
+          <strong>{{label}}</strong>
+          <span>{{key}}</span>
+        </div>
+        <button type="button" data-action="openLimb"><i class="fa-solid fa-bone"></i> Настроить</button>
       </div>
-      <button type="button" data-action="openGroup"><i class="fa-solid fa-bone"></i> Настройка травм</button>
-    </header>
-    <div class="fallout-maw-summary-grid two-columns">
-      <div class="fallout-maw-inline-stat">
-        <span>Рас в наборе:</span>
-        <strong>{{races.length}}</strong>
-      </div>
-      <div class="fallout-maw-inline-stat">
-        <span>Порогов настроено:</span>
-        <strong>{{traumaStagesCount}}</strong>
-      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">В настройках рас нет конечностей.</p>
+      {{/each}}
     </div>
   </section>
-  {{/each}}
 </div>

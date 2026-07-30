@@ -21,6 +21,7 @@ const COMMON_FIELDS = Object.freeze([
 ]);
 const SKILL_FIELDS = Object.freeze([
   Object.freeze({ field: "base", suffix: "Base", label: "база" }),
+  Object.freeze({ field: "bonusPercent", suffix: "BonusPercent", label: "процентное изменение" }),
   Object.freeze({ field: "advantage", suffix: "Advantage", label: "преимущество" }),
   Object.freeze({ field: "disadvantage", suffix: "Disadvantage", label: "помеха" }),
   Object.freeze({ field: "developmentBonus", suffix: "DevelopmentBonus", label: "бонус развития" }),
@@ -67,7 +68,7 @@ export function buildActorFormulaReferenceData({
   addIndicatorReferenceGroup(state, {
     root: "skills",
     definitions: skillSettings,
-    values: mergeIndicatorValues(system?.skills, skillValues),
+    values: mergeSkillIndicatorValues(system?.skills, skillValues),
     extraFields: SKILL_FIELDS,
     includeBareValueAliases: false
   });
@@ -313,6 +314,19 @@ function mergeIndicatorValues(values = {}, valueOverrides = {}) {
     return [key, {
       ...base,
       value: Number.isFinite(override) ? override : (current?.value ?? current ?? 0)
+    }];
+  }));
+}
+
+function mergeSkillIndicatorValues(values = {}, valueOverrides = {}) {
+  const merged = mergeIndicatorValues(values, valueOverrides);
+  return Object.fromEntries(Object.entries(merged).map(([key, skill]) => {
+    if (skill?.developmentLimitPureOnly === false) return [key, skill];
+    const value = toFiniteNumber(skill?.value);
+    const max = toFiniteNumber(skill?.max);
+    return [key, {
+      ...skill,
+      scaleMax: Math.max(max, value)
     }];
   }));
 }

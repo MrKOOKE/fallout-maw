@@ -3091,6 +3091,38 @@ body #prosemirror-dropdown {
   gap: 0.55rem;
 }
 
+.fallout-maw-trauma-limb-summary-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.fallout-maw-trauma-limb-summary-row {
+  align-items: center;
+  border-top: 1px solid rgba(131, 119, 74, 0.32);
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(10rem, 1fr) auto;
+  padding: 0.55rem 0;
+}
+
+.fallout-maw-trauma-limb-summary-row:first-child {
+  border-top: 0;
+}
+
+.fallout-maw-trauma-limb-summary-name {
+  display: grid;
+  min-width: 0;
+}
+
+.fallout-maw-trauma-limb-summary-name span {
+  color: var(--color-text-light-6);
+  font-size: 0.84rem;
+}
+
+.fallout-maw-trauma-limb-heading {
+  margin-bottom: 0.75rem;
+}
+
 .fallout-maw-trauma-damage-type-list {
   display: flex;
   flex-direction: column;

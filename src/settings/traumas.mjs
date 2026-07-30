@@ -9,30 +9,36 @@ const HEALING_TOOL_CLASSES = new Set(["D", "C", "B", "A", "S"]);
 const DEFAULT_TRAUMA_THRESHOLDS = [60, 0];
 
 export function createDefaultTraumaSettings() {
-  return { groups: {} };
+  return { limbs: {} };
 }
 
 export function normalizeTraumaSettings(value = {}, creatureOptions = {}, damageTypes = []) {
-  const sourceGroups = value && typeof value === "object" ? value.groups ?? {} : {};
-  const normalizedGroups = {};
+  const source = value && typeof value === "object" ? value : {};
   const traumaDamageTypes = getTraumaDamageTypes(damageTypes);
+  const limbs = getUniqueTraumaLimbs(creatureOptions);
+  const normalizedLimbs = {};
 
-  for (const limbSet of getUniqueLimbSets(creatureOptions)) {
-    normalizedGroups[limbSet.id] = normalizeTraumaGroup(getTraumaGroupSource(sourceGroups, limbSet), limbSet, traumaDamageTypes);
+  for (const limb of limbs) {
+    normalizedLimbs[limb.key] = normalizeTraumaLimb(
+      getTraumaLimbSource(source, limb, traumaDamageTypes),
+      limb,
+      traumaDamageTypes
+    );
   }
 
-  return { groups: normalizedGroups };
+  return { limbs: normalizedLimbs };
 }
 
 export function getTraumaGroupForActor(actor, settings = null, creatureOptions = {}, damageTypes = []) {
   const race = creatureOptions.races.find(entry => entry.id === actor?.system?.creature?.raceId);
   const limbSetId = getLimbSetId(race?.limbs ?? []);
   const normalized = settings ?? normalizeTraumaSettings({}, creatureOptions, damageTypes);
-  const traumaDamageTypes = getTraumaDamageTypes(damageTypes);
   return {
     id: limbSetId,
     race,
-    config: normalized.groups?.[limbSetId] ?? normalizeTraumaGroup({}, { limbs: [] }, traumaDamageTypes)
+    config: {
+      limbs: normalized.limbs ?? {}
+    }
   };
 }
 
@@ -66,6 +72,36 @@ export function getUniqueLimbSets(creatureOptions = {}) {
   return Array.from(groups.values()).sort((left, right) => left.raceNames.localeCompare(right.raceNames));
 }
 
+export function getUniqueTraumaLimbs(creatureOptions = {}) {
+  const limbs = new Map();
+
+  for (const race of creatureOptions?.races ?? []) {
+    for (const limb of normalizeLimbSetLimbs(race?.limbs ?? [], { sort: false })) {
+      const current = limbs.get(limb.key) ?? {
+        ...limb,
+        races: [],
+        raceNames: ""
+      };
+      if (!current.label || current.label === current.key) current.label = limb.label || limb.key;
+      if (!current.stateMax || current.stateMax === "0") current.stateMax = limb.stateMax;
+      if (!current.races.some(entry => entry.id === race.id)) {
+        current.races.push({
+          id: String(race.id ?? ""),
+          name: String(race.name ?? race.id ?? "")
+        });
+      }
+      current.raceNames = current.races.map(entry => entry.name).filter(Boolean).join(", ");
+      limbs.set(limb.key, current);
+    }
+  }
+
+  return Array.from(limbs.values())
+    .sort((left, right) => (
+      left.label.localeCompare(right.label)
+      || left.key.localeCompare(right.key)
+    ));
+}
+
 export function getLimbSetId(limbs = []) {
   const normalized = normalizeLimbSetLimbs(limbs, { sort: true });
   if (!normalized.length) return "";
@@ -82,25 +118,56 @@ function getLegacyLimbSetId(limbs = []) {
     .join("|");
 }
 
-function getTraumaGroupSource(sourceGroups = {}, limbSet = {}) {
-  if (sourceGroups?.[limbSet.id]) return sourceGroups[limbSet.id];
-  return mergeTraumaGroupSources((limbSet.legacyIds ?? []).map(id => sourceGroups?.[id]).filter(Boolean));
+function getTraumaLimbSource(source = {}, limb = {}, damageTypes = []) {
+  if (source?.limbs?.[limb.key]) return source.limbs[limb.key];
+
+  const legacySources = Object.values(source?.groups ?? {})
+    .map(group => {
+      const legacyLimb = group?.limbs?.[limb.key];
+      if (!legacyLimb) return null;
+      return {
+        ...legacyLimb,
+        thresholds: legacyLimb.thresholds ?? group.thresholds
+      };
+    })
+    .filter(Boolean);
+  return mergeTraumaLimbSources(legacySources, limb, damageTypes);
 }
 
-function mergeTraumaGroupSources(sources = []) {
+function mergeTraumaLimbSources(sources = [], limb = {}, damageTypes = []) {
   if (!sources.length) return {};
   if (sources.length === 1) return sources[0];
 
-  const merged = { limbs: {} };
-  for (const source of sources) {
-    for (const [limbKey, limb] of Object.entries(source?.limbs ?? {})) {
-      const existingStages = merged.limbs[limbKey]?.stages ?? [];
-      const stages = Array.isArray(limb?.stages) ? limb.stages : [];
-      if (existingStages.length && !stages.length) continue;
-      merged.limbs[limbKey] = limb;
-    }
-  }
-  return merged;
+  const candidates = sources.map(source => normalizeTraumaLimb(source, limb, damageTypes));
+  const thresholds = normalizeTraumaThresholdList(candidates.flatMap(candidate => candidate.thresholds ?? []));
+  const stages = thresholds.map((threshold, index) => {
+    const profiles = Object.fromEntries(damageTypes.map(damageType => {
+      const profileCandidates = candidates
+        .map(candidate => candidate.stages.find(stage => (
+          stage.id === threshold.id
+          || stage.thresholdPercent === threshold.thresholdPercent
+        ))?.profiles?.[damageType.key])
+        .filter(Boolean);
+      return [
+        damageType.key,
+        profileCandidates.find(profile => isConfiguredTraumaProfile(profile, damageType))
+          ?? profileCandidates[0]
+          ?? createDefaultTraumaProfile(damageType, threshold.thresholdPercent)
+      ];
+    }));
+    return normalizeTraumaStage({
+      id: threshold.id,
+      thresholdPercent: threshold.thresholdPercent,
+      profiles
+    }, index, damageTypes);
+  });
+
+  return {
+    label: candidates.find(candidate => candidate.label)?.label ?? limb.label ?? limb.key,
+    stateMax: candidates.find(candidate => candidate.stateMax)?.stateMax ?? limb.stateMax ?? "0",
+    thresholds,
+    stages
+  };
 }
 
 export function normalizeTraumaGroup(value = {}, limbSet = { limbs: [] }, damageTypes = []) {
@@ -113,7 +180,10 @@ export function normalizeTraumaGroup(value = {}, limbSet = { limbs: [] }, damage
     limbs: Object.fromEntries(
       (limbSet?.limbs ?? []).map(limb => [
         limb.key,
-        normalizeTraumaLimb(sourceLimbs?.[limb.key], limb, damageTypes, legacyStages, thresholds)
+        normalizeTraumaLimb({
+          ...(sourceLimbs?.[limb.key] ?? {}),
+          thresholds
+        }, limb, damageTypes, legacyStages)
       ])
     )
   };
@@ -149,14 +219,18 @@ export function getDefaultTraumaProfileName(damageType = {}) {
   return label ? `Травма ${label}` : "Травма";
 }
 
-function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = [], thresholds = []) {
+export function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = []) {
   const stagesSource = Array.isArray(value?.stages) && value.stages.length
     ? value.stages
     : legacyStages;
+  const thresholds = normalizeTraumaThresholds(value, {
+    [limb.key || "limb"]: value
+  }, legacyStages);
 
   return {
     label: String(limb?.label ?? limb?.name ?? limb?.key ?? ""),
     stateMax: String(limb?.stateMax ?? "0").trim() || "0",
+    thresholds,
     stages: normalizeTraumaStages(stagesSource, damageTypes, thresholds)
   };
 }
@@ -273,6 +347,10 @@ function isConfiguredTraumaProfile(profile, damageType = {}) {
     (name && name !== defaultName)
     || String(profile.img ?? "").trim()
     || (profile.effects ?? []).length
+    || toInteger(profile.healingDifficulty) !== DEFAULT_HEALING_DIFFICULTY
+    || normalizeHealingToolClass(profile.healingToolClass) !== DEFAULT_HEALING_TOOL_CLASS
+    || toInteger(profile.healingProgress) !== DEFAULT_HEALING_PROGRESS
+    || String(profile.healingSkillKey ?? "").trim() !== DEFAULT_HEALING_SKILL
   );
 }
 

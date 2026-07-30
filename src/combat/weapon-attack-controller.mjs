@@ -67,6 +67,10 @@ import {
 } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  applySkillBonusPercent,
+  getSkillValueBeforePercent
+} from "../utils/skill-value.mjs";
+import {
   getEffectiveRangeDistanceState,
   normalizeAttackDistanceContext
 } from "../utils/attack-distance.mjs";
@@ -76,6 +80,7 @@ import {
   resolveBaseWeaponEffectiveRange
 } from "../utils/weapon-range.mjs";
 import {
+  ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
@@ -13413,6 +13418,7 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
 function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponFunctionId = "", actionKey = "", previewContext = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
+  const preparedSkill = attackerActor?.system?.skills?.[skillKey] ?? {};
   const context = {
     ...(previewContext ?? {}),
     targetActor,
@@ -13424,8 +13430,14 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
     {
       id: "skill",
       key: `system.skills.${skillKey}.bonus`,
-      baseValue: toInteger(attackerActor?.system?.skills?.[skillKey]?.value),
+      baseValue: getSkillValueBeforePercent(preparedSkill),
       alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "skillBonusPercent",
+      key: `system.skills.${skillKey}.bonusPercent`,
+      baseValue: toInteger(preparedSkill.bonusPercent),
+      alternateKeys: [ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY]
     },
     {
       id: "skillCriticalSuccessChance",
@@ -13462,7 +13474,11 @@ function buildAimedAttackChanceBasis(attackerActor, weapon, targetActor, weaponF
     + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
 
-  const finalSkillValue = toInteger(contextual.skill)
+  const finalSkillValue = applySkillBonusPercent(contextual.skill, contextual.skillBonusPercent, {
+    min: preparedSkill.min,
+    max: preparedSkill.max,
+    capResult: preparedSkill.developmentLimitPureOnly === false
+  })
     + evaluateWeaponFormula(weapon, weaponData?.accuracyBonus, {
       minimum: -Infinity,
       context: "weapon accuracy"
@@ -13542,13 +13558,20 @@ function getDirectedAttackHitChance(attackerActor, weapon, targetActor, {
 }
 
 function getContextualAttackSkillState(actor, skillKey = "", context = {}) {
+  const preparedSkill = actor?.system?.skills?.[skillKey] ?? {};
   const disabledResultSpecs = buildSkillCheckDisabledResultContextSpecs(actor);
   const contextual = getContextualAbilityChangeValues(actor, [
     {
       id: "skill",
       key: `system.skills.${skillKey}.bonus`,
-      baseValue: toInteger(actor?.system?.skills?.[skillKey]?.value),
+      baseValue: getSkillValueBeforePercent(preparedSkill),
       alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "skillBonusPercent",
+      key: `system.skills.${skillKey}.bonusPercent`,
+      baseValue: toInteger(preparedSkill.bonusPercent),
+      alternateKeys: [ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY]
     },
     {
       id: "skillCriticalSuccessChance",
@@ -13565,7 +13588,11 @@ function getContextualAttackSkillState(actor, skillKey = "", context = {}) {
     ...disabledResultSpecs
   ], context);
   return {
-    value: toInteger(contextual.skill),
+    value: applySkillBonusPercent(contextual.skill, contextual.skillBonusPercent, {
+      min: preparedSkill.min,
+      max: preparedSkill.max,
+      capResult: preparedSkill.developmentLimitPureOnly === false
+    }),
     criticalSuccessBonus: toInteger(contextual.skillCriticalSuccessChance),
     criticalFailureBonus: toInteger(contextual.skillCriticalFailureChance),
     disabledResults: extractContextualSkillCheckDisabledResults(contextual, disabledResultSpecs)

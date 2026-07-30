@@ -10,8 +10,13 @@ import {
 import { serializeWeaponContextData } from "../utils/weapon-context.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  applySkillBonusPercent,
+  getSkillValueBeforePercent
+} from "../utils/skill-value.mjs";
+import {
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   getActorCombatAttackEdgeCount,
@@ -1392,6 +1397,11 @@ function resolveSkill(actor, skillKey) {
     abbr: setting.abbr,
     label: setting.label,
     value: toInteger(actorSkill.value),
+    valueBeforePercent: getSkillValueBeforePercent(actorSkill),
+    bonusPercent: toInteger(actorSkill.bonusPercent),
+    min: toInteger(actorSkill.min),
+    max: Number.isFinite(Number(actorSkill.max)) ? toInteger(actorSkill.max) : Number.MAX_SAFE_INTEGER,
+    developmentLimitPureOnly: actorSkill.developmentLimitPureOnly !== false,
     advantage: Math.max(0, toInteger(actorSkill.advantage)),
     disadvantage: Math.max(0, toInteger(actorSkill.disadvantage))
   };
@@ -1482,8 +1492,14 @@ function createMutableCheck(actor, skill, data) {
     {
       id: "skillValue",
       key: `system.skills.${skill.key}.bonus`,
-      baseValue: skill.value,
+      baseValue: skill.valueBeforePercent,
       alternateKeys: ["system.skills.all.bonus"]
+    },
+    {
+      id: "skillBonusPercent",
+      key: `system.skills.${skill.key}.bonusPercent`,
+      baseValue: skill.bonusPercent,
+      alternateKeys: [ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY]
     },
     {
       id: "skillAdvantage",
@@ -1542,7 +1558,11 @@ function createMutableCheck(actor, skill, data) {
     actor,
     skill: {
       ...skill,
-      value: toInteger(contextual.skillValue) + toInteger(contextual["skillCheckAction:bonus"])
+      value: applySkillBonusPercent(contextual.skillValue, contextual.skillBonusPercent, {
+        min: skill.min,
+        max: skill.max,
+        capResult: !skill.developmentLimitPureOnly
+      }) + toInteger(contextual["skillCheckAction:bonus"])
     },
     difficulty: toInteger(data.difficulty ?? DEFAULT_CHECK.difficulty),
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),

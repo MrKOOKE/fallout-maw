@@ -9,7 +9,7 @@ import {
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { buildNeedChangeModifierEffectKeyTokens } from "../needs/need-change-effect-key-tokens.mjs";
-import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageBarrierEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsBonusPercentEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageBarrierEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens, buildSkillBonusPercentEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildStealthAttackBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
@@ -512,7 +512,9 @@ function buildEffectKeyTokens() {
       path: `system.skills.${entry.key}.bonus`,
       group: "Навыки"
     })),
+    ...buildSkillBonusPercentEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsBonusPercentEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),

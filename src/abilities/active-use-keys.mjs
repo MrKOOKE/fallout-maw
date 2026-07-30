@@ -4,6 +4,7 @@ import {
   ALL_COMBAT_DISADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
@@ -38,6 +39,7 @@ const WEAPON_CONTEXT_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPu
 const ATTACKING_SKILL_CHECK_REQUESTERS = new Set(["weaponAttack", "weaponPush", "activePush"]);
 const SKILL_CHANGE_SUFFIXES = Object.freeze([
   "bonus",
+  "bonusPercent",
   "advantage",
   "disadvantage",
   "criticalSuccessChance",
@@ -86,7 +88,7 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   ...Object.values(FIRST_AID_EFFECT_KEYS)
 ]);
 
-const SKILL_CHANGE_KEY_PATTERN = /^system\.skills\.[^.]+\.(?:bonus|advantage|disadvantage|criticalSuccessChance|criticalFailureChance)$/;
+const SKILL_CHANGE_KEY_PATTERN = /^system\.skills\.[^.]+\.(?:bonus|bonusPercent|advantage|disadvantage|criticalSuccessChance|criticalFailureChance)$/;
 const PROFICIENCY_BONUS_KEY_PATTERN = /^system\.proficiencies\.[^.]+\.bonus$/;
 const ACTION_COST_KEY_PATTERN = /^system\.costs\.actions\.[^.]+$/;
 const ACTION_PENETRATION_KEY_PATTERN = /^system\.penetration\.actions\.[^.]+$/;
@@ -103,6 +105,7 @@ export function getSkillCheckActiveUseKeys(skillKey = "", context = {}) {
 
   const keys = new Set([
     ALL_SKILLS_BONUS_EFFECT_KEY,
+    ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
     ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
     ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
     ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,

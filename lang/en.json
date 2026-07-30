@@ -1848,6 +1848,8 @@
       "CombatAdvantage": "Advantage",
       "CombatDisadvantage": "Disadvantage",
       "AllSkills": "All skills",
+      "SkillBonusPercent": "Skill change, %",
+      "AllSkillsBonusPercent": "Skill change, %: all skills",
       "AllSkillsAdvantage": "Advantage: all skills",
       "AllSkillsDisadvantage": "Disadvantage: all skills",
       "SkillCriticalSuccessChance": "Critical success chance",
@@ -2368,6 +2370,8 @@
         "FormulaHint": "Skill formulas can use characteristic keys and codes. Keep keys and codes in Latin characters.",
         "LabelPlaceholder": "Skill name",
         "DevelopmentLimit": "Skill Development Limit",
+        "DevelopmentLimitPureOnly": "Limit pure value only",
+        "DevelopmentLimitPureOnlyHint": "When enabled, the limit constrains only the pure skill value; the final value after external and percentage bonuses may be unlimited. When disabled, the limit caps the final value.",
         "SignatureFlatBonus": "Signature Flat Bonus",
         "SignatureMultiplier": "Signature Multiplier",
         "Title": "Skill Settings"

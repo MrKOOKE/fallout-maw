@@ -1908,6 +1908,8 @@
       "CombatAdvantage": "Преимущество",
       "CombatDisadvantage": "Помеха",
       "AllSkills": "Все навыки",
+      "SkillBonusPercent": "Изменение навыка, %",
+      "AllSkillsBonusPercent": "Изменение навыков, %: все навыки",
       "AllSkillsAdvantage": "Преимущество: все навыки",
       "AllSkillsDisadvantage": "Помеха: все навыки",
       "SkillCriticalSuccessChance": "Шанс критического успеха",
@@ -2427,6 +2429,8 @@
         "FormulaHint": "Формулы навыков могут использовать ключи и коды характеристик. Ключи и коды держите в латинице.",
         "LabelPlaceholder": "Название навыка",
         "DevelopmentLimit": "Предел развития навыков",
+        "DevelopmentLimitPureOnly": "Предел только для чистого значения",
+        "DevelopmentLimitPureOnlyHint": "При включении предел ограничивает только чистое значение навыка, а итог после внешних и процентных бонусов может быть любым. При выключении предел ограничивает итоговое значение.",
         "SignatureFlatBonus": "Плоский бонус коронного навыка",
         "SignatureMultiplier": "Множитель коронного навыка",
         "Title": "Настройка навыков"

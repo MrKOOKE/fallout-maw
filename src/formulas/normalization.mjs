@@ -7,6 +7,7 @@ import {
   DEFAULT_PROFICIENCY_INFLUENCE,
   DEFAULT_RESOURCES,
   DEFAULT_SKILL_DEVELOPMENT_LIMIT,
+  DEFAULT_SKILL_DEVELOPMENT_LIMIT_PURE_ONLY,
   DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
   DEFAULT_SIGNATURE_SKILL_MULTIPLIER,
   DEFAULT_SKILL_ADVANCEMENT,
@@ -235,6 +236,7 @@ export function createDefaultSkillAdvancementSettings(
     signatureMultiplier: DEFAULT_SIGNATURE_SKILL_MULTIPLIER,
     signatureFlatBonus: DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
     developmentLimit: DEFAULT_SKILL_DEVELOPMENT_LIMIT,
+    developmentLimitPureOnly: DEFAULT_SKILL_DEVELOPMENT_LIMIT_PURE_ONLY,
     entries: Object.fromEntries(
       skills.map(skill => {
         const defaults = DEFAULT_SKILL_ADVANCEMENT[skill.key] ?? {};
@@ -325,6 +327,9 @@ export function normalizeSkillAdvancementSettings(
     signatureMultiplier: toDecimal(source?.signatureMultiplier ?? source?.signature?.multiplier, defaults.signatureMultiplier),
     signatureFlatBonus: toDecimal(source?.signatureFlatBonus ?? source?.signature?.flatBonus, defaults.signatureFlatBonus),
     developmentLimit: Math.max(0, toInteger(source?.developmentLimit ?? source?.limit ?? defaults.developmentLimit)),
+    developmentLimitPureOnly: source?.developmentLimitPureOnly === undefined
+      ? defaults.developmentLimitPureOnly
+      : Boolean(source.developmentLimitPureOnly),
     entries: Object.fromEntries(
       skills.map(skill => {
         const sourceEntry = source?.entries?.[skill.key] ?? source?.skills?.[skill.key] ?? source?.[skill.key] ?? {};

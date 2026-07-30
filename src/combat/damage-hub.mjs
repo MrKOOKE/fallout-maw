@@ -8919,6 +8919,7 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
       img,
       transfer: true,
       disabled: false,
+      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
       statuses,
       system: {
         changes: activeEffectChanges

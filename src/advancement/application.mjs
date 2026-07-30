@@ -39,6 +39,7 @@ import {
 import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { applySkillBonusPercent } from "../utils/skill-value.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { prepareIndicatorEntry as prepareDisplayIndicatorEntry } from "../utils/actor-display-data.mjs";
 import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
@@ -1165,23 +1166,37 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         multiplierChanges: resolvedMultiplierChanges
       })
       : toInteger(pureValue);
-    const liveOffset = this.#getLiveSkillValueOffset(key);
+    const externalFlatValue = this.#getLiveSkillFlatValueOffset(key);
     const limit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
-    return Math.max(0, Math.min(limit, resolvedPureValue + liveOffset));
+    const limitedPureValue = Math.min(limit, Math.max(0, resolvedPureValue));
+    const flatValue = skillAdvancementSettings?.developmentLimitPureOnly !== false
+      ? Math.max(0, limitedPureValue + externalFlatValue)
+      : Math.max(0, Math.min(limit, resolvedPureValue + externalFlatValue));
+    return applySkillBonusPercent(
+      flatValue,
+      this.actor.system?.skills?.[key]?.bonusPercent,
+      {
+        min: 0,
+        max: limit,
+        capResult: skillAdvancementSettings?.developmentLimitPureOnly === false
+      }
+    );
   }
 
-  #getLiveSkillValueOffset(key) {
+  #getLiveSkillFlatValueOffset(key) {
     const liveSkill = this.actor.system?.skills?.[key] ?? {};
-    const liveValue = toInteger(liveSkill.value);
-    const externalBonus = toInteger(liveSkill.bonus) + toInteger(liveSkill.abilityBonus);
-    const min = toInteger(liveSkill.min);
-    const max = Math.max(min, toInteger(liveSkill.max));
-    const preparedValue = Math.max(min, Math.min(
-      max,
-      toInteger(liveSkill.base) + toInteger(liveSkill.developmentBonus) + externalBonus
-    ));
     const pureBonus = toInteger(this.#getAdvancementPureValues().skillBonusDeltas?.[key]);
-    return externalBonus - pureBonus + (liveValue - preparedValue);
+    const livePureValue = Number.isFinite(Number(liveSkill.pureValue))
+      ? Math.max(0, toInteger(liveSkill.pureValue))
+      : Math.max(
+        0,
+        toInteger(liveSkill.base) + toInteger(liveSkill.developmentBonus) + pureBonus
+      );
+    const rawFlatValue = toInteger(liveSkill.base)
+      + toInteger(liveSkill.developmentBonus)
+      + toInteger(liveSkill.bonus)
+      + toInteger(liveSkill.abilityBonus);
+    return rawFlatValue - livePureValue;
   }
 
   #getPreviewSkillPureValue(key) {

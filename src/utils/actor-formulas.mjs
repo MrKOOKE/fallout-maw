@@ -17,6 +17,11 @@ import {
 } from "../settings/accessors.mjs";
 import { toInteger } from "./numbers.mjs";
 import { formatFormulaForDisplay } from "./formula-display.mjs";
+import { composePreparedSkillValue } from "./skill-value.mjs";
+import {
+  isReverseEffectKey,
+  isSkillBonusPercentEffectKey
+} from "./active-effect-keys.mjs";
 
 const FORMULA_IDENTIFIER_PATTERN = /@?[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)*/gu;
 const PREPARED_REFERENCE_PATH_PATTERN = /@?(?:system\.)?(?:skills|resources|needs|proficiencies|limbs|load)\.[\p{L}_]/iu;
@@ -101,6 +106,10 @@ export function invalidateActorFormulaData(actor = null) {
  * so the runtime value and every later attribution use the same snapshot.
  */
 export function getActorFormulaApplicationPhase(change = {}, actor = null, { formulaData = null } = {}) {
+  // This field participates in derived skill composition, so applying it in
+  // Foundry's post-derived "final" phase would update the accumulator without
+  // recalculating the skill value.
+  if (isSkillBonusPercentEffectKey(change?.key) && !isReverseEffectKey(change?.key)) return "initial";
   const configured = String(change?.phase ?? "initial").trim() || "initial";
   if (configured !== "initial") return configured;
 
@@ -322,11 +331,16 @@ function buildInitialActiveEffectSkillValues(actor = null, characteristicSetting
       const current = actor?.system?.skills?.[skill.key] ?? {};
       const min = Math.max(0, toInteger(current?.min));
       const bonus = toInteger(current?.bonus);
-      const value = Math.min(
-        Math.max(toInteger(skillBases?.[skill.key]) + bonus + toInteger(skillBonuses?.[skill.key]), min),
+      const prepared = composePreparedSkillValue({
+        base: toInteger(skillBases?.[skill.key]),
+        bonus,
+        developmentBonus: toInteger(skillBonuses?.[skill.key]),
+        bonusPercent: toInteger(current?.bonusPercent),
+        developmentLimitPureOnly: skillAdvancementSettings?.developmentLimitPureOnly !== false,
+        min,
         max
-      );
-      return [skill.key, value];
+      });
+      return [skill.key, prepared.value];
     })
   );
 }

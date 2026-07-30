@@ -8,7 +8,14 @@ import {
   PARALLEL_PERCENT_CALCULATION,
   replayItemValueAttribution
 } from "../src/utils/item-value-attribution.mjs";
+import {
+  createDefaultSkillAdvancementSettings,
+  normalizeSkillAdvancementSettings
+} from "../src/formulas/normalization.mjs";
+import { buildActorFormulaReferenceData } from "../src/formulas/actor-references.mjs";
+import { evaluateFormula } from "../src/formulas/evaluation.mjs";
 import { decomposePreparedSkillValue } from "../src/utils/skill-value-attribution.mjs";
+import { applySkillBonusPercent } from "../src/utils/skill-value.mjs";
 
 test("item value attribution replays every supported operation in order", () => {
   const result = replayItemValueAttribution(10, [
@@ -160,12 +167,13 @@ test("parallel percent attribution preserves zero-base sources without negative 
   assert.equal(Object.is(result.delta, -0), false);
 });
 
-test("prepared skill attribution mirrors component composition and limits", () => {
+test("prepared skill attribution mirrors flat component composition and first-layer limits", () => {
   assert.deepEqual(decomposePreparedSkillValue({
     base: 70,
     bonus: 8,
     developmentBonus: 20,
     abilityBonus: 5,
+    developmentLimitPureOnly: false,
     min: 0,
     max: 100
   }), {
@@ -173,9 +181,17 @@ test("prepared skill attribution mirrors component composition and limits", () =
     bonus: 8,
     developmentBonus: 20,
     abilityBonus: 5,
+    bonusPercent: 0,
+    pureValue: 90,
+    limitedPureValue: 90,
+    externalFlatValue: 13,
+    developmentLimitPureOnly: false,
     min: 0,
     max: 100,
-    unclamped: 103,
+    rawFlatValue: 103,
+    flatUnclamped: 103,
+    valueBeforePercent: 100,
+    unclamped: 100,
     value: 100
   });
 
@@ -184,7 +200,176 @@ test("prepared skill attribution mirrors component composition and limits", () =
     bonus: -30,
     developmentBonus: 2,
     abilityBonus: 3,
+    developmentLimitPureOnly: true,
     min: 0,
     max: 100
   }).value, 0);
+});
+
+test("skill percentage bonuses add in one second layer without compounding", () => {
+  const result = decomposePreparedSkillValue({
+    base: 100,
+    bonusPercent: 20 + 30,
+    developmentLimitPureOnly: true,
+    min: 0,
+    max: 100
+  });
+
+  assert.equal(result.valueBeforePercent, 100);
+  assert.equal(result.bonusPercent, 50);
+  assert.equal(result.value, 150);
+  assert.notEqual(result.value, Math.round(100 * 1.2 * 1.3));
+});
+
+test("pure-only skill percentage layer may exceed the development maximum", () => {
+  assert.equal(applySkillBonusPercent(140, 50, { min: 0, max: 100 }), 210);
+  assert.equal(decomposePreparedSkillValue({
+    base: 100,
+    bonusPercent: 50,
+    developmentLimitPureOnly: true,
+    min: 0,
+    max: 100
+  }).value, 150);
+});
+
+test("skill percentage penalties cannot produce a negative skill", () => {
+  assert.equal(applySkillBonusPercent(100, -25, { min: 0, max: 300 }), 75);
+  assert.equal(applySkillBonusPercent(100, -100, { min: 0, max: 300 }), 0);
+  assert.equal(applySkillBonusPercent(100, -150, { min: 0, max: 300 }), 0);
+  assert.equal(applySkillBonusPercent(-20, 50, { min: 0, max: 300 }), 0);
+});
+
+test("skill percentage layer rounds the combined result exactly once", () => {
+  assert.equal(applySkillBonusPercent(101, 50, { min: 0, max: 300 }), 152);
+  assert.equal(decomposePreparedSkillValue({
+    base: 101,
+    bonusPercent: 50,
+    developmentLimitPureOnly: true,
+    min: 0,
+    max: 300
+  }).value, 152);
+});
+
+test("pure-only development limit caps the pure skill while preserving external flat bonuses", () => {
+  const result = decomposePreparedSkillValue({
+    base: 80,
+    developmentBonus: 40,
+    bonus: 20,
+    abilityBonus: 10,
+    bonusPercent: 50,
+    pureValue: 120,
+    developmentLimitPureOnly: true,
+    min: 0,
+    max: 100
+  });
+
+  assert.equal(result.rawFlatValue, 150);
+  assert.equal(result.pureValue, 120);
+  assert.equal(result.limitedPureValue, 100);
+  assert.equal(result.externalFlatValue, 30);
+  assert.equal(result.valueBeforePercent, 130);
+  assert.equal(result.value, 195);
+});
+
+test("legacy development limit mode caps the complete result after percentages", () => {
+  assert.equal(applySkillBonusPercent(140, 50, {
+    min: 0,
+    max: 100,
+    capResult: true
+  }), 100);
+  const result = decomposePreparedSkillValue({
+    base: 80,
+    developmentBonus: 40,
+    bonus: 20,
+    abilityBonus: 10,
+    bonusPercent: 50,
+    pureValue: 120,
+    developmentLimitPureOnly: false,
+    min: 0,
+    max: 100
+  });
+
+  assert.equal(result.rawFlatValue, 150);
+  assert.equal(result.valueBeforePercent, 100);
+  assert.equal(result.unclamped, 150);
+  assert.equal(result.value, 100);
+});
+
+test("pure-only development limit is enabled by default and preserves an explicit legacy opt-out", () => {
+  const skills = [{ key: "naturalist", abbr: "nat", label: "Натуралист", formula: "100", img: "" }];
+  const characteristics = [{ key: "perception", abbr: "wis", label: "Восприятие" }];
+
+  assert.equal(
+    createDefaultSkillAdvancementSettings(skills, characteristics).developmentLimitPureOnly,
+    true
+  );
+  assert.equal(
+    normalizeSkillAdvancementSettings({}, skills, characteristics).developmentLimitPureOnly,
+    true
+  );
+  assert.equal(
+    normalizeSkillAdvancementSettings(
+      { developmentLimitPureOnly: false },
+      skills,
+      characteristics
+    ).developmentLimitPureOnly,
+    false
+  );
+  assert.equal(
+    normalizeSkillAdvancementSettings(
+      { advancement: { developmentLimitPureOnly: true } },
+      skills,
+      characteristics
+    ).developmentLimitPureOnly,
+    true
+  );
+});
+
+test("formula references expose the unlimited pure-only result and the capped legacy result", () => {
+  const skillSettings = [{
+    key: "fieldLore",
+    abbr: "fld",
+    label: "Полевые знания",
+    formula: "300",
+    img: ""
+  }];
+  const pureOnly = decomposePreparedSkillValue({
+    base: 300,
+    pureValue: 300,
+    bonusPercent: 50,
+    developmentLimitPureOnly: true,
+    min: 0,
+    max: 300
+  });
+  const legacy = decomposePreparedSkillValue({
+    base: 300,
+    pureValue: 300,
+    bonusPercent: 50,
+    developmentLimitPureOnly: false,
+    min: 0,
+    max: 300
+  });
+
+  assert.equal(pureOnly.value, 450);
+  assert.equal(legacy.value, 300);
+
+  for (const [skill, expected] of [[pureOnly, 450], [legacy, 300]]) {
+    const references = buildActorFormulaReferenceData({
+      system: { skills: { fieldLore: skill } },
+      skillSettings,
+      skillValues: { fieldLore: skill.value }
+    });
+    const formulaData = {
+      ...references,
+      skillSettings,
+      skills: { fieldLore: skill.value }
+    };
+
+    assert.equal(references.formulaVariables.fieldLoreValue, expected);
+    assert.equal(references.formulaVariables.fldValue, expected);
+    assert.equal(references.formulaReferences["skills.fieldLore.value"], expected);
+    assert.equal(references.formulaReferences["system.skills.fieldLore.value"], expected);
+    assert.equal(evaluateFormula("@skills.fieldLore.value", formulaData), expected);
+    assert.equal(evaluateFormula("@system.skills.fieldLore.value", formulaData), expected);
+  }
 });

@@ -1,4 +1,5 @@
 import { isPeriodicHealingEffectKey } from "../combat/periodic-healing.mjs";
+import { isSkillBonusPercentEffectKey } from "../utils/active-effect-keys.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { scaleFirstAidSignedValue } from "../utils/first-aid-scaling.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -208,8 +209,8 @@ function buildChangeRows(changes = [], {
       const appliedValue = scaleChangeValue(configuredValue, multiplier);
       return createComparisonRow({
         label: healing ? labels.periodicHealing : getEffectPathLabel(pathLabels, key),
-        configured: formatChangeValue(change?.type, configuredValue),
-        applied: formatChangeValue(change?.type, appliedValue),
+        configured: formatChangeValue(change?.type, configuredValue, key),
+        applied: formatChangeValue(change?.type, appliedValue, key),
         appliedZero: Number(appliedValue) === 0
       });
     })
@@ -264,14 +265,15 @@ function createDurationComparison(configuredSeconds, appliedSeconds, zeroDuratio
   };
 }
 
-function formatChangeValue(type = "add", value = 0) {
+function formatChangeValue(type = "add", value = 0, key = "") {
   const normalizedType = String(type ?? "add");
   const text = String(value ?? "0").trim() || "0";
-  if (normalizedType === "override") return `= ${text}`;
+  const suffix = isSkillBonusPercentEffectKey(key) && normalizedType !== "multiply" ? "%" : "";
+  if (normalizedType === "override") return `= ${text}${suffix}`;
   if (normalizedType === "multiply") return `× ${text}`;
   const number = Number(text);
-  if (Number.isFinite(number)) return formatSignedNumber(number);
-  return text.startsWith("-") ? text : `+${text}`;
+  if (Number.isFinite(number)) return `${formatSignedNumber(number)}${suffix}`;
+  return `${text.startsWith("-") ? "" : "+"}${text}${suffix}`;
 }
 
 function formatSignedNumber(value) {

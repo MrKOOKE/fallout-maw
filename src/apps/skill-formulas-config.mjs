@@ -60,6 +60,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       signatureMultiplier: this.skillAdvancement.signatureMultiplier,
       signatureFlatBonus: this.skillAdvancement.signatureFlatBonus,
       developmentLimit: this.skillAdvancement.developmentLimit,
+      developmentLimitPureOnly: this.skillAdvancement.developmentLimitPureOnly,
       skillCostThresholds: this.skillDevelopmentCosts.thresholds ?? [],
       skills: this.skills.map(skill => ({
         ...skill,
@@ -158,6 +159,9 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       signatureMultiplier: Number(this.form?.querySelector("[data-field='signatureMultiplier']")?.value ?? 0),
       signatureFlatBonus: Number(this.form?.querySelector("[data-field='signatureFlatBonus']")?.value ?? 0),
       developmentLimit: Number(this.form?.querySelector("[data-field='developmentLimit']")?.value ?? 0),
+      developmentLimitPureOnly: Boolean(
+        this.form?.querySelector("[data-field='developmentLimitPureOnly']")?.checked
+      ),
       entries: Object.fromEntries(
         rows.map(row => {
           const key = row.dataset.skillKey ?? "";

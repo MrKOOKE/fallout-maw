@@ -9,6 +9,7 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { isSkillBonusPercentEffectKey } from "../utils/active-effect-keys.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { getOneTimeUseFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
@@ -299,7 +300,7 @@ function buildOneTimeUsePathLabelMap() {
 
 function formatOneTimeUseChangeSummary(change = {}, pathLabels = new Map()) {
   const pathLabel = pathLabels.get(change.key) ?? formatOneTimeUseFallbackPathLabel(change.key);
-  const value = formatOneTimeUseChangeValue(change.type, change.value);
+  const value = formatOneTimeUseChangeValue(change.type, change.value, change.key);
   return value ? `${pathLabel}: ${value}` : pathLabel;
 }
 
@@ -311,21 +312,22 @@ function formatOneTimeUseFallbackPathLabel(key = "") {
     .join(" / ");
 }
 
-function formatOneTimeUseChangeValue(type = "add", value = "") {
+function formatOneTimeUseChangeValue(type = "add", value = "", key = "") {
   const normalizedType = String(type ?? "add");
   const normalizedValue = String(value ?? "").trim();
   if (!normalizedValue) return "";
+  const suffix = isSkillBonusPercentEffectKey(key) && normalizedType !== "multiply" ? "%" : "";
 
   if (normalizedType === "add") {
     const number = Number(normalizedValue);
-    if (Number.isFinite(number)) return number >= 0 ? `+${normalizedValue}` : normalizedValue;
-    return normalizedValue.startsWith("-") ? normalizedValue : `+${normalizedValue}`;
+    if (Number.isFinite(number)) return `${number >= 0 ? "+" : ""}${normalizedValue}${suffix}`;
+    return `${normalizedValue.startsWith("-") ? "" : "+"}${normalizedValue}${suffix}`;
   }
-  if (normalizedType === "override") return `= ${normalizedValue}`;
+  if (normalizedType === "override") return `= ${normalizedValue}${suffix}`;
   if (normalizedType === "multiply") return `× ${normalizedValue}`;
-  if (normalizedType === "upgrade") return `≥ ${normalizedValue}`;
-  if (normalizedType === "downgrade") return `≤ ${normalizedValue}`;
-  return normalizedValue;
+  if (normalizedType === "upgrade") return `≥ ${normalizedValue}${suffix}`;
+  if (normalizedType === "downgrade") return `≤ ${normalizedValue}${suffix}`;
+  return `${normalizedValue}${suffix}`;
 }
 
 async function spendOneTimeUseItem(item, documentOptions = {}) {

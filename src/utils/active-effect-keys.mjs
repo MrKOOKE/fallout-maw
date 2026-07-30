@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
+export const ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY = "system.skills.all.bonusPercent";
 export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
 export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
 export const ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY = "system.skills.all.criticalSuccessChance";
@@ -45,4 +46,9 @@ export function getOriginalEffectKeyFromReverse(key = "") {
 
 export function isReverseEffectKey(key = "") {
   return Boolean(getOriginalEffectKeyFromReverse(key));
+}
+
+export function isSkillBonusPercentEffectKey(key = "") {
+  const path = getOriginalEffectKeyFromReverse(key) || String(key ?? "").trim();
+  return /^system\.skills\.[^.]+\.bonusPercent$/.test(path);
 }

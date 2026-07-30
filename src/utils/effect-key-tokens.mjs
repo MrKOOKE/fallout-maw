@@ -14,6 +14,7 @@ import { STUN_EFFECT_KEY } from "../combat/resource-limits.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
@@ -82,11 +83,13 @@ export function buildEffectKeyTokens({ includePeriodicHealing = false } = {}) {
       path: `system.skills.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Skills")
     })),
+    ...buildSkillBonusPercentEffectKeyTokens(),
     ...buildSkillAdvantageEffectKeyTokens(),
     ...buildSkillDisadvantageEffectKeyTokens(),
     ...buildSkillCriticalChanceEffectKeyTokens(),
     ...buildSkillCheckActionEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsBonusPercentEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
     buildAllSkillsCriticalSuccessChanceEffectKeyToken(),
@@ -239,6 +242,16 @@ export function buildAllSkillsEffectKeyToken() {
   });
 }
 
+export function buildAllSkillsBonusPercentEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allSkillsBonusPercent",
+    key: "allSkillsBonusPercent",
+    label: game.i18n.localize("FALLOUTMAW.Effects.AllSkillsBonusPercent"),
+    path: ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  });
+}
+
 export function buildAllSkillsAdvantageEffectKeyToken() {
   return createEffectKeyToken({
     code: "allSkillsAdvantage",
@@ -313,6 +326,17 @@ export function buildSkillAdvancementMultiplierEffectKeyTokens() {
       group
     })
   ].filter(Boolean);
+}
+
+export function buildSkillBonusPercentEffectKeyTokens() {
+  const label = game.i18n.localize("FALLOUTMAW.Effects.SkillBonusPercent");
+  return getSkillSettings().map(entry => createEffectKeyToken({
+    code: `${entry.abbr || entry.key}:bonusPercent`,
+    key: `${entry.key}.bonusPercent`,
+    label: `${label}: ${entry.label || entry.key}`,
+    path: `system.skills.${entry.key}.bonusPercent`,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  })).filter(Boolean);
 }
 
 export function buildSkillAdvantageEffectKeyTokens() {
@@ -899,11 +923,13 @@ export function buildReverseInteractionEffectKeyTokens() {
       path: `system.skills.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Skills")
     })),
+    ...buildSkillBonusPercentEffectKeyTokens(),
     ...buildSkillAdvantageEffectKeyTokens(),
     ...buildSkillDisadvantageEffectKeyTokens(),
     ...buildSkillCriticalChanceEffectKeyTokens(),
     ...buildSkillCheckActionEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsBonusPercentEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
     buildAllSkillsCriticalSuccessChanceEffectKeyToken(),

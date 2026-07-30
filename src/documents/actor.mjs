@@ -46,6 +46,8 @@ import { getInstalledConstructPartForLimb } from "../utils/construct-parts.mjs";
 import {
   expandActorEffectChangeKeys,
   getActorSuppressedTraumaDiseaseIds,
+  isReverseEffectKey,
+  isSkillBonusPercentEffectKey,
   isActorTraumaDiseaseEffectSuppressed,
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
@@ -258,12 +260,14 @@ export class FalloutMaWActor extends Actor {
       routedFinalKeys = new Set();
       for (const effect of applicableEffects) {
         for (const change of effect.system.changes) {
-          const configuredPhase = String(change?.phase ?? "initial").trim() || "initial";
+          const effectKey = String(change?.key ?? "").trim();
+          const configuredPhase = isSkillBonusPercentEffectKey(effectKey) && !isReverseEffectKey(effectKey)
+            ? "initial"
+            : String(change?.phase ?? "initial").trim() || "initial";
           if (configuredPhase !== "initial") continue;
           const applicationPhase = getActorFormulaApplicationPhase(change, this, { formulaData: getFormulaData });
           if (applicationPhase !== "final") continue;
-          const key = String(change?.key ?? "").trim();
-          if (key) routedFinalKeys.add(key);
+          if (effectKey) routedFinalKeys.add(effectKey);
         }
       }
       this._falloutMawRoutedFinalEffectKeys = routedFinalKeys;
@@ -272,8 +276,11 @@ export class FalloutMaWActor extends Actor {
     for (const effect of applicableEffects) {
       for (const change of effect.system.changes) {
         if (change.key === "") continue;
-        const configuredPhase = String(change?.phase ?? "initial").trim() || "initial";
-        const applicationPhase = configuredPhase === "initial" && routedFinalKeys.has(String(change?.key ?? "").trim())
+        const effectKey = String(change?.key ?? "").trim();
+        const configuredPhase = isSkillBonusPercentEffectKey(effectKey) && !isReverseEffectKey(effectKey)
+          ? "initial"
+          : String(change?.phase ?? "initial").trim() || "initial";
+        const applicationPhase = configuredPhase === "initial" && routedFinalKeys.has(effectKey)
           ? "final"
           : configuredPhase;
         if (applicationPhase !== phase) continue;

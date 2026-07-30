@@ -4,6 +4,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   evaluateActorEffectChangeBaseNumber,
   isReverseEffectKey,
+  isSkillBonusPercentEffectKey,
   prepareActorEffectChangeForApplication
 } from "../utils/active-effect-changes.mjs";
 import { parseDamageBarrierEffectKey } from "../combat/damage-barriers.mjs";
@@ -899,7 +900,8 @@ function formatEffectChange(change, actor = null, effect = null) {
       fallback: Number(change?.value),
       stage: getEffectChangePreparationStage(change, actor)
     });
-    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, change?.type))}</span>`;
+    const suffix = isSkillBonusPercentEffectKey(key) && change?.type !== "multiply" ? "%" : "";
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(`${formatSignedValue(value, change?.type)}${suffix}`)}</span>`;
   }
   const preparedChange = prepareTooltipEffectChange(actor, change, effect);
   if (!preparedChange) return "";
@@ -910,7 +912,8 @@ function formatEffectChange(change, actor = null, effect = null) {
   if (isPostureWeaponActionCostChange(key)) {
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatActionPointDelta(value, preparedChange.type))}</span>`;
   }
-  return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, preparedChange.type))}</span>`;
+  const suffix = isSkillBonusPercentEffectKey(key) && preparedChange.type !== "multiply" ? "%" : "";
+  return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(`${formatSignedValue(value, preparedChange.type)}${suffix}`)}</span>`;
 }
 
 function prepareTooltipEffectChange(actor, change = {}, effect = null) {

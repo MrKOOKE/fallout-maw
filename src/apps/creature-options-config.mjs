@@ -32,7 +32,7 @@ import {
   normalizeNaturalRaceItemData,
   NATURAL_RACE_ITEM_KINDS
 } from "../races/natural-items.mjs";
-import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageBarrierEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildImplantLimitEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsBonusPercentEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageBarrierEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildImplantLimitEffectKeyTokens, buildInitiativeBonusEffectKeyToken, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildSkillAdvancementMultiplierEffectKeyTokens, buildSkillBonusPercentEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 import { buildStealthAttackBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -1126,7 +1126,9 @@ function buildEffectKeyTokens() {
   return [
     ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: "Характеристики" })),
     ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: "Навыки" })),
+    ...buildSkillBonusPercentEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsBonusPercentEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildSkillAdvancementMultiplierEffectKeyTokens(),

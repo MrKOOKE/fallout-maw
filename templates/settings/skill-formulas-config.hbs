@@ -65,7 +65,7 @@
       <h2>{{localize "FALLOUTMAW.Settings.Skills.AdvancementTitle"}}</h2>
     </header>
 
-    <div class="fallout-maw-list-grid three-columns">
+    <div class="fallout-maw-list-grid four-columns">
       <label>
         <span>{{localize "FALLOUTMAW.Settings.Skills.SignatureMultiplier"}}</span>
         <input type="number" data-field="signatureMultiplier" value="{{signatureMultiplier}}" step="0.01">
@@ -77,6 +77,11 @@
       <label>
         <span>{{localize "FALLOUTMAW.Settings.Skills.DevelopmentLimit"}}</span>
         <input type="number" data-field="developmentLimit" value="{{developmentLimit}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Skills.DevelopmentLimitPureOnly"}}</span>
+        <input type="checkbox" data-field="developmentLimitPureOnly" {{checked developmentLimitPureOnly}}>
+        <small class="hint">{{localize "FALLOUTMAW.Settings.Skills.DevelopmentLimitPureOnlyHint"}}</small>
       </label>
     </div>
 
