@@ -180,6 +180,10 @@ import {
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
+import {
+  createFormSelfRenderSuppressionController,
+  isFormTextEditingControl
+} from "../utils/form-self-render-suppression.mjs";
 import { getActorFormulaAutocompleteEntries, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -210,10 +214,6 @@ import {
   resolveCraftKnowledgeItem
 } from "../items/recipe-knowledge.mjs";
 import { extractEnergyConsumerSource } from "../items/light-source.mjs";
-import {
-  preserveTextSelectionBeforePartSync,
-  restoreTextSelectionAfterPartSync
-} from "../utils/application-focus-state.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -264,6 +264,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #scrollPositions = new Map();
   #handledFormChangeEvents = new WeakSet();
   #submitQueue = Promise.resolve();
+  #selfRenderSuppression = createFormSelfRenderSuppressionController();
+  #pendingScalarInputRender = false;
+  #pendingScalarInputRenderTimer = null;
   #functionPickerActive = false;
   #fixedAbilityFunctionPickerActive = false;
   #mitigationFillDrag = null;
@@ -317,19 +320,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.document;
   }
 
-  _preSyncPartState(partId, newElement, priorElement, state) {
-    super._preSyncPartState(partId, newElement, priorElement, state);
-    preserveTextSelectionBeforePartSync(priorElement, state);
-  }
+  render(options = {}, legacyOptions = {}) {
+    const renderOptions = typeof options === "boolean" ? legacyOptions : options;
+    if (this.#selfRenderSuppression.shouldSuppress(
+      renderOptions?.renderContext,
+      renderOptions?.renderData
+    )) {
+      this.#pendingScalarInputRender = true;
+      this.#scheduleScalarInputRender();
+      return Promise.resolve(this);
+    }
 
-  _syncPartState(partId, newElement, priorElement, state) {
-    super._syncPartState(partId, newElement, priorElement, state);
-    restoreTextSelectionAfterPartSync(newElement, state);
-  }
-
-  render(options = {}) {
+    this.#clearPendingScalarInputRender();
     this.#captureScrollPositions();
-    return super.render(options);
+    return super.render(options, legacyOptions);
   }
 
   changeTab(tab, group, options) {
@@ -833,7 +837,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       if (hasSubmittedStackShapeChange(this.item, submitData)) {
         options.falloutMawRepackStacks = true;
       }
-      return super._processSubmitData(event, form, submitData, options);
+      return this.#selfRenderSuppression.run(
+        event,
+        () => super._processSubmitData(event, form, submitData, options)
+      );
     };
     const pending = this.#submitQueue.then(process, process);
     this.#submitQueue = pending.catch(() => undefined);
@@ -871,6 +878,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.form?.addEventListener("focusout", () => this.#scheduleScalarInputRender());
     this.#fitAutoHeightToContent();
     this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
@@ -2583,6 +2591,35 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     drag.moved = true;
     drag.bend = getCraftSvgPointFromEvent(event, svg);
     this.#renderCraftLinks();
+  }
+
+  _onClose(options) {
+    super._onClose(options);
+    this.#clearPendingScalarInputRender();
+  }
+
+  #scheduleScalarInputRender() {
+    if (!this.#pendingScalarInputRender || this.#pendingScalarInputRenderTimer !== null) return;
+    const view = this.element?.ownerDocument?.defaultView ?? globalThis.window;
+    this.#pendingScalarInputRenderTimer = view?.setTimeout?.(() => {
+      this.#pendingScalarInputRenderTimer = null;
+      if (!this.#pendingScalarInputRender) return;
+
+      const form = this.form;
+      const activeControl = form?.ownerDocument?.activeElement;
+      if (form?.contains(activeControl) && isFormTextEditingControl(activeControl)) return;
+
+      this.#pendingScalarInputRender = false;
+      void this.render();
+    }, 0) ?? null;
+  }
+
+  #clearPendingScalarInputRender() {
+    this.#pendingScalarInputRender = false;
+    if (this.#pendingScalarInputRenderTimer === null) return;
+    const view = this.element?.ownerDocument?.defaultView ?? globalThis.window;
+    view?.clearTimeout?.(this.#pendingScalarInputRenderTimer);
+    this.#pendingScalarInputRenderTimer = null;
   }
 
   #onCraftLinkEnd(event) {

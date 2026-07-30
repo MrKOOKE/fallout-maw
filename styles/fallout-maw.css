@@ -1198,6 +1198,28 @@ body #prosemirror-dropdown {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
 
+.fallout-maw-skill-advancement-settings > .fallout-maw-skill-development-limit-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  margin: 0;
+  width: 100%;
+}
+
+.fallout-maw-skill-development-limit-toggle > input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+  width: auto;
+}
+
+.fallout-maw-skill-advancement-settings > .fallout-maw-skill-development-limit-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  width: 100%;
+}
+
 .fallout-maw-panel {
   background: var(--fallout-maw-panel-bg);
   border: 1px solid var(--fallout-maw-border);

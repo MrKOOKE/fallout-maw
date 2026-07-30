@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "3595b5d643eadd69b1e9f7247ff6da6a1e875318fd98c0e6ae62aead878e17fc",
-  "updatedAt": "2026-07-30T06:09:30.651Z",
+  "revision": "57e397f6c2c5f922d4223c7fc00a425c8f1d1aa9391be207718f206783d6e8d2",
+  "updatedAt": "2026-07-30T07:39:47.946Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -9384,12 +9384,12 @@
         "craft": {
           "criticalFailureRefundPercent": 20,
           "failureRefundPercent": 80,
-          "mode": "skillChecks"
+          "mode": "skillThreshold"
         },
         "repair": {
           "criticalFailureToolCostIncreasePercent": 0,
           "failureToolCostIncreasePercent": 100,
-          "mode": "skillChecks"
+          "mode": "skillThreshold"
         }
       }
     },

@@ -17,119 +17,98 @@ const TEXT_SELECTION_CONTROL_SELECTOR = [
 ].join(", ");
 const FALLOUT_MAW_SCOPE_SELECTOR = ".fallout-maw, [class*='fallout-maw-']";
 const DRAG_THRESHOLD_PX = 4;
-const SUPPRESSION_DURATION_MS = 250;
-
-let dragState = null;
-let suppressedFocusTransfer = null;
 
 export function registerFormFocusDragGuard(doc = document) {
   const root = doc?.documentElement;
   if (!root || root.dataset.falloutMawFormFocusDragGuard === "true") return;
   root.dataset.falloutMawFormFocusDragGuard = "true";
 
+  let dragState = null;
+  let pendingClickTarget = null;
+  let pendingClickClearId = null;
+
   doc.addEventListener("pointerdown", onPointerDown, { capture: true });
   doc.addEventListener("pointermove", onPointerMove, { capture: true, passive: true });
   doc.addEventListener("pointerup", onPointerUp, { capture: true });
-  doc.addEventListener("pointercancel", clearDragState, { capture: true });
-  doc.addEventListener("mouseup", onMouseUp, { capture: true });
+  doc.addEventListener("pointercancel", clearPointerGesture, { capture: true });
   doc.addEventListener("click", onClick, { capture: true });
-  doc.addEventListener("focusin", onFocusIn, { capture: true });
-}
 
-function onPointerDown(event) {
-  if (event.button !== 0) {
-    clearDragState();
-    return;
+  function onPointerDown(event) {
+    // A click which belongs to the previous release is dispatched before any
+    // subsequent pointerdown. Reaching a new press therefore makes an
+    // unmatched pending click stale.
+    clearPendingClick();
+    if (event.button !== 0) {
+      dragState = null;
+      return;
+    }
+
+    const source = getClosestControl(event.target, TEXT_SELECTION_CONTROL_SELECTOR);
+    if (!source || !isFalloutMawElement(source)) {
+      dragState = null;
+      return;
+    }
+
+    dragState = {
+      pointerId: event.pointerId,
+      source,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
   }
 
-  const source = getClosestControl(event.target, TEXT_SELECTION_CONTROL_SELECTOR);
-  if (!source || !isFalloutMawElement(source)) {
-    clearDragState();
-    return;
+  function onPointerMove(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const dx = Math.abs(event.clientX - dragState.startX);
+    const dy = Math.abs(event.clientY - dragState.startY);
+    if ((dx >= DRAG_THRESHOLD_PX) || (dy >= DRAG_THRESHOLD_PX)) dragState.moved = true;
   }
 
-  dragState = {
-    pointerId: event.pointerId,
-    source,
-    startX: event.clientX,
-    startY: event.clientY,
-    moved: false
-  };
-}
+  function onPointerUp(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const state = dragState;
+    dragState = null;
+    if (!state.moved || !state.source?.isConnected) return;
 
-function onPointerMove(event) {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  const dx = Math.abs(event.clientX - dragState.startX);
-  const dy = Math.abs(event.clientY - dragState.startY);
-  if ((dx >= DRAG_THRESHOLD_PX) || (dy >= DRAG_THRESHOLD_PX)) dragState.moved = true;
-}
+    const target = getReleaseTargetControl(event);
+    if (!target || isSameControl(state.source, target) || !isFalloutMawElement(target)) return;
 
-function onPointerUp(event) {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  handleRelease(event);
-}
-
-function onMouseUp(event) {
-  if (!dragState || event.button !== 0) return;
-  handleRelease(event);
-}
-
-function handleRelease(event) {
-  const state = dragState;
-  dragState = null;
-  if (!state.moved || !state.source?.isConnected) return;
-
-  const target = getReleaseTargetControl(event);
-  if (!target || isSameControl(state.source, target) || !isFalloutMawElement(target)) return;
-
-  event.preventDefault();
-  const selection = captureSelection(state.source);
-  suppressedFocusTransfer = {
-    source: state.source,
-    target,
-    selection,
-    until: performance.now() + SUPPRESSION_DURATION_MS
-  };
-  window.setTimeout(clearSuppressedFocusTransfer, SUPPRESSION_DURATION_MS);
-}
-
-function onClick(event) {
-  const suppressed = getSuppressedFocusTransfer(event);
-  if (!suppressed) return;
-
-  const target = getReleaseTargetControl(event);
-  if (!target || !isSameControl(target, suppressed.target)) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  restoreSourceFocus(suppressed);
-  clearSuppressedFocusTransfer();
-}
-
-function onFocusIn(event) {
-  const suppressed = getSuppressedFocusTransfer(event);
-  if (!suppressed) return;
-
-  const target = getClosestControl(event.target, FORM_CONTROL_SELECTOR);
-  if (!target || isSameControl(target, suppressed.source)) return;
-  queueMicrotask(() => restoreSourceFocus(suppressed));
-}
-
-function getSuppressedFocusTransfer(event) {
-  if (!suppressedFocusTransfer) return null;
-  if (performance.now() > suppressedFocusTransfer.until) {
-    clearSuppressedFocusTransfer();
-    return null;
+    // Cancel only the activation produced by this cross-control release.
+    // Native focus and selection on the source are intentionally untouched.
+    event.preventDefault();
+    pendingClickTarget = target;
+    const view = doc.defaultView ?? globalThis.window;
+    pendingClickClearId = view?.setTimeout?.(() => {
+      pendingClickTarget = null;
+      pendingClickClearId = null;
+    }, 0) ?? null;
   }
-  if (event?.target && !isFalloutMawElement(event.target)) return null;
-  return suppressedFocusTransfer;
-}
 
-function clearDragState() {
-  dragState = null;
-}
+  function onClick(event) {
+    if (!pendingClickTarget) return;
+    const pendingTarget = pendingClickTarget;
+    clearPendingClick();
 
-function clearSuppressedFocusTransfer() {
-  suppressedFocusTransfer = null;
+    const target = getReleaseTargetControl(event);
+    if (!target || !isSameControl(target, pendingTarget)) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  function clearPointerGesture() {
+    dragState = null;
+    clearPendingClick();
+  }
+
+  function clearPendingClick() {
+    pendingClickTarget = null;
+    if (pendingClickClearId === null) return;
+    const view = doc.defaultView ?? globalThis.window;
+    view?.clearTimeout?.(pendingClickClearId);
+    pendingClickClearId = null;
+  }
 }
 
 function getReleaseTargetControl(event) {
@@ -157,25 +136,4 @@ function isFalloutMawElement(target) {
 
 function isSameControl(a, b) {
   return (a === b) || a.contains?.(b) || b.contains?.(a);
-}
-
-function captureSelection(control) {
-  if (!isTextSelectionElement(control)) return null;
-  if (typeof control.selectionStart !== "number" || typeof control.selectionEnd !== "number") return null;
-  return {
-    start: control.selectionStart,
-    end: control.selectionEnd,
-    direction: control.selectionDirection ?? "none"
-  };
-}
-
-function isTextSelectionElement(control) {
-  return ["INPUT", "TEXTAREA"].includes(control?.tagName);
-}
-
-function restoreSourceFocus({ source, selection }) {
-  if (!source?.isConnected || source.disabled || source.readOnly) return;
-  source.focus?.({ preventScroll: true });
-  if (!selection || (typeof source.setSelectionRange !== "function")) return;
-  source.setSelectionRange(selection.start, selection.end, selection.direction);
 }

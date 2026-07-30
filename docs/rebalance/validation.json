@@ -1,19 +1,21 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-28T12:30:32.289Z",
-  "mode": "write",
-  "status": "written-and-verified",
+  "generatedAt": "2026-07-30T08:26:00.686Z",
+  "mode": "dry-run",
+  "status": "ready-to-write",
   "scope": {
     "actorsRead": false,
     "civilianItemsExcluded": 323,
     "constructWeaponItemsExcluded": 15,
-    "constructConditionItemsExcluded": 27,
+    "constructConditionItemsExcluded": 42,
     "gaussDamageSourcesForcedPiercing": 3,
     "activeDamageSourceFunctions": 198,
     "hybridDamageEnergySources": 3,
     "hybridDamageEnergySourcesAdjusted": 0,
+    "energyConsumersExactClassAdjusted": 0,
+    "energyConsumersExactClassBlocked": 0,
     "conditionOnlyArmorItems": 0,
-    "weaponContentAdjusted": 0,
+    "weaponContentAdjusted": 1,
     "persistentDamageAreas": 14,
     "groups": {
       "damageSources": 195,
@@ -36,7 +38,7 @@
   "unpaidPositiveQuality": [],
   "equipmentIndividualization": {
     "file": "equipment-individualization.json",
-    "restoredBeforeRecalculation": 0,
+    "restoredBeforeRecalculation": 327,
     "originalCloneGroups": 87,
     "originalCloneItems": 325,
     "individualizedItems": 327,
@@ -226,10 +228,10 @@
       "damageSources": {
         "items": 195,
         "itemsWithPaidDeviations": 184,
-        "payments": 430,
+        "payments": 431,
         "paymentChannels": {
           "area": 17,
-          "damage": 133,
+          "damage": 134,
           "damage+area": 11,
           "damage+critical": 17,
           "damage+handling": 8,
@@ -255,13 +257,14 @@
       "weapons": {
         "items": 799,
         "itemsWithPaidDeviations": 718,
-        "payments": 2133,
+        "payments": 2277,
         "paymentChannels": {
-          "actions": 193,
+          "actions": 198,
           "additionalWeapons": 2,
           "condition": 70,
           "fireControl": 401,
           "manualDamageEfficiency": 17,
+          "modularity": 139,
           "noise": 117,
           "platformScore": 72,
           "precision": 270,
@@ -294,13 +297,18 @@
         }
       }
     },
-    "sameRecipeDistinctCapabilities": 231
+    "sameRecipeDistinctCapabilities": 225
   },
   "weaponContentRebalance": {
-    "items": 0,
+    "items": 1,
     "missingActionPresetsApplied": 0,
     "automaticShotgunsEnabled": 0,
     "burstCountsChanged": 0
+  },
+  "energyConsumerClassCompatibility": {
+    "rule": "exact-platform-class-only",
+    "adjusted": [],
+    "blocked": []
   },
   "persistentAreaRebalance": {
     "sources": 14,
@@ -320,10 +328,10 @@
     "armor": 531,
     "maxChanged": 0,
     "valueChanged": 0,
-    "conditionCostsChanged": 0,
+    "conditionCostsChanged": 1,
     "durabilitySurplusItems": 70,
-    "weakeningThresholdChanged": 0,
-    "weakeningThreshold": 10
+    "weakeningThresholdChanged": 327,
+    "weakeningThreshold": 20
   },
   "brokenCraftReferences": [],
   "byGroupAndClass": {
@@ -466,12 +474,12 @@
         "items": 294,
         "price": {
           "min": 140,
-          "median": 1366.5,
+          "median": 1425,
           "max": 3305
         },
         "difficulty": {
           "min": 70,
-          "median": 70,
+          "median": 72.5,
           "max": 100
         }
       },
@@ -492,8 +500,8 @@
         "items": 263,
         "price": {
           "min": 384,
-          "median": 5824,
-          "max": 13501
+          "median": 6089,
+          "max": 13936
         },
         "difficulty": {
           "min": 100,
@@ -597,17 +605,5 @@
     }
   },
   "preparedUpdates": 1532,
-  "databaseWritten": true,
-  "postWrite": {
-    "updatedItemsChecked": 1532,
-    "readbackMismatches": [],
-    "damageSourceCombatReadbackMismatches": [],
-    "weaponContentReadbackMismatches": [],
-    "conditionReadbackMismatches": [],
-    "equipmentIndividualizationReadbackMismatches": [],
-    "priceFormulaMismatches": [],
-    "craftStructureMismatches": [],
-    "civilianItemsChecked": 323,
-    "civilianMismatches": []
-  }
+  "databaseWritten": false
 }

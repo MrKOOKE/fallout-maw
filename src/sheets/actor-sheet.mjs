@@ -217,10 +217,6 @@ import {
 import { getEnergyConsumerTooltipSourceEntries } from "../utils/energy-consumer-tooltip-sources.mjs";
 import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
-import {
-  preserveTextSelectionBeforePartSync,
-  restoreTextSelectionAfterPartSync
-} from "../utils/application-focus-state.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
@@ -436,16 +432,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       template: TEMPLATES.actorSheet.effects
     }
   };
-
-  _preSyncPartState(partId, newElement, priorElement, state) {
-    super._preSyncPartState(partId, newElement, priorElement, state);
-    preserveTextSelectionBeforePartSync(priorElement, state);
-  }
-
-  _syncPartState(partId, newElement, priorElement, state) {
-    super._syncPartState(partId, newElement, priorElement, state);
-    restoreTextSelectionAfterPartSync(newElement, state);
-  }
 
   static TABS = {
     primary: {

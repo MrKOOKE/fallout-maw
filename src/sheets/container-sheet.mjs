@@ -57,10 +57,6 @@ import {
   renderInventoryPlacementPreview,
   syncInventoryVirtualCell
 } from "../utils/inventory-grid-dom.mjs";
-import {
-  preserveTextSelectionBeforePartSync,
-  restoreTextSelectionAfterPartSync
-} from "../utils/application-focus-state.mjs";
 import { executeInventoryMutation } from "../inventory/mutation.mjs";
 import { canStackInventoryItems } from "../inventory/stacking.mjs";
 
@@ -109,16 +105,6 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   get item() {
     return this.document;
-  }
-
-  _preSyncPartState(partId, newElement, priorElement, state) {
-    super._preSyncPartState(partId, newElement, priorElement, state);
-    preserveTextSelectionBeforePartSync(priorElement, state);
-  }
-
-  _syncPartState(partId, newElement, priorElement, state) {
-    super._syncPartState(partId, newElement, priorElement, state);
-    restoreTextSelectionAfterPartSync(newElement, state);
   }
 
   get actor() {

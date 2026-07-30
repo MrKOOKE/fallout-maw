@@ -2,6 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { getAbilityCatalog, getSkillSettings, setAbilityCatalog } from "../settings/accessors.mjs";
 import { ABILITY_CATALOG_DRAG_TYPE, LOCKED_FEATURES_CATEGORY_ID, normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { createAbilityCatalogCopy } from "../utils/ability-catalog-copy.mjs";
 import { AbilityCatalogItemEditor } from "./ability-catalog-item-editor.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
@@ -38,6 +39,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
       addAbility: this.#onAddAbility,
       moveAbility: this.#onMoveAbility,
       toggleAbilityVisibility: this.#onToggleAbilityVisibility,
+      copyAbility: this.#onCopyAbility,
       editAbility: this.#onEditAbility,
       deleteAbility: this.#onDeleteAbility
     }
@@ -72,6 +74,9 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
             cost: toInteger(ability.system?.cost),
             visible: ability.visible !== false,
             visibilityIconClass: ability.visible === false ? "fa-eye-slash" : "fa-eye",
+            copyTitle: category.id === LOCKED_FEATURES_CATEGORY_ID
+              ? "Создать копию особенности"
+              : "Создать копию способности",
             visibilityTitle: ability.visible === false
               ? "Показать в повышении уровня"
               : "Скрыть из повышения уровня"
@@ -305,6 +310,26 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     if (!ability) return undefined;
     ability.visible = ability.visible === false;
     return this.forceRender();
+  }
+
+  static async #onCopyAbility(event, target) {
+    event.preventDefault();
+    this.catalog = this.readCatalogFromForm();
+    const categoryId = target.closest("[data-ability-category-row]")?.dataset.categoryId ?? "";
+    const abilityId = target.closest("[data-ability-row]")?.dataset.abilityId ?? "";
+    const category = this.catalog.categories.find(entry => entry.id === categoryId);
+    const ability = category?.abilities?.find(entry => entry.id === abilityId);
+    if (!category || !ability) return undefined;
+
+    const copy = normalizeAbilityEntry(createAbilityCatalogCopy(ability, {
+      id: foundry.utils.randomID(),
+      existingNames: category.abilities.map(entry => entry.name)
+    }));
+    category.abilities.push(copy);
+    category.abilities.sort(compareAbilityNames);
+    this.#expandedCategoryIds.add(categoryId);
+    await this.forceRender();
+    return new AbilityCatalogItemEditor(this, categoryId, copy.id).render(true);
   }
 
   static #onEditAbility(event, target) {

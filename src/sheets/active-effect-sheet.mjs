@@ -5,10 +5,6 @@ import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getActorFormulaAutocompleteEntries } from "../utils/actor-formulas.mjs";
 import { buildEffectKeyTokens, buildResourceBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
-import {
-  preserveTextSelectionBeforePartSync,
-  restoreTextSelectionAfterPartSync
-} from "../utils/application-focus-state.mjs";
 
 const { ActiveEffectConfig } = foundry.applications.sheets;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -48,16 +44,6 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
       initial: "main"
     }
   };
-
-  _preSyncPartState(partId, newElement, priorElement, state) {
-    super._preSyncPartState(partId, newElement, priorElement, state);
-    preserveTextSelectionBeforePartSync(priorElement, state);
-  }
-
-  _syncPartState(partId, newElement, priorElement, state) {
-    super._syncPartState(partId, newElement, priorElement, state);
-    restoreTextSelectionAfterPartSync(newElement, state);
-  }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);

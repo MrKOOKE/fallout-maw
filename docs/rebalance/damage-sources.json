@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-28T12:30:32.201Z",
+  "generatedAt": "2026-07-30T08:26:00.606Z",
   "world": "fallout",
   "group": "damageSources",
-  "writeRequested": true,
+  "writeRequested": false,
   "records": [
     {
       "id": "8568ceb2553d4a5d",
@@ -928,18 +928,18 @@
       "folderPath": "Боеприпасы / .308 Winchester / A",
       "class": "A",
       "family": "conventionalBallistic",
-      "difficulty": 145,
+      "difficulty": 140,
       "resultQuantity": 30,
       "previousPrice": 10,
-      "price": 166,
-      "priceDelta": 156,
-      "priceRatio": 16.6,
+      "price": 147,
+      "priceDelta": 137,
+      "priceRatio": 14.7,
       "priceCalculation": {
-        "rawComponentCost": 130.93333333333334,
-        "componentCost": 131,
+        "rawComponentCost": 116,
+        "componentCost": 116,
         "toolCost": 0,
         "difficultyPercent": 27,
-        "final": 166
+        "final": 147
       },
       "ingredients": [
         {
@@ -958,11 +958,10 @@
           "name": "Компонент химиката A класса",
           "kind": "chemistry",
           "class": "A",
-          "quantity": 2,
+          "quantity": 1,
           "unitPrice": 899,
           "reasons": [
-            "метательный заряд",
-            "повышенный эффективный урон после дробления и типовой защиты"
+            "метательный заряд"
           ]
         },
         {
@@ -974,6 +973,17 @@
           "unitPrice": 1278,
           "reasons": [
             "бронебойный сердечник"
+          ]
+        },
+        {
+          "itemId": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "kind": "chemistry",
+          "class": "B",
+          "quantity": 1,
+          "unitPrice": 451,
+          "reasons": [
+            "повышенный эффективный урон после дробления и типовой защиты"
           ]
         },
         {
@@ -991,8 +1001,7 @@
       "reasons": [
         "бронебойный вариант",
         "повышенный эффективный урон после дробления и типовой защиты: единый пакет фактического преимущества внутри семейства и класса",
-        "стабилизация исключительно высокой пробивной силы: единый пакет фактического преимущества внутри семейства и класса",
-        "надбавка сложности только за 1 исключительных совокупных преимущества"
+        "стабилизация исключительно высокой пробивной силы: единый пакет фактического преимущества внутри семейства и класса"
       ],
       "deviationPayments": [
         {
@@ -1006,9 +1015,9 @@
         {
           "channel": "damage",
           "label": "повышенный эффективный урон после дробления и типовой защиты",
-          "rank": 2,
+          "rank": 1,
           "componentKind": "chemistry",
-          "componentClass": "A",
+          "componentClass": "B",
           "componentCount": 1
         },
         {
@@ -4613,15 +4622,15 @@
       "difficulty": 135,
       "resultQuantity": 30,
       "previousPrice": 10,
-      "price": 109,
-      "priceDelta": 99,
-      "priceRatio": 10.9,
+      "price": 128,
+      "priceDelta": 118,
+      "priceRatio": 12.8,
       "priceCalculation": {
-        "rawComponentCost": 88.33333333333333,
-        "componentCost": 88,
+        "rawComponentCost": 103.36666666666666,
+        "componentCost": 103,
         "toolCost": 0,
         "difficultyPercent": 24,
-        "final": 109
+        "final": 128
       },
       "ingredients": [
         {
@@ -4657,10 +4666,22 @@
           "reasons": [
             "заданное формирование поражающего поля"
           ]
+        },
+        {
+          "itemId": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "kind": "chemistry",
+          "class": "B",
+          "quantity": 1,
+          "unitPrice": 451,
+          "reasons": [
+            "стабилизация исключительно высокого поражающего действия"
+          ]
         }
       ],
       "reasons": [
-        "усиленное взрывное или осколочное действие"
+        "усиленное взрывное или осколочное действие",
+        "стабилизация исключительно высокого поражающего действия: единый пакет фактического преимущества внутри семейства и класса"
       ],
       "deviationPayments": [
         {
@@ -4678,11 +4699,19 @@
           "componentKind": "properties",
           "componentClass": "B",
           "componentCount": 1
+        },
+        {
+          "channel": "damage",
+          "label": "стабилизация исключительно высокого поражающего действия",
+          "rank": 1,
+          "componentKind": "chemistry",
+          "componentClass": "B",
+          "componentCount": 1
         }
       ],
       "signals": {
-        "damage": 195,
-        "pellets": 8,
+        "damage": 300,
+        "pellets": 4,
         "penetration": 14,
         "accuracy": -5,
         "criticalChance": 0,
@@ -4690,10 +4719,10 @@
         "maxRange": 0,
         "effectiveFar": 0,
         "explosionRadius": 1,
-        "damageTypeCount": 2,
+        "damageTypeCount": 1,
         "specialTypeCount": 0,
-        "armoredEffectiveDamage": 46,
-        "damagePacketCount": 16,
+        "armoredEffectiveDamage": 138.4,
+        "damagePacketCount": 4,
         "regionEffectCount": 0
       },
       "combatAdjustment": null,
@@ -4949,8 +4978,8 @@
         "damage": 108,
         "pellets": 1,
         "penetration": 15,
-        "accuracy": 10,
-        "criticalChance": 0,
+        "accuracy": 25,
+        "criticalChance": 2,
         "criticalDamage": 0,
         "maxRange": 10,
         "effectiveFar": 8,
@@ -5804,8 +5833,8 @@
         }
       ],
       "signals": {
-        "damage": 332,
-        "pellets": 8,
+        "damage": 190,
+        "pellets": 4,
         "penetration": 5,
         "accuracy": -5,
         "criticalChance": 0,
@@ -5813,10 +5842,10 @@
         "maxRange": 0,
         "effectiveFar": 0,
         "explosionRadius": 2,
-        "damageTypeCount": 2,
+        "damageTypeCount": 1,
         "specialTypeCount": 0,
-        "armoredEffectiveDamage": 88.8,
-        "damagePacketCount": 16,
+        "armoredEffectiveDamage": 74,
+        "damagePacketCount": 4,
         "regionEffectCount": 0
       },
       "combatAdjustment": null,
@@ -6837,8 +6866,8 @@
         }
       ],
       "signals": {
-        "damage": 179,
-        "pellets": 8,
+        "damage": 220,
+        "pellets": 4,
         "penetration": 12,
         "accuracy": -5,
         "criticalChance": 0,
@@ -6846,10 +6875,10 @@
         "maxRange": 0,
         "effectiveFar": 0,
         "explosionRadius": 1,
-        "damageTypeCount": 2,
+        "damageTypeCount": 1,
         "specialTypeCount": 0,
-        "armoredEffectiveDamage": 36.4,
-        "damagePacketCount": 16,
+        "armoredEffectiveDamage": 87.2,
+        "damagePacketCount": 4,
         "regionEffectCount": 0
       },
       "combatAdjustment": null,
@@ -7178,8 +7207,8 @@
         }
       ],
       "signals": {
-        "damage": 186,
-        "pellets": 8,
+        "damage": 220,
+        "pellets": 4,
         "penetration": 12,
         "accuracy": -5,
         "criticalChance": 0,
@@ -7189,8 +7218,8 @@
         "explosionRadius": 1,
         "damageTypeCount": 2,
         "specialTypeCount": 0,
-        "armoredEffectiveDamage": 39.2,
-        "damagePacketCount": 16,
+        "armoredEffectiveDamage": 64,
+        "damagePacketCount": 8,
         "regionEffectCount": 0
       },
       "combatAdjustment": null,
