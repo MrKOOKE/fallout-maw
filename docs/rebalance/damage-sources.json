@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T09:22:27.357Z",
+  "generatedAt": "2026-07-31T13:00:36.880Z",
   "world": "fallout",
   "group": "damageSources",
   "writeRequested": false,
@@ -20863,119 +20863,18 @@
       "folderPath": "Боеприпасы / Ядерный выстрел / S",
       "class": "S",
       "family": "grenadeOrRocket",
-      "difficulty": 175,
-      "resultQuantity": 1,
-      "previousPrice": 417,
-      "price": 6845,
-      "priceDelta": 6428,
-      "priceRatio": 16.415,
-      "priceCalculation": {
-        "rawComponentCost": 4960,
-        "componentCost": 4960,
-        "toolCost": 0,
-        "difficultyPercent": 38,
-        "final": 6845
-      },
-      "ingredients": [
-        {
-          "itemId": "w3xIoO171uQbdr6z",
-          "name": "Компонент каркаса A класса",
-          "kind": "frame",
-          "class": "A",
-          "quantity": 1,
-          "unitPrice": 840,
-          "reasons": [
-            "корпус боеприпаса"
-          ]
-        },
-        {
-          "itemId": "tyqQLLfOSUDaCc2Z",
-          "name": "Компонент химиката S класса",
-          "kind": "chemistry",
-          "class": "S",
-          "quantity": 1,
-          "unitPrice": 1661,
-          "reasons": [
-            "основное взрывчатое наполнение"
-          ]
-        },
-        {
-          "itemId": "T2Z8K1muRKCZSxRX",
-          "name": "Компонент химиката A класса",
-          "kind": "chemistry",
-          "class": "A",
-          "quantity": 1,
-          "unitPrice": 899,
-          "reasons": [
-            "инициирующее наполнение"
-          ]
-        },
-        {
-          "itemId": "k6IWvSo2c0ZxvYDm",
-          "name": "Компонент свойств S класса",
-          "kind": "properties",
-          "class": "S",
-          "quantity": 1,
-          "unitPrice": 1560,
-          "reasons": [
-            "особый физический канал воздействия"
-          ]
-        }
-      ],
-      "reasons": [
-        "особый канал воздействия"
-      ],
-      "deviationPayments": [
-        {
-          "channel": "special",
-          "label": "особый физический канал воздействия",
-          "rank": 2,
-          "componentKind": "properties",
-          "componentClass": "S",
-          "componentCount": 1
-        }
-      ],
-      "signals": {
-        "damage": 2100,
-        "pellets": 8,
-        "penetration": 18,
-        "accuracy": 0,
-        "criticalChance": 0,
-        "criticalDamage": 0,
-        "maxRange": 0,
-        "effectiveFar": 0,
-        "explosionRadius": 12,
-        "damageTypeCount": 3,
-        "specialTypeCount": 2,
-        "armoredEffectiveDamage": 797.6,
-        "damagePacketCount": 32,
-        "regionEffectCount": 1
-      },
-      "combatAdjustment": null,
-      "areaAdjustment": null,
-      "weaponContentAdjustment": null,
-      "conditionAdjustment": null,
-      "equipmentIndividualization": null
-    },
-    {
-      "id": "6891f3dbc6009d21",
-      "oldId": "dfuRD6XIw4cdeS17",
-      "name": "Ядерный выстрел «Сингулярный»",
-      "folderPath": "Боеприпасы / Ядерный выстрел / S",
-      "class": "S",
-      "family": "grenadeOrRocket",
       "difficulty": 180,
       "resultQuantity": 1,
       "previousPrice": 417,
-      "price": 10678,
-      "priceDelta": 10261,
-      "priceRatio": 25.607,
+      "price": 9402,
+      "priceDelta": 8985,
+      "priceRatio": 22.547,
       "priceCalculation": {
-        "rawComponentCost": 7520,
-        "componentCost": 7520,
+        "rawComponentCost": 6621,
+        "componentCost": 6621,
         "toolCost": 0,
         "difficultyPercent": 42,
-        "final": 10678
+        "final": 9402
       },
       "ingredients": [
         {
@@ -21006,6 +20905,117 @@
           "name": "Компонент химиката A класса",
           "kind": "chemistry",
           "class": "A",
+          "quantity": 1,
+          "unitPrice": 899,
+          "reasons": [
+            "инициирующее наполнение"
+          ]
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "kind": "properties",
+          "class": "S",
+          "quantity": 1,
+          "unitPrice": 1560,
+          "reasons": [
+            "особый физический канал воздействия"
+          ]
+        }
+      ],
+      "reasons": [
+        "особый канал воздействия",
+        "повышенный эффективный урон после дробления и типовой защиты: единый пакет фактического преимущества внутри семейства и класса",
+        "надбавка сложности только за 1 исключительных совокупных преимущества"
+      ],
+      "deviationPayments": [
+        {
+          "channel": "special",
+          "label": "особый физический канал воздействия",
+          "rank": 2,
+          "componentKind": "properties",
+          "componentClass": "S",
+          "componentCount": 1
+        },
+        {
+          "channel": "damage",
+          "label": "повышенный эффективный урон после дробления и типовой защиты",
+          "rank": 2,
+          "componentKind": "chemistry",
+          "componentClass": "S",
+          "componentCount": 1
+        }
+      ],
+      "signals": {
+        "damage": 2100,
+        "pellets": 8,
+        "penetration": 18,
+        "accuracy": 0,
+        "criticalChance": 0,
+        "criticalDamage": 0,
+        "maxRange": 0,
+        "effectiveFar": 0,
+        "explosionRadius": 12,
+        "damageTypeCount": 2,
+        "specialTypeCount": 1,
+        "armoredEffectiveDamage": 1263.2,
+        "damagePacketCount": 16,
+        "regionEffectCount": 1
+      },
+      "combatAdjustment": null,
+      "areaAdjustment": null,
+      "weaponContentAdjustment": null,
+      "conditionAdjustment": null,
+      "equipmentIndividualization": null
+    },
+    {
+      "id": "6891f3dbc6009d21",
+      "oldId": "dfuRD6XIw4cdeS17",
+      "name": "Ядерный выстрел «Сингулярный»",
+      "folderPath": "Боеприпасы / Ядерный выстрел / S",
+      "class": "S",
+      "family": "grenadeOrRocket",
+      "difficulty": 175,
+      "resultQuantity": 1,
+      "previousPrice": 417,
+      "price": 8085,
+      "priceDelta": 7668,
+      "priceRatio": 19.388,
+      "priceCalculation": {
+        "rawComponentCost": 5859,
+        "componentCost": 5859,
+        "toolCost": 0,
+        "difficultyPercent": 38,
+        "final": 8085
+      },
+      "ingredients": [
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "kind": "frame",
+          "class": "A",
+          "quantity": 1,
+          "unitPrice": 840,
+          "reasons": [
+            "корпус боеприпаса"
+          ]
+        },
+        {
+          "itemId": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "kind": "chemistry",
+          "class": "S",
+          "quantity": 1,
+          "unitPrice": 1661,
+          "reasons": [
+            "основное взрывчатое наполнение"
+          ]
+        },
+        {
+          "itemId": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "kind": "chemistry",
+          "class": "A",
           "quantity": 2,
           "unitPrice": 899,
           "reasons": [
@@ -21027,9 +21037,7 @@
       ],
       "reasons": [
         "особый канал воздействия",
-        "повышенный эффективный урон после дробления и типовой защиты: единый пакет фактического преимущества внутри семейства и класса",
-        "расширенное поражение области: единый пакет фактического преимущества внутри семейства и класса",
-        "надбавка сложности только за 1 исключительных совокупных преимущества"
+        "расширенное поражение области: единый пакет фактического преимущества внутри семейства и класса"
       ],
       "deviationPayments": [
         {
@@ -21037,14 +21045,6 @@
           "label": "особый физический канал воздействия",
           "rank": 2,
           "componentKind": "properties",
-          "componentClass": "S",
-          "componentCount": 1
-        },
-        {
-          "channel": "damage",
-          "label": "повышенный эффективный урон после дробления и типовой защиты",
-          "rank": 2,
-          "componentKind": "chemistry",
           "componentClass": "S",
           "componentCount": 1
         },

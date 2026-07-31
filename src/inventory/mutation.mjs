@@ -73,7 +73,7 @@ export function normalizeInventoryMutationPlans(input) {
   const grouped = new Map();
 
   for (const rawPlan of rawPlans.filter(Boolean)) {
-    const actor = rawPlan.actor;
+    const actor = resolveInventoryActor(rawPlan.actor);
     const actorKey = getActorKey(actor);
     if (!actor || actor?.documentName !== "Actor" || !actorKey) {
       throw new TypeError("An Actor-owned inventory mutation requires a valid Actor.");
@@ -395,15 +395,9 @@ function createFoundryBatchOperations(plans, {
 
   for (const plan of plans) {
     const planOperations = [];
-    if (plan.updates.length) {
-      planOperations.push({
-        action: "update",
-        documentName: "Item",
-        parent: plan.actor,
-        updates: cloneValue(plan.updates),
-        expectedIds: plan.updates.map(update => String(update._id))
-      });
-    }
+    // Foundry applies and handles modifyBatch results in request order. Every
+    // embedded create/delete resets the parent Actor, so commit Item updates
+    // after collection-shape changes and leave their source as the final state.
     if (plan.deletes.length) {
       planOperations.push({
         action: "delete",
@@ -421,6 +415,15 @@ function createFoundryBatchOperations(plans, {
         data: cloneValue(plan.creates),
         keepId: true,
         expectedIds: plan.creates.map(data => String(data._id))
+      });
+    }
+    if (plan.updates.length) {
+      planOperations.push({
+        action: "update",
+        documentName: "Item",
+        parent: plan.actor,
+        updates: cloneValue(plan.updates),
+        expectedIds: plan.updates.map(update => String(update._id))
       });
     }
     if (plan.actorUpdatePaths.length) {
@@ -526,7 +529,14 @@ function assertCompleteBatchResults(results, operationMeta, plans, { validateLoa
   }
 
   try {
-    assertCommittedInventoryState(plans, { validateLoad });
+    assertCommittedInventoryState(plans, {
+      validateLoad,
+      // A complete modifyBatch result is the server acknowledgement for each
+      // Item write. Its client-side Document can contain a normalized version
+      // of an ObjectField, so only compare exact requested values when Foundry
+      // omitted a result and live state is our fallback commit evidence.
+      verifyItemUpdateFields: shortResponse
+    });
   } catch (error) {
     if (!shortResponse) throw error;
     const incompleteError = new Error(
@@ -539,7 +549,10 @@ function assertCompleteBatchResults(results, operationMeta, plans, { validateLoa
   }
 }
 
-function assertCommittedInventoryState(plans, { validateLoad = true } = {}) {
+function assertCommittedInventoryState(plans, {
+  validateLoad = true,
+  verifyItemUpdateFields = true
+} = {}) {
   for (const plan of plans) {
     const currentItems = getActorItems(plan.actor);
     const currentById = new Map(currentItems.map(item => [getItemId(item), item]));
@@ -553,7 +566,7 @@ function assertCommittedInventoryState(plans, { validateLoad = true } = {}) {
     if (plan.updates.some(update => !currentIds.has(String(update._id)))) {
       throw new Error("Foundry removed an Item which should only have been updated.");
     }
-    assertCommittedItemUpdates(plan, currentById);
+    if (verifyItemUpdateFields) assertCommittedItemUpdates(plan, currentById);
     assertCommittedActorUpdate(plan);
     validateActorInventoryState(plan.actor, currentItems, { validateLoad });
   }
@@ -903,6 +916,17 @@ function getActorItems(actor) {
 
 function getActorKey(actor) {
   return String(actor?.uuid ?? actor?.id ?? "").trim();
+}
+
+function resolveInventoryActor(actor) {
+  const actorUuid = String(actor?.uuid ?? "").trim();
+  if (!actorUuid || typeof globalThis.fromUuidSync !== "function") return actor;
+  try {
+    const resolved = globalThis.fromUuidSync(actorUuid);
+    return resolved?.documentName === "Actor" ? resolved : actor;
+  } catch (_error) {
+    return actor;
+  }
 }
 
 function allocateItemId(takenIds) {

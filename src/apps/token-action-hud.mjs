@@ -173,6 +173,7 @@ import { AdvancementApplication } from "../advancement/application.mjs";
 import { getActorsCrossingLevelThreshold, playExperienceAwardMedia } from "../advancement/media.mjs";
 import {
   applyWeaponModuleModifiers,
+  createWeaponModuleSlotItemData,
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   isModuleItemCompatibleWithSlot
@@ -1193,7 +1194,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         return this.#handleDualWeaponActionSelection({ item, actionKey, weaponFunctionId });
       }
     }
-    return startWeaponAttack({ token: this.token, weapon: item, actionKey, weaponFunctionId });
+    return startWeaponAttack({
+      token: this.token,
+      weapon: item,
+      actionKey,
+      weaponFunctionId,
+      useGmAuthority: !game.user?.isGM
+    });
   }
 
   async #handleDualWeaponActionSelection({ item = null, actionKey = "", weaponFunctionId = "" } = {}) {
@@ -1972,9 +1979,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return undefined;
     const oldItemData = getWeaponModuleSlotItemData(slot);
 
-    const itemData = moduleItem.toObject();
-    delete itemData._id;
-    foundry.utils.setProperty(itemData, "system.quantity", 1);
+    const itemData = createWeaponModuleSlotItemData(moduleItem);
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
     let returnPlan = { updates: [], creates: [] };
     try {

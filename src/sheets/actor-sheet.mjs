@@ -293,6 +293,7 @@ import {
 } from "../items/item-interactions.mjs";
 import {
   applyWeaponModuleModifiers,
+  createWeaponModuleSlotItemData,
   WEAPON_MODULE_ACTION_KEYS,
   getWeaponNoiseLevel,
   getWeaponModuleDisplayName,
@@ -4055,9 +4056,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return;
     const oldItemData = getWeaponModuleSlotItemData(slot);
 
-    const itemData = moduleItem.toObject();
-    delete itemData._id;
-    foundry.utils.setProperty(itemData, "system.quantity", 1);
+    const itemData = createWeaponModuleSlotItemData(moduleItem);
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
 
     let returnPlan = { updates: [], creates: [] };

@@ -17,16 +17,23 @@ import { isActorInActiveCombat } from "./combat-membership.mjs";
 const DODGE_RESOURCE_KEY = "dodge";
 const DODGE_SOCKET_ACTION_SPEND = "spendDodgeResource";
 const DODGE_SOCKET_ACTION_RESTORE = "restoreDodgeResource";
-const DODGE_SOCKET_ACTION_RESULT = "dodgeResourceResult";
-const DODGE_SOCKET_REQUEST_TIMEOUT_MS = 30000;
-const pendingDodgeSocketRequests = new Map();
+const DODGE_RESOURCE_QUERY = `${FALLOUT_MAW.id}.dodgeResourceMutation`;
+const DODGE_RESOURCE_QUERY_TIMEOUT_MS = 2000;
 const actorDodgeMutationQueue = new Map();
 
 export function registerCombatDodgeHooks() {
+  registerDodgeResourceQuery();
 }
 
 export function registerCombatDodgeSocket() {
-  game.socket.on(`system.${FALLOUT_MAW.id}`, handleDodgeSocketMessage);
+  registerDodgeResourceQuery();
+}
+
+function registerDodgeResourceQuery() {
+  const config = globalThis.CONFIG;
+  if (!config) return;
+  config.queries ??= {};
+  config.queries[DODGE_RESOURCE_QUERY] = handleDodgeResourceQuery;
 }
 
 export function createDodgeAttackExposureTracker() {
@@ -272,7 +279,7 @@ async function updateActorDodgeValue(actor, value, {
 
   const gm = getResponsibleGM();
   if (!gm) return false;
-  return requestDodgeSocketAction(gm, {
+  return requestDodgeResourceQuery(gm, {
     action: socketAction,
     actorUuid: actor.uuid,
     value: nextValue,
@@ -332,81 +339,81 @@ async function commitDodgeActiveUseOperations(preparations = [], operationId = "
   }
 }
 
-async function requestDodgeSocketAction(gm, payload = {}) {
-  const requestId = foundry.utils.randomID();
-  const promise = new Promise(resolve => {
-    const timeout = window.setTimeout(() => {
-      pendingDodgeSocketRequests.delete(requestId);
-      resolve(false);
-    }, DODGE_SOCKET_REQUEST_TIMEOUT_MS);
-    pendingDodgeSocketRequests.set(requestId, { resolve, timeout });
-  });
-
-  game.socket.emit(`system.${FALLOUT_MAW.id}`, {
-    ...payload,
-    gmUserId: gm.id,
-    requesterUserId: game.user?.id ?? "",
-    requestId
-  });
-  return promise;
+async function requestDodgeResourceQuery(gm, payload = {}) {
+  if (!gm?.active || typeof gm.query !== "function") return false;
+  try {
+    return Boolean(await gm.query(
+      DODGE_RESOURCE_QUERY,
+      payload,
+      { timeout: DODGE_RESOURCE_QUERY_TIMEOUT_MS }
+    ));
+  } catch (error) {
+    console.warn(`${FALLOUT_MAW.id} | Dodge resource authority query failed`, error);
+    return false;
+  }
 }
 
-async function handleDodgeSocketMessage(payload = {}) {
-  if (payload.action === DODGE_SOCKET_ACTION_RESULT) {
-    const pending = pendingDodgeSocketRequests.get(payload.requestId);
-    if (!pending) return;
-    window.clearTimeout(pending.timeout);
-    pendingDodgeSocketRequests.delete(payload.requestId);
-    pending.resolve(Boolean(payload.success));
-    return;
-  }
-
-  if (![DODGE_SOCKET_ACTION_SPEND, DODGE_SOCKET_ACTION_RESTORE].includes(payload.action)) return;
-  if (!game.user?.isActiveGM || payload.gmUserId !== game.user.id) return;
-
-  const actor = await fromUuid(String(payload.actorUuid ?? ""));
-  let success = false;
+async function handleDodgeResourceQuery(payload = {}, { user: requester } = {}) {
+  if (!game.user?.isActiveGM || !requester?.id) return false;
+  if (![DODGE_SOCKET_ACTION_SPEND, DODGE_SOCKET_ACTION_RESTORE].includes(payload.action)) return false;
   try {
+    const actorUuid = String(payload.actorUuid ?? "").trim();
+    if (!actorUuid) return false;
+    const actor = await fromUuid(actorUuid);
     const combatSpendAllowed = payload.action !== DODGE_SOCKET_ACTION_SPEND || isActorInActiveCombat(actor);
-    if (actor?.isOwner && combatSpendAllowed) {
-      const nextValue = Math.max(0, toInteger(payload.value));
-      const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
-      if (nextValue === currentValue) return;
-      const expectedActiveUseKey = payload.action === DODGE_SOCKET_ACTION_SPEND
-        ? DODGE_LOSS_MODIFIER_EFFECT_KEY
-        : DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY;
-      const requestedActiveUseKey = String(payload.activeUseKey ?? "").trim();
-      const directionMatches = payload.action === DODGE_SOCKET_ACTION_SPEND
-        ? nextValue < currentValue
-        : nextValue > currentValue;
-      const activeUseKey = directionMatches && requestedActiveUseKey === expectedActiveUseKey
-        ? expectedActiveUseKey
-        : "";
-      const activeUseKind = payload.action === DODGE_SOCKET_ACTION_SPEND
-        ? "dodgeLoss"
-        : "dodgeRoundRecovery";
-      const operationId = String(payload.operationId ?? "").trim()
-        || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
-      const conditionContext = await resolveDodgeConditionContextPayload(payload.conditionContext);
-      const activeUsePreparations = prepareDodgeActiveUseOperations(
-        actor,
-        activeUseKey,
-        activeUseKind,
-        operationId,
-        conditionContext
-      );
-      await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
-      success = true;
-      await commitDodgeActiveUseOperations(activeUsePreparations, operationId);
-    }
-  } finally {
-    game.socket.emit(`system.${FALLOUT_MAW.id}`, {
-      action: DODGE_SOCKET_ACTION_RESULT,
-      requestId: payload.requestId,
-      requesterUserId: payload.requesterUserId,
-      success
-    });
+    if (!actor?.isOwner || !combatSpendAllowed) return false;
+
+    const nextValue = Math.max(0, toInteger(payload.value));
+    const currentValue = Math.max(0, toInteger(getDodgeResource(actor)?.value));
+    if (nextValue === currentValue) return false;
+    const conditionContext = await resolveDodgeConditionContextPayload(payload.conditionContext);
+    if (!canRequesterMutateDodgeResource(requester, actor, payload.action, conditionContext)) return false;
+    const expectedActiveUseKey = payload.action === DODGE_SOCKET_ACTION_SPEND
+      ? DODGE_LOSS_MODIFIER_EFFECT_KEY
+      : DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY;
+    const requestedActiveUseKey = String(payload.activeUseKey ?? "").trim();
+    const directionMatches = payload.action === DODGE_SOCKET_ACTION_SPEND
+      ? nextValue < currentValue
+      : nextValue > currentValue;
+    if (!directionMatches) return false;
+    const activeUseKey = directionMatches && requestedActiveUseKey === expectedActiveUseKey
+      ? expectedActiveUseKey
+      : "";
+    const activeUseKind = payload.action === DODGE_SOCKET_ACTION_SPEND
+      ? "dodgeLoss"
+      : "dodgeRoundRecovery";
+    const operationId = String(payload.operationId ?? "").trim()
+      || `${activeUseKind}:${String(actor.uuid ?? actor.id ?? "")}:${foundry.utils.randomID()}`;
+    const activeUsePreparations = prepareDodgeActiveUseOperations(
+      actor,
+      activeUseKey,
+      activeUseKind,
+      operationId,
+      conditionContext
+    );
+    await actor.update({ [`system.resources.${DODGE_RESOURCE_KEY}.value`]: nextValue });
+    await commitDodgeActiveUseOperations(activeUsePreparations, operationId);
+    return true;
+  } catch (error) {
+    console.error(`${FALLOUT_MAW.id} | Dodge resource authority query failed`, error);
+    return false;
   }
+}
+
+function canRequesterMutateDodgeResource(requester, actor, action, conditionContext = {}) {
+  if (requester?.isGM) return true;
+  if (!requester?.id || action !== DODGE_SOCKET_ACTION_SPEND) return false;
+  if (actor?.testUserPermission?.(requester, "OWNER")) return true;
+
+  const defenderActor = conditionContext?.actorToken?.actor
+    ?? conditionContext?.actorToken?.document?.actor
+    ?? null;
+  if (defenderActor && !isSameActor(defenderActor, actor)) return false;
+  const sourceActor = conditionContext?.targetActor
+    ?? conditionContext?.targetToken?.actor
+    ?? conditionContext?.targetToken?.document?.actor
+    ?? null;
+  return Boolean(sourceActor?.testUserPermission?.(requester, "OWNER"));
 }
 
 function getDodgeResource(actor) {

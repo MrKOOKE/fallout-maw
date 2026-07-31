@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T09:22:27.439Z",
+  "generatedAt": "2026-07-31T13:00:36.970Z",
   "rule": "Значимая положительная девиация обязана иметь компонентный пакет; одинаковый рецепт при разных значимых возможностях сохраняется в очереди аудита.",
   "groups": {
     "damageSources": {
@@ -34,44 +34,44 @@
     },
     "weapons": {
       "items": 799,
-      "itemsWithPaidDeviations": 718,
-      "payments": 2277,
+      "itemsWithPaidDeviations": 717,
+      "payments": 2293,
       "paymentChannels": {
-        "actions": 198,
+        "actions": 200,
         "additionalWeapons": 2,
         "condition": 70,
-        "fireControl": 401,
-        "manualDamageEfficiency": 17,
-        "modularity": 139,
+        "fireControl": 393,
+        "manualDamageEfficiency": 15,
+        "modularity": 170,
         "noise": 117,
         "platformScore": 72,
-        "precision": 270,
+        "precision": 269,
         "range": 181,
         "sourcePercentile": 253,
-        "technology": 246,
-        "weight": 311
+        "technology": 245,
+        "weight": 306
       }
     },
     "equipment": {
       "items": 531,
       "itemsWithPaidDeviations": 521,
-      "payments": 1872,
+      "payments": 1862,
       "paymentChannels": {
-        "characteristicBonus": 43,
-        "condition": 48,
+        "characteristicBonus": 44,
+        "condition": 46,
         "coverage": 17,
-        "energyProtection": 92,
-        "environmentalProtection": 65,
-        "individualization": 435,
-        "kineticProtection": 68,
-        "namedVariantDominance": 9,
-        "protection": 73,
+        "energyProtection": 95,
+        "environmentalProtection": 64,
+        "individualization": 428,
+        "kineticProtection": 71,
+        "namedVariantDominance": 8,
+        "protection": 66,
         "quality": 55,
-        "skillBonus": 94,
+        "skillBonus": 93,
         "specialization": 620,
-        "thermalProtection": 68,
-        "wearRequirement": 16,
-        "weight": 169
+        "thermalProtection": 65,
+        "wearRequirement": 12,
+        "weight": 178
       }
     }
   },
@@ -95,7 +95,7 @@
       "items": 2,
       "itemsWithPayment": 2,
       "minimumPrice": 1612,
-      "maximumPrice": 4020
+      "maximumPrice": 3974
     },
     {
       "specializationId": "armor.energy",
@@ -108,7 +108,7 @@
       "specializationId": "armor.fire",
       "items": 4,
       "itemsWithPayment": 4,
-      "minimumPrice": 3915,
+      "minimumPrice": 3868,
       "maximumPrice": 19399
     },
     {
@@ -129,7 +129,7 @@
       "specializationId": "armor.meleePlate",
       "items": 25,
       "itemsWithPayment": 25,
-      "minimumPrice": 1262,
+      "minimumPrice": 598,
       "maximumPrice": 56272
     },
     {
@@ -171,7 +171,7 @@
       "specializationId": "chemical.sealed",
       "items": 17,
       "itemsWithPayment": 17,
-      "minimumPrice": 1629,
+      "minimumPrice": 1582,
       "maximumPrice": 20132
     },
     {
@@ -221,7 +221,7 @@
       "items": 9,
       "itemsWithPayment": 0,
       "minimumPrice": 1962,
-      "maximumPrice": 7265
+      "maximumPrice": 7277
     },
     {
       "specializationId": "power.tesla",
@@ -238,7 +238,7 @@
       "maximumPrice": 58906
     }
   ],
-  "sameRecipeDistinctCapabilitiesCount": 225,
+  "sameRecipeDistinctCapabilitiesCount": 220,
   "sameRecipeDistinctCapabilities": [
     {
       "group": "damageSources",
@@ -3189,17 +3189,22 @@
       "group": "weapons",
       "class": "B",
       "family": "simpleMelee",
-      "price": 4608,
+      "price": 4105,
       "items": [
         {
-          "id": "FdcqNIqX7s2FFv5O",
-          "name": "Суперкувалда",
-          "functionalSignature": "[4,2,25,0,1,4,0,3,1,2,27,2,6,0,8,0]"
+          "id": "YaKKUavWOrzqoMOr",
+          "name": "Протонная Алебарда",
+          "functionalSignature": "[2,2,20,0,1,3,0,2,1,1,18,1,6,0,7,1]"
         },
         {
-          "id": "8LWELv8EgRq6tFK3",
-          "name": "Антенна X-2",
-          "functionalSignature": "[0,4,20,0,1,3,0,3,1,1,27,2,6,0,8,0]"
+          "id": "MZaheMZBqqbEUf7u",
+          "name": "Автопила Базз",
+          "functionalSignature": "[2,0,15,0,1,4,0,1,1,1,15,2,6,1,8,1]"
+        },
+        {
+          "id": "Cuc9bu3SP2lDzJOX",
+          "name": "Индустриальный кастет",
+          "functionalSignature": "[2,1,15,0,1,3,0,1,1,0,12,2,6,1,8,1]"
         }
       ]
     },
@@ -3233,6 +3238,11 @@
           "functionalSignature": "[1,0,15,0,1,0,0,1,0,1,4,2,6,0,6,1]"
         },
         {
+          "id": "rd5CgFCthnIudZzn",
+          "name": "Волшебный Молоток",
+          "functionalSignature": "[-2,-10,15,0,1,0,0,1,0,1,3,2,6,0,6,2]"
+        },
+        {
           "id": "UJmUObOYvnjB14Oi",
           "name": "Большой меч",
           "functionalSignature": "[1,0,2,0,1,0,0,1,0,1,22,2,6,0,6,1]"
@@ -3246,62 +3256,6 @@
           "id": "85IBqCdNfSPDaWtp",
           "name": "Топор",
           "functionalSignature": "[1,1,17,0,1,0,0,1,0,1,7,2,6,0,6,1]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "price": 937,
-      "items": [
-        {
-          "id": "0zOj6huBosV0pW3A",
-          "name": "Боевая дубинка",
-          "functionalSignature": "[0,0,15,0,1,0,0,2,0,1,4,2,6,0,5,1]"
-        },
-        {
-          "id": "JMmKwPfeAynKgMbv",
-          "name": "Облученный Свинцовый Стояк",
-          "functionalSignature": "[0,3,15,0,1,0,0,1,0,1,4,2,6,0,6,2]"
-        },
-        {
-          "id": "6p6e9uROXBu9qi6m",
-          "name": "Украшенная Боевая Дубинка",
-          "functionalSignature": "[1,0,15,0,1,0,0,2,0,1,4,2,6,0,5,1]"
-        },
-        {
-          "id": "HcRnPVYf1Z0mlDSR",
-          "name": "«Тук-тук»",
-          "functionalSignature": "[4,2,18,0,1,0,0,1,0,1,7,2,6,0,6,0]"
-        },
-        {
-          "id": "Aa4npNtUYXV9O59v",
-          "name": "Боевой Меч",
-          "functionalSignature": "[1,1,17,0,1,0,0,2,0,0,8,2,6,0,6,1]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "price": 799,
-      "items": [
-        {
-          "id": "rd5CgFCthnIudZzn",
-          "name": "Волшебный Молоток",
-          "functionalSignature": "[-2,-10,15,0,1,0,0,1,0,1,3,2,6,0,6,2]"
-        },
-        {
-          "id": "2n7uXhgPi5u262qy",
-          "name": "Армейский Кортик",
-          "functionalSignature": "[0,0,15,0,1,0,0,1,0,0,2,2,6,0,6,1]"
-        },
-        {
-          "id": "z2s1uq9qwLOidDcv",
-          "name": "Гладиус Легиона",
-          "functionalSignature": "[1,0,15,0,1,0,0,1,0,0,2,2,6,0,6,1]"
         },
         {
           "id": "kHccvtxTZkqxySPA",
@@ -3314,17 +3268,32 @@
       "group": "weapons",
       "class": "C",
       "family": "simpleMelee",
-      "price": 799,
+      "price": 879,
       "items": [
         {
-          "id": "rsBBj6fVF3DjylP9",
-          "name": "Деревянная кувалда",
-          "functionalSignature": "[0,0,15,0,1,0,0,2,0,2,6,2,6,0,6,1]"
+          "id": "0zOj6huBosV0pW3A",
+          "name": "Боевая дубинка",
+          "functionalSignature": "[0,0,15,0,1,0,0,2,0,1,4,2,6,0,5,1]"
         },
         {
           "id": "zFY9ZGoxkYZGW1kK",
           "name": "Кувалда",
           "functionalSignature": "[1,1,17,0,1,0,0,2,0,2,22,2,6,0,6,1]"
+        },
+        {
+          "id": "UcB9eipOGU2m5kNR",
+          "name": "Полицейская дубинка",
+          "functionalSignature": "[0,0,15,0,1,0,0,2,0,1,3,2,6,0,6,1]"
+        },
+        {
+          "id": "5m0e5Z8aZShVTsIZ",
+          "name": "Широкое Мачете",
+          "functionalSignature": "[1,1,17,0,1,0,0,2,0,0,3,2,6,0,6,1]"
+        },
+        {
+          "id": "Gj6Dtgu2THO3rCvM",
+          "name": "Катана",
+          "functionalSignature": "[2,2,18,0,1,0,0,2,0,1,3,2,6,0,6,1]"
         },
         {
           "id": "pgLxew6HgDCyO4HO",
@@ -3345,16 +3314,6 @@
           "functionalSignature": "[0,2,15,0,1,0,0,1,0,1,2,2,6,0,6,0]"
         },
         {
-          "id": "UcB9eipOGU2m5kNR",
-          "name": "Полицейская дубинка",
-          "functionalSignature": "[0,0,15,0,1,0,0,2,0,1,3,2,6,0,6,1]"
-        },
-        {
-          "id": "mW0tAat4Ds6EcL38",
-          "name": "Телескопическая дубинка",
-          "functionalSignature": "[0,0,15,0,1,0,0,2,0,1,2,2,6,0,6,1]"
-        },
-        {
           "id": "aMsGTh9BQPKzw0tF",
           "name": "«Кровопускатель»",
           "functionalSignature": "[2,2,18,0,1,0,0,1,0,0,2,2,6,0,6,1]"
@@ -3363,6 +3322,47 @@
           "id": "wZJ7gJRevxdzAx8B",
           "name": "«Хесусик»",
           "functionalSignature": "[2,2,18,0,1,0,0,1,0,0,2,2,6,0,6,1]"
+        }
+      ]
+    },
+    {
+      "group": "weapons",
+      "class": "C",
+      "family": "simpleMelee",
+      "price": 937,
+      "items": [
+        {
+          "id": "O0clUe6nFubF4tfp",
+          "name": "Золотые Боксёрские перчатки",
+          "functionalSignature": "[0,4,20,0,1,0,0,1,0,0,3,2,6,0,6,1]"
+        },
+        {
+          "id": "JMmKwPfeAynKgMbv",
+          "name": "Облученный Свинцовый Стояк",
+          "functionalSignature": "[0,3,15,0,1,0,0,1,0,1,4,2,6,0,6,2]"
+        },
+        {
+          "id": "ff2g7EBmCDqO4XTM",
+          "name": "«Ронин»",
+          "functionalSignature": "[0,4,40,0,1,0,0,1,0,1,3,2,6,0,6,0]"
+        },
+        {
+          "id": "HcRnPVYf1Z0mlDSR",
+          "name": "«Тук-тук»",
+          "functionalSignature": "[4,2,18,0,1,0,0,1,0,1,7,2,6,0,6,0]"
+        }
+      ]
+    },
+    {
+      "group": "weapons",
+      "class": "C",
+      "family": "simpleMelee",
+      "price": 912,
+      "items": [
+        {
+          "id": "mW0tAat4Ds6EcL38",
+          "name": "Телескопическая дубинка",
+          "functionalSignature": "[0,0,15,0,1,0,0,2,0,1,2,2,6,0,6,1]"
         },
         {
           "id": "8lpng2l51BLKL7AG",
@@ -3375,16 +3375,6 @@
           "functionalSignature": "[0,0,15,0,1,0,0,2,0,0,2,2,6,0,6,1]"
         },
         {
-          "id": "5m0e5Z8aZShVTsIZ",
-          "name": "Широкое Мачете",
-          "functionalSignature": "[1,1,17,0,1,0,0,2,0,0,3,2,6,0,6,1]"
-        },
-        {
-          "id": "wQIaxI4d5CxWMRsF",
-          "name": "Быстрая Смерть",
-          "functionalSignature": "[3,0,15,0,1,0,0,1,0,0,2,2,6,0,6,1]"
-        },
-        {
           "id": "x4wmd3mfLeXfF4fr",
           "name": "Мачете-гладий",
           "functionalSignature": "[1,2,15,0,1,0,0,2,0,0,2,2,6,0,6,1]"
@@ -3395,55 +3385,17 @@
       "group": "weapons",
       "class": "C",
       "family": "simpleMelee",
-      "price": 971,
+      "price": 1017,
       "items": [
         {
-          "id": "O0clUe6nFubF4tfp",
-          "name": "Золотые Боксёрские перчатки",
-          "functionalSignature": "[0,4,20,0,1,0,0,1,0,0,3,2,6,0,6,1]"
+          "id": "6p6e9uROXBu9qi6m",
+          "name": "Украшенная Боевая Дубинка",
+          "functionalSignature": "[1,0,15,0,1,0,0,2,0,1,4,2,6,0,5,1]"
         },
         {
-          "id": "lnyrLq8Msfb9uckl",
-          "name": "Царапки",
-          "functionalSignature": "[4,2,20,0,1,0,0,1,0,0,2,2,6,0,6,0]"
-        },
-        {
-          "id": "ff2g7EBmCDqO4XTM",
-          "name": "«Ронин»",
-          "functionalSignature": "[0,4,40,0,1,0,0,1,0,1,3,2,6,0,6,0]"
-        },
-        {
-          "id": "AGVbTwv3Mj9umCgU",
-          "name": "«Сакура»",
-          "functionalSignature": "[2,2,20,0,1,0,0,1,0,0,2,2,6,0,6,0]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "price": 971,
-      "items": [
-        {
-          "id": "qC64cVwZApQJQru7",
-          "name": "Шипованный кастет",
-          "functionalSignature": "[0,1,15,0,1,0,0,2,0,0,1,2,6,0,6,1]"
-        },
-        {
-          "id": "uFe4a3ZStzHQOYgR",
-          "name": "«Бабочка»",
-          "functionalSignature": "[2,2,18,0,1,0,0,1,0,0,1,2,6,0,6,1]"
-        },
-        {
-          "id": "CMVb0UCejiMROC6Y",
-          "name": "Кабар",
-          "functionalSignature": "[0,1,17,0,1,0,0,2,0,0,1,2,6,0,6,1]"
-        },
-        {
-          "id": "ZIwR10TneByya7Ny",
-          "name": "«Фигаро»",
-          "functionalSignature": "[0,2,16,0,1,0,0,1,0,0,1,2,6,0,6,0]"
+          "id": "Aa4npNtUYXV9O59v",
+          "name": "Боевой Меч",
+          "functionalSignature": "[1,1,17,0,1,0,0,2,0,0,8,2,6,0,6,1]"
         }
       ]
     },
@@ -3545,7 +3497,7 @@
       "group": "weapons",
       "class": "D",
       "family": "simpleMelee",
-      "price": 281,
+      "price": 249,
       "items": [
         {
           "id": "KtZDRHUgQL9cDODI",
@@ -3553,19 +3505,19 @@
           "functionalSignature": "[4,0,15,0,1,0,0,1,0,1,2,2,6,0,4,2]"
         },
         {
-          "id": "HglRlws2YlFGrBdM",
-          "name": "Китайский Короткий Меч",
-          "functionalSignature": "[2,2,18,0,1,0,0,1,0,0,2,2,6,0,4,2]"
+          "id": "jq4su4pdi9nQsPFU",
+          "name": "Перчатка богомола",
+          "functionalSignature": "[0,0,15,0,2,0,0,1,0,0,4,2,6,0,4,2]"
         },
         {
-          "id": "RIa9G0cB8ZawDKHQ",
-          "name": "Хватка короля богомолов!",
-          "functionalSignature": "[0,3,15,0,2,0,0,1,0,0,6,2,6,0,4,0]"
+          "id": "VWDKRJOKChGcJkRf",
+          "name": "Жуткий Мачете",
+          "functionalSignature": "[0,2,15,0,1,0,0,1,0,0,2,2,6,0,4,1]"
         },
         {
-          "id": "ftcnUtzsjAm1J0eP",
-          "name": "Нож Командос",
-          "functionalSignature": "[1,1,18,0,1,0,0,1,0,0,2,2,6,0,4,1]"
+          "id": "FOSktZ2IqbuuY1mO",
+          "name": "Нож Боуи",
+          "functionalSignature": "[1,0,15,0,1,0,0,1,0,0,2,2,6,0,4,1]"
         }
       ]
     },
@@ -3637,24 +3589,60 @@
     },
     {
       "group": "weapons",
-      "class": "D",
+      "class": "C",
       "family": "simpleMelee",
-      "price": 249,
+      "price": 971,
       "items": [
         {
-          "id": "jq4su4pdi9nQsPFU",
-          "name": "Перчатка богомола",
-          "functionalSignature": "[0,0,15,0,2,0,0,1,0,0,4,2,6,0,4,2]"
+          "id": "uFe4a3ZStzHQOYgR",
+          "name": "«Бабочка»",
+          "functionalSignature": "[2,2,18,0,1,0,0,1,0,0,1,2,6,0,6,1]"
         },
         {
-          "id": "VWDKRJOKChGcJkRf",
-          "name": "Жуткий Мачете",
-          "functionalSignature": "[0,2,15,0,1,0,0,1,0,0,2,2,6,0,4,1]"
+          "id": "ZIwR10TneByya7Ny",
+          "name": "«Фигаро»",
+          "functionalSignature": "[0,2,16,0,1,0,0,1,0,0,1,2,6,0,6,0]"
+        }
+      ]
+    },
+    {
+      "group": "weapons",
+      "class": "C",
+      "family": "simpleMelee",
+      "price": 799,
+      "items": [
+        {
+          "id": "2n7uXhgPi5u262qy",
+          "name": "Армейский Кортик",
+          "functionalSignature": "[0,0,15,0,1,0,0,1,0,0,2,2,6,0,6,1]"
         },
         {
-          "id": "FOSktZ2IqbuuY1mO",
-          "name": "Нож Боуи",
-          "functionalSignature": "[1,0,15,0,1,0,0,1,0,0,2,2,6,0,4,1]"
+          "id": "z2s1uq9qwLOidDcv",
+          "name": "Гладиус Легиона",
+          "functionalSignature": "[1,0,15,0,1,0,0,1,0,0,2,2,6,0,6,1]"
+        }
+      ]
+    },
+    {
+      "group": "weapons",
+      "class": "C",
+      "family": "simpleMelee",
+      "price": 971,
+      "items": [
+        {
+          "id": "lnyrLq8Msfb9uckl",
+          "name": "Царапки",
+          "functionalSignature": "[4,2,20,0,1,0,0,1,0,0,2,2,6,0,6,0]"
+        },
+        {
+          "id": "AGVbTwv3Mj9umCgU",
+          "name": "«Сакура»",
+          "functionalSignature": "[2,2,20,0,1,0,0,1,0,0,2,2,6,0,6,0]"
+        },
+        {
+          "id": "wQIaxI4d5CxWMRsF",
+          "name": "Быстрая Смерть",
+          "functionalSignature": "[3,0,15,0,1,0,0,1,0,0,2,2,6,0,6,1]"
         }
       ]
     },
@@ -3693,6 +3681,29 @@
           "id": "82NJovx0tG5VFjQX",
           "name": "Канцелярский нож",
           "functionalSignature": "[0,0,15,0,1,0,0,1,0,0,1,2,6,0,1,1]"
+        }
+      ]
+    },
+    {
+      "group": "weapons",
+      "class": "D",
+      "family": "simpleMelee",
+      "price": 281,
+      "items": [
+        {
+          "id": "HglRlws2YlFGrBdM",
+          "name": "Китайский Короткий Меч",
+          "functionalSignature": "[2,2,18,0,1,0,0,1,0,0,2,2,6,0,4,2]"
+        },
+        {
+          "id": "RIa9G0cB8ZawDKHQ",
+          "name": "Хватка короля богомолов!",
+          "functionalSignature": "[0,3,15,0,2,0,0,1,0,0,6,2,6,0,4,0]"
+        },
+        {
+          "id": "ftcnUtzsjAm1J0eP",
+          "name": "Нож Командос",
+          "functionalSignature": "[1,1,18,0,1,0,0,1,0,0,2,2,6,0,4,1]"
         }
       ]
     },
@@ -3868,24 +3879,6 @@
     {
       "group": "weapons",
       "class": "C",
-      "family": "simpleMelee",
-      "price": 971,
-      "items": [
-        {
-          "id": "jNuTz1IwRsGIORZF",
-          "name": "Топор Грогнака",
-          "functionalSignature": "[4,2,25,0,1,0,0,2,0,1,9,2,6,0,6,0]"
-        },
-        {
-          "id": "QdCbspEuDQQTDQgn",
-          "name": "Тяжёлый Меч",
-          "functionalSignature": "[2,1,17,0,1,0,0,2,0,1,23,2,6,0,6,0]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "C",
       "family": "heavyWeapon",
       "price": 2224,
       "items": [
@@ -3934,65 +3927,6 @@
           "id": "9oje59Dyx6Mt8XF0",
           "name": "«Принцесса»",
           "functionalSignature": "[1,0,15,8,9,11,0,1,2,5,5,2,6,0,2,0]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "B",
-      "family": "simpleMelee",
-      "price": 5303,
-      "items": [
-        {
-          "id": "an0Kbp6TYUpUqe9P",
-          "name": "\"Разъединитель\"",
-          "functionalSignature": "[2,3,18,0,1,3,0,4,1,1,22,2,6,0,8,1]"
-        },
-        {
-          "id": "Gwej6FCjFOvqowsf",
-          "name": "«Бэби!»",
-          "functionalSignature": "[4,4,15,0,1,3,0,4,1,1,27,2,6,0,8,0]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "price": 1670,
-      "items": [
-        {
-          "id": "MZaheMZBqqbEUf7u",
-          "name": "Автопила Базз",
-          "functionalSignature": "[2,0,15,0,1,4,0,1,1,1,15,2,6,1,6,1]"
-        },
-        {
-          "id": "4TurzNXFRVnIyjOY",
-          "name": "«Потрошитель»",
-          "functionalSignature": "[2,1,15,0,1,4,0,1,1,3,4,2,6,1,6,1]"
-        },
-        {
-          "id": "afoRExzphadDXAnb",
-          "name": "Сатурнитовый Кастет",
-          "functionalSignature": "[2,2,18,0,1,4,0,2,1,1,9,2,6,1,6,1]"
-        }
-      ]
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "price": 1814,
-      "items": [
-        {
-          "id": "9FbcTQNyMP5gYTLh",
-          "name": "Кулак Востока",
-          "functionalSignature": "[0,3,15,0,1,3,0,2,1,1,11,2,6,1,5,2]"
-        },
-        {
-          "id": "xc7L9SS9CHYFHruN",
-          "name": "Тостер паладина",
-          "functionalSignature": "[2,3,18,0,1,6,0,2,1,0,9,2,6,1,5,1]"
         }
       ]
     },
@@ -4198,24 +4132,6 @@
       "group": "equipment",
       "class": "D",
       "family": "lightArmor",
-      "price": 336,
-      "items": [
-        {
-          "id": "c49qa1KSqwm4CCTc",
-          "name": "Броня Ривера",
-          "functionalSignature": "[\"armor.balanced\",2,10,3,3,2,5,0,2,19,6,1]"
-        },
-        {
-          "id": "JykMgUaQVmVtI2wB",
-          "name": "Одежда Диверсанта",
-          "functionalSignature": "[\"armor.balanced\",2,10,3,3,2,5,1,0,7,6,1]"
-        }
-      ]
-    },
-    {
-      "group": "equipment",
-      "class": "D",
-      "family": "lightArmor",
       "price": 292,
       "items": [
         {
@@ -4270,7 +4186,7 @@
       "group": "equipment",
       "class": "C",
       "family": "sealedProtectiveEquipment",
-      "price": 1451,
+      "price": 1438,
       "items": [
         {
           "id": "OppVmJGhdFb6MMUu",
@@ -4281,42 +4197,6 @@
           "id": "Kg7QuWdAB6F6UIEg",
           "name": "Противогаз НКР",
           "functionalSignature": "[\"chemical.gasMask\",7,12,6,12,37,3,0,0,2,2,2]"
-        }
-      ]
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "sealedProtectiveEquipment",
-      "price": 1379,
-      "items": [
-        {
-          "id": "ox4vM18Vvhg7cJSg",
-          "name": "Мозгошлем Доктора Зорбо",
-          "functionalSignature": "[\"chemical.gasMask\",10,12,6,12,37,5,0,0,3,2,3]"
-        },
-        {
-          "id": "GX11Dx90n0TYMgnc",
-          "name": "Полицейский Противогаз",
-          "functionalSignature": "[\"chemical.gasMask\",7,12,6,12,37,3,0,0,3,2,2]"
-        }
-      ]
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "sealedProtectiveEquipment",
-      "price": 1379,
-      "items": [
-        {
-          "id": "X8qvRdYC4FGWKcaX",
-          "name": "Улучшенный противогаз",
-          "functionalSignature": "[\"chemical.gasMask\",7,12,6,12,38,3,0,0,4,2,2]"
-        },
-        {
-          "id": "lziFHvwJEFDqEHt0",
-          "name": "Химическая Маска",
-          "functionalSignature": "[\"chemical.gasMask\",7,12,6,12,37,2,0,0,3,2,2]"
         }
       ]
     },
@@ -4409,9 +4289,9 @@
           "functionalSignature": "[\"power.balanced\",29,72,34,35,52,33,10,8,102,6,1]"
         },
         {
-          "id": "Ya9jlKudXXgkiVpE",
-          "name": "Силовая броня T-45c",
-          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,35,4,5,94,6,1]"
+          "id": "r9jRCXJK3qwtlP11",
+          "name": "Силовая броня T-45a",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,33,4,5,97,6,1]"
         }
       ]
     },
@@ -4430,11 +4310,6 @@
           "id": "6CBHO7UnNkEpkQNm",
           "name": "Силовая броня EXC-17",
           "functionalSignature": "[\"power.balanced\",29,73,34,35,52,35,13,10,95,6,1]"
-        },
-        {
-          "id": "r9jRCXJK3qwtlP11",
-          "name": "Силовая броня T-45a",
-          "functionalSignature": "[\"power.balanced\",29,73,34,35,52,35,3,5,100,6,1]"
         }
       ]
     },
@@ -4468,9 +4343,27 @@
           "functionalSignature": "[\"power.balanced\",29,72,35,35,52,34,13,10,95,6,1]"
         },
         {
-          "id": "vbunaijmSSzAvQWs",
-          "name": "Силовая броня Рейдеров",
-          "functionalSignature": "[\"power.improvised\",24,62,26,27,43,33,5,6,109,6,1]"
+          "id": "Ya9jlKudXXgkiVpE",
+          "name": "Силовая броня T-45c",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,34,3,6,93,6,1]"
+        }
+      ]
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "powerArmor",
+      "price": 7477,
+      "items": [
+        {
+          "id": "DYZiPz8BQqz28bfY",
+          "name": "Силовая броня Клинта",
+          "functionalSignature": "[\"power.balanced\",29,73,34,35,52,34,13,10,89,6,1]"
+        },
+        {
+          "id": "SKgj3fkZlXjAT9lt",
+          "name": "Силовая броня T-45b",
+          "functionalSignature": "[\"power.balanced\",29,73,34,35,52,34,3,5,89,6,1]"
         }
       ]
     },
@@ -4499,14 +4392,55 @@
       "price": 2033,
       "items": [
         {
-          "id": "25E28djkDeIISZZD",
-          "name": "Силовой шлем «Уостер»",
-          "functionalSignature": "[\"power.balanced\",29,72,35,35,52,34,3,3,17,2,3]"
+          "id": "biOrruDn3RCPS6zR",
+          "name": "Силовой шлем «Всадник Войны»",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,36,3,2,12,2,3]"
         },
         {
-          "id": "uurGjZyWGMENw3RC",
-          "name": "Силовой шлем EXC-17",
-          "functionalSignature": "[\"power.balanced\",29,72,35,35,52,34,4,4,12,2,3]"
+          "id": "25E28djkDeIISZZD",
+          "name": "Силовой шлем «Уостер»",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,34,3,3,16,2,3]"
+        },
+        {
+          "id": "Ijdr0JcJ8cXR9ue8",
+          "name": "Силовой шлем T-45b",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,34,1,2,12,2,3]"
+        }
+      ]
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "powerHelmet",
+      "price": 2080,
+      "items": [
+        {
+          "id": "Y99tQ5sp6nexMWyk",
+          "name": "Силовой шлем «Рассказчик»",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,34,5,4,12,2,3]"
+        },
+        {
+          "id": "k7xuejlWcsN9FZ3D",
+          "name": "Шлем Главного Гада",
+          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,34,5,4,20,2,3]"
+        }
+      ]
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "powerHelmet",
+      "price": 1997,
+      "items": [
+        {
+          "id": "wOyFPYzdNFcO7FFG",
+          "name": "Силовой шлем Босса Рейдеров",
+          "functionalSignature": "[\"power.improvised\",24,61,25,27,43,34,3,2,20,2,3]"
+        },
+        {
+          "id": "taZX5bNrUJ9LwKMu",
+          "name": "Силовой шлем Рейдеров",
+          "functionalSignature": "[\"power.improvised\",24,62,25,27,43,36,3,2,14,2,3]"
         }
       ]
     },
@@ -4532,35 +4466,17 @@
       "group": "equipment",
       "class": "C",
       "family": "powerHelmet",
-      "price": 2103,
+      "price": 2033,
       "items": [
         {
           "id": "CZxlN02x8PVuw7W2",
           "name": "Силовой шлем Ренегатов",
-          "functionalSignature": "[\"power.balanced\",29,72,34,36,53,37,3,2,14,2,3]"
+          "functionalSignature": "[\"power.balanced\",29,72,34,36,52,34,3,2,14,2,3]"
         },
         {
           "id": "RsQs5GF8YeE0NfJE",
           "name": "Силовой шлем T-45a",
-          "functionalSignature": "[\"power.balanced\",29,72,34,36,53,37,1,2,14,2,3]"
-        }
-      ]
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "powerHelmet",
-      "price": 2033,
-      "items": [
-        {
-          "id": "ouXcVeGgbmCZWGjq",
-          "name": "Силовой шлем ТБС",
-          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,34,3,3,12,2,3]"
-        },
-        {
-          "id": "31DCY86HSwLuQZQM",
-          "name": "Силовой шлем T-45c",
-          "functionalSignature": "[\"power.balanced\",29,72,34,35,52,36,1,2,12,2,3]"
+          "functionalSignature": "[\"power.balanced\",29,72,34,36,52,34,1,2,14,2,3]"
         }
       ]
     },
@@ -4938,11 +4854,6 @@
           "id": "9IUXQW42PZPa4wY9",
           "name": "Боевая броня Капрала",
           "functionalSignature": "[\"armor.ballistic\",8,27,8,8,5,13,0,0,23,6,1]"
-        },
-        {
-          "id": "D0z90s3YFRzMReGe",
-          "name": "Автомобильная броня Мутанта",
-          "functionalSignature": "[\"armor.ballistic\",6,21,6,6,4,13,0,2,60,6,1]"
         }
       ]
     },
@@ -5032,24 +4943,6 @@
       "group": "equipment",
       "class": "C",
       "family": "mediumArmor",
-      "price": 2385,
-      "items": [
-        {
-          "id": "BHa3OfQhe6rwtjBs",
-          "name": "Боевой Пыльник Рейнджера",
-          "functionalSignature": "[\"armor.flexible\",7,19,8,7,4,13,0,0,32,6,1]"
-        },
-        {
-          "id": "ahNXU3iUgWPf1gS7",
-          "name": "Бронированный Пыльник Мутанта",
-          "functionalSignature": "[\"armor.flexible\",5,15,6,6,3,13,0,2,59,6,1]"
-        }
-      ]
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
       "price": 2257,
       "items": [
         {
@@ -5089,19 +4982,19 @@
     },
     {
       "group": "equipment",
-      "class": "C",
+      "class": "D",
       "family": "mediumArmor",
-      "price": 2468,
+      "price": 554,
       "items": [
         {
           "id": "8R90J0a5Ogq8zowE",
           "name": "Броня НКР с наплечником",
-          "functionalSignature": "[\"armor.ballistic\",6,21,6,6,4,13,0,2,24,6,1]"
+          "functionalSignature": "[\"armor.ballistic\",6,21,6,6,4,9,0,2,24,6,1]"
         },
         {
           "id": "55snZhelZyyyuv5h",
           "name": "Броня НКР с патронташем",
-          "functionalSignature": "[\"armor.ballistic\",6,21,6,6,4,13,0,0,24,6,1]"
+          "functionalSignature": "[\"armor.ballistic\",6,21,6,6,4,9,0,0,24,6,1]"
         }
       ]
     },
@@ -5168,7 +5061,7 @@
       "group": "equipment",
       "class": "C",
       "family": "heavyArmor",
-      "price": 3776,
+      "price": 3430,
       "items": [
         {
           "id": "grVtlNslc2KVYPzo",
@@ -5181,27 +5074,9 @@
           "functionalSignature": "[\"armor.meleePlate\",16,55,10,17,10,22,0,2,50,6,1]"
         }
       ]
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "heavyArmor",
-      "price": 3384,
-      "items": [
-        {
-          "id": "D70BtrOnTOvdx6Up",
-          "name": "Доспех Война Легиона",
-          "functionalSignature": "[\"armor.meleePlate\",12,42,8,13,8,22,0,2,50,6,1]"
-        },
-        {
-          "id": "gdUhHEOMdNF104fR",
-          "name": "Металлические доспехи",
-          "functionalSignature": "[\"armor.meleePlate\",12,42,8,13,8,22,0,0,45,6,1]"
-        }
-      ]
     }
   ],
-  "nonIncreasingPriceDominanceCount": 730,
+  "nonIncreasingPriceDominanceCount": 668,
   "nonIncreasingPriceDominance": [
     {
       "group": "damageSources",
@@ -20840,7 +20715,7 @@
       "weaker": {
         "id": "f7oLEE4jCg8v2eCp",
         "name": "«Рельса»",
-        "price": 7693,
+        "price": 7000,
         "vector": [
           3,
           0,
@@ -21253,7 +21128,7 @@
       "weaker": {
         "id": "f7oLEE4jCg8v2eCp",
         "name": "«Рельса»",
-        "price": 7693,
+        "price": 7000,
         "vector": [
           3,
           0,
@@ -21489,7 +21364,7 @@
       "weaker": {
         "id": "f7oLEE4jCg8v2eCp",
         "name": "«Рельса»",
-        "price": 7693,
+        "price": 7000,
         "vector": [
           3,
           0,
@@ -22433,7 +22308,7 @@
       "weaker": {
         "id": "f7oLEE4jCg8v2eCp",
         "name": "«Рельса»",
-        "price": 7693,
+        "price": 7000,
         "vector": [
           3,
           0,
@@ -25708,124 +25583,6 @@
       "class": "C",
       "family": "simpleMelee",
       "stronger": {
-        "id": "mW0tAat4Ds6EcL38",
-        "name": "Телескопическая дубинка",
-        "price": 833,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          -1,
-          -2,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          9,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "UcB9eipOGU2m5kNR",
-        "name": "Полицейская дубинка",
-        "price": 833,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          -1,
-          -3,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          8,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
-        "id": "6p6e9uROXBu9qi6m",
-        "name": "Украшенная Боевая Дубинка",
-        "price": 937,
-        "vector": [
-          1,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          -1,
-          -4,
-          2,
-          -6,
-          0,
-          5,
-          1,
-          0,
-          10,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "0zOj6huBosV0pW3A",
-        "name": "Боевая дубинка",
-        "price": 937,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          -1,
-          -4,
-          2,
-          -6,
-          0,
-          5,
-          1,
-          0,
-          10,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
         "id": "z2s1uq9qwLOidDcv",
         "name": "Гладиус Легиона",
         "price": 799,
@@ -25885,186 +25642,9 @@
       "class": "C",
       "family": "simpleMelee",
       "stronger": {
-        "id": "z2s1uq9qwLOidDcv",
-        "name": "Гладиус Легиона",
-        "price": 799,
-        "vector": [
-          1,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          1,
-          0,
-          0,
-          -2,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          8,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "kHccvtxTZkqxySPA",
-        "name": "Топорик",
-        "price": 799,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          1,
-          0,
-          0,
-          -3,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          7,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
-        "id": "8lpng2l51BLKL7AG",
-        "name": "Мачете",
-        "price": 833,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          0,
-          -2,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          8,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "UcB9eipOGU2m5kNR",
-        "name": "Полицейская дубинка",
-        "price": 833,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          -1,
-          -3,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          8,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
         "id": "phC1BJtzZjG2yYQN",
         "name": "Мачете Легиона",
-        "price": 833,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          0,
-          -2,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          9,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "UcB9eipOGU2m5kNR",
-        "name": "Полицейская дубинка",
-        "price": 833,
-        "vector": [
-          0,
-          0,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          -1,
-          -3,
-          2,
-          -6,
-          0,
-          6,
-          1,
-          0,
-          8,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
-        "id": "phC1BJtzZjG2yYQN",
-        "name": "Мачете Легиона",
-        "price": 833,
+        "price": 912,
         "vector": [
           0,
           0,
@@ -26091,7 +25671,7 @@
       "weaker": {
         "id": "mW0tAat4Ds6EcL38",
         "name": "Телескопическая дубинка",
-        "price": 833,
+        "price": 912,
         "vector": [
           0,
           0,
@@ -26123,7 +25703,7 @@
       "stronger": {
         "id": "phC1BJtzZjG2yYQN",
         "name": "Мачете Легиона",
-        "price": 833,
+        "price": 912,
         "vector": [
           0,
           0,
@@ -26150,7 +25730,7 @@
       "weaker": {
         "id": "8lpng2l51BLKL7AG",
         "name": "Мачете",
-        "price": 833,
+        "price": 912,
         "vector": [
           0,
           0,
@@ -26182,7 +25762,66 @@
       "stronger": {
         "id": "5m0e5Z8aZShVTsIZ",
         "name": "Широкое Мачете",
-        "price": 833,
+        "price": 879,
+        "vector": [
+          1,
+          1,
+          17,
+          0,
+          1,
+          0,
+          0,
+          2,
+          0,
+          0,
+          -3,
+          2,
+          -6,
+          0,
+          6,
+          1,
+          0,
+          9,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "zFY9ZGoxkYZGW1kK",
+        "name": "Кувалда",
+        "price": 879,
+        "vector": [
+          1,
+          1,
+          17,
+          0,
+          1,
+          0,
+          0,
+          2,
+          0,
+          -2,
+          -22,
+          2,
+          -6,
+          0,
+          6,
+          1,
+          0,
+          9,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "weapons",
+      "class": "C",
+      "family": "simpleMelee",
+      "stronger": {
+        "id": "5m0e5Z8aZShVTsIZ",
+        "name": "Широкое Мачете",
+        "price": 879,
         "vector": [
           1,
           1,
@@ -26209,7 +25848,7 @@
       "weaker": {
         "id": "UcB9eipOGU2m5kNR",
         "name": "Полицейская дубинка",
-        "price": 833,
+        "price": 879,
         "vector": [
           0,
           0,
@@ -26229,6 +25868,65 @@
           1,
           0,
           8,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "weapons",
+      "class": "C",
+      "family": "simpleMelee",
+      "stronger": {
+        "id": "5m0e5Z8aZShVTsIZ",
+        "name": "Широкое Мачете",
+        "price": 879,
+        "vector": [
+          1,
+          1,
+          17,
+          0,
+          1,
+          0,
+          0,
+          2,
+          0,
+          0,
+          -3,
+          2,
+          -6,
+          0,
+          6,
+          1,
+          0,
+          9,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "pgLxew6HgDCyO4HO",
+        "name": "Пожарный топор",
+        "price": 879,
+        "vector": [
+          1,
+          1,
+          17,
+          0,
+          1,
+          0,
+          0,
+          2,
+          0,
+          -1,
+          -7,
+          2,
+          -6,
+          0,
+          6,
+          1,
+          0,
+          9,
           0,
           0
         ]
@@ -26298,80 +25996,21 @@
       "class": "C",
       "family": "simpleMelee",
       "stronger": {
-        "id": "x4wmd3mfLeXfF4fr",
-        "name": "Мачете-гладий",
-        "price": 833,
+        "id": "Gj6Dtgu2THO3rCvM",
+        "name": "Катана",
+        "price": 879,
         "vector": [
-          1,
           2,
-          15,
-          0,
-          1,
-          0,
-          0,
           2,
+          18,
           0,
-          0,
-          -2,
-          2,
-          -6,
-          0,
-          6,
           1,
           0,
-          8,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "dbhGfhFkrudA3IOw",
-        "name": "Драйвер — клюшка Нефи",
-        "price": 833,
-        "vector": [
           0,
           2,
-          15,
-          0,
-          1,
-          0,
-          0,
-          1,
           0,
           -1,
-          -2,
-          2,
-          -6,
-          0,
-          6,
-          0,
-          0,
-          7,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
-        "id": "x4wmd3mfLeXfF4fr",
-        "name": "Мачете-гладий",
-        "price": 833,
-        "vector": [
-          1,
-          2,
-          15,
-          0,
-          1,
-          0,
-          0,
-          2,
-          0,
-          0,
-          -2,
+          -3,
           2,
           -6,
           0,
@@ -26386,7 +26025,7 @@
       "weaker": {
         "id": "UcB9eipOGU2m5kNR",
         "name": "Полицейская дубинка",
-        "price": 833,
+        "price": 879,
         "vector": [
           0,
           0,
@@ -26418,7 +26057,7 @@
       "stronger": {
         "id": "x4wmd3mfLeXfF4fr",
         "name": "Мачете-гладий",
-        "price": 833,
+        "price": 912,
         "vector": [
           1,
           2,
@@ -26445,7 +26084,7 @@
       "weaker": {
         "id": "8lpng2l51BLKL7AG",
         "name": "Мачете",
-        "price": 833,
+        "price": 912,
         "vector": [
           0,
           0,
@@ -26477,7 +26116,7 @@
       "stronger": {
         "id": "pgLxew6HgDCyO4HO",
         "name": "Пожарный топор",
-        "price": 799,
+        "price": 879,
         "vector": [
           1,
           1,
@@ -26504,7 +26143,7 @@
       "weaker": {
         "id": "zFY9ZGoxkYZGW1kK",
         "name": "Кувалда",
-        "price": 799,
+        "price": 879,
         "vector": [
           1,
           1,
@@ -26583,65 +26222,6 @@
           1,
           0,
           7,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "weapons",
-      "class": "C",
-      "family": "simpleMelee",
-      "stronger": {
-        "id": "afoRExzphadDXAnb",
-        "name": "Сатурнитовый Кастет",
-        "price": 1670,
-        "vector": [
-          2,
-          2,
-          18,
-          0,
-          1,
-          4,
-          0,
-          2,
-          1,
-          -1,
-          -9,
-          2,
-          -6,
-          1,
-          6,
-          1,
-          0,
-          3,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "MZaheMZBqqbEUf7u",
-        "name": "Автопила Базз",
-        "price": 1670,
-        "vector": [
-          2,
-          0,
-          15,
-          0,
-          1,
-          4,
-          0,
-          1,
-          1,
-          -1,
-          -15,
-          2,
-          -6,
-          1,
-          6,
-          1,
-          0,
-          1,
           0,
           0
         ]
@@ -28874,7 +28454,7 @@
       "stronger": {
         "id": "OppVmJGhdFb6MMUu",
         "name": "Маска Ликвидатора",
-        "price": 1451,
+        "price": 1438,
         "vector": [
           10,
           12,
@@ -28894,7 +28474,7 @@
       "weaker": {
         "id": "Kg7QuWdAB6F6UIEg",
         "name": "Противогаз НКР",
-        "price": 1451,
+        "price": 1438,
         "vector": [
           7,
           12,
@@ -28917,9 +28497,29 @@
       "class": "C",
       "family": "sealedProtectiveEquipment",
       "stronger": {
+        "id": "ISv8Evj7bFY6G4FP",
+        "name": "Маска Риверов",
+        "price": 1413,
+        "vector": [
+          10,
+          12,
+          6,
+          12,
+          37,
+          6,
+          0,
+          0,
+          0,
+          -3,
+          2,
+          0,
+          0
+        ]
+      },
+      "weaker": {
         "id": "ox4vM18Vvhg7cJSg",
         "name": "Мозгошлем Доктора Зорбо",
-        "price": 1379,
+        "price": 1425,
         "vector": [
           10,
           12,
@@ -28935,26 +28535,6 @@
           0,
           0
         ]
-      },
-      "weaker": {
-        "id": "GX11Dx90n0TYMgnc",
-        "name": "Полицейский Противогаз",
-        "price": 1379,
-        "vector": [
-          7,
-          12,
-          6,
-          12,
-          37,
-          3,
-          0,
-          0,
-          0,
-          -3,
-          2,
-          0,
-          0
-        ]
       }
     },
     {
@@ -28962,16 +28542,16 @@
       "class": "C",
       "family": "sealedProtectiveEquipment",
       "stronger": {
-        "id": "ox4vM18Vvhg7cJSg",
-        "name": "Мозгошлем Доктора Зорбо",
-        "price": 1379,
+        "id": "ISv8Evj7bFY6G4FP",
+        "name": "Маска Риверов",
+        "price": 1413,
         "vector": [
           10,
           12,
           6,
           12,
           37,
-          5,
+          6,
           0,
           0,
           0,
@@ -28984,32 +28564,7 @@
       "weaker": {
         "id": "lziFHvwJEFDqEHt0",
         "name": "Химическая Маска",
-        "price": 1379,
-        "vector": [
-          7,
-          12,
-          6,
-          12,
-          37,
-          2,
-          0,
-          0,
-          0,
-          -3,
-          2,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "sealedProtectiveEquipment",
-      "stronger": {
-        "id": "GX11Dx90n0TYMgnc",
-        "name": "Полицейский Противогаз",
-        "price": 1379,
+        "price": 1413,
         "vector": [
           7,
           12,
@@ -29017,26 +28572,6 @@
           12,
           37,
           3,
-          0,
-          0,
-          0,
-          -3,
-          2,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "lziFHvwJEFDqEHt0",
-        "name": "Химическая Маска",
-        "price": 1379,
-        "vector": [
-          7,
-          12,
-          6,
-          12,
-          37,
-          2,
           0,
           0,
           0,
@@ -30537,6 +30072,51 @@
       "class": "D",
       "family": "lightArmor",
       "stronger": {
+        "id": "F0hvywGu6rwDPd8d",
+        "name": "Броня Санитара",
+        "price": 304,
+        "vector": [
+          2,
+          10,
+          3,
+          3,
+          2,
+          5,
+          0,
+          1,
+          0,
+          -7,
+          6,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "rwYFxKBCCkdfKykF",
+        "name": "Одежда Сапёра",
+        "price": 304,
+        "vector": [
+          2,
+          10,
+          3,
+          3,
+          2,
+          5,
+          0,
+          1,
+          0,
+          -8,
+          6,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "lightArmor",
+      "stronger": {
         "id": "dKRju6sEYGf52lso",
         "name": "Жилетка рейдера",
         "price": 289,
@@ -31302,6 +30882,141 @@
       "class": "D",
       "family": "lightArmor",
       "stronger": {
+        "id": "XBSVh1xPwMRKHcPt",
+        "name": "Одежда Рейдера Автостопщика",
+        "price": 289,
+        "vector": [
+          2,
+          7,
+          2,
+          2,
+          1,
+          5,
+          0,
+          2,
+          0,
+          -7,
+          6,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "Q3Yo6yqTxgbfnutr",
+        "name": "Броня Рейдера-Карателя",
+        "price": 289,
+        "vector": [
+          2,
+          7,
+          2,
+          2,
+          1,
+          5,
+          0,
+          2,
+          0,
+          -21,
+          6,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "lightArmor",
+      "stronger": {
+        "id": "rwYFxKBCCkdfKykF",
+        "name": "Одежда Сапёра",
+        "price": 304,
+        "vector": [
+          2,
+          10,
+          3,
+          3,
+          2,
+          5,
+          0,
+          1,
+          0,
+          -8,
+          6,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "QO4f1Az4paZxkGvA",
+        "name": "Броня Матроны",
+        "price": 315,
+        "vector": [
+          2,
+          10,
+          3,
+          3,
+          2,
+          5,
+          0,
+          0,
+          0,
+          -9,
+          6,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "lightArmor",
+      "stronger": {
+        "id": "rwYFxKBCCkdfKykF",
+        "name": "Одежда Сапёра",
+        "price": 304,
+        "vector": [
+          2,
+          10,
+          3,
+          3,
+          2,
+          5,
+          0,
+          1,
+          0,
+          -8,
+          6,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "mewGgWH23q3Blghz",
+        "name": "Кожаная куртка мутанта",
+        "price": 324,
+        "vector": [
+          2,
+          7,
+          3,
+          3,
+          1,
+          5,
+          0,
+          0,
+          0,
+          -22,
+          6,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "lightArmor",
+      "stronger": {
         "id": "xOOqtUCc832uHS6o",
         "name": "Чёрная бандана",
         "price": 368,
@@ -31527,51 +31242,6 @@
       "class": "D",
       "family": "lightHelmet",
       "stronger": {
-        "id": "j7Ib3ddIVJMJmfGt",
-        "name": "Защитный Капюшон",
-        "price": 292,
-        "vector": [
-          2,
-          8,
-          1,
-          2,
-          1,
-          4,
-          0,
-          1,
-          0,
-          -1,
-          1,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "4AQplaqJZwgF4pId",
-        "name": "Строительная Каска",
-        "price": 304,
-        "vector": [
-          2,
-          8,
-          1,
-          2,
-          1,
-          4,
-          0,
-          0,
-          0,
-          -2,
-          1,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "D",
-      "family": "lightHelmet",
-      "stronger": {
         "id": "6S65RcyGWzVsLXgm",
         "name": "Каска",
         "price": 184,
@@ -31774,14 +31444,59 @@
       "weaker": {
         "id": "4AQplaqJZwgF4pId",
         "name": "Строительная Каска",
-        "price": 304,
+        "price": 260,
         "vector": [
           2,
           8,
           1,
           2,
           1,
-          4,
+          3,
+          0,
+          0,
+          0,
+          -2,
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "lightHelmet",
+      "stronger": {
+        "id": "u6PWDFtt8af3Aanx",
+        "name": "Китайская Каска",
+        "price": 184,
+        "vector": [
+          5,
+          15,
+          5,
+          5,
+          3,
+          3,
+          0,
+          0,
+          0,
+          -2,
+          1,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "4AQplaqJZwgF4pId",
+        "name": "Строительная Каска",
+        "price": 260,
+        "vector": [
+          2,
+          8,
+          1,
+          2,
+          1,
+          3,
           0,
           0,
           0,
@@ -31909,14 +31624,14 @@
       "weaker": {
         "id": "4AQplaqJZwgF4pId",
         "name": "Строительная Каска",
-        "price": 304,
+        "price": 260,
         "vector": [
           2,
           8,
           1,
           2,
           1,
-          4,
+          3,
           0,
           0,
           0,
@@ -31932,15 +31647,15 @@
       "class": "D",
       "family": "lightHelmet",
       "stronger": {
-        "id": "14lH0CaHovwHmNk7",
-        "name": "Открытый Шлем Синта",
-        "price": 295,
+        "id": "nWoV4Rs3YdvTwWfo",
+        "name": "Прочная Строительная Каска",
+        "price": 260,
         "vector": [
-          6,
-          14,
+          2,
           8,
-          6,
-          4,
+          1,
+          2,
+          1,
           4,
           0,
           0,
@@ -31954,14 +31669,59 @@
       "weaker": {
         "id": "4AQplaqJZwgF4pId",
         "name": "Строительная Каска",
-        "price": 304,
+        "price": 260,
         "vector": [
           2,
           8,
           1,
           2,
           1,
-          4,
+          3,
+          0,
+          0,
+          0,
+          -2,
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "lightHelmet",
+      "stronger": {
+        "id": "VlZLuW1uBrLMsH3G",
+        "name": "Шлем Механика",
+        "price": 216,
+        "vector": [
+          5,
+          15,
+          6,
+          5,
+          3,
+          3,
+          0,
+          0,
+          0,
+          -1,
+          1,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "4AQplaqJZwgF4pId",
+        "name": "Строительная Каска",
+        "price": 260,
+        "vector": [
+          2,
+          8,
+          1,
+          2,
+          1,
+          3,
           0,
           0,
           0,
@@ -32011,51 +31771,6 @@
           1,
           0,
           -1,
-          1,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "D",
-      "family": "lightHelmet",
-      "stronger": {
-        "id": "mIYETNCXTx0adYOS",
-        "name": "Шлем Психо-Рейдера",
-        "price": 292,
-        "vector": [
-          5,
-          16,
-          5,
-          5,
-          3,
-          4,
-          0,
-          1,
-          0,
-          -1,
-          2,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "4AQplaqJZwgF4pId",
-        "name": "Строительная Каска",
-        "price": 304,
-        "vector": [
-          2,
-          8,
-          1,
-          2,
-          1,
-          4,
-          0,
-          0,
-          0,
-          -2,
           1,
           0,
           0
@@ -32292,40 +32007,40 @@
       "class": "C",
       "family": "powerArmor",
       "stronger": {
-        "id": "EVRMmgqXv5fITXx1",
-        "name": "Силовая Броня «Пустынный лис»",
-        "price": 7312,
+        "id": "75DvioMo0FpiXZ4G",
+        "name": "Силовая броня «Месть Убежища 13»",
+        "price": 7442,
         "vector": [
           29,
-          73,
+          72,
           34,
           35,
           52,
-          35,
+          34,
+          14,
           10,
-          7,
           0,
-          -91,
+          -86,
           6,
           0,
           -6
         ]
       },
       "weaker": {
-        "id": "r9jRCXJK3qwtlP11",
-        "name": "Силовая броня T-45a",
-        "price": 7312,
+        "id": "KyyfO0Ju8h6IqsVc",
+        "name": "Силовая Броня Пророка Потерянных",
+        "price": 7477,
         "vector": [
           29,
-          73,
+          72,
           34,
           35,
           52,
-          35,
-          3,
-          5,
+          33,
+          14,
+          10,
           0,
-          -100,
+          -114,
           6,
           0,
           -6
@@ -32539,18 +32254,18 @@
       "weaker": {
         "id": "vbunaijmSSzAvQWs",
         "name": "Силовая броня Рейдеров",
-        "price": 7265,
+        "price": 7277,
         "vector": [
           24,
-          62,
-          26,
+          63,
+          24,
           27,
           43,
-          33,
+          34,
           5,
           6,
           0,
-          -109,
+          -110,
           6,
           0,
           -6
@@ -32596,6 +32311,96 @@
           8,
           0,
           -102,
+          6,
+          0,
+          -6
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "powerArmor",
+      "stronger": {
+        "id": "xoOPJWab2JdD1RzM",
+        "name": "Силовая броня Доктора Брауна",
+        "price": 7265,
+        "vector": [
+          29,
+          72,
+          35,
+          35,
+          52,
+          34,
+          13,
+          10,
+          0,
+          -95,
+          6,
+          0,
+          -6
+        ]
+      },
+      "weaker": {
+        "id": "r9jRCXJK3qwtlP11",
+        "name": "Силовая броня T-45a",
+        "price": 7300,
+        "vector": [
+          29,
+          72,
+          34,
+          35,
+          52,
+          33,
+          4,
+          5,
+          0,
+          -97,
+          6,
+          0,
+          -6
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "powerArmor",
+      "stronger": {
+        "id": "DYZiPz8BQqz28bfY",
+        "name": "Силовая броня Клинта",
+        "price": 7477,
+        "vector": [
+          29,
+          73,
+          34,
+          35,
+          52,
+          34,
+          13,
+          10,
+          0,
+          -89,
+          6,
+          0,
+          -6
+        ]
+      },
+      "weaker": {
+        "id": "SKgj3fkZlXjAT9lt",
+        "name": "Силовая броня T-45b",
+        "price": 7477,
+        "vector": [
+          29,
+          73,
+          34,
+          35,
+          52,
+          34,
+          3,
+          5,
+          0,
+          -89,
           6,
           0,
           -6
@@ -32674,18 +32479,18 @@
       "weaker": {
         "id": "vbunaijmSSzAvQWs",
         "name": "Силовая броня Рейдеров",
-        "price": 7265,
+        "price": 7277,
         "vector": [
           24,
-          62,
-          26,
+          63,
+          24,
           27,
           43,
-          33,
+          34,
           5,
           6,
           0,
-          -109,
+          -110,
           6,
           0,
           -6
@@ -32874,51 +32679,6 @@
     },
     {
       "group": "equipment",
-      "class": "C",
-      "family": "powerArmor",
-      "stronger": {
-        "id": "6CBHO7UnNkEpkQNm",
-        "name": "Силовая броня EXC-17",
-        "price": 7312,
-        "vector": [
-          29,
-          73,
-          34,
-          35,
-          52,
-          35,
-          13,
-          10,
-          0,
-          -95,
-          6,
-          0,
-          -6
-        ]
-      },
-      "weaker": {
-        "id": "r9jRCXJK3qwtlP11",
-        "name": "Силовая броня T-45a",
-        "price": 7312,
-        "vector": [
-          29,
-          73,
-          34,
-          35,
-          52,
-          35,
-          3,
-          5,
-          0,
-          -100,
-          6,
-          0,
-          -6
-        ]
-      }
-    },
-    {
-      "group": "equipment",
       "class": "B",
       "family": "powerHelmet",
       "stronger": {
@@ -32967,9 +32727,54 @@
       "class": "C",
       "family": "powerHelmet",
       "stronger": {
+        "id": "biOrruDn3RCPS6zR",
+        "name": "Силовой шлем «Всадник Войны»",
+        "price": 2033,
+        "vector": [
+          29,
+          72,
+          34,
+          35,
+          52,
+          36,
+          3,
+          2,
+          0,
+          -12,
+          2,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "Ijdr0JcJ8cXR9ue8",
+        "name": "Силовой шлем T-45b",
+        "price": 2033,
+        "vector": [
+          29,
+          72,
+          34,
+          35,
+          52,
+          34,
+          1,
+          2,
+          0,
+          -12,
+          2,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "powerHelmet",
+      "stronger": {
         "id": "Y99tQ5sp6nexMWyk",
         "name": "Силовой шлем «Рассказчик»",
-        "price": 2045,
+        "price": 2080,
         "vector": [
           29,
           72,
@@ -33057,51 +32862,6 @@
       "class": "C",
       "family": "powerHelmet",
       "stronger": {
-        "id": "1iZFFLxj9oMzSoUU",
-        "name": "Силовой шлем Клинта",
-        "price": 2080,
-        "vector": [
-          29,
-          72,
-          35,
-          35,
-          52,
-          34,
-          5,
-          4,
-          0,
-          -12,
-          2,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "k7xuejlWcsN9FZ3D",
-        "name": "Шлем Главного Гада",
-        "price": 2080,
-        "vector": [
-          29,
-          72,
-          34,
-          35,
-          52,
-          34,
-          5,
-          4,
-          0,
-          -20,
-          2,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "powerHelmet",
-      "stronger": {
         "id": "taZX5bNrUJ9LwKMu",
         "name": "Силовой шлем Рейдеров",
         "price": 1997,
@@ -33110,8 +32870,8 @@
           62,
           25,
           27,
-          44,
-          34,
+          43,
+          36,
           3,
           2,
           0,
@@ -33149,14 +32909,14 @@
       "stronger": {
         "id": "CZxlN02x8PVuw7W2",
         "name": "Силовой шлем Ренегатов",
-        "price": 2103,
+        "price": 2033,
         "vector": [
           29,
           72,
           34,
           36,
-          53,
-          37,
+          52,
+          34,
           3,
           2,
           0,
@@ -33169,14 +32929,14 @@
       "weaker": {
         "id": "RsQs5GF8YeE0NfJE",
         "name": "Силовой шлем T-45a",
-        "price": 2103,
+        "price": 2033,
         "vector": [
           29,
           72,
           34,
           36,
-          53,
-          37,
+          52,
+          34,
           1,
           2,
           0,
@@ -33192,8 +32952,8 @@
       "class": "C",
       "family": "powerHelmet",
       "stronger": {
-        "id": "uurGjZyWGMENw3RC",
-        "name": "Силовой шлем EXC-17",
+        "id": "ouXcVeGgbmCZWGjq",
+        "name": "Силовой шлем ТБС",
         "price": 2033,
         "vector": [
           29,
@@ -33202,10 +32962,10 @@
           35,
           52,
           34,
-          4,
-          4,
+          3,
+          3,
           0,
-          -12,
+          -13,
           2,
           0,
           0
@@ -33218,51 +32978,6 @@
         "vector": [
           29,
           72,
-          35,
-          35,
-          52,
-          34,
-          3,
-          3,
-          0,
-          -17,
-          2,
-          0,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "powerHelmet",
-      "stronger": {
-        "id": "uurGjZyWGMENw3RC",
-        "name": "Силовой шлем EXC-17",
-        "price": 2033,
-        "vector": [
-          29,
-          72,
-          35,
-          35,
-          52,
-          34,
-          4,
-          4,
-          0,
-          -12,
-          2,
-          0,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ouXcVeGgbmCZWGjq",
-        "name": "Силовой шлем ТБС",
-        "price": 2033,
-        "vector": [
-          29,
-          72,
           34,
           35,
           52,
@@ -33270,7 +32985,7 @@
           3,
           3,
           0,
-          -12,
+          -16,
           2,
           0,
           0
@@ -35847,6 +35562,51 @@
       "class": "C",
       "family": "mediumHelmet",
       "stronger": {
+        "id": "kJf5HTNTem0NNc3s",
+        "name": "Рогатый Шлем Великих Ханов",
+        "price": 1077,
+        "vector": [
+          10,
+          28,
+          10,
+          10,
+          6,
+          9,
+          0,
+          0,
+          0,
+          -1,
+          1,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "Jn9LPw2b1FXT6yue",
+        "name": "Шлем Чертей",
+        "price": 1123,
+        "vector": [
+          10,
+          28,
+          10,
+          10,
+          6,
+          9,
+          0,
+          0,
+          0,
+          -2,
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "mediumHelmet",
+      "stronger": {
         "id": "gviZhn6w0IZGosqr",
         "name": "Улучшенная Китайская Каска",
         "price": 1077,
@@ -36106,6 +35866,51 @@
           0,
           0,
           -4,
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "C",
+      "family": "mediumHelmet",
+      "stronger": {
+        "id": "gviZhn6w0IZGosqr",
+        "name": "Улучшенная Китайская Каска",
+        "price": 1077,
+        "vector": [
+          10,
+          29,
+          10,
+          10,
+          6,
+          9,
+          0,
+          0,
+          0,
+          -2,
+          1,
+          0,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "Jn9LPw2b1FXT6yue",
+        "name": "Шлем Чертей",
+        "price": 1123,
+        "vector": [
+          10,
+          28,
+          10,
+          10,
+          6,
+          9,
+          0,
+          0,
+          0,
+          -2,
           1,
           0,
           0
@@ -37557,231 +37362,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "l15O97gqVr1yKfDO",
-        "name": "Боевая броня",
-        "price": 2341,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "l15O97gqVr1yKfDO",
-        "name": "Боевая броня",
-        "price": 2341,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "l15O97gqVr1yKfDO",
-        "name": "Боевая броня",
-        "price": 2341,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "l15O97gqVr1yKfDO",
-        "name": "Боевая броня",
-        "price": 2341,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "l15O97gqVr1yKfDO",
-        "name": "Боевая броня",
-        "price": 2341,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "9IUXQW42PZPa4wY9",
         "name": "Боевая броня Капрала",
         "price": 2341,
@@ -37816,51 +37396,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "9IUXQW42PZPa4wY9",
-        "name": "Боевая броня Капрала",
-        "price": 2341,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          0,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -37962,366 +37497,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "CTPOn8wtEp47pkJo",
-        "name": "Боевая броня Компании Коготь",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "CTPOn8wtEp47pkJo",
-        "name": "Боевая броня Компании Коготь",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "pbylFTVH1mqWrRrz",
-        "name": "Броня Легионера",
-        "price": 2409,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "CTPOn8wtEp47pkJo",
-        "name": "Боевая броня Компании Коготь",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "CTPOn8wtEp47pkJo",
-        "name": "Боевая броня Компании Коготь",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "CTPOn8wtEp47pkJo",
-        "name": "Боевая броня Компании Коготь",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "TfTVgIN5yQtAvnDH",
-        "name": "Доспех",
-        "price": 2397,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          3,
-          0,
-          -49,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "CTPOn8wtEp47pkJo",
-        "name": "Боевая броня Компании Коготь",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "yteLFIp86aC6V4aR",
-        "name": "Боевая броня Мутанта",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -54,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "yteLFIp86aC6V4aR",
-        "name": "Боевая броня Мутанта",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -54,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "hIsBAqeHEO0GwFDb",
         "name": "Боевая броня Национальной Гвардии",
         "price": 2329,
@@ -38356,51 +37531,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "hIsBAqeHEO0GwFDb",
-        "name": "Боевая броня Национальной Гвардии",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          0,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -38491,321 +37621,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "xSqPLf9R2VgWcyOv",
-        "name": "Боевая броня Охранны",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          14,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "xSqPLf9R2VgWcyOv",
-        "name": "Боевая броня Охранны",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          14,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "xSqPLf9R2VgWcyOv",
-        "name": "Боевая броня Охранны",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          14,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "xSqPLf9R2VgWcyOv",
-        "name": "Боевая броня Охранны",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          14,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "xSqPLf9R2VgWcyOv",
-        "name": "Боевая броня Охранны",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          14,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "XCHZ6WhPhDEh9vSD",
-        "name": "Боевая броня Ренегата",
-        "price": 2397,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          3,
-          0,
-          -31,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "TfTVgIN5yQtAvnDH",
-        "name": "Доспех",
-        "price": 2397,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          3,
-          0,
-          -49,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "PhA8IIxdb4ObRKlR",
-        "name": "Боевая броня Сержанта Компании Коготь",
-        "price": 2397,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          1,
-          0,
-          0,
-          -22,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -38862,51 +37677,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "Ygm55Ich1kIgzuL6",
-        "name": "Боевая Броня Техасского Братства",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          1,
-          0,
-          -22,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "R1mU6rXulAuC3YGy",
         "name": "Броня Военной Полиции НКР",
         "price": 2296,
@@ -38952,51 +37722,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "R1mU6rXulAuC3YGy",
-        "name": "Броня Военной Полиции НКР",
-        "price": 2296,
-        "vector": [
-          8,
-          27,
-          8,
-          7,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "e61H1rlkInz9Z190",
         "name": "Броня Дикаря Усилинная",
         "price": 2257,
@@ -39076,276 +37801,6 @@
           0,
           0,
           -18,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "e61H1rlkInz9Z190",
-        "name": "Броня Дикаря Усилинная",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "e61H1rlkInz9Z190",
-        "name": "Броня Дикаря Усилинная",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "oQUqgB9gWVuEbKiW",
-        "name": "Боевая Броня воина Легиона",
-        "price": 2329,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "e61H1rlkInz9Z190",
-        "name": "Броня Дикаря Усилинная",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "e61H1rlkInz9Z190",
-        "name": "Броня Дикаря Усилинная",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "e61H1rlkInz9Z190",
-        "name": "Броня Дикаря Усилинная",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "e61H1rlkInz9Z190",
-        "name": "Броня Дикаря Усилинная",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
           6,
           -2,
           0
@@ -39492,276 +37947,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "DVMEAPb383a1NiJg",
-        "name": "Броня охраны Убежища",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -14,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "DVMEAPb383a1NiJg",
-        "name": "Броня охраны Убежища",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -14,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "oQUqgB9gWVuEbKiW",
-        "name": "Боевая Броня воина Легиона",
-        "price": 2329,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "DVMEAPb383a1NiJg",
-        "name": "Броня охраны Убежища",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -14,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "DVMEAPb383a1NiJg",
-        "name": "Броня охраны Убежища",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -14,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "DVMEAPb383a1NiJg",
-        "name": "Броня охраны Убежища",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -14,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "DVMEAPb383a1NiJg",
-        "name": "Броня охраны Убежища",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -14,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "5cKEOTNZuYTbJ8U6",
         "name": "Броня Первой Кавалерии",
         "price": 2257,
@@ -39796,96 +37981,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "5cKEOTNZuYTbJ8U6",
-        "name": "Броня Первой Кавалерии",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          0,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "oQUqgB9gWVuEbKiW",
-        "name": "Боевая Броня воина Легиона",
-        "price": 2329,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "5cKEOTNZuYTbJ8U6",
-        "name": "Броня Первой Кавалерии",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          0,
-          0,
-          -18,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -39987,231 +38082,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "Z32Vlhnt6hKV6CkZ",
-        "name": "Броня Хабологов",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          6,
-          0,
-          -36,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "Z32Vlhnt6hKV6CkZ",
-        "name": "Броня Хабологов",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          6,
-          0,
-          -36,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "Z32Vlhnt6hKV6CkZ",
-        "name": "Броня Хабологов",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          6,
-          0,
-          -36,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "TfTVgIN5yQtAvnDH",
-        "name": "Доспех",
-        "price": 2397,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          3,
-          0,
-          -49,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "Z32Vlhnt6hKV6CkZ",
-        "name": "Броня Хабологов",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          6,
-          0,
-          -36,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "C0ODd4miZGAhhrNJ",
-        "name": "Металлическая броня мутанта",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          4,
-          0,
-          -68,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "Z32Vlhnt6hKV6CkZ",
-        "name": "Броня Хабологов",
-        "price": 2257,
-        "vector": [
-          8,
-          25,
-          9,
-          9,
-          5,
-          13,
-          0,
-          6,
-          0,
-          -36,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "IxS3rpm888e60psK",
         "name": "Комплект Брони Рейнджера",
         "price": 2296,
@@ -40302,141 +38172,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "IxS3rpm888e60psK",
-        "name": "Комплект Брони Рейнджера",
-        "price": 2296,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "IxS3rpm888e60psK",
-        "name": "Комплект Брони Рейнджера",
-        "price": 2296,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "IxS3rpm888e60psK",
-        "name": "Комплект Брони Рейнджера",
-        "price": 2296,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "mvdsQ9l7LtQ38anY",
         "name": "Комплект Дорожной Полицейской Брони",
         "price": 2397,
@@ -40482,51 +38217,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "mvdsQ9l7LtQ38anY",
-        "name": "Комплект Дорожной Полицейской Брони",
-        "price": 2397,
-        "vector": [
-          8,
-          27,
-          8,
-          7,
-          4,
-          13,
-          0,
-          3,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "TfTVgIN5yQtAvnDH",
-        "name": "Доспех",
-        "price": 2397,
-        "vector": [
-          6,
-          22,
-          4,
-          7,
-          4,
-          13,
-          0,
-          3,
-          0,
-          -49,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "H9i7HKdmpyH3dxZ0",
         "name": "Комплект Полицейской Брони SWAT",
         "price": 2329,
@@ -40561,186 +38251,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "H9i7HKdmpyH3dxZ0",
-        "name": "Комплект Полицейской Брони SWAT",
-        "price": 2329,
-        "vector": [
-          8,
-          27,
-          8,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "H9i7HKdmpyH3dxZ0",
-        "name": "Комплект Полицейской Брони SWAT",
-        "price": 2329,
-        "vector": [
-          8,
-          27,
-          8,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "H9i7HKdmpyH3dxZ0",
-        "name": "Комплект Полицейской Брони SWAT",
-        "price": 2329,
-        "vector": [
-          8,
-          27,
-          8,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -27,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "3uEsU137Ev8eJLz9",
-        "name": "Летняя Боевая Броня",
-        "price": 2409,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          0,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -40842,96 +38352,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "f7EjcH94usXv63c5",
-        "name": "Летняя Боевая Броня Первой Кавалерии",
-        "price": 2409,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "f7EjcH94usXv63c5",
-        "name": "Летняя Боевая Броня Первой Кавалерии",
-        "price": 2409,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "DjDGeUKrKRg1mvY6",
         "name": "Летняя Боевая Броня Пустынная",
         "price": 2363,
@@ -41011,51 +38431,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "DjDGeUKrKRg1mvY6",
-        "name": "Летняя Боевая Броня Пустынная",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          1,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -41247,321 +38622,6 @@
       "class": "C",
       "family": "mediumArmor",
       "stronger": {
-        "id": "89XfyOd9xoDloHJa",
-        "name": "Летняя Боевая Броня Чёрная",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "89XfyOd9xoDloHJa",
-        "name": "Летняя Боевая Броня Чёрная",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "8R90J0a5Ogq8zowE",
-        "name": "Броня НКР с наплечником",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "89XfyOd9xoDloHJa",
-        "name": "Летняя Боевая Броня Чёрная",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "89XfyOd9xoDloHJa",
-        "name": "Летняя Боевая Броня Чёрная",
-        "price": 2363,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          2,
-          0,
-          -20,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "zHwEkNb5oW11hRPi",
-        "name": "Полицейская броня",
-        "price": 2329,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -37,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "D0z90s3YFRzMReGe",
-        "name": "Автомобильная броня Мутанта",
-        "price": 2341,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -60,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "zHwEkNb5oW11hRPi",
-        "name": "Полицейская броня",
-        "price": 2329,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -37,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "zHwEkNb5oW11hRPi",
-        "name": "Полицейская броня",
-        "price": 2329,
-        "vector": [
-          8,
-          27,
-          8,
-          8,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -37,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "WblOLU2crNOAF02e",
-        "name": "Металлические доспехи Выходца из Убежища",
-        "price": 2375,
-        "vector": [
-          6,
-          23,
-          4,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -45,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
         "id": "WH51QPTzjJFDfhUT",
         "name": "Трофейная Боевая Броня",
         "price": 2329,
@@ -41596,51 +38656,6 @@
           0,
           0,
           -32,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "WH51QPTzjJFDfhUT",
-        "name": "Трофейная Боевая Броня",
-        "price": 2329,
-        "vector": [
-          8,
-          26,
-          8,
-          8,
-          5,
-          13,
-          0,
-          0,
-          0,
-          -23,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "55snZhelZyyyuv5h",
-        "name": "Броня НКР с патронташем",
-        "price": 2468,
-        "vector": [
-          6,
-          21,
-          6,
-          6,
-          4,
-          13,
-          0,
-          0,
-          0,
-          -24,
           6,
           -2,
           0
@@ -41694,19 +38709,64 @@
     },
     {
       "group": "equipment",
-      "class": "C",
+      "class": "D",
       "family": "mediumArmor",
       "stronger": {
         "id": "8R90J0a5Ogq8zowE",
         "name": "Броня НКР с наплечником",
-        "price": 2468,
+        "price": 554,
         "vector": [
           6,
           21,
           6,
           6,
           4,
-          13,
+          9,
+          0,
+          2,
+          0,
+          -24,
+          6,
+          -2,
+          0
+        ]
+      },
+      "weaker": {
+        "id": "D0z90s3YFRzMReGe",
+        "name": "Автомобильная броня Мутанта",
+        "price": 566,
+        "vector": [
+          6,
+          21,
+          6,
+          6,
+          4,
+          9,
+          0,
+          2,
+          0,
+          -60,
+          6,
+          -2,
+          0
+        ]
+      }
+    },
+    {
+      "group": "equipment",
+      "class": "D",
+      "family": "mediumArmor",
+      "stronger": {
+        "id": "8R90J0a5Ogq8zowE",
+        "name": "Броня НКР с наплечником",
+        "price": 554,
+        "vector": [
+          6,
+          21,
+          6,
+          6,
+          4,
+          9,
           0,
           2,
           0,
@@ -41719,63 +38779,18 @@
       "weaker": {
         "id": "55snZhelZyyyuv5h",
         "name": "Броня НКР с патронташем",
-        "price": 2468,
+        "price": 554,
         "vector": [
           6,
           21,
           6,
           6,
           4,
-          13,
+          9,
           0,
           0,
           0,
           -24,
-          6,
-          -2,
-          0
-        ]
-      }
-    },
-    {
-      "group": "equipment",
-      "class": "C",
-      "family": "mediumArmor",
-      "stronger": {
-        "id": "xqzp7YX5vkbXebOy",
-        "name": "Набедренная Повязка мутанта",
-        "price": 2362,
-        "vector": [
-          6,
-          20,
-          7,
-          7,
-          4,
-          13,
-          0,
-          2,
-          0,
-          -13,
-          6,
-          -2,
-          0
-        ]
-      },
-      "weaker": {
-        "id": "ahNXU3iUgWPf1gS7",
-        "name": "Бронированный Пыльник Мутанта",
-        "price": 2385,
-        "vector": [
-          5,
-          15,
-          6,
-          6,
-          3,
-          13,
-          0,
-          2,
-          0,
-          -59,
           6,
           -2,
           0
@@ -41879,7 +38894,7 @@
       "stronger": {
         "id": "grVtlNslc2KVYPzo",
         "name": "Броня Центуриона Легиона",
-        "price": 3776,
+        "price": 3430,
         "vector": [
           16,
           55,
@@ -41899,7 +38914,7 @@
       "weaker": {
         "id": "me7wyFutTnfcw5Ct",
         "name": "Доспех Писца Братства",
-        "price": 3776,
+        "price": 3430,
         "vector": [
           16,
           55,

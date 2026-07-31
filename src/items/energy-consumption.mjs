@@ -235,15 +235,19 @@ export async function openEnergyConsumptionDialog({ actor = null, item = null, c
 }
 
 async function processEnergyConsumptionWorldTime(_worldTime, deltaSeconds) {
-  if (!game.user?.isGM) return;
+  if (!isEnergyConsumptionWorldTimeAuthority()) return;
   const seconds = Number(deltaSeconds) || 0;
   if (seconds <= 0) return;
   const actors = collectEnergyConsumptionActors();
   for (const actor of actors) await processActorEnergyConsumptionWorldTime(actor, seconds);
 }
 
+export function isEnergyConsumptionWorldTimeAuthority(user = globalThis.game?.user) {
+  return user?.isActiveGM === true;
+}
+
 async function processActorEnergyConsumptionWorldTime(actor = null, deltaSeconds = 0) {
-  let changed = false;
+  let activationChanged = false;
   const hours = Math.max(0, Number(deltaSeconds) || 0) / 3600;
   if (!actor || hours <= 0) return;
 
@@ -251,11 +255,12 @@ async function processActorEnergyConsumptionWorldTime(actor = null, deltaSeconds
     if (!isActiveEnergyConsumptionCarrier(actor, item)) continue;
     const activeConditions = getEnergyConsumptionConditions(item).filter(condition => isEnergyConsumptionActive(item, condition.id));
     if (!activeConditions.length) continue;
-    const consumed = await consumeEnergyConditions(actor, item, activeConditions, hours);
-    changed = changed || consumed.changed;
+    activationChanged = (await consumeEnergyConditions(actor, item, activeConditions, hours))
+      || activationChanged;
   }
 
-  if (changed) {
+  // Reserve-only writes do not alter free-settings projections.
+  if (activationChanged) {
     Hooks.callAll("fallout-maw.energyConsumptionChanged", actor);
   }
 }
@@ -264,11 +269,13 @@ async function consumeEnergyConditions(actor = null, item = null, conditions = [
   const activeConditions = Array.isArray(conditions) ? conditions : [];
   const changes = {};
   const validConditions = [];
+  let activationChanged = false;
   for (const condition of activeConditions) {
     if (canActivateEnergyConsumption(actor, item, condition)) {
       validConditions.push(condition);
     } else {
       changes[`system.functions.energyConsumer.activeConditions.${condition.id}`] = false;
+      activationChanged = true;
     }
   }
 
@@ -287,9 +294,9 @@ async function consumeEnergyConditions(actor = null, item = null, conditions = [
         changes,
         "energy-consumption-disable-invalid"
       );
-      return { changed: updated };
+      return Boolean(updated && activationChanged);
     }
-    return { changed };
+    return false;
   }
 
   const source = getActiveEnergySourceItem(actor, getEnergyConsumerFunction(item));
@@ -311,6 +318,7 @@ async function consumeEnergyConditions(actor = null, item = null, conditions = [
     for (const condition of activeConditions) {
       changes[`system.functions.energyConsumer.activeConditions.${condition.id}`] = false;
     }
+    activationChanged = activeConditions.length > 0;
   }
 
   const changed = Object.keys(changes).length > 0;
@@ -321,10 +329,10 @@ async function consumeEnergyConditions(actor = null, item = null, conditions = [
       changes,
       "energy-consumption-world-time"
     );
-    if (!updated) return { changed: false };
+    if (!updated) return false;
   }
   rememberEnergyConsumptionReserveValue(item, source, plan.remaining);
-  return { changed };
+  return activationChanged;
 }
 
 function getCachedEnergyConsumptionReserveValue(item = null, source = null, fallback = 0) {

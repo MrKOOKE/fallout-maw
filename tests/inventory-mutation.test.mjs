@@ -110,9 +110,9 @@ test("a successful mutation commits update, delete and create in one Foundry bat
 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].map(operation => operation.action), [
-    "update",
     "delete",
-    "create"
+    "create",
+    "update"
   ]);
   for (const operation of calls[0]) {
     assert.equal(operation[INVENTORY_ATOMIC_OPTION], true);
@@ -121,9 +121,9 @@ test("a successful mutation commits update, delete and create in one Foundry bat
   }
   assert.deepEqual(
     calls[0].map(operation => operation[INVENTORY_EXPECTED_IDS_OPTION]),
-    [["updated"], ["deleted"], ["created-copy"]]
+    [["deleted"], ["created-copy"], ["updated"]]
   );
-  assert.equal(calls[0][0].diff, false, "callers cannot re-enable diff for atomic inventory updates");
+  assert.equal(calls[0][2].diff, false, "callers cannot re-enable diff for atomic inventory updates");
   assert.deepEqual(
     actor.items.contents.map(item => [
       item._id,
@@ -133,6 +133,46 @@ test("a successful mutation commits update, delete and create in one Foundry bat
   );
   assert.equal(result.operationId, "inventory-operation-success");
   assert.equal(result.createdDocuments[0], actor.items.get("created-copy"));
+});
+
+test("Item updates are committed after embedded collection changes", async () => {
+  const weapon = createItem({ id: "weapon", x: 1 });
+  weapon.system.functions.weapon = {
+    enabled: true,
+    moduleSlots: [{ id: "optic", moduleKey: "scope", itemUuid: "", itemData: {} }]
+  };
+  const moduleItem = createItem({ id: "scope", x: 2 });
+  const actor = createActor("module-install", [weapon, moduleItem]);
+  const installedSlots = [{
+    id: "optic",
+    moduleKey: "scope",
+    itemUuid: "Actor.module-install.Item.scope",
+    itemData: structuredClone(moduleItem)
+  }];
+  const calls = [];
+  installFoundryMock({
+    randomIds: ["operation-module-install"],
+    modifyBatch: async operations => {
+      calls.push(structuredCloneBatch(operations));
+      return applyBatchOperations(operations);
+    }
+  });
+
+  await executeInventoryMutation({
+    actor,
+    updates: [{
+      _id: "weapon",
+      "system.functions.weapon.moduleSlots": installedSlots
+    }],
+    deletes: ["scope"]
+  }, { reason: "install-weapon-module" });
+
+  assert.deepEqual(calls[0].map(operation => operation.action), ["delete", "update"]);
+  assert.equal(actor.items.get("scope"), undefined);
+  assert.deepEqual(
+    actor.items.get("weapon").system.functions.weapon.moduleSlots,
+    installedSlots
+  );
 });
 
 test("an incomplete batch result compensates a partially committed cross-actor transfer", async () => {
@@ -238,29 +278,63 @@ test("a no-op Item update omitted by Foundry does not become a false inventory f
   assert.equal(actor.items.get("stationary").system.placement.x, 1);
 });
 
-test("a nominally complete response is rejected when an explicit Item field was not persisted", async () => {
-  const actor = createActor("wrong-update-state", [
+test("a complete Foundry response is not rolled back because a detached caller source stayed stale", async () => {
+  const actor = createActor("detached-update-state", [
     createItem({ id: "moved", x: 1 })
   ]);
   let batchCalls = 0;
   installFoundryMock({
-    randomIds: ["operation-wrong-update-state"],
+    randomIds: ["operation-detached-update-state"],
     modifyBatch: async operations => {
       batchCalls += 1;
       return operations.map(operation => operation.updates.map(update => actor.items.get(update._id)));
     }
   });
 
-  await assert.rejects(
-    executeInventoryMutation({
-      actor,
-      updates: [{ _id: "moved", "system.placement.x": 2 }]
-    }, { reason: "wrong-update-state" }),
-    /did not persist Item "moved" inventory field "system\.placement\.x"/
-  );
+  await executeInventoryMutation({
+    actor,
+    updates: [{ _id: "moved", "system.placement.x": 2 }]
+  }, { reason: "detached-update-state" });
 
-  assert.equal(batchCalls, 1, "an unchanged Actor does not need compensation");
+  assert.equal(batchCalls, 1, "a complete server acknowledgement must not trigger compensation");
   assert.equal(actor.items.get("moved").system.placement.x, 1);
+});
+
+test("a detached UI Actor is replaced with Foundry's canonical UUID instance", async () => {
+  const detachedActor = createActor("canonical-actor", [
+    createItem({ id: "weapon", x: 1 }),
+    createItem({ id: "module", x: 2 })
+  ]);
+  const canonicalActor = createActor("canonical-actor", detachedActor.items.contents);
+  const originalFromUuidSync = globalThis.fromUuidSync;
+  let operationParents = [];
+  globalThis.fromUuidSync = uuid => (
+    uuid === canonicalActor.uuid ? canonicalActor : null
+  );
+  installFoundryMock({
+    randomIds: ["operation-canonical-actor"],
+    modifyBatch: async operations => {
+      operationParents = operations.map(operation => operation.parent);
+      return applyBatchOperations(operations);
+    }
+  });
+
+  try {
+    await executeInventoryMutation({
+      actor: detachedActor,
+      updates: [{ _id: "weapon", "system.placement.x": 2 }],
+      deletes: ["module"]
+    }, { reason: "canonical-actor" });
+  } finally {
+    if (originalFromUuidSync === undefined) delete globalThis.fromUuidSync;
+    else globalThis.fromUuidSync = originalFromUuidSync;
+  }
+
+  assert.equal(operationParents.every(actor => actor === canonicalActor), true);
+  assert.equal(canonicalActor.items.get("module"), undefined);
+  assert.equal(canonicalActor.items.get("weapon").system.placement.x, 2);
+  assert.ok(detachedActor.items.get("module"), "the detached snapshot is not the committed document graph");
+  assert.equal(detachedActor.items.get("weapon").system.placement.x, 1);
 });
 
 test("inventory Items and Actor currency fields commit in the same Foundry batch", async () => {

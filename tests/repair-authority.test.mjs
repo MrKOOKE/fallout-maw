@@ -33,6 +33,15 @@ test("repair clients send intent while the authority re-resolves and calculates 
   assert.doesNotMatch(socket, /payload\.(?:finalValue|remainingSupply|expectedCondition|expectedSupply)/);
 });
 
+test("repair delegates to the same active GM used by Foundry system-event authority", () => {
+  const responsible = sliceFunction("getResponsibleGM");
+  const request = sliceFunction("requestRepairResolution");
+
+  assert.match(responsible, /game\.users\?\.activeGM/);
+  assert.doesNotMatch(responsible, /\.sort\(/);
+  assert.match(request, /game\.user\?\.isGM && game\.user\.id === gm\.id/);
+});
+
 test("repair authority serializes actors, deduplicates sockets and gives every check a unique operation identity", () => {
   const resolver = sliceFunction("resolveRepairOnAuthority");
   const once = sliceFunction("handleRepairSocketRequestOnce");

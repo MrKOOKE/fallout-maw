@@ -135,9 +135,11 @@ import { buildActorFormulaData, evaluateActorFormula, isFormulaTextConfigured } 
 import { evaluateFormula } from "../formulas/evaluation.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
+  cancelPendingAttackAutoCoverSync,
   clearAttackAutoCoverSync,
   getActorForcedCoverData,
-  queueAttackAutoCoverSync
+  queueAttackAutoCoverSync,
+  syncAttackAutoCoverNow
 } from "../canvas/cover.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, requestReactionEvent } from "./reaction-hub.mjs";
 import {
@@ -238,6 +240,16 @@ const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
 const COMMANDED_ATTACK_QUERY = "fallout-maw.weaponAttack.commandedAbility";
 const COMMANDED_ATTACK_QUERY_TIMEOUT_MS = 120000;
+const ORDINARY_ATTACK_TICKET_QUERY = "fallout-maw.weaponAttack.ordinaryTicket";
+const ORDINARY_ATTACK_TICKET_QUERY_TIMEOUT_MS = 3000;
+const ORDINARY_ATTACK_TICKET_TTL_MS = 10000;
+const ORDINARY_ATTACK_ACCEPT_TIMEOUT_MS = 5000;
+const ORDINARY_ATTACK_COMPLETION_TIMEOUT_MS = 120000;
+const ORDINARY_ATTACK_PROGRESS_INTERVAL_MS = 2000;
+const ORDINARY_ATTACK_RECOVERY_TIMEOUT_MS = 10000;
+const ORDINARY_ATTACK_HARD_TIMEOUT_MS = 150000;
+const ORDINARY_ATTACK_COMPLETED_TTL_MS = 5 * 60 * 1000;
+const ORDINARY_ATTACK_CACHE_LIMIT = 512;
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
@@ -249,6 +261,12 @@ const GEOMETRY_EPSILON = 0.0001;
 const AUTO_COVER_GRID_STEPS = 4;
 const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
+const pendingOrdinaryAttackRequests = new Map();
+const ordinaryAttackTickets = new Map();
+const ordinaryAttackOperationsInFlight = new Map();
+const ordinaryAttackOperationsCompleted = new Map();
+const ordinaryAttackActorQueues = new Map();
+const ordinaryAttackAuthoritySockets = new Map();
 const processingDelayedVolleyRegions = new Set();
 const weaponAttackResolvedHandlers = new Map();
 const weaponResourceActorLock = createActorOperationLock();
@@ -441,7 +459,9 @@ export function getWeaponActionModifierEnergyCost({
 }
 
 export function registerWeaponAttackSocket() {
-  if (globalThis.CONFIG?.queries) CONFIG.queries[COMMANDED_ATTACK_QUERY] = handleCommandedWeaponAttackQuery;
+  CONFIG.queries ??= {};
+  CONFIG.queries[COMMANDED_ATTACK_QUERY] = handleCommandedWeaponAttackQuery;
+  CONFIG.queries[ORDINARY_ATTACK_TICKET_QUERY] = handleOrdinaryWeaponAttackTicketQuery;
   game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
   Hooks.on("canvasReady", clearRemoteAttackPreviews);
   if (!delayedVolleyProcessorRegistered) {
@@ -573,10 +593,20 @@ export function startWeaponAttack({
   skipBaseWeaponResourceCosts = false,
   ignoreReactionLock = false,
   finishAfterAttack = false,
-  suppressGenericEventReactions = false
+  suppressGenericEventReactions = false,
+  useGmAuthority = false
 } = {}) {
   if (!ignoreReactionLock && isReactionSystemLocked()) return undefined;
   if (!token?.actor || !weapon || !isAttackSource(weapon, weaponFunctionId)) return undefined;
+  if (
+    useGmAuthority
+    && !game.user?.isGM
+    && game.user?.hasPermission?.("QUERY_USER") === false
+  ) {
+    ui.notifications.warn(
+      "В правах роли отключён «Запрос к пользователям»: атака будет обработана старым локальным путём."
+    );
+  }
   if (isActorUnableToAct(token.actor)) return undefined;
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return undefined;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
@@ -595,13 +625,37 @@ export function startWeaponAttack({
     skipBaseWeaponResourceCosts,
     ignoreReactionLock,
     finishAfterAttack,
-    suppressGenericEventReactions
+    suppressGenericEventReactions,
+    useGmAuthority
   });
   if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) return undefined;
   activeAttack = controller;
   activeAttack.activate();
   return activeAttack;
 }
+
+export const ORDINARY_WEAPON_ATTACK_TESTING = Object.freeze({
+  queryName: ORDINARY_ATTACK_TICKET_QUERY,
+  queryTimeoutMs: ORDINARY_ATTACK_TICKET_QUERY_TIMEOUT_MS,
+  handleTicketQuery: handleOrdinaryWeaponAttackTicketQuery,
+  handleSocketRequest: handleOrdinaryWeaponAttackSocketRequest,
+  executeSelection: executeOrdinaryWeaponAttackSelection,
+  settleResponse: settlePendingOrdinaryAttackRequest,
+  serializeSelection: serializeOrdinaryAttackSelection,
+  reset() {
+    for (const pending of pendingOrdinaryAttackRequests.values()) {
+      globalThis.clearTimeout(pending.timeout);
+      globalThis.clearTimeout(pending.completionTimeout);
+      globalThis.clearTimeout(pending.hardTimeout);
+    }
+    pendingOrdinaryAttackRequests.clear();
+    for (const ticket of ordinaryAttackTickets.keys()) deleteOrdinaryAttackTicket(ticket);
+    ordinaryAttackOperationsInFlight.clear();
+    ordinaryAttackOperationsCompleted.clear();
+    ordinaryAttackActorQueues.clear();
+    ordinaryAttackAuthoritySockets.clear();
+  }
+});
 
 function suspendWeaponAttackForNestedSelection(controller = activeAttack) {
   if (!controller || controller.destroyed) return null;
@@ -658,7 +712,9 @@ export function startWeaponAttackAndWait(options = {}) {
       finishAfterAttack: true,
       onProcessingStarted,
       onDestroy: ({ controller: destroyed }) => finish(
-        Boolean(destroyed?.lastResolvedAttackOutcome) || destroyed?.attackCheckCount > 0
+        Boolean(destroyed?.lastResolvedAttackOutcome)
+          || destroyed?.attackCheckCount > 0
+          || Boolean(destroyed?.authorityExecutionSucceeded)
       )
     });
     if (!controller) {
@@ -2063,6 +2119,620 @@ class CommandedWeaponAttackController {
   }
 }
 
+function serializeOrdinaryAttackSelection(selection = {}) {
+  return {
+    tokenUuid: selection.token?.document?.uuid ?? selection.token?.uuid ?? selection.tokenUuid ?? "",
+    weaponUuid: selection.weapon?.uuid ?? selection.weaponUuid ?? "",
+    actionKey: String(selection.actionKey ?? ""),
+    weaponFunctionId: String(selection.weaponFunctionId || ITEM_FUNCTIONS.weapon),
+    pointer: selection.pointer,
+    geometry: selection.geometry,
+    lockedGeometry: selection.lockedGeometry ?? selection.geometry,
+    targetUuid: String(selection.targetUuid ?? ""),
+    selectedLimbKey: String(selection.selectedLimbKey ?? ""),
+    directionKey: String(selection.directionKey ?? ""),
+    selectedStrength: Math.max(1, toInteger(selection.selectedStrength) || 1),
+    mode: String(selection.mode ?? "current"),
+    visibleTokenUuids: Array.from(new Set((selection.visibleTokenUuids ?? [])
+      .map(uuid => String(uuid ?? "").trim())
+      .filter(Boolean))),
+    operationId: String(selection.operationId ?? "").trim(),
+    previewAttackId: String(selection.previewAttackId ?? "").trim()
+  };
+}
+
+async function requestOrdinaryWeaponAttackOperation(gm, selection = {}) {
+  if (!gm?.active || typeof gm.query !== "function") {
+    return { ok: false, executed: false, reason: "missingGM" };
+  }
+  if (game.user?.hasPermission?.("QUERY_USER") === false) {
+    return { ok: false, executed: false, reason: "queryPermission" };
+  }
+
+  const preferredAuthoritySocketId = ordinaryAttackAuthoritySockets.get(gm.id) ?? "";
+  const preferences = preferredAuthoritySocketId ? [preferredAuthoritySocketId, ""] : [""];
+  let lastFailure = { ok: false, executed: false, reason: "authorityUnavailable" };
+
+  for (const preferredSocketId of preferences) {
+    let ticket;
+    try {
+      ticket = await gm.query(
+        ORDINARY_ATTACK_TICKET_QUERY,
+        {
+          selection,
+          preferredAuthoritySocketId: preferredSocketId
+        },
+        { timeout: ORDINARY_ATTACK_TICKET_QUERY_TIMEOUT_MS }
+      );
+    } catch (error) {
+      console.warn("Fallout MaW | Ordinary weapon attack authority ticket failed", error);
+      const reason = /permission|query users/iu.test(String(error?.message ?? error))
+        ? "queryPermission"
+        : "authorityUnavailable";
+      if (reason === "queryPermission") return { ok: false, executed: false, reason };
+      lastFailure = { ok: false, executed: false, reason };
+      if (preferredSocketId) ordinaryAttackAuthoritySockets.delete(gm.id);
+      continue;
+    }
+    if (
+      !ticket?.ok
+      || ticket.operationId !== selection.operationId
+      || !ticket.ticket
+      || !ticket.authoritySocketId
+    ) {
+      lastFailure = {
+        ok: false,
+        executed: false,
+        reason: String(ticket?.reason ?? "authorityUnavailable")
+      };
+      if (preferredSocketId) ordinaryAttackAuthoritySockets.delete(gm.id);
+      continue;
+    }
+    ordinaryAttackAuthoritySockets.set(gm.id, ticket.authoritySocketId);
+    return dispatchOrdinaryWeaponAttackOperation(gm, selection, ticket);
+  }
+  return lastFailure;
+}
+
+async function handleOrdinaryWeaponAttackTicketQuery(data = {}, {
+  user: sender = null,
+  timeout = ORDINARY_ATTACK_TICKET_QUERY_TIMEOUT_MS
+} = {}) {
+  if (
+    !sender?.active
+    || !sender?.id
+    || !game.user?.isGM
+    || game.users?.activeGM?.id !== game.user.id
+  ) return { ok: false, reason: "authorityRejected" };
+
+  const selection = serializeOrdinaryAttackSelection(data?.selection ?? {});
+  if (
+    !selection.operationId
+    || !selection.previewAttackId
+    || !selection.tokenUuid
+    || !selection.weaponUuid
+    || !selection.actionKey
+  ) return { ok: false, reason: "invalidSelection" };
+  if (!selection.visibleTokenUuids.length || selection.visibleTokenUuids.length > 2048) {
+    return { ok: false, reason: "invalidVisibility" };
+  }
+  const authoritySocketId = String(game.socket?.id ?? "").trim();
+  if (!authoritySocketId) return { ok: false, reason: "authorityUnavailable" };
+  const preferredAuthoritySocketId = String(data?.preferredAuthoritySocketId ?? "").trim();
+  if (preferredAuthoritySocketId && preferredAuthoritySocketId !== authoritySocketId) {
+    await delayOrdinaryAttackTicketResponse(timeout);
+    return { ok: false, reason: "authoritySocketUnavailable" };
+  }
+  const tokenDocument = await fromUuid(selection.tokenUuid);
+  if (
+    !tokenDocument?.object?.actor
+    || !isAttackSceneClient([tokenDocument], { requirePlaceables: true })
+  ) {
+    await delayOrdinaryAttackTicketResponse(timeout);
+    return { ok: false, reason: "gmSceneUnavailable" };
+  }
+
+  pruneOrdinaryAttackAuthorityState();
+  const ticket = foundry.utils.randomID(32);
+  const entry = {
+    actorUuid: String(tokenDocument.object.actor.uuid ?? ""),
+    authoritySocketId,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + ORDINARY_ATTACK_TICKET_TTL_MS,
+    operationId: selection.operationId,
+    selection,
+    sender,
+    senderUserId: sender.id
+  };
+  entry.expiryTimeout = globalThis.setTimeout(() => {
+    deleteOrdinaryAttackTicket(ticket, entry);
+  }, ORDINARY_ATTACK_TICKET_TTL_MS + 50);
+  entry.expiryTimeout?.unref?.();
+  ordinaryAttackTickets.set(ticket, entry);
+  return {
+    ok: true,
+    authoritySocketId,
+    operationId: selection.operationId,
+    ticket
+  };
+}
+
+function delayOrdinaryAttackTicketResponse(timeout = ORDINARY_ATTACK_TICKET_QUERY_TIMEOUT_MS) {
+  return new Promise(resolve => {
+    globalThis.setTimeout(
+      resolve,
+      Math.max(1, Number(timeout) || ORDINARY_ATTACK_TICKET_QUERY_TIMEOUT_MS) + 25
+    );
+  });
+}
+
+function dispatchOrdinaryWeaponAttackOperation(gm, selection, ticket) {
+  const operationId = String(selection?.operationId ?? "").trim();
+  const existing = pendingOrdinaryAttackRequests.get(operationId);
+  if (existing) {
+    if (
+      existing.authorityUserId === gm.id
+      && existing.authoritySocketId === ticket.authoritySocketId
+    ) return existing.promise;
+    return Promise.resolve({ ok: false, executed: false, reason: "operationCollision" });
+  }
+
+  let resolvePending;
+  const promise = new Promise(resolve => {
+    resolvePending = resolve;
+  });
+  const state = {
+    accepted: false,
+    authoritySocketId: ticket.authoritySocketId,
+    authorityUserId: gm.id,
+    completionTimeout: null,
+    hardTimeout: null,
+    operationId,
+    promise,
+    recoveryAttempts: 0,
+    requestPayload: {
+      scope: WEAPON_ATTACK_SOCKET_SCOPE,
+      action: "ordinaryAttackRequest",
+      authoritySocketId: ticket.authoritySocketId,
+      gmUserId: gm.id,
+      operationId,
+      senderUserId: game.user?.id ?? "",
+      ticket: ticket.ticket
+    },
+    resolve: resolvePending,
+    timeout: null
+  };
+  state.timeout = globalThis.setTimeout(() => {
+    recoverPendingOrdinaryAttackRequest(state);
+  }, ORDINARY_ATTACK_ACCEPT_TIMEOUT_MS);
+  state.timeout?.unref?.();
+  pendingOrdinaryAttackRequests.set(operationId, state);
+  emitPendingOrdinaryAttackRequest(state);
+  return promise;
+}
+
+function emitPendingOrdinaryAttackRequest(pending) {
+  game.socket.emit(
+    WEAPON_ATTACK_SOCKET,
+    pending.requestPayload,
+    { recipients: [pending.authorityUserId] }
+  );
+}
+
+function recoverPendingOrdinaryAttackRequest(pending) {
+  if (pendingOrdinaryAttackRequests.get(pending.operationId) !== pending) return;
+  globalThis.clearTimeout(pending.timeout);
+  globalThis.clearTimeout(pending.completionTimeout);
+  pending.timeout = null;
+  pending.completionTimeout = null;
+  if (pending.recoveryAttempts >= 1) {
+    pendingOrdinaryAttackRequests.delete(pending.operationId);
+    globalThis.clearTimeout(pending.hardTimeout);
+    pending.resolve({
+      ok: false,
+      executed: false,
+      reason: pending.accepted ? "authorityStateUnknown" : "authorityUnavailable"
+    });
+    return;
+  }
+
+  pending.recoveryAttempts += 1;
+  emitPendingOrdinaryAttackRequest(pending);
+  pending.timeout = globalThis.setTimeout(() => {
+    recoverPendingOrdinaryAttackRequest(pending);
+  }, ORDINARY_ATTACK_RECOVERY_TIMEOUT_MS);
+  pending.timeout?.unref?.();
+}
+
+function armOrdinaryAttackHardTimeout(pending) {
+  if (pending.hardTimeout) return;
+  pending.hardTimeout = globalThis.setTimeout(() => {
+    if (pendingOrdinaryAttackRequests.get(pending.operationId) !== pending) return;
+    pendingOrdinaryAttackRequests.delete(pending.operationId);
+    globalThis.clearTimeout(pending.timeout);
+    globalThis.clearTimeout(pending.completionTimeout);
+    pending.resolve({ ok: false, executed: false, reason: "authorityStateUnknown" });
+  }, ORDINARY_ATTACK_HARD_TIMEOUT_MS);
+  pending.hardTimeout?.unref?.();
+}
+
+function armOrdinaryAttackCompletionTimeout(pending) {
+  if (pending.completionTimeout) return;
+  pending.completionTimeout = globalThis.setTimeout(() => {
+    pending.completionTimeout = null;
+    recoverPendingOrdinaryAttackRequest(pending);
+  }, ORDINARY_ATTACK_COMPLETION_TIMEOUT_MS);
+  pending.completionTimeout?.unref?.();
+}
+
+function settlePendingOrdinaryAttackRequest(payload = {}, socketSenderUserId = "") {
+  const authenticatedSenderUserId = String(socketSenderUserId ?? "").trim();
+  if (
+    !authenticatedSenderUserId
+    || payload.senderUserId !== authenticatedSenderUserId
+    || payload.targetUserId !== game.user?.id
+  ) return false;
+  const operationId = String(payload.operationId ?? "").trim();
+  const pending = pendingOrdinaryAttackRequests.get(operationId);
+  if (
+    !pending
+    || authenticatedSenderUserId !== pending.authorityUserId
+    || payload.authoritySocketId !== pending.authoritySocketId
+  ) return false;
+
+  if (payload.action === "ordinaryAttackAccepted") {
+    const firstAcceptance = !pending.accepted;
+    pending.accepted = true;
+    globalThis.clearTimeout(pending.timeout);
+    pending.timeout = null;
+    if (firstAcceptance) armOrdinaryAttackHardTimeout(pending);
+    armOrdinaryAttackCompletionTimeout(pending);
+    return true;
+  }
+  if (payload.action === "ordinaryAttackProgress") {
+    const firstAcceptance = !pending.accepted;
+    pending.accepted = true;
+    globalThis.clearTimeout(pending.timeout);
+    pending.timeout = null;
+    if (firstAcceptance) armOrdinaryAttackHardTimeout(pending);
+    armOrdinaryAttackCompletionTimeout(pending);
+    return true;
+  }
+  if (payload.action !== "ordinaryAttackResult") return false;
+  pendingOrdinaryAttackRequests.delete(operationId);
+  globalThis.clearTimeout(pending.timeout);
+  globalThis.clearTimeout(pending.completionTimeout);
+  globalThis.clearTimeout(pending.hardTimeout);
+  pending.resolve(payload.result ?? { ok: false, executed: false, reason: "authorityError" });
+  return true;
+}
+
+async function handleOrdinaryWeaponAttackSocketRequest(payload = {}, socketSenderUserId = "") {
+  const authenticatedSenderUserId = String(socketSenderUserId ?? "").trim();
+  if (
+    !authenticatedSenderUserId
+    || payload.senderUserId !== authenticatedSenderUserId
+    || !game.user?.isGM
+    || game.users?.activeGM?.id !== game.user.id
+    || payload.gmUserId !== game.user.id
+    || payload.authoritySocketId !== String(game.socket?.id ?? "")
+  ) return false;
+
+  pruneOrdinaryAttackAuthorityState();
+  const operationId = String(payload.operationId ?? "").trim();
+  const senderUserId = authenticatedSenderUserId;
+  const ticketValue = String(payload.ticket ?? "").trim();
+  const operationKey = `${senderUserId}:${operationId}`;
+  if (!operationId || !ticketValue) return false;
+
+  const completed = ordinaryAttackOperationsCompleted.get(operationKey);
+  if (completed?.ticket === ticketValue) {
+    emitOrdinaryAttackResult(senderUserId, operationId, completed.result, payload.authoritySocketId);
+    return true;
+  }
+  const inFlight = ordinaryAttackOperationsInFlight.get(operationKey);
+  if (inFlight?.ticket === ticketValue) {
+    emitOrdinaryAttackAccepted(senderUserId, operationId, payload.authoritySocketId);
+    emitOrdinaryAttackResult(
+      senderUserId,
+      operationId,
+      await inFlight.promise,
+      payload.authoritySocketId
+    );
+    return true;
+  }
+
+  const ticket = ordinaryAttackTickets.get(ticketValue);
+  if (
+    !ticket
+    || ticket.authoritySocketId !== payload.authoritySocketId
+    || ticket.operationId !== operationId
+    || ticket.senderUserId !== senderUserId
+  ) return false;
+  deleteOrdinaryAttackTicket(ticketValue, ticket);
+  if (ticket.expiresAt < Date.now()) {
+    emitOrdinaryAttackResult(senderUserId, operationId, {
+      ok: false,
+      executed: false,
+      reason: "authorityUnavailable"
+    }, payload.authoritySocketId);
+    return true;
+  }
+  if (completed) {
+    emitOrdinaryAttackResult(senderUserId, operationId, completed.result, payload.authoritySocketId);
+    return true;
+  }
+  if (inFlight) {
+    emitOrdinaryAttackAccepted(senderUserId, operationId, payload.authoritySocketId);
+    emitOrdinaryAttackResult(
+      senderUserId,
+      operationId,
+      await inFlight.promise,
+      payload.authoritySocketId
+    );
+    return true;
+  }
+
+  emitOrdinaryAttackAccepted(senderUserId, operationId, payload.authoritySocketId);
+  const progressInterval = globalThis.setInterval(() => {
+    emitOrdinaryAttackProgress(senderUserId, operationId, payload.authoritySocketId);
+  }, ORDINARY_ATTACK_PROGRESS_INTERVAL_MS);
+  progressInterval?.unref?.();
+  const promise = enqueueOrdinaryAttackActorOperation(ticket.actorUuid, () => (
+    executeOrdinaryWeaponAttackSelection(ticket.selection, ticket.sender)
+  ));
+  ordinaryAttackOperationsInFlight.set(operationKey, { promise, ticket: ticketValue });
+  const result = await promise.catch(error => {
+    console.error("Fallout MaW | Ordinary weapon attack authority operation failed", error);
+    return { ok: false, executed: false, reason: "authorityError" };
+  }).finally(() => {
+    globalThis.clearInterval(progressInterval);
+  });
+  ordinaryAttackOperationsInFlight.delete(operationKey);
+  ordinaryAttackOperationsCompleted.set(operationKey, {
+    completedAt: Date.now(),
+    result,
+    ticket: ticketValue
+  });
+  emitOrdinaryAttackResult(senderUserId, operationId, result, payload.authoritySocketId);
+  return true;
+}
+
+function enqueueOrdinaryAttackActorOperation(tokenUuid = "", operation) {
+  const key = String(tokenUuid ?? "").trim();
+  const previous = ordinaryAttackActorQueues.get(key) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(operation)
+    .finally(() => {
+      if (ordinaryAttackActorQueues.get(key) === next) ordinaryAttackActorQueues.delete(key);
+    });
+  ordinaryAttackActorQueues.set(key, next);
+  return next;
+}
+
+function emitOrdinaryAttackAccepted(targetUserId, operationId, authoritySocketId) {
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "ordinaryAttackAccepted",
+    authoritySocketId,
+    operationId,
+    senderUserId: game.user?.id ?? "",
+    targetUserId
+  }, { recipients: [targetUserId] });
+}
+
+function emitOrdinaryAttackProgress(targetUserId, operationId, authoritySocketId) {
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "ordinaryAttackProgress",
+    authoritySocketId,
+    operationId,
+    senderUserId: game.user?.id ?? "",
+    targetUserId
+  }, { recipients: [targetUserId] });
+}
+
+function emitOrdinaryAttackResult(targetUserId, operationId, result, authoritySocketId) {
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "ordinaryAttackResult",
+    authoritySocketId,
+    operationId,
+    result,
+    senderUserId: game.user?.id ?? "",
+    targetUserId
+  }, { recipients: [targetUserId] });
+}
+
+function deleteOrdinaryAttackTicket(ticketValue, expectedEntry = null) {
+  const value = String(ticketValue ?? "").trim();
+  const entry = ordinaryAttackTickets.get(value);
+  if (!entry || (expectedEntry && entry !== expectedEntry)) return false;
+  globalThis.clearTimeout(entry.expiryTimeout);
+  ordinaryAttackTickets.delete(value);
+  return true;
+}
+
+function pruneOrdinaryAttackAuthorityState() {
+  const now = Date.now();
+  for (const [ticket, entry] of ordinaryAttackTickets) {
+    if (entry.expiresAt < now) deleteOrdinaryAttackTicket(ticket, entry);
+  }
+  for (const [key, entry] of ordinaryAttackOperationsCompleted) {
+    if (entry.completedAt < now - ORDINARY_ATTACK_COMPLETED_TTL_MS) {
+      ordinaryAttackOperationsCompleted.delete(key);
+    }
+  }
+  while (ordinaryAttackOperationsCompleted.size > ORDINARY_ATTACK_CACHE_LIMIT) {
+    ordinaryAttackOperationsCompleted.delete(ordinaryAttackOperationsCompleted.keys().next().value);
+  }
+}
+
+async function executeOrdinaryWeaponAttackSelection(selection, sender) {
+  if (
+    !sender?.active
+    || !sender?.id
+    || !game.user?.isGM
+    || game.users?.activeGM?.id !== game.user.id
+  ) return { ok: false, executed: false, reason: "authorityRejected" };
+
+  try {
+    if (!selection.operationId || !selection.tokenUuid || !selection.weaponUuid || !selection.actionKey) {
+      return { ok: false, executed: false, reason: "invalidSelection" };
+    }
+    if (!selection.visibleTokenUuids.length || selection.visibleTokenUuids.length > 2048) {
+      return { ok: false, executed: false, reason: "invalidVisibility" };
+    }
+
+    const relevantTokenUuids = selection.visibleTokenUuids
+      .filter(uuid => uuid !== selection.tokenUuid);
+    const [tokenDocument, weapon, ...visibleTokenDocuments] = await Promise.all([
+      fromUuid(selection.tokenUuid),
+      fromUuid(selection.weaponUuid),
+      ...relevantTokenUuids.map(uuid => fromUuid(uuid))
+    ]);
+    const token = tokenDocument?.object ?? null;
+    if (!token?.actor || !weapon) return { ok: false, executed: false, reason: "missingDocument" };
+    if (visibleTokenDocuments.some(document => !document?.object?.actor)) {
+      return { ok: false, executed: false, reason: "invalidVisibility" };
+    }
+    if (!isAttackSceneClient([tokenDocument, ...visibleTokenDocuments], { requirePlaceables: true })) {
+      return { ok: false, executed: false, reason: "gmSceneUnavailable" };
+    }
+    if (!sender.isGM && visibleTokenDocuments.some(document => (
+      document.uuid !== tokenDocument.uuid && document.hidden
+    ))) {
+      return { ok: false, executed: false, reason: "invalidVisibility" };
+    }
+    if (!selection.visibleTokenUuids.includes(tokenDocument.uuid)) {
+      return { ok: false, executed: false, reason: "invalidVisibility" };
+    }
+    if (!sender.isGM && !token.actor.testUserPermission?.(sender, "OWNER")) {
+      return { ok: false, executed: false, reason: "notOwner" };
+    }
+    if (weapon.parent?.uuid !== token.actor.uuid) {
+      return { ok: false, executed: false, reason: "wrongWeaponOwner" };
+    }
+    if (!isAttackSource(weapon, selection.weaponFunctionId)) {
+      return { ok: false, executed: false, reason: "invalidWeapon" };
+    }
+    if (isActorUnableToAct(token.actor)) {
+      return { ok: false, executed: false, reason: "unableToAct" };
+    }
+    if (!getWeaponAttackData(weapon, selection.weaponFunctionId)?.enabled) {
+      return { ok: false, executed: false, reason: "disabledWeapon" };
+    }
+    if (!hasWeaponAction(weapon, selection.actionKey, selection.weaponFunctionId)) {
+      return { ok: false, executed: false, reason: "missingAction" };
+    }
+    if (isVolleyAttackAction(weapon, selection.actionKey, selection.weaponFunctionId)) {
+      return { ok: false, executed: false, reason: "unsupportedAction" };
+    }
+    if (getWeaponActionBlockState(token.actor, selection.actionKey).blocked) {
+      return { ok: false, executed: false, reason: "blockedAction" };
+    }
+    if (isWeaponPlacementDisabled(token.actor, weapon)) {
+      return { ok: false, executed: false, reason: "disabledPlacement" };
+    }
+    if (isReactionSystemLocked()) {
+      return { ok: false, executed: false, reason: "reactionLocked" };
+    }
+    const attackCount = getActionAttackCount(weapon, selection.actionKey, selection.weaponFunctionId);
+    if (!hasRequiredWeaponResources(weapon, attackCount, selection.weaponFunctionId)) {
+      return { ok: false, executed: false, reason: "weaponResources" };
+    }
+    if (!validateCommandedAttackSelectionMode(selection, weapon)) {
+      return { ok: false, executed: false, reason: "invalidMode" };
+    }
+
+    const targetTokenUuidAllowlist = new Set(selection.visibleTokenUuids);
+    if (selection.targetUuid && !targetTokenUuidAllowlist.has(selection.targetUuid)) {
+      return { ok: false, executed: false, reason: "invalidTarget" };
+    }
+    const controller = new WeaponAttackController(token, weapon, selection.actionKey, selection.weaponFunctionId, null, {
+      skipActionPointCost: false,
+      skipBaseWeaponResourceCosts: false,
+      targetTokenUuidAllowlist,
+      suppressAttackPreviewBroadcast: true,
+      headlessExecution: true,
+      attackId: selection.operationId,
+      chanceOperationId: selection.previewAttackId,
+      chatMessageAuthorId: sender.id,
+      autoCoverAttackId: selection.previewAttackId,
+      ownsAttackAutoCoverLifecycle: false,
+      finishAfterAttack: true
+    });
+    try {
+      if (!(await validateCommandedAttackSelectionGeometry(selection, token, weapon, {
+        targetTokenUuidAllowlist,
+        attackId: selection.operationId,
+        controller
+      }))) {
+        return { ok: false, executed: false, reason: "invalidGeometry" };
+      }
+
+      const result = await executeCapturedWeaponAttack({
+        ...selection,
+        token,
+        weapon
+      }, {
+        controller,
+        returnAuthorityMetadata: true
+      });
+      return {
+        ok: Boolean(result?.executed),
+        executed: Boolean(result?.executed),
+        attackCheckCount: Math.max(0, toInteger(result?.attackCheckCount)),
+        canceledByReaction: Boolean(result?.canceledByReaction),
+        selectionCommitted: Boolean(result?.selectionCommitted),
+        shouldFinish: Boolean(result?.shouldFinish),
+        reason: result?.executed ? "" : (result?.canceledByReaction ? "authorityCancelled" : "notExecuted")
+      };
+    } finally {
+      controller.destroy();
+    }
+  } catch (error) {
+    console.error("Fallout MaW | Ordinary weapon attack authority operation failed", error);
+    return { ok: false, executed: false, reason: "authorityError" };
+  }
+}
+
+function getOrdinaryAttackSceneGM(token = null) {
+  const gm = game.users?.activeGM ?? null;
+  return gm?.active && gm.isGM ? gm : null;
+}
+
+function getVisibleAttackTokenUuids(controller = null) {
+  return Array.from(new Set([
+    getTokenDocumentUuid(controller?.token),
+    ...(canvas.tokens?.placeables ?? [])
+      .filter(token => token?.actor && token.visible)
+      .map(getTokenDocumentUuid)
+  ].filter(Boolean)));
+}
+
+function getOrdinaryAttackFailureMessage(reason = "") {
+  const messages = {
+    authorityUnavailable: "Активный GM не принял запрос атаки.",
+    authorityStateUnknown: "GM принял атаку, но итоговый ответ потерян. Не повторяйте её до проверки ресурсов и цели.",
+    operationCollision: "Локальный идентификатор атаки уже занят другой операцией.",
+    authoritySocketUnavailable: "Выбранная вкладка GM больше недоступна.",
+    queryPermission: "В правах роли отключён запрос к пользователю. Повторите атаку — будет использован локальный путь.",
+    missingGM: "Нет активного GM для обработки атаки.",
+    gmSceneUnavailable: "GM должен находиться на сцене и уровне атаки.",
+    senderSceneUnavailable: "Сцена или уровень игрока изменились до подтверждения атаки.",
+    notOwner: "Нет прав на атакующего актёра.",
+    weaponResources: "Недостаточно боеприпасов или ресурса оружия.",
+    unableToAct: "Актёр больше не может действовать.",
+    reactionLocked: "Сейчас завершается другое боевое взаимодействие.",
+    blockedAction: "Действие оружия заблокировано.",
+    invalidGeometry: "Положение или траектория атаки успели измениться.",
+    invalidTarget: "Выбранная цель больше недоступна."
+  };
+  return messages[String(reason ?? "")] ?? "GM отклонил выполнение атаки.";
+}
+
 function serializeCommandedAttackSelection(selection = {}) {
   return {
     tokenUuid: selection.token?.document?.uuid ?? selection.token?.uuid ?? "",
@@ -2472,7 +3142,11 @@ function validateCommandedAttackSelectionMode(selection = {}, weapon = null) {
   return mode === "current" && !targetUuid;
 }
 
-async function validateCommandedAttackSelectionGeometry(selection = {}, token = null, weapon = null) {
+async function validateCommandedAttackSelectionGeometry(selection = {}, token = null, weapon = null, {
+  targetTokenUuidAllowlist = null,
+  attackId = "",
+  controller: suppliedController = null
+} = {}) {
   if (!token?.actor || !weapon) return false;
   if (!isFiniteCommandedPoint(selection?.pointer)) return false;
   const submittedGeometry = deserializeGeometry(selection?.lockedGeometry ?? selection?.geometry);
@@ -2482,10 +3156,22 @@ async function validateCommandedAttackSelectionGeometry(selection = {}, token = 
 
   const actionKey = String(selection?.actionKey ?? "");
   const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
-  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
-    skipActionPointCost: true,
-    ignoreReactionLock: true
-  });
+  const controller = suppliedController ?? new WeaponAttackController(
+    token,
+    weapon,
+    actionKey,
+    weaponFunctionId,
+    null,
+    {
+      skipActionPointCost: true,
+      ignoreReactionLock: true,
+      targetTokenUuidAllowlist,
+      attackId,
+      headlessExecution: Boolean(attackId),
+      ownsAttackAutoCoverLifecycle: false
+    }
+  );
+  const ownsController = !suppliedController;
   try {
     controller.pointer = deserializePoint(selection.pointer);
     if (!controller.rebuildGeometryAndTargets()) return false;
@@ -2523,8 +3209,10 @@ async function validateCommandedAttackSelectionGeometry(selection = {}, token = 
     }
     return true;
   } finally {
-    controller.clearBurstTargetPreviewTimer();
-    controller.container.destroy({ children: true });
+    if (ownsController) {
+      controller.clearBurstTargetPreviewTimer();
+      controller.container.destroy({ children: true });
+    }
   }
 }
 
@@ -2564,7 +3252,15 @@ async function executeCapturedWeaponAttack(selection = {}, {
   reactionCoordinator = null,
   chainRef = null,
   deferWeaponNoiseDetection = false,
-  returnWeaponNoiseMetadata = false
+  returnWeaponNoiseMetadata = false,
+  targetTokenUuidAllowlist = null,
+  suppressAttackPreviewBroadcast = false,
+  headlessExecution = false,
+  attackId = "",
+  chatMessageAuthorId = "",
+  autoCoverAttackId = "",
+  controller: suppliedController = null,
+  returnAuthorityMetadata = false
 } = {}) {
   const token = selection?.token ?? null;
   const weapon = selection?.weapon ?? null;
@@ -2572,7 +3268,7 @@ async function executeCapturedWeaponAttack(selection = {}, {
   const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
   if (!token?.actor || !weapon || !actionKey) return false;
 
-  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
+  const controller = suppliedController ?? new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
     skipActionPointCost,
     skipBaseWeaponResourceCosts,
     reportedActionPointCost,
@@ -2580,11 +3276,21 @@ async function executeCapturedWeaponAttack(selection = {}, {
     chainRef,
     abilityTrialSession,
     deferWeaponNoiseDetection,
+    targetTokenUuidAllowlist,
+    suppressAttackPreviewBroadcast,
+    headlessExecution,
+    attackId,
+    chatMessageAuthorId,
+    autoCoverAttackId,
+    ownsAttackAutoCoverLifecycle: !headlessExecution,
     finishAfterAttack: true
   });
+  const ownsController = !suppliedController;
   controller.pointer = deserializePoint(selection.pointer);
-  controller.geometry = deserializeGeometry(selection.geometry);
-  controller.lockedGeometry = selection.lockedGeometry ?? serializeGeometry(controller.geometry);
+  if (ownsController) controller.geometry = deserializeGeometry(selection.geometry);
+  controller.lockedGeometry = ownsController
+    ? (selection.lockedGeometry ?? serializeGeometry(controller.geometry))
+    : serializeGeometry(controller.geometry);
   controller.selectedLimbKey = String(selection.selectedLimbKey ?? "");
 
   const targetDocument = selection.targetUuid ? await fromUuid(selection.targetUuid) : null;
@@ -2593,21 +3299,36 @@ async function executeCapturedWeaponAttack(selection = {}, {
     if (selection.mode === "aimed") {
       controller.selectedTarget = selectedTarget;
       controller.aimedMode = "limb";
-      controller.refresh(true);
+      if (ownsController) controller.refresh(true);
+      await controller.syncAttackAutoCoverForExecution();
+      controller.reuseValidatedGeometryOnce = !ownsController;
       await controller.performAimedAttack(selection.selectedLimbKey);
-      return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
+      return getCapturedWeaponAttackResult(controller, {
+        includeWeaponNoiseMetadata: returnWeaponNoiseMetadata,
+        includeAuthorityMetadata: returnAuthorityMetadata
+      });
     }
     if (selection.mode === "directed") {
       controller.selectedTarget = selectedTarget;
       controller.aimedMode = "direction";
-      controller.refresh(true);
+      if (ownsController) controller.refresh(true);
+      await controller.syncAttackAutoCoverForExecution();
+      controller.reuseValidatedGeometryOnce = !ownsController;
       await controller.performDirectedAttack(selection.directionKey);
-      return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
+      return getCapturedWeaponAttackResult(controller, {
+        includeWeaponNoiseMetadata: returnWeaponNoiseMetadata,
+        includeAuthorityMetadata: returnAuthorityMetadata
+      });
     }
     if (selection.mode === "push") {
-      controller.refresh(true);
+      if (ownsController) controller.refresh(true);
+      await controller.syncAttackAutoCoverForExecution();
+      controller.reuseValidatedGeometryOnce = !ownsController;
       await controller.performPushAttack(selection.selectedStrength);
-      return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
+      return getCapturedWeaponAttackResult(controller, {
+        includeWeaponNoiseMetadata: returnWeaponNoiseMetadata,
+        includeAuthorityMetadata: returnAuthorityMetadata
+      });
     }
     if (
       controller.targetedAction
@@ -2617,11 +3338,16 @@ async function executeCapturedWeaponAttack(selection = {}, {
       controller.selectedTarget = selectedTarget;
       controller.targetedAction = false;
     }
-    controller.refresh(true);
+    if (ownsController) controller.refresh(true);
+    await controller.syncAttackAutoCoverForExecution();
+    controller.reuseValidatedGeometryOnce = !ownsController;
     await controller.performCurrentAttack();
-    return getCapturedWeaponAttackResult(controller, { includeWeaponNoiseMetadata: returnWeaponNoiseMetadata });
+    return getCapturedWeaponAttackResult(controller, {
+      includeWeaponNoiseMetadata: returnWeaponNoiseMetadata,
+      includeAuthorityMetadata: returnAuthorityMetadata
+    });
   } finally {
-    controller.destroy();
+    if (ownsController) controller.destroy();
   }
 }
 
@@ -2629,14 +3355,31 @@ function didCapturedWeaponAttackExecute(controller = null) {
   return Boolean(controller?.lastResolvedAttackOutcome) || Number(controller?.attackCheckCount) > 0;
 }
 
-function getCapturedWeaponAttackResult(controller = null, { includeWeaponNoiseMetadata = false } = {}) {
+function getCapturedWeaponAttackResult(controller = null, {
+  includeWeaponNoiseMetadata = false,
+  includeAuthorityMetadata = false
+} = {}) {
   const executed = didCapturedWeaponAttackExecute(controller) || Boolean(controller?.weaponNoiseAttempted);
-  if (!includeWeaponNoiseMetadata) return executed;
-  return {
+  if (!includeWeaponNoiseMetadata && !includeAuthorityMetadata) return executed;
+  const result = {
     executed,
-    weaponNoiseAttempted: Boolean(controller?.weaponNoiseAttempted),
-    noiseLevel: getWeaponNoiseLevel({ noiseLevel: controller?.weaponNoiseLevel })
+    ...(includeWeaponNoiseMetadata ? {
+      weaponNoiseAttempted: Boolean(controller?.weaponNoiseAttempted),
+      noiseLevel: getWeaponNoiseLevel({ noiseLevel: controller?.weaponNoiseLevel })
+    } : {}),
+    ...(includeAuthorityMetadata ? {
+      attackCheckCount: Math.max(0, toInteger(controller?.attackCheckCount)),
+      canceledByReaction: Boolean(controller?.attackCanceledByReaction),
+      selectionCommitted: Boolean(
+        controller?.attackCommitted
+        || controller?.attackCanceledByReaction
+        || controller?.attackCheckCount > 0
+        || controller?.weaponNoiseAttempted
+      ),
+      shouldFinish: Boolean(controller?.authorityShouldFinish)
+    } : {})
   };
+  return result;
 }
 
 export async function executeWeaponAttackAgainstToken({
@@ -3057,16 +3800,17 @@ export function isWeaponPlacementDisabled(actor, weapon) {
   return requiredSlots.some(slot => slot.limbKey && getLimbHealingCap(actor, slot.limbKey) <= 0);
 }
 
-class WeaponAttackController {
+export class WeaponAttackController {
   constructor(token, weapon, actionKey, weaponFunctionId = "", attackModifier = null, options = {}) {
     this.token = token;
     this.weapon = weapon;
     this.actionKey = actionKey;
     this.weaponFunctionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
-    this.attackId = foundry.utils.randomID();
+    this.attackId = String(options.attackId ?? "").trim() || foundry.utils.randomID();
+    this.chanceOperationId = String(options.chanceOperationId ?? "").trim() || this.attackId;
     this.rangeProfile = getWeaponRangeProfile(weapon, actionKey, token, this.weaponFunctionId, {
       weaponAttackId: this.attackId,
-      chanceOperationId: this.attackId
+      chanceOperationId: this.chanceOperationId
     });
     this.rangeProfilesByTarget = new Map();
     this.attackModifier = normalizeWeaponAttackModifier(attackModifier);
@@ -3091,6 +3835,16 @@ class WeaponAttackController {
     this.suppressGenericEventReactions = Boolean(options.suppressGenericEventReactions);
     this.captureOnly = Boolean(options.captureOnly);
     this.onCapture = typeof options.onCapture === "function" ? options.onCapture : null;
+    this.useGmAuthority = Boolean(options.useGmAuthority);
+    this.authorityExecutionSucceeded = false;
+    this.authorityShouldFinish = false;
+    this.targetTokenUuidAllowlist = normalizeTargetTokenUuidAllowlist(options.targetTokenUuidAllowlist);
+    this.suppressAttackPreviewBroadcast = Boolean(options.suppressAttackPreviewBroadcast);
+    this.headlessExecution = Boolean(options.headlessExecution);
+    this.reuseValidatedGeometryOnce = false;
+    this.chatMessageAuthorId = String(options.chatMessageAuthorId ?? "").trim();
+    this.autoCoverAttackId = String(options.autoCoverAttackId ?? "").trim() || this.attackId;
+    this.ownsAttackAutoCoverLifecycle = options.ownsAttackAutoCoverLifecycle !== false;
     this.reactionCoordinator = options.reactionCoordinator?.run ? options.reactionCoordinator : null;
     this.deferWeaponNoiseDetection = Boolean(options.deferWeaponNoiseDetection);
     this.finishAfterAttack = Boolean(options.finishAfterAttack);
@@ -3249,13 +4003,16 @@ class WeaponAttackController {
 
   resumeFromNestedTargetSelection() {
     if (!this.nestedTargetSelectionSuspended || this.destroyed || this.finishRequested) return false;
-    this.nestedTargetSelectionSuspended = false;
+    if (this.processing) {
+      this.nestedTargetSelectionSuspended = false;
+      return true;
+    }
     this.attachInteractiveHandlers();
-    if (this.processing) return true;
     if (!this.startTargetSelectionLifecycle({ supersede: false })) {
       this.detachInteractiveHandlers();
       return false;
     }
+    this.nestedTargetSelectionSuspended = false;
     this.resumePreview();
     return true;
   }
@@ -3287,7 +4044,7 @@ class WeaponAttackController {
       actionPointCostApplied
         ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
           ...this.createWeaponAttackSkillCheckContext(this.selectedTarget),
-          chanceOperationId: this.attackId
+          chanceOperationId: this.chanceOperationId
         })
         : 0
     );
@@ -3383,7 +4140,13 @@ class WeaponAttackController {
   }
 
   createSkillCheckCollector(options = {}) {
-    const collector = createSkillCheckBatchCollector(options);
+    const collector = createSkillCheckBatchCollector({
+      ...options,
+      messageData: {
+        ...(options?.messageData ?? {}),
+        ...(this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {})
+      }
+    });
     this.skillCheckCollectors.add(collector);
     collector.onSettled(() => this.skillCheckCollectors.delete(collector));
     return collector;
@@ -3439,7 +4202,7 @@ class WeaponAttackController {
         weaponData: weaponData ?? getWeaponAttackData(this.weapon, this.weaponFunctionId),
         attackDistanceMeters: normalizedDistance,
         weaponAttackId: this.attackId,
-        chanceOperationId: this.attackId,
+        chanceOperationId: this.chanceOperationId,
         rangeConditionEffectiveRange: this.rangeProfile?.conditionEffectiveRange
       }
     );
@@ -3465,7 +4228,7 @@ class WeaponAttackController {
       damageHubOperationRef: this.damageHubOperationRef,
       systemEventOperationId: this.attackId,
       weaponAttackId: this.attackId,
-      ...(this.processing || this.attackCommitted ? { chanceOperationId: this.attackId } : {}),
+      ...(this.processing || this.attackCommitted ? { chanceOperationId: this.chanceOperationId } : {}),
       weaponActionKey: this.actionKey,
       weaponData,
       attackModifier: this.attackModifier,
@@ -3484,7 +4247,12 @@ class WeaponAttackController {
 
   createWeaponActionContext({ targetToken = undefined, geometry = this.geometry } = {}) {
     const resolvedTarget = targetToken === undefined
-      ? (this.trajectoryAimTarget ?? getNearestAttackChanceTarget(this.token, geometry, this.targets))
+      ? (this.trajectoryAimTarget ?? getNearestAttackChanceTarget(
+        this.token,
+        geometry,
+        this.targets,
+        this.targetTokenUuidAllowlist
+      ))
       : targetToken;
     if (resolvedTarget) return this.createWeaponAttackSkillCheckContext(resolvedTarget);
     const attackDistanceMeters = geometry ? getAttackGeometryDistanceMeters(geometry) : null;
@@ -3571,7 +4339,9 @@ class WeaponAttackController {
       const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
       const aimPoint = geometry ? (selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target)) : null;
       const trajectory = geometry && aimPoint ? buildTrajectoryThroughPoint(this.token, geometry, aimPoint) : null;
-      const blockerCount = this.ignoreAimedObstructions || !trajectory ? 0 : getAimedTargetBlockers(this.token, target, trajectory).length;
+      const blockerCount = this.ignoreAimedObstructions || !trajectory
+        ? 0
+        : getAimedTargetBlockers(this.token, target, trajectory, this.targetTokenUuidAllowlist).length;
       return getAimedAttackHitChance(
         this.token.actor,
         this.weapon,
@@ -3919,10 +4689,12 @@ class WeaponAttackController {
     this.clearTargetMarkers();
     this.removeLimbMenu();
     this.removeChanceMenu();
-    broadcastAttackPreview({
-      action: "clearPreview",
-      attackId: this.attackId
-    });
+    if (!this.suppressAttackPreviewBroadcast) {
+      broadcastAttackPreview({
+        action: "clearPreview",
+        attackId: this.attackId
+      });
+    }
   }
 
   resumePreview() {
@@ -3980,6 +4752,7 @@ class WeaponAttackController {
         this.destroy();
         return true;
       }
+      this.attachInteractiveHandlers();
       this.resumePreview();
     }
     return false;
@@ -4075,7 +4848,7 @@ class WeaponAttackController {
     const actionPointCost = actionPointCostApplied
       ? getWeaponActionPointCost(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
         ...resolvedActionContext,
-        chanceOperationId: this.attackId
+        chanceOperationId: this.chanceOperationId
       })
       : 0;
     const actorResourceActionPointCost = this.skipBaseWeaponResourceCosts
@@ -4342,16 +5115,18 @@ class WeaponAttackController {
         console.error("Fallout MaW | Weapon attack destroy callback failed", error);
       }
     }
-    clearAttackAutoCoverSync(this.attackId);
+    if (this.ownsAttackAutoCoverLifecycle) clearAttackAutoCoverSync(this.autoCoverAttackId);
     this.autoCoverActorUuids.clear();
     this.detachInteractiveHandlers();
     this.removeLimbMenu();
     this.removeChanceMenu();
     this.clearBurstTargetPreviewTimer();
-    broadcastAttackPreview({
-      action: "clearPreview",
-      attackId: this.attackId
-    });
+    if (!this.suppressAttackPreviewBroadcast) {
+      broadcastAttackPreview({
+        action: "clearPreview",
+        attackId: this.attackId
+      });
+    }
     this.container.destroy({ children: true });
   }
 
@@ -4635,6 +5410,73 @@ class WeaponAttackController {
     return true;
   }
 
+  shouldUseOrdinaryGmAuthority() {
+    return Boolean(
+      this.useGmAuthority
+      && !game.user?.isGM
+      && game.user?.hasPermission?.("QUERY_USER") !== false
+      && !this.captureOnly
+      && !this.attackModifier
+      && !this.onBeforeExecute
+      && !this.chainRef
+      && !this.abilityTrialSession
+      && !this.volleyAction
+      && !this.skipActionPointCost
+      && !this.skipBaseWeaponResourceCosts
+    );
+  }
+
+  filterTargetTokens(targets = []) {
+    if (this.targetTokenUuidAllowlist === null) return targets;
+    return targets.filter(target => this.targetTokenUuidAllowlist.has(getTokenDocumentUuid(target)));
+  }
+
+  async executeOrdinaryAttackViaGm(data = {}) {
+    if (!this.shouldUseOrdinaryGmAuthority() || this.processing) return false;
+    const gm = getOrdinaryAttackSceneGM(this.token);
+    if (!gm) {
+      ui.notifications.warn("Нет активного GM на сцене и уровне атаки.");
+      return false;
+    }
+
+    const selection = serializeOrdinaryAttackSelection({
+      token: this.token,
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      pointer: serializePoint(this.pointer),
+      geometry: serializeGeometry(this.geometry),
+      lockedGeometry: this.lockedGeometry ?? serializeGeometry(this.geometry),
+      targetUuid: this.selectedTarget?.document?.uuid ?? this.selectedTarget?.uuid ?? "",
+      selectedLimbKey: this.selectedLimbKey,
+      visibleTokenUuids: getVisibleAttackTokenUuids(this),
+      operationId: foundry.utils.randomID(),
+      previewAttackId: this.attackId,
+      ...data
+    });
+
+    this.authorityExecutionSucceeded = false;
+    cancelPendingAttackAutoCoverSync(this.autoCoverAttackId);
+    this.beginProcessingCycle();
+    try {
+      const result = await requestOrdinaryWeaponAttackOperation(gm, selection);
+      this.authorityExecutionSucceeded = Boolean(result?.ok && result.executed);
+      this.attackCanceledByReaction = Boolean(result?.canceledByReaction);
+      this.attackCheckCount = Math.max(this.attackCheckCount, Math.max(0, toInteger(result?.attackCheckCount)));
+      if (data.mode === "push" && result?.selectionCommitted) {
+        this.pushStrengthMaximum = 0;
+        this.removeLimbMenu();
+      }
+      if (result?.shouldFinish) this.finishRequested = true;
+      if (!result?.ok && result?.reason && result.reason !== "authorityCancelled") {
+        ui.notifications.warn(getOrdinaryAttackFailureMessage(result.reason));
+      }
+      return this.authorityExecutionSucceeded;
+    } finally {
+      this.completeProcessingCycle();
+    }
+  }
+
   finishTargetSelection({ cancelled = false, ...outcome } = {}) {
     const session = this.targetSelectionSession;
     if (!session) return false;
@@ -4665,6 +5507,9 @@ class WeaponAttackController {
       actionContext
     )) return;
     if (this.captureOnly) return this.captureAttackSelection({ mode: "current" });
+    if (this.shouldUseOrdinaryGmAuthority()) {
+      return this.executeOrdinaryAttackViaGm({ mode: "current" });
+    }
     const originalTarget = this.trajectoryAimTarget;
     if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
       return this.performConeTargetsAttack({ attackCount, actionContext });
@@ -4937,7 +5782,9 @@ class WeaponAttackController {
       this.weaponFunctionId,
       actionContext
     )) return;
-    if (!getPotentialTargets(this.token, this.geometry).length) {
+    if (!this.filterTargetTokens(getPotentialTargets(this.token, this.geometry, {
+      targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
+    })).length) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Settings.HUD.NoPushTargets"));
       return;
     }
@@ -4980,6 +5827,12 @@ class WeaponAttackController {
         selectedStrength: Math.max(1, toInteger(selectedStrength))
       });
     }
+    if (this.shouldUseOrdinaryGmAuthority()) {
+      return this.executeOrdinaryAttackViaGm({
+        mode: "push",
+        selectedStrength: Math.max(1, toInteger(selectedStrength))
+      });
+    }
 
     this.beginProcessingCycle();
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
@@ -4988,7 +5841,9 @@ class WeaponAttackController {
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
 
-    const targets = getPotentialTargets(this.token, this.geometry);
+    const targets = this.filterTargetTokens(getPotentialTargets(this.token, this.geometry, {
+      targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
+    }));
     if (!targets.length) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Settings.HUD.NoPushTargets"));
       this.completeProcessingCycle();
@@ -5056,6 +5911,7 @@ class WeaponAttackController {
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
+      messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + rangeDifficultyBonus + requirementDifficultyBonus,
@@ -5211,6 +6067,10 @@ class WeaponAttackController {
         void this.runInteractiveAttackOperation(() => this.captureAttackSelection({ mode: "current" }));
         return undefined;
       }
+      if (this.shouldUseOrdinaryGmAuthority()) {
+        void this.runInteractiveAttackOperation(() => this.executeOrdinaryAttackViaGm({ mode: "current" }));
+        return undefined;
+      }
       this.targetedAction = false;
       this.refresh(true);
       void this.runInteractiveAttackOperation(() => this.performCurrentAttack());
@@ -5254,6 +6114,12 @@ class WeaponAttackController {
         selectedLimbKey: limbKey
       });
     }
+    if (this.shouldUseOrdinaryGmAuthority()) {
+      return this.executeOrdinaryAttackViaGm({
+        mode: "aimed",
+        selectedLimbKey: limbKey
+      });
+    }
 
     this.beginProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
@@ -5265,7 +6131,10 @@ class WeaponAttackController {
         reactionResult?.handled
         || reactionResult?.status === REACTION_RESULT.success
         || reactionResult?.status === REACTION_RESULT.failed
-      ) this.finishRequested = true;
+      ) {
+        this.finishRequested = true;
+        this.authorityShouldFinish = true;
+      }
       if (this.interruptForIncapacitation()) return this.completeProcessingCycle();
     }
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
@@ -5371,10 +6240,20 @@ class WeaponAttackController {
     checkBatch = null,
     allOrNothingContext = null
   } = {}) {
-    if (forceAimed || doesTrajectoryHitTarget(this.token, selectedTarget, trajectory)) {
+    if (forceAimed || doesTrajectoryHitTarget(
+      this.token,
+      selectedTarget,
+      trajectory,
+      this.targetTokenUuidAllowlist
+    )) {
       const blockerCount = this.ignoreAimedObstructions
         ? 0
-        : getAimedTargetBlockers(this.token, selectedTarget, trajectory).length;
+        : getAimedTargetBlockers(
+          this.token,
+          selectedTarget,
+          trajectory,
+          this.targetTokenUuidAllowlist
+        ).length;
       return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
         blockerBonus: getAimedTargetBlockerBonus(blockerCount),
         baseDamage,
@@ -5415,6 +6294,13 @@ class WeaponAttackController {
     )) return;
     if (this.captureOnly) {
       return this.captureAttackSelection({
+        mode: "directed",
+        directionKey: direction.key,
+        selectedLimbKey: this.selectedLimbKey
+      });
+    }
+    if (this.shouldUseOrdinaryGmAuthority()) {
+      return this.executeOrdinaryAttackViaGm({
         mode: "directed",
         directionKey: direction.key,
         selectedLimbKey: this.selectedLimbKey
@@ -5488,7 +6374,7 @@ class WeaponAttackController {
     const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", this.getWeaponDamage(), this.weaponFunctionId, {
       percentBaseAmount: this.getWeaponDamagePercentBase()
     });
-    const targets = getTrajectoryTargetEntries(this.token, trajectory);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
     const subsequentTargets = targets.filter(entry => (
@@ -5613,6 +6499,7 @@ class WeaponAttackController {
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
+      messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDirectedAttackDifficulty(
@@ -5716,7 +6603,7 @@ class WeaponAttackController {
         title: this.weapon.name
       })
       : null;
-    const targets = getTrajectoryTargetEntries(this.token, trajectory);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
     const subsequentTargets = targets.filter(entry => (
@@ -5866,7 +6753,7 @@ class WeaponAttackController {
     const damageRequests = [];
     trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
     if (!this.targets.length && !Array.isArray(trajectory?.segments)) return { attempted: true, damageRequests, trajectory };
-    const targets = getTrajectoryTargetEntries(this.token, trajectory);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory, this.targetTokenUuidAllowlist);
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     let penetrationsUsed = 0;
     let attempted = true;
@@ -5971,6 +6858,7 @@ class WeaponAttackController {
     );
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
+      messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor)
@@ -6062,6 +6950,9 @@ class WeaponAttackController {
       actionContext
     )) return;
     if (this.captureOnly) return this.captureAttackSelection({ mode: "current" });
+    if (this.shouldUseOrdinaryGmAuthority()) {
+      return this.executeOrdinaryAttackViaGm({ mode: "current" });
+    }
 
     this.beginProcessingCycle();
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
@@ -6109,10 +7000,11 @@ class WeaponAttackController {
       finalGeometries.push(finalGeometry);
       blastOutcomes.push(blastOutcome);
       if (!delayedExplosion) {
-        const blastTargets = getPotentialTargets(this.token, finalGeometry, {
+        const blastTargets = this.filterTargetTokens(getPotentialTargets(this.token, finalGeometry, {
           includeAttacker: true,
-          includeDead: true
-        });
+          includeDead: true,
+          targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
+        }));
         this.registerAbilityTrialTargets(blastTargets);
         const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
         if (regionRequest) regionRequests.push(regionRequest);
@@ -6125,7 +7017,15 @@ class WeaponAttackController {
     if (!delayedExplosion) await this.dodgeExposure.flush();
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
-    this.targets = getPotentialTargets(this.token, this.geometry, { includeAttacker: true, includeDead: true });
+    this.targets = this.filterTargetTokens(getPotentialTargets(
+      this.token,
+      this.geometry,
+      {
+        includeAttacker: true,
+        includeDead: true,
+        targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
+      }
+    ));
 
     const delayedThrownItemId = delayedExplosion ? (existingDelayedThrownItemId || foundry.utils.randomID()) : "";
     const landingPoint = getAttackLandingPoint(finalGeometries, this.pointer);
@@ -6239,6 +7139,7 @@ class WeaponAttackController {
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
+      messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus + requirementDifficultyBonus + Math.max(0, toInteger(difficultyBonus)),
@@ -6402,6 +7303,7 @@ class WeaponAttackController {
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
+      messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(
@@ -6514,6 +7416,7 @@ class WeaponAttackController {
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
+      messageData: this.chatMessageAuthorId ? { author: this.chatMessageAuthorId } : {},
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(
@@ -6636,6 +7539,20 @@ class WeaponAttackController {
 
   refresh(forceBroadcast = false, { skipBurstDistribution = false } = {}) {
     if (this.destroyed) return;
+    if (this.headlessExecution) {
+      if (!this.pointer && !this.lockedGeometry && !isWhirlwindAttackModifier(this.attackModifier)) {
+        this.targets = [];
+        this.geometry = null;
+        return;
+      }
+      if (this.reuseValidatedGeometryOnce && this.geometry) {
+        this.reuseValidatedGeometryOnce = false;
+      } else if (!this.rebuildGeometryAndTargets()) return;
+      this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
+        ? getAimedTargetUnderPointer(this.pointer, this.targets)
+        : this.selectedTarget;
+      return;
+    }
     if (this.previewSuppressed) {
       this.shape.clear();
       this.meleeDirectionPreview.clear();
@@ -6716,10 +7633,11 @@ class WeaponAttackController {
       );
       this.geometry.ricochetCone = buildRicochetCone(this.token, this.geometry);
     }
-    let potentialTargets = getPotentialTargets(this.token, this.geometry, {
+    let potentialTargets = this.filterTargetTokens(getPotentialTargets(this.token, this.geometry, {
       includeAttacker: this.volleyAction,
-      includeDead: this.volleyAction
-    });
+      includeDead: this.volleyAction,
+      targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
+    }));
     this.targets = potentialTargets;
     this.geometry.aimPoint = null;
     this.trajectoryAimTarget = isWhirlwindAttackModifier(this.attackModifier)
@@ -6735,10 +7653,11 @@ class WeaponAttackController {
       : null;
     if (this.volleyAction && this.geometry.aimPoint) {
       this.geometry = aimVolleyGeometryAtPoint(this.token, this.geometry, this.geometry.aimPoint);
-      potentialTargets = getPotentialTargets(this.token, this.geometry, {
+      potentialTargets = this.filterTargetTokens(getPotentialTargets(this.token, this.geometry, {
         includeAttacker: true,
-        includeDead: true
-      });
+        includeDead: true,
+        targetTokenUuidAllowlist: this.targetTokenUuidAllowlist
+      }));
       this.targets = potentialTargets;
     } else if (this.geometry.aimPoint) {
       this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
@@ -6795,7 +7714,16 @@ class WeaponAttackController {
     if (signature === this.lastAutoCoverSignature) return;
     this.lastAutoCoverSignature = signature;
     this.autoCoverActorUuids = new Set(nextStates.map(state => state.actorUuid).filter(Boolean));
-    queueAttackAutoCoverSync(this.attackId, nextStates);
+    if (this.ownsAttackAutoCoverLifecycle) queueAttackAutoCoverSync(this.autoCoverAttackId, nextStates);
+  }
+
+  async syncAttackAutoCoverForExecution() {
+    if (!this.headlessExecution) return;
+    const states = this.ignoreAimedObstructions
+      ? []
+      : getAttackAutoCoverStates(this.token, this.geometry, this.targets);
+    this.autoCoverActorUuids = new Set(states.map(state => state.actorUuid).filter(Boolean));
+    await syncAttackAutoCoverNow(this.autoCoverAttackId, states);
   }
 
   getFocusedTarget() {
@@ -7029,7 +7957,7 @@ class WeaponAttackController {
       : null;
     const blockerCount = this.ignoreAimedObstructions || !trajectory
       ? 0
-      : getAimedTargetBlockers(this.token, target, trajectory).length;
+      : getAimedTargetBlockers(this.token, target, trajectory, this.targetTokenUuidAllowlist).length;
     const previewContext = this.createWeaponAttackSkillCheckContext(target);
     const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
       + getEffectiveRangeDifficultyBonus(
@@ -7148,7 +8076,12 @@ class WeaponAttackController {
         })
       }];
     }
-    const target = getNearestAttackChanceTarget(this.token, this.geometry, this.targets);
+    const target = getNearestAttackChanceTarget(
+      this.token,
+      this.geometry,
+      this.targets,
+      this.targetTokenUuidAllowlist
+    );
     if (!target) return [];
     const previewContext = this.createWeaponAttackSkillCheckContext(target);
     return [{
@@ -7345,6 +8278,7 @@ class WeaponAttackController {
   }
 
   broadcastPreview(force = false, markerPreview = null) {
+    if (this.suppressAttackPreviewBroadcast) return;
     const now = performance.now();
     if (!force && now - this.lastPreviewBroadcastAt < PREVIEW_BROADCAST_INTERVAL_MS) return;
     markerPreview ??= this.getTargetMarkerPreview(force);
@@ -7543,8 +8477,27 @@ function broadcastAttackPreview(payload = {}) {
   });
 }
 
-function handleWeaponAttackSocketMessage(payload = {}) {
-  if (!payload || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
+function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") {
+  const authenticatedSenderUserId = String(socketSenderUserId ?? "").trim();
+  if (
+    !payload
+    || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE
+    || !authenticatedSenderUserId
+    || payload.senderUserId !== authenticatedSenderUserId
+    || authenticatedSenderUserId === game.user?.id
+  ) return;
+  if (payload.action === "ordinaryAttackRequest") {
+    void handleOrdinaryWeaponAttackSocketRequest(payload, authenticatedSenderUserId);
+    return;
+  }
+  if (
+    payload.action === "ordinaryAttackAccepted"
+    || payload.action === "ordinaryAttackProgress"
+    || payload.action === "ordinaryAttackResult"
+  ) {
+    settlePendingOrdinaryAttackRequest(payload, authenticatedSenderUserId);
+    return;
+  }
   if (payload.action === "completeAttack") {
     requestActiveWeaponAttackFinish(payload.attackId);
     removeRemoteAttackPreview(payload.attackId);
@@ -8510,7 +9463,11 @@ function getCommandedAttackAuthorityFailureReason() {
 }
 
 function isCommandedAttackSceneAuthority(user, tokenDocuments, { requirePlaceables = false } = {}) {
-  if (!user?.active || !user.isGM || !Array.isArray(tokenDocuments) || !tokenDocuments.length) return false;
+  return Boolean(user?.isGM && isAttackSceneUser(user, tokenDocuments, { requirePlaceables }));
+}
+
+function isAttackSceneUser(user, tokenDocuments, { requirePlaceables = false } = {}) {
+  if (!user?.active || !Array.isArray(tokenDocuments) || !tokenDocuments.length) return false;
   const sceneId = String(tokenDocuments[0]?.parent?.id ?? "");
   if (!sceneId || String(user.viewedScene ?? "") !== sceneId) return false;
   for (const tokenDocument of tokenDocuments) {
@@ -8526,6 +9483,37 @@ function isCommandedAttackSceneAuthority(user, tokenDocuments, { requirePlaceabl
     }
   }
   return true;
+}
+
+function isAttackSceneClient(tokenDocuments, { requirePlaceables = false } = {}) {
+  if (!Array.isArray(tokenDocuments) || !tokenDocuments.length) return false;
+  const sceneId = String(canvas?.scene?.id ?? "");
+  const levelId = String(canvas?.level?.id ?? "");
+  if (!sceneId) return false;
+  for (const tokenDocument of tokenDocuments) {
+    if (String(tokenDocument?.parent?.id ?? "") !== sceneId) return false;
+    try {
+      if (!tokenDocument.includedInLevel(levelId || null)) return false;
+    } catch (_error) {
+      return false;
+    }
+    if (requirePlaceables) {
+      const token = tokenDocument.object ?? null;
+      if (!token?.actor || String(token.document?.uuid ?? "") !== String(tokenDocument.uuid ?? "")) return false;
+    }
+  }
+  return true;
+}
+
+function getTokenDocumentUuid(token = null) {
+  return String(token?.document?.uuid ?? token?.uuid ?? "").trim();
+}
+
+function normalizeTargetTokenUuidAllowlist(value = null) {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Set) return value;
+  const entries = Array.isArray(value) ? value : [];
+  return new Set(entries.map(uuid => String(uuid ?? "").trim()).filter(Boolean));
 }
 
 function serializeGeometry(geometry) {
@@ -9872,13 +10860,22 @@ function buildClippedCirclePoints(attackerToken, { origin, distance }) {
   return points;
 }
 
-function getPotentialTargets(attackerToken, geometry, { includeAttacker = false, includeDead = false } = {}) {
+function getPotentialTargets(attackerToken, geometry, {
+  includeAttacker = false,
+  includeDead = false,
+  targetTokenUuidAllowlist = null
+} = {}) {
+  const allowlist = normalizeTargetTokenUuidAllowlist(targetTokenUuidAllowlist);
   if (Array.isArray(geometry?.ricochetCone?.strips)) {
     const entries = new Map();
     return (canvas.tokens?.placeables ?? [])
       .filter(target => {
-        if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
-        const entry = getRicochetTargetEntry(target, geometry);
+        if (
+          (!includeAttacker && target === attackerToken)
+          || !target.actor
+          || !isAttackTargetVisible(target, allowlist)
+        ) return false;
+        const entry = getRicochetTargetEntry(target, geometry, allowlist);
         if (entry) entries.set(target, entry);
         return entry !== null;
       })
@@ -9888,7 +10885,11 @@ function getPotentialTargets(attackerToken, geometry, { includeAttacker = false,
       ));
   }
   return (canvas.tokens?.placeables ?? []).filter(target => {
-    if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
+    if (
+      (!includeAttacker && target === attackerToken)
+      || !target.actor
+      || !isAttackTargetVisible(target, allowlist)
+    ) return false;
     return geometry.type === VOLLEY_ACTION_KEY
       ? Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry))
       : Boolean(selectTargetTrajectoryAimPoint(attackerToken, target, geometry));
@@ -9919,8 +10920,12 @@ function getAttackAutoCoverStates(attackerToken, geometry, targets = []) {
     .sort((left, right) => Math.max(0, toInteger(right.overlapPercent)) - Math.max(0, toInteger(left.overlapPercent)));
   if (!settings.length) return [];
 
+  const targetTokenUuidAllowlist = new Set((targets ?? []).map(getTokenDocumentUuid).filter(Boolean));
   const ricochetEntries = Array.isArray(geometry?.ricochetCone?.strips)
-    ? new Map((targets ?? []).map(target => [target, getRicochetTargetEntry(target, geometry)]))
+    ? new Map((targets ?? []).map(target => [
+      target,
+      getRicochetTargetEntry(target, geometry, targetTokenUuidAllowlist)
+    ]))
     : new Map();
   const states = [];
   for (const target of targets ?? []) {
@@ -10230,11 +11235,18 @@ function drawBurstAllocationLabel(graphics, marker, label = "") {
 }
 
 function buildAttackTrajectory(attackerToken, coneGeometry, targets = []) {
+  const targetTokenUuidAllowlist = new Set((targets ?? []).map(getTokenDocumentUuid).filter(Boolean));
   if (Array.isArray(coneGeometry?.ricochetCone?.rays)) {
     for (const target of targets ?? []) {
-      const entry = getRicochetTargetEntry(target, coneGeometry);
+      const entry = getRicochetTargetEntry(target, coneGeometry, targetTokenUuidAllowlist);
       if (entry?.trajectory) return foundry.utils.deepClone(entry.trajectory);
-      const trajectory = findRicochetTrajectoryForTarget(attackerToken, target, coneGeometry);
+      const trajectory = findRicochetTrajectoryForTarget(
+        attackerToken,
+        target,
+        coneGeometry,
+        97,
+        targetTokenUuidAllowlist
+      );
       if (trajectory) return trajectory;
     }
     return buildRandomTrajectory(attackerToken, coneGeometry);
@@ -10523,7 +11535,7 @@ function getRicochetSegmentBranchKey(trajectory = {}, segment = {}) {
   return path.slice(0, reflectionCount).join("|") || "direct";
 }
 
-function getRicochetTargetEntry(target, geometry) {
+function getRicochetTargetEntry(target, geometry, targetTokenUuidAllowlist = null) {
   const tokenPolygon = getTokenWorldPolygon(target);
   const cone = geometry?.ricochetCone;
   if (!tokenPolygon || !Array.isArray(cone?.strips)) return null;
@@ -10537,7 +11549,7 @@ function getRicochetTargetEntry(target, geometry) {
 
   let best = null;
   for (const trajectory of cone.rays ?? []) {
-    const entries = getTrajectoryTargetEntries(null, trajectory);
+    const entries = getTrajectoryTargetEntries(null, trajectory, targetTokenUuidAllowlist);
     const entry = entries.find(candidate => candidate.target === target);
     if (!entry) continue;
     if (!best || entry.distance < best.distance) best = { ...entry, trajectory };
@@ -10557,7 +11569,13 @@ function getRicochetTargetEntry(target, geometry) {
   };
 }
 
-function findRicochetTrajectoryForTarget(attackerToken, target, geometry, sampleCount = 97) {
+function findRicochetTrajectoryForTarget(
+  attackerToken,
+  target,
+  geometry,
+  sampleCount = 97,
+  targetTokenUuidAllowlist = null
+) {
   if (!attackerToken || !target || !geometry?.ricochet) return null;
   const amount = Math.max(3, toInteger(sampleCount));
   const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
@@ -10572,7 +11590,11 @@ function findRicochetTrajectoryForTarget(attackerToken, target, geometry, sample
       Number(geometry.elevationSlope) || 0,
       geometry.ricochet.maxReflections
     );
-    const entry = getTrajectoryTargetEntries(attackerToken, trajectory).find(candidate => candidate.target === target);
+    const entry = getTrajectoryTargetEntries(
+      attackerToken,
+      trajectory,
+      targetTokenUuidAllowlist
+    ).find(candidate => candidate.target === target);
     if (!entry) continue;
     if (!best || entry.distance < best.distance) best = { trajectory, distance: entry.distance };
   }
@@ -10689,12 +11711,13 @@ function reflectAngleAcrossWall(angle, wallDirection) {
   return Math.atan2(dy - (2 * dot * ny), dx - (2 * dot * nx));
 }
 
-function getTrajectoryTargetEntries(attackerToken, trajectory) {
+function getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist = null) {
+  const allowlist = normalizeTargetTokenUuidAllowlist(targetTokenUuidAllowlist);
   if (Array.isArray(trajectory?.segments) && trajectory.segments.length) {
     const byTarget = new Map();
     for (const segment of trajectory.segments) {
       for (const target of canvas.tokens?.placeables ?? []) {
-        if (target === attackerToken || !target.actor || !target.visible) continue;
+        if (target === attackerToken || !target.actor || !isAttackTargetVisible(target, allowlist)) continue;
         const hit = getTokenTrajectoryHit(target, segment);
         if (!hit) continue;
         const distance = (Number(segment.distanceOffset) || 0) + hit.distance;
@@ -10713,15 +11736,23 @@ function getTrajectoryTargetEntries(attackerToken, trajectory) {
     return Array.from(byTarget.values()).sort((left, right) => left.distance - right.distance);
   }
   return (canvas.tokens?.placeables ?? [])
-    .filter(target => target !== attackerToken && target.actor && target.visible)
+    .filter(target => (
+      target !== attackerToken
+      && target.actor
+      && isAttackTargetVisible(target, allowlist)
+    ))
     .map(target => ({ target, hit: getTokenTrajectoryHit(target, trajectory) }))
     .filter(entry => entry.hit && hasLineOfSight(attackerToken, entry.hit.point, trajectory.origin))
     .sort((left, right) => left.hit.distance - right.hit.distance);
 }
 
-function doesTrajectoryHitTarget(attackerToken, target, trajectory) {
+function doesTrajectoryHitTarget(attackerToken, target, trajectory, targetTokenUuidAllowlist = null) {
   if (!target || !trajectory) return false;
-  return getTrajectoryTargetEntries(attackerToken, trajectory).some(entry => entry.target === target);
+  return getTrajectoryTargetEntries(
+    attackerToken,
+    trajectory,
+    targetTokenUuidAllowlist
+  ).some(entry => entry.target === target);
 }
 
 function updateTrajectoryEnd(trajectory, point) {
@@ -11545,6 +12576,13 @@ function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "
     ));
 }
 
+function isAttackTargetVisible(target, targetTokenUuidAllowlist = null) {
+  const allowlist = normalizeTargetTokenUuidAllowlist(targetTokenUuidAllowlist);
+  return allowlist === null
+    ? Boolean(target?.visible)
+    : allowlist.has(getTokenDocumentUuid(target));
+}
+
 function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponFunctionId = "", context = {}) {
   const weaponData = context?.weaponData ?? getWeaponAttackData(weapon, weaponFunctionId);
   const contextualDistance = Number(context?.attackDistanceMeters);
@@ -11955,10 +12993,10 @@ function getTargetDistance(target, geometry) {
   return Infinity;
 }
 
-function getNearestAttackChanceTarget(attackerToken, geometry, targets = []) {
+function getNearestAttackChanceTarget(attackerToken, geometry, targets = [], targetTokenUuidAllowlist = null) {
   if (!geometry || !targets.length) return null;
   const trajectory = buildAttackTrajectory(attackerToken, geometry, targets);
-  return getTrajectoryTargetEntries(attackerToken, trajectory).at(0)?.target ?? null;
+  return getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist).at(0)?.target ?? null;
 }
 
 function buildBurstTargetRanges(
@@ -11983,7 +13021,7 @@ function buildBurstTargetRanges(
 function buildBurstBulletAssignments(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   const allowedTargets = new Set(targets);
-  const shots = getBurstPrimaryShots(attackerToken, geometry, amount, primaryShots);
+  const shots = getBurstPrimaryShots(attackerToken, geometry, amount, primaryShots, targets);
   return Array.from({ length: amount }, (_value, index) => {
     const target = shots[index]?.target ?? null;
     return target && allowedTargets.has(target) ? target : null;
@@ -12017,7 +13055,7 @@ function buildBurstTargetEntries(
   );
   if (denominator <= 0) return [];
   return Array.from(buckets.entries())
-    .filter(([target, shots]) => ((weights.get(target) ?? shots.length) > 0) && target?.actor && target.visible)
+    .filter(([target, shots]) => ((weights.get(target) ?? shots.length) > 0) && target?.actor)
     .sort((left, right) => (distances.get(left[0]) ?? Infinity) - (distances.get(right[0]) ?? Infinity))
     .map(([target, shots]) => {
       const expected = ((weights.get(target) ?? shots.length) / denominator) * amount;
@@ -12037,7 +13075,10 @@ function buildBurstDistributionShots(
   attackerToken,
   geometry,
   attackCount = 1,
-  { purpose = "resolution" } = {}
+  {
+    purpose = "resolution",
+    targetTokenUuidAllowlist = null
+  } = {}
 ) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   const sampleCount = getBurstSampleCount(amount, { purpose });
@@ -12046,7 +13087,7 @@ function buildBurstDistributionShots(
     const offset = getEvenBurstSampleOffset(index, sampleCount);
     const angle = (Number(geometry?.angle) || 0) + ((Number(geometry?.halfAngle) || 0) * offset);
     const trajectory = buildTrajectoryByAngle(attackerToken, shotGeometry, angle, Number(shotGeometry?.elevationSlope) || 0);
-    const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0) ?? null;
+    const hit = getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist).at(0) ?? null;
     return {
       trajectory,
       target: hit?.target ?? null,
@@ -12063,6 +13104,7 @@ function getBurstTargetHitDistribution(
   { purpose = "resolution" } = {}
 ) {
   const allowedTargets = new Set(targets);
+  const targetTokenUuidAllowlist = new Set(targets.map(getTokenDocumentUuid).filter(Boolean));
   const aimShots = new Map();
   const buckets = new Map();
   const distances = new Map();
@@ -12070,11 +13112,11 @@ function getBurstTargetHitDistribution(
     attackerToken,
     geometry,
     attackCount,
-    { purpose }
+    { purpose, targetTokenUuidAllowlist }
   );
   for (const shot of distributionShots) {
     const target = shot?.target ?? null;
-    if (!target || !allowedTargets.has(target) || !target.actor || !target.visible) continue;
+    if (!target || !allowedTargets.has(target) || !target.actor) continue;
     if (!buckets.has(target)) buckets.set(target, []);
     buckets.get(target).push(shot);
     distances.set(target, Math.min(distances.get(target) ?? Infinity, Number(shot.hit?.distance) || getTargetDistance(target, geometry)));
@@ -12083,11 +13125,17 @@ function getBurstTargetHitDistribution(
   const sampleCount = Math.max(1, distributionShots.length);
   const weights = new Map(Array.from(buckets.entries()).map(([target, shots]) => [target, shots.length]));
   for (const target of allowedTargets) {
-    if (!target?.actor || !target.visible) continue;
+    if (!target?.actor) continue;
     const axisProfile = getBurstTargetAxisProfile(target, geometry, sampleCount);
     const aimWeight = axisProfile?.weight ?? 0;
     if (aimWeight <= 0 || !axisProfile?.point) continue;
-    const aimShot = buildBurstTargetAimShot(attackerToken, geometry, target, axisProfile.point);
+    const aimShot = buildBurstTargetAimShot(
+      attackerToken,
+      geometry,
+      target,
+      axisProfile.point,
+      targetTokenUuidAllowlist
+    );
     if (!aimShot) continue;
     if (!buckets.has(target)) buckets.set(target, []);
     aimShots.set(target, aimShot);
@@ -12175,13 +13223,19 @@ function getClosestBurstAxisPolygonPoint(axis, points = []) {
   return best;
 }
 
-function buildBurstTargetAimShot(attackerToken, geometry, target, point = null) {
+function buildBurstTargetAimShot(
+  attackerToken,
+  geometry,
+  target,
+  point = null,
+  targetTokenUuidAllowlist = null
+) {
   const aimPoint = isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point)
     ? point
     : selectTargetTrajectoryAimPoint(attackerToken, target, geometry);
   if (!aimPoint) return null;
   const trajectory = buildTrajectoryThroughPoint(attackerToken, geometry, aimPoint);
-  const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0);
+  const hit = getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist).at(0);
   if (hit?.target !== target) return null;
   if (!hit) return null;
   return {
@@ -12200,12 +13254,17 @@ function getBurstDistributionRange(amount = 1, expected = 0) {
   return { min, max };
 }
 
-function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
+function buildBurstPrimaryShots(
+  attackerToken,
+  geometry,
+  attackCount = 1,
+  targetTokenUuidAllowlist = null
+) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   const shotGeometry = getRandomBurstMissGeometry(attackerToken, geometry);
   return Array.from({ length: amount }, () => {
     const trajectory = buildRandomTrajectory(attackerToken, shotGeometry);
-    const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0) ?? null;
+    const hit = getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist).at(0) ?? null;
     return {
       trajectory,
       target: hit?.target ?? null,
@@ -12223,6 +13282,7 @@ function buildBurstPrimaryShotsForRanges(
   { distribution = null } = {}
 ) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
+  const targetTokenUuidAllowlist = new Set(targets.map(getTokenDocumentUuid).filter(Boolean));
   const distributedShots = buildBurstPrimaryShotsFromTargetDistribution(
     attackerToken,
     geometry,
@@ -12231,14 +13291,16 @@ function buildBurstPrimaryShotsForRanges(
     { distribution }
   );
   if (distributedShots.length === amount) return distributedShots;
-  if (!burstRanges?.size) return buildBurstPrimaryShots(attackerToken, geometry, amount);
+  if (!burstRanges?.size) {
+    return buildBurstPrimaryShots(attackerToken, geometry, amount, targetTokenUuidAllowlist);
+  }
   const allowedTargets = new Set(targets);
   let bestShots = null;
   let bestScore = Infinity;
   const attempts = Math.max(120, amount * 30);
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const shots = buildBurstPrimaryShots(attackerToken, geometry, amount);
+    const shots = buildBurstPrimaryShots(attackerToken, geometry, amount, targetTokenUuidAllowlist);
     const score = getBurstShotRangeMismatchScore(shots, allowedTargets, burstRanges);
     if (score <= 0) return shots;
     if (score >= bestScore) continue;
@@ -12246,7 +13308,7 @@ function buildBurstPrimaryShotsForRanges(
     bestShots = shots;
   }
 
-  return bestShots ?? buildBurstPrimaryShots(attackerToken, geometry, amount);
+  return bestShots ?? buildBurstPrimaryShots(attackerToken, geometry, amount, targetTokenUuidAllowlist);
 }
 
 function buildBurstPrimaryShotsFromTargetDistribution(
@@ -12357,8 +13419,16 @@ function getBurstShotRangeMismatchScore(shots = [], allowedTargets = new Set(), 
   return score;
 }
 
-function getBurstPrimaryShots(attackerToken, geometry, attackCount = 1, primaryShots = null) {
-  return Array.isArray(primaryShots) ? primaryShots : buildBurstPrimaryShots(attackerToken, geometry, attackCount);
+function getBurstPrimaryShots(
+  attackerToken,
+  geometry,
+  attackCount = 1,
+  primaryShots = null,
+  targets = []
+) {
+  if (Array.isArray(primaryShots)) return primaryShots;
+  const targetTokenUuidAllowlist = new Set(targets.map(getTokenDocumentUuid).filter(Boolean));
+  return buildBurstPrimaryShots(attackerToken, geometry, attackCount, targetTokenUuidAllowlist);
 }
 
 function formatBurstBulletRange(range = {}) {
@@ -12453,7 +13523,7 @@ function getSwingTargetSequence(selectedTarget, directionKey, targets = [], geom
   const movingLeft = directionKey === "rightToLeft";
   const anchor = selectedSpan.lateralCenter;
   const nextTargets = Array.from(new Set(targets ?? []))
-    .filter(target => target !== selectedTarget && target?.actor && target.visible)
+    .filter(target => target !== selectedTarget && target?.actor)
     .map(target => ({ target, span: getTokenSwingArcSpan(target, geometry) }))
     .filter(entry => entry.span)
     .filter(entry => movingLeft
@@ -13766,10 +14836,10 @@ function getActorRequirementValue(actor, requirement = {}) {
   return toInteger(actor?.system?.characteristics?.[key]);
 }
 
-function getAimedTargetBlockers(attackerToken, selectedTarget, trajectory) {
+function getAimedTargetBlockers(attackerToken, selectedTarget, trajectory, targetTokenUuidAllowlist = null) {
   const selectedHit = getTokenTrajectoryHit(selectedTarget, trajectory);
   if (!selectedHit) return [];
-  return getTrajectoryTargetEntries(attackerToken, trajectory)
+  return getTrajectoryTargetEntries(attackerToken, trajectory, targetTokenUuidAllowlist)
     .filter(entry => entry.target !== selectedTarget && entry.hit.distance < selectedHit.distance - 0.5);
 }
 

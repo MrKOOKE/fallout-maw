@@ -33,6 +33,22 @@ export function getWeaponModuleDisplayName(itemOrData = null) {
   return name || getWeaponModuleTechnicalName(itemOrData);
 }
 
+/**
+ * Create the portable Item snapshot stored inside a weapon module slot.
+ *
+ * A slot owns gameplay data, not the source embedded Document's database
+ * placement or server-managed bookkeeping. Excluding those fields also keeps
+ * the nested snapshot stable when the source Item is consumed or recreated.
+ */
+export function createWeaponModuleSlotItemData(itemOrData = null) {
+  const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
+  const itemData = foundry.utils.deepClone(source);
+  for (const key of ["_id", "folder", "sort", "ownership", "_stats"]) delete itemData[key];
+  itemData.system ??= {};
+  itemData.system.quantity = 1;
+  return itemData;
+}
+
 export function getWeaponModuleSlots(weaponData = {}) {
   const slots = Array.isArray(weaponData?.moduleSlots) ? weaponData.moduleSlots : [];
   return slots.map((slot, index) => ({

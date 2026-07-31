@@ -1145,9 +1145,17 @@ async function applyMassTreatmentToTarget(targetContext, {
   }
   const normalizedOptions = normalizeMassTreatmentOptions(options);
   const stableRequestId = String(requestId ?? "").trim();
-  const actor = targetToken?.actor ?? await fromUuid(actorUuid);
-  if (actor && String(actor.uuid ?? "") === actorUuid && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для массового лечения.");
+    return null;
+  }
+  if (isCurrentResponsibleGM(gm)) {
     try {
+      const actor = targetToken?.actor ?? await fromUuid(actorUuid);
+      if (!actor || String(actor.uuid ?? "") !== actorUuid) {
+        throw new Error("цель массового лечения не найдена");
+      }
       return await resolveMassTreatmentOnAuthority({
         sourceActor,
         sourceToken,
@@ -1166,11 +1174,6 @@ async function applyMassTreatmentToTarget(targetContext, {
     }
   }
 
-  const gm = getResponsibleGM();
-  if (!gm) {
-    ui.notifications.warn("Нет активного GM для массового лечения.");
-    return null;
-  }
   try {
     const result = await requestMedicineSocket("performMassTreatment", {
       actorUuid,
@@ -2538,9 +2541,17 @@ async function applyTreatmentToTarget(targetContext, {
     return null;
   }
 
-  const actor = targetToken?.actor ?? await fromUuid(actorUuid);
-  if (actor && String(actor.uuid ?? "") === actorUuid && canUseActorLocally(actor) && canUseActorLocally(sourceActor)) {
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для применения лечения.");
+    return null;
+  }
+  if (isCurrentResponsibleGM(gm)) {
     try {
+      const actor = targetToken?.actor ?? await fromUuid(actorUuid);
+      if (!actor || String(actor.uuid ?? "") !== actorUuid) {
+        throw new Error("цель лечения не найдена");
+      }
       return await resolveTreatmentOnAuthority({
         sourceActor,
         sourceToken,
@@ -2557,12 +2568,6 @@ async function applyTreatmentToTarget(targetContext, {
       ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
       return null;
     }
-  }
-
-  const gm = getResponsibleGM();
-  if (!gm) {
-    ui.notifications.warn("Нет активного GM для применения лечения.");
-    return null;
   }
 
   try {
@@ -3967,8 +3972,13 @@ function runWithMedicineAuthorityLocks(actors, operation, chainRef = null, index
 }
 
 function getResponsibleGM() {
-  return (game.users?.contents ?? [])
-    .filter(user => user.active && user.isGM)
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .at(0) ?? null;
+  return game.users?.activeGM ?? null;
+}
+
+function isCurrentResponsibleGM(gm = getResponsibleGM()) {
+  return Boolean(
+    gm
+    && game.user?.isGM
+    && String(game.user.id ?? "") === String(gm.id ?? "")
+  );
 }

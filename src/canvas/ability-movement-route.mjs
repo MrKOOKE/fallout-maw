@@ -106,6 +106,14 @@ export async function requestAbilityMovementRoute({
       });
     } catch (error) {
       console.warn("fallout-maw | Ability movement authorization failed", error);
+      if (lifecycleCancelled) {
+        targetSelectionSession.finish({
+          cancelled: true,
+          failed: false,
+          reason: "targetSelectionCancelled"
+        });
+        return { cancelled: true, failed: false, reason: "targetSelectionCancelled" };
+      }
       targetSelectionSession.finish({
         cancelled: false,
         failed: true,

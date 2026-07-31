@@ -628,6 +628,74 @@ test("managed effects use native v14 duration, stack timed effects per root, and
   );
 });
 
+test("root cleanup is O(1) when the root never created a managed effect", async () => {
+  let listCalls = 0;
+  let resolveCalls = 0;
+  const manager = createEventReactionEffectManager({
+    listActors: () => {
+      listCalls += 1;
+      return [];
+    },
+    resolveActor: async () => {
+      resolveCalls += 1;
+      return null;
+    }
+  });
+
+  assert.equal(await manager.cleanupRoot("ordinary-attack-root"), 0);
+  assert.equal(listCalls, 0);
+  assert.equal(resolveCalls, 0);
+});
+
+test("root cleanup resolves only actors and effect ids tracked by that root", async () => {
+  let listCalls = 0;
+  const resolvedActorUuids = [];
+  const deleted = [];
+  const trackedActor = { uuid: "Actor.Tracked", effects: [] };
+  const unrelatedActor = { uuid: "Actor.Unrelated", effects: [] };
+  const manager = createEventReactionEffectManager({
+    resolveActor: async uuid => {
+      resolvedActorUuids.push(uuid);
+      return uuid === trackedActor.uuid ? trackedActor : null;
+    },
+    listActors: () => {
+      listCalls += 1;
+      return [trackedActor, unrelatedActor];
+    },
+    createEffects: async (subject, entries) => {
+      const created = entries.map(data => createEffectDocument("tracked-effect", data));
+      subject.effects.push(...created);
+      return created;
+    },
+    deleteEffects: async (subject, ids) => {
+      deleted.push(...ids);
+      subject.effects = subject.effects.filter(effect => !ids.includes(effect.id));
+    }
+  });
+  const abilityFunction = eventFunction({ id: "tracked-cleanup" });
+  abilityFunction.changes = [{ key: "system.test", value: "1", type: "add", phase: "initial" }];
+
+  await manager.apply({
+    actor: trackedActor,
+    sourceItem: { uuid: "Actor.Tracked.Item.ability", name: "Reaction" },
+    abilityFunction,
+    envelope: eventEnvelope({ rootId: "root-addressed", eventId: "event-addressed" })
+  });
+  unrelatedActor.effects.push(createEffectDocument("unrelated-effect", buildEventReactionEffectData({
+    reactor: unrelatedActor,
+    sourceItem: { uuid: "Actor.Unrelated.Item.ability", name: "Other" },
+    abilityFunction,
+    envelope: eventEnvelope({ rootId: "root-addressed", eventId: "event-unrelated" }),
+    durationSeconds: 0
+  })));
+
+  assert.equal(await manager.cleanupRoot("root-addressed"), 1);
+  assert.equal(listCalls, 0);
+  assert.deepEqual(resolvedActorUuids, [trackedActor.uuid]);
+  assert.deepEqual(deleted, ["tracked-effect"]);
+  assert.deepEqual(unrelatedActor.effects.map(effect => effect.id), ["unrelated-effect"]);
+});
+
 test("accumulating event effect keeps one timer and grants typed resistance to all limbs", async () => {
   let worldTime = 100;
   let nextId = 1;
@@ -1084,6 +1152,7 @@ test("synthetic active-HUD module effects retain module provenance and use a val
 
 test("orphan cleanup removes only root-scoped managed effects", async () => {
   const actor = { uuid: "Actor.C", effects: [] };
+  let listCalls = 0;
   const rootData = buildEventReactionEffectData({
     reactor: actor,
     sourceItem: { uuid: "Item.A", name: "A" },
@@ -1101,12 +1170,17 @@ test("orphan cleanup removes only root-scoped managed effects", async () => {
   });
   actor.effects = [createEffectDocument("root", rootData), createEffectDocument("timed", timedData)];
   const manager = createEventReactionEffectManager({
-    listActors: () => [actor],
+    listActors: () => {
+      listCalls += 1;
+      return [actor];
+    },
+    resolveActor: async uuid => uuid === actor.uuid ? actor : null,
     deleteEffects: async (subject, ids) => {
       subject.effects = subject.effects.filter(effect => !ids.includes(effect.id));
     }
   });
   assert.equal(await manager.cleanupOrphans([]), 1);
+  assert.equal(listCalls, 1);
   assert.deepEqual(actor.effects.map(effect => effect.id), ["timed"]);
 });
 

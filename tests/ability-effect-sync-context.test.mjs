@@ -152,6 +152,9 @@ const {
   syncAuraGeneratedEffects
 } = await import("../src/abilities/effects.mjs");
 const {
+  isEnergyConsumptionWorldTimeAuthority
+} = await import("../src/items/energy-consumption.mjs");
+const {
   registerActiveEffectAuraHooks
 } = await import("../src/abilities/active-effect-auras.mjs");
 const {
@@ -341,6 +344,68 @@ test("item source definition and activation updates retain exact projection fano
     }),
     { actor: true, aura: true }
   );
+});
+
+test("energy-consumption toggles rebuild the owning projection on the active GM", () => {
+  const item = gearItem({
+    mode: "equipment",
+    freeSettings: true,
+    mitigationRequirements: false
+  });
+  item.system.functions.energyConsumer = {
+    enabled: true,
+    activeConditions: { powered: false }
+  };
+  item.system.functions.freeSettings.entries = [{
+    id: "powered-effect",
+    type: ABILITY_FUNCTION_TYPES.effectChanges,
+    changes: [change("powered-change", "system.resources.actionPoints.bonus", 1)],
+    conditions: [condition("powered", ABILITY_CONDITION_TYPES.energyConsumption)]
+  }];
+
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      "system.functions.energyConsumer.activeConditions.powered": true
+    }),
+    { actor: true, aura: false }
+  );
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      system: {
+        functions: {
+          energyConsumer: {
+            installedSource: { reserve: { value: 9 } }
+          }
+        }
+      }
+    }),
+    { actor: false, aura: false },
+    "ordinary reserve writes must stay off the projection hot path"
+  );
+
+  item.system.functions.freeSettings.entries[0].conditions.push(
+    condition("powered-aura", ABILITY_CONDITION_TYPES.aura, {
+      auraMode: ABILITY_AURA_MODES.applyToTargets
+    })
+  );
+  assert.deepEqual(
+    getItemAbilityEffectSyncPlan(item, {
+      system: {
+        functions: {
+          energyConsumer: {
+            activeConditions: { powered: false }
+          }
+        }
+      }
+    }),
+    { actor: true, aura: true }
+  );
+});
+
+test("only the designated active GM processes continuous energy consumption", () => {
+  assert.equal(isEnergyConsumptionWorldTimeAuthority({ isGM: false, isActiveGM: false }), false);
+  assert.equal(isEnergyConsumptionWorldTimeAuthority({ isGM: true, isActiveGM: false }), false);
+  assert.equal(isEnergyConsumptionWorldTimeAuthority({ isGM: true, isActiveGM: true }), true);
 });
 
 test("ordinary Actor damage requests a scene aura pass only for a real aura source", () => {

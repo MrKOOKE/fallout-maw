@@ -1,17 +1,84 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T08:22:36.105Z",
-  "rule": "A weapon energy consumer accepts only energy sources whose class exactly matches the redistributed weapon platform class. Weapon magazine ammunition is not changed.",
+  "generatedAt": "2026-07-31T13:21:58.643Z",
+  "rule": "Energy weapons accept only an exact-class source. Powered protective equipment accepts sources of its own class or any higher class; lower-class sources are removed.",
   "writeRequested": false,
-  "consumerCount": 18,
+  "consumerCount": 90,
   "incompatibleConsumerCount": 0,
   "changedConsumerCount": 0,
   "blockedConsumerCount": 0,
   "consumers": [
     {
+      "id": "15XR6jOwe710Pwx5",
+      "name": "Броня Хэнка",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "21BhM3uQKKzkURn6",
+      "name": "Силовая броня «Гризли»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "2b87ar0pdmckDruy",
+      "name": "Силовая броня «Рассказчик»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
       "id": "2h8p9d1TB6rkFG5o",
       "name": "Винтовка Гаусса Спецслужбы",
       "class": "A",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.aff056c7f8605b10",
@@ -30,9 +97,54 @@
       ]
     },
     {
+      "id": "2xKLUR86OwB0tnWK",
+      "name": "Кованая Силовая Броня",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "3tkMAiESiTAbci9U",
+      "name": "Силовая броня Волт-Тек «Тесла»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
       "id": "3uehdTUIVHG9EpEu",
       "name": "YCS/186",
       "class": "B",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.b79f279500d79adf",
@@ -51,9 +163,142 @@
       ]
     },
     {
+      "id": "4PM2psQYNrxpzblK",
+      "name": "Силовая броня T-51b ТБС",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "4zC2PIKDX1t5EeVl",
+      "name": "Силовая броня MP-47",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "6CBHO7UnNkEpkQNm",
+      "name": "Силовая броня EXC-17",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "6XSmUcYT4Jfjwwzr",
+      "name": "Силовая Броня «Наварро»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "73UGac2AmjT8Q6ZZ",
+      "name": "Силовая броня X-01 Убежища 7",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "75DvioMo0FpiXZ4G",
+      "name": "Силовая броня «Месть Убежища 13»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
       "id": "7oI3q8pjcifL993Q",
       "name": "Гаусс-Пулемёт",
       "class": "A",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.aff056c7f8605b10",
@@ -72,9 +317,32 @@
       ]
     },
     {
+      "id": "8n2r9JS1x4XiDj5X",
+      "name": "Закалённая Силовая броня T-51b",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
       "id": "908t60KuZaBRSjMt",
       "name": "Китайская Винтовка Гаусса",
       "class": "B",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.b79f279500d79adf",
@@ -96,6 +364,7 @@
       "id": "9FWjq0n8ew7NJfsk",
       "name": "Гауссов пистолет PPK12",
       "class": "B",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.b79f279500d79adf",
@@ -114,51 +383,10 @@
       ]
     },
     {
-      "id": "C4pDEiNtMsxabz8n",
-      "name": "Наплечный Гатлинг Гаусса",
-      "class": "A",
-      "configured": [
-        {
-          "uuid": "Item.aff056c7f8605b10",
-          "itemId": "aff056c7f8605b10",
-          "name": "Высокоразрядная оружейная батарея (A)",
-          "class": "A",
-          "compatible": true,
-          "reason": null
-        }
-      ],
-      "incompatibleCount": 0,
-      "changed": false,
-      "blocked": false,
-      "resultingSourceUuids": [
-        "Item.aff056c7f8605b10"
-      ]
-    },
-    {
-      "id": "DYccpE0aJTw9nYi3",
-      "name": "Гауссов пистолет PPK12 Секретной Службы",
-      "class": "B",
-      "configured": [
-        {
-          "uuid": "Item.b79f279500d79adf",
-          "itemId": "b79f279500d79adf",
-          "name": "Высокоразрядная оружейная батарея (B)",
-          "class": "B",
-          "compatible": true,
-          "reason": null
-        }
-      ],
-      "incompatibleCount": 0,
-      "changed": false,
-      "blocked": false,
-      "resultingSourceUuids": [
-        "Item.b79f279500d79adf"
-      ]
-    },
-    {
-      "id": "EuQqVxoz1kXSIUaz",
-      "name": "Двигатель сингулярности",
+      "id": "BUvNraOUb69bXD6k",
+      "name": "Силовая броня Квант X-01",
       "class": "S",
+      "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
           "uuid": "Item.60ac3df89403b230",
@@ -177,9 +405,10 @@
       ]
     },
     {
-      "id": "UaZqgQUBuZhmlZoD",
-      "name": "Гаусс-миниган MEC Mk.II",
+      "id": "C4pDEiNtMsxabz8n",
+      "name": "Наплечный Гатлинг Гаусса",
       "class": "A",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.aff056c7f8605b10",
@@ -195,12 +424,629 @@
       "blocked": false,
       "resultingSourceUuids": [
         "Item.aff056c7f8605b10"
+      ]
+    },
+    {
+      "id": "CiAHd1Iiq0k5UjpB",
+      "name": "Силовая броня Ренегата",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "DGEmGwBRUeRxoO9U",
+      "name": "Силовая броня T-60",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "DYZiPz8BQqz28bfY",
+      "name": "Силовая броня Клинта",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "DYccpE0aJTw9nYi3",
+      "name": "Гауссов пистолет PPK12 Секретной Службы",
+      "class": "B",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.b79f279500d79adf",
+          "itemId": "b79f279500d79adf",
+          "name": "Высокоразрядная оружейная батарея (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.b79f279500d79adf"
+      ]
+    },
+    {
+      "id": "Dldkj4IKbClpfQnm",
+      "name": "Броня Командос Анклава",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "E2o1wef27rfbAIAO",
+      "name": "Силовая броня «Геенна»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "EVRMmgqXv5fITXx1",
+      "name": "Силовая Броня «Пустынный лис»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "EuQqVxoz1kXSIUaz",
+      "name": "Двигатель сингулярности",
+      "class": "S",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
+      ]
+    },
+    {
+      "id": "FVDzgTCqzfa5MDGt",
+      "name": "Улучшенная Силовая Броня Mk.I «Тесла»",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "GXl9Tc3fY5Bl85eD",
+      "name": "Силовая броня T-51d",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "HozO1sNldCRtd8Je",
+      "name": "Силовая броня «Расхититель костей»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "I5eBUAlgQ5rgvfAH",
+      "name": "Силовая броня «Освободитель»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "K2UKXbtPnAAHmlqx",
+      "name": "Силовая броня T-51a",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "KrCIDo7QUE2sPqWa",
+      "name": "Силовая броня СЗБС",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "KyyfO0Ju8h6IqsVc",
+      "name": "Силовая Броня Пророка Потерянных",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "LhaCElahnkCQs1rV",
+      "name": "Силовая броня T-51b БС",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "LxUpWmt1aeCR64Vb",
+      "name": "Экспериментальная Силовая броня «Тесла»",
+      "class": "S",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
+      ]
+    },
+    {
+      "id": "MPenpN5JyNjTKwBN",
+      "name": "Ржавая Силовая броня X-01",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "MrEO6gDr0U4NeakB",
+      "name": "Улучшенная Силовая Броня Mk.II «Тесла»",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "OUz3E5kdDPWuxgTW",
+      "name": "Силовая броня «Центурион»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "OvHuoHZH0gAr4GBn",
+      "name": "Броня Главного Гада",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "P6S6zCdL3wTOBNUC",
+      "name": "Силовая броня НКР",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "PFudN3JpQYScXglq",
+      "name": "Силовая броня T-51b Паладина БС",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "R88SwqMhwOKO3aUh",
+      "name": "Силовая броня T-60 ВБС",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "SKgj3fkZlXjAT9lt",
+      "name": "Силовая броня T-45b",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "Tw1rPWviAhHPsjXh",
+      "name": "Силовая броня T-45d",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "UaZqgQUBuZhmlZoD",
+      "name": "Гаусс-миниган MEC Mk.II",
+      "class": "A",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.aff056c7f8605b10",
+          "itemId": "aff056c7f8605b10",
+          "name": "Высокоразрядная оружейная батарея (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.aff056c7f8605b10"
+      ]
+    },
+    {
+      "id": "UdTUOTs8mXrRgurz",
+      "name": "Трофейная Броня Мутанта",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
       ]
     },
     {
       "id": "V1sBYlTidekllsx8",
       "name": "Гаусс-винтовка M72 Mk.II",
       "class": "A",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.aff056c7f8605b10",
@@ -219,9 +1065,32 @@
       ]
     },
     {
+      "id": "WGDk7KsmmXCyWK4R",
+      "name": "Силовая броня Волт-Тек",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
       "id": "XSr4bKRHtPjEaqyO",
       "name": "«В последнюю минуту»",
       "class": "B",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.b79f279500d79adf",
@@ -243,6 +1112,7 @@
       "id": "Xur9B7YUcF5QUe6A",
       "name": "Гаусс-винтовка M72",
       "class": "B",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.b79f279500d79adf",
@@ -261,15 +1131,16 @@
       ]
     },
     {
-      "id": "iZOHUocqkCIq03qc",
-      "name": "Трёхствольный Гаусс-миниган MEC",
-      "class": "A",
+      "id": "Ya9jlKudXXgkiVpE",
+      "name": "Силовая броня T-45c",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
-          "uuid": "Item.aff056c7f8605b10",
-          "itemId": "aff056c7f8605b10",
-          "name": "Высокоразрядная оружейная батарея (A)",
-          "class": "A",
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
           "compatible": true,
           "reason": null
         }
@@ -278,19 +1149,20 @@
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.aff056c7f8605b10"
+        "Item.idCnJLNhPJOKiJFQ"
       ]
     },
     {
-      "id": "koYRk0lu9PnSd6eK",
-      "name": "Аннигилятор материи",
-      "class": "S",
+      "id": "YorvYWQH4gVPqfnm",
+      "name": "Силовая броня «Крушитель черепов»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
-          "uuid": "Item.60ac3df89403b230",
-          "itemId": "60ac3df89403b230",
-          "name": "Ядерный блок (S)",
-          "class": "S",
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
           "compatible": true,
           "reason": null
         }
@@ -299,34 +1171,14 @@
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.60ac3df89403b230"
+        "Item.idCnJLNhPJOKiJFQ"
       ]
     },
     {
-      "id": "ogT5CNiCxUsZNAUm",
-      "name": "Гауссов пистолет PPK12 Mk.II",
+      "id": "ZOTBXfQ7y3gGQgmk",
+      "name": "Силовая броня X-01",
       "class": "A",
-      "configured": [
-        {
-          "uuid": "Item.aff056c7f8605b10",
-          "itemId": "aff056c7f8605b10",
-          "name": "Высокоразрядная оружейная батарея (A)",
-          "class": "A",
-          "compatible": true,
-          "reason": null
-        }
-      ],
-      "incompatibleCount": 0,
-      "changed": false,
-      "blocked": false,
-      "resultingSourceUuids": [
-        "Item.aff056c7f8605b10"
-      ]
-    },
-    {
-      "id": "teYqUZJWFlMrFU85",
-      "name": "BFG 9000",
-      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
           "uuid": "Item.810613648446db93",
@@ -345,9 +1197,274 @@
       ]
     },
     {
-      "id": "zCuz6ED2olNBicyP",
-      "name": "Карабин Гаусса",
+      "id": "a3sQoP17VyeGHCo9",
+      "name": "Ультрацитовая Силовая Броня",
+      "class": "S",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
+      ]
+    },
+    {
+      "id": "b6Vf8lF9UtWDfnFD",
+      "name": "Силовая броня «Прометей»",
       "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "bZEwD6mJZXFGufvl",
+      "name": "Силовая броня T-51f",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "bkxjdFgGex88fSDM",
+      "name": "Силовая броня «ЗЕВС»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "bridMYqCwev9dmLR",
+      "name": "Силовая броня «Атомных Котов»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "cB85WLyGevYZ5mGi",
+      "name": "Улучшенная Силовая броня СЗБС",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "dLLidLxXDZWF6ptw",
+      "name": "Силовая броня Босса Рейдеров",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "eHpEA0qL5ynhCsF8",
+      "name": "Силовая броня «Мститель»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "eccpIa8kv6AbQDjD",
+      "name": "Силовая броня T-45d БС",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "eqU5QCT3VXU932y8",
+      "name": "Силовая броня T-65 Секретной Службы Анклава",
+      "class": "S",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
+      ]
+    },
+    {
+      "id": "h3ov3fKOVSrjMl3q",
+      "name": "Силовая броня «Огненный Воин»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "iAbo8VL4QcQSlqjO",
+      "name": "Улучшенная Силовая Броня Mk.I",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "iZOHUocqkCIq03qc",
+      "name": "Трёхствольный Гаусс-миниган MEC",
+      "class": "A",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.aff056c7f8605b10",
@@ -366,9 +1483,494 @@
       ]
     },
     {
+      "id": "iZektiojvSP7bn69",
+      "name": "Силовая броня T-51с",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "jCxYk4k1xT2w4FXS",
+      "name": "Силовая броня Ашура",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "koYRk0lu9PnSd6eK",
+      "name": "Аннигилятор материи",
+      "class": "S",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
+      ]
+    },
+    {
+      "id": "l0QAzEsrcFDHskuK",
+      "name": "Улучшенная Силовая Броня Mk.II",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "lRFjXWKenXsQi5ro",
+      "name": "Силовая броня T-65",
+      "class": "S",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
+      ]
+    },
+    {
+      "id": "lmexURcKfJ1u5SMr",
+      "name": "Силовая броня Изгоев «Линчеватель»",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "nMPYeJSRDo4VUHrr",
+      "name": "Силовая броня Рейдера Дробителя",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "ogT5CNiCxUsZNAUm",
+      "name": "Гауссов пистолет PPK12 Mk.II",
+      "class": "A",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.aff056c7f8605b10",
+          "itemId": "aff056c7f8605b10",
+          "name": "Высокоразрядная оружейная батарея (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.aff056c7f8605b10"
+      ]
+    },
+    {
+      "id": "pkcRPCrmXVRppDQD",
+      "name": "Силовая броня T-51b",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "quf2ehDr5zciEO9x",
+      "name": "Броня Мутанта Убийцы Паладинов",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "r9jRCXJK3qwtlP11",
+      "name": "Силовая броня T-45a",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "tFLGDnA3QQBnN3G6",
+      "name": "Силовая броня «Хеллкэт»",
+      "class": "A",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "teYqUZJWFlMrFU85",
+      "name": "BFG 9000",
+      "class": "A",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.810613648446db93"
+      ]
+    },
+    {
+      "id": "uNx9PtcGeNv9pfyD",
+      "name": "Силовая броня Изгоев",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "uwpl3bqVFXefH1U2",
+      "name": "Силовая броня T-51e",
+      "class": "B",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "vIS3o90WIjfqct8c",
+      "name": "Броня Лейтенанта",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "vbunaijmSSzAvQWs",
+      "name": "Силовая броня Рейдеров",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "wy2DvIF81vuwBI5h",
+      "name": "Опалённая силовая броня «Сьерра»",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "xoOPJWab2JdD1RzM",
+      "name": "Силовая броня Доктора Брауна",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "zCuz6ED2olNBicyP",
+      "name": "Карабин Гаусса",
+      "class": "A",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.aff056c7f8605b10",
+          "itemId": "aff056c7f8605b10",
+          "name": "Высокоразрядная оружейная батарея (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.aff056c7f8605b10"
+      ]
+    },
+    {
+      "id": "zkT4wxjyaZlEYyoW",
+      "name": "Силовая Броня Круга Стали",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "zqFfXpXV5Z0HsFb5",
+      "name": "Силовая броня ТБС",
+      "class": "C",
+      "compatibilityMode": "same-or-higher-class",
+      "configured": [
+        {
+          "uuid": "Item.idCnJLNhPJOKiJFQ",
+          "itemId": "idCnJLNhPJOKiJFQ",
+          "name": "Ядерный блок (B)",
+          "class": "B",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
       "id": "zwp7bfSrsOBksfbd",
       "name": "Гаусс-миниган MEC",
       "class": "A",
+      "compatibilityMode": "exact-class",
       "configured": [
         {
           "uuid": "Item.aff056c7f8605b10",

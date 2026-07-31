@@ -885,6 +885,125 @@ test("canvas target-selection sessions finish once and preserve the cancellation
   }
 });
 
+test("a movement authorization which resolves late cannot supersede a newer canvas selector", async () => {
+  const previousGlobals = new Map();
+  const installGlobal = (key, value) => {
+    previousGlobals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value
+    });
+  };
+  let resolveAuthorize;
+  let authorizationStarted;
+  const authorizationStartedPromise = new Promise(resolve => {
+    authorizationStarted = resolve;
+  });
+  const authorization = new Promise(resolve => {
+    resolveAuthorize = resolve;
+  });
+  let planningCalls = 0;
+  let dragCalls = 0;
+  let cancelledPlanning = 0;
+  let replacementSession = null;
+  const tokenDocument = {
+    id: "token",
+    uuid: "Scene.scene.Token.token",
+    actor: {},
+    movementAction: "walk",
+    movement: {},
+    _source: movementSource()
+  };
+  const tokenObject = {
+    actor: tokenDocument.actor,
+    document: tokenDocument,
+    layer: {
+      _cancelMovementPlanning() {
+        cancelledPlanning += 1;
+      }
+    },
+    planAbilityMovement() {
+      planningCalls += 1;
+      return Promise.resolve(null);
+    },
+    async startMovementPlanningDrag() {
+      dragCalls += 1;
+      return false;
+    }
+  };
+  tokenDocument.object = tokenObject;
+  const planAuthority = {
+    async authorize() {
+      authorizationStarted();
+      return authorization;
+    },
+    async retain() {
+      throw new Error("retain must not run after the route intent was superseded");
+    }
+  };
+  const eventTarget = {
+    addEventListener() {},
+    removeEventListener() {}
+  };
+
+  installGlobal("Hooks", { callAll() {} });
+  installGlobal("window", eventTarget);
+  installGlobal("document", eventTarget);
+  installGlobal("game", {
+    user: { id: "user" },
+    i18n: { lang: "ru" }
+  });
+  installGlobal("ui", {
+    notifications: {
+      info() {},
+      warn() {}
+    }
+  });
+  installGlobal("canvas", {
+    app: { view: eventTarget },
+    stage: {
+      on() {},
+      off() {}
+    },
+    grid: {
+      isGridless: false,
+      units: "м"
+    },
+    mouseInteractionManager: {
+      cancel() {}
+    },
+    canvasCoordinatesFromClient: point => point
+  });
+
+  try {
+    const routePromise = requestAbilityMovementRoute({
+      token: tokenObject,
+      planAuthority
+    });
+    await authorizationStartedPromise;
+    replacementSession = startCanvasTargetSelectionSession({ kind: "replacement" });
+    resolveAuthorize(true);
+
+    const result = await routePromise;
+    assert.deepEqual(result, {
+      cancelled: true,
+      failed: false,
+      reason: "targetSelectionCancelled"
+    });
+    assert.equal(planningCalls, 0);
+    assert.equal(dragCalls, 0);
+    assert.equal(cancelledPlanning, 1);
+    assert.equal(replacementSession.active, true);
+  } finally {
+    replacementSession?.finish();
+    for (const [key, descriptor] of previousGlobals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  }
+});
+
 test("superseding a movement route while its authority commit is pending releases the old plan", async () => {
   const previousGlobals = new Map();
   const installGlobal = (key, value) => {

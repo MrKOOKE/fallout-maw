@@ -238,6 +238,7 @@ export async function requestSkillCheckBatch({
   entries = [],
   animate = false,
   createMessage = true,
+  messageData = {},
   requester = "",
   title = "",
   chainRef = null,
@@ -374,7 +375,11 @@ export async function requestSkillCheckBatch({
       .filter(pending => pending.terminalContext.success && pending.terminalContext.value && !pending.presentationError)
       .map(pending => pending.terminalContext.value);
     const messages = createMessage
-      ? await publishSkillCheckMessageSafely(() => publishSkillCheckOutcomeMessages(presentableOutcomes, { requester, title }))
+      ? await publishSkillCheckMessageSafely(() => publishSkillCheckOutcomeMessages(presentableOutcomes, {
+        requester,
+        title,
+        messageData
+      }))
       : [];
     const message = messages?.[0];
 
@@ -431,7 +436,7 @@ function notifySkillCheckTriggerCostCancellation(workflow = {}) {
   });
 }
 
-export function createSkillCheckBatchCollector({ requester = "", title = "" } = {}) {
+export function createSkillCheckBatchCollector({ requester = "", title = "", messageData = {} } = {}) {
   const outcomes = [];
   const outcomeSet = new Set();
   const pendingTerminals = [];
@@ -453,7 +458,11 @@ export function createSkillCheckBatchCollector({ requester = "", title = "" } = 
       try {
         if (createMessage) {
           const normalizedOutcomes = outcomes.filter(Boolean);
-          const messages = await publishSkillCheckOutcomeMessages(normalizedOutcomes, { requester, title });
+          const messages = await publishSkillCheckOutcomeMessages(normalizedOutcomes, {
+            requester,
+            title,
+            messageData
+          });
           message = messages[0];
         }
       } catch (error) {
@@ -542,21 +551,27 @@ async function publishSkillCheckMessageSafely(publisher) {
   }
 }
 
-async function publishSkillCheckOutcomeMessages(outcomes = [], { requester = "", title = "" } = {}) {
+async function publishSkillCheckOutcomeMessages(
+  outcomes = [],
+  { requester = "", title = "", messageData = {} } = {}
+) {
   const messages = [];
   const actorGroups = groupSkillCheckOutcomesByActor(outcomes);
 
   for (const actorOutcomes of actorGroups) {
     const message = actorOutcomes.length > 1
-      ? await publishSkillCheckBatchMessage(actorOutcomes, { requester, title })
-      : await publishSkillCheckMessage(actorOutcomes[0], { requester });
+      ? await publishSkillCheckBatchMessage(actorOutcomes, { requester, title, messageData })
+      : await publishSkillCheckMessage(actorOutcomes[0], { requester, messageData });
     if (message) messages.push(message);
   }
 
   return messages;
 }
 
-async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", title = "" } = {}) {
+async function publishSkillCheckBatchMessage(
+  outcomes = [],
+  { requester = "", title = "", messageData = {} } = {}
+) {
   const normalizedOutcomes = outcomes.filter(Boolean);
   if (!normalizedOutcomes.length) return undefined;
 
@@ -567,6 +582,7 @@ async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", ti
     content,
     sound: null,
     rolls: normalizedOutcomes.flatMap(outcome => outcome.rolls.map(roll => roll.toJSON())),
+    ...normalizeSkillCheckMessageData(messageData),
     flags: {
       "fallout-maw": {
         skillCheckBatch: {
@@ -937,6 +953,7 @@ async function publishSkillCheckMessage(outcome, { requester = "", messageData =
 function normalizeSkillCheckMessageData(messageData = {}) {
   if (!messageData || typeof messageData !== "object") return {};
   return {
+    ...(messageData.author !== undefined ? { author: messageData.author } : {}),
     ...(Array.isArray(messageData.whisper) ? { whisper: messageData.whisper } : {}),
     ...(messageData.blind !== undefined ? { blind: Boolean(messageData.blind) } : {}),
     ...(messageData.type !== undefined ? { type: messageData.type } : {}),

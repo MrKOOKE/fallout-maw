@@ -204,37 +204,42 @@ export function createEventReactionEffectManager({
   async function cleanupRoot(rootId = "") {
     const id = String(rootId ?? "").trim();
     if (!id) return 0;
-    const tracked = trackedRoots.get(id) ?? new Map();
-    const actors = new Map();
-    for (const actor of await listActors()) {
-      if (actor?.uuid) actors.set(actor.uuid, actor);
-    }
-    for (const actorUuid of tracked.keys()) {
-      if (!actors.has(actorUuid)) {
-        const actor = await resolveActor(actorUuid);
-        if (actor) actors.set(actorUuid, actor);
-      }
-    }
+    const tracked = trackedRoots.get(id);
+    if (!tracked) return 0;
 
     let deleted = 0;
-    for (const actor of actors.values()) {
-      const ids = getEffects(actor)
-        .filter(effect => {
-          const flag = getEventReactionEffectFlag(effect);
-          return flag?.scope === "root" && flag.rootId === id;
-        })
-        .map(effect => String(effect?.id ?? effect?._id ?? ""))
-        .filter(Boolean);
-      if (!ids.length) continue;
-      try {
-        await deleteEffects(actor, ids, { animate: false, falloutMawEventReactionCleanup: true });
-        deleted += ids.length;
-      } catch (error) {
-        logger?.error?.(`fallout-maw | Failed to clean Event Reaction root '${id}'.`, error);
+    try {
+      for (const [actorUuid, trackedEffectIds] of tracked) {
+        let actor;
+        try {
+          actor = await resolveActor(actorUuid);
+        } catch (error) {
+          logger?.error?.(`fallout-maw | Failed to resolve Event Reaction actor '${actorUuid}'.`, error);
+          continue;
+        }
+        if (!actor) continue;
+        const ids = getEffects(actor)
+          .filter(effect => {
+            const effectId = String(effect?.id ?? effect?._id ?? "").trim();
+            const flag = getEventReactionEffectFlag(effect);
+            return trackedEffectIds.has(effectId)
+              && flag?.scope === "root"
+              && flag.rootId === id;
+          })
+          .map(effect => String(effect?.id ?? effect?._id ?? ""))
+          .filter(Boolean);
+        if (!ids.length) continue;
+        try {
+          await deleteEffects(actor, ids, { animate: false, falloutMawEventReactionCleanup: true });
+          deleted += ids.length;
+        } catch (error) {
+          logger?.error?.(`fallout-maw | Failed to clean Event Reaction root '${id}'.`, error);
+        }
       }
+      return deleted;
+    } finally {
+      trackedRoots.delete(id);
     }
-    trackedRoots.delete(id);
-    return deleted;
   }
 
   async function cleanupOrphans(activeRootIds = []) {
@@ -243,7 +248,9 @@ export function createEventReactionEffectManager({
     for (const actor of await listActors()) {
       for (const effect of getEffects(actor)) {
         const flag = getEventReactionEffectFlag(effect);
-        if (flag?.scope === "root" && flag.rootId && !active.has(flag.rootId)) orphanRoots.add(flag.rootId);
+        if (flag?.scope !== "root" || !flag.rootId) continue;
+        trackRootEffect(flag.rootId, actor?.uuid, effect);
+        if (!active.has(flag.rootId)) orphanRoots.add(flag.rootId);
       }
     }
     let deleted = 0;
@@ -252,12 +259,15 @@ export function createEventReactionEffectManager({
   }
 
   function trackRootEffect(rootId, actorUuid, effect) {
-    const actors = trackedRoots.get(rootId) ?? new Map();
-    const ids = actors.get(actorUuid) ?? new Set();
+    const normalizedRootId = String(rootId ?? "").trim();
+    const normalizedActorUuid = String(actorUuid ?? "").trim();
     const effectId = String(effect?.id ?? effect?._id ?? "").trim();
-    if (effectId) ids.add(effectId);
-    actors.set(actorUuid, ids);
-    trackedRoots.set(rootId, actors);
+    if (!normalizedRootId || !normalizedActorUuid || !effectId) return;
+    const actors = trackedRoots.get(normalizedRootId) ?? new Map();
+    const ids = actors.get(normalizedActorUuid) ?? new Set();
+    ids.add(effectId);
+    actors.set(normalizedActorUuid, ids);
+    trackedRoots.set(normalizedRootId, actors);
   }
 
   return Object.freeze({

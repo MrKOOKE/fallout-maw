@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T09:22:27.446Z",
+  "generatedAt": "2026-07-31T13:00:36.977Z",
   "mode": "dry-run",
   "status": "ready-to-write",
   "scope": {
@@ -17,7 +17,7 @@
     "standardMagazineSourcesAdjusted": 0,
     "standardMagazineSourcesBlocked": 0,
     "conditionOnlyArmorItems": 0,
-    "weaponContentAdjusted": 1,
+    "weaponContentAdjusted": 0,
     "persistentDamageAreas": 14,
     "groups": {
       "damageSources": 195,
@@ -44,7 +44,7 @@
     "originalCloneGroups": 87,
     "originalCloneItems": 325,
     "individualizedItems": 327,
-    "collisionAdjustments": 16,
+    "collisionAdjustments": 14,
     "remainingCloneGroups": 0,
     "remainingEquipmentCloneGroups": []
   },
@@ -77,20 +77,6 @@
         "finalPrice": 7335,
         "comparedWith": [
           "Силовая броня «Крушитель черепов»"
-        ]
-      },
-      {
-        "itemId": "BbeY8kuy4sbbMMav",
-        "itemName": "Силовой шлем «Огненный Воин»",
-        "group": "equipment",
-        "class": "C",
-        "family": "powerHelmet",
-        "componentClass": "D",
-        "componentCount": 1,
-        "requiredPrice": 2594,
-        "finalPrice": 2629,
-        "comparedWith": [
-          "Силовой Шлем «Геенна»"
         ]
       },
       {
@@ -258,51 +244,51 @@
       },
       "weapons": {
         "items": 799,
-        "itemsWithPaidDeviations": 718,
-        "payments": 2277,
+        "itemsWithPaidDeviations": 717,
+        "payments": 2293,
         "paymentChannels": {
-          "actions": 198,
+          "actions": 200,
           "additionalWeapons": 2,
           "condition": 70,
-          "fireControl": 401,
-          "manualDamageEfficiency": 17,
-          "modularity": 139,
+          "fireControl": 393,
+          "manualDamageEfficiency": 15,
+          "modularity": 170,
           "noise": 117,
           "platformScore": 72,
-          "precision": 270,
+          "precision": 269,
           "range": 181,
           "sourcePercentile": 253,
-          "technology": 246,
-          "weight": 311
+          "technology": 245,
+          "weight": 306
         }
       },
       "equipment": {
         "items": 531,
         "itemsWithPaidDeviations": 521,
-        "payments": 1872,
+        "payments": 1862,
         "paymentChannels": {
-          "characteristicBonus": 43,
-          "condition": 48,
+          "characteristicBonus": 44,
+          "condition": 46,
           "coverage": 17,
-          "energyProtection": 92,
-          "environmentalProtection": 65,
-          "individualization": 435,
-          "kineticProtection": 68,
-          "namedVariantDominance": 9,
-          "protection": 73,
+          "energyProtection": 95,
+          "environmentalProtection": 64,
+          "individualization": 428,
+          "kineticProtection": 71,
+          "namedVariantDominance": 8,
+          "protection": 66,
           "quality": 55,
-          "skillBonus": 94,
+          "skillBonus": 93,
           "specialization": 620,
-          "thermalProtection": 68,
-          "wearRequirement": 16,
-          "weight": 169
+          "thermalProtection": 65,
+          "wearRequirement": 12,
+          "weight": 178
         }
       }
     },
-    "sameRecipeDistinctCapabilities": 225
+    "sameRecipeDistinctCapabilities": 220
   },
   "weaponContentRebalance": {
-    "items": 1,
+    "items": 0,
     "missingActionPresetsApplied": 0,
     "automaticShotgunsEnabled": 0,
     "burstCountsChanged": 0
@@ -335,9 +321,9 @@
     "armor": 531,
     "maxChanged": 0,
     "valueChanged": 0,
-    "conditionCostsChanged": 1,
+    "conditionCostsChanged": 0,
     "durabilitySurplusItems": 70,
-    "weakeningThresholdChanged": 327,
+    "weakeningThresholdChanged": 0,
     "weakeningThreshold": 20
   },
   "brokenCraftReferences": [],
@@ -399,7 +385,7 @@
         "items": 4,
         "price": {
           "min": 527,
-          "median": 8761.5,
+          "median": 8743.5,
           "max": 18024
         },
         "difficulty": {
@@ -478,23 +464,23 @@
     },
     "weapons": {
       "C": {
-        "items": 294,
+        "items": 284,
         "price": {
           "min": 140,
-          "median": 1425,
+          "median": 1406.5,
           "max": 3305
         },
         "difficulty": {
           "min": 70,
-          "median": 72.5,
+          "median": 70,
           "max": 100
         }
       },
       "D": {
-        "items": 131,
+        "items": 128,
         "price": {
           "min": 32,
-          "median": 260,
+          "median": 249,
           "max": 713
         },
         "difficulty": {
@@ -504,10 +490,10 @@
         }
       },
       "B": {
-        "items": 263,
+        "items": 276,
         "price": {
           "min": 384,
-          "median": 6089,
+          "median": 6031,
           "max": 13936
         },
         "difficulty": {
@@ -545,11 +531,11 @@
     },
     "equipment": {
       "D": {
-        "items": 80,
+        "items": 96,
         "price": {
           "min": 129,
-          "median": 292,
-          "max": 767
+          "median": 304,
+          "max": 858
         },
         "difficulty": {
           "min": 25,
@@ -571,15 +557,15 @@
         }
       },
       "C": {
-        "items": 220,
+        "items": 204,
         "price": {
           "min": 435,
-          "median": 2098,
+          "median": 2044.5,
           "max": 8724
         },
         "difficulty": {
           "min": 60,
-          "median": 72.5,
+          "median": 80,
           "max": 110
         }
       },

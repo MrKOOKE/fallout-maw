@@ -1,0 +1,4419 @@
+{
+  "generatedAt": "2026-07-30T14:38:53.995Z",
+  "scope": {
+    "actorsRead": false,
+    "packsRead": false,
+    "currentWorldItems": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\data\\items",
+    "oldWorldItems": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\fallout-old\\data\\items",
+    "assetRoot": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\systems\\fallout-maw\\assets\\Predmety\\Implanty"
+  },
+  "summary": {
+    "current": {
+      "total": 6,
+      "bySource": {
+        "current-world": 6
+      },
+      "byClass": {
+        "unclassified": 4,
+        "B": 2
+      },
+      "byFunction": {
+        "condition": 6,
+        "prosthesis": 1,
+        "constructPart": 3,
+        "damageMitigation": 4,
+        "freeSettings": 3,
+        "weapon": 1
+      }
+    },
+    "old": {
+      "total": 6,
+      "bySource": {
+        "old-world": 6
+      },
+      "byClass": {
+        "unclassified": 6
+      },
+      "byFunction": {}
+    },
+    "assetCount": 74
+  },
+  "currentItems": [
+    {
+      "source": "current-world",
+      "id": "FxEEPkLf0ltXjJ0w",
+      "name": "Деревянная нога",
+      "type": "gear",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/noga-pirata.webp",
+      "folderPath": [
+        "Протезы"
+      ],
+      "itemClass": "",
+      "price": 0,
+      "weight": 0,
+      "equipped": false,
+      "placement": {
+        "mode": "inventory",
+        "equipmentSlot": "",
+        "weaponSet": "",
+        "weaponSlot": "",
+        "limbKey": "",
+        "constructPartOrder": 0,
+        "x": 1,
+        "y": 1,
+        "width": 1,
+        "height": 1,
+        "rotated": false
+      },
+      "functionKeys": [
+        "condition",
+        "prosthesis"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "blockedPeriodicEffects": [
+          "bleeding",
+          "poison"
+        ],
+        "integrationPercent": 50,
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 100,
+        "max": 100,
+        "weakeningThreshold": 10,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 20
+          }
+        ]
+      },
+      "weapon": {
+        "enabled": false,
+        "damageMode": "manual",
+        "damage": "0",
+        "pellets": "1",
+        "damageTypeKey": "firearm",
+        "damageTypes": [
+          {
+            "key": "firearm",
+            "percent": 100
+          }
+        ],
+        "attackAnimationKey": "",
+        "attackSoundPath": "",
+        "attackAnimationDelayMs": 0,
+        "proficiencyKey": "pistol",
+        "skillKey": "rangedCombat",
+        "accuracyBonus": "0",
+        "criticalChanceModifier": "0",
+        "criticalDamagePercent": "150",
+        "attackConeDegrees": 3,
+        "maxRangeMeters": "0",
+        "effectiveRange": {
+          "value": "0",
+          "max": "0"
+        },
+        "penetration": "0",
+        "magazine": {
+          "value": 0,
+          "max": 0,
+          "sourceItemUuid": "",
+          "sourceItemUuids": []
+        },
+        "resourceCosts": [],
+        "moduleSlots": [],
+        "specialProperties": [],
+        "requirements": [],
+        "availableActions": {
+          "aimedShot": false,
+          "snapshot": false,
+          "burst": false,
+          "volley": false,
+          "meleeAttack": false,
+          "aimedMeleeAttack": false,
+          "push": false,
+          "reload": false
+        },
+        "aimedShot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "snapshot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "burst": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "count": 3,
+          "difficultyPerShot": 10,
+          "criticalFailureConsequences": []
+        },
+        "volley": {
+          "name": "",
+          "actionPointCost": 5,
+          "damageRadius": "0",
+          "regionRadius": "0",
+          "regionDamageEntries": [],
+          "regionDurationSeconds": "0",
+          "regionDelaySeconds": "0",
+          "regionRadiusDeltaMeters": "0",
+          "explosionAnimationKey": "",
+          "explosionSoundPath": "",
+          "criticalFailureConsequences": []
+        },
+        "meleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "aimedMeleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "push": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "maxRangeMeters": 1,
+          "accuracyModifier": 0,
+          "pushDifficultyModifier": 0,
+          "criticalFailureConsequences": []
+        },
+        "reload": {
+          "name": "",
+          "actionPointCost": 2
+        }
+      },
+      "additionalWeaponFunctions": {},
+      "freeSettings": {
+        "enabled": false,
+        "useConditionWeakening": false,
+        "entries": []
+      },
+      "damageMitigation": {
+        "enabled": false,
+        "mode": "defense",
+        "limbSetIds": [],
+        "entries": {}
+      },
+      "energyConsumer": {
+        "enabled": false,
+        "sourceItemUuid": "",
+        "sourceItemUuids": [],
+        "activeSourceUuid": "",
+        "activeConditions": {},
+        "installedSource": {
+          "sourceItemUuid": "",
+          "name": "",
+          "class": "",
+          "img": "",
+          "itemData": {},
+          "reserve": {
+            "value": 0,
+            "max": 0
+          }
+        }
+      },
+      "lightSource": {
+        "enabled": false,
+        "name": "",
+        "dim": 0,
+        "bright": 0,
+        "angle": 360,
+        "rotation": 0,
+        "color": "",
+        "resourceCosts": []
+      },
+      "craft": {
+        "mode": "craft",
+        "nodes": [],
+        "links": [],
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "disassembly": {
+          "nodes": [],
+          "links": [],
+          "viewport": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "recipes": []
+      },
+      "description": ""
+    },
+    {
+      "source": "current-world",
+      "id": "5G4LHj91xV6mR5br",
+      "name": "Источник питания Разрушителя",
+      "type": "gear",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+      "folderPath": [
+        "Деталей конструктов",
+        "Разрушитель"
+      ],
+      "itemClass": "",
+      "price": 85083,
+      "weight": 9.072,
+      "equipped": false,
+      "placement": {
+        "mode": "inventory",
+        "equipmentSlot": "",
+        "weaponSet": "",
+        "weaponSlot": "",
+        "limbKey": "",
+        "constructPartOrder": 0,
+        "x": 1,
+        "y": 1,
+        "width": 1,
+        "height": 1,
+        "rotated": false
+      },
+      "functionKeys": [
+        "condition",
+        "constructPart",
+        "damageMitigation"
+      ],
+      "prosthesis": {
+        "enabled": false,
+        "limbKeys": [],
+        "blockedPeriodicEffects": [],
+        "integrationPercent": 0,
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 3000,
+        "max": 3000,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "S",
+            "difficulty": 300
+          }
+        ]
+      },
+      "weapon": {
+        "enabled": false,
+        "damageMode": "manual",
+        "damage": "0",
+        "pellets": "1",
+        "damageTypeKey": "firearm",
+        "damageTypes": [
+          {
+            "key": "firearm",
+            "percent": 100
+          }
+        ],
+        "attackAnimationKey": "",
+        "attackSoundPath": "",
+        "attackAnimationDelayMs": 0,
+        "proficiencyKey": "pistol",
+        "skillKey": "rangedCombat",
+        "accuracyBonus": "0",
+        "criticalChanceModifier": "0",
+        "criticalDamagePercent": "150",
+        "attackConeDegrees": 3,
+        "maxRangeMeters": "0",
+        "effectiveRange": {
+          "value": "0",
+          "max": "0"
+        },
+        "penetration": "0",
+        "magazine": {
+          "value": 0,
+          "max": 0,
+          "sourceItemUuid": "",
+          "sourceItemUuids": []
+        },
+        "resourceCosts": [],
+        "moduleSlots": [],
+        "specialProperties": [],
+        "requirements": [],
+        "availableActions": {
+          "aimedShot": false,
+          "snapshot": false,
+          "burst": false,
+          "volley": false,
+          "meleeAttack": false,
+          "aimedMeleeAttack": false,
+          "push": false,
+          "reload": false
+        },
+        "aimedShot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "snapshot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "burst": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "count": 3,
+          "difficultyPerShot": 10,
+          "criticalFailureConsequences": []
+        },
+        "volley": {
+          "name": "",
+          "actionPointCost": 5,
+          "damageRadius": "0",
+          "regionRadius": "0",
+          "regionDamageEntries": [],
+          "regionDurationSeconds": "0",
+          "regionDelaySeconds": "0",
+          "regionRadiusDeltaMeters": "0",
+          "explosionAnimationKey": "",
+          "explosionSoundPath": "",
+          "criticalFailureConsequences": []
+        },
+        "meleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "aimedMeleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "push": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "maxRangeMeters": 1,
+          "accuracyModifier": 0,
+          "pushDifficultyModifier": 0,
+          "criticalFailureConsequences": []
+        },
+        "reload": {
+          "name": "",
+          "actionPointCost": 2
+        }
+      },
+      "additionalWeaponFunctions": {},
+      "freeSettings": {
+        "enabled": false,
+        "useConditionWeakening": false,
+        "entries": []
+      },
+      "damageMitigation": {
+        "enabled": true,
+        "mode": "defense",
+        "limbSetIds": [],
+        "entries": {
+          "constructPart": {
+            "piercing": {
+              "value": 297
+            },
+            "slashing": {
+              "value": 275
+            },
+            "bludgeoning": {
+              "value": 253
+            },
+            "firearm": {
+              "value": 341
+            },
+            "energy": {
+              "value": 330
+            },
+            "fire": {
+              "value": 297
+            },
+            "cryo": {
+              "value": 286
+            },
+            "electric": {
+              "value": 90
+            },
+            "acid": {
+              "value": 330
+            },
+            "poison": {
+              "value": 264
+            },
+            "radiation": {
+              "value": 286
+            }
+          }
+        }
+      },
+      "energyConsumer": {
+        "enabled": false,
+        "sourceItemUuid": "",
+        "sourceItemUuids": [],
+        "activeSourceUuid": "",
+        "activeConditions": {},
+        "installedSource": {
+          "sourceItemUuid": "",
+          "name": "",
+          "class": "",
+          "img": "",
+          "itemData": {},
+          "reserve": {
+            "value": 0,
+            "max": 0
+          }
+        }
+      },
+      "lightSource": {
+        "enabled": false,
+        "name": "",
+        "dim": 0,
+        "bright": 0,
+        "angle": 360,
+        "rotation": 0,
+        "color": "",
+        "resourceCosts": []
+      },
+      "craft": {
+        "mode": "craft",
+        "nodes": [
+          {
+            "id": "root",
+            "itemUuid": "Item.5G4LHj91xV6mR5br",
+            "name": "Источник питания Разрушителя",
+            "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+            "type": "gear",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "",
+            "blockLimit": null,
+            "root": true
+          },
+          {
+            "id": "node-dlXyUQkaeH6z8mrf-1",
+            "itemUuid": "Item.k2xwBuAEJRfFPuCy",
+            "name": "Компонент армирования S класса",
+            "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+            "type": "gear",
+            "x": -1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-krb7EBxOY0c9FPrQ-2",
+            "itemUuid": "Item.d7X6WOpKVzNpowOk",
+            "name": "Компонент электроники S класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-sinta.webp",
+            "type": "gear",
+            "x": 0,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-0CJ6uAydVY2bTxcI-3",
+            "itemUuid": "Item.tyqQLLfOSUDaCc2Z",
+            "name": "Компонент химиката S класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+            "type": "gear",
+            "x": 1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 16,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-LaDzi2QBwmIXdQvq-4",
+            "itemUuid": "Item.QwZQBTprygdNvKUb",
+            "name": "Компонент каркаса S класса",
+            "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+            "type": "gear",
+            "x": 2,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          }
+        ],
+        "links": [
+          {
+            "id": "link-recipe1-resources-root",
+            "fromNodeId": "node-dlXyUQkaeH6z8mrf-1",
+            "toNodeId": "root",
+            "skillKey": "repair",
+            "difficulty": 300,
+            "noCheck": false,
+            "bendX": null,
+            "bendY": null,
+            "fromAnchorSide": "bottom",
+            "fromAnchorOffset": 0.5,
+            "toAnchorSide": "top",
+            "toAnchorOffset": 0.5,
+            "failureResult": false
+          }
+        ],
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "disassembly": {
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.5G4LHj91xV6mR5br",
+              "name": "Источник питания Разрушителя",
+              "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-dlXyUQkaeH6z8mrf-1",
+              "itemUuid": "Item.k2xwBuAEJRfFPuCy",
+              "name": "Компонент армирования S класса",
+              "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-krb7EBxOY0c9FPrQ-2",
+              "itemUuid": "Item.d7X6WOpKVzNpowOk",
+              "name": "Компонент электроники S класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-sinta.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-0CJ6uAydVY2bTxcI-3",
+              "itemUuid": "Item.tyqQLLfOSUDaCc2Z",
+              "name": "Компонент химиката S класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 16,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-LaDzi2QBwmIXdQvq-4",
+              "itemUuid": "Item.QwZQBTprygdNvKUb",
+              "name": "Компонент каркаса S класса",
+              "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+              "type": "gear",
+              "x": 2,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-dlXyUQkaeH6z8mrf-1",
+              "skillKey": "repair",
+              "difficulty": 300,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5,
+              "failureResult": false
+            }
+          ],
+          "viewport": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [
+              {
+                "id": "root",
+                "itemUuid": "Item.5G4LHj91xV6mR5br",
+                "name": "Источник питания Разрушителя",
+                "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+                "type": "gear",
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "",
+                "blockLimit": null,
+                "root": true
+              },
+              {
+                "id": "node-dlXyUQkaeH6z8mrf-1",
+                "itemUuid": "Item.k2xwBuAEJRfFPuCy",
+                "name": "Компонент армирования S класса",
+                "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                "type": "gear",
+                "x": -1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-krb7EBxOY0c9FPrQ-2",
+                "itemUuid": "Item.d7X6WOpKVzNpowOk",
+                "name": "Компонент электроники S класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-sinta.webp",
+                "type": "gear",
+                "x": 0,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-0CJ6uAydVY2bTxcI-3",
+                "itemUuid": "Item.tyqQLLfOSUDaCc2Z",
+                "name": "Компонент химиката S класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                "type": "gear",
+                "x": 1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 16,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-LaDzi2QBwmIXdQvq-4",
+                "itemUuid": "Item.QwZQBTprygdNvKUb",
+                "name": "Компонент каркаса S класса",
+                "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                "type": "gear",
+                "x": 2,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              }
+            ],
+            "links": [
+              {
+                "id": "link-recipe1-resources-root",
+                "fromNodeId": "node-dlXyUQkaeH6z8mrf-1",
+                "toNodeId": "root",
+                "skillKey": "repair",
+                "difficulty": 300,
+                "noCheck": false,
+                "failureResult": false,
+                "bendX": null,
+                "bendY": null,
+                "fromAnchorSide": "bottom",
+                "fromAnchorOffset": 0.5,
+                "toAnchorSide": "top",
+                "toAnchorOffset": 0.5
+              }
+            ],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.5G4LHj91xV6mR5br",
+                  "name": "Источник питания Разрушителя",
+                  "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-dlXyUQkaeH6z8mrf-1",
+                  "itemUuid": "Item.k2xwBuAEJRfFPuCy",
+                  "name": "Компонент армирования S класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-krb7EBxOY0c9FPrQ-2",
+                  "itemUuid": "Item.d7X6WOpKVzNpowOk",
+                  "name": "Компонент электроники S класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-sinta.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-0CJ6uAydVY2bTxcI-3",
+                  "itemUuid": "Item.tyqQLLfOSUDaCc2Z",
+                  "name": "Компонент химиката S класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 16,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-LaDzi2QBwmIXdQvq-4",
+                  "itemUuid": "Item.QwZQBTprygdNvKUb",
+                  "name": "Компонент каркаса S класса",
+                  "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                  "type": "gear",
+                  "x": 2,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-dlXyUQkaeH6z8mrf-1",
+                  "skillKey": "repair",
+                  "difficulty": 300,
+                  "noCheck": false,
+                  "failureResult": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
+      },
+      "description": ""
+    },
+    {
+      "source": "current-world",
+      "id": "fYlgz8L48fYxyrvX",
+      "name": "Камеры",
+      "type": "gear",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+      "folderPath": [
+        "Деталей конструктов",
+        "Робомозг"
+      ],
+      "itemClass": "",
+      "price": 452,
+      "weight": 1.361,
+      "equipped": false,
+      "placement": {
+        "mode": "inventory",
+        "equipmentSlot": "",
+        "weaponSet": "",
+        "weaponSlot": "",
+        "limbKey": "",
+        "constructPartOrder": 0,
+        "x": 1,
+        "y": 1,
+        "width": 1,
+        "height": 1,
+        "rotated": false
+      },
+      "functionKeys": [
+        "condition",
+        "constructPart",
+        "freeSettings",
+        "damageMitigation"
+      ],
+      "prosthesis": {
+        "enabled": false,
+        "limbKeys": [],
+        "blockedPeriodicEffects": [],
+        "integrationPercent": 0,
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 80,
+        "max": 80,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "weapon": {
+        "enabled": false,
+        "damageMode": "manual",
+        "damage": "0",
+        "pellets": "1",
+        "damageTypeKey": "firearm",
+        "damageTypes": [
+          {
+            "key": "firearm",
+            "percent": 100
+          }
+        ],
+        "attackAnimationKey": "",
+        "attackSoundPath": "",
+        "attackAnimationDelayMs": 0,
+        "proficiencyKey": "pistol",
+        "skillKey": "rangedCombat",
+        "accuracyBonus": "0",
+        "criticalChanceModifier": "0",
+        "criticalDamagePercent": "150",
+        "attackConeDegrees": 3,
+        "maxRangeMeters": "0",
+        "effectiveRange": {
+          "value": "0",
+          "max": "0"
+        },
+        "penetration": "0",
+        "magazine": {
+          "value": 0,
+          "max": 0,
+          "sourceItemUuid": "",
+          "sourceItemUuids": []
+        },
+        "resourceCosts": [],
+        "moduleSlots": [],
+        "specialProperties": [],
+        "requirements": [],
+        "availableActions": {
+          "aimedShot": false,
+          "snapshot": false,
+          "burst": false,
+          "volley": false,
+          "meleeAttack": false,
+          "aimedMeleeAttack": false,
+          "push": false,
+          "reload": false
+        },
+        "aimedShot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "snapshot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "burst": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "count": 3,
+          "difficultyPerShot": 10,
+          "criticalFailureConsequences": []
+        },
+        "volley": {
+          "name": "",
+          "actionPointCost": 5,
+          "damageRadius": "0",
+          "regionRadius": "0",
+          "regionDamageEntries": [],
+          "regionDurationSeconds": "0",
+          "regionDelaySeconds": "0",
+          "regionRadiusDeltaMeters": "0",
+          "explosionAnimationKey": "",
+          "explosionSoundPath": "",
+          "criticalFailureConsequences": []
+        },
+        "meleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "aimedMeleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "push": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "maxRangeMeters": 1,
+          "accuracyModifier": 0,
+          "pushDifficultyModifier": 0,
+          "criticalFailureConsequences": []
+        },
+        "reload": {
+          "name": "",
+          "actionPointCost": 2
+        }
+      },
+      "additionalWeaponFunctions": {},
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "entries": [
+          {
+            "id": "8f2906029a0b44d0",
+            "type": "effectChanges",
+            "changes": [
+              {
+                "id": "e6fc796049634349",
+                "key": "system.characteristics.perception",
+                "type": "add",
+                "value": "2",
+                "phase": "initial",
+                "priority": null
+              }
+            ],
+            "conditions": [],
+            "penalties": [],
+            "fixedKey": "",
+            "fixedSettings": {},
+            "target": "",
+            "value": 0,
+            "condition": {
+              "enabled": false,
+              "resource": "health",
+              "operator": "lte",
+              "percent": 50,
+              "equipmentSlotKey": ""
+            }
+          }
+        ]
+      },
+      "damageMitigation": {
+        "enabled": true,
+        "mode": "defense",
+        "limbSetIds": [],
+        "entries": {
+          "constructPart": {
+            "piercing": {
+              "value": 84
+            },
+            "slashing": {
+              "value": 77
+            },
+            "bludgeoning": {
+              "value": 69
+            },
+            "firearm": {
+              "value": 112
+            },
+            "energy": {
+              "value": 75
+            },
+            "fire": {
+              "value": 57
+            },
+            "cryo": {
+              "value": 58
+            },
+            "electric": {
+              "value": 20
+            },
+            "acid": {
+              "value": 69
+            },
+            "poison": {
+              "value": 112
+            },
+            "radiation": {
+              "value": 112
+            }
+          }
+        }
+      },
+      "energyConsumer": {
+        "enabled": false,
+        "sourceItemUuid": "",
+        "sourceItemUuids": [],
+        "activeSourceUuid": "",
+        "activeConditions": {},
+        "installedSource": {
+          "sourceItemUuid": "",
+          "name": "",
+          "class": "",
+          "img": "",
+          "itemData": {},
+          "reserve": {
+            "value": 0,
+            "max": 0
+          }
+        }
+      },
+      "lightSource": {
+        "enabled": false,
+        "name": "",
+        "dim": 0,
+        "bright": 0,
+        "angle": 360,
+        "rotation": 0,
+        "color": "",
+        "resourceCosts": []
+      },
+      "craft": {
+        "mode": "craft",
+        "nodes": [
+          {
+            "id": "root",
+            "itemUuid": "Item.fYlgz8L48fYxyrvX",
+            "name": "Камеры",
+            "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+            "type": "gear",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "",
+            "blockLimit": null,
+            "root": true
+          },
+          {
+            "id": "node-OKTdscmDkpK1Ms2d-1",
+            "itemUuid": "Item.W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+            "type": "gear",
+            "x": -1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-Td8UD9mwdDhB4333-2",
+            "itemUuid": "Item.kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+            "type": "gear",
+            "x": 0,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-422g8VSUxSrbC8jf-3",
+            "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+            "type": "gear",
+            "x": 1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          }
+        ],
+        "links": [
+          {
+            "id": "link-recipe1-resources-root",
+            "fromNodeId": "node-OKTdscmDkpK1Ms2d-1",
+            "toNodeId": "root",
+            "skillKey": "repair",
+            "difficulty": 100,
+            "noCheck": false,
+            "bendX": null,
+            "bendY": null,
+            "fromAnchorSide": "bottom",
+            "fromAnchorOffset": 0.5,
+            "toAnchorSide": "top",
+            "toAnchorOffset": 0.5,
+            "failureResult": false
+          }
+        ],
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "disassembly": {
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.fYlgz8L48fYxyrvX",
+              "name": "Камеры",
+              "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OKTdscmDkpK1Ms2d-1",
+              "itemUuid": "Item.W22bRWHvKwAwdmpE",
+              "name": "Компонент электроники C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-Td8UD9mwdDhB4333-2",
+              "itemUuid": "Item.kicA1KGhQ2MFDInk",
+              "name": "Компонент электроники D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-422g8VSUxSrbC8jf-3",
+              "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+              "name": "Компонент каркаса C класса",
+              "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OKTdscmDkpK1Ms2d-1",
+              "skillKey": "repair",
+              "difficulty": 100,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5,
+              "failureResult": false
+            }
+          ],
+          "viewport": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [
+              {
+                "id": "root",
+                "itemUuid": "Item.fYlgz8L48fYxyrvX",
+                "name": "Камеры",
+                "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+                "type": "gear",
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "",
+                "blockLimit": null,
+                "root": true
+              },
+              {
+                "id": "node-OKTdscmDkpK1Ms2d-1",
+                "itemUuid": "Item.W22bRWHvKwAwdmpE",
+                "name": "Компонент электроники C класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+                "type": "gear",
+                "x": -1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-Td8UD9mwdDhB4333-2",
+                "itemUuid": "Item.kicA1KGhQ2MFDInk",
+                "name": "Компонент электроники D класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+                "type": "gear",
+                "x": 0,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-422g8VSUxSrbC8jf-3",
+                "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+                "name": "Компонент каркаса C класса",
+                "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                "type": "gear",
+                "x": 1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              }
+            ],
+            "links": [
+              {
+                "id": "link-recipe1-resources-root",
+                "fromNodeId": "node-OKTdscmDkpK1Ms2d-1",
+                "toNodeId": "root",
+                "skillKey": "repair",
+                "difficulty": 100,
+                "noCheck": false,
+                "bendX": null,
+                "bendY": null,
+                "fromAnchorSide": "bottom",
+                "fromAnchorOffset": 0.5,
+                "toAnchorSide": "top",
+                "toAnchorOffset": 0.5,
+                "failureResult": false
+              }
+            ],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.fYlgz8L48fYxyrvX",
+                  "name": "Камеры",
+                  "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OKTdscmDkpK1Ms2d-1",
+                  "itemUuid": "Item.W22bRWHvKwAwdmpE",
+                  "name": "Компонент электроники C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-Td8UD9mwdDhB4333-2",
+                  "itemUuid": "Item.kicA1KGhQ2MFDInk",
+                  "name": "Компонент электроники D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-422g8VSUxSrbC8jf-3",
+                  "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+                  "name": "Компонент каркаса C класса",
+                  "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OKTdscmDkpK1Ms2d-1",
+                  "skillKey": "repair",
+                  "difficulty": 100,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5,
+                  "failureResult": false
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
+      },
+      "description": ""
+    },
+    {
+      "source": "current-world",
+      "id": "Y6vZgXvLHhzkxC39",
+      "name": "Костюм Киборг-Ниндзя",
+      "type": "gear",
+      "img": "systems/fallout-maw/assets/Snaryaga/Dikaya%20Pustosh/Srednyaya%20Bronya/kiber-nindzya.webp",
+      "folderPath": [
+        "Снаряжение",
+        "Лёгкая броня",
+        "B"
+      ],
+      "itemClass": "B",
+      "price": 3283,
+      "weight": 22.907,
+      "equipped": false,
+      "placement": {
+        "mode": "inventory",
+        "equipmentSlot": "",
+        "weaponSet": "",
+        "weaponSlot": "",
+        "limbKey": "",
+        "constructPartOrder": 0,
+        "x": 1,
+        "y": 1,
+        "width": 3,
+        "height": 3,
+        "rotated": false
+      },
+      "functionKeys": [
+        "condition",
+        "damageMitigation",
+        "freeSettings"
+      ],
+      "prosthesis": {
+        "enabled": false,
+        "limbKeys": [],
+        "blockedPeriodicEffects": [],
+        "integrationPercent": 0,
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 500,
+        "max": 500,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "S",
+            "difficulty": 300
+          }
+        ]
+      },
+      "weapon": {
+        "enabled": false,
+        "damageMode": "manual",
+        "damage": "0",
+        "pellets": "1",
+        "damageTypeKey": "firearm",
+        "damageTypes": [
+          {
+            "key": "firearm",
+            "percent": 100
+          }
+        ],
+        "attackAnimationKey": "",
+        "attackSoundPath": "",
+        "attackAnimationDelayMs": 0,
+        "proficiencyKey": "pistol",
+        "skillKey": "rangedCombat",
+        "accuracyBonus": "0",
+        "criticalChanceModifier": "0",
+        "criticalDamagePercent": "150",
+        "attackConeDegrees": 3,
+        "maxRangeMeters": "0",
+        "effectiveRange": {
+          "value": "0",
+          "max": "0"
+        },
+        "penetration": "0",
+        "magazine": {
+          "value": 0,
+          "max": 0,
+          "sourceItemUuid": "",
+          "sourceItemUuids": []
+        },
+        "resourceCosts": [],
+        "moduleSlots": [],
+        "specialProperties": [],
+        "requirements": [],
+        "availableActions": {
+          "aimedShot": false,
+          "snapshot": false,
+          "burst": false,
+          "volley": false,
+          "meleeAttack": false,
+          "aimedMeleeAttack": false,
+          "push": false,
+          "reload": false
+        },
+        "aimedShot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "snapshot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "burst": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "count": 3,
+          "difficultyPerShot": 10,
+          "criticalFailureConsequences": []
+        },
+        "volley": {
+          "name": "",
+          "actionPointCost": 5,
+          "damageRadius": "0",
+          "regionRadius": "0",
+          "regionDamageEntries": [],
+          "regionDurationSeconds": "0",
+          "regionDelaySeconds": "0",
+          "regionRadiusDeltaMeters": "0",
+          "explosionAnimationKey": "",
+          "explosionSoundPath": "",
+          "criticalFailureConsequences": []
+        },
+        "meleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "aimedMeleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "push": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "maxRangeMeters": 1,
+          "accuracyModifier": 0,
+          "pushDifficultyModifier": 0,
+          "criticalFailureConsequences": []
+        },
+        "reload": {
+          "name": "",
+          "actionPointCost": 2
+        }
+      },
+      "additionalWeaponFunctions": {},
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "entries": [
+          {
+            "id": "0bbf2d139e4846d6",
+            "type": "effectChanges",
+            "changes": [
+              {
+                "id": "c50233fa3b084dd6",
+                "key": "system.skills.rangedCombat.bonus",
+                "type": "add",
+                "value": "10",
+                "phase": "initial",
+                "priority": null
+              }
+            ],
+            "conditions": [],
+            "penalties": [],
+            "fixedKey": "",
+            "fixedSettings": {},
+            "target": "",
+            "value": 0,
+            "condition": {
+              "enabled": false,
+              "resource": "health",
+              "operator": "lte",
+              "percent": 50,
+              "equipmentSlotKey": ""
+            }
+          }
+        ]
+      },
+      "damageMitigation": {
+        "enabled": true,
+        "mode": "defense",
+        "limbSetIds": [],
+        "entries": {
+          "torso": {
+            "piercing": {
+              "value": 23
+            },
+            "slashing": {
+              "value": 21
+            },
+            "bludgeoning": {
+              "value": 19
+            },
+            "firearm": {
+              "value": 31
+            },
+            "energy": {
+              "value": 20
+            },
+            "fire": {
+              "value": 16
+            },
+            "cryo": {
+              "value": 17
+            },
+            "electric": {
+              "value": 13
+            },
+            "acid": {
+              "value": 19
+            },
+            "poison": {
+              "value": 0
+            },
+            "radiation": {
+              "value": 0
+            }
+          },
+          "groin": {
+            "piercing": {
+              "value": 15
+            },
+            "slashing": {
+              "value": 14
+            },
+            "bludgeoning": {
+              "value": 12
+            },
+            "firearm": {
+              "value": 20
+            },
+            "energy": {
+              "value": 13
+            },
+            "fire": {
+              "value": 10
+            },
+            "cryo": {
+              "value": 11
+            },
+            "electric": {
+              "value": 8
+            },
+            "acid": {
+              "value": 12
+            },
+            "poison": {
+              "value": 0
+            },
+            "radiation": {
+              "value": 0
+            }
+          },
+          "leftArm": {
+            "piercing": {
+              "value": 13
+            },
+            "slashing": {
+              "value": 12
+            },
+            "bludgeoning": {
+              "value": 10
+            },
+            "firearm": {
+              "value": 17
+            },
+            "energy": {
+              "value": 11
+            },
+            "fire": {
+              "value": 9
+            },
+            "cryo": {
+              "value": 10
+            },
+            "electric": {
+              "value": 7
+            },
+            "acid": {
+              "value": 10
+            },
+            "poison": {
+              "value": 0
+            },
+            "radiation": {
+              "value": 0
+            }
+          },
+          "rightArm": {
+            "piercing": {
+              "value": 13
+            },
+            "slashing": {
+              "value": 12
+            },
+            "bludgeoning": {
+              "value": 10
+            },
+            "firearm": {
+              "value": 17
+            },
+            "energy": {
+              "value": 11
+            },
+            "fire": {
+              "value": 9
+            },
+            "cryo": {
+              "value": 10
+            },
+            "electric": {
+              "value": 7
+            },
+            "acid": {
+              "value": 10
+            },
+            "poison": {
+              "value": 0
+            },
+            "radiation": {
+              "value": 0
+            }
+          },
+          "leftLeg": {
+            "piercing": {
+              "value": 13
+            },
+            "slashing": {
+              "value": 12
+            },
+            "bludgeoning": {
+              "value": 10
+            },
+            "firearm": {
+              "value": 17
+            },
+            "energy": {
+              "value": 11
+            },
+            "fire": {
+              "value": 9
+            },
+            "cryo": {
+              "value": 10
+            },
+            "electric": {
+              "value": 7
+            },
+            "acid": {
+              "value": 10
+            },
+            "poison": {
+              "value": 0
+            },
+            "radiation": {
+              "value": 0
+            }
+          },
+          "rightLeg": {
+            "piercing": {
+              "value": 13
+            },
+            "slashing": {
+              "value": 12
+            },
+            "bludgeoning": {
+              "value": 10
+            },
+            "firearm": {
+              "value": 17
+            },
+            "energy": {
+              "value": 11
+            },
+            "fire": {
+              "value": 9
+            },
+            "cryo": {
+              "value": 10
+            },
+            "electric": {
+              "value": 7
+            },
+            "acid": {
+              "value": 10
+            },
+            "poison": {
+              "value": 0
+            },
+            "radiation": {
+              "value": 0
+            }
+          }
+        }
+      },
+      "energyConsumer": {
+        "enabled": false,
+        "sourceItemUuid": "",
+        "sourceItemUuids": [],
+        "activeSourceUuid": "",
+        "activeConditions": {},
+        "installedSource": {
+          "sourceItemUuid": "",
+          "name": "",
+          "class": "",
+          "img": "",
+          "itemData": {},
+          "reserve": {
+            "value": 0,
+            "max": 0
+          }
+        }
+      },
+      "lightSource": {
+        "enabled": false,
+        "name": "",
+        "dim": 0,
+        "bright": 0,
+        "angle": 360,
+        "rotation": 0,
+        "color": "",
+        "resourceCosts": []
+      },
+      "craft": {
+        "mode": "craft",
+        "nodes": [
+          {
+            "id": "root",
+            "itemUuid": "Item.Y6vZgXvLHhzkxC39",
+            "name": "Костюм Киборг-Ниндзя",
+            "img": "systems/fallout-maw/assets/Snaryaga/Dikaya%20Pustosh/Srednyaya%20Bronya/kiber-nindzya.webp",
+            "type": "gear",
+            "x": 0,
+            "y": 1,
+            "width": 3,
+            "height": 3,
+            "quantity": 1,
+            "blockId": "",
+            "blockLimit": null,
+            "root": true
+          },
+          {
+            "id": "node-resource-SDZz9ePMcdPVZQhg-1",
+            "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+            "name": "Компонент армирования B класса",
+            "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+            "type": "gear",
+            "x": -1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 3,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-HgfZibc95BHfvA0i-2",
+            "itemUuid": "Item.HgfZibc95BHfvA0i",
+            "name": "Компонент текстиля B класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+            "type": "gear",
+            "x": 0,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-YGNLXmADX9pkDtek-3",
+            "itemUuid": "Item.YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+            "type": "gear",
+            "x": 1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          }
+        ],
+        "links": [
+          {
+            "id": "link-recipe1-resources-root",
+            "fromNodeId": "node-resource-SDZz9ePMcdPVZQhg-1",
+            "toNodeId": "root",
+            "skillKey": "repair",
+            "difficulty": 100,
+            "noCheck": false,
+            "bendX": null,
+            "bendY": null,
+            "fromAnchorSide": "bottom",
+            "fromAnchorOffset": 0.5,
+            "toAnchorSide": "top",
+            "toAnchorOffset": 0.5
+          }
+        ],
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "disassembly": {
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.Y6vZgXvLHhzkxC39",
+              "name": "Костюм Киборг-Ниндзя",
+              "img": "systems/fallout-maw/assets/Snaryaga/Dikaya%20Pustosh/Srednyaya%20Bronya/kiber-nindzya.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-disassembly-SDZz9ePMcdPVZQhg-1",
+              "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+              "name": "Компонент армирования B класса",
+              "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 4,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-HgfZibc95BHfvA0i-2",
+              "itemUuid": "Item.HgfZibc95BHfvA0i",
+              "name": "Компонент текстиля B класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 4,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-YGNLXmADX9pkDtek-3",
+              "itemUuid": "Item.YGNLXmADX9pkDtek",
+              "name": "Компонент химиката C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 4,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-disassembly-SDZz9ePMcdPVZQhg-1",
+              "skillKey": "repair",
+              "difficulty": 100,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
+          "viewport": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [
+              {
+                "id": "root",
+                "itemUuid": "Item.Y6vZgXvLHhzkxC39",
+                "name": "Костюм Киборг-Ниндзя",
+                "img": "systems/fallout-maw/assets/Snaryaga/Dikaya%20Pustosh/Srednyaya%20Bronya/kiber-nindzya.webp",
+                "type": "gear",
+                "x": 0,
+                "y": 1,
+                "width": 3,
+                "height": 3,
+                "quantity": 1,
+                "blockId": "",
+                "blockLimit": null,
+                "root": true
+              },
+              {
+                "id": "node-resource-SDZz9ePMcdPVZQhg-1",
+                "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+                "name": "Компонент армирования B класса",
+                "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                "type": "gear",
+                "x": -1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 3,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-HgfZibc95BHfvA0i-2",
+                "itemUuid": "Item.HgfZibc95BHfvA0i",
+                "name": "Компонент текстиля B класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                "type": "gear",
+                "x": 0,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-YGNLXmADX9pkDtek-3",
+                "itemUuid": "Item.YGNLXmADX9pkDtek",
+                "name": "Компонент химиката C класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                "type": "gear",
+                "x": 1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              }
+            ],
+            "links": [
+              {
+                "id": "link-recipe1-resources-root",
+                "fromNodeId": "node-resource-SDZz9ePMcdPVZQhg-1",
+                "toNodeId": "root",
+                "skillKey": "repair",
+                "difficulty": 100,
+                "noCheck": false,
+                "bendX": null,
+                "bendY": null,
+                "fromAnchorSide": "bottom",
+                "fromAnchorOffset": 0.5,
+                "toAnchorSide": "top",
+                "toAnchorOffset": 0.5
+              }
+            ],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.Y6vZgXvLHhzkxC39",
+                  "name": "Костюм Киборг-Ниндзя",
+                  "img": "systems/fallout-maw/assets/Snaryaga/Dikaya%20Pustosh/Srednyaya%20Bronya/kiber-nindzya.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 3,
+                  "height": 3,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-disassembly-SDZz9ePMcdPVZQhg-1",
+                  "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+                  "name": "Компонент армирования B класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 4,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-HgfZibc95BHfvA0i-2",
+                  "itemUuid": "Item.HgfZibc95BHfvA0i",
+                  "name": "Компонент текстиля B класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 4,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-YGNLXmADX9pkDtek-3",
+                  "itemUuid": "Item.YGNLXmADX9pkDtek",
+                  "name": "Компонент химиката C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 4,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-disassembly-SDZz9ePMcdPVZQhg-1",
+                  "skillKey": "repair",
+                  "difficulty": 100,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
+      },
+      "description": ""
+    },
+    {
+      "source": "current-world",
+      "id": "4M3Hl82OvfdKmnGT",
+      "name": "Окуляры",
+      "type": "gear",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+      "folderPath": [
+        "Деталей конструктов",
+        "Протектрон"
+      ],
+      "itemClass": "",
+      "price": 452,
+      "weight": 1.361,
+      "equipped": false,
+      "placement": {
+        "mode": "inventory",
+        "equipmentSlot": "",
+        "weaponSet": "",
+        "weaponSlot": "",
+        "limbKey": "",
+        "constructPartOrder": 0,
+        "x": 1,
+        "y": 1,
+        "width": 1,
+        "height": 1,
+        "rotated": false
+      },
+      "functionKeys": [
+        "condition",
+        "constructPart",
+        "freeSettings",
+        "damageMitigation"
+      ],
+      "prosthesis": {
+        "enabled": false,
+        "limbKeys": [],
+        "blockedPeriodicEffects": [],
+        "integrationPercent": 0,
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 80,
+        "max": 80,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "weapon": {
+        "enabled": false,
+        "damageMode": "manual",
+        "damage": "0",
+        "pellets": "1",
+        "damageTypeKey": "firearm",
+        "damageTypes": [
+          {
+            "key": "firearm",
+            "percent": 100
+          }
+        ],
+        "attackAnimationKey": "",
+        "attackSoundPath": "",
+        "attackAnimationDelayMs": 0,
+        "proficiencyKey": "pistol",
+        "skillKey": "rangedCombat",
+        "accuracyBonus": "0",
+        "criticalChanceModifier": "0",
+        "criticalDamagePercent": "150",
+        "attackConeDegrees": 3,
+        "maxRangeMeters": "0",
+        "effectiveRange": {
+          "value": "0",
+          "max": "0"
+        },
+        "penetration": "0",
+        "magazine": {
+          "value": 0,
+          "max": 0,
+          "sourceItemUuid": "",
+          "sourceItemUuids": []
+        },
+        "resourceCosts": [],
+        "moduleSlots": [],
+        "specialProperties": [],
+        "requirements": [],
+        "availableActions": {
+          "aimedShot": false,
+          "snapshot": false,
+          "burst": false,
+          "volley": false,
+          "meleeAttack": false,
+          "aimedMeleeAttack": false,
+          "push": false,
+          "reload": false
+        },
+        "aimedShot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "snapshot": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "burst": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "count": 3,
+          "difficultyPerShot": 10,
+          "criticalFailureConsequences": []
+        },
+        "volley": {
+          "name": "",
+          "actionPointCost": 5,
+          "damageRadius": "0",
+          "regionRadius": "0",
+          "regionDamageEntries": [],
+          "regionDurationSeconds": "0",
+          "regionDelaySeconds": "0",
+          "regionRadiusDeltaMeters": "0",
+          "explosionAnimationKey": "",
+          "explosionSoundPath": "",
+          "criticalFailureConsequences": []
+        },
+        "meleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "aimedMeleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "push": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "maxRangeMeters": 1,
+          "accuracyModifier": 0,
+          "pushDifficultyModifier": 0,
+          "criticalFailureConsequences": []
+        },
+        "reload": {
+          "name": "",
+          "actionPointCost": 2
+        }
+      },
+      "additionalWeaponFunctions": {},
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "entries": [
+          {
+            "id": "0c50c2332eba42cb",
+            "type": "effectChanges",
+            "changes": [
+              {
+                "id": "e167f110645d4011",
+                "key": "system.characteristics.perception",
+                "type": "add",
+                "value": "2",
+                "phase": "initial",
+                "priority": null
+              }
+            ],
+            "conditions": [],
+            "penalties": [],
+            "fixedKey": "",
+            "fixedSettings": {},
+            "target": "",
+            "value": 0,
+            "condition": {
+              "enabled": false,
+              "resource": "health",
+              "operator": "lte",
+              "percent": 50,
+              "equipmentSlotKey": ""
+            }
+          }
+        ]
+      },
+      "damageMitigation": {
+        "enabled": true,
+        "mode": "defense",
+        "limbSetIds": [],
+        "entries": {
+          "constructPart": {
+            "piercing": {
+              "value": 65
+            },
+            "slashing": {
+              "value": 53
+            },
+            "bludgeoning": {
+              "value": 47
+            },
+            "firearm": {
+              "value": 73
+            },
+            "energy": {
+              "value": 42
+            },
+            "fire": {
+              "value": 39
+            },
+            "cryo": {
+              "value": 39
+            },
+            "electric": {
+              "value": 0
+            },
+            "acid": {
+              "value": 47
+            },
+            "poison": {
+              "value": 73
+            },
+            "radiation": {
+              "value": 73
+            }
+          }
+        }
+      },
+      "energyConsumer": {
+        "enabled": false,
+        "sourceItemUuid": "",
+        "sourceItemUuids": [],
+        "activeSourceUuid": "",
+        "activeConditions": {},
+        "installedSource": {
+          "sourceItemUuid": "",
+          "name": "",
+          "class": "",
+          "img": "",
+          "itemData": {},
+          "reserve": {
+            "value": 0,
+            "max": 0
+          }
+        }
+      },
+      "lightSource": {
+        "enabled": false,
+        "name": "",
+        "dim": 0,
+        "bright": 0,
+        "angle": 360,
+        "rotation": 0,
+        "color": "",
+        "resourceCosts": []
+      },
+      "craft": {
+        "mode": "craft",
+        "nodes": [
+          {
+            "id": "root",
+            "itemUuid": "Item.4M3Hl82OvfdKmnGT",
+            "name": "Окуляры",
+            "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+            "type": "gear",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "",
+            "blockLimit": null,
+            "root": true
+          },
+          {
+            "id": "node-OKTdscmDkpK1Ms2d-1",
+            "itemUuid": "Item.W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+            "type": "gear",
+            "x": -1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-Td8UD9mwdDhB4333-2",
+            "itemUuid": "Item.kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+            "type": "gear",
+            "x": 0,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-422g8VSUxSrbC8jf-3",
+            "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+            "type": "gear",
+            "x": 1,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 1,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          }
+        ],
+        "links": [
+          {
+            "id": "link-recipe1-resources-root",
+            "fromNodeId": "node-OKTdscmDkpK1Ms2d-1",
+            "toNodeId": "root",
+            "skillKey": "repair",
+            "difficulty": 100,
+            "noCheck": false,
+            "bendX": null,
+            "bendY": null,
+            "fromAnchorSide": "bottom",
+            "fromAnchorOffset": 0.5,
+            "toAnchorSide": "top",
+            "toAnchorOffset": 0.5,
+            "failureResult": false
+          }
+        ],
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "disassembly": {
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.4M3Hl82OvfdKmnGT",
+              "name": "Окуляры",
+              "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OKTdscmDkpK1Ms2d-1",
+              "itemUuid": "Item.W22bRWHvKwAwdmpE",
+              "name": "Компонент электроники C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-Td8UD9mwdDhB4333-2",
+              "itemUuid": "Item.kicA1KGhQ2MFDInk",
+              "name": "Компонент электроники D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-422g8VSUxSrbC8jf-3",
+              "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+              "name": "Компонент каркаса C класса",
+              "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OKTdscmDkpK1Ms2d-1",
+              "skillKey": "repair",
+              "difficulty": 100,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5,
+              "failureResult": false
+            }
+          ],
+          "viewport": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [
+              {
+                "id": "root",
+                "itemUuid": "Item.4M3Hl82OvfdKmnGT",
+                "name": "Окуляры",
+                "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+                "type": "gear",
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "",
+                "blockLimit": null,
+                "root": true
+              },
+              {
+                "id": "node-OKTdscmDkpK1Ms2d-1",
+                "itemUuid": "Item.W22bRWHvKwAwdmpE",
+                "name": "Компонент электроники C класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+                "type": "gear",
+                "x": -1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-Td8UD9mwdDhB4333-2",
+                "itemUuid": "Item.kicA1KGhQ2MFDInk",
+                "name": "Компонент электроники D класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+                "type": "gear",
+                "x": 0,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-422g8VSUxSrbC8jf-3",
+                "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+                "name": "Компонент каркаса C класса",
+                "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                "type": "gear",
+                "x": 1,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 1,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              }
+            ],
+            "links": [
+              {
+                "id": "link-recipe1-resources-root",
+                "fromNodeId": "node-OKTdscmDkpK1Ms2d-1",
+                "toNodeId": "root",
+                "skillKey": "repair",
+                "difficulty": 100,
+                "noCheck": false,
+                "bendX": null,
+                "bendY": null,
+                "fromAnchorSide": "bottom",
+                "fromAnchorOffset": 0.5,
+                "toAnchorSide": "top",
+                "toAnchorOffset": 0.5,
+                "failureResult": false
+              }
+            ],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.4M3Hl82OvfdKmnGT",
+                  "name": "Окуляры",
+                  "img": "systems/fallout-maw/assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OKTdscmDkpK1Ms2d-1",
+                  "itemUuid": "Item.W22bRWHvKwAwdmpE",
+                  "name": "Компонент электроники C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/detal-elektroniki-(2).webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-Td8UD9mwdDhB4333-2",
+                  "itemUuid": "Item.kicA1KGhQ2MFDInk",
+                  "name": "Компонент электроники D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Redkoe/vakuumnaya-lampa.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-422g8VSUxSrbC8jf-3",
+                  "itemUuid": "Item.IjNHxcqFdzwxRJBX",
+                  "name": "Компонент каркаса C класса",
+                  "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OKTdscmDkpK1Ms2d-1",
+                  "skillKey": "repair",
+                  "difficulty": 100,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5,
+                  "failureResult": false
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
+      },
+      "description": ""
+    },
+    {
+      "source": "current-world",
+      "id": "fQreLdYUsHW6sOk9",
+      "name": "Ружьё-киберпёс K9000",
+      "type": "gear",
+      "img": "systems/fallout-maw/assets/Oruzhie/Unikalnoe/Patron%20357%20Magnum/[ff0000]%E2%97%8F[-]-ruzhyo-kiberpyos-k9000.webp",
+      "folderPath": [
+        "Оружие",
+        ".357 Magnum",
+        "B"
+      ],
+      "itemClass": "B",
+      "price": 9028,
+      "weight": 12.247,
+      "equipped": false,
+      "placement": {
+        "mode": "inventory",
+        "equipmentSlot": "",
+        "weaponSet": "",
+        "weaponSlot": "",
+        "limbKey": "",
+        "constructPartOrder": 0,
+        "x": 1,
+        "y": 1,
+        "width": 6,
+        "height": 3,
+        "rotated": false
+      },
+      "functionKeys": [
+        "weapon",
+        "condition"
+      ],
+      "prosthesis": {
+        "enabled": false,
+        "limbKeys": [],
+        "blockedPeriodicEffects": [],
+        "integrationPercent": 0,
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 600,
+        "max": 600,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "B",
+            "difficulty": 140
+          }
+        ]
+      },
+      "weapon": {
+        "enabled": true,
+        "damageMode": "source",
+        "damage": "0",
+        "pellets": "1",
+        "damageTypeKey": "firearm",
+        "damageTypes": [],
+        "attackAnimationKey": "fallout-maw.generic.weapon_attacks.ranged.bullet_01_regular_orange",
+        "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Orugee_2/K9000CyberdogGun_Fire_2D.mp3",
+        "attackAnimationDelayMs": 200,
+        "proficiencyKey": "machineGun",
+        "skillKey": "rangedCombat",
+        "accuracyBonus": "10",
+        "criticalChanceModifier": "10",
+        "criticalDamagePercent": "185",
+        "attackConeDegrees": 30,
+        "maxRangeMeters": "62",
+        "effectiveRange": {
+          "value": "5",
+          "max": "32"
+        },
+        "penetration": "0",
+        "magazine": {
+          "value": 50,
+          "max": 50,
+          "sourceItemUuid": "Item.00f77278544f4dc8",
+          "sourceItemUuids": [
+            "Item.Scy8pyJyHNmxMNuW",
+            "Item.e35812a923417095",
+            "Item.8eb564eb9ab862aa",
+            "Item.00f77278544f4dc8",
+            "Item.fc265bf67132a608"
+          ]
+        },
+        "resourceCosts": [
+          {
+            "type": "condition",
+            "amount": 3
+          },
+          {
+            "id": "69e1352c95140a10",
+            "type": "magazine",
+            "resourceKey": "",
+            "formula": "0",
+            "amount": 1
+          }
+        ],
+        "moduleSlots": [
+          {
+            "id": "module-slot-1",
+            "moduleKey": "Подача — тяжёлая",
+            "itemUuid": "",
+            "itemData": {}
+          },
+          {
+            "id": "module-slot-2",
+            "moduleKey": "Оружейный механизм",
+            "itemUuid": "",
+            "itemData": {}
+          },
+          {
+            "id": "module-slot-3",
+            "moduleKey": "Дульный узел — стандартный",
+            "itemUuid": "",
+            "itemData": {}
+          },
+          {
+            "id": "module-slot-4",
+            "moduleKey": "Тактическая планка",
+            "itemUuid": "",
+            "itemData": {}
+          },
+          {
+            "id": "module-slot-5",
+            "moduleKey": "Рукоять — стрелковая",
+            "itemUuid": "",
+            "itemData": {}
+          }
+        ],
+        "specialProperties": [],
+        "requirements": [
+          {
+            "type": "skill",
+            "key": "athletics",
+            "value": 80
+          }
+        ],
+        "availableActions": {
+          "aimedShot": true,
+          "snapshot": true,
+          "burst": true,
+          "volley": false,
+          "meleeAttack": false,
+          "aimedMeleeAttack": false,
+          "push": false,
+          "reload": true
+        },
+        "aimedShot": {
+          "actionPointCost": 6,
+          "name": "Прицельный выстрел",
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "snapshot": {
+          "actionPointCost": 5,
+          "name": "Одиночный выстрел",
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": []
+        },
+        "burst": {
+          "actionPointCost": 6,
+          "attackConeDegrees": 30,
+          "count": 10,
+          "difficultyPerShot": 10,
+          "criticalFailureConsequences": [],
+          "name": "Очередь"
+        },
+        "volley": {
+          "damageRadius": "0",
+          "regionRadius": "0",
+          "regionDamageEntries": [],
+          "regionDurationSeconds": "0",
+          "regionDelaySeconds": "0",
+          "regionRadiusDeltaMeters": "0",
+          "explosionAnimationKey": "",
+          "explosionSoundPath": "",
+          "criticalFailureConsequences": [],
+          "name": "",
+          "actionPointCost": 5
+        },
+        "meleeAttack": {
+          "actionPointCost": 5,
+          "name": "Удар прикладом",
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "aimedMeleeAttack": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "criticalFailureConsequences": [],
+          "thrust": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          },
+          "swing": {
+            "enabled": true,
+            "accuracyModifier": 0,
+            "criticalChanceModifier": 0,
+            "damagePercentModifier": 0
+          }
+        },
+        "push": {
+          "name": "",
+          "actionPointCost": 5,
+          "attackConeDegrees": 3,
+          "maxRangeMeters": 1,
+          "accuracyModifier": 0,
+          "pushDifficultyModifier": 0,
+          "criticalFailureConsequences": []
+        },
+        "reload": {
+          "actionPointCost": 2,
+          "name": "Перезарядка"
+        },
+        "noiseLevel": 30
+      },
+      "additionalWeaponFunctions": {},
+      "freeSettings": {
+        "enabled": false,
+        "useConditionWeakening": false,
+        "entries": []
+      },
+      "damageMitigation": {
+        "enabled": false,
+        "mode": "defense",
+        "limbSetIds": [],
+        "entries": {}
+      },
+      "energyConsumer": {
+        "enabled": false,
+        "sourceItemUuid": "",
+        "sourceItemUuids": [],
+        "activeSourceUuid": "",
+        "activeConditions": {},
+        "installedSource": {
+          "sourceItemUuid": "",
+          "name": "",
+          "class": "",
+          "img": "",
+          "itemData": {},
+          "reserve": {
+            "value": 0,
+            "max": 0
+          }
+        }
+      },
+      "lightSource": {
+        "enabled": false,
+        "name": "",
+        "dim": 0,
+        "bright": 0,
+        "angle": 360,
+        "rotation": 0,
+        "color": "",
+        "resourceCosts": []
+      },
+      "craft": {
+        "mode": "craft",
+        "nodes": [
+          {
+            "id": "root",
+            "itemUuid": "Item.fQreLdYUsHW6sOk9",
+            "name": "Ружьё-киберпёс K9000",
+            "img": "systems/fallout-maw/assets/Oruzhie/Unikalnoe/Patron%20357%20Magnum/[ff0000]%E2%97%8F[-]-ruzhyo-kiberpyos-k9000.webp",
+            "type": "gear",
+            "x": 0.5,
+            "y": 1,
+            "width": 6,
+            "height": 3,
+            "quantity": 1,
+            "blockId": "",
+            "blockLimit": null,
+            "root": true
+          },
+          {
+            "id": "node-resource-Odn6MG7PkbQc62zX-1",
+            "itemUuid": "Item.Odn6MG7PkbQc62zX",
+            "name": "Компонент механики B класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+            "type": "gear",
+            "x": -2,
+            "y": -4,
+            "width": 1,
+            "height": 1,
+            "quantity": 5,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-Asz5d8D4m2AuyfdE-2",
+            "itemUuid": "Item.Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+            "type": "gear",
+            "x": -1,
+            "y": -4,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-Za5sDkVpsbqop6wM-3",
+            "itemUuid": "Item.Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+            "type": "gear",
+            "x": 0,
+            "y": -4,
+            "width": 1,
+            "height": 1,
+            "quantity": 3,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-SDZz9ePMcdPVZQhg-4",
+            "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+            "name": "Компонент армирования B класса",
+            "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+            "type": "gear",
+            "x": 1,
+            "y": -4,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-DMvUAbNSujpN3F47-5",
+            "itemUuid": "Item.DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+            "type": "gear",
+            "x": 2,
+            "y": -4,
+            "width": 1,
+            "height": 1,
+            "quantity": 4,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          },
+          {
+            "id": "node-resource-kMWPNzGd70409Gyf-6",
+            "itemUuid": "Item.kMWPNzGd70409Gyf",
+            "name": "Компонент свойств B класса",
+            "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+            "type": "gear",
+            "x": 0,
+            "y": -3,
+            "width": 1,
+            "height": 1,
+            "quantity": 2,
+            "blockId": "block-1-resources",
+            "blockLimit": null,
+            "root": false
+          }
+        ],
+        "links": [
+          {
+            "id": "link-recipe1-resources-root",
+            "fromNodeId": "node-resource-Odn6MG7PkbQc62zX-1",
+            "toNodeId": "root",
+            "skillKey": "repair",
+            "difficulty": 120,
+            "noCheck": false,
+            "bendX": null,
+            "bendY": null,
+            "fromAnchorSide": "bottom",
+            "fromAnchorOffset": 0.5,
+            "toAnchorSide": "top",
+            "toAnchorOffset": 0.5
+          }
+        ],
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "zoom": 1
+        },
+        "disassembly": {
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.fQreLdYUsHW6sOk9",
+              "name": "Ружьё-киберпёс K9000",
+              "img": "systems/fallout-maw/assets/Oruzhie/Unikalnoe/Patron%20357%20Magnum/[ff0000]%E2%97%8F[-]-ruzhyo-kiberpyos-k9000.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 0,
+              "width": 6,
+              "height": 3,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-disassembly-Odn6MG7PkbQc62zX-1",
+              "itemUuid": "Item.Odn6MG7PkbQc62zX",
+              "name": "Компонент механики B класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+              "type": "gear",
+              "x": -2,
+              "y": 5,
+              "width": 1,
+              "height": 1,
+              "quantity": 5,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-Asz5d8D4m2AuyfdE-2",
+              "itemUuid": "Item.Asz5d8D4m2AuyfdE",
+              "name": "Компонент механики C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 5,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-Za5sDkVpsbqop6wM-3",
+              "itemUuid": "Item.Za5sDkVpsbqop6wM",
+              "name": "Компонент каркаса B класса",
+              "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 5,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-SDZz9ePMcdPVZQhg-4",
+              "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+              "name": "Компонент армирования B класса",
+              "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 5,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-DMvUAbNSujpN3F47-5",
+              "itemUuid": "Item.DMvUAbNSujpN3F47",
+              "name": "Компонент свойств C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+              "type": "gear",
+              "x": 2,
+              "y": 5,
+              "width": 1,
+              "height": 1,
+              "quantity": 4,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-disassembly-kMWPNzGd70409Gyf-6",
+              "itemUuid": "Item.kMWPNzGd70409Gyf",
+              "name": "Компонент свойств B класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 4,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-disassembly-Odn6MG7PkbQc62zX-1",
+              "skillKey": "repair",
+              "difficulty": 120,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
+          "viewport": {
+            "x": 0,
+            "y": 0,
+            "zoom": 1
+          }
+        },
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [
+              {
+                "id": "root",
+                "itemUuid": "Item.fQreLdYUsHW6sOk9",
+                "name": "Ружьё-киберпёс K9000",
+                "img": "systems/fallout-maw/assets/Oruzhie/Unikalnoe/Patron%20357%20Magnum/[ff0000]%E2%97%8F[-]-ruzhyo-kiberpyos-k9000.webp",
+                "type": "gear",
+                "x": 0.5,
+                "y": 1,
+                "width": 6,
+                "height": 3,
+                "quantity": 1,
+                "blockId": "",
+                "blockLimit": null,
+                "root": true
+              },
+              {
+                "id": "node-resource-Odn6MG7PkbQc62zX-1",
+                "itemUuid": "Item.Odn6MG7PkbQc62zX",
+                "name": "Компонент механики B класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+                "type": "gear",
+                "x": -2,
+                "y": -4,
+                "width": 1,
+                "height": 1,
+                "quantity": 5,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-Asz5d8D4m2AuyfdE-2",
+                "itemUuid": "Item.Asz5d8D4m2AuyfdE",
+                "name": "Компонент механики C класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+                "type": "gear",
+                "x": -1,
+                "y": -4,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-Za5sDkVpsbqop6wM-3",
+                "itemUuid": "Item.Za5sDkVpsbqop6wM",
+                "name": "Компонент каркаса B класса",
+                "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                "type": "gear",
+                "x": 0,
+                "y": -4,
+                "width": 1,
+                "height": 1,
+                "quantity": 3,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-SDZz9ePMcdPVZQhg-4",
+                "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+                "name": "Компонент армирования B класса",
+                "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                "type": "gear",
+                "x": 1,
+                "y": -4,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-DMvUAbNSujpN3F47-5",
+                "itemUuid": "Item.DMvUAbNSujpN3F47",
+                "name": "Компонент свойств C класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+                "type": "gear",
+                "x": 2,
+                "y": -4,
+                "width": 1,
+                "height": 1,
+                "quantity": 4,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              },
+              {
+                "id": "node-resource-kMWPNzGd70409Gyf-6",
+                "itemUuid": "Item.kMWPNzGd70409Gyf",
+                "name": "Компонент свойств B класса",
+                "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+                "type": "gear",
+                "x": 0,
+                "y": -3,
+                "width": 1,
+                "height": 1,
+                "quantity": 2,
+                "blockId": "block-1-resources",
+                "blockLimit": null,
+                "root": false
+              }
+            ],
+            "links": [
+              {
+                "id": "link-recipe1-resources-root",
+                "fromNodeId": "node-resource-Odn6MG7PkbQc62zX-1",
+                "toNodeId": "root",
+                "skillKey": "repair",
+                "difficulty": 120,
+                "noCheck": false,
+                "bendX": null,
+                "bendY": null,
+                "fromAnchorSide": "bottom",
+                "fromAnchorOffset": 0.5,
+                "toAnchorSide": "top",
+                "toAnchorOffset": 0.5
+              }
+            ],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.fQreLdYUsHW6sOk9",
+                  "name": "Ружьё-киберпёс K9000",
+                  "img": "systems/fallout-maw/assets/Oruzhie/Unikalnoe/Patron%20357%20Magnum/[ff0000]%E2%97%8F[-]-ruzhyo-kiberpyos-k9000.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 0,
+                  "width": 6,
+                  "height": 3,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-disassembly-Odn6MG7PkbQc62zX-1",
+                  "itemUuid": "Item.Odn6MG7PkbQc62zX",
+                  "name": "Компонент механики B класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+                  "type": "gear",
+                  "x": -2,
+                  "y": 5,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 5,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-Asz5d8D4m2AuyfdE-2",
+                  "itemUuid": "Item.Asz5d8D4m2AuyfdE",
+                  "name": "Компонент механики C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/metallolom.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 5,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-Za5sDkVpsbqop6wM-3",
+                  "itemUuid": "Item.Za5sDkVpsbqop6wM",
+                  "name": "Компонент каркаса B класса",
+                  "img": "systems/fallout-maw/assets/Oruzhie/detali-karabina.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 5,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-SDZz9ePMcdPVZQhg-4",
+                  "itemUuid": "Item.SDZz9ePMcdPVZQhg",
+                  "name": "Компонент армирования B класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 5,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-DMvUAbNSujpN3F47-5",
+                  "itemUuid": "Item.DMvUAbNSujpN3F47",
+                  "name": "Компонент свойств C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+                  "type": "gear",
+                  "x": 2,
+                  "y": 5,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 4,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-disassembly-kMWPNzGd70409Gyf-6",
+                  "itemUuid": "Item.kMWPNzGd70409Gyf",
+                  "name": "Компонент свойств B класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/kryshka-so-zvezdoj.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 4,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-disassembly-Odn6MG7PkbQc62zX-1",
+                  "skillKey": "repair",
+                  "difficulty": 120,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
+      },
+      "description": ""
+    }
+  ],
+  "oldItems": [
+    {
+      "source": "old-world",
+      "id": "n6U9jesxxGOm86vx",
+      "name": "Костюм Киборг-Ниндзя",
+      "type": "equipment",
+      "img": "%D0%A1%D0%B2%D0%BE%D1%91/%D0%A1%D0%BD%D0%B0%D1%80%D1%8F%D0%B3%D0%B0/%D0%94%D0%B8%D0%BA%D0%B0%D1%8F%20%D0%9F%D1%83%D1%81%D1%82%D0%BE%D1%88%D1%8C/%D0%A1%D1%80%D0%B5%D0%B4%D0%BD%D1%8F%D1%8F%20%D0%91%D1%80%D0%BE%D0%BD%D1%8F/kiber-nindzya.webp",
+      "folderPath": [
+        "Снаряжение",
+        "Дикая Пустошь",
+        "Лёгкая броня"
+      ],
+      "itemClass": "",
+      "price": {
+        "value": 32644,
+        "denomination": "gp"
+      },
+      "weight": {
+        "value": 50,
+        "units": "lb"
+      },
+      "equipped": false,
+      "placement": null,
+      "functionKeys": [],
+      "prosthesis": null,
+      "condition": null,
+      "weapon": null,
+      "additionalWeaponFunctions": null,
+      "freeSettings": null,
+      "damageMitigation": null,
+      "energyConsumer": null,
+      "lightSource": null,
+      "craft": null,
+      "description": {
+        "value": "<div class=\"terminal-interface\" style=\"font-family:'Courier New', Courier, monospace;font-size:140%;background-color:#0A0A0A;color:#E8D488;padding:15px;border:3px solid #E8D488;border-radius:5px;letter-spacing:0.05em;line-height:1.3;text-transform:uppercase;box-shadow:0 0 20px rgba(232, 212, 136, 0.3), inset 0 0 15px rgba(232, 212, 136, 0.2);position:relative;overflow:hidden\"><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(180deg, #0A0A0A 0%, #151512 50%, #0A0A0A 100%);pointer-events:none;z-index:0\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(180deg, transparent 0px, transparent 2px, rgba(232, 212, 136, 0.08) 2px, rgba(232, 212, 136, 0.08) 4px);pointer-events:none;z-index:1;animation:scanlines 10s linear infinite\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(90deg, rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0) 4px, rgba(0, 0, 0, 0) 50px);pointer-events:none;z-index:2\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjc1IiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxwYXRoIGZpbHRlcj0idXJsKCNhKSIgb3BhY2l0eT0iLjA1IiBkPSJNMCAwaDIwMHYyMDBIMHoiLz48L3N2Zz4=');pointer-events:none;z-index:3;opacity:0.25;animation:staticNoise 0.5s steps(2) infinite\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.4) 90%);pointer-events:none;z-index:4\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:5;opacity:0;background:rgba(232, 212, 136, 0.05);animation:flicker 6s infinite\"><p></p></div><div style=\"position:relative;z-index:10\"><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>\"Снаряжение\"</strong></span></p><div style=\"display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-left:20px;margin-bottom:15px\"><p style=\"margin:2px 0\">\n      <span style=\"font-family:'Courier New', Courier, monospace\">Состояние: </span>\n      <span id=\"durability-value\" style=\"color:#FFD700\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">470</span>\n      </span>\n      <span style=\"font-family:'Courier New', Courier, monospace\"> / </span>\n      <span id=\"durability-max\" style=\"color:#FFD700\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">470</span>\n      </span>\n    </p><div id=\"durability-container\" class=\"durability-container\"><div id=\"durability-bar\" class=\"durability-bar\" style=\"width:100%\"><div class=\"durability-scanlines\"><p></p></div></div><div id=\"durability-text\" class=\"durability-text\"><p>100%</p></div></div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Порог ослабления: </span><span style=\"color:#FFD700\"><span style=\"font-family:'Courier New', Courier, monospace\">20</span></span></p><p style=\"margin:2px 0\">\n      <span style=\"font-family:'Courier New', Courier, monospace\">Редкость: </span>\n      <span style=\"color:#FFD700\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">Дикая Пустошь</span>\n      </span>\n    </p><p style=\"margin:2px 0\">\n      <span style=\"font-family:'Courier New', Courier, monospace\">Мин. класс деталей: </span>\n      <span style=\"color:#FFD700\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">S</span>\n      </span>\n    </p><p style=\"margin:2px 0\">\n      <span style=\"font-family:'Courier New', Courier, monospace\">Сложность ремонта: </span>\n      <span id=\"repair-difficulty\" style=\"color:#FFD700\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">300</span>\n      </span>\n    </p><p style=\"margin:2px 0\">\n      <span style=\"font-family:'Courier New', Courier, monospace\">Итоговое снижение урона: </span>\n      <span id=\"damage-threshold\" style=\"color:#FFD700\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">10</span>\n      </span>\n    </p></div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Занимает:</strong></span></p><div style=\"margin-left:20px;margin-bottom:15px;display:flex;flex-wrap:wrap;gap:10px\"><p style=\"margin:0px\"><span class=\"armor-slot\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid rgb(191, 164, 80);border-radius:3px\"><span style=\"font-family:'Courier New', Courier, monospace\">Броня</span></span> <span class=\"armor-slot\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid rgb(191, 164, 80);border-radius:3px\"><span style=\"font-family:'Courier New', Courier, monospace\">Жилет</span></span></p></div></div>\n        <div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid rgb(191, 164, 80)\">\n      <p style=\"margin-top:0;color:#E8D488\">\n        <span style=\"font-family:'Courier New', Courier, monospace\"><strong>ТРЕБОВАНИЯ:</strong></span>\n      </p>\n      <div style=\"margin-left:20px;margin-bottom:15px\"><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">-</span></p></div>\n    </div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid rgb(191, 164, 80)\">\n      <p style=\"margin-top:0;color:#E8D488\">\n        <span style=\"font-family:'Courier New', Courier, monospace\"><strong>НАВЫКИ:</strong></span>\n      </p>\n      <div style=\"margin-left:20px;margin-bottom:15px\"><p style=\"margin:2px 0\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">Дальний бой: </span>\n        <span id=\"skill-light-weapon-bonus\" class=\"skill-bonus\" style=\"color:#FFD700\">\n          <span style=\"font-family:'Courier New', Courier, monospace\">+10</span>\n        </span>\n      <span style=\"font-family:'Courier New', Courier, monospace\"> | </span>\n        <span style=\"font-family:'Courier New', Courier, monospace\">Пилот: </span>\n        <span id=\"skill-pilot-bonus\" class=\"skill-bonus\" style=\"color:#FFD700\">\n          <span style=\"font-family:'Courier New', Courier, monospace\">+10</span>\n        </span>\n      <span style=\"font-family:'Courier New', Courier, monospace\"> | </span>\n        <span style=\"font-family:'Courier New', Courier, monospace\">Скрытность: </span>\n        <span id=\"skill-sneak-bonus\" class=\"skill-bonus\" style=\"color:#FFD700\">\n          <span style=\"font-family:'Courier New', Courier, monospace\">+10</span>\n        </span>\n      </p></div>\n    </div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid rgb(191, 164, 80)\">\n      <p style=\"margin-top:0;color:#E8D488\">\n        <span style=\"font-family:'Courier New', Courier, monospace\"><strong>ХАРАКТЕРИСТИКИ:</strong></span>\n      </p>\n      <div style=\"margin-left:20px;margin-bottom:15px\"><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">-</span></p></div>\n    </div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Примечание:</strong></span></p><div style=\"margin-left:20px;margin-bottom:15px\"><p style=\"margin:2px 0px\">?</p></div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\">\n            <p style=\"margin-top:0\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Защита:</strong></span></p>\n            <table style=\"width:100%;border-collapse:collapse;margin-left:20px;margin-bottom:15px\">\n                <tbody><tr style=\"border-bottom:1px solid #BFA450;background:rgba(191, 164, 80, 0.1)\">\n                    <th style=\"text-align:left;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Тип урона</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Голова</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Глаза</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Туловище</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Пах</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Левая рука</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Правая рука</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Левая нога</span></p>\n                    </th>\n                    <th style=\"text-align:center;padding:4px\">\n                        <p><span style=\"font-family:'Courier New', Courier, monospace\">Правая нога</span></p>\n                    </th></tr><tr style=\"background:rgba(191, 164, 80, 0.03)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Кислота</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+62%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.05)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Дробящий</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+62%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.03)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Режущий</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+62%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.05)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Колющий</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+62%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.03)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Криогенный</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+62%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.05)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Электрический</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.03)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Огненный</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.05)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Огнестрельный</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.03)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Энергетический</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+46%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">+34%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.05)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Ядовитый</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td></tr><tr style=\"background:rgba(191, 164, 80, 0.03)\">\n                        <td style=\"text-align:left;padding:4px\">\n                            <p><span style=\"font-family:'Courier New', Courier, monospace\"><strong>Радиоактивный</strong></span></p>\n                        </td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td>\n                        <td style=\"text-align:center;padding:4px\"><p><span style=\"font-family:'Courier New', Courier, monospace\"><strong style=\"color:#FFD700\">0%</strong></span></p></td></tr></tbody></table></div></div></div>",
+        "chat": ""
+      }
+    },
+    {
+      "source": "old-world",
+      "id": "Kvr4z5G4Oni2e2jk",
+      "name": "Костюм Киборг-Ниндзя",
+      "type": "base",
+      "img": "%D0%A1%D0%B2%D0%BE%D1%91/%D0%A1%D0%BD%D0%B0%D1%80%D1%8F%D0%B3%D0%B0/%D0%94%D0%B8%D0%BA%D0%B0%D1%8F%20%D0%9F%D1%83%D1%81%D1%82%D0%BE%D1%88%D1%8C/%D0%A1%D1%80%D0%B5%D0%B4%D0%BD%D1%8F%D1%8F%20%D0%91%D1%80%D0%BE%D0%BD%D1%8F/kiber-nindzya.webp",
+      "folderPath": [],
+      "itemClass": "",
+      "price": null,
+      "weight": null,
+      "equipped": null,
+      "placement": null,
+      "functionKeys": [],
+      "prosthesis": null,
+      "condition": null,
+      "weapon": null,
+      "additionalWeaponFunctions": null,
+      "freeSettings": null,
+      "damageMitigation": null,
+      "energyConsumer": null,
+      "lightSource": null,
+      "craft": null,
+      "description": ""
+    },
+    {
+      "source": "old-world",
+      "id": "zt1bIJpu9SuVskf9",
+      "name": "Костюм Киборг-Ниндзя",
+      "type": "base",
+      "img": "%D0%A1%D0%B2%D0%BE%D1%91/%D0%A1%D0%BD%D0%B0%D1%80%D1%8F%D0%B3%D0%B0/%D0%94%D0%B8%D0%BA%D0%B0%D1%8F%20%D0%9F%D1%83%D1%81%D1%82%D0%BE%D1%88%D1%8C/%D0%A1%D1%80%D0%B5%D0%B4%D0%BD%D1%8F%D1%8F%20%D0%91%D1%80%D0%BE%D0%BD%D1%8F/kiber-nindzya.webp",
+      "folderPath": [],
+      "itemClass": "",
+      "price": null,
+      "weight": null,
+      "equipped": null,
+      "placement": null,
+      "functionKeys": [],
+      "prosthesis": null,
+      "condition": null,
+      "weapon": null,
+      "additionalWeaponFunctions": null,
+      "freeSettings": null,
+      "damageMitigation": null,
+      "energyConsumer": null,
+      "lightSource": null,
+      "craft": null,
+      "description": ""
+    },
+    {
+      "source": "old-world",
+      "id": "MDmY2g86AbvPwbUJ",
+      "name": "Ружьё-киберпёс K9000",
+      "type": "weapon",
+      "img": "%D0%A1%D0%B2%D0%BE%D1%91/%D0%9E%D1%80%D1%83%D0%B6%D0%B8%D0%B5/Unikalnoe/%D0%9F%D0%B0%D1%82%D1%80%D0%BE%D0%BD%20357%20%C2%AB%D0%9C%D0%B0%D0%B3%D0%BD%D1%83%D0%BC%C2%BB/%5Bff0000%5D%E2%97%8F%5B-%5D-ruzh%D1%8Cyo-kiberpyos-k9000.webp",
+      "folderPath": [
+        "Оружие",
+        "Уникальное",
+        ".357"
+      ],
+      "itemClass": "",
+      "price": {
+        "value": 33669,
+        "denomination": "gp"
+      },
+      "weight": {
+        "value": 27,
+        "units": "lb"
+      },
+      "equipped": false,
+      "placement": null,
+      "functionKeys": [],
+      "prosthesis": null,
+      "condition": null,
+      "weapon": null,
+      "additionalWeaponFunctions": null,
+      "freeSettings": null,
+      "damageMitigation": null,
+      "energyConsumer": null,
+      "lightSource": null,
+      "craft": null,
+      "description": {
+        "value": "<div class=\"terminal-interface\" style=\"font-family:'Courier New', Courier, monospace;font-size:140%;background-color:#0A0A0A;color:#E8D488;padding:15px;border:3px solid #E8D488;border-radius:5px;letter-spacing:0.05em;line-height:1.3;text-transform:uppercase;box-shadow:0 0 20px rgba(232, 212, 136, 0.3), inset 0 0 15px rgba(232, 212, 136, 0.2);position:relative;overflow:hidden\"><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(180deg, #0A0A0A 0%, #151512 50%, #0A0A0A 100%);pointer-events:none;z-index:0\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(180deg, transparent 0px, transparent 2px, rgba(232, 212, 136, 0.08) 2px, rgba(232, 212, 136, 0.08) 4px);pointer-events:none;z-index:1;animation:scanlines 10s linear infinite\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(90deg, rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0.4) 2px, rgba(0, 0, 0, 0) 4px, rgba(0, 0, 0, 0) 50px);pointer-events:none;z-index:2\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjc1IiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxwYXRoIGZpbHRlcj0idXJsKCNhKSIgb3BhY2l0eT0iLjA1IiBkPSJNMCAwaDIwMHYyMDBIMHoiLz48L3N2Zz4=');pointer-events:none;z-index:3;opacity:0.25;animation:staticNoise 0.5s steps(2) infinite\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.4) 90%);pointer-events:none;z-index:4\"><p></p></div><div style=\"position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:5;opacity:0;background:rgba(232, 212, 136, 0.05);animation:flicker 6s infinite\"><p></p></div><div style=\"position:relative;z-index:10\"><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><div style=\"display:flex;justify-content:space-between;align-items:center\"><p style=\"margin-top:0\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>\"Оружие\" Пулемёт</strong></span></p></div><div style=\"display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-left:20px;margin-bottom:15px\"><div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Калибр:</span><span id=\"weapon-caliber\" style=\"color:#FFD700\">.357</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Тип боеприпаса:</span><span id=\"ammo-type\" style=\"color:#FFD700\">Стандартный</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Редкость:</span><span style=\"color:#FFD700\"><span style=\"font-family:'Courier New', Courier, monospace\">Уникальный</span></span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Мин. класс деталей:</span><span style=\"color:#FFD700\"><span style=\"font-family:'Courier New', Courier, monospace\">S</span></span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Сложность ремонта:</span><span style=\"color:#FFD700\">260</span></p></div><div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Состояние:</span><span id=\"durability-value\">1050</span><span style=\"font-family:'Courier New', Courier, monospace\">/</span><span id=\"durability-max\">1050</span></p><div id=\"durability-container\" class=\"durability-container\"><div id=\"durability-bar\" class=\"durability-bar\" style=\"width:90%\"><div class=\"durability-scanlines\"><p></p></div></div><div id=\"durability-text\" class=\"durability-text\"><p>100%</p></div></div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Порог ослабления:</span><span id=\"durability-threshold\" style=\"color:#FFD700\">20</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Потеря прочности за выстрел:</span><span id=\"durability-loss\" style=\"color:#FFD700\">5</span></p></div></div><div style=\"display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-left:20px;margin-bottom:15px\"><div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Магазин:</span><span id=\"magazine-value\">50</span><span style=\"font-family:'Courier New', Courier, monospace\">/</span><span id=\"magazine-max\">50</span></p><div id=\"magazine-container\" class=\"magazine-container\"><div id=\"magazine-bar\" class=\"magazine-bar\" style=\"width:33%\"><div class=\"magazine-scanlines\"><p></p></div></div><div id=\"magazine-text\" class=\"magazine-text\"><p>100%</p></div></div><p style=\"margin:2px 0px\"><span style=\"font-family:'Courier New', Courier, monospace\">Конечная ширина луча:</span><span id=\"beam-end-width\" style=\"color:#FFD700\">25</span></p><p style=\"margin:2px 0px\"><span style=\"font-family:'Courier New', Courier, monospace\">Патронов за очередь:</span><span id=\"ammo-per-burst\" style=\"color:#FFD700\">12</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\"><br />Задействованный навык: </span><span id=\"weapon-skill\" style=\"color:#FFD700\">Дальний бой</span></p></div><div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Максимальная дистанция:</span><span id=\"range-max\" style=\"color:#FFD700\">110</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Эффективная дистанция:</span><span id=\"range-effective\" style=\"color:#FFD700\">10-55</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Точность:</span><span id=\"accuracy\" style=\"color:#FFD700\">+10%</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Шанс на крит:</span><span id=\"crit-chance\" style=\"color:#FFD700\">+10%</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Крит урон:</span><span id=\"crit-damage\" style=\"color:#FFD700\">185%</span></p><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Пробивная сила:</span><span id=\"penetration-power\" style=\"color:#FFD700\">3</span></p></div></div><div style=\"display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-left:20px;margin-bottom:15px\"><div><p style=\"margin:2px 0\"><span style=\"font-family:'Courier New', Courier, monospace\">Урон:</span><span id=\"damage-value\" style=\"color:#FFD700\">60</span></p><p style=\"margin:2px 0px 2px 10px\"><span style=\"font-family:'Courier New', Courier, monospace\">- </span><span style=\"color:#FFD700\"><span style=\"font-family:'Courier New', Courier, monospace\">100%</span></span><span style=\"font-family:'Courier New', Courier, monospace\"> огнестрельный</span></p></div></div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0;color:#E8D488\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>ДОСТУПНЫЕ ДЕЙСТВИЯ:</strong></span></p><div style=\"margin-left:20px;margin-bottom:15px;display:flex;flex-wrap:wrap;gap:10px\"><p><span class=\"weapon-mode\" data-action-id=\"single-shot\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid #BFA450;border-radius:3px\">Одиночный выстрел (5 ОД)</span> <span class=\"weapon-mode\" data-action-id=\"aimed-shot\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid #BFA450;border-radius:3px\">Прицельный выстрел (6 ОД)</span> <span class=\"weapon-mode\" data-action-id=\"burst-shot\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid #BFA450;border-radius:3px\">Очередь (6 ОД)</span> <span class=\"weapon-mode\" data-action-id=\"butt-strike\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid #BFA450;border-radius:3px\">Удар прикладом (5 ОД)</span> <span class=\"weapon-mode\" data-action-id=\"reload\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid #BFA450;border-radius:3px\"><span style=\"font-family:'Courier New', Courier, monospace\">Перезарядка (2 ОД)</span></span></p></div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0;color:#E8D488\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>МОДУЛИ:</strong></span></p><div style=\"display:flex;align-items:flex-start;gap:25px;margin-left:20px;margin-top:15px;margin-bottom:15px;flex-wrap:wrap\"></div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0;color:#E8D488\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>ТРЕБОВАНИЯ:</strong></span></p><div style=\"margin-left:20px;margin-bottom:15px\">\n      <p style=\"margin:2px 0px\">\n        <span style=\"font-family:'Courier New', Courier, monospace\">Атлетика: </span>\n        <span id=\"req-heavy-weapon\" class=\"req-value\" style=\"color:#FFD700\">\n          <span style=\"font-family:'Courier New', Courier, monospace\">80</span>\n        </span>\n      </p>\n    </div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0;color:#E8D488\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>ЗАНИМАЕТ:</strong></span></p><div style=\"margin-left:20px;margin-bottom:15px;display:flex;flex-wrap:wrap;gap:10px\"><p><span class=\"weapon-mode\" data-slot-id=\"two-hands\" style=\"display:inline-block;padding:5px 10px;background:rgba(191, 164, 80, 0.2);border:1px solid #BFA450;border-radius:3px\"><span style=\"font-family:'Courier New', Courier, monospace\">Две руки</span></span></p><p></p></div></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0;color:#E8D488\"></p></div><div class=\"terminal-section\" style=\"margin-bottom:20px;background:rgba(10, 10, 10, 0.2);border-radius:5px;padding:10px;border-left:3px solid #BFA450\"><p style=\"margin-top:0;color:#E8D488\"><span style=\"font-family:'Courier New', Courier, monospace\"><strong>ПРИМЕЧАНИЕ:</strong></span></p><div style=\"margin-left:20px;margin-bottom:15px\"><p style=\"margin:2px 0px\">!</p></div></div></div></div><div id=\"installed-modules-data\" style=\"display:none\"><p>[]</p></div><section class=\"secret\" id=\"secret-yqjVzYgq3IpU1F4x\"><p>Путь анимации выстрела: <span id=\"animation-path\">jb2a.bullet.01.orange</span><br />Путь звука выстрела: <span id=\"sound-path\">systems/fallout-maw/icons/Weapon_Sounds/Orugee_2/K9000CyberdogGun_Fire_2D.mp3</span><br />Путь анимации приклада: <span id=\"butt-animation-path\">jb2a.melee_generic.bludgeoning.one_handed</span><br />Путь звука приклада: <span id=\"butt-sound-path\">systems/fallout-maw/icons/Weapon_Sounds/mele_weapon/fx_swing_small_01.mp3</span></p></section>",
+        "chat": ""
+      }
+    },
+    {
+      "source": "old-world",
+      "id": "bL7h7vh75haePaMa",
+      "name": "Сильный удар",
+      "type": "feat",
+      "img": "%D0%A1%D0%B2%D0%BE%D1%91/icons/%D0%BE%D1%81%D0%BE%D0%B1%D0%B5%D0%BD%D0%BD%D0%BE%D1%81%D1%82%D0%B8/tyazhyolaya-ruka.webp",
+      "folderPath": [
+        "Способности",
+        "Особенности"
+      ],
+      "itemClass": "",
+      "price": null,
+      "weight": null,
+      "equipped": null,
+      "placement": null,
+      "functionKeys": [],
+      "prosthesis": null,
+      "condition": null,
+      "weapon": null,
+      "additionalWeaponFunctions": null,
+      "freeSettings": null,
+      "damageMitigation": null,
+      "energyConsumer": null,
+      "lightSource": null,
+      "craft": null,
+      "description": {
+        "value": "<p>Задействуя: Ближний бой.<br />Точность: +10%<br />Урон: +[[floor(@abilities.str.mod/2)]]<br />Шанс на крит: -5%</p>",
+        "chat": ""
+      }
+    },
+    {
+      "source": "old-world",
+      "id": "ScKr5duD20uUKdDh",
+      "name": "Тяжёлая рука",
+      "type": "feat",
+      "img": "%D0%A1%D0%B2%D0%BE%D1%91/icons/%D0%BE%D1%81%D0%BE%D0%B1%D0%B5%D0%BD%D0%BD%D0%BE%D1%81%D1%82%D0%B8/tyazhyolaya-ruka.webp",
+      "folderPath": [
+        "Способности",
+        "Особенности"
+      ],
+      "itemClass": "",
+      "price": null,
+      "weight": null,
+      "equipped": null,
+      "placement": null,
+      "functionKeys": [],
+      "prosthesis": null,
+      "condition": null,
+      "weapon": null,
+      "additionalWeaponFunctions": null,
+      "freeSettings": null,
+      "damageMitigation": null,
+      "energyConsumer": null,
+      "lightSource": null,
+      "craft": null,
+      "description": {
+        "value": "<p>Задействуя: Ближний бой.<br />Урон: +10%<br />Крит урон: -20%</p>",
+        "chat": ""
+      }
+    }
+  ],
+  "assets": [
+    {
+      "name": "1.webp",
+      "path": "assets/Predmety/Implanty/1.webp",
+      "bytes": 3586
+    },
+    {
+      "name": "2.webp",
+      "path": "assets/Predmety/Implanty/2.webp",
+      "bytes": 3692
+    },
+    {
+      "name": "3.webp",
+      "path": "assets/Predmety/Implanty/3.webp",
+      "bytes": 5018
+    },
+    {
+      "name": "4.webp",
+      "path": "assets/Predmety/Implanty/4.webp",
+      "bytes": 5006
+    },
+    {
+      "name": "5.webp",
+      "path": "assets/Predmety/Implanty/5.webp",
+      "bytes": 4294
+    },
+    {
+      "name": "avtonavedenie.webp",
+      "path": "assets/Predmety/Implanty/avtonavedenie.webp",
+      "bytes": 3736
+    },
+    {
+      "name": "batareya.webp",
+      "path": "assets/Predmety/Implanty/batareya.webp",
+      "bytes": 4694
+    },
+    {
+      "name": "bionicheskaya-ruka-dzhehuti.webp",
+      "path": "assets/Predmety/Implanty/bionicheskaya-ruka-dzhehuti.webp",
+      "bytes": 3756
+    },
+    {
+      "name": "bionicheskaya-ruka-fantoma.webp",
+      "path": "assets/Predmety/Implanty/bionicheskaya-ruka-fantoma.webp",
+      "bytes": 3112
+    },
+    {
+      "name": "brone-ruka.webp",
+      "path": "assets/Predmety/Implanty/brone-ruka.webp",
+      "bytes": 3536
+    },
+    {
+      "name": "chip-2.webp",
+      "path": "assets/Predmety/Implanty/chip-2.webp",
+      "bytes": 4368
+    },
+    {
+      "name": "chip.webp",
+      "path": "assets/Predmety/Implanty/chip.webp",
+      "bytes": 4304
+    },
+    {
+      "name": "ekranirovannyj-protez.webp",
+      "path": "assets/Predmety/Implanty/ekranirovannyj-protez.webp",
+      "bytes": 3058
+    },
+    {
+      "name": "glaz-mistera-pomoshnika.webp",
+      "path": "assets/Predmety/Implanty/glaz-mistera-pomoshnika.webp",
+      "bytes": 3996
+    },
+    {
+      "name": "ikonka_implant-10.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-10.webp",
+      "bytes": 4380
+    },
+    {
+      "name": "ikonka_implant-11.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-11.webp",
+      "bytes": 4576
+    },
+    {
+      "name": "ikonka_implant-2.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-2.webp",
+      "bytes": 4538
+    },
+    {
+      "name": "ikonka_implant-3.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-3.webp",
+      "bytes": 4680
+    },
+    {
+      "name": "ikonka_implant-4.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-4.webp",
+      "bytes": 4860
+    },
+    {
+      "name": "ikonka_implant-5.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-5.webp",
+      "bytes": 4784
+    },
+    {
+      "name": "ikonka_implant-6.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-6.webp",
+      "bytes": 4864
+    },
+    {
+      "name": "ikonka_implant-7.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-7.webp",
+      "bytes": 5166
+    },
+    {
+      "name": "ikonka_implant-8.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-8.webp",
+      "bytes": 5020
+    },
+    {
+      "name": "ikonka_implant-9.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant-9.webp",
+      "bytes": 5310
+    },
+    {
+      "name": "ikonka_implant.webp",
+      "path": "assets/Predmety/Implanty/ikonka_implant.webp",
+      "bytes": 4572
+    },
+    {
+      "name": "implanty(glaz).webp",
+      "path": "assets/Predmety/Implanty/implanty(glaz).webp",
+      "bytes": 3586
+    },
+    {
+      "name": "implanty(golova).webp",
+      "path": "assets/Predmety/Implanty/implanty(golova).webp",
+      "bytes": 3338
+    },
+    {
+      "name": "implanty(nogi).webp",
+      "path": "assets/Predmety/Implanty/implanty(nogi).webp",
+      "bytes": 3352
+    },
+    {
+      "name": "implanty(pah).webp",
+      "path": "assets/Predmety/Implanty/implanty(pah).webp",
+      "bytes": 3430
+    },
+    {
+      "name": "implanty(ruka).webp",
+      "path": "assets/Predmety/Implanty/implanty(ruka).webp",
+      "bytes": 3094
+    },
+    {
+      "name": "implanty(tors).webp",
+      "path": "assets/Predmety/Implanty/implanty(tors).webp",
+      "bytes": 3392
+    },
+    {
+      "name": "kiber-gorlo.webp",
+      "path": "assets/Predmety/Implanty/kiber-gorlo.webp",
+      "bytes": 2462
+    },
+    {
+      "name": "kiber-noga-2.webp",
+      "path": "assets/Predmety/Implanty/kiber-noga-2.webp",
+      "bytes": 3452
+    },
+    {
+      "name": "kiber-noga.webp",
+      "path": "assets/Predmety/Implanty/kiber-noga.webp",
+      "bytes": 3102
+    },
+    {
+      "name": "kogti.webp",
+      "path": "assets/Predmety/Implanty/kogti.webp",
+      "bytes": 3712
+    },
+    {
+      "name": "krio-batareya.webp",
+      "path": "assets/Predmety/Implanty/krio-batareya.webp",
+      "bytes": 3862
+    },
+    {
+      "name": "kryuk.webp",
+      "path": "assets/Predmety/Implanty/kryuk.webp",
+      "bytes": 2628
+    },
+    {
+      "name": "mehanicheskaya-noga-satir.webp",
+      "path": "assets/Predmety/Implanty/mehanicheskaya-noga-satir.webp",
+      "bytes": 2730
+    },
+    {
+      "name": "mod-na-kastet.webp",
+      "path": "assets/Predmety/Implanty/mod-na-kastet.webp",
+      "bytes": 3648
+    },
+    {
+      "name": "monokol-kiber.webp",
+      "path": "assets/Predmety/Implanty/monokol-kiber.webp",
+      "bytes": 2946
+    },
+    {
+      "name": "monokol-pnv-kiber.webp",
+      "path": "assets/Predmety/Implanty/monokol-pnv-kiber.webp",
+      "bytes": 2992
+    },
+    {
+      "name": "noga-cheloveka.webp",
+      "path": "assets/Predmety/Implanty/noga-cheloveka.webp",
+      "bytes": 2990
+    },
+    {
+      "name": "noga-gulya.webp",
+      "path": "assets/Predmety/Implanty/noga-gulya.webp",
+      "bytes": 3198
+    },
+    {
+      "name": "noga-pirata.webp",
+      "path": "assets/Predmety/Implanty/noga-pirata.webp",
+      "bytes": 2740
+    },
+    {
+      "name": "noga-supermutanta-ten.webp",
+      "path": "assets/Predmety/Implanty/noga-supermutanta-ten.webp",
+      "bytes": 3154
+    },
+    {
+      "name": "noga-supermutanta.webp",
+      "path": "assets/Predmety/Implanty/noga-supermutanta.webp",
+      "bytes": 3154
+    },
+    {
+      "name": "noga-svetyashegosya-gulya.webp",
+      "path": "assets/Predmety/Implanty/noga-svetyashegosya-gulya.webp",
+      "bytes": 3624
+    },
+    {
+      "name": "ottalkivayushij-shit_2.webp",
+      "path": "assets/Predmety/Implanty/ottalkivayushij-shit_2.webp",
+      "bytes": 3766
+    },
+    {
+      "name": "ottalkivayushij-shit.webp",
+      "path": "assets/Predmety/Implanty/ottalkivayushij-shit.webp",
+      "bytes": 3830
+    },
+    {
+      "name": "pila-mistera-pomoshnika.webp",
+      "path": "assets/Predmety/Implanty/pila-mistera-pomoshnika.webp",
+      "bytes": 3948
+    },
+    {
+      "name": "privod-2.webp",
+      "path": "assets/Predmety/Implanty/privod-2.webp",
+      "bytes": 5352
+    },
+    {
+      "name": "privod.webp",
+      "path": "assets/Predmety/Implanty/privod.webp",
+      "bytes": 5222
+    },
+    {
+      "name": "protez-klinok.webp",
+      "path": "assets/Predmety/Implanty/protez-klinok.webp",
+      "bytes": 3484
+    },
+    {
+      "name": "protez-monoklya-pnv.webp",
+      "path": "assets/Predmety/Implanty/protez-monoklya-pnv.webp",
+      "bytes": 2794
+    },
+    {
+      "name": "protez-monoklya.webp",
+      "path": "assets/Predmety/Implanty/protez-monoklya.webp",
+      "bytes": 2712
+    },
+    {
+      "name": "protez-nogi-silovoj-broni-rejdera.webp",
+      "path": "assets/Predmety/Implanty/protez-nogi-silovoj-broni-rejdera.webp",
+      "bytes": 3262
+    },
+    {
+      "name": "protez-nogi-silovoj-broni.webp",
+      "path": "assets/Predmety/Implanty/protez-nogi-silovoj-broni.webp",
+      "bytes": 3026
+    },
+    {
+      "name": "protez-nogi.webp",
+      "path": "assets/Predmety/Implanty/protez-nogi.webp",
+      "bytes": 2714
+    },
+    {
+      "name": "protez-ruki-silovoj-broni-rejdera.webp",
+      "path": "assets/Predmety/Implanty/protez-ruki-silovoj-broni-rejdera.webp",
+      "bytes": 3010
+    },
+    {
+      "name": "protez-ruki-silovoj-broni.webp",
+      "path": "assets/Predmety/Implanty/protez-ruki-silovoj-broni.webp",
+      "bytes": 3118
+    },
+    {
+      "name": "protez-ruki.webp",
+      "path": "assets/Predmety/Implanty/protez-ruki.webp",
+      "bytes": 3234
+    },
+    {
+      "name": "ruka-«potroshitel».webp",
+      "path": "assets/Predmety/Implanty/ruka-«potroshitel».webp",
+      "bytes": 2656
+    },
+    {
+      "name": "ruka-cheloveka.webp",
+      "path": "assets/Predmety/Implanty/ruka-cheloveka.webp",
+      "bytes": 3526
+    },
+    {
+      "name": "ruka-ognemyot-mk2.webp",
+      "path": "assets/Predmety/Implanty/ruka-ognemyot-mk2.webp",
+      "bytes": 3858
+    },
+    {
+      "name": "ruka-ognemyot-mk3.webp",
+      "path": "assets/Predmety/Implanty/ruka-ognemyot-mk3.webp",
+      "bytes": 3850
+    },
+    {
+      "name": "ruka-ognemyot.webp",
+      "path": "assets/Predmety/Implanty/ruka-ognemyot.webp",
+      "bytes": 3804
+    },
+    {
+      "name": "serdce-implant.webp",
+      "path": "assets/Predmety/Implanty/serdce-implant.webp",
+      "bytes": 3612
+    },
+    {
+      "name": "serebryanaya-ruka.webp",
+      "path": "assets/Predmety/Implanty/serebryanaya-ruka.webp",
+      "bytes": 2862
+    },
+    {
+      "name": "sportivnyj-protez-nogi.webp",
+      "path": "assets/Predmety/Implanty/sportivnyj-protez-nogi.webp",
+      "bytes": 2540
+    },
+    {
+      "name": "stels-boj.webp",
+      "path": "assets/Predmety/Implanty/stels-boj.webp",
+      "bytes": 3820
+    },
+    {
+      "name": "tehnologichnaya-ruka.webp",
+      "path": "assets/Predmety/Implanty/tehnologichnaya-ruka.webp",
+      "bytes": 3190
+    },
+    {
+      "name": "tyazhyolaya-ruka.webp",
+      "path": "assets/Predmety/Implanty/tyazhyolaya-ruka.webp",
+      "bytes": 3186
+    },
+    {
+      "name": "uluchshennyj-protez-ruki.webp",
+      "path": "assets/Predmety/Implanty/uluchshennyj-protez-ruki.webp",
+      "bytes": 2842
+    },
+    {
+      "name": "yadernaya-batareya.webp",
+      "path": "assets/Predmety/Implanty/yadernaya-batareya.webp",
+      "bytes": 3980
+    }
+  ]
+}

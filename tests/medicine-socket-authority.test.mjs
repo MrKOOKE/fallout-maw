@@ -122,6 +122,28 @@ test("treatment client sends intent, never an authored outcome", () => {
   assertIntentOnly(socketIntent, "applyTreatment socket payload");
 });
 
+test("owned and self treatment delegate the complete workflow to Foundry's active GM", () => {
+  const single = sliceFunction("applyTreatmentToTarget");
+  const mass = sliceFunction("applyMassTreatmentToTarget");
+  const responsible = sliceFunction("getResponsibleGM");
+  const currentAuthority = sliceFunction("isCurrentResponsibleGM");
+
+  for (const apply of [single, mass]) {
+    assert.match(apply, /const gm = getResponsibleGM\(\)/);
+    assert.match(apply, /if \(isCurrentResponsibleGM\(gm\)\)/);
+    assert.doesNotMatch(apply, /canUseActorLocally\(/);
+    assert.ok(
+      apply.indexOf("isCurrentResponsibleGM(gm)") < apply.indexOf("resolveTreatmentOnAuthority(")
+        || apply.indexOf("isCurrentResponsibleGM(gm)") < apply.indexOf("resolveMassTreatmentOnAuthority("),
+      "only the responsible GM may enter the local authority resolver"
+    );
+  }
+  assert.match(responsible, /game\.users\?\.activeGM/);
+  assert.match(currentAuthority, /game\.user\?\.isGM/);
+  assert.match(currentAuthority, /String\(game\.user\.id/);
+  assert.match(currentAuthority, /String\(gm\.id/);
+});
+
 test("treatment is resolved and rolled again on the GM authority before commit", () => {
   const handler = sliceFunction("handleMedicineSocketRequest");
   const branch = sliceActionBranch(handler, treatmentSocketAction);

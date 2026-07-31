@@ -1798,8 +1798,5 @@ function runWithRepairAuthorityLocks(actors, operation, chainRef = null, index =
 }
 
 function getResponsibleGM() {
-  return (game.users?.contents ?? [])
-    .filter(user => user.active && user.isGM)
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .at(0) ?? null;
+  return game.users?.activeGM ?? null;
 }

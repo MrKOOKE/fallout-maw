@@ -48,7 +48,8 @@ const {
   validateSlotAllocation
 } = await import("../scripts/rebalance/module-slot-allocation.mjs");
 const {
-  applyWeaponModuleModifiers
+  applyWeaponModuleModifiers,
+  createWeaponModuleSlotItemData
 } = await import("../src/utils/weapon-modules.mjs");
 
 const auditPath = path.join(
@@ -93,6 +94,36 @@ function moduleItem(modifiers, current = 100, maximum = 100, hasAttack = false) 
     }
   };
 }
+
+test("installed module snapshots retain gameplay data without embedded Document bookkeeping", () => {
+  const source = {
+    _id: "owned-module",
+    name: "Scope",
+    type: "gear",
+    img: "scope.webp",
+    folder: "inventory-folder",
+    sort: 100000,
+    ownership: { default: 0, owner: 3 },
+    _stats: { modifiedTime: 1234, lastModifiedBy: "owner" },
+    flags: { "fallout-maw": { prototypeUuid: "Item.prototype" } },
+    effects: [{ _id: "effect", name: "Module effect" }],
+    system: {
+      quantity: 7,
+      functions: {
+        module: { enabled: true, targetFunction: "weapon" }
+      }
+    }
+  };
+  const item = { toObject: () => structuredClone(source) };
+
+  const snapshot = createWeaponModuleSlotItemData(item);
+
+  assert.deepEqual(Object.keys(snapshot).sort(), ["effects", "flags", "img", "name", "system", "type"]);
+  assert.equal(snapshot.system.quantity, 1);
+  assert.equal(snapshot.system.functions.module.enabled, true);
+  assert.equal(snapshot.effects[0].name, "Module effect");
+  assert.equal(source.system.quantity, 7, "snapshot preparation must not mutate the inventory Item");
+});
 
 test("module catalogue is complete, source-first, and respects AP limits", () => {
   const validation = validateModuleCatalog();

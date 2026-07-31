@@ -133,13 +133,33 @@ export function queueAttackAutoCoverSync(attackId, coverStates = []) {
   autoCoverFlushTimers.set(id, window.setTimeout(() => flushAttackAutoCoverSync(id), AUTO_COVER_FLUSH_DELAY_MS));
 }
 
-export function clearAttackAutoCoverSync(attackId) {
+export async function syncAttackAutoCoverNow(attackId, coverStates) {
   const id = String(attackId ?? "").trim();
   if (!id) return;
 
   window.clearTimeout(autoCoverFlushTimers.get(id));
   autoCoverFlushTimers.delete(id);
+  const stateByActor = pendingAutoCoverStates.get(id);
   pendingAutoCoverStates.delete(id);
+  const states = coverStates === undefined
+    ? Array.from(stateByActor?.values() ?? [])
+    : (Array.isArray(coverStates) ? coverStates : []);
+  await syncAttackAutoCoverState(id, states);
+}
+
+export function cancelPendingAttackAutoCoverSync(attackId) {
+  const id = String(attackId ?? "").trim();
+  if (!id) return;
+  window.clearTimeout(autoCoverFlushTimers.get(id));
+  autoCoverFlushTimers.delete(id);
+  pendingAutoCoverStates.delete(id);
+}
+
+export function clearAttackAutoCoverSync(attackId) {
+  const id = String(attackId ?? "").trim();
+  if (!id) return;
+
+  cancelPendingAttackAutoCoverSync(id);
   void syncAttackAutoCoverState(id, []);
 }
 
@@ -309,10 +329,7 @@ function refreshCoverHudsForActor(actor) {
 }
 
 function flushAttackAutoCoverSync(attackId) {
-  autoCoverFlushTimers.delete(attackId);
-  const stateByActor = pendingAutoCoverStates.get(attackId);
-  pendingAutoCoverStates.delete(attackId);
-  void syncAttackAutoCoverState(attackId, Array.from(stateByActor?.values() ?? []));
+  void syncAttackAutoCoverNow(attackId);
 }
 
 async function syncAttackAutoCoverState(attackId, states = []) {

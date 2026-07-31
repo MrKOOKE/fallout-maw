@@ -2071,6 +2071,12 @@ export function getItemAbilityEffectSyncPlan(item, changes = {}) {
       "system.functions.constructPart"
     ]);
   const freeSettingsChanged = isItemFreeSettingsUpdate(item, changes, paths);
+  // The owner persists this runtime switch outside freeSettings. Treat its
+  // broadcast Item delta as a projection input so the active GM reconciles it.
+  const energyConsumptionStateChanged = hasItemFreeSettingsFunction(item)
+    && changedPathsAffect(paths, "system.functions.energyConsumer.activeConditions");
+  const energyConsumptionAuraStateChanged = energyConsumptionStateChanged
+    && abilityFunctionsMayContainAuraCondition(item.system?.functions?.freeSettings?.entries);
 
   // Names and images are persisted in managed projection documents. They only
   // matter for items which can actually own such a projection. Aura copies
@@ -2082,7 +2088,8 @@ export function getItemAbilityEffectSyncPlan(item, changes = {}) {
     || (itemPresentationChanged && hasDamageMitigationRequirements(item));
   const aura = activeSourceSetChanged
     || freeSettingsChanged
-    || freeSettingsPresentationChanged;
+    || freeSettingsPresentationChanged
+    || energyConsumptionAuraStateChanged;
 
   // Requirement projections depend on their configuration, but are not aura
   // sources. Ordinary mitigation and condition values are prepared directly
@@ -2100,7 +2107,11 @@ export function getItemAbilityEffectSyncPlan(item, changes = {}) {
     ]);
 
   return {
-    actor: aura || presentationChanged || equipmentRequirementsChanged || derivedActorHealthChanged,
+    actor: aura
+      || energyConsumptionStateChanged
+      || presentationChanged
+      || equipmentRequirementsChanged
+      || derivedActorHealthChanged,
     aura
   };
 }
