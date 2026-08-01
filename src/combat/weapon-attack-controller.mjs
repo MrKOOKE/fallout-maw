@@ -7024,7 +7024,8 @@ export class WeaponAttackController {
       this.token,
       this.geometry,
       this.targets,
-      projectiles.length
+      projectiles.length,
+      { assignPelletTargets: true }
     );
     const totalProjectileCount = Math.max(1, toInteger(attackCount))
       * Math.max(1, trajectories.length);
@@ -11698,9 +11699,19 @@ function buildAttackTrajectory(attackerToken, coneGeometry, targets = []) {
   return buildRandomTrajectory(attackerToken, coneGeometry);
 }
 
-function buildAttackTrajectories(attackerToken, coneGeometry, targets = [], count = 1) {
+function buildAttackTrajectories(
+  attackerToken,
+  coneGeometry,
+  targets = [],
+  count = 1,
+  { assignPelletTargets = false } = {}
+) {
   const amount = Math.max(1, toInteger(count) || 1);
   if (amount <= 1) return [buildAttackTrajectory(attackerToken, coneGeometry, targets)];
+  if (assignPelletTargets && targets.length) {
+    const trajectories = buildAssignedPelletTrajectories(attackerToken, coneGeometry, targets, amount);
+    if (trajectories.length === amount) return trajectories;
+  }
 
   const trajectories = [];
   const reserved = new Set();
@@ -11713,6 +11724,29 @@ function buildAttackTrajectories(attackerToken, coneGeometry, targets = [], coun
   }
 
   return trajectories;
+}
+
+function buildAssignedPelletTrajectories(attackerToken, geometry, targets = [], count = 1) {
+  const profiles = shuffleBurstShots(targets
+    .map(target => ({ target, points: getPelletTargetAimPoints(attackerToken, target, geometry) }))
+    .filter(profile => profile.points.length));
+  if (!profiles.length) return [];
+
+  return Array.from({ length: Math.max(1, toInteger(count) || 1) }, (_value, index) => {
+    const profile = profiles[index % profiles.length];
+    const cycle = Math.floor(index / profiles.length);
+    const point = profile.points[cycle % profile.points.length];
+    return buildTrajectoryThroughPoint(attackerToken, geometry, point);
+  });
+}
+
+function getPelletTargetAimPoints(attackerToken, target, geometry) {
+  const points = [];
+  addUniquePoint(points, selectTargetTrajectoryAimPoint(attackerToken, target, geometry));
+  for (const point of getVisibleTokenAttackPoints(attackerToken, target, geometry)) {
+    if (isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point)) addUniquePoint(points, point);
+  }
+  return points;
 }
 
 function buildAimedAttackTrajectories(attackerToken, coneGeometry, centerTrajectory, count = 1) {

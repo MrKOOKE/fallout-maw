@@ -146,6 +146,24 @@ test("all shotgun pellets inherit the selected target elevation slope", () => {
   assert.match(aimed, /buildReservedPelletTrajectory\(attackerToken, pelletGeometry/);
 });
 
+test("ordinary shotgun spread assigns every pellet to an available cone target", () => {
+  const resolution = sliceBetween(
+    controllerSource,
+    "async resolveAttackPellets",
+    "async resolveAttackTrajectory"
+  );
+  const assignment = sliceBetween(
+    controllerSource,
+    "function buildAssignedPelletTrajectories",
+    "function getPelletTargetAimPoints"
+  );
+
+  assert.match(resolution, /assignPelletTargets:\s*true/);
+  assert.match(assignment, /profiles\[index % profiles\.length\]/);
+  assert.match(assignment, /buildTrajectoryThroughPoint\(attackerToken, geometry, point\)/);
+  assert.doesNotMatch(assignment, /buildRandomTrajectory/);
+});
+
 test("directed melee expands one successful impact before damage mitigation", () => {
   const directed = sliceBetween(
     controllerSource,
