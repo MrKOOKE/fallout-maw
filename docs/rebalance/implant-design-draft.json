@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-01T05:15:20.174Z",
+  "generatedAt": "2026-08-01T07:02:01.596Z",
   "status": "design-only",
   "worldDatabaseTouched": false,
   "actorsRead": false,
@@ -51,26 +51,26 @@
     "explanation": "При прошедшем уроне занятой части имплант теряет 20% этого урона, минимум 1. Если он уже потерял состояние как источник защиты той же атаки, применяется большее значение, а не сумма."
   },
   "summary": {
-    "total": 78,
+    "total": 120,
     "byClass": {
-      "D": 8,
-      "C": 14,
+      "D": 28,
+      "C": 36,
       "B": 24,
       "A": 16,
       "S": 16
     },
     "pricesByClass": {
       "D": {
-        "count": 8,
+        "count": 28,
         "min": 336,
-        "median": 368,
-        "max": 433
+        "median": 423,
+        "max": 529
       },
       "C": {
-        "count": 14,
+        "count": 36,
         "min": 1149,
-        "median": 1410,
-        "max": 2126
+        "median": 1740,
+        "max": 2612
       },
       "B": {
         "count": 24,
@@ -91,13 +91,195 @@
         "max": 73402
       }
     },
+    "coverageByClass": {
+      "D": {
+        "skills": {
+          "meleeCombat": 3,
+          "rangedCombat": 6,
+          "athletics": 7,
+          "energy": 3,
+          "resilience": 12,
+          "doctor": 3,
+          "naturalist": 6,
+          "stealth": 4,
+          "science": 3,
+          "repair": 3,
+          "speech": 3,
+          "gambling": 2
+        },
+        "limbs": {
+          "head": 5,
+          "eyes": 6,
+          "torso": 5,
+          "groin": 4,
+          "leftArm": 4,
+          "rightArm": 4,
+          "leftLeg": 4,
+          "rightLeg": 4
+        },
+        "mechanics": {
+          "mitigation": 2,
+          "weapon": 0,
+          "capacity": 0,
+          "plannedCode": 0
+        },
+        "condition": {
+          "min": 160,
+          "max": 250
+        }
+      },
+      "C": {
+        "skills": {
+          "meleeCombat": 4,
+          "rangedCombat": 6,
+          "athletics": 9,
+          "energy": 4,
+          "resilience": 12,
+          "doctor": 7,
+          "naturalist": 5,
+          "stealth": 4,
+          "science": 6,
+          "repair": 5,
+          "speech": 5,
+          "gambling": 4
+        },
+        "limbs": {
+          "head": 7,
+          "eyes": 6,
+          "torso": 8,
+          "groin": 5,
+          "leftArm": 6,
+          "rightArm": 6,
+          "leftLeg": 5,
+          "rightLeg": 5
+        },
+        "mechanics": {
+          "mitigation": 3,
+          "weapon": 1,
+          "capacity": 0,
+          "plannedCode": 0
+        },
+        "condition": {
+          "min": 260,
+          "max": 400
+        }
+      },
+      "B": {
+        "skills": {
+          "meleeCombat": 2,
+          "rangedCombat": 2,
+          "athletics": 1,
+          "energy": 1,
+          "resilience": 3,
+          "doctor": 2,
+          "naturalist": 2,
+          "stealth": 2,
+          "science": 2,
+          "repair": 1,
+          "speech": 1,
+          "gambling": 0
+        },
+        "limbs": {
+          "head": 7,
+          "eyes": 4,
+          "torso": 6,
+          "groin": 3,
+          "leftArm": 3,
+          "rightArm": 3,
+          "leftLeg": 2,
+          "rightLeg": 2
+        },
+        "mechanics": {
+          "mitigation": 1,
+          "weapon": 0,
+          "capacity": 8,
+          "plannedCode": 0
+        },
+        "condition": {
+          "min": 400,
+          "max": 500
+        }
+      },
+      "A": {
+        "skills": {
+          "meleeCombat": 4,
+          "rangedCombat": 2,
+          "athletics": 3,
+          "energy": 0,
+          "resilience": 2,
+          "doctor": 1,
+          "naturalist": 2,
+          "stealth": 2,
+          "science": 3,
+          "repair": 2,
+          "speech": 1,
+          "gambling": 1
+        },
+        "limbs": {
+          "head": 4,
+          "eyes": 2,
+          "torso": 5,
+          "groin": 3,
+          "leftArm": 2,
+          "rightArm": 2,
+          "leftLeg": 2,
+          "rightLeg": 2
+        },
+        "mechanics": {
+          "mitigation": 1,
+          "weapon": 0,
+          "capacity": 2,
+          "plannedCode": 0
+        },
+        "condition": {
+          "min": 500,
+          "max": 600
+        }
+      },
+      "S": {
+        "skills": {
+          "meleeCombat": 1,
+          "rangedCombat": 1,
+          "athletics": 4,
+          "energy": 0,
+          "resilience": 4,
+          "doctor": 3,
+          "naturalist": 2,
+          "stealth": 3,
+          "science": 4,
+          "repair": 2,
+          "speech": 4,
+          "gambling": 2
+        },
+        "limbs": {
+          "head": 5,
+          "eyes": 2,
+          "torso": 4,
+          "groin": 3,
+          "leftArm": 2,
+          "rightArm": 2,
+          "leftLeg": 3,
+          "rightLeg": 3
+        },
+        "mechanics": {
+          "mitigation": 1,
+          "weapon": 0,
+          "capacity": 1,
+          "plannedCode": 0
+        },
+        "condition": {
+          "min": 600,
+          "max": 800
+        }
+      }
+    },
     "byPrimaryLimb": {
-      "head": 20,
-      "eyes": 12,
-      "leftArm": 11,
-      "leftLeg": 9,
-      "torso": 15,
-      "groin": 9,
+      "head": 28,
+      "eyes": 20,
+      "leftArm": 17,
+      "leftLeg": 15,
+      "torso": 23,
+      "groin": 15,
       "rightArm": 1,
       "rightLeg": 1
     },
@@ -187,6 +369,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -317,6 +500,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -449,6 +633,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -581,6 +766,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -703,6 +889,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -843,6 +1030,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -991,6 +1179,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1129,6 +1318,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1263,6 +1453,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1396,6 +1587,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1534,6 +1726,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1609,7 +1802,24 @@
       "limbKeys": [
         "torso"
       ],
-      "effects": [],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Натуралист"
+        }
+      ],
       "mitigation": {
         "mode": "resistance",
         "limbKeys": [
@@ -1623,8 +1833,8 @@
           "rightLeg"
         ],
         "values": {
-          "poison": 15,
-          "radiation": 15
+          "poison": 25,
+          "radiation": 25
         }
       },
       "recipeExtra": [
@@ -1670,11 +1880,35 @@
         ]
       },
       "freeSettings": {
-        "enabled": false,
-        "useConditionWeakening": false,
-        "effects": []
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Стойкость"
+          },
+          {
+            "kind": "skill",
+            "key": "naturalist",
+            "path": "system.skills.naturalist.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Натуралист"
+          }
+        ]
       },
-      "utilityScore": 0,
+      "utilityScore": 30,
+      "mitigationEconomy": {
+        "channelTotal": 50,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 4.55,
+        "protectionVolume": 36.36,
+        "pricePerProtectionVolume": 54.57
+      },
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1817,6 +2051,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -1951,6 +2186,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -2072,6 +2308,7 @@
         "effects": []
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -2242,6 +2479,7 @@
         ]
       },
       "utilityScore": 35,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -2378,6 +2616,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -2526,6 +2765,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -2667,6 +2907,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -2815,6 +3056,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -2950,6 +3192,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3093,6 +3336,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3236,6 +3480,7 @@
         ]
       },
       "utilityScore": 60,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3389,6 +3634,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3549,6 +3795,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3718,6 +3965,7 @@
         ]
       },
       "utilityScore": 90,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3885,6 +4133,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -3960,7 +4209,16 @@
       "limbKeys": [
         "torso"
       ],
-      "effects": [],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Стойкость"
+        }
+      ],
       "exclusiveGroup": "nemean",
       "mitigation": {
         "mode": "defense",
@@ -3975,10 +4233,15 @@
           "rightLeg"
         ],
         "values": {
-          "piercing": 12,
-          "slashing": 12,
-          "bludgeoning": 12,
-          "firearm": 12
+          "piercing": 35,
+          "slashing": 35,
+          "bludgeoning": 35,
+          "firearm": 35,
+          "energy": 15,
+          "electric": 15,
+          "fire": 12,
+          "cryo": 12,
+          "acid": 10
         }
       },
       "recipeExtra": [
@@ -3995,7 +4258,7 @@
           "reason": "биосовместимое покрытие"
         }
       ],
-      "note": "Малая всетелевая прибавка, складывающаяся с носимой бронёй; не имитирует тяжёлую или силовую броню.",
+      "note": "Всетелевая прибавка, складывающаяся с носимой бронёй. По суммарному покрытию сопоставима с C-средней бронёй, но дороже из-за восьми защищаемых частей и отсутствия требования Атлетики.",
       "folderPath": [
         "Импланты",
         "Туловище",
@@ -4024,11 +4287,27 @@
         ]
       },
       "freeSettings": {
-        "enabled": false,
-        "useConditionWeakening": false,
-        "effects": []
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 30,
+            "label": "Стойкость"
+          }
+        ]
       },
-      "utilityScore": 0,
+      "utilityScore": 30,
+      "mitigationEconomy": {
+        "channelTotal": 204,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 18.55,
+        "protectionVolume": 148.36,
+        "pricePerProtectionVolume": 50.93
+      },
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -4117,7 +4396,24 @@
       "limbKeys": [
         "torso"
       ],
-      "effects": [],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "endurance",
+          "path": "system.characteristics.endurance",
+          "type": "add",
+          "value": 1,
+          "label": "Выносливость"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 40,
+          "label": "Стойкость"
+        }
+      ],
       "exclusiveGroup": "nemean",
       "mitigation": {
         "mode": "defense",
@@ -4132,12 +4428,15 @@
           "rightLeg"
         ],
         "values": {
-          "piercing": 22,
-          "slashing": 22,
-          "bludgeoning": 22,
-          "firearm": 22,
-          "energy": 10,
-          "acid": 10
+          "piercing": 55,
+          "slashing": 55,
+          "bludgeoning": 55,
+          "firearm": 55,
+          "energy": 28,
+          "electric": 28,
+          "fire": 22,
+          "cryo": 22,
+          "acid": 18
         }
       },
       "recipeExtra": [
@@ -4188,11 +4487,35 @@
         ]
       },
       "freeSettings": {
-        "enabled": false,
-        "useConditionWeakening": false,
-        "effects": []
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "characteristic",
+            "key": "endurance",
+            "path": "system.characteristics.endurance",
+            "type": "add",
+            "value": 1,
+            "label": "Выносливость"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 40,
+            "label": "Стойкость"
+          }
+        ]
       },
-      "utilityScore": 0,
+      "utilityScore": 70,
+      "mitigationEconomy": {
+        "channelTotal": 338,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 30.73,
+        "protectionVolume": 245.82,
+        "pricePerProtectionVolume": 65.49
+      },
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -4426,6 +4749,7 @@
         ]
       },
       "utilityScore": 180,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -4613,6 +4937,7 @@
         ]
       },
       "utilityScore": 200,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -4816,6 +5141,7 @@
         ]
       },
       "utilityScore": 210,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -5019,6 +5345,7 @@
         ]
       },
       "utilityScore": 230,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -5207,6 +5534,7 @@
         ]
       },
       "utilityScore": 200,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -5390,6 +5718,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -5575,6 +5904,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -5779,6 +6109,7 @@
         ]
       },
       "utilityScore": 170,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -6013,6 +6344,7 @@
         ]
       },
       "utilityScore": 250,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -6208,6 +6540,7 @@
         ]
       },
       "utilityScore": 230,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -6447,6 +6780,7 @@
         ]
       },
       "utilityScore": 260,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -6652,6 +6986,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -6878,6 +7213,7 @@
         ]
       },
       "utilityScore": 330,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -7096,6 +7432,7 @@
         ]
       },
       "utilityScore": 330,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -7307,6 +7644,7 @@
         ]
       },
       "utilityScore": 450,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -7408,7 +7746,32 @@
       "limbKeys": [
         "torso"
       ],
-      "effects": [],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "endurance",
+          "path": "system.characteristics.endurance",
+          "type": "add",
+          "value": 2,
+          "label": "Выносливость"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "resilience",
+          "path": "system.skills.resilience.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 60,
+          "label": "Стойкость"
+        }
+      ],
       "exclusiveGroup": "nemean",
       "mitigation": {
         "mode": "defense",
@@ -7423,15 +7786,16 @@
           "rightLeg"
         ],
         "values": {
-          "piercing": 38,
-          "slashing": 38,
-          "bludgeoning": 38,
-          "firearm": 38,
-          "energy": 22,
-          "fire": 22,
-          "cryo": 22,
-          "electric": 22,
-          "acid": 22
+          "piercing": 85,
+          "slashing": 85,
+          "bludgeoning": 85,
+          "firearm": 85,
+          "energy": 55,
+          "fire": 45,
+          "cryo": 45,
+          "electric": 55,
+          "acid": 40,
+          "plasma": 20
         }
       },
       "recipeExtra": [
@@ -7483,11 +7847,43 @@
         ]
       },
       "freeSettings": {
-        "enabled": false,
-        "useConditionWeakening": false,
-        "effects": []
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "characteristic",
+            "key": "endurance",
+            "path": "system.characteristics.endurance",
+            "type": "add",
+            "value": 2,
+            "label": "Выносливость"
+          },
+          {
+            "kind": "skillAdvantage",
+            "key": "resilience",
+            "path": "system.skills.resilience.advantage",
+            "type": "add",
+            "value": 1,
+            "label": "Преимущество: Стойкость"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 60,
+            "label": "Стойкость"
+          }
+        ]
       },
-      "utilityScore": 0,
+      "utilityScore": 240,
+      "mitigationEconomy": {
+        "channelTotal": 600,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 54.55,
+        "protectionVolume": 436.36,
+        "pricePerProtectionVolume": 122.91
+      },
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -7689,6 +8085,7 @@
         ]
       },
       "utilityScore": 450,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -7907,6 +8304,7 @@
         ]
       },
       "utilityScore": 330,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -8117,6 +8515,7 @@
         ]
       },
       "utilityScore": 330,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -8331,6 +8730,7 @@
         ]
       },
       "utilityScore": 330,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -8554,6 +8954,7 @@
         ]
       },
       "utilityScore": 390,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -8793,6 +9194,7 @@
         ]
       },
       "utilityScore": 420,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -9030,6 +9432,7 @@
         ]
       },
       "utilityScore": 390,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -9202,6 +9605,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -9350,6 +9754,7 @@
         ]
       },
       "utilityScore": 20,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 40,
         "markupPercent": 4,
@@ -9500,6 +9905,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -9661,6 +10067,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -9809,6 +10216,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -9957,6 +10365,7 @@
         ]
       },
       "utilityScore": 30,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 70,
         "markupPercent": 9,
@@ -10123,6 +10532,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -10311,6 +10721,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -10497,6 +10908,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -10672,6 +11084,7 @@
         ]
       },
       "utilityScore": 80,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -10855,6 +11268,7 @@
         ]
       },
       "utilityScore": 200,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -11062,6 +11476,7 @@
         ]
       },
       "utilityScore": 200,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -11261,6 +11676,7 @@
         ]
       },
       "utilityScore": 200,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -11453,6 +11869,7 @@
         ]
       },
       "utilityScore": 200,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 160,
         "markupPercent": 34,
@@ -11681,6 +12098,7 @@
         ]
       },
       "utilityScore": 360,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -11920,6 +12338,7 @@
         ]
       },
       "utilityScore": 360,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -12157,6 +12576,7 @@
         ]
       },
       "utilityScore": 360,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -12394,6 +12814,7 @@
         ]
       },
       "utilityScore": 360,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 220,
         "markupPercent": 60,
@@ -12474,6 +12895,6452 @@
         ]
       },
       "price": 49502
+    },
+    {
+      "key": "d-odds-ticker",
+      "class": "D",
+      "family": "neural",
+      "name": "РобКо «Счётчик» — карманный вероятностный шунт",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/chip.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 170,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Азарт"
+        },
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Красноречие"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 2,
+          "reason": "арифметический контур"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 170,
+        "max": 170,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "gambling",
+            "path": "system.skills.gambling.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Азарт"
+          },
+          {
+            "kind": "skill",
+            "key": "speech",
+            "path": "system.skills.speech.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Красноречие"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 6,
+            "reason": "",
+            "reasons": [
+              "арифметический контур"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 252
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-focus-coil",
+      "class": "D",
+      "family": "neural",
+      "name": "Катушка концентрации «Заземлитель»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-2.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 180,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 2,
+          "reason": "контур обратной связи"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 180,
+        "max": 180,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "energy",
+            "path": "system.skills.energy.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Контроль энергии"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 6,
+            "reason": "",
+            "reasons": [
+              "контур обратной связи"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 252
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-reflex-buzzer",
+      "class": "D",
+      "family": "neural",
+      "name": "Рефлекторный зуммер «Щелчок»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(golova).webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 165,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Атлетика"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "датчик движения"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 165,
+        "max": 165,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Дальний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Атлетика"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 365,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "датчик движения"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 210
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 380
+    },
+    {
+      "key": "d-sleep-gate",
+      "class": "D",
+      "family": "neural",
+      "name": "Нейроклапан «Чуткий сон»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/chip-2.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 180,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 1,
+          "reason": "нейромедиаторная смесь"
+        },
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "контроллер бодрствования"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 180,
+        "max": 180,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "stealth",
+            "path": "system.skills.stealth.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Скрытность"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 396,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "контроллер бодрствования"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 210
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "нейромедиаторная смесь"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 93
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 412
+    },
+    {
+      "key": "d-watchmaker-eye",
+      "class": "D",
+      "family": "ocular",
+      "name": "Линза часовщика «Риска»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/protez-monoklya.webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 160,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Ремесло"
+        },
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Доктор"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "фокусировочная сетка"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 160,
+        "max": 160,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "repair",
+            "path": "system.skills.repair.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Ремесло"
+          },
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Доктор"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 365,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "фокусировочная сетка"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 210
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 380
+    },
+    {
+      "key": "d-dusk-retina",
+      "class": "D",
+      "family": "ocular",
+      "name": "Сумеречная сетка «Сова»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(glaz).webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 170,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Натуралист"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 1,
+          "reason": "светочувствительный пигмент"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 170,
+        "max": 170,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "stealth",
+            "path": "system.skills.stealth.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Скрытность"
+          },
+          {
+            "kind": "skill",
+            "key": "naturalist",
+            "path": "system.skills.naturalist.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Натуралист"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 354,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "светочувствительный пигмент"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 93
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 368
+    },
+    {
+      "key": "d-range-grid",
+      "class": "D",
+      "family": "ocular",
+      "name": "Дальномерная сетка «Засечка»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/avtonavedenie.webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 165,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Наука"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 2,
+          "reason": "дальномер"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 165,
+        "max": 165,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Дальний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "science",
+            "path": "system.skills.science.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Наука"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 6,
+            "reason": "",
+            "reasons": [
+              "дальномер"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 252
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-ocular-film",
+      "class": "D",
+      "family": "ocular",
+      "name": "Защитная плёнка «Сварщик»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(glaz).webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 240,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Натуралист"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": {
+        "mode": "resistance",
+        "limbKeys": [
+          "eyes"
+        ],
+        "values": {
+          "fire": 12,
+          "acid": 12
+        }
+      },
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 3,
+          "reason": "термостойкая плёнка"
+        },
+        {
+          "kind": "armor",
+          "class": "D",
+          "quantity": 2,
+          "reason": "прозрачная защита"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 240,
+        "max": 240,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "naturalist",
+            "path": "system.skills.naturalist.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Натуралист"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": {
+        "channelTotal": 24,
+        "coveredLimbs": 1,
+        "averageAcrossDamageChannels": 2.18,
+        "protectionVolume": 2.18,
+        "pricePerProtectionVolume": 238.53
+      },
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 500,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "термостойкая плёнка"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 155
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          },
+          {
+            "kind": "armor",
+            "class": "D",
+            "quantity": 2,
+            "reason": "прозрачная защита",
+            "reasons": [
+              "прозрачная защита"
+            ],
+            "itemId": "MbJjX3815eYKaRvc",
+            "name": "Компонент армирования D класса",
+            "unitPrice": 42,
+            "subtotal": 84
+          }
+        ]
+      },
+      "price": 520
+    },
+    {
+      "key": "d-wrist-damper",
+      "class": "D",
+      "family": "motor",
+      "name": "Запястный демпфер «Упор»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(ruka).webp",
+      "limbKeys": [
+        "leftArm",
+        "rightArm"
+      ],
+      "conditionMax": 220,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "D",
+          "quantity": 2,
+          "reason": "пружинный демпфер"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая рука",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftArm",
+          "rightArm"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 220,
+        "max": 220,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Дальний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          },
+          {
+            "kind": "mechanics",
+            "class": "D",
+            "quantity": 2,
+            "reason": "пружинный демпфер",
+            "reasons": [
+              "пружинный демпфер"
+            ],
+            "itemId": "y8zBda96njMVWYrz",
+            "name": "Компонент механики D класса",
+            "unitPrice": 42,
+            "subtotal": 84
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-suture-servo",
+      "class": "D",
+      "family": "motor",
+      "name": "Шовный сервопривод «Игла»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/privod.webp",
+      "limbKeys": [
+        "leftArm",
+        "rightArm"
+      ],
+      "conditionMax": 210,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Ремесло"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "ограничитель дрожания"
+        },
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "контроллер кисти"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая рука",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftArm",
+          "rightArm"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 210,
+        "max": 210,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Доктор"
+          },
+          {
+            "kind": "skill",
+            "key": "repair",
+            "path": "system.skills.repair.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Ремесло"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "контроллер кисти"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 210
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          },
+          {
+            "kind": "mechanics",
+            "class": "D",
+            "quantity": 1,
+            "reason": "ограничитель дрожания",
+            "reasons": [
+              "ограничитель дрожания"
+            ],
+            "itemId": "y8zBda96njMVWYrz",
+            "name": "Компонент механики D класса",
+            "unitPrice": 42,
+            "subtotal": 42
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-knuckle-mesh",
+      "class": "D",
+      "family": "motor",
+      "name": "Сухожильная сетка «Костяшка»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/privod-2.webp",
+      "limbKeys": [
+        "leftArm",
+        "rightArm"
+      ],
+      "conditionMax": 230,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "D",
+          "quantity": 2,
+          "reason": "тяговые нити"
+        },
+        {
+          "kind": "frame",
+          "class": "D",
+          "quantity": 1,
+          "reason": "якоря сухожилий"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая рука",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftArm",
+          "rightArm"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 230,
+        "max": 230,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "meleeCombat",
+            "path": "system.skills.meleeCombat.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Ближний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 438,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "якоря сухожилий"
+            ],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "mechanics",
+            "class": "D",
+            "quantity": 2,
+            "reason": "тяговые нити",
+            "reasons": [
+              "тяговые нити"
+            ],
+            "itemId": "y8zBda96njMVWYrz",
+            "name": "Компонент механики D класса",
+            "unitPrice": 42,
+            "subtotal": 84
+          }
+        ]
+      },
+      "price": 456
+    },
+    {
+      "key": "d-heel-damper",
+      "class": "D",
+      "family": "motor",
+      "name": "Пяточный демпфер «Мякиш»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(nogi).webp",
+      "limbKeys": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "conditionMax": 220,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Атлетика"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "properties",
+          "class": "D",
+          "quantity": 2,
+          "reason": "гашение шага"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая нога",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 220,
+        "max": 220,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "stealth",
+            "path": "system.skills.stealth.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Скрытность"
+          },
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Атлетика"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 385,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "гашение шага"
+            ],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 124
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 400
+    },
+    {
+      "key": "d-march-fiber",
+      "class": "D",
+      "family": "motor",
+      "name": "Маршевая миоструна «Ходок»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(nogi).webp",
+      "limbKeys": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "conditionMax": 225,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "D",
+          "quantity": 2,
+          "reason": "тяговая струна"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая нога",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 225,
+        "max": 225,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Атлетика"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          },
+          {
+            "kind": "mechanics",
+            "class": "D",
+            "quantity": 2,
+            "reason": "тяговая струна",
+            "reasons": [
+              "тяговая струна"
+            ],
+            "itemId": "y8zBda96njMVWYrz",
+            "name": "Компонент механики D класса",
+            "unitPrice": 42,
+            "subtotal": 84
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-posture-wire",
+      "class": "D",
+      "family": "motor",
+      "name": "Провод осанки «Тренога»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/stels-boj.webp",
+      "limbKeys": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "conditionMax": 210,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Атлетика"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "датчик наклона"
+        },
+        {
+          "kind": "mechanics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "коленный ограничитель"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая нога",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 210,
+        "max": 210,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Дальний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Атлетика"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 407,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "датчик наклона"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 210
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          },
+          {
+            "kind": "mechanics",
+            "class": "D",
+            "quantity": 1,
+            "reason": "коленный ограничитель",
+            "reasons": [
+              "коленный ограничитель"
+            ],
+            "itemId": "y8zBda96njMVWYrz",
+            "name": "Компонент механики D класса",
+            "unitPrice": 42,
+            "subtotal": 42
+          }
+        ]
+      },
+      "price": 423
+    },
+    {
+      "key": "d-lung-valve",
+      "class": "D",
+      "family": "circulatory",
+      "name": "Лёгочный клапан «Второе дыхание»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(tors).webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 240,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 2,
+          "reason": "дыхательная мембрана"
+        },
+        {
+          "kind": "mechanics",
+          "class": "D",
+          "quantity": 1,
+          "reason": "клапан"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 240,
+        "max": 240,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Атлетика"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 427,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "дыхательная мембрана"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 124
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          },
+          {
+            "kind": "mechanics",
+            "class": "D",
+            "quantity": 1,
+            "reason": "клапан",
+            "reasons": [
+              "клапан"
+            ],
+            "itemId": "y8zBda96njMVWYrz",
+            "name": "Компонент механики D класса",
+            "unitPrice": 42,
+            "subtotal": 42
+          }
+        ]
+      },
+      "price": 444
+    },
+    {
+      "key": "d-capacitor-node",
+      "class": "D",
+      "family": "neural",
+      "name": "Подкожный конденсатор «Искра»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 220,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Наука"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "D",
+          "quantity": 3,
+          "reason": "накопительная катушка"
+        },
+        {
+          "kind": "properties",
+          "class": "D",
+          "quantity": 1,
+          "reason": "изоляция"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 220,
+        "max": 220,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "energy",
+            "path": "system.skills.energy.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Контроль энергии"
+          },
+          {
+            "kind": "skill",
+            "key": "science",
+            "path": "system.skills.science.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Наука"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 480,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 7,
+            "reason": "",
+            "reasons": [
+              "накопительная катушка"
+            ],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 294
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "изоляция"
+            ],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 93
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 499
+    },
+    {
+      "key": "d-detox-sorbent",
+      "class": "D",
+      "family": "circulatory",
+      "name": "Кровяной сорбент «Угольник»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(tors).webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 250,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": {
+        "mode": "resistance",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "poison": 12,
+          "acid": 8
+        }
+      },
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 4,
+          "reason": "сменный сорбент"
+        },
+        {
+          "kind": "frame",
+          "class": "D",
+          "quantity": 2,
+          "reason": "корпус фильтра"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 250,
+        "max": 250,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Стойкость"
+          },
+          {
+            "kind": "skill",
+            "key": "naturalist",
+            "path": "system.skills.naturalist.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Натуралист"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": {
+        "channelTotal": 20,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 1.82,
+        "protectionVolume": 14.55,
+        "pricePerProtectionVolume": 36.36
+      },
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 509,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 6,
+            "reason": "",
+            "reasons": [
+              "сменный сорбент"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 186
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "корпус фильтра"
+            ],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 93
+          }
+        ]
+      },
+      "price": 529
+    },
+    {
+      "key": "d-voice-throttle",
+      "class": "D",
+      "family": "endocrine",
+      "name": "Голосовой дроссель «Не дрогни»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/kiber-gorlo.webp",
+      "limbKeys": [
+        "groin"
+      ],
+      "conditionMax": 220,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Азарт"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 2,
+          "reason": "стрессовая смесь"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Пах",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 220,
+        "max": 220,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "speech",
+            "path": "system.skills.speech.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Красноречие"
+          },
+          {
+            "kind": "skill",
+            "key": "gambling",
+            "path": "system.skills.gambling.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Азарт"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 385,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "стрессовая смесь"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 124
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 400
+    },
+    {
+      "key": "d-stress-gland",
+      "class": "D",
+      "family": "endocrine",
+      "name": "Стресс-железа «Предохранитель»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(pah).webp",
+      "limbKeys": [
+        "groin"
+      ],
+      "conditionMax": 235,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Контроль энергии"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 3,
+          "reason": "гормональный буфер"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Пах",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 235,
+        "max": 235,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 12,
+            "label": "Стойкость"
+          },
+          {
+            "kind": "skill",
+            "key": "energy",
+            "path": "system.skills.energy.bonus",
+            "type": "add",
+            "value": 8,
+            "label": "Контроль энергии"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 416,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "гормональный буфер"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 155
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 433
+    },
+    {
+      "key": "d-adrenal-primer",
+      "class": "D",
+      "family": "endocrine",
+      "name": "Адреналовый капсюль «Старт»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/serdce-implant.webp",
+      "limbKeys": [
+        "groin"
+      ],
+      "conditionMax": 225,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Дальний бой"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "D",
+          "quantity": 3,
+          "reason": "адреналовая капсула"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Пах",
+        "D"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "difficulty": 40,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 225,
+        "max": 225,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "D",
+            "difficulty": 60
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "meleeCombat",
+            "path": "system.skills.meleeCombat.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Ближний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Дальний бой"
+          }
+        ]
+      },
+      "utilityScore": 20,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 40,
+        "markupPercent": 4,
+        "rawComponentCost": 416,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "D",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [],
+            "itemId": "kicA1KGhQ2MFDInk",
+            "name": "Компонент электроники D класса",
+            "unitPrice": 42,
+            "subtotal": 168
+          },
+          {
+            "kind": "chemistry",
+            "class": "D",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "адреналовая капсула"
+            ],
+            "itemId": "iFCrgqlvEdFwWtxB",
+            "name": "Компонент химиката D класса",
+            "unitPrice": 31,
+            "subtotal": 155
+          },
+          {
+            "kind": "properties",
+            "class": "D",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [],
+            "itemId": "EVqMOdv1cMFiaGpj",
+            "name": "Компонент свойств D класса",
+            "unitPrice": 31,
+            "subtotal": 62
+          },
+          {
+            "kind": "frame",
+            "class": "D",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "JEMb1FInHzmTfV8I",
+            "name": "Компонент каркаса D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ]
+      },
+      "price": 433
+    },
+    {
+      "key": "c-memory-index",
+      "class": "C",
+      "family": "neural",
+      "name": "РобКо «Картотека» — индекс памяти",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/chip-2.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 270,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Доктор"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "индексатор памяти"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 270,
+        "max": 270,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "science",
+            "path": "system.skills.science.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Наука"
+          },
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Доктор"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1502,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "индексатор памяти"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1637
+    },
+    {
+      "key": "c-risk-forecaster",
+      "class": "C",
+      "family": "neural",
+      "name": "РобКо «Букмекер» — прогнозатор риска",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-7.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 280,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Азарт"
+        },
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Красноречие"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "вероятностный процессор"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 1,
+          "reason": "эвристика"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 280,
+        "max": 280,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "gambling",
+            "path": "system.skills.gambling.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Азарт"
+          },
+          {
+            "kind": "skill",
+            "key": "speech",
+            "path": "system.skills.speech.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Красноречие"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1629,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "вероятностный процессор"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "эвристика"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1776
+    },
+    {
+      "key": "c-pain-gate",
+      "class": "C",
+      "family": "neural",
+      "name": "Мед-Тек «Шлюз» — блокатор боли",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-3.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 320,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Ближний бой"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 2,
+          "reason": "нейромедиаторный клапан"
+        },
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 1,
+          "reason": "датчик боли"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 320,
+        "max": 320,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Стойкость"
+          },
+          {
+            "kind": "skill",
+            "key": "meleeCombat",
+            "path": "system.skills.meleeCombat.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Ближний бой"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1534,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "датчик боли"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 896
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "нейромедиаторный клапан"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 384
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1672
+    },
+    {
+      "key": "c-reserve-shunt",
+      "class": "C",
+      "family": "neural",
+      "name": "Нейрошунт «Резерв» — контур концентрации",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-4.webp",
+      "limbKeys": [
+        "head"
+      ],
+      "conditionMax": 290,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Наука"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "контур концентрации"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 1,
+          "reason": "экранирование"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Голова",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "head"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 290,
+        "max": 290,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "energy",
+            "path": "system.skills.energy.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Контроль энергии"
+          },
+          {
+            "kind": "skill",
+            "key": "science",
+            "path": "system.skills.science.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Наука"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1629,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "контур концентрации"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "экранирование"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1776
+    },
+    {
+      "key": "c-dusk-pupil",
+      "class": "C",
+      "family": "ocular",
+      "name": "Адаптивный зрачок «Полумрак»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(glaz).webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 270,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Натуралист"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 2,
+          "reason": "адаптивный пигмент"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 270,
+        "max": 270,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "stealth",
+            "path": "system.skills.stealth.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Скрытность"
+          },
+          {
+            "kind": "skill",
+            "key": "naturalist",
+            "path": "system.skills.naturalist.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Натуралист"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1310,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "адаптивный пигмент"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 384
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1428
+    },
+    {
+      "key": "c-microfocus-eye",
+      "class": "C",
+      "family": "ocular",
+      "name": "Микрофокус «Гравёр»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/protez-monoklya.webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 260,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Ремесло"
+        },
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Доктор"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "микрофокус"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 260,
+        "max": 260,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "repair",
+            "path": "system.skills.repair.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Ремесло"
+          },
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Доктор"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1502,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "микрофокус"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1637
+    },
+    {
+      "key": "c-motion-retina",
+      "class": "C",
+      "family": "ocular",
+      "name": "Ретина движения «Перехват»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/avtonavedenie.webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 280,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Атлетика"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "трекер движения"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 280,
+        "max": 280,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Дальний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Атлетика"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1502,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "трекер движения"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1637
+    },
+    {
+      "key": "c-hazard-spectrum",
+      "class": "C",
+      "family": "ocular",
+      "name": "Спектральная линза «След»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/monokol-kiber.webp",
+      "limbKeys": [
+        "eyes"
+      ],
+      "conditionMax": 285,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Натуралист"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Наука"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "спектральный сенсор"
+        },
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 1,
+          "reason": "реактивные метки"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Глаза",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 285,
+        "max": 285,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "naturalist",
+            "path": "system.skills.naturalist.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Натуралист"
+          },
+          {
+            "kind": "skill",
+            "key": "science",
+            "path": "system.skills.science.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Наука"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1630,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "спектральный сенсор"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "реактивные метки"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 256
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1777
+    },
+    {
+      "key": "c-surgical-servo",
+      "class": "C",
+      "family": "motor",
+      "name": "Мед-Тек «Ассистент» — хирургический сервонерв",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(ruka).webp",
+      "limbKeys": [
+        "leftArm",
+        "rightArm"
+      ],
+      "conditionMax": 330,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Ремесло"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "сервонерв"
+        },
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 1,
+          "reason": "фильтр дрожания"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая рука",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftArm",
+          "rightArm"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 330,
+        "max": 330,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Доктор"
+          },
+          {
+            "kind": "skill",
+            "key": "repair",
+            "path": "system.skills.repair.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Ремесло"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1726,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "фильтр дрожания"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 896
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 2,
+            "reason": "сервонерв",
+            "reasons": [
+              "сервонерв"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          }
+        ]
+      },
+      "price": 1881
+    },
+    {
+      "key": "c-recoil-lattice",
+      "class": "C",
+      "family": "motor",
+      "name": "Локтевая решётка «Затвор»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/privod.webp",
+      "limbKeys": [
+        "leftArm",
+        "rightArm"
+      ],
+      "conditionMax": 350,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Атлетика"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 3,
+          "reason": "решётка отдачи"
+        },
+        {
+          "kind": "frame",
+          "class": "C",
+          "quantity": 1,
+          "reason": "костные анкеры"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая рука",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftArm",
+          "rightArm"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 350,
+        "max": 350,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 25,
+            "label": "Дальний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Атлетика"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1853,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "костные анкеры"
+            ],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "решётка отдачи",
+            "reasons": [
+              "решётка отдачи"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          }
+        ]
+      },
+      "price": 2020
+    },
+    {
+      "key": "c-impact-myomer",
+      "class": "C",
+      "family": "motor",
+      "name": "Ударный миомер «Кувалда»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/privod-2.webp",
+      "limbKeys": [
+        "leftArm",
+        "rightArm"
+      ],
+      "conditionMax": 360,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 3,
+          "reason": "ударные миомеры"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 1,
+          "reason": "гашение отдачи"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая рука",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftArm",
+          "rightArm"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 360,
+        "max": 360,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "meleeCombat",
+            "path": "system.skills.meleeCombat.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Ближний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1853,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "гашение отдачи"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "ударные миомеры",
+            "reasons": [
+              "ударные миомеры"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          }
+        ]
+      },
+      "price": 2020
+    },
+    {
+      "key": "c-climbing-fibers",
+      "class": "C",
+      "family": "motor",
+      "name": "Скалолазные волокна «Кошка»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(nogi).webp",
+      "limbKeys": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "conditionMax": 340,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Ближний бой"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 3,
+          "reason": "тяговые волокна"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая нога",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 340,
+        "max": 340,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 25,
+            "label": "Атлетика"
+          },
+          {
+            "kind": "skill",
+            "key": "meleeCombat",
+            "path": "system.skills.meleeCombat.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Ближний бой"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1726,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "тяговые волокна",
+            "reasons": [
+              "тяговые волокна"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          }
+        ]
+      },
+      "price": 1881
+    },
+    {
+      "key": "c-silent-pads",
+      "class": "C",
+      "family": "motor",
+      "name": "Подошвенные подушки «Тишь»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/stels-boj.webp",
+      "limbKeys": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "conditionMax": 320,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Атлетика"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 3,
+          "reason": "поглощение шага"
+        },
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 1,
+          "reason": "эластомер"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая нога",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 320,
+        "max": 320,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "stealth",
+            "path": "system.skills.stealth.bonus",
+            "type": "add",
+            "value": 25,
+            "label": "Скрытность"
+          },
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Атлетика"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1563,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 2,
+            "reason": "",
+            "reasons": [
+              "эластомер"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 256
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "поглощение шага"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 508
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1704
+    },
+    {
+      "key": "c-retreat-reflex",
+      "class": "C",
+      "family": "motor",
+      "name": "Коленный рефлекс «Отход»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(nogi).webp",
+      "limbKeys": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "conditionMax": 330,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "аварийный рефлекс"
+        },
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 1,
+          "reason": "коленный привод"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Левая нога",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 330,
+        "max": 330,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "stealth",
+            "path": "system.skills.stealth.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Скрытность"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1726,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 5,
+            "reason": "",
+            "reasons": [
+              "аварийный рефлекс"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 1,
+            "reason": "коленный привод",
+            "reasons": [
+              "коленный привод"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          }
+        ]
+      },
+      "price": 1881
+    },
+    {
+      "key": "c-synthetic-lung",
+      "class": "C",
+      "family": "circulatory",
+      "name": "Синтетическое лёгкое «Сильфон»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(tors).webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 380,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 3,
+          "reason": "газообменная мембрана"
+        },
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "дыхательный привод"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 380,
+        "max": 380,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Атлетика"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1886,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "газообменная мембрана"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 512
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 2,
+            "reason": "дыхательный привод",
+            "reasons": [
+              "дыхательный привод"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          }
+        ]
+      },
+      "price": 2056
+    },
+    {
+      "key": "c-reserve-capacitor",
+      "class": "C",
+      "family": "neural",
+      "name": "Торакальный накопитель «Резерв»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/batareya.webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 350,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Наука"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 4,
+          "reason": "внутренний накопитель"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 2,
+          "reason": "биоизоляция"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 350,
+        "max": 350,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "energy",
+            "path": "system.skills.energy.bonus",
+            "type": "add",
+            "value": 25,
+            "label": "Контроль энергии"
+          },
+          {
+            "kind": "skill",
+            "key": "science",
+            "path": "system.skills.science.bonus",
+            "type": "add",
+            "value": 5,
+            "label": "Наука"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 2204,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 7,
+            "reason": "",
+            "reasons": [
+              "внутренний накопитель"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 1568
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 128
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "биоизоляция"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 381
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 2402
+    },
+    {
+      "key": "c-field-coagulator",
+      "class": "C",
+      "family": "circulatory",
+      "name": "Коагулятор «Полевой хирург»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/serdce-implant.webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 360,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 3,
+          "reason": "коагулянт"
+        },
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 1,
+          "reason": "датчик кровопотери"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 360,
+        "max": 360,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Доктор"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1662,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "датчик кровопотери"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 896
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "коагулянт"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 512
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1812
+    },
+    {
+      "key": "c-detox-kidney",
+      "class": "C",
+      "family": "circulatory",
+      "name": "Синтопочка «Чистильщик»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(tors).webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 400,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": {
+        "mode": "resistance",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "poison": 30,
+          "acid": 18
+        }
+      },
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 5,
+          "reason": "селективная мембрана"
+        },
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 2,
+          "reason": "насос"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 2,
+          "reason": "контур очистки"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 400,
+        "max": 400,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "doctor",
+            "path": "system.skills.doctor.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Доктор"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": {
+        "channelTotal": 48,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 4.36,
+        "protectionVolume": 34.91,
+        "pricePerProtectionVolume": 74.82
+      },
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 2396,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 6,
+            "reason": "",
+            "reasons": [
+              "селективная мембрана"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 768
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "контур очистки"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 381
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 2,
+            "reason": "насос",
+            "reasons": [
+              "насос"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          }
+        ]
+      },
+      "price": 2612
+    },
+    {
+      "key": "c-heat-exchanger",
+      "class": "C",
+      "family": "circulatory",
+      "name": "Теплообменник «Климат»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/krio-batareya.webp",
+      "limbKeys": [
+        "torso"
+      ],
+      "conditionMax": 390,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": {
+        "mode": "resistance",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "fire": 24,
+          "cryo": 24
+        }
+      },
+      "recipeExtra": [
+        {
+          "kind": "mechanics",
+          "class": "C",
+          "quantity": 3,
+          "reason": "теплообменный контур"
+        },
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 3,
+          "reason": "теплоноситель"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 2,
+          "reason": "терморегуляция"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Туловище",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "torso"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 390,
+        "max": 390,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "athletics",
+            "path": "system.skills.athletics.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Атлетика"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": {
+        "channelTotal": 48,
+        "coveredLimbs": 8,
+        "averageAcrossDamageChannels": 4.36,
+        "protectionVolume": 34.91,
+        "pricePerProtectionVolume": 73.82
+      },
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 2364,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "теплоноситель"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 512
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "терморегуляция"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 381
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "теплообменный контур",
+            "reasons": [
+              "теплообменный контур"
+            ],
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          }
+        ]
+      },
+      "price": 2577
+    },
+    {
+      "key": "c-adrenal-valve",
+      "class": "C",
+      "family": "endocrine",
+      "name": "Адреналовый клапан «Дуэлянт»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(pah).webp",
+      "limbKeys": [
+        "groin"
+      ],
+      "conditionMax": 350,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Дальний бой"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 3,
+          "reason": "адреналовая матрица"
+        },
+        {
+          "kind": "electronics",
+          "class": "C",
+          "quantity": 1,
+          "reason": "боевой триггер"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Пах",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 350,
+        "max": 350,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "meleeCombat",
+            "path": "system.skills.meleeCombat.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Ближний бой"
+          },
+          {
+            "kind": "skill",
+            "key": "rangedCombat",
+            "path": "system.skills.rangedCombat.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Дальний бой"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1662,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "боевой триггер"
+            ],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 896
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "адреналовая матрица"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 512
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1812
+    },
+    {
+      "key": "c-social-regulator",
+      "class": "C",
+      "family": "endocrine",
+      "name": "Эндокринный регулятор «Дипломат»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(pah).webp",
+      "limbKeys": [
+        "groin"
+      ],
+      "conditionMax": 340,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Азарт"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 3,
+          "reason": "социальный гормональный профиль"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Пах",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 340,
+        "max": 340,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "speech",
+            "path": "system.skills.speech.bonus",
+            "type": "add",
+            "value": 20,
+            "label": "Красноречие"
+          },
+          {
+            "kind": "skill",
+            "key": "gambling",
+            "path": "system.skills.gambling.bonus",
+            "type": "add",
+            "value": 10,
+            "label": "Азарт"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1438,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "социальный гормональный профиль"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 512
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1567
+    },
+    {
+      "key": "c-endocrine-focus",
+      "class": "C",
+      "family": "endocrine",
+      "name": "Железистый контур «Самоконтроль»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(pah).webp",
+      "limbKeys": [
+        "groin"
+      ],
+      "conditionMax": 360,
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "recipeExtra": [
+        {
+          "kind": "chemistry",
+          "class": "C",
+          "quantity": 3,
+          "reason": "стабилизирующая смесь"
+        },
+        {
+          "kind": "properties",
+          "class": "C",
+          "quantity": 2,
+          "reason": "контур гомеостаза"
+        }
+      ],
+      "folderPath": [
+        "Импланты",
+        "Пах",
+        "C"
+      ],
+      "implant": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "enabled": true,
+        "value": 360,
+        "max": 360,
+        "weakeningThreshold": 20,
+        "recoveryMethods": [
+          {
+            "type": "tools",
+            "toolKey": "repair",
+            "toolClass": "C",
+            "difficulty": 100
+          }
+        ]
+      },
+      "freeSettings": {
+        "enabled": true,
+        "useConditionWeakening": true,
+        "effects": [
+          {
+            "kind": "skill",
+            "key": "energy",
+            "path": "system.skills.energy.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Контроль энергии"
+          },
+          {
+            "kind": "skill",
+            "key": "resilience",
+            "path": "system.skills.resilience.bonus",
+            "type": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ]
+      },
+      "utilityScore": 30,
+      "mitigationEconomy": null,
+      "recipe": {
+        "difficulty": 70,
+        "markupPercent": 9,
+        "rawComponentCost": 1692,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [],
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "chemistry",
+            "class": "C",
+            "quantity": 4,
+            "reason": "",
+            "reasons": [
+              "стабилизирующая смесь"
+            ],
+            "itemId": "YGNLXmADX9pkDtek",
+            "name": "Компонент химиката C класса",
+            "unitPrice": 128,
+            "subtotal": 512
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 3,
+            "reason": "",
+            "reasons": [
+              "контур гомеостаза"
+            ],
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 381
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 1,
+            "reason": "",
+            "reasons": [],
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ]
+      },
+      "price": 1844
     },
     {
       "key": "b-local-socket-head",
@@ -12564,6 +19431,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -12723,6 +19591,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -12882,6 +19751,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -13041,6 +19911,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -13200,6 +20071,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -13359,6 +20231,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -13518,6 +20391,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,
@@ -13677,6 +20551,7 @@
         ]
       },
       "utilityScore": 0,
+      "mitigationEconomy": null,
       "recipe": {
         "difficulty": 110,
         "markupPercent": 18,

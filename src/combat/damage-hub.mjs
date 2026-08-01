@@ -7,6 +7,10 @@ import {
   getTimeMechanicsIgnored,
   getTokenActionHudDamageIcons
 } from "../settings/accessors.mjs";
+import {
+  canActorLimbBeAutomaticallyDestroyed,
+  getActorLimbDestructionMode
+} from "../settings/combat.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { withQueuedReactionOpportunityWave } from "./reaction-hub.mjs";
@@ -2379,7 +2383,7 @@ async function applyFinishingBlowIfEligible(targetActor, data = {}) {
   const roll = chance > 0 ? Math.ceil(Math.random() * 100) : 0;
   if (chance > 0 && roll > chance) return null;
 
-  const destroyed = await destroyFinishingBlowCriticalLimb(targetActor, limbKey);
+  const destroyed = await destroyActorLimbExplicitly(targetActor, limbKey);
   if (!destroyed) return null;
 
   const result = {
@@ -2419,7 +2423,8 @@ function selectFinishingBlowCriticalLimbKey(actor, preferredLimbKey = "") {
     .at(0)?.limbKey ?? "";
 }
 
-async function destroyFinishingBlowCriticalLimb(actor, limbKey = "") {
+/** Explicitly destroy a limb, independently from automatic −100% destruction policy. */
+export async function destroyActorLimbExplicitly(actor, limbKey = "") {
   const key = String(limbKey ?? "").trim();
   if (!actor || !key || isLimbDestroyed(actor, key)) return false;
 
@@ -3020,6 +3025,7 @@ function preventCriticalLimbHealthRecovery(actor, changes = {}) {
 
 function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
   const limbHealthContext = buildActorLimbHealthContext(actor);
+  let combatSettings = null;
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     const critical = isCriticalLimb(actor, key) || Boolean(getUpdatePath(changes, `system.limbs.${key}.critical`) ?? limb?.critical);
     if (!critical) continue;
@@ -3029,7 +3035,17 @@ function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
     if (missing) return true;
     const min = toInteger(getUpdatePath(changes, `system.limbs.${key}.min`) ?? limb?.min);
     const value = toInteger(getUpdatePath(changes, `system.limbs.${key}.value`) ?? limb?.value);
-    if (value <= min) return true;
+    if (
+      value <= min
+      && (
+        isConstructPartLimb(actor, key)
+        || canActorLimbBeAutomaticallyDestroyed(
+          actor,
+          { critical: true },
+          combatSettings ??= getCombatSettings()
+        )
+      )
+    ) return true;
   }
   return false;
 }
@@ -3234,6 +3250,8 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
   const destroyedLimbKeys = [];
   const limbLossEffectData = [];
   const limbHealthContext = buildActorLimbHealthContext(actor);
+  let combatSettings = null;
+  let limbDestructionMode = null;
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
     const limb = actor?.system?.limbs?.[limbKey];
     if (!limb) continue;
@@ -3244,6 +3262,21 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
       : isLimbPhysicallyMissing(actor, limbKey);
     const reachedDestruction = constructSlot ? missing : toInteger(limb.value) <= toInteger(limb.min);
     if (!missing && !reachedDestruction) continue;
+    if (
+      !missing
+      && !constructSlot
+      && !canActorLimbBeAutomaticallyDestroyed(
+        actor,
+        {
+          critical: isCriticalLimb(actor, limbKey),
+          mode: limbDestructionMode ??= getActorLimbDestructionMode(
+            actor,
+            combatSettings ??= getCombatSettings()
+          )
+        },
+        combatSettings
+      )
+    ) continue;
     destroyed.add(limbKey);
     destroyedLimbKeys.push(limbKey);
     if (!missing) missingUpdates[`system.limbs.${limbKey}.missing`] = true;
@@ -6674,10 +6707,17 @@ async function preventLethalDamageIfApplicable(actor, estimate = {}, context = {
 
 function isDamageEstimateLethal(actor, estimate = {}) {
   if (estimate?.lethal === true) return true;
+  let combatSettings = null;
   for (const [limbKey, state] of estimate?.limbStates ?? []) {
     if (!isCriticalLimb(actor, limbKey)) continue;
     if (hasInstalledProsthesis(actor, limbKey)) continue;
-    if (toInteger(state?.nextValue) <= toInteger(state?.min)) return true;
+    if (toInteger(state?.nextValue) > toInteger(state?.min)) continue;
+    if (isConstructPartLimb(actor, limbKey)) return true;
+    if (canActorLimbBeAutomaticallyDestroyed(
+      actor,
+      { critical: true },
+      combatSettings ??= getCombatSettings()
+    )) return true;
   }
   return (estimate?.brokenProsthesisLimbKeys ?? [])
     .some(limbKey => isCriticalLimb(actor, limbKey));

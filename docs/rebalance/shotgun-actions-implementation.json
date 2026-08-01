@@ -1,20 +1,36 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T07:24:26.614Z",
+  "generatedAt": "2026-08-01T10:05:22.785Z",
   "mode": "dry-run",
   "status": "validated-dry-run",
   "databasePath": "C:\\Users\\1\\AppData\\Local\\FoundryVTT\\Data\\worlds\\fallout\\data\\items",
   "summary": {
-    "shotguns": 76,
+    "shotguns": 79,
     "changed": 0,
     "automatic": 6,
     "byVariant": {
       "advanced": 7,
       "compact": 2,
       "doubleBarrel": 6,
+      "gauntlet": 3,
       "precision": 10,
       "sawedOff": 10,
       "standard": 41
+    },
+    "byClass": {
+      "A": 4,
+      "B": 24,
+      "C": 32,
+      "D": 19
+    },
+    "byEffectiveRange": {
+      "1/2": 2,
+      "1/3": 13,
+      "1/4": 39,
+      "1/5": 12,
+      "1/6": 6,
+      "1/7": 5,
+      "1/8": 2
     }
   },
   "items": [
@@ -26,6 +42,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 4517,
+      "magazine": 12,
+      "accuracyBonus": 5,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -48,6 +73,15 @@
       "variant": "compact",
       "automatic": false,
       "changed": false,
+      "price": 239,
+      "magazine": 5,
+      "accuracyBonus": 1,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -70,6 +104,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1194,
+      "magazine": 6,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -85,6 +128,68 @@
       }
     },
     {
+      "itemId": "1n4FxyJUj46cJ0IV",
+      "name": "Баллистический кулак",
+      "class": "B",
+      "profileId": "hybrid.gauntletLauncher",
+      "variant": "gauntlet",
+      "automatic": false,
+      "changed": false,
+      "price": 3884,
+      "magazine": 2,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 2,
+        "maximum": 10
+      },
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
+      "itemId": "2a4d28efc7bfb012",
+      "name": "Военная перчатка «Гром»",
+      "class": "B",
+      "profileId": "",
+      "variant": "gauntlet",
+      "automatic": false,
+      "changed": false,
+      "price": 7855,
+      "magazine": 3,
+      "accuracyBonus": 0,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 12
+      },
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
       "itemId": "2bTKK6EEED4AYirp",
       "name": "Полицейский дробовик",
       "class": "C",
@@ -92,6 +197,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1239,
+      "magazine": 12,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -114,6 +228,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 7024,
+      "magazine": 12,
+      "accuracyBonus": 25,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 6,
+        "maximum": 35
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -136,6 +259,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 359,
+      "magazine": 1,
+      "accuracyBonus": 2,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -158,6 +290,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 359,
+      "magazine": 2,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -180,6 +321,15 @@
       "variant": "doubleBarrel",
       "automatic": false,
       "changed": false,
+      "price": 427,
+      "magazine": 2,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -202,6 +352,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 2040,
+      "magazine": 2,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -224,6 +383,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1366,
+      "magazine": 5,
+      "accuracyBonus": 5,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -246,6 +414,15 @@
       "variant": "standard",
       "automatic": true,
       "changed": false,
+      "price": 5669,
+      "magazine": 8,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -273,6 +450,15 @@
       "variant": "doubleBarrel",
       "automatic": false,
       "changed": false,
+      "price": 1761,
+      "magazine": 2,
+      "accuracyBonus": 5,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -295,6 +481,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 11640,
+      "magazine": 12,
+      "accuracyBonus": 16,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 7,
+        "maximum": 40
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -317,6 +512,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 15237,
+      "magazine": 10,
+      "accuracyBonus": 10,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 7,
+        "maximum": 40
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -339,6 +543,15 @@
       "variant": "doubleBarrel",
       "automatic": false,
       "changed": false,
+      "price": 1425,
+      "magazine": 2,
+      "accuracyBonus": 20,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -361,6 +574,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 271,
+      "magazine": 5,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -383,6 +605,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 6889,
+      "magazine": 30,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -405,6 +636,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 4030,
+      "magazine": 7,
+      "accuracyBonus": 11,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -427,6 +667,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1802,
+      "magazine": 15,
+      "accuracyBonus": 12,
+      "paidRangeDeviationRank": 1,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -449,6 +698,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 4667,
+      "magazine": 12,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 1,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 7,
+        "maximum": 40
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -471,6 +729,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 5319,
+      "magazine": 12,
+      "accuracyBonus": 12,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 6,
+        "maximum": 35
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -493,6 +760,15 @@
       "variant": "standard",
       "automatic": true,
       "changed": false,
+      "price": 6428,
+      "magazine": 21,
+      "accuracyBonus": 14,
+      "paidRangeDeviationRank": 1,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -520,6 +796,15 @@
       "variant": "standard",
       "automatic": true,
       "changed": false,
+      "price": 7147,
+      "magazine": 10,
+      "accuracyBonus": 11,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -547,6 +832,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 423,
+      "magazine": 2,
+      "accuracyBonus": 2,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -569,6 +863,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1194,
+      "magazine": 6,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -591,6 +894,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1227,
+      "magazine": 4,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -613,6 +925,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1227,
+      "magazine": 7,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -635,6 +956,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 424,
+      "magazine": 2,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -657,6 +987,15 @@
       "variant": "doubleBarrel",
       "automatic": false,
       "changed": false,
+      "price": 391,
+      "magazine": 2,
+      "accuracyBonus": 2,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -679,6 +1018,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 1728,
+      "magazine": 4,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -701,6 +1049,15 @@
       "variant": "standard",
       "automatic": true,
       "changed": false,
+      "price": 7817,
+      "magazine": 10,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -728,6 +1085,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 8305,
+      "magazine": 7,
+      "accuracyBonus": 18,
+      "paidRangeDeviationRank": 2,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 8,
+        "maximum": 45
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -750,6 +1116,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1900,
+      "magazine": 7,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -772,6 +1147,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 307,
+      "magazine": 5,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -794,6 +1178,15 @@
       "variant": "standard",
       "automatic": true,
       "changed": false,
+      "price": 6120,
+      "magazine": 24,
+      "accuracyBonus": 16,
+      "paidRangeDeviationRank": 1,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -821,6 +1214,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 271,
+      "magazine": 5,
+      "accuracyBonus": 5,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -843,6 +1245,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1728,
+      "magazine": 2,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -865,6 +1276,15 @@
       "variant": "standard",
       "automatic": true,
       "changed": false,
+      "price": 5967,
+      "magazine": 12,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -892,6 +1312,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 4287,
+      "magazine": 16,
+      "accuracyBonus": 16,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -914,6 +1343,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1721,
+      "magazine": 5,
+      "accuracyBonus": 23,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -936,6 +1374,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 359,
+      "magazine": 6,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -958,6 +1405,15 @@
       "variant": "compact",
       "automatic": false,
       "changed": false,
+      "price": 274,
+      "magazine": 5,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -980,6 +1436,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 4030,
+      "magazine": 6,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1002,6 +1467,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1483,
+      "magazine": 6,
+      "accuracyBonus": 5,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1024,6 +1498,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1194,
+      "magazine": 6,
+      "accuracyBonus": 11,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1046,6 +1529,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 6846,
+      "magazine": 3,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1068,6 +1560,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1761,
+      "magazine": 8,
+      "accuracyBonus": 11,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1090,6 +1591,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 423,
+      "magazine": 2,
+      "accuracyBonus": 2,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1105,6 +1615,37 @@
       }
     },
     {
+      "itemId": "c718abdd8e1606d3",
+      "name": "Перчатка-дробовик «Шершень»",
+      "class": "C",
+      "profileId": "",
+      "variant": "gauntlet",
+      "automatic": false,
+      "changed": false,
+      "price": 2329,
+      "magazine": 2,
+      "accuracyBonus": 0,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 2,
+        "maximum": 10
+      },
+      "actions": {
+        "aimedShot": {
+          "name": "Прицельный выстрел",
+          "actionPointCost": 6,
+          "attackConeDegrees": 25
+        },
+        "snapshot": {
+          "name": "Выстрел на вскидку",
+          "actionPointCost": 5,
+          "attackConeDegrees": 45
+        },
+        "burst": null
+      }
+    },
+    {
       "itemId": "cAQVzLAe7jUjAjco",
       "name": "Модный помповый дробовик",
       "class": "C",
@@ -1112,6 +1653,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1425,
+      "magazine": 8,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1134,6 +1684,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 271,
+      "magazine": 2,
+      "accuracyBonus": 2,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1156,6 +1715,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 4931,
+      "magazine": 17,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 6,
+        "maximum": 35
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1178,6 +1746,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 16588,
+      "magazine": 8,
+      "accuracyBonus": 10,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 7,
+        "maximum": 40
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1200,6 +1777,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1483,
+      "magazine": 24,
+      "accuracyBonus": 12,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1222,6 +1808,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 1794,
+      "magazine": 8,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1244,6 +1839,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 568,
+      "magazine": 1,
+      "accuracyBonus": 23,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1266,6 +1870,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 17098,
+      "magazine": 8,
+      "accuracyBonus": 19,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 7,
+        "maximum": 40
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1288,6 +1901,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 1690,
+      "magazine": 6,
+      "accuracyBonus": 4,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1310,6 +1932,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 391,
+      "magazine": 2,
+      "accuracyBonus": 4,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1332,6 +1963,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1969,
+      "magazine": 6,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1354,6 +1994,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1721,
+      "magazine": 5,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1376,6 +2025,15 @@
       "variant": "advanced",
       "automatic": false,
       "changed": false,
+      "price": 7329,
+      "magazine": 5,
+      "accuracyBonus": 11,
+      "paidRangeDeviationRank": 2,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 8,
+        "maximum": 45
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1398,6 +2056,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 4584,
+      "magazine": 12,
+      "accuracyBonus": 12,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 6,
+        "maximum": 35
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1420,6 +2087,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1227,
+      "magazine": 6,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1442,6 +2118,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 336,
+      "magazine": 5,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1464,6 +2149,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 1900,
+      "magazine": 5,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1486,6 +2180,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 504,
+      "magazine": 5,
+      "accuracyBonus": 12,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 20
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1508,6 +2211,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1728,
+      "magazine": 6,
+      "accuracyBonus": 4,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1530,6 +2242,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1969,
+      "magazine": 18,
+      "accuracyBonus": 23,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1552,6 +2273,15 @@
       "variant": "doubleBarrel",
       "automatic": false,
       "changed": false,
+      "price": 1969,
+      "magazine": 2,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1574,6 +2304,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 1273,
+      "magazine": 12,
+      "accuracyBonus": 12,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1596,6 +2335,15 @@
       "variant": "sawedOff",
       "automatic": false,
       "changed": false,
+      "price": 391,
+      "magazine": 4,
+      "accuracyBonus": 6,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 3,
+        "maximum": 15
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1618,6 +2366,15 @@
       "variant": "doubleBarrel",
       "automatic": false,
       "changed": false,
+      "price": 2050,
+      "magazine": 2,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 4,
+        "maximum": 25
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1640,6 +2397,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 6889,
+      "magazine": 15,
+      "accuracyBonus": 17,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 6,
+        "maximum": 35
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1662,6 +2428,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 5519,
+      "magazine": 20,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 6,
+        "maximum": 35
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1684,6 +2459,15 @@
       "variant": "precision",
       "automatic": false,
       "changed": false,
+      "price": 1969,
+      "magazine": 5,
+      "accuracyBonus": 23,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",
@@ -1706,6 +2490,15 @@
       "variant": "standard",
       "automatic": false,
       "changed": false,
+      "price": 4520,
+      "magazine": 12,
+      "accuracyBonus": 8,
+      "paidRangeDeviationRank": 0,
+      "range": {
+        "effectiveNear": 1,
+        "effectiveFar": 5,
+        "maximum": 30
+      },
       "actions": {
         "aimedShot": {
           "name": "Прицельный выстрел",

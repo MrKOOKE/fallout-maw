@@ -110,78 +110,19 @@ test("per-target finishing is deduplicated and bounded before a session is pinne
   assert.match(enqueue, /getCombatEndFinishOperationKey\(sessionId,\s*actorUuid\)/);
 });
 
-test("an in-flight finishing claim survives authority reconstruction and gates damage", () => {
-  const refresh = sliceFunction(
-    "refreshAllCombatEndSessionsAsAuthority",
-    "refreshCombatEndSessionsForActor"
-  );
-  const enqueue = sliceFunction("enqueuePinnedCombatEndFinish", "handleCombatEndFinish");
-  const finish = sliceFunction("handleCombatEndFinish", "getCombatEndFinishOperationKey");
-
-  assert.match(refresh, /getActiveCombatEndFinishClaim\(entry\)/);
-  assert.doesNotMatch(refresh, /entry\.finishing\s*=\s*false/);
-  assert.match(resolutionSource, /scheduleCombatEndFinishClaimExpiryRefresh\(\)/);
-  assert.match(resolutionSource, /expireCombatEndFinishClaimsAsAuthority/);
-  assert.match(enqueue, /setCombatEndFinishClaim\(entry/);
-  assert.match(enqueue, /isMatchingCombatEndFinishClaim\(currentEntry,\s*operationId,\s*authorityUserId\)/);
-  assert.ok(
-    finish.indexOf("isCombatEndAuthority(authorityUserId)")
-      < finish.indexOf("await applyDamageApplication")
-  );
-  assert.match(finish, /combatEndOperationId:\s*operationId/);
-});
-
-test("ordinary joins and disconnects never exchange combat-end history", () => {
-  const connected = sliceFunction("handleCombatEndUserConnected", "sendCombatEndSessionSync");
-
-  assert.match(connected, /authorityChanged/);
-  assert.match(connected, /if \(authorityChanged\)/);
-  assert.match(connected, /requestCombatEndAuthorityRecovery\(/);
-  assert.doesNotMatch(connected, /sendCombatEndSessionSync\(/);
-  assert.doesNotMatch(connected, /\bconnected\b/);
-});
-
-test("authority recovery uses bounded authenticated GM donors and only in-flight sessions", () => {
-  const sync = sliceFunction("sendCombatEndSessionSync", "scheduleCombatEndAuthorityCanonicalRefresh");
+test("only the live combat completion opens a window and later state cannot restore it", () => {
+  const registration = sliceFunction("registerCombatEndResolutionSocket", "handleCombatDeleted");
+  const deleted = sliceFunction("handleCombatDeleted", "createCombatEndSession");
+  const broadcast = sliceFunction("broadcastCombatEndSession", "broadcastCombatEndTerminal");
+  const render = sliceFunction("renderCombatEndSession", "closeCombatEndApplication");
   const socket = sliceFunction("handleCombatEndSocketMessage", "handleCombatEndFinishQuery");
 
-  assert.match(sync, /session\?\.operationPending \|\| sessionHasActiveCombatEndFinishClaims\(session\)/);
-  assert.match(socket, /socketSenderUserId/);
-  assert.match(socket, /recovery\?\.requestId !== message\.requestId/);
-  assert.match(socket, /recovery\?\.donorUserIds\?\.has\(senderUserId\)/);
-  assert.match(socket, /recovery\.respondedUserIds\.has\(senderUserId\)/);
-  assert.match(socket, /renderCombatEndSession\(session, \{ present: false \}\)/);
-  assert.match(resolutionSource, /COMBAT_END_MAX_RECOVERY_DONORS = 8/);
-  assert.match(resolutionSource, /preferredDonorUserId/);
-  assert.match(resolutionSource, /user\?\.active && user\.isGM/);
-  assert.doesNotMatch(socket, /sentByAuthority/);
-});
-
-test("combat-end completion is authoritative and combat session identity is stable", () => {
-  const create = sliceFunction("createCombatEndSession", "createSessionEntry");
-  const complete = sliceFunction("completeCombatEndSessionAsAuthority", "handleCombatEndSocketMessage");
-
-  assert.match(create, /id: String\(combat\?\.id \?\? foundry\.utils\.randomID\(\)\)/);
-  assert.doesNotMatch(create, /combat\?\.id[^\n]+randomID\(\).*`/);
-  assert.match(create, /sceneId:/);
-  assert.match(create, /expiresAt:/);
-  assert.match(complete, /expireCombatEndFinishClaimsAsAuthority\(\)/);
-  assert.doesNotMatch(complete, /session\.operationPending \|\|/);
-  assert.match(complete, /broadcastCombatEndTerminal\(id, session\.revision\)/);
-  assert.match(resolutionSource, /CONFIG\.queries\[COMBAT_END_COMPLETE_QUERY\]/);
-  assert.match(resolutionSource, /requestCombatEndComplete\(this\.#session\?\.id\)/);
-  assert.match(resolutionSource, /completeCombatEndSessionAsAuthority\(this\.#session\.id\)\?\.ok/);
-});
-
-test("combat-end windows are reconciled against the viewed scene before rerender", () => {
-  const present = sliceFunction("presentStoredCombatEndSession", "shouldPresentCombatEndSession");
-  const reconcile = sliceFunction(
-    "reconcileCombatEndApplicationPresentation",
-    "closeCombatEndApplication"
-  );
-
-  assert.match(present, /if \(!shouldPresentCombatEndSession\(storedSession\)\)/);
-  assert.match(present, /closeCombatEndApplication\(sessionId, \{ dismiss: false, animate: false \}\)/);
-  assert.match(reconcile, /presentStoredCombatEndSession\(session\)/);
-  assert.match(resolutionSource, /Hooks\.on\("canvasReady", reconcileCombatEndApplicationPresentation\)/);
+  assert.match(registration, /game\.socket\.on\(COMBAT_END_SOCKET,\s*handleCombatEndSocketMessage\)/);
+  assert.match(deleted, /broadcastCombatEndSession\(session, \{ open: true \}\)/);
+  assert.match(broadcast, /renderCombatEndSession\(session, \{ open \}\)/);
+  assert.match(broadcast, /type:\s*"state"/);
+  assert.match(broadcast, /open: Boolean\(open\)/);
+  assert.match(render, /if \(!application\) \{\s*if \(!open\) return;\s*for \(const id of renderedApplications\.keys\(\)\) closeCombatEndApplication\(id, \{ animate: false \}\);/);
+  assert.match(socket, /message\.type === "state"[\s\S]*renderCombatEndSession\(message\.session, \{ open: message\.open === true \}\)/);
+  assert.doesNotMatch(resolutionSource, /syncRequest|syncState|handleCombatEndUserConnected|sendCombatEndSessionSync/);
 });

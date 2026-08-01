@@ -11200,6 +11200,279 @@ html.fallout-maw-token-action-hud-open #hotbar {
   visibility: hidden;
 }
 
+.application.fallout-maw-combat-settings {
+  --fallout-maw-combat-settings-accent: rgba(228, 197, 121, 0.82);
+  --fallout-maw-combat-settings-border: rgba(228, 197, 121, 0.24);
+  --fallout-maw-combat-settings-border-strong: rgba(228, 197, 121, 0.5);
+  --fallout-maw-combat-settings-field: rgba(255, 255, 255, 0.035);
+  --fallout-maw-combat-settings-panel: rgba(7, 6, 10, 0.58);
+  max-height: calc(100vh - 2rem);
+}
+
+.application.fallout-maw-combat-settings .window-content {
+  container: combat-settings / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.75rem;
+}
+
+.fallout-maw-combat-settings-body {
+  flex: 1 1 auto;
+  gap: 0.65rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fallout-maw-combat-settings-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.35rem;
+  scrollbar-gutter: stable;
+}
+
+.fallout-maw-combat-settings-hero {
+  align-items: center;
+  background:
+    linear-gradient(120deg, rgba(228, 197, 121, 0.09), transparent 58%),
+    var(--fallout-maw-combat-settings-panel);
+  border: 1px solid var(--fallout-maw-combat-settings-border-strong);
+  border-radius: 7px;
+  display: flex;
+  gap: 0.85rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0.8rem;
+}
+
+.fallout-maw-combat-settings-hero-title {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.fallout-maw-combat-settings-hero-icon,
+.fallout-maw-combat-settings-section-icon {
+  align-items: center;
+  background: rgba(228, 197, 121, 0.1);
+  border: 1px solid var(--fallout-maw-combat-settings-border);
+  border-radius: 5px;
+  color: var(--fallout-maw-combat-settings-accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+.fallout-maw-combat-settings-hero-icon {
+  font-size: 1.15rem;
+  height: 2.45rem;
+  width: 2.45rem;
+}
+
+.fallout-maw-combat-settings-hero h2 {
+  border: 0;
+  color: var(--color-text-light-highlight, #f2e6c1);
+  font-size: 1.12rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.fallout-maw-combat-settings-hero p {
+  color: var(--color-text-light-6);
+  line-height: 1.3;
+  margin: 0.18rem 0 0;
+}
+
+.fallout-maw-combat-settings-migrate {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding-inline: 0.75rem;
+  width: auto;
+}
+
+.fallout-maw-combat-settings-sections {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+}
+
+.fallout-maw-combat-settings-section {
+  background:
+    linear-gradient(135deg, rgba(228, 197, 121, 0.035), transparent 48%),
+    var(--fallout-maw-combat-settings-panel);
+  border: 1px solid var(--fallout-maw-combat-settings-border);
+  border-left: 3px solid rgba(228, 197, 121, 0.55);
+  border-radius: 6px;
+  min-width: 0;
+  padding: 0.8rem;
+}
+
+.fallout-maw-combat-settings-section.wide {
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-combat-settings-section-header {
+  align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-combat-settings-border);
+  display: flex;
+  gap: 0.55rem;
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.55rem;
+}
+
+.fallout-maw-combat-settings-section-icon {
+  height: 1.9rem;
+  width: 1.9rem;
+}
+
+.fallout-maw-combat-settings-section-header h3 {
+  border: 0;
+  color: var(--color-text-light-highlight, #f2e6c1);
+  font-size: 1rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.fallout-maw-combat-settings-description {
+  color: var(--color-text-light-6);
+  line-height: 1.35;
+  margin: -0.1rem 0 0.7rem;
+}
+
+.fallout-maw-combat-settings-fields {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr));
+}
+
+.fallout-maw-combat-settings-field {
+  align-content: start;
+  background: var(--fallout-maw-combat-settings-field);
+  border: 1px solid rgba(228, 197, 121, 0.12);
+  border-radius: 5px;
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0.55rem 0.6rem;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.fallout-maw-combat-settings-field:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(228, 197, 121, 0.25);
+}
+
+.fallout-maw-combat-settings-field:focus-within {
+  background: rgba(228, 197, 121, 0.065);
+  border-color: var(--fallout-maw-combat-settings-border-strong);
+}
+
+.fallout-maw-combat-settings-field.span-all {
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-combat-settings-field > span {
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-combat-settings-field > input,
+.fallout-maw-combat-settings-field > select {
+  margin: 0;
+  min-height: 2.15rem;
+}
+
+.fallout-maw-combat-settings-field > small {
+  color: var(--color-text-light-6);
+  display: block;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.fallout-maw-combat-settings-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+}
+
+.fallout-maw-combat-settings-section .fallout-maw-combat-skill-damage-table {
+  gap: 0;
+  min-width: 34rem;
+}
+
+.fallout-maw-combat-settings-section .fallout-maw-combat-skill-damage-table .fallout-maw-settings-row {
+  border-top: 1px solid rgba(228, 197, 121, 0.12);
+  gap: 0.55rem;
+  padding: 0.5rem 0.55rem;
+}
+
+.fallout-maw-combat-settings-section .fallout-maw-combat-skill-damage-table .fallout-maw-grid-header {
+  background: rgba(228, 197, 121, 0.07);
+  border: 1px solid rgba(228, 197, 121, 0.2);
+  border-radius: 4px 4px 0 0;
+  color: var(--color-text-light-highlight, #f2e6c1);
+  padding-block: 0.45rem;
+}
+
+.fallout-maw-combat-settings-section .fallout-maw-combat-skill-damage-table .fallout-maw-settings-row:not(.fallout-maw-grid-header) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.fallout-maw-combat-settings-section .fallout-maw-combat-skill-damage-table .fallout-maw-settings-row > span:first-child {
+  font-weight: 600;
+}
+
+.application.fallout-maw-combat-settings .fallout-maw-combat-settings-footer {
+  background: rgba(10, 8, 12, 0.94);
+  border-top: 1px solid var(--fallout-maw-combat-settings-border-strong);
+  box-shadow: none;
+  flex: 0 0 auto;
+  margin: 0;
+  padding-top: 0.65rem;
+  position: static;
+  z-index: auto;
+}
+
+.fallout-maw-combat-settings-footer > button {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-content: center;
+  margin: 0;
+  min-height: 2.35rem;
+}
+
+@container combat-settings (max-width: 38rem) {
+  .fallout-maw-combat-settings-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fallout-maw-combat-settings-migrate {
+    width: 100%;
+  }
+
+  .fallout-maw-combat-settings-sections,
+  .fallout-maw-combat-settings-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fallout-maw-combat-settings-field.span-all {
+    grid-column: auto;
+  }
+}
+
 .fallout-maw-settings-grid {
   display: grid;
   gap: 0.55rem;
@@ -13529,6 +13802,43 @@ label.checkbox.fallout-maw-ability-change-choice {
   background: rgba(0, 0, 0, 0.68);
   border-color: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.42);
+  cursor: not-allowed;
+}
+
+.fallout-maw-aimed-limb-menu.range-unavailable {
+  background: rgba(31, 14, 15, 0.97);
+  border-color: rgba(255, 111, 111, 0.82);
+  box-shadow: 0 0 20px rgba(170, 25, 25, 0.28);
+}
+
+.fallout-maw-aimed-range-warning {
+  align-items: flex-start;
+  background: rgba(255, 111, 111, 0.12);
+  border: 1px solid rgba(255, 111, 111, 0.35);
+  border-radius: 4px;
+  color: #ffabab;
+  display: grid;
+  font-size: 0.78rem;
+  gap: 0.4rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+  line-height: 1.25;
+  margin-bottom: 0.15rem;
+  max-width: 260px;
+  padding: 0.4rem 0.45rem;
+}
+
+.fallout-maw-aimed-limb-menu .fallout-maw-aimed-range-warning span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.fallout-maw-aimed-limb-menu button.range-unavailable,
+.fallout-maw-aimed-limb-menu button.range-unavailable:hover,
+.fallout-maw-aimed-limb-menu button.range-unavailable.hover {
+  background: rgba(255, 111, 111, 0.045);
+  border-color: rgba(255, 111, 111, 0.12);
+  color: rgba(255, 228, 228, 0.48);
   cursor: not-allowed;
 }
 

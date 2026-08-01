@@ -85,6 +85,10 @@ import {
   resolveBaseWeaponEffectiveRange
 } from "../utils/weapon-range.mjs";
 import {
+  AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY,
   ALL_SKILLS_BONUS_PERCENT_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
@@ -98,6 +102,7 @@ import {
   evaluateActorEffectChangeNumber,
   SKILL_CHECK_DISABLED_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
+import { getAimedRangeSelectionState } from "../utils/aimed-range.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers, getWeaponNoiseLevel } from "../utils/weapon-modules.mjs";
@@ -874,20 +879,31 @@ async function executeAbilityAttackTargetSequence({
       context: "ability attack selected-target range"
     }
   ));
+  const aimedTargeting = settings.targeting?.aimed === true && !MELEE_ACTION_KEYS.has(actionKey);
+  const selectionOperationId = foundry.utils.randomID();
+  const selectionAttackModifier = aimedTargeting
+    ? createAttackActionTargetedModifier({ aimed: true, label })
+    : null;
   const collectTargetRows = () => collectAbilityAttackTargetSelectionRows({
     token,
     item,
     abilityFunction,
     actionKey,
-    maxRangeMeters
+    maxRangeMeters,
+    aimed: aimedTargeting,
+    attackModifier: selectionAttackModifier,
+    selectionOperationId
   });
+  const selectionRangeHint = aimedTargeting
+    ? `внутри эффективной дистанции и в пределах ${formatAbilityAttackRange(maxRangeMeters)}`
+    : `в пределах ${formatAbilityAttackRange(maxRangeMeters)}`;
   const selectedRows = await requestCustomTokenSelection({
     rows: collectTargetRows(),
     limit,
     allowRepeated: allowRepeatedTargets,
     title: label,
-    noneWarning: `${label}: нет доступных целей в пределах ${formatAbilityAttackRange(maxRangeMeters)}.`,
-    instructions: `${label}: выберите до ${limit} целей в пределах ${formatAbilityAttackRange(maxRangeMeters)}. Enter подтверждает неполный выбор, ПКМ снимает последнюю цель, Esc отменяет.`,
+    noneWarning: `${label}: нет доступных целей ${selectionRangeHint}.`,
+    instructions: `${label}: выберите до ${limit} целей ${selectionRangeHint}. Enter подтверждает неполный выбор, ПКМ снимает последнюю цель, Esc отменяет.`,
     sourceToken: token,
     refreshRows: collectTargetRows,
     getRowId: row => String(row?.token?.document?.uuid ?? row?.token?.uuid ?? row?.token?.id ?? ""),
@@ -914,6 +930,7 @@ async function executeAbilityAttackTargetSequence({
     selections.push({
       token: row.token,
       targetUuid: String(row.token?.document?.uuid ?? row.token?.uuid ?? ""),
+      chanceOperationId: String(row.chanceOperationId ?? ""),
       selectedLimbKey,
       attackModifier: createAttackActionTargetedModifier({
         aimed: settings.targeting?.aimed,
@@ -924,6 +941,19 @@ async function executeAbilityAttackTargetSequence({
   }
 
   if (!selections.length) {
+    onInteractionCancelled?.();
+    return false;
+  }
+  const refreshedRows = new Map(collectTargetRows().map(row => [getAbilityAttackTargetRowId(row), row]));
+  const invalidSelection = selections.find(selection => {
+    const row = refreshedRows.get(String(selection.targetUuid ?? ""));
+    if (!row?.selectable) return true;
+    return aimedTargeting && !resolveAimedTargetSelection(selection.token?.actor, selection.selectedLimbKey);
+  });
+  if (invalidSelection) {
+    const row = refreshedRows.get(String(invalidSelection.targetUuid ?? ""));
+    const targetName = invalidSelection.token?.name ?? invalidSelection.token?.actor?.name ?? "Цель";
+    ui.notifications.warn(`${label}: ${targetName} — ${row?.reason || game.i18n.localize("FALLOUTMAW.Messages.AimedTargetChanged")}`);
     onInteractionCancelled?.();
     return false;
   }
@@ -948,6 +978,7 @@ async function executeAbilityAttackTargetSequence({
         selection,
         selectionIndex
       ),
+      chanceOperationId: selection.chanceOperationId,
       chainRef
     }));
   }
@@ -959,36 +990,88 @@ function collectAbilityAttackTargetSelectionRows({
   item = null,
   abilityFunction = null,
   actionKey = "",
-  maxRangeMeters = 0
+  maxRangeMeters = 0,
+  aimed = false,
+  attackModifier = null,
+  selectionOperationId = ""
 } = {}) {
-  const reachable = new Set(collectValidWeaponAttackTargets({
-    attackerToken: token,
-    weapon: item,
-    actionKey,
-    weaponFunctionId: abilityFunction?.id
-  }));
-  return (canvas.tokens?.placeables ?? [])
+  const candidates = (canvas.tokens?.placeables ?? [])
     .filter(target => (
       target?.actor
       && target.visible !== false
       && target.renderable !== false
       && !isSameAttackToken(token, target)
-    ))
-    .map(target => {
-      const distanceMeters = measureTokenDistanceMeters(token, target);
-      const inRange = distanceMeters <= maxRangeMeters + 1e-6;
-      const selectable = inRange && reachable.has(target);
-      return {
-        token: target,
-        actorUuid: String(target.actor?.uuid ?? ""),
-        selectable,
-        reason: selectable
-          ? ""
-          : (!inRange
-            ? `вне дистанции ${formatAbilityAttackRange(maxRangeMeters)}`
-            : "цель недоступна для атаки")
-      };
-    });
+    ));
+  const reachable = aimed
+    ? null
+    : new Set(collectValidWeaponAttackTargets({
+      attackerToken: token,
+      weapon: item,
+      actionKey,
+      weaponFunctionId: abilityFunction?.id
+    }));
+  const weaponData = aimed ? getWeaponAttackData(item, abilityFunction?.id) : null;
+  const rangeContext = aimed
+    ? {
+      aimed: true,
+      targeting: { aimed: true },
+      attackModifier,
+      weaponData,
+      contextualAbilitySnapshots: new Map()
+    }
+    : null;
+  return candidates.map(target => {
+    const targetId = getAbilityAttackTargetRowId(target);
+    const chanceOperationId = aimed
+      ? `${selectionOperationId}:${targetId}`
+      : "";
+    const distanceMeters = getTokenDistanceMeters(token, target);
+    const inRange = distanceMeters <= maxRangeMeters + 1e-6;
+    const aimedRangeState = aimed
+      ? getAimedTargetRangeSelectionState({
+        weapon: item,
+        actionKey,
+        attackerToken: token,
+        targetToken: target,
+        weaponFunctionId: abilityFunction?.id,
+        context: {
+          ...rangeContext,
+          weaponAttackId: chanceOperationId,
+          chanceOperationId
+        }
+      })
+      : null;
+    const targetReachable = aimed
+      ? isAimedAttackGeometryTargetReachable({
+        attackerToken: token,
+        targetToken: target,
+        weapon: item,
+        actionKey,
+        weaponFunctionId: abilityFunction?.id,
+        rangeProfile: aimedRangeState?.rangeProfile
+      })
+      : reachable.has(target);
+    const insideAimedRange = aimedRangeState?.allowed !== false;
+    const selectable = inRange && targetReachable && insideAimedRange;
+    return {
+      token: target,
+      actorUuid: String(target.actor?.uuid ?? ""),
+      chanceOperationId,
+      selectable,
+      reason: selectable
+        ? ""
+        : (!inRange
+          ? `вне дистанции ${formatAbilityAttackRange(maxRangeMeters)}`
+          : (!insideAimedRange
+            ? formatAimedRangeBlockReason(aimedRangeState)
+            : "цель недоступна для атаки"))
+    };
+  });
+}
+
+function getAbilityAttackTargetRowId(row = null) {
+  const token = row?.token ?? row;
+  return String(token?.document?.uuid ?? token?.uuid ?? token?.id ?? "");
 }
 
 async function requestAbilityAttackSelectedLimb(targetToken = null, {
@@ -1036,6 +1119,31 @@ async function requestAbilityAttackSelectedLimb(targetToken = null, {
 function formatAbilityAttackRange(value = 0) {
   const number = Math.max(0, Number(value) || 0);
   return `${Number.isInteger(number) ? number : number.toFixed(2)} м`;
+}
+
+function formatAimedRangeBlockReason(state = {}) {
+  const unit = game.i18n.localize("FALLOUTMAW.Common.MeterShort");
+  const distance = formatAimedRangeMeters(state.attackDistanceMeters);
+  if (state.side === "near") {
+    return game.i18n.format("FALLOUTMAW.Messages.AimedRangeTooNear", {
+      distance,
+      limit: formatAimedRangeMeters(state.effectiveRange?.min),
+      unit
+    });
+  }
+  if (state.side === "far") {
+    return game.i18n.format("FALLOUTMAW.Messages.AimedRangeTooFar", {
+      distance,
+      limit: formatAimedRangeMeters(state.effectiveRange?.max),
+      unit
+    });
+  }
+  return game.i18n.localize("FALLOUTMAW.Messages.AimedRangeUnavailable");
+}
+
+function formatAimedRangeMeters(value = 0) {
+  const number = Math.max(0, Number(value) || 0);
+  return Number.isInteger(number) ? String(number) : number.toFixed(2);
 }
 
 async function requestAbilityAttackDirectionModifier(settings = {}, label = "Атакующее действие") {
@@ -3220,7 +3328,8 @@ async function validateCommandedAttackSelectionGeometry(selection = {}, token = 
     }
 
     if (actionKey === "aimedShot") {
-      return Boolean(resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? "")));
+      return controller.isAimedTargetInEffectiveRange(selectedTarget)
+        && Boolean(resolveAimedTargetSelection(selectedTarget?.actor, String(selection?.selectedLimbKey ?? "")));
     }
     if (MELEE_ACTION_KEYS.has(actionKey)) {
       if (
@@ -3420,6 +3529,7 @@ export async function executeWeaponAttackAgainstToken({
   damageHubOperationRef = "",
   onBeforeExecute = null,
   abilityTrialSession = null,
+  chanceOperationId = "",
   selectedLimbKey = "",
   skipActionPointCost = false,
   skipBaseWeaponResourceCosts = false,
@@ -3446,6 +3556,7 @@ export async function executeWeaponAttackAgainstToken({
     damageHubOperationRef,
     onBeforeExecute,
     abilityTrialSession,
+    chanceOperationId,
     skipActionPointCost,
     skipBaseWeaponResourceCosts,
     ignoreReactionLock,
@@ -3531,6 +3642,36 @@ function isSameAttackToken(left, right) {
   return Boolean(leftId && rightId && leftId === rightId);
 }
 
+function isAimedAttackGeometryTargetReachable({
+  attackerToken = null,
+  targetToken = null,
+  weapon = null,
+  actionKey = "aimedShot",
+  weaponFunctionId = "",
+  rangeProfile = null
+} = {}) {
+  const attacker = attackerToken?.object ?? attackerToken;
+  const target = targetToken?.object ?? targetToken;
+  if (!attacker?.actor || !target?.actor || !weapon || !isAttackTargetVisible(target)) return false;
+  const origin = getTokenAimPoint(attacker);
+  const targetPoint = getTokenAimPoint(target);
+  const geometry = getAttackGeometry(
+    weapon,
+    actionKey,
+    attacker,
+    origin,
+    targetPoint,
+    weaponFunctionId,
+    rangeProfile
+  );
+  if (!geometry) return false;
+  const aimPoint = selectTargetTrajectoryAimPoint(attacker, target, geometry);
+  if (!aimPoint) return false;
+  geometry.aimPoint = selectAttackGeometryAimPoint(attacker, target, geometry) ?? aimPoint;
+  if (!getAimedElevationTargets(attacker, geometry, [target]).includes(target)) return false;
+  return canTokenPhysicallySeeTarget(attacker, target);
+}
+
 export async function startConstrainedAimedAttackSelection({
   attackerToken = null,
   targetToken = null,
@@ -3592,7 +3733,11 @@ export async function startConstrainedAimedAttackSelection({
 
     controller.pointer = getTokenAimPoint(targetToken);
     controller.refresh(true);
-    if (!controller.geometry || !controller.targets.includes(targetToken)) {
+    if (
+      !controller.geometry
+      || !controller.targets.includes(targetToken)
+      || !controller.isAimedTargetInEffectiveRange(targetToken)
+    ) {
       controller.destroy();
       finish(false);
       return;
@@ -3637,13 +3782,30 @@ export function canPerformAimedAttackAgainstToken({
   const target = targetToken?.object ?? targetToken;
   if (!attacker?.actor || !target?.actor || !weapon || isActorUnableToAct(attacker.actor)) return false;
   if (!normalizedActionKey || !isAttackSource(weapon, weaponFunctionId) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
-  if (isWeaponPlacementDisabled(attacker.actor, weapon)) return false;
+  if (
+    isWeaponActionBlocked(attacker.actor, normalizedActionKey)
+    || isWeaponPlacementDisabled(attacker.actor, weapon)
+  ) return false;
   if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId), weaponFunctionId)) return false;
-  const origin = getTokenAimPoint(attacker);
-  const targetPoint = getTokenAimPoint(target);
-  const geometry = getAttackGeometry(weapon, normalizedActionKey, attacker, origin, targetPoint, weaponFunctionId);
-  if (!geometry || !selectTargetTrajectoryAimPoint(attacker, target, geometry)) return false;
-  return canTokenPhysicallySeeTarget(attacker, target);
+  const aimedRangeState = normalizedActionKey === "aimedShot"
+    ? getAimedTargetRangeSelectionState({
+      weapon,
+      actionKey: normalizedActionKey,
+      attackerToken: attacker,
+      targetToken: target,
+      weaponFunctionId,
+      context: { aimed: true, targeting: { aimed: true } }
+    })
+    : null;
+  if (aimedRangeState?.allowed === false) return false;
+  return isAimedAttackGeometryTargetReachable({
+    attackerToken: attacker,
+    targetToken: target,
+    weapon,
+    actionKey: normalizedActionKey,
+    weaponFunctionId,
+    rangeProfile: aimedRangeState?.rangeProfile
+  });
 }
 
 export function getDelayedVolleyWeaponState(weapon = null, weaponFunctionId = "") {
@@ -4235,6 +4397,39 @@ export class WeaponAttackController {
     );
     this.rangeProfilesByTarget.set(cacheKey, profile);
     return profile;
+  }
+
+  usesAimedRangeLimits() {
+    return this.requiresLimbSelection && !this.meleeAction;
+  }
+
+  getAimedTargetRangeState(targetToken = null) {
+    if (!this.usesAimedRangeLimits() || !targetToken?.actor) {
+      return { allowed: true, resolved: false, side: "" };
+    }
+    const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
+    const rangeProfile = this.getRangeProfileForTarget(targetToken, weaponData);
+    return getAimedTargetRangeSelectionState({
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      attackerToken: this.token,
+      targetToken,
+      weaponFunctionId: this.weaponFunctionId,
+      rangeProfile,
+      context: {
+        weaponData,
+        attackModifier: this.attackModifier,
+        weaponActionModifierState: this.getWeaponActionModifierState(),
+        weaponAttackId: this.attackId,
+        chanceOperationId: this.chanceOperationId,
+        chainRef: this.chainRef,
+        rangeConditionEffectiveRange: this.rangeProfile?.conditionEffectiveRange
+      }
+    });
+  }
+
+  isAimedTargetInEffectiveRange(targetToken = null) {
+    return this.getAimedTargetRangeState(targetToken).allowed !== false;
   }
 
   createWeaponAttackReactionContext(targetToken = null) {
@@ -5020,6 +5215,7 @@ export class WeaponAttackController {
       return true;
     }
     if (!this.targets.includes(targetToken)) return false;
+    if (!this.isAimedTargetInEffectiveRange(targetToken)) return false;
 
     this.selectedTarget = targetToken;
     this.lockedGeometry = serializeGeometry(this.geometry);
@@ -5048,6 +5244,7 @@ export class WeaponAttackController {
     this.pointer = getTokenAimPoint(targetToken);
     if (!this.pointer || !this.rebuildGeometryAndTargets()) return false;
     if (!this.targets.includes(targetToken)) return false;
+    if (!this.isAimedTargetInEffectiveRange(targetToken)) return false;
 
     this.selectedTarget = targetToken;
     this.lockedGeometry = serializeGeometry(this.geometry);
@@ -5059,6 +5256,7 @@ export class WeaponAttackController {
 
   async performStrictSelectedTargetAttack(targetToken, { selectedLimbKey = "" } = {}) {
     if (this.processing || !targetToken?.actor || !this.geometry) return false;
+    if (!this.isAimedTargetInEffectiveRange(targetToken)) return false;
     const actionContext = this.createWeaponActionContext({ targetToken });
     if (!this.hasRequiredWeaponResources(1)) return false;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(
@@ -6114,6 +6312,11 @@ export class WeaponAttackController {
     if (this.processing || this.aimedMode !== "limb" || !this.selectedTarget) return;
     if (this.interruptForIncapacitation()) return;
     const target = this.selectedTarget;
+    const aimedRangeState = this.getAimedTargetRangeState(target);
+    if (aimedRangeState.allowed === false) {
+      if (!this.headlessExecution) ui.notifications.warn(formatAimedRangeBlockReason(aimedRangeState));
+      return;
+    }
     const actionContext = this.createWeaponActionContext({ targetToken: target });
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) {
@@ -7962,21 +8165,39 @@ export class WeaponAttackController {
     this.removeChanceMenu();
     if (!this.limbMenu) this.createLimbMenu();
     this.limbMenu.dataset.mode = this.aimedMode;
-    this.limbMenu.innerHTML = rows.map(row => `
-      <button type="button" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${[
-        row.key === this.hoveredLimbKey ? "hover" : "",
-        row.destroyed ? "destroyed" : ""
-      ].filter(Boolean).join(" ")}" ${row.destroyed ? 'data-destroyed="true" disabled' : ""}>
-        <span>${escapeHtml(row.label)}</span>
-        <strong class="${getAimedChanceClass(row.chance)}">${row.destroyed ? "—" : `${row.chance}%`}</strong>
-      </button>
-    `).join("");
+    const rangeBlocked = menuContext.rangeBlocked === true;
+    const blockReason = rangeBlocked ? String(menuContext.blockReason ?? "") : "";
+    this.limbMenu.classList.toggle("range-unavailable", rangeBlocked);
+    this.limbMenu.dataset.rangeUnavailable = rangeBlocked ? "true" : "false";
+    const warning = rangeBlocked ? `
+      <div class="fallout-maw-aimed-range-warning" role="status">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>${escapeHtml(blockReason)}</span>
+      </div>
+    ` : "";
+    const buttons = rows.map(row => {
+      const unavailable = row.destroyed || rangeBlocked;
+      return `
+        <button type="button" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${[
+          row.key === this.hoveredLimbKey ? "hover" : "",
+          row.destroyed ? "destroyed" : "",
+          rangeBlocked ? "range-unavailable" : ""
+        ].filter(Boolean).join(" ")}" ${row.destroyed ? 'data-destroyed="true"' : ""} ${rangeBlocked ? 'data-range-unavailable="true"' : ""} ${unavailable ? "disabled" : ""} ${rangeBlocked ? `title="${escapeHtml(blockReason)}"` : ""}>
+          <span>${escapeHtml(row.label)}</span>
+          <strong class="${row.destroyed ? "" : getAimedChanceClass(row.chance)}">${row.destroyed ? "—" : `${row.chance}%`}</strong>
+        </button>
+      `;
+    }).join("");
+    this.limbMenu.innerHTML = `${warning}${buttons}`;
     this.aimedLimbMenuCache = { key: menuContext.key };
     this.positionLimbMenu(target);
     this.updateLimbMenuHover();
   }
 
   getAimedLimbMenuContext(target) {
+    const rangeState = this.getAimedTargetRangeState(target);
+    const rangeBlocked = rangeState.allowed === false;
+    const blockReason = rangeBlocked ? formatAimedRangeBlockReason(rangeState) : "";
     const aimPoint = this.geometry
       ? (selectTargetTrajectoryAimPoint(this.token, target, this.geometry) ?? getTokenAimPoint(target))
       : null;
@@ -8006,17 +8227,32 @@ export class WeaponAttackController {
       blockerBonus,
       toInteger(chanceOptions.innateDifficultyIgnorePercent),
       chanceOptions.ignoreCover ? 1 : 0,
+      rangeBlocked ? rangeState.side : "",
+      rangeBlocked ? formatAimedRangeMeters(rangeState.attackDistanceMeters) : "",
+      rangeBlocked ? formatAimedRangeMeters(rangeState.effectiveRange?.min) : "",
+      rangeBlocked ? formatAimedRangeMeters(rangeState.effectiveRange?.max) : "",
       this.actionKey,
       this.weaponFunctionId,
       this.weapon?.id ?? ""
     ].join("|");
-    return { blockerBonus, chanceOptions, key, blockerCount, previewContext };
+    return {
+      blockerBonus,
+      chanceOptions,
+      key,
+      blockerCount,
+      previewContext,
+      rangeState,
+      rangeBlocked,
+      blockReason
+    };
   }
 
   refreshPushStrengthMenu() {
     if (this.processing || this.pushStrengthMaximum <= 1) return;
     if (!this.limbMenu) this.createLimbMenu();
     this.limbMenu.dataset.mode = "push-strength";
+    this.limbMenu.classList.remove("range-unavailable");
+    this.limbMenu.dataset.rangeUnavailable = "false";
     const distanceUnit = game.i18n.localize("FALLOUTMAW.Common.MeterShort");
     this.limbMenu.innerHTML = Array.from({ length: this.pushStrengthMaximum }, (_entry, index) => index + 1)
       .map(strength => `
@@ -8167,7 +8403,7 @@ export class WeaponAttackController {
       const directionButton = event.target?.closest?.("[data-attack-direction]");
       const strengthButton = event.target?.closest?.("[data-push-strength]");
       const activeButton = button ?? directionButton ?? strengthButton;
-      if (!activeButton) return;
+      if (!activeButton || activeButton.disabled) return;
       this.hoveredLimbKey = activeButton.dataset.limbKey ?? activeButton.dataset.attackDirection ?? activeButton.dataset.pushStrength ?? "";
       this.updateLimbMenuHover();
     });
@@ -8242,6 +8478,23 @@ export class WeaponAttackController {
   prepareAimedLimbRows(target, menuContext = null) {
     if (!this.requiresLimbSelection) return [];
     const context = menuContext ?? this.getAimedLimbMenuContext(target);
+    const limbRows = Object.entries(target.actor?.system?.limbs ?? {})
+      .filter(([_key, limb]) => limb && typeof limb === "object")
+      .map(([key, limb]) => ({
+        key,
+        limbKey: key,
+        label: String(limb.label ?? key),
+        destroyed: isLimbDestroyed(target.actor, key)
+      }));
+    const weaponRows = this.aimedShot
+      ? getHeldWeaponAimTargets(target.actor).map(entry => ({
+        key: getAimedWeaponTargetKey(entry.item),
+        limbKey: entry.limbKey,
+        label: entry.label,
+        destroyed: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
+      }))
+      : [];
+    const rows = [...limbRows, ...weaponRows];
     const { blockerBonus, chanceOptions } = context;
     // One attacker+target contextual resolve for the whole menu (Foundry attack-config style).
     const chanceBasis = buildAimedAttackChanceBasis(
@@ -8252,27 +8505,12 @@ export class WeaponAttackController {
       this.actionKey,
       context.previewContext ?? this.createWeaponAttackSkillCheckContext(target)
     );
-    const limbRows = Object.entries(target.actor?.system?.limbs ?? {})
-      .filter(([_key, limb]) => limb && typeof limb === "object")
-      .map(([key, limb]) => ({
-        key,
-        label: String(limb.label ?? key),
-        destroyed: isLimbDestroyed(target.actor, key),
-        chance: isLimbDestroyed(target.actor, key)
-          ? 0
-          : getAimedAttackHitChanceFromBasis(chanceBasis, key, blockerBonus, chanceOptions)
-      }));
-    if (!this.aimedShot) return limbRows;
-    const weaponRows = getHeldWeaponAimTargets(target.actor)
-      .map(entry => ({
-        key: getAimedWeaponTargetKey(entry.item),
-        label: entry.label,
-        destroyed: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey),
-        chance: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
-          ? 0
-          : getAimedAttackHitChanceFromBasis(chanceBasis, entry.limbKey, blockerBonus, chanceOptions)
-      }));
-    return [...limbRows, ...weaponRows];
+    return rows.map(row => ({
+      ...row,
+      chance: row.destroyed
+        ? 0
+        : getAimedAttackHitChanceFromBasis(chanceBasis, row.limbKey, blockerBonus, chanceOptions)
+    }));
   }
 
   prepareAttackDirectionRows(target) {
@@ -10774,6 +11012,73 @@ function getWeaponRangeModifierValues(actor, context = {}) {
     key,
     baseValue: Number(actor?.system?.combat?.[id]) || 0
   })), context);
+}
+
+function getAimedRangeModifierValues(actor, context = {}) {
+  const fields = [
+    ["aimedEffectiveRangeNearBonus", AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY],
+    ["aimedEffectiveRangeFarBonus", AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY],
+    ["aimedEffectiveRangeNearRestrictionDisabled", AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY],
+    ["aimedEffectiveRangeFarRestrictionDisabled", AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY]
+  ];
+  return getSourceContextualAbilityChangeValues(actor, fields.map(([id, key]) => ({
+    id,
+    key,
+    baseValue: Number(actor?.system?.combat?.[id]) || 0
+  })), context);
+}
+
+function getAimedTargetRangeSelectionState({
+  weapon = null,
+  actionKey = "",
+  attackerToken = null,
+  targetToken = null,
+  weaponFunctionId = "",
+  rangeProfile = null,
+  context = {}
+} = {}) {
+  const actor = attackerToken?.actor ?? getWeaponOwnerActor(weapon);
+  const attackDistanceMeters = getTokenDistanceMeters(attackerToken, targetToken);
+  const resolvedProfile = rangeProfile ?? getWeaponRangeProfile(
+    weapon,
+    actionKey,
+    attackerToken,
+    weaponFunctionId,
+    {
+      ...context,
+      targetToken,
+      targetActor: targetToken?.actor ?? null,
+      attackDistanceMeters
+    }
+  );
+  const modifierContext = {
+    ...context,
+    actorToken: attackerToken,
+    token: attackerToken,
+    targetToken,
+    targetActor: targetToken?.actor ?? null,
+    weapon,
+    weaponUuid: String(weapon?.uuid ?? "").trim(),
+    weaponData: context?.weaponData ?? getWeaponAttackData(weapon, weaponFunctionId),
+    actionKey: String(actionKey ?? "").trim(),
+    weaponActionKey: String(actionKey ?? "").trim(),
+    weaponFunctionId,
+    attackDistanceMeters,
+    effectiveRange: resolvedProfile?.effectiveRange ?? null
+  };
+  const modifiers = getAimedRangeModifierValues(actor, modifierContext);
+  return {
+    ...getAimedRangeSelectionState({
+      attackDistanceMeters,
+      effectiveRange: resolvedProfile?.effectiveRange,
+      nearBonusMeters: modifiers.aimedEffectiveRangeNearBonus,
+      farBonusMeters: modifiers.aimedEffectiveRangeFarBonus,
+      nearLimitDisabled: modifiers.aimedEffectiveRangeNearRestrictionDisabled,
+      farLimitDisabled: modifiers.aimedEffectiveRangeFarRestrictionDisabled
+    }),
+    modifiers,
+    rangeProfile: resolvedProfile
+  };
 }
 
 function getTokenAttackRangeBonusMeters(token) {
@@ -14430,12 +14735,16 @@ function resolveAimedTargetSelection(actor, key = "") {
   const value = String(key ?? "").trim();
   if (!value) return null;
   if (!value.startsWith("weapon:")) {
-    return actor?.system?.limbs?.[value] ? { type: "limb", limbKey: value } : null;
+    return actor?.system?.limbs?.[value] && !isLimbDestroyed(actor, value)
+      ? { type: "limb", limbKey: value }
+      : null;
   }
 
   const itemId = value.slice("weapon:".length);
   const entry = getHeldWeaponAimTargets(actor).find(target => target.item?.id === itemId);
-  return entry ? { type: "weapon", item: entry.item, limbKey: entry.limbKey } : null;
+  return entry && !entry.destroyed && !isLimbDestroyed(actor, entry.limbKey)
+    ? { type: "weapon", item: entry.item, limbKey: entry.limbKey }
+    : null;
 }
 
 function getHeldWeaponAimTargets(actor) {

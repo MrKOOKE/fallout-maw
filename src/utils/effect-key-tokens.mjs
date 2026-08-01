@@ -23,6 +23,10 @@ import {
   ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
@@ -741,6 +745,34 @@ export function buildCombatEffectKeyTokens() {
       key: "effectiveRangeFarPenaltyPercent",
       label: game.i18n.localize("FALLOUTMAW.Effects.EffectiveRangeFarPenaltyPercent"),
       path: EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "aimedEffectiveRangeNearBonus",
+      key: "aimedEffectiveRangeNearBonus",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AimedEffectiveRangeNearBonus"),
+      path: AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "aimedEffectiveRangeFarBonus",
+      key: "aimedEffectiveRangeFarBonus",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AimedEffectiveRangeFarBonus"),
+      path: AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "aimedEffectiveRangeNearRestrictionDisabled",
+      key: "aimedEffectiveRangeNearRestrictionDisabled",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AimedEffectiveRangeNearRestrictionDisabled"),
+      path: AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY,
+      group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
+    }),
+    createEffectKeyToken({
+      code: "aimedEffectiveRangeFarRestrictionDisabled",
+      key: "aimedEffectiveRangeFarRestrictionDisabled",
+      label: game.i18n.localize("FALLOUTMAW.Effects.AimedEffectiveRangeFarRestrictionDisabled"),
+      path: AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY,
       group: game.i18n.localize("FALLOUTMAW.Effects.CombatGroup")
     }),
     createEffectKeyToken({

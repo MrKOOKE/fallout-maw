@@ -1,135 +1,214 @@
-<div class="fallout-maw-config-body">
-  <section class="fallout-maw-panel">
-    <header class="fallout-maw-panel-header">
-      <h2>{{localize "FALLOUTMAW.Settings.Combat.Title"}}</h2>
-      <div class="fallout-maw-button-row">
-        <button type="button" data-action="migratePresetSettings"><i class="fa-solid fa-code-compare"></i> Мигрировать из других пресетов</button>
+<div class="fallout-maw-config-body fallout-maw-combat-settings-body">
+  <div class="fallout-maw-combat-settings-scroll">
+    <header class="fallout-maw-combat-settings-hero">
+      <div class="fallout-maw-combat-settings-hero-title">
+        <span class="fallout-maw-combat-settings-hero-icon" aria-hidden="true">
+          <i class="fa-solid fa-crosshairs"></i>
+        </span>
+        <div>
+          <h2>{{localize "FALLOUTMAW.Settings.Combat.Title"}}</h2>
+          <p>{{localize "FALLOUTMAW.Settings.Combat.ConfigurationHint"}}</p>
+        </div>
       </div>
+      <button type="button" class="fallout-maw-combat-settings-migrate" data-action="migratePresetSettings">
+        <i class="fa-solid fa-code-compare"></i>
+        <span>Мигрировать из других пресетов</span>
+      </button>
     </header>
 
-    <div class="fallout-maw-settings-grid">
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.TurnOrderScheme"}}</span>
-        <select name="turnOrder.scheme">
-          {{#each turnOrderSchemeChoices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </label>
-      <label>
-        <span>Стоимость вставки оружия в набор, ОД</span>
-        <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutSeconds"}}</span>
-        <input type="number" name="reactions.timeoutSeconds" value="{{settings.reactions.timeoutSeconds}}" min="1" max="600" step="1">
-        <small>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutHint"}}</small>
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAttackCostPercent"}}</span>
-        <input type="number" name="dodge.attackCostPercent" value="{{settings.dodge.attackCostPercent}}" min="0" max="100" step="1">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeBurstMultiplier"}}</span>
-        <input type="number" name="dodge.burstMultiplier" value="{{settings.dodge.burstMultiplier}}" min="0" step="0.1">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeVolleyMultiplier"}}</span>
-        <input type="number" name="dodge.volleyMultiplier" value="{{settings.dodge.volleyMultiplier}}" min="0" step="0.1">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAreaDamageMultiplier"}}</span>
-        <input type="number" name="dodge.areaDamageMultiplier" value="{{settings.dodge.areaDamageMultiplier}}" min="0" step="0.1">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRoundRecoveryPercent"}}</span>
-        <input type="number" name="dodge.roundRecoveryPercent" value="{{settings.dodge.roundRecoveryPercent}}" min="0" max="100" step="1">
-      </label>
+    <div class="fallout-maw-combat-settings-sections">
+      <section class="fallout-maw-combat-settings-section wide" data-combat-settings-section="general">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-sliders"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.GeneralTitle"}}</h3>
+        </header>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.TurnOrderScheme"}}</span>
+            <select name="turnOrder.scheme">
+              {{#each turnOrderSchemeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>Стоимость вставки оружия в набор, ОД</span>
+            <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
+          </label>
+          <label class="fallout-maw-combat-settings-field span-all">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutSeconds"}}</span>
+            <input type="number" name="reactions.timeoutSeconds" value="{{settings.reactions.timeoutSeconds}}" min="1" max="600" step="1">
+            <small>{{localize "FALLOUTMAW.Settings.Combat.ReactionTimeoutHint"}}</small>
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-combat-settings-section wide" data-combat-settings-section="dodge">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-shield-halved"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.DodgeTitle"}}</h3>
+        </header>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAttackCostPercent"}}</span>
+            <input type="number" name="dodge.attackCostPercent" value="{{settings.dodge.attackCostPercent}}" min="0" max="100" step="1">
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeBurstMultiplier"}}</span>
+            <input type="number" name="dodge.burstMultiplier" value="{{settings.dodge.burstMultiplier}}" min="0" step="0.1">
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeVolleyMultiplier"}}</span>
+            <input type="number" name="dodge.volleyMultiplier" value="{{settings.dodge.volleyMultiplier}}" min="0" step="0.1">
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAreaDamageMultiplier"}}</span>
+            <input type="number" name="dodge.areaDamageMultiplier" value="{{settings.dodge.areaDamageMultiplier}}" min="0" step="0.1">
+          </label>
+          <label class="fallout-maw-combat-settings-field span-all">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRoundRecoveryPercent"}}</span>
+            <input type="number" name="dodge.roundRecoveryPercent" value="{{settings.dodge.roundRecoveryPercent}}" min="0" max="100" step="1">
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-combat-settings-section" data-combat-settings-section="limbs">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-bone"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.LimbDestructionTitle"}}</h3>
+        </header>
+        <p class="fallout-maw-combat-settings-description">{{localize "FALLOUTMAW.Settings.Combat.LimbDestructionHint"}}</p>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.LimbDestructionNonPlayer"}}</span>
+            <select name="limbDestruction.nonPlayerMode">
+              {{#each nonPlayerLimbDestructionChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.LimbDestructionPlayerOwned"}}</span>
+            <select name="limbDestruction.playerOwnedMode">
+              {{#each playerOwnedLimbDestructionChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-combat-settings-section" data-combat-settings-section="knockback">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-arrows-left-right"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.KnockbackTitle"}}</h3>
+        </header>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field">
+            <span>Порог дополнительной проверки</span>
+            <input type="number" name="knockback.repeatDifficultyThreshold" value="{{settings.knockback.repeatDifficultyThreshold}}" min="1" step="1">
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>Снижение сложности после каждой проверки</span>
+            <input type="number" name="knockback.repeatDifficultyStep" value="{{settings.knockback.repeatDifficultyStep}}" min="1" step="1">
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-combat-settings-section wide" data-combat-settings-section="areas">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-draw-polygon"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.AreasTitle"}}</h3>
+        </header>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field span-all">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.AreaMovementDamageThresholdFormula"}}</span>
+            <input type="text" name="areas.movementDamageThresholdFormula" value="{{settings.areas.movementDamageThresholdFormula}}" data-formula-autocomplete="all">
+            <small>{{localize "FALLOUTMAW.Settings.Combat.AreaMovementDamageThresholdHint"}}</small>
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-combat-settings-section wide" data-combat-settings-section="skill-damage">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-chart-line"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.WeaponSkillDamageTitle"}}</h3>
+        </header>
+        <div class="fallout-maw-combat-settings-table-scroll">
+          <div class="fallout-maw-settings-table fallout-maw-combat-skill-damage-table">
+            <div class="fallout-maw-settings-row fallout-maw-grid-header">
+              <span></span>
+              <span>Плоский бонус</span>
+              <span>Процентный бонус</span>
+            </div>
+            <div class="fallout-maw-settings-row">
+              <span>Ближний бой</span>
+              <input type="text" name="weaponSkillDamage.meleeCombat.flat" value="{{settings.weaponSkillDamage.meleeCombat.flat}}" data-formula-autocomplete="all">
+              <input type="text" name="weaponSkillDamage.meleeCombat.percent" value="{{settings.weaponSkillDamage.meleeCombat.percent}}" data-formula-autocomplete="all">
+            </div>
+            <div class="fallout-maw-settings-row">
+              <span>Дальний бой</span>
+              <input type="text" name="weaponSkillDamage.rangedCombat.flat" value="{{settings.weaponSkillDamage.rangedCombat.flat}}" data-formula-autocomplete="all">
+              <input type="text" name="weaponSkillDamage.rangedCombat.percent" value="{{settings.weaponSkillDamage.rangedCombat.percent}}" data-formula-autocomplete="all">
+            </div>
+            <div class="fallout-maw-settings-row">
+              <span>Метание</span>
+              <input type="text" name="weaponSkillDamage.throwing.flat" value="{{settings.weaponSkillDamage.throwing.flat}}" data-formula-autocomplete="all">
+              <input type="text" name="weaponSkillDamage.throwing.percent" value="{{settings.weaponSkillDamage.throwing.percent}}" data-formula-autocomplete="all">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="fallout-maw-combat-settings-section wide" data-combat-settings-section="unconsciousness">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-heart-pulse"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.UnconsciousnessTitle"}}</h3>
+        </header>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field">
+            <span>Урон по обычной конечности</span>
+            <input type="text" name="unconsciousness.normalDamageFormula" value="{{settings.unconsciousness.normalDamageFormula}}" data-formula-autocomplete="all">
+            <small>Накопление сложности при состоянии конечности &gt;0.</small>
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>Урон по повреждённой конечности</span>
+            <input type="text" name="unconsciousness.negativeDamageFormula" value="{{settings.unconsciousness.negativeDamageFormula}}" data-formula-autocomplete="all">
+            <small>Накопление сложности при состоянии конечности &lt;0.</small>
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>Множитель по ключевой конечности</span>
+            <input type="text" name="unconsciousness.criticalDamageFormula" value="{{settings.unconsciousness.criticalDamageFormula}}" data-formula-autocomplete="all">
+            <small>Накопление сложности при повреждении ключевой конечности.</small>
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>Множитель недостающего состояния</span>
+            <input type="text" name="unconsciousness.stateMultiplierFormula" value="{{settings.unconsciousness.stateMultiplierFormula}}" data-formula-autocomplete="all">
+            <small>Чем ниже состояние конечности от максимального, тем больше сложности накапливается от других источников.</small>
+          </label>
+        </div>
+      </section>
     </div>
+  </div>
 
-    <header class="fallout-maw-panel-header">
-      <h2>{{localize "FALLOUTMAW.Settings.Combat.AreasTitle"}}</h2>
-    </header>
-
-    <div class="fallout-maw-settings-grid">
-      <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.AreaMovementDamageThresholdFormula"}}</span>
-        <input type="text" name="areas.movementDamageThresholdFormula" value="{{settings.areas.movementDamageThresholdFormula}}" data-formula-autocomplete="all">
-        <small>{{localize "FALLOUTMAW.Settings.Combat.AreaMovementDamageThresholdHint"}}</small>
-      </label>
-    </div>
-
-    <header class="fallout-maw-panel-header">
-      <h2>Отбрасывание</h2>
-    </header>
-
-    <div class="fallout-maw-settings-grid">
-      <label>
-        <span>Порог дополнительной проверки</span>
-        <input type="number" name="knockback.repeatDifficultyThreshold" value="{{settings.knockback.repeatDifficultyThreshold}}" min="1" step="1">
-      </label>
-      <label>
-        <span>Снижение сложности после каждой проверки</span>
-        <input type="number" name="knockback.repeatDifficultyStep" value="{{settings.knockback.repeatDifficultyStep}}" min="1" step="1">
-      </label>
-    </div>
-
-    <header class="fallout-maw-panel-header">
-      <h2>Бонус к урону в зависимости от оружейного навыка</h2>
-    </header>
-
-    <div class="fallout-maw-settings-table fallout-maw-combat-skill-damage-table">
-      <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span></span>
-        <span>Плоский бонус</span>
-        <span>Процентный бонус</span>
-      </div>
-      <div class="fallout-maw-settings-row">
-        <span>Ближний бой</span>
-        <input type="text" name="weaponSkillDamage.meleeCombat.flat" value="{{settings.weaponSkillDamage.meleeCombat.flat}}" data-formula-autocomplete="all">
-        <input type="text" name="weaponSkillDamage.meleeCombat.percent" value="{{settings.weaponSkillDamage.meleeCombat.percent}}" data-formula-autocomplete="all">
-      </div>
-      <div class="fallout-maw-settings-row">
-        <span>Дальний бой</span>
-        <input type="text" name="weaponSkillDamage.rangedCombat.flat" value="{{settings.weaponSkillDamage.rangedCombat.flat}}" data-formula-autocomplete="all">
-        <input type="text" name="weaponSkillDamage.rangedCombat.percent" value="{{settings.weaponSkillDamage.rangedCombat.percent}}" data-formula-autocomplete="all">
-      </div>
-      <div class="fallout-maw-settings-row">
-        <span>Метание</span>
-        <input type="text" name="weaponSkillDamage.throwing.flat" value="{{settings.weaponSkillDamage.throwing.flat}}" data-formula-autocomplete="all">
-        <input type="text" name="weaponSkillDamage.throwing.percent" value="{{settings.weaponSkillDamage.throwing.percent}}" data-formula-autocomplete="all">
-      </div>
-    </div>
-
-    <header class="fallout-maw-panel-header">
-      <h2>Потеря сознания</h2>
-    </header>
-
-    <div class="fallout-maw-settings-grid">
-      <label>
-        <span>Урон по обычной конечности</span>
-        <input type="text" name="unconsciousness.normalDamageFormula" value="{{settings.unconsciousness.normalDamageFormula}}" data-formula-autocomplete="all">
-        <small>Накопление сложности при состояние конечности &gt;0.</small>
-      </label>
-      <label>
-        <span>Урон по поврежденной конечности</span>
-        <input type="text" name="unconsciousness.negativeDamageFormula" value="{{settings.unconsciousness.negativeDamageFormula}}" data-formula-autocomplete="all">
-        <small>Накопление сложности при состояние конечности &lt;0.</small>
-      </label>
-      <label>
-        <span>Множитель по ключевой конечности</span>
-        <input type="text" name="unconsciousness.criticalDamageFormula" value="{{settings.unconsciousness.criticalDamageFormula}}" data-formula-autocomplete="all">
-        <small>Накопление сложности при повреждении ключевой конечности.</small>
-      </label>
-      <label>
-        <span>Множитель недостающего состояния</span>
-        <input type="text" name="unconsciousness.stateMultiplierFormula" value="{{settings.unconsciousness.stateMultiplierFormula}}" data-formula-autocomplete="all">
-        <small>Чем ниже состояние конечности от максимальной, тем больше сложности накапливается от других источников.</small>
-      </label>
-    </div>
-  </section>
-
-  <footer class="sheet-footer flexrow">
-    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  <footer class="sheet-footer fallout-maw-combat-settings-footer">
+    <button type="submit">
+      <i class="fa-solid fa-save"></i>
+      <span>{{localize "FALLOUTMAW.Common.SaveChanges"}}</span>
+    </button>
   </footer>
 </div>

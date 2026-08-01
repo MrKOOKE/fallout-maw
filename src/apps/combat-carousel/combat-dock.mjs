@@ -32,8 +32,6 @@ export class CombatDock extends HandlebarsApplication {
         this._removeWindowResizeListener = addManagedEventListener(window, "resize", this._onWindowResize);
         this._combatTrackerRefreshed = false;
         this._turnNavigationPromise = null;
-        this._timeouts = new Set();
-        this._animations = new Set();
     }
 
     static get DEFAULT_OPTIONS() {
@@ -106,11 +104,11 @@ export class CombatDock extends HandlebarsApplication {
             },
             {
                 hook: "createCombatant",
-                fn: this._onCreateCombatant.bind(this),
+                fn: this.setupCombatants.bind(this),
             },
             {
                 hook: "deleteCombatant",
-                fn: this._onDeleteCombatant.bind(this),
+                fn: this.setupCombatants.bind(this),
             },
             {
                 hook: "updateCombatant",
@@ -161,21 +159,7 @@ export class CombatDock extends HandlebarsApplication {
         this._removeWindowResizeListener?.();
         this._removeWindowResizeListener = null;
         this._onWindowResize = null;
-        for (const timeoutId of this._timeouts) globalThis.clearTimeout(timeoutId);
-        this._timeouts.clear();
-        for (const animation of this._animations) animation.cancel?.();
-        this._animations.clear();
         if (ui.combatDock === this) ui.combatDock = null;
-    }
-
-    _scheduleTimeout(callback, delay = 0) {
-        if (this._closed) return null;
-        const timeoutId = globalThis.setTimeout(() => {
-            this._timeouts.delete(timeoutId);
-            if (!this._closed) callback();
-        }, Math.max(0, Number(delay) || 0));
-        this._timeouts.add(timeoutId);
-        return timeoutId;
     }
 
     _prepareContext(options) {
@@ -259,13 +243,11 @@ export class CombatDock extends HandlebarsApplication {
                 //fill: "forwards",
                 delay: delay,
             });
-            this._animations.add(anim);
 
             anim.finished.then(() => {
-                if (this._closed) return;
                 el.style.transform = "";
                 Hooks.callAll("combatDock:playIntroAnimation:finished", this, el);
-            }).catch(() => undefined).finally(() => this._animations.delete(anim));
+            });
         };
         let totalAnimationTime = 0;
         this.getCarouselItems().forEach((el, index) => {
@@ -275,11 +257,11 @@ export class CombatDock extends HandlebarsApplication {
             playSlideInAnimation(el, delay);
         });
 
-        this._scheduleTimeout(() => {
+        setTimeout(() => {
             if (isVertical) this.centerCurrentCombatant();
         }, totalAnimationTime + duration);
 
-        this._scheduleTimeout(() => {
+        setTimeout(() => {
             this.element.classList.remove("hidden");
             if (!isVertical) this.centerCurrentCombatant();
         }, 10);
@@ -311,7 +293,6 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     updateCombatant(combatant, updates = {}) {
-        if (combatant?.parent !== this.combat) return;
         if ("initiative" in updates) {
             this.setupCombatants();
             return;
@@ -407,7 +388,7 @@ export class CombatDock extends HandlebarsApplication {
                         await this._runTurnNavigation(() => this.combat?.nextRound());
                         break;
                     case "end-combat":
-                        await this._runTurnNavigation(() => this.combat?.endCombat());
+                        this.combat.endCombat();
                         break;
                     case "roll-all": {
                         const surprisedIds = await promptCombatInitiativeSurprise(this.combat);
@@ -460,9 +441,7 @@ export class CombatDock extends HandlebarsApplication {
                 '[data-action="previous-turn"]',
                 '[data-action="next-turn"]',
                 '[data-action="previous-round"]',
-                '[data-action="next-round"]',
-                '[data-action="start-combat"]',
-                '[data-action="end-combat"]'
+                '[data-action="next-round"]'
             ].join(","))?.forEach(button => {
                 button.disabled = disabled;
             });
@@ -481,14 +460,12 @@ export class CombatDock extends HandlebarsApplication {
         }
     }
 
-    _onRenderCombatTracker(combatTracker) {
-        if (combatTracker?.viewed && combatTracker.viewed !== this.combat) return;
+    _onRenderCombatTracker() {
         Promise.all(this.portraits.map((p) => p.renderInner())).then(() => this.updateBlockFrameClasses());
         this.updateStartEndButtons();
     }
 
     _onCombatTurn(combat, updates, update) {
-        if (combat !== this.combat) return;
         if ("started" in updates) {
             this.setupCombatants();
             return;
@@ -543,7 +520,7 @@ export class CombatDock extends HandlebarsApplication {
             return;
         }
 
-        this._scheduleTimeout(() => this.updateOrder(), 200);
+        setTimeout(() => this.updateOrder(), 200);
 
         if (!this.trueCarousel) {
             combatantsContainer.style.minWidth = "";
@@ -553,9 +530,9 @@ export class CombatDock extends HandlebarsApplication {
 
         for (const el of els) {
             el.classList.add(`collapsed-${this.isVertical ? "vertical" : "horizontal"}`);
-            this._scheduleTimeout(() => {
+            setTimeout(() => {
                 el.classList.remove(`collapsed-${this.isVertical ? "vertical" : "horizontal"}`);
-                this._scheduleTimeout(() => {
+                setTimeout(() => {
                     combatantsContainer.style.minWidth = "";
                     combatantsContainer.style.minHeight = "";
                 }, 200);
@@ -645,24 +622,15 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     _onDeleteCombat(combat) {
-        if (combat !== this.combat) return;
-        this.close();
+        if (combat === this.combat) {
+            this.close();
+        }
     }
 
     _onCombatStart(combat) {
         if (combat !== this.combat) return;
         this._playAnimation = true;
         if (!this.element) return;
-        this.setupCombatants();
-    }
-
-    _onCreateCombatant(combatant) {
-        if (combatant?.parent !== this.combat) return;
-        this.setupCombatants();
-    }
-
-    _onDeleteCombatant(combatant) {
-        if (combatant?.parent !== this.combat) return;
         this.setupCombatants();
     }
 
@@ -687,9 +655,8 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     async restart() {
-        const combat = this.combat ?? game.combat;
         await this.close();
-        if (combat) await new CombatDock(combat).render({ force: true });
+        await new CombatDock().render({ force: true });
     }
 
     async close(...args) {
@@ -697,31 +664,10 @@ export class CombatDock extends HandlebarsApplication {
         try {
             return await super.close(...args);
         } finally {
-            this._restoreReplacementApplicationRegistration();
-            for (const portrait of this.portraits) portrait.destroy?.();
             this.portraits.length = 0;
             this._promises = [];
             this.combat = null;
         }
-    }
-
-    _restoreReplacementApplicationRegistration() {
-        const replacement = ui.combatDock;
-        if (
-            replacement === this
-            || replacement?.id !== this.id
-            || replacement?._closed
-            || !replacement?.rendered
-        ) return;
-        const instances = foundry.applications.instances;
-        // Windowed docks deliberately opt out of the global Application registry
-        // so Escape cannot close them. Preserve that invariant after the old
-        // ApplicationV2 finishes its asynchronous close.
-        if (replacement?.options?.window?.preventEscapeClose) {
-            if (instances.get(this.id) === replacement) instances.delete(this.id);
-            return;
-        }
-        if (instances.get(this.id) !== replacement) instances.set(this.id, replacement);
     }
 
     getCarouselItems() {

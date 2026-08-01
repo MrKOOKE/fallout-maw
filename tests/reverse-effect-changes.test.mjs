@@ -141,6 +141,36 @@ test("condition loss multiplier is registered and participates only when an atta
   }).has(key), false);
 });
 
+test("aimed effective-range controls are registered and active only for ranged aimed checks", () => {
+  const keys = [
+    "system.combat.aimedEffectiveRangeNearBonus",
+    "system.combat.aimedEffectiveRangeFarBonus",
+    "system.combat.aimedEffectiveRangeNearRestrictionDisabled",
+    "system.combat.aimedEffectiveRangeFarRestrictionDisabled"
+  ];
+  const tokenPaths = new Set(buildEffectKeyTokens().map(entry => entry.path));
+  const aimedCheckKeys = getWeaponActionActiveUseKeys({
+    actionKey: "aimedShot",
+    activeUseStages: { action: false, check: true, damage: false }
+  });
+  const snapshotCheckKeys = getWeaponActionActiveUseKeys({
+    actionKey: "snapshot",
+    activeUseStages: { action: false, check: true, damage: false }
+  });
+  const aimedMeleeCheckKeys = getWeaponActionActiveUseKeys({
+    actionKey: "aimedMeleeAttack",
+    activeUseStages: { action: false, check: true, damage: false }
+  });
+
+  for (const key of keys) {
+    assert.equal(tokenPaths.has(key), true);
+    assert.equal(isActiveUseEffectKey(key), true);
+    assert.equal(aimedCheckKeys.has(key), true);
+    assert.equal(snapshotCheckKeys.has(key), false);
+    assert.equal(aimedMeleeCheckKeys.has(key), false);
+  }
+});
+
 test("critical damage modifier is registered as a reversible weapon-damage key", () => {
   const key = "system.combat.criticalDamagePercent";
   const token = buildEffectKeyTokens().find(entry => entry.path === key);

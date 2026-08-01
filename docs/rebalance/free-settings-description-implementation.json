@@ -1,0 +1,500 @@
+{
+  "generatedAt": "2026-08-01T08:09:43.982Z",
+  "status": "written-and-verified",
+  "scope": "world gear items with enabled freeSettings/effectChanges; actors, packs, scenes and tokens excluded",
+  "markers": {
+    "start": "<!-- fallout-maw:free-settings-description:start -->",
+    "end": "<!-- fallout-maw:free-settings-description:end -->"
+  },
+  "gearItems": 3262,
+  "activeFreeSettings": 777,
+  "itemsWithDescriptionChanges": 777,
+  "describedChanges": 2093,
+  "conditionalEntries": 72,
+  "obsoleteSkillReplacements": [
+    {
+      "id": "08C0dfLOxAvUtDqR",
+      "name": "Броня Тонга",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.athletics.bonus",
+      "value": "20"
+    },
+    {
+      "id": "0ZUUxstzWirQ8Lj9",
+      "name": "Броня LK-4D4",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "0ZUUxstzWirQ8Lj9",
+      "name": "Броня LK-4D4",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus"
+    },
+    {
+      "id": "2imVrMqFPzsTeDE1",
+      "name": "Боевая броня, усиленная",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "10"
+    },
+    {
+      "id": "2imVrMqFPzsTeDE1",
+      "name": "Боевая броня, усиленная",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[1].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus"
+    },
+    {
+      "id": "3Lvz4bgFPpVhc2Gs",
+      "name": "Броня Дугласа",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "3Lvz4bgFPpVhc2Gs",
+      "name": "Броня Дугласа",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[1].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus"
+    },
+    {
+      "id": "4G7zOsY0njw6afHY",
+      "name": "Динамит",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "5EKMxOH4Do99lOcs",
+      "name": "Плазменная граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "74ksE0B8rnp2Xeup",
+      "name": "Импульсная граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "75vLVDrlxCcrh9WS",
+      "name": "Укреплённый Жилет Великих Ханов",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.athletics.bonus",
+      "value": "5"
+    },
+    {
+      "id": "89XfyOd9xoDloHJa",
+      "name": "Летняя Боевая Броня Чёрная",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus",
+      "value": "10"
+    },
+    {
+      "id": "89XfyOd9xoDloHJa",
+      "name": "Летняя Боевая Броня Чёрная",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus"
+    },
+    {
+      "id": "8BjIgVFvnwANPfHh",
+      "name": "Броня Морпеха UAC",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "CTPOn8wtEp47pkJo",
+      "name": "Боевая броня Компании Коготь",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "10"
+    },
+    {
+      "id": "CTPOn8wtEp47pkJo",
+      "name": "Боевая броня Компании Коготь",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus"
+    },
+    {
+      "id": "CcJWb6gpbeJtdInI",
+      "name": "Газовая Граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "CxCRLTfjcXhiYnV2",
+      "name": "Кожаная Броня СЗБС Mk.II",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus",
+      "value": "10"
+    },
+    {
+      "id": "CxCRLTfjcXhiYnV2",
+      "name": "Кожаная Броня СЗБС Mk.II",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus"
+    },
+    {
+      "id": "GUPSB02ry1muYdXo",
+      "name": "Зажигательная граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "GcSG2w8dOROv68UC",
+      "name": "Боевая кожаная куртка",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus",
+      "value": "10"
+    },
+    {
+      "id": "GcSG2w8dOROv68UC",
+      "name": "Боевая кожаная куртка",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus"
+    },
+    {
+      "id": "ILohw04yNV85Rr8J",
+      "name": "Броня рейнджера-патрульного",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.naturalist.bonus",
+      "value": "10"
+    },
+    {
+      "id": "ILohw04yNV85Rr8J",
+      "name": "Броня рейнджера-патрульного",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.naturalist.bonus"
+    },
+    {
+      "id": "JTrn5APQBLHCuWrH",
+      "name": "Броня Леона",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "JTrn5APQBLHCuWrH",
+      "name": "Броня Леона",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus"
+    },
+    {
+      "id": "Kz0fTXgeRkVTp2JU",
+      "name": "Боевая броня Драчуна Мутанта",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus",
+      "value": "10"
+    },
+    {
+      "id": "Nig9NRht7nEotQu0",
+      "name": "Тяжёлые Защитные пластины мутанта",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus",
+      "value": "10"
+    },
+    {
+      "id": "Nig9NRht7nEotQu0",
+      "name": "Тяжёлые Защитные пластины мутанта",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[1].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus"
+    },
+    {
+      "id": "Qq7kQ6BuNPKB2Ylu",
+      "name": "Броня BBC-32G",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "Qq7kQ6BuNPKB2Ylu",
+      "name": "Броня BBC-32G",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus"
+    },
+    {
+      "id": "R8YytctHLzE0WL4Q",
+      "name": "Криограната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "RPxOFwL3MMUmbyEI",
+      "name": "Растяжка",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "repair"
+    },
+    {
+      "id": "ShuV0bkUBmmAyBqs",
+      "name": "Капкан",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "repair"
+    },
+    {
+      "id": "Ty7ySHvP7W2djz6j",
+      "name": "Броня Волт-Тек РИОТ",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.resilience.bonus",
+      "value": "10"
+    },
+    {
+      "id": "Ty7ySHvP7W2djz6j",
+      "name": "Броня Волт-Тек РИОТ",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.resilience.bonus"
+    },
+    {
+      "id": "WemqP29bNfeaS3Us",
+      "name": "Мина",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "repair"
+    },
+    {
+      "id": "YXcDhK2AA0bNRp8L",
+      "name": "Боевая броня, усиленная «Марк 2» Анклава",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "Z32Vlhnt6hKV6CkZ",
+      "name": "Броня Хабологов",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.science.bonus",
+      "value": "10"
+    },
+    {
+      "id": "a3sTRTCi6kVFheDq",
+      "name": "Молотов",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "b3r21sq3ztYvFeRQ",
+      "name": "Осколочная Граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "cBX2Hj9TZv2vbamu",
+      "name": "Ударная Граната M96",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "grVtlNslc2KVYPzo",
+      "name": "Броня Центуриона Легиона",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.meleeCombat.bonus",
+      "value": "10"
+    },
+    {
+      "id": "hyvhesI9vy0N83Oo",
+      "name": "Броня Секретной Службы Анклава",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus",
+      "value": "20"
+    },
+    {
+      "id": "hyvhesI9vy0N83Oo",
+      "name": "Броня Секретной Службы Анклава",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus"
+    },
+    {
+      "id": "j7Ib3ddIVJMJmfGt",
+      "name": "Защитный Капюшон",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.naturalist.bonus",
+      "value": "5"
+    },
+    {
+      "id": "l077HfU8tDdr9diN",
+      "name": "Ультрацитовый Силовой Доспех",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.energy.bonus",
+      "value": "20"
+    },
+    {
+      "id": "n6VAe7FoIWTTWOfi",
+      "name": "Святая граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "o40rezyjYAm31s1o",
+      "name": "Штурмовая броня 1-го разведбатальона",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus",
+      "value": "20"
+    },
+    {
+      "id": "o40rezyjYAm31s1o",
+      "name": "Штурмовая броня 1-го разведбатальона",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[1].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.rangedCombat.bonus"
+    },
+    {
+      "id": "pwgmEU6Z2VHu0H6B",
+      "name": "Броня Анархиста",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus",
+      "value": "10"
+    },
+    {
+      "id": "pwgmEU6Z2VHu0H6B",
+      "name": "Броня Анархиста",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus"
+    },
+    {
+      "id": "uAMygqIKRxE7Aig6",
+      "name": "Кожаная Куртка из Огненного Геккона",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.naturalist.bonus",
+      "value": "10"
+    },
+    {
+      "id": "wLQkFkiq1jjb2p0g",
+      "name": "Осколочная Граната РГЧ",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "wf4UfHv2ib1M20X1",
+      "name": "ЭМИ-Граната",
+      "scope": "activeWeapon",
+      "path": "system.functions.weapon.skillKey",
+      "from": "throwing",
+      "to": "athletics"
+    },
+    {
+      "id": "x2gygO6gPwgr5Vj9",
+      "name": "Кожаная Куртка из Геккона Охотника",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.naturalist.bonus",
+      "value": "10"
+    },
+    {
+      "id": "xSqPLf9R2VgWcyOv",
+      "name": "Боевая броня Охранны",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.resilience.bonus",
+      "value": "10"
+    },
+    {
+      "id": "xSqPLf9R2VgWcyOv",
+      "name": "Боевая броня Охранны",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.resilience.bonus"
+    },
+    {
+      "id": "xuupYDs8vhjNkH8P",
+      "name": "Броня рейнджера-диверсанта НКР",
+      "scope": "activeFreeSettings",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus",
+      "value": "10"
+    },
+    {
+      "id": "xuupYDs8vhjNkH8P",
+      "name": "Броня рейнджера-диверсанта НКР",
+      "scope": "historicalFlag",
+      "path": "flags.fallout-maw.equipmentIndividualization.original.freeSettings.entries[0].changes[0].key",
+      "from": "system.skills.throwing.bonus",
+      "to": "system.skills.stealth.bonus"
+    }
+  ],
+  "remainingThrowingReferences": [],
+  "unexpectedSkillReferences": [],
+  "unresolvedKeys": [],
+  "verificationMismatches": []
+}

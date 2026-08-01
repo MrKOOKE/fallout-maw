@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-01T04:42:41.468Z",
+  "generatedAt": "2026-08-01T05:39:13.364Z",
   "mode": "write",
   "status": "written-and-verified",
   "actorsRead": 0,
   "actorsChanged": 0,
   "packsRead": 0,
-  "items": 29,
+  "items": 43,
   "folders": 23,
   "deletedLegacyOrGeneratedItems": [],
   "deletedGeneratedFolders": 0,
@@ -13,53 +13,142 @@
     "D": {
       "count": 3,
       "minPrice": 184,
-      "maxPrice": 368,
-      "minCondition": 100,
+      "maxPrice": 281,
+      "minCondition": 85,
       "maxCondition": 100
     },
     "C": {
-      "count": 7,
+      "count": 11,
       "minPrice": 765,
-      "maxPrice": 3202,
+      "maxPrice": 3341,
       "minCondition": 108,
-      "maxCondition": 170
+      "maxCondition": 220
     },
     "B": {
-      "count": 9,
-      "minPrice": 2895,
-      "maxPrice": 13727,
-      "minCondition": 162,
-      "maxCondition": 255
+      "count": 13,
+      "minPrice": 2157,
+      "maxPrice": 14494,
+      "minCondition": 150,
+      "maxCondition": 315
     },
     "A": {
-      "count": 5,
-      "minPrice": 7160,
-      "maxPrice": 28294,
-      "minCondition": 216,
-      "maxCondition": 340
+      "count": 8,
+      "minPrice": 5695,
+      "maxPrice": 30257,
+      "minCondition": 205,
+      "maxCondition": 410
     },
     "S": {
-      "count": 5,
-      "minPrice": 23120,
-      "maxPrice": 97798,
-      "minCondition": 324,
-      "maxCondition": 510
+      "count": 8,
+      "minPrice": 25616,
+      "maxPrice": 108406,
+      "minCondition": 340,
+      "maxCondition": 720
     }
   },
   "byFamily": {
     "Руки": 16,
-    "Ноги": 5,
-    "Глаза": 4,
-    "Пах": 4
+    "Ноги": 11,
+    "Глаза": 8,
+    "Пах": 8
   },
   "functions": {
-    "prosthesis": 29,
-    "condition": 29,
-    "freeSettings": 15,
-    "weapon": 11,
+    "prosthesis": 43,
+    "condition": 43,
+    "freeSettings": 24,
+    "weapon": 13,
     "energyConsumer": 1
   },
   "itemsDetail": [
+    {
+      "id": "19ae98dd111eecef",
+      "key": "eyes-s-panopt",
+      "name": "Биг-МТ «Панопт»",
+      "class": "S",
+      "family": "Глаза",
+      "folderId": "b235ae0c2f3f3b29",
+      "sort": 100000,
+      "price": 34776,
+      "condition": 420,
+      "integrationPercent": 50,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.perception",
+          "mode": "add",
+          "value": 2,
+          "label": "Восприятие"
+        },
+        {
+          "key": "system.skills.science.bonus",
+          "mode": "add",
+          "value": 60,
+          "label": "Наука"
+        },
+        {
+          "key": "system.skills.doctor.bonus",
+          "mode": "add",
+          "value": 40,
+          "label": "Доктор"
+        },
+        {
+          "key": "system.skills.naturalist.bonus",
+          "mode": "add",
+          "value": 40,
+          "label": "Натуралист"
+        },
+        {
+          "key": "system.skills.science.advantage",
+          "mode": "add",
+          "value": 1,
+          "label": "Преимущество: Наука"
+        },
+        {
+          "key": "system.skills.doctor.advantage",
+          "mode": "add",
+          "value": 1,
+          "label": "Преимущество: Доктор"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 3,
+          "unitPrice": 2952
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 3,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 4,
+          "unitPrice": 840
+        }
+      ]
+    },
     {
       "id": "10d5b8c182407a0a",
       "key": "eyes-s-adaptive",
@@ -67,9 +156,9 @@
       "class": "S",
       "family": "Глаза",
       "folderId": "b235ae0c2f3f3b29",
-      "sort": 100000,
-      "price": 23120,
-      "condition": 324,
+      "sort": 200000,
+      "price": 25616,
+      "condition": 340,
       "integrationPercent": 50,
       "limbs": [
         "eyes"
@@ -126,7 +215,7 @@
         {
           "id": "QwZQBTprygdNvKUb",
           "name": "Компонент каркаса S класса",
-          "quantity": 1,
+          "quantity": 2,
           "unitPrice": 1560
         },
         {
@@ -150,15 +239,135 @@
       ]
     },
     {
+      "id": "52a18cbcbc13a398",
+      "key": "leg-s-talos",
+      "name": "Биг-МТ «Талос»",
+      "class": "S",
+      "family": "Ноги",
+      "folderId": "13e4aed13a8c053f",
+      "sort": 100000,
+      "price": 59926,
+      "condition": 720,
+      "integrationPercent": 50,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.strength",
+          "mode": "add",
+          "value": 2,
+          "label": "Сила"
+        },
+        {
+          "key": "system.characteristics.endurance",
+          "mode": "add",
+          "value": 2,
+          "label": "Выносливость"
+        },
+        {
+          "key": "system.skills.athletics.bonus",
+          "mode": "add",
+          "value": 40,
+          "label": "Атлетика"
+        },
+        {
+          "key": "system.skills.resilience.bonus",
+          "mode": "add",
+          "value": 20,
+          "label": "Стойкость"
+        },
+        {
+          "key": "system.skills.stealth.bonus",
+          "mode": "add",
+          "value": 20,
+          "label": "Скрытность"
+        },
+        {
+          "key": "system.skills.athletics.advantage",
+          "mode": "add",
+          "value": 1,
+          "label": "Преимущество: Атлетика"
+        },
+        {
+          "key": "system.skills.resilience.advantage",
+          "mode": "add",
+          "value": 1,
+          "label": "Преимущество: Стойкость"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 2,
+          "unitPrice": 2952
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "quantity": 3,
+          "unitPrice": 2952
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "id": "HeUFgD0VHAH8XazV",
+          "name": "Компонент армирования A класса",
+          "quantity": 2,
+          "unitPrice": 1278
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 4,
+          "unitPrice": 1278
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
       "id": "0281dd053bad4d7c",
       "key": "leg-s-power",
       "name": "Биг-МТ «Икар»",
       "class": "S",
       "family": "Ноги",
       "folderId": "13e4aed13a8c053f",
-      "sort": 100000,
-      "price": 45930,
-      "condition": 510,
+      "sort": 200000,
+      "price": 48426,
+      "condition": 560,
       "integrationPercent": 50,
       "limbs": [
         "leftLeg",
@@ -216,7 +425,7 @@
         {
           "id": "QwZQBTprygdNvKUb",
           "name": "Компонент каркаса S класса",
-          "quantity": 2,
+          "quantity": 3,
           "unitPrice": 1560
         },
         {
@@ -264,15 +473,128 @@
       ]
     },
     {
+      "id": "f8db43163e472b1b",
+      "key": "groin-s-colossus",
+      "name": "Биг-МТ «Колосс»",
+      "class": "S",
+      "family": "Пах",
+      "folderId": "e8f730cd70af265d",
+      "sort": 100000,
+      "price": 52110,
+      "condition": 580,
+      "integrationPercent": 50,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.endurance",
+          "mode": "add",
+          "value": 2,
+          "label": "Выносливость"
+        },
+        {
+          "key": "system.characteristics.strength",
+          "mode": "add",
+          "value": 2,
+          "label": "Сила"
+        },
+        {
+          "key": "system.skills.resilience.bonus",
+          "mode": "add",
+          "value": 50,
+          "label": "Стойкость"
+        },
+        {
+          "key": "system.skills.athletics.bonus",
+          "mode": "add",
+          "value": 30,
+          "label": "Атлетика"
+        },
+        {
+          "key": "system.skills.resilience.advantage",
+          "mode": "add",
+          "value": 1,
+          "label": "Преимущество: Стойкость"
+        },
+        {
+          "key": "system.skills.athletics.advantage",
+          "mode": "add",
+          "value": 1,
+          "label": "Преимущество: Атлетика"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "k2xwBuAEJRfFPuCy",
+          "name": "Компонент армирования S класса",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "quantity": 3,
+          "unitPrice": 2952
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "id": "HeUFgD0VHAH8XazV",
+          "name": "Компонент армирования A класса",
+          "quantity": 3,
+          "unitPrice": 1278
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 1,
+          "unitPrice": 1093
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 3,
+          "unitPrice": 1278
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 2,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
       "id": "e333daf0deaa5f40",
       "key": "groin-s-adaptive",
       "name": "Биг-МТ «Кариатида»",
       "class": "S",
       "family": "Пах",
       "folderId": "e8f730cd70af265d",
-      "sort": 100000,
-      "price": 37413,
-      "condition": 408,
+      "sort": 200000,
+      "price": 39909,
+      "condition": 430,
       "integrationPercent": 50,
       "limbs": [
         "groin"
@@ -329,7 +651,7 @@
         {
           "id": "QwZQBTprygdNvKUb",
           "name": "Компонент каркаса S класса",
-          "quantity": 2,
+          "quantity": 3,
           "unitPrice": 1560
         },
         {
@@ -384,8 +706,8 @@
       "family": "Руки",
       "folderId": "f42fb80a83092655",
       "sort": 100000,
-      "price": 97798,
-      "condition": 510,
+      "price": 108406,
+      "condition": 700,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -433,13 +755,13 @@
         {
           "id": "QwZQBTprygdNvKUb",
           "name": "Компонент каркаса S класса",
-          "quantity": 5,
+          "quantity": 6,
           "unitPrice": 1560
         },
         {
           "id": "fZIB2VLVZlX8fkrW",
           "name": "Компонент механики S класса",
-          "quantity": 5,
+          "quantity": 6,
           "unitPrice": 2952
         },
         {
@@ -451,7 +773,7 @@
         {
           "id": "HeUFgD0VHAH8XazV",
           "name": "Компонент армирования A класса",
-          "quantity": 1,
+          "quantity": 2,
           "unitPrice": 1278
         },
         {
@@ -463,7 +785,7 @@
         {
           "id": "w3xIoO171uQbdr6z",
           "name": "Компонент каркаса A класса",
-          "quantity": 1,
+          "quantity": 2,
           "unitPrice": 840
         },
         {
@@ -488,8 +810,8 @@
       "family": "Руки",
       "folderId": "f42fb80a83092655",
       "sort": 200000,
-      "price": 42541,
-      "condition": 510,
+      "price": 45037,
+      "condition": 550,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -547,7 +869,7 @@
         {
           "id": "QwZQBTprygdNvKUb",
           "name": "Компонент каркаса S класса",
-          "quantity": 2,
+          "quantity": 3,
           "unitPrice": 1560
         },
         {
@@ -595,15 +917,86 @@
       ]
     },
     {
+      "id": "294cabf463c095dd",
+      "key": "eyes-a-helios",
+      "name": "Вест-Тек «Гелиос»",
+      "class": "A",
+      "family": "Глаза",
+      "folderId": "1e3361a6d8cc3ba5",
+      "sort": 100000,
+      "price": 9694,
+      "condition": 250,
+      "integrationPercent": 50,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.perception",
+          "mode": "add",
+          "value": 1,
+          "label": "Восприятие"
+        },
+        {
+          "key": "system.skills.science.bonus",
+          "mode": "add",
+          "value": 40,
+          "label": "Наука"
+        },
+        {
+          "key": "system.skills.doctor.bonus",
+          "mode": "add",
+          "value": 30,
+          "label": "Доктор"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 3,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
       "id": "0ff305f025f0703b",
       "key": "eyes-a-tactical",
       "name": "Вест-Тек «Аргус»",
       "class": "A",
       "family": "Глаза",
       "folderId": "1e3361a6d8cc3ba5",
-      "sort": 100000,
-      "price": 7160,
-      "condition": 216,
+      "sort": 200000,
+      "price": 5695,
+      "condition": 205,
       "integrationPercent": 50,
       "limbs": [
         "eyes"
@@ -642,7 +1035,7 @@
         {
           "id": "It2PbILpbXfuiadi",
           "name": "Компонент электроники A класса",
-          "quantity": 2,
+          "quantity": 1,
           "unitPrice": 1093
         },
         {
@@ -672,15 +1065,111 @@
       ]
     },
     {
+      "id": "29aa213531f66374",
+      "key": "leg-a-centurion",
+      "name": "Вест-Тек «Центурион»",
+      "class": "A",
+      "family": "Ноги",
+      "folderId": "d32403a714240c3a",
+      "sort": 100000,
+      "price": 17365,
+      "condition": 410,
+      "integrationPercent": 50,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.strength",
+          "mode": "add",
+          "value": 1,
+          "label": "Сила"
+        },
+        {
+          "key": "system.characteristics.dexterity",
+          "mode": "add",
+          "value": 1,
+          "label": "Ловкость"
+        },
+        {
+          "key": "system.skills.athletics.bonus",
+          "mode": "add",
+          "value": 25,
+          "label": "Атлетика"
+        },
+        {
+          "key": "system.skills.resilience.bonus",
+          "mode": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 3,
+          "unitPrice": 1278
+        },
+        {
+          "id": "SDZz9ePMcdPVZQhg",
+          "name": "Компонент армирования B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 3,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
       "id": "dd4dd993694b70b4",
       "key": "leg-a-cyber",
       "name": "Вест-Тек «Саранча»",
       "class": "A",
       "family": "Ноги",
       "folderId": "d32403a714240c3a",
-      "sort": 100000,
-      "price": 14831,
-      "condition": 340,
+      "sort": 200000,
+      "price": 13119,
+      "condition": 330,
       "integrationPercent": 50,
       "limbs": [
         "leftLeg",
@@ -732,7 +1221,7 @@
         {
           "id": "wi6byx3I7USPwOqA",
           "name": "Компонент механики A класса",
-          "quantity": 3,
+          "quantity": 2,
           "unitPrice": 1278
         },
         {
@@ -762,15 +1251,110 @@
       ]
     },
     {
+      "id": "6f17b2f79fd2171a",
+      "key": "groin-a-fortress",
+      "name": "Вест-Тек «Крепость»",
+      "class": "A",
+      "family": "Пах",
+      "folderId": "db4f883bfb138f2d",
+      "sort": 100000,
+      "price": 16132,
+      "condition": 340,
+      "integrationPercent": 50,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.endurance",
+          "mode": "add",
+          "value": 1,
+          "label": "Выносливость"
+        },
+        {
+          "key": "system.skills.resilience.bonus",
+          "mode": "add",
+          "value": 35,
+          "label": "Стойкость"
+        },
+        {
+          "key": "system.skills.athletics.bonus",
+          "mode": "add",
+          "value": 20,
+          "label": "Атлетика"
+        },
+        {
+          "key": "system.skills.speech.bonus",
+          "mode": "add",
+          "value": 15,
+          "label": "Красноречие"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "HeUFgD0VHAH8XazV",
+          "name": "Компонент армирования A класса",
+          "quantity": 1,
+          "unitPrice": 1278
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 3,
+          "unitPrice": 1278
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "SDZz9ePMcdPVZQhg",
+          "name": "Компонент армирования B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
       "id": "503e96e4a37db907",
       "key": "groin-a-neuromuscular",
       "name": "Вест-Тек «Атлант»",
       "class": "A",
       "family": "Пах",
       "folderId": "db4f883bfb138f2d",
-      "sort": 100000,
-      "price": 11619,
-      "condition": 272,
+      "sort": 200000,
+      "price": 9907,
+      "condition": 265,
       "integrationPercent": 50,
       "limbs": [
         "groin"
@@ -815,7 +1399,7 @@
         {
           "id": "wi6byx3I7USPwOqA",
           "name": "Компонент механики A класса",
-          "quantity": 2,
+          "quantity": 1,
           "unitPrice": 1278
         },
         {
@@ -852,8 +1436,8 @@
       "family": "Руки",
       "folderId": "a84a05cc8e0e34d6",
       "sort": 100000,
-      "price": 28294,
-      "condition": 340,
+      "price": 30257,
+      "condition": 400,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -901,7 +1485,7 @@
         {
           "id": "w3xIoO171uQbdr6z",
           "name": "Компонент каркаса A класса",
-          "quantity": 5,
+          "quantity": 6,
           "unitPrice": 840
         },
         {
@@ -915,6 +1499,12 @@
           "name": "Компонент свойств A класса",
           "quantity": 2,
           "unitPrice": 840
+        },
+        {
+          "id": "SDZz9ePMcdPVZQhg",
+          "name": "Компонент армирования B класса",
+          "quantity": 1,
+          "unitPrice": 625
         },
         {
           "id": "0QfaywkaOisatK8N",
@@ -944,8 +1534,8 @@
       "family": "Руки",
       "folderId": "a84a05cc8e0e34d6",
       "sort": 200000,
-      "price": 11993,
-      "condition": 340,
+      "price": 10280,
+      "condition": 330,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -991,7 +1581,7 @@
         {
           "id": "wi6byx3I7USPwOqA",
           "name": "Компонент механики A класса",
-          "quantity": 2,
+          "quantity": 1,
           "unitPrice": 1278
         },
         {
@@ -1021,15 +1611,80 @@
       ]
     },
     {
+      "id": "df72fbbb7911c2ed",
+      "key": "eyes-b-lab",
+      "name": "РобКо «Лаборант»",
+      "class": "B",
+      "family": "Глаза",
+      "folderId": "00d0540f09ea0454",
+      "sort": 100000,
+      "price": 3811,
+      "condition": 185,
+      "integrationPercent": 50,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "key": "system.skills.science.bonus",
+          "mode": "add",
+          "value": 25,
+          "label": "Наука"
+        },
+        {
+          "key": "system.skills.doctor.bonus",
+          "mode": "add",
+          "value": 20,
+          "label": "Доктор"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
       "id": "3370006379a5c8e2",
       "key": "eyes-b-cyber",
       "name": "РобКо «Следопыт»",
       "class": "B",
       "family": "Глаза",
       "folderId": "00d0540f09ea0454",
-      "sort": 100000,
-      "price": 2895,
-      "condition": 162,
+      "sort": 200000,
+      "price": 2157,
+      "condition": 150,
       "integrationPercent": 50,
       "limbs": [
         "eyes"
@@ -1056,7 +1711,7 @@
         {
           "id": "0QfaywkaOisatK8N",
           "name": "Компонент электроники B класса",
-          "quantity": 2,
+          "quantity": 1,
           "unitPrice": 625
         },
         {
@@ -1086,15 +1741,178 @@
       ]
     },
     {
+      "id": "b1627484afa2fa00",
+      "key": "leg-b-ram",
+      "name": "Вест-Тек «Крушитель»",
+      "class": "B",
+      "family": "Ноги",
+      "folderId": "77c75152c8fd5602",
+      "sort": 100000,
+      "price": 12545,
+      "condition": 280,
+      "integrationPercent": 50,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [],
+      "weapon": {
+        "mode": "manual-with-fixed-source",
+        "role": "Энергизированный таран ноги",
+        "source": "Энергетический аккумулятор (B)",
+        "exactSourceClass": "B",
+        "damage": 210,
+        "pellets": 3,
+        "specialProperties": [
+          "concentratedPelletImpact"
+        ],
+        "penetration": 14,
+        "damageTypes": {
+          "bludgeoning": 100
+        },
+        "magazine": 12,
+        "resourcePerAttack": 3,
+        "attacksPerReload": 4,
+        "notes": "Силовой удар питается тем же B-аккумулятором, что и силовой кастет, и делает четыре атаки до перезарядки."
+      },
+      "sourceType": "magazine",
+      "sourceNames": [
+        "Энергетический аккумулятор (B)"
+      ],
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "SDZz9ePMcdPVZQhg",
+          "name": "Компонент армирования B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 3,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 6,
+          "unitPrice": 426
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 7,
+          "unitPrice": 625
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "9c819503ac642c7a",
+      "key": "leg-b-jack",
+      "name": "РобКо «Домкрат»",
+      "class": "B",
+      "family": "Ноги",
+      "folderId": "77c75152c8fd5602",
+      "sort": 200000,
+      "price": 6053,
+      "condition": 295,
+      "integrationPercent": 50,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.strength",
+          "mode": "add",
+          "value": 1,
+          "label": "Сила"
+        },
+        {
+          "key": "system.skills.athletics.bonus",
+          "mode": "add",
+          "value": 15,
+          "label": "Атлетика"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 3,
+          "unitPrice": 625
+        },
+        {
+          "id": "UixDzPJuR77ohltt",
+          "name": "Компонент армирования C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
       "id": "609b2180075a8f5d",
       "key": "leg-b-sport",
       "name": "РобКо «Спринтер»",
       "class": "B",
       "family": "Ноги",
       "folderId": "77c75152c8fd5602",
-      "sort": 100000,
-      "price": 5137,
-      "condition": 255,
+      "sort": 300000,
+      "price": 4399,
+      "condition": 230,
       "integrationPercent": 50,
       "limbs": [
         "leftLeg",
@@ -1134,7 +1952,7 @@
         {
           "id": "Odn6MG7PkbQc62zX",
           "name": "Компонент механики B класса",
-          "quantity": 3,
+          "quantity": 2,
           "unitPrice": 625
         },
         {
@@ -1158,15 +1976,86 @@
       ]
     },
     {
+      "id": "35abf466795374bb",
+      "key": "groin-b-buttress",
+      "name": "РобКо «Контрфорс»",
+      "class": "B",
+      "family": "Пах",
+      "folderId": "bbd3e5526f2144c8",
+      "sort": 100000,
+      "price": 5166,
+      "condition": 245,
+      "integrationPercent": 50,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "key": "system.characteristics.strength",
+          "mode": "add",
+          "value": 1,
+          "label": "Сила"
+        },
+        {
+          "key": "system.skills.resilience.bonus",
+          "mode": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "SDZz9ePMcdPVZQhg",
+          "name": "Компонент армирования B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "UixDzPJuR77ohltt",
+          "name": "Компонент армирования C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
       "id": "a136700fb6c775a0",
       "key": "groin-b-reinforced",
       "name": "РобКо «Бастион»",
       "class": "B",
       "family": "Пах",
       "folderId": "bbd3e5526f2144c8",
-      "sort": 100000,
-      "price": 4135,
-      "condition": 204,
+      "sort": 200000,
+      "price": 4637,
+      "condition": 205,
       "integrationPercent": 50,
       "limbs": [
         "groin"
@@ -1199,7 +2088,7 @@
         {
           "id": "Za5sDkVpsbqop6wM",
           "name": "Компонент каркаса B класса",
-          "quantity": 3,
+          "quantity": 4,
           "unitPrice": 426
         },
         {
@@ -1230,8 +2119,8 @@
       "family": "Руки",
       "folderId": "7a0b8e84ea7bd62b",
       "sort": 100000,
-      "price": 13727,
-      "condition": 255,
+      "price": 14494,
+      "condition": 315,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1284,7 +2173,7 @@
         {
           "id": "Za5sDkVpsbqop6wM",
           "name": "Компонент каркаса B класса",
-          "quantity": 6,
+          "quantity": 7,
           "unitPrice": 426
         },
         {
@@ -1298,6 +2187,12 @@
           "name": "Компонент свойств B класса",
           "quantity": 2,
           "unitPrice": 426
+        },
+        {
+          "id": "UixDzPJuR77ohltt",
+          "name": "Компонент армирования C класса",
+          "quantity": 1,
+          "unitPrice": 224
         },
         {
           "id": "W22bRWHvKwAwdmpE",
@@ -1321,8 +2216,8 @@
       "family": "Руки",
       "folderId": "7a0b8e84ea7bd62b",
       "sort": 200000,
-      "price": 10629,
-      "condition": 255,
+      "price": 11132,
+      "condition": 270,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1374,7 +2269,7 @@
         {
           "id": "Za5sDkVpsbqop6wM",
           "name": "Компонент каркаса B класса",
-          "quantity": 5,
+          "quantity": 6,
           "unitPrice": 426
         },
         {
@@ -1405,8 +2300,8 @@
       "family": "Руки",
       "folderId": "7a0b8e84ea7bd62b",
       "sort": 300000,
-      "price": 9918,
-      "condition": 255,
+      "price": 10685,
+      "condition": 300,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1453,7 +2348,7 @@
         {
           "id": "Za5sDkVpsbqop6wM",
           "name": "Компонент каркаса B класса",
-          "quantity": 5,
+          "quantity": 6,
           "unitPrice": 426
         },
         {
@@ -1467,6 +2362,12 @@
           "name": "Компонент свойств B класса",
           "quantity": 1,
           "unitPrice": 426
+        },
+        {
+          "id": "UixDzPJuR77ohltt",
+          "name": "Компонент армирования C класса",
+          "quantity": 1,
+          "unitPrice": 224
         },
         {
           "id": "Asz5d8D4m2AuyfdE",
@@ -1484,8 +2385,8 @@
       "family": "Руки",
       "folderId": "7a0b8e84ea7bd62b",
       "sort": 400000,
-      "price": 8593,
-      "condition": 255,
+      "price": 7855,
+      "condition": 245,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1539,7 +2440,7 @@
         {
           "id": "Odn6MG7PkbQc62zX",
           "name": "Компонент механики B класса",
-          "quantity": 6,
+          "quantity": 5,
           "unitPrice": 625
         },
         {
@@ -1570,8 +2471,8 @@
       "family": "Руки",
       "folderId": "7a0b8e84ea7bd62b",
       "sort": 500000,
-      "price": 8504,
-      "condition": 255,
+      "price": 7767,
+      "condition": 225,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1618,7 +2519,7 @@
         {
           "id": "Odn6MG7PkbQc62zX",
           "name": "Компонент механики B класса",
-          "quantity": 5,
+          "quantity": 4,
           "unitPrice": 625
         },
         {
@@ -1714,13 +2615,59 @@
       ]
     },
     {
+      "id": "bbf24d43ebfde18c",
+      "key": "eyes-c-armored",
+      "name": "Мед-Тек «Монокль-М»",
+      "class": "C",
+      "family": "Глаза",
+      "folderId": "1f766bc95aca65f0",
+      "sort": 100000,
+      "price": 1182,
+      "condition": 145,
+      "integrationPercent": 50,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 2,
+          "unitPrice": 127
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
       "id": "fe75670b17d2ff64",
       "key": "eyes-c-optical",
       "name": "Мед-Тек «Ясный взгляд»",
       "class": "C",
       "family": "Глаза",
       "folderId": "1f766bc95aca65f0",
-      "sort": 100000,
+      "sort": 200000,
       "price": 765,
       "condition": 108,
       "integrationPercent": 50,
@@ -1754,13 +2701,140 @@
       ]
     },
     {
+      "id": "7f1daf620aa8672c",
+      "key": "leg-c-hoof",
+      "name": "РобКо «Копыто»",
+      "class": "C",
+      "family": "Ноги",
+      "folderId": "ff0fc9669ed517a1",
+      "sort": 100000,
+      "price": 2679,
+      "condition": 190,
+      "integrationPercent": 50,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [],
+      "weapon": {
+        "mode": "manual",
+        "role": "Встроенное дробящее оружие ноги",
+        "damage": 96,
+        "pellets": 2,
+        "specialProperties": [
+          "concentratedPelletImpact"
+        ],
+        "penetration": 8,
+        "damageTypes": {
+          "bludgeoning": 100
+        },
+        "magazine": 0,
+        "resourcePerAttack": null,
+        "notes": "Привод и усиленная пятка образуют C-классовую атаку без отдельного расходника."
+      },
+      "sourceType": "none",
+      "sourceNames": [],
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "UixDzPJuR77ohltt",
+          "name": "Компонент армирования C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 4,
+          "unitPrice": 127
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 5,
+          "unitPrice": 224
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
+      "id": "6e95fafb7f6cfd34",
+      "key": "leg-c-miner",
+      "name": "Jim's Limbs JL-5R «Шахтёр»",
+      "class": "C",
+      "family": "Ноги",
+      "folderId": "ff0fc9669ed517a1",
+      "sort": 200000,
+      "price": 1854,
+      "condition": 220,
+      "integrationPercent": 50,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 4,
+          "unitPrice": 127
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        },
+        {
+          "id": "MbJjX3815eYKaRvc",
+          "name": "Компонент армирования D класса",
+          "quantity": 1,
+          "unitPrice": 42
+        },
+        {
+          "id": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
       "id": "8ea8accb9ec7f2a1",
       "key": "leg-c-mechanical",
       "name": "Jim's Limbs JL-4 «Выбор ветерана»",
       "class": "C",
       "family": "Ноги",
       "folderId": "ff0fc9669ed517a1",
-      "sort": 100000,
+      "sort": 300000,
       "price": 1426,
       "condition": 170,
       "integrationPercent": 50,
@@ -1801,13 +2875,65 @@
       ]
     },
     {
+      "id": "5f83b5213748f146",
+      "key": "groin-c-reinforced",
+      "name": "Jim's Limbs JP-5 «Стропила»",
+      "class": "C",
+      "family": "Пах",
+      "folderId": "3ed7db1c0e7cd880",
+      "sort": 100000,
+      "price": 1527,
+      "condition": 185,
+      "integrationPercent": 50,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [],
+      "weapon": null,
+      "sourceType": null,
+      "sourceNames": [],
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 4,
+          "unitPrice": 127
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "quantity": 1,
+          "unitPrice": 148
+        },
+        {
+          "id": "MbJjX3815eYKaRvc",
+          "name": "Компонент армирования D класса",
+          "quantity": 1,
+          "unitPrice": 42
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
       "id": "6795cde24d0be53e",
       "key": "groin-c-frame",
       "name": "Мед-Тек «Опора»",
       "class": "C",
       "family": "Пах",
       "folderId": "3ed7db1c0e7cd880",
-      "sort": 100000,
+      "sort": 200000,
       "price": 1065,
       "condition": 136,
       "integrationPercent": 50,
@@ -1848,8 +2974,8 @@
       "family": "Руки",
       "folderId": "e202392bb2e2e216",
       "sort": 100000,
-      "price": 3202,
-      "condition": 170,
+      "price": 3341,
+      "condition": 190,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1898,7 +3024,7 @@
         {
           "id": "IjNHxcqFdzwxRJBX",
           "name": "Компонент каркаса C класса",
-          "quantity": 5,
+          "quantity": 6,
           "unitPrice": 127
         },
         {
@@ -1923,8 +3049,8 @@
       "family": "Руки",
       "folderId": "e202392bb2e2e216",
       "sort": 200000,
-      "price": 2573,
-      "condition": 170,
+      "price": 2329,
+      "condition": 160,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -1974,7 +3100,7 @@
         {
           "id": "Asz5d8D4m2AuyfdE",
           "name": "Компонент механики C класса",
-          "quantity": 6,
+          "quantity": 5,
           "unitPrice": 224
         },
         {
@@ -1999,8 +3125,8 @@
       "family": "Руки",
       "folderId": "e202392bb2e2e216",
       "sort": 300000,
-      "price": 1947,
-      "condition": 170,
+      "price": 2085,
+      "condition": 180,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -2033,7 +3159,7 @@
         {
           "id": "IjNHxcqFdzwxRJBX",
           "name": "Компонент каркаса C класса",
-          "quantity": 4,
+          "quantity": 5,
           "unitPrice": 127
         },
         {
@@ -2165,8 +3291,8 @@
       "family": "Руки",
       "folderId": "039d26dae7479371",
       "sort": 100000,
-      "price": 368,
-      "condition": 100,
+      "price": 281,
+      "condition": 85,
       "integrationPercent": 50,
       "limbs": [
         "leftArm",
@@ -2212,7 +3338,7 @@
         {
           "id": "y8zBda96njMVWYrz",
           "name": "Компонент механики D класса",
-          "quantity": 4,
+          "quantity": 2,
           "unitPrice": 42
         },
         {

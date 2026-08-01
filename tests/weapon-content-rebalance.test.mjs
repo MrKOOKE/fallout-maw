@@ -11,6 +11,7 @@ import {
   rebalanceDamageSourceArea,
   rebalanceWeaponContent,
   shotgunActionPreset,
+  shotgunRangePreset,
   thrownGrenadeProfile
 } from "../scripts/rebalance/weapon-content-rebalance.mjs";
 
@@ -291,6 +292,93 @@ test("sawed-off and advanced shotguns keep meaningful spread deviations", () => 
       snapshotConeDegrees: 35,
       burstConeDegrees: 35
     }
+  );
+});
+
+test("shotgun effective range starts at one meter and follows class, platform, and paid deviations", () => {
+  const junk = weaponItem("shotgun-junk", "Обычный дробовик", {
+    proficiencyKey: "shotgun",
+    effectiveRange: { value: "2", max: "12" },
+    maxRangeMeters: "40"
+  });
+  const sawedOff = weaponItem("shotgun-sawed", "Обрез 12 кал.", {
+    proficiencyKey: "shotgun"
+  });
+  const neostead = weaponItem("ERkjv4ei6Iq21I1C", "Дробовик Неостед-Комбат", {
+    proficiencyKey: "shotgun"
+  });
+  const gauss = weaponItem("o35D4Wga0qc9fU09", "Гаусс-Дробовик", {
+    proficiencyKey: "shotgun"
+  });
+
+  assert.deepEqual(
+    shotgunRangePreset(junk, {
+      redistributedClass: "D",
+      modulePlatformProfileId: "shotshell.tubularShotgun"
+    }),
+    { itemClass: "D", effectiveNear: 1, effectiveFar: 4, maximum: 20, deviationRank: 0 }
+  );
+  assert.deepEqual(
+    shotgunRangePreset(sawedOff, {
+      redistributedClass: "C",
+      modulePlatformProfileId: "shotshell.tubularShotgun"
+    }),
+    { itemClass: "C", effectiveNear: 1, effectiveFar: 3, maximum: 20, deviationRank: 0 }
+  );
+  assert.deepEqual(
+    shotgunRangePreset(neostead, {
+      redistributedClass: "B",
+      modulePlatformProfileId: "shotshell.magazineShotgun"
+    }),
+    { itemClass: "B", effectiveNear: 1, effectiveFar: 7, maximum: 40, deviationRank: 1 }
+  );
+  assert.deepEqual(
+    shotgunRangePreset(gauss, {
+      redistributedClass: "B",
+      modulePlatformProfileId: "gauss.long"
+    }),
+    { itemClass: "B", effectiveNear: 1, effectiveFar: 8, maximum: 45, deviationRank: 2 }
+  );
+
+  rebalanceWeaponContent(junk, {
+    redistributedClass: "D",
+    modulePlatformProfileId: "shotshell.tubularShotgun"
+  });
+  assert.deepEqual(junk.system.functions.weapon.effectiveRange, { value: "1", max: "4" });
+  assert.equal(junk.system.functions.weapon.maxRangeMeters, "20");
+});
+
+test("ballistic fist is rebuilt as a short-range shotgun platform", () => {
+  const item = weaponItem("1n4FxyJUj46cJ0IV", "Баллистический кулак", {
+    proficiencyKey: "shotgun",
+    effectiveRange: { value: "0", max: "3" },
+    maxRangeMeters: "10"
+  });
+  const platform = {
+    redistributedClass: "B",
+    modulePlatformProfileId: "hybrid.gauntletLauncher"
+  };
+
+  assert.equal(shotgunActionPreset(item, platform).variant, "gauntlet");
+  assert.deepEqual(
+    shotgunRangePreset(item, platform),
+    { itemClass: "B", effectiveNear: 1, effectiveFar: 2, maximum: 10, deviationRank: 0 }
+  );
+
+  rebalanceWeaponContent(item, platform);
+  assert.equal(item.system.functions.weapon.aimedShot.attackConeDegrees, 25);
+  assert.equal(item.system.functions.weapon.snapshot.attackConeDegrees, 45);
+  assert.deepEqual(item.system.functions.weapon.effectiveRange, { value: "1", max: "2" });
+
+  const hornet = weaponItem("c718abdd8e1606d3", "Перчатка-дробовик «Шершень»", {
+    proficiencyKey: "shotgun",
+    effectiveRange: { value: "0", max: "3" },
+    maxRangeMeters: "10"
+  });
+  assert.equal(shotgunActionPreset(hornet)?.variant, "gauntlet");
+  assert.deepEqual(
+    shotgunRangePreset(hornet),
+    { itemClass: "C", effectiveNear: 1, effectiveFar: 2, maximum: 10, deviationRank: 0 }
   );
 });
 

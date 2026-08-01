@@ -8,6 +8,10 @@ import {
   ALL_SKILLS_CRITICAL_FAILURE_CHANCE_EFFECT_KEY,
   ALL_SKILLS_CRITICAL_SUCCESS_CHANCE_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY,
   ATTACK_RANGE_BONUS_EFFECT_KEY,
   CONDITION_LOSS_MULTIPLIER_EFFECT_KEY,
   CRITICAL_DAMAGE_PERCENT_EFFECT_KEY,
@@ -68,6 +72,10 @@ const STATIC_ACTIVE_USE_KEYS = new Set([
   EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
   EFFECTIVE_RANGE_NEAR_PENALTY_PERCENT_EFFECT_KEY,
   EFFECTIVE_RANGE_FAR_PENALTY_PERCENT_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY,
+  AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY,
   ...SKILL_CHECK_DISABLED_RESULT_KEYS,
   ...SMART_FUDGE_RESULT_KEYS,
   ALL_COMBAT_ADVANTAGE_EFFECT_KEY,
@@ -169,6 +177,12 @@ export function getWeaponActionActiveUseKeys(context = {}) {
     const rangePenaltyKey = getEffectiveRangePenaltyActiveUseKey(context);
     if (rangePenaltyKey) keys.add(rangePenaltyKey);
     for (const rangeBoundaryKey of getEffectiveRangeBoundaryActiveUseKeys(context)) keys.add(rangeBoundaryKey);
+    if (usesAimedRangeLimits(context, actionKey)) {
+      keys.add(AIMED_EFFECTIVE_RANGE_NEAR_BONUS_EFFECT_KEY);
+      keys.add(AIMED_EFFECTIVE_RANGE_FAR_BONUS_EFFECT_KEY);
+      keys.add(AIMED_EFFECTIVE_RANGE_NEAR_RESTRICTION_DISABLED_EFFECT_KEY);
+      keys.add(AIMED_EFFECTIVE_RANGE_FAR_RESTRICTION_DISABLED_EFFECT_KEY);
+    }
   }
   if (includeDamage) {
     keys.add(`system.penetration.actions.${actionKey}`);
@@ -343,4 +357,11 @@ function getEffectiveRangeBoundaryActiveUseKeys(context = {}) {
     ];
   }
   return [];
+}
+
+function usesAimedRangeLimits(context = {}, actionKey = "") {
+  if (actionKey === "aimedMeleeAttack" || actionKey === "meleeAttack") return false;
+  if (actionKey === "aimedShot" || context?.aimed === true || context?.targeting?.aimed === true) return true;
+  const attackModifier = getContextObject(context, "attackModifier");
+  return attackModifier?.requiresLimbSelection === true;
 }

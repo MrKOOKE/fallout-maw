@@ -37,6 +37,7 @@ import {
   measureTheoreticalMovementPathCost
 } from "../combat/movement-resources.mjs";
 import {
+  canPerformAimedAttackAgainstToken,
   canWeaponAttackReachToken,
   collectValidWeaponAttackTargets,
   executeWeaponAttackAgainstToken,
@@ -136,6 +137,15 @@ export function abilityWeaponAttackOptionCanReach(actor, option = null, targetTo
   const attackerToken = getPrimaryActorToken(actor);
   const weapon = option?.weapon ?? null;
   if (!attackerToken?.actor || !weapon || !option?.actionKey) return false;
+  if (option.actionKey === "aimedShot") {
+    return canPerformAimedAttackAgainstToken({
+      attackerToken,
+      targetToken,
+      weapon,
+      actionKey: option.actionKey,
+      weaponFunctionId: option.weaponFunctionId
+    });
+  }
   return canWeaponAttackReachToken({
     attackerToken,
     weapon,
@@ -1218,12 +1228,24 @@ export async function pickRandomAbilityFreeAttackTarget(actor = null, option = n
   const weapon = freshOption?.weapon
     ?? (freshOption?.weaponUuid ? await globalThis.fromUuid?.(freshOption.weaponUuid) : null);
   if (!attackerToken?.actor || !weapon || !freshOption?.actionKey) return null;
-  const targets = collectValidWeaponAttackTargets({
-    attackerToken,
-    weapon,
-    actionKey: freshOption.actionKey,
-    weaponFunctionId: freshOption.weaponFunctionId
-  });
+  const targets = freshOption.actionKey === "aimedShot"
+    ? (canvas.tokens?.placeables ?? []).filter(target => (
+      target?.actor
+      && target !== attackerToken
+      && canPerformAimedAttackAgainstToken({
+        attackerToken,
+        targetToken: target,
+        weapon,
+        actionKey: freshOption.actionKey,
+        weaponFunctionId: freshOption.weaponFunctionId
+      })
+    ))
+    : collectValidWeaponAttackTargets({
+      attackerToken,
+      weapon,
+      actionKey: freshOption.actionKey,
+      weaponFunctionId: freshOption.weaponFunctionId
+    });
   return pickRandomAbilityAttackOption(targets);
 }
 

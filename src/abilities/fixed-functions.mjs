@@ -4830,7 +4830,7 @@ async function executeOversightReaction({ offer } = {}) {
   if (!candidates.length) return { handled: false };
   const selected = candidates.length === 1 ? candidates[0] : await queryOversightAttackOwner(sourceActor, targetToken, candidates);
   if (!selected) return { handled: true, status: REACTION_RESULT.declined };
-  if (!canPerformWeaponActionAgainstToken({
+  if (!canPerformOversightAttackAgainstToken({
     attackerToken: sourceToken,
     targetToken,
     weapon: selected.weapon,
@@ -4870,12 +4870,18 @@ function getOversightAttackCandidates(actor, sourceToken, targetToken) {
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
       for (const action of OVERSIGHT_ACTIONS) {
         if (!hasWeaponAction(weapon, action.key, weaponFunctionId)) continue;
-        if (!canPerformWeaponActionAgainstToken({ attackerToken: sourceToken, targetToken, weapon, actionKey: action.key, weaponFunctionId })) continue;
+        if (!canPerformOversightAttackAgainstToken({ attackerToken: sourceToken, targetToken, weapon, actionKey: action.key, weaponFunctionId })) continue;
         candidates.push({ weapon, weaponFunctionId, actionKey: action.key, actionLabel: action.label });
       }
     }
   }
   return candidates;
+}
+
+function canPerformOversightAttackAgainstToken(options = {}) {
+  return options.actionKey === "aimedShot"
+    ? canPerformAimedAttackAgainstToken(options)
+    : canPerformWeaponActionAgainstToken(options);
 }
 
 async function queryOversightAttackOwner(actor, targetToken, candidates) {

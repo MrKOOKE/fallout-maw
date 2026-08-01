@@ -3,6 +3,7 @@ import {
   getCombatSettings,
   setCombatSettings
 } from "../settings/accessors.mjs";
+import { LIMB_DESTRUCTION_MODES } from "../settings/combat.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
@@ -35,8 +36,8 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-combat-settings",
     classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-combat-settings"],
     position: {
-      width: 760,
-      height: "auto"
+      width: 840,
+      height: 820
     },
     window: {
       resizable: true
@@ -49,7 +50,8 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   static PARTS = {
     form: {
-      template: TEMPLATES.settings.combat
+      template: TEMPLATES.settings.combat,
+      scrollable: [".fallout-maw-combat-settings-scroll"]
     }
   };
 
@@ -58,9 +60,32 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
   }
 
   async _prepareContext(options) {
+    const buildLimbDestructionChoices = selectedMode => [
+      {
+        value: LIMB_DESTRUCTION_MODES.standard,
+        label: game.i18n.localize("FALLOUTMAW.Settings.Combat.LimbDestructionStandard"),
+        selected: selectedMode === LIMB_DESTRUCTION_MODES.standard
+      },
+      {
+        value: LIMB_DESTRUCTION_MODES.nonCriticalOnly,
+        label: game.i18n.localize("FALLOUTMAW.Settings.Combat.LimbDestructionNonCriticalOnly"),
+        selected: selectedMode === LIMB_DESTRUCTION_MODES.nonCriticalOnly
+      },
+      {
+        value: LIMB_DESTRUCTION_MODES.disabled,
+        label: game.i18n.localize("FALLOUTMAW.Settings.Combat.LimbDestructionDisabled"),
+        selected: selectedMode === LIMB_DESTRUCTION_MODES.disabled
+      }
+    ];
     return {
       ...(await super._prepareContext(options)),
       settings: this.settings,
+      nonPlayerLimbDestructionChoices: buildLimbDestructionChoices(
+        this.settings.limbDestruction?.nonPlayerMode
+      ),
+      playerOwnedLimbDestructionChoices: buildLimbDestructionChoices(
+        this.settings.limbDestruction?.playerOwnedMode
+      ),
       turnOrderSchemeChoices: [
         {
           value: "normal",

@@ -1,3 +1,11 @@
+export const LIMB_DESTRUCTION_MODES = Object.freeze({
+  standard: "standard",
+  nonCriticalOnly: "nonCriticalOnly",
+  disabled: "disabled"
+});
+
+const LIMB_DESTRUCTION_MODE_VALUES = new Set(Object.values(LIMB_DESTRUCTION_MODES));
+
 export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
   turnOrder: Object.freeze({
     scheme: "block"
@@ -30,6 +38,10 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
     negativeDamageFormula: "damage",
     criticalDamageFormula: "damage * 2",
     stateMultiplierFormula: "1 + missingStateRatio"
+  }),
+  limbDestruction: Object.freeze({
+    nonPlayerMode: LIMB_DESTRUCTION_MODES.standard,
+    playerOwnedMode: LIMB_DESTRUCTION_MODES.standard
   }),
   weaponSkillDamage: Object.freeze({
     meleeCombat: Object.freeze({
@@ -99,6 +111,16 @@ export function normalizeCombatSettings(value = {}) {
       criticalDamageFormula: normalizeFormula(source.unconsciousness?.criticalDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.criticalDamageFormula),
       stateMultiplierFormula: normalizeFormula(source.unconsciousness?.stateMultiplierFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.stateMultiplierFormula)
     },
+    limbDestruction: {
+      nonPlayerMode: normalizeLimbDestructionMode(
+        source.limbDestruction?.nonPlayerMode,
+        DEFAULT_COMBAT_SETTINGS.limbDestruction.nonPlayerMode
+      ),
+      playerOwnedMode: normalizeLimbDestructionMode(
+        source.limbDestruction?.playerOwnedMode,
+        DEFAULT_COMBAT_SETTINGS.limbDestruction.playerOwnedMode
+      )
+    },
     weaponSkillDamage: Object.fromEntries(
       WEAPON_SKILL_DAMAGE_KEYS.map(key => [
         key,
@@ -106,6 +128,25 @@ export function normalizeCombatSettings(value = {}) {
       ])
     )
   };
+}
+
+export function getActorLimbDestructionMode(actor = null, settings = DEFAULT_COMBAT_SETTINGS) {
+  const configured = actor?.hasPlayerOwner
+    ? settings?.limbDestruction?.playerOwnedMode
+    : settings?.limbDestruction?.nonPlayerMode;
+  return normalizeLimbDestructionMode(configured, LIMB_DESTRUCTION_MODES.standard);
+}
+
+export function canActorLimbBeAutomaticallyDestroyed(
+  actor = null,
+  { critical = false, mode = null } = {},
+  settings = DEFAULT_COMBAT_SETTINGS
+) {
+  const resolvedMode = mode === null
+    ? getActorLimbDestructionMode(actor, settings)
+    : normalizeLimbDestructionMode(mode, LIMB_DESTRUCTION_MODES.standard);
+  return resolvedMode === LIMB_DESTRUCTION_MODES.standard
+    || (resolvedMode === LIMB_DESTRUCTION_MODES.nonCriticalOnly && !critical);
 }
 
 function normalizeWeaponSkillDamageEntry(source, defaults = {}) {
@@ -125,6 +166,11 @@ function normalizeWeaponSkillDamageEntry(source, defaults = {}) {
 function normalizeFormula(value, fallback) {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function normalizeLimbDestructionMode(value, fallback) {
+  const mode = String(value ?? "").trim();
+  return LIMB_DESTRUCTION_MODE_VALUES.has(mode) ? mode : fallback;
 }
 
 function clampInteger(value, fallback, min, max) {
