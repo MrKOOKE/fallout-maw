@@ -6471,6 +6471,7 @@ export class WeaponAttackController {
       this.token,
       geometry,
       centerTrajectory,
+      target,
       projectiles.length
     );
     const checkBatch = (duplicatePlan.cycles > 1 || projectiles.length > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
@@ -11727,17 +11728,53 @@ function buildAttackTrajectories(
 }
 
 function buildAssignedPelletTrajectories(attackerToken, geometry, targets = [], count = 1) {
-  const profiles = shuffleBurstShots(targets
-    .map(target => ({ target, points: getPelletTargetAimPoints(attackerToken, target, geometry) }))
-    .filter(profile => profile.points.length));
+  const amount = Math.max(1, toInteger(count) || 1);
+  const profiles = targets
+    .map(target => ({
+      target,
+      points: getPelletTargetAimPoints(attackerToken, target, geometry),
+      weight: getPelletTargetCenterWeight(target, geometry),
+      pointIndex: 0
+    }))
+    .filter(profile => profile.points.length);
   if (!profiles.length) return [];
 
-  return Array.from({ length: Math.max(1, toInteger(count) || 1) }, (_value, index) => {
-    const profile = profiles[index % profiles.length];
-    const cycle = Math.floor(index / profiles.length);
-    const point = profile.points[cycle % profile.points.length];
+  return allocatePelletTargetProfiles(profiles, amount).map(profile => {
+    const point = profile.points[profile.pointIndex % profile.points.length];
+    profile.pointIndex += 1;
     return buildTrajectoryThroughPoint(attackerToken, geometry, point);
   });
+}
+
+function allocatePelletTargetProfiles(profiles = [], count = 1) {
+  const amount = Math.max(1, toInteger(count) || 1);
+  const totalWeight = profiles.reduce((sum, profile) => sum + profile.weight, 0);
+  const allocations = profiles.map((profile, index) => {
+    const exact = (profile.weight / totalWeight) * amount;
+    return {
+      profile,
+      index,
+      count: Math.floor(exact),
+      remainder: exact - Math.floor(exact)
+    };
+  });
+  const assigned = allocations.reduce((sum, entry) => sum + entry.count, 0);
+  const remaining = amount - assigned;
+  [...allocations]
+    .sort((left, right) => (
+      (right.remainder - left.remainder)
+      || (right.profile.weight - left.profile.weight)
+      || (left.index - right.index)
+    ))
+    .slice(0, remaining)
+    .forEach(entry => { entry.count += 1; });
+
+  return shuffleBurstShots(allocations.flatMap(entry => Array(entry.count).fill(entry.profile)));
+}
+
+function getPelletTargetCenterWeight(target, geometry) {
+  const centrality = clamp(Number(getBurstTargetAxisProfile(target, geometry, 1)?.weight) || 0, 0, 1);
+  return Math.max(GEOMETRY_EPSILON, centrality * centrality);
 }
 
 function getPelletTargetAimPoints(attackerToken, target, geometry) {
@@ -11749,21 +11786,26 @@ function getPelletTargetAimPoints(attackerToken, target, geometry) {
   return points;
 }
 
-function buildAimedAttackTrajectories(attackerToken, coneGeometry, centerTrajectory, count = 1) {
+function buildAimedAttackTrajectories(attackerToken, coneGeometry, centerTrajectory, target, count = 1) {
   const amount = Math.max(1, toInteger(count) || 1);
   if (amount <= 1) return [centerTrajectory];
 
   const trajectories = [centerTrajectory];
-  const reserved = new Set();
-  const spacing = getPelletPointSpacing();
-  const pelletGeometry = {
-    ...coneGeometry,
-    elevationSlope: Number(centerTrajectory?.elevationSlope) || 0
-  };
-  reservePelletPoint(centerTrajectory.end, reserved, spacing, true);
+  const points = getPelletTargetAimPoints(attackerToken, target, coneGeometry);
+  if (!points.length) {
+    return Array.from({ length: amount }, () => ({
+      ...centerTrajectory,
+      origin: { ...centerTrajectory.origin },
+      end: { ...centerTrajectory.end }
+    }));
+  }
 
   for (let index = 1; index < amount; index += 1) {
-    trajectories.push(buildReservedPelletTrajectory(attackerToken, pelletGeometry, reserved, spacing));
+    trajectories.push(buildTrajectoryThroughPoint(
+      attackerToken,
+      coneGeometry,
+      points[index % points.length]
+    ));
   }
 
   return trajectories;

@@ -128,22 +128,33 @@ test("weapon runtime collapses trajectories and burst bullets before expanding o
   assert.match(hit, /pelletImpactIndex:\s*impactIndex/);
 });
 
-test("all shotgun pellets inherit the selected target elevation slope", () => {
+test("ordinary shotgun pellets inherit the selected target elevation slope", () => {
   const ordinary = sliceBetween(
     controllerSource,
     "function buildAttackTrajectories",
     "function buildAimedAttackTrajectories"
   );
-  const aimed = sliceBetween(
+
+  assert.match(ordinary, /const pelletGeometry = getRandomBurstMissGeometry\(attackerToken, coneGeometry\)/);
+  assert.match(ordinary, /buildReservedPelletTrajectory\(attackerToken, pelletGeometry/);
+});
+
+test("aimed shotgun assigns every pellet trajectory to the selected target", () => {
+  const attack = sliceBetween(
+    controllerSource,
+    "async performAimedAttack",
+    "async requestAimedLimbSelectedReaction"
+  );
+  const trajectories = sliceBetween(
     controllerSource,
     "function buildAimedAttackTrajectories",
     "function buildReservedPelletTrajectory"
   );
 
-  assert.match(ordinary, /const pelletGeometry = getRandomBurstMissGeometry\(attackerToken, coneGeometry\)/);
-  assert.match(ordinary, /buildReservedPelletTrajectory\(attackerToken, pelletGeometry/);
-  assert.match(aimed, /elevationSlope:\s*Number\(centerTrajectory\?\.elevationSlope\) \|\| 0/);
-  assert.match(aimed, /buildReservedPelletTrajectory\(attackerToken, pelletGeometry/);
+  assert.match(attack, /buildAimedAttackTrajectories\([\s\S]*?centerTrajectory,\s*target,\s*projectiles\.length/);
+  assert.match(trajectories, /getPelletTargetAimPoints\(attackerToken, target, coneGeometry\)/);
+  assert.match(trajectories, /buildTrajectoryThroughPoint\([\s\S]*?points\[index % points\.length\]/);
+  assert.doesNotMatch(trajectories, /buildRandomTrajectory|buildReservedPelletTrajectory/);
 });
 
 test("ordinary shotgun spread assigns every pellet to an available cone target", () => {
@@ -159,9 +170,23 @@ test("ordinary shotgun spread assigns every pellet to an available cone target",
   );
 
   assert.match(resolution, /assignPelletTargets:\s*true/);
-  assert.match(assignment, /profiles\[index % profiles\.length\]/);
+  assert.match(assignment, /getPelletTargetCenterWeight\(target, geometry\)/);
+  assert.match(assignment, /allocatePelletTargetProfiles\(profiles, amount\)/);
   assert.match(assignment, /buildTrajectoryThroughPoint\(attackerToken, geometry, point\)/);
   assert.doesNotMatch(assignment, /buildRandomTrajectory/);
+});
+
+test("ordinary shotgun allocation prioritizes the cone center instead of equal target shares", () => {
+  const allocation = sliceBetween(
+    controllerSource,
+    "function allocatePelletTargetProfiles",
+    "function getPelletTargetAimPoints"
+  );
+
+  assert.match(allocation, /getBurstTargetAxisProfile\(target, geometry, 1\)/);
+  assert.match(allocation, /centrality \* centrality/);
+  assert.match(allocation, /\(profile\.weight \/ totalWeight\) \* amount/);
+  assert.match(allocation, /right\.profile\.weight - left\.profile\.weight/);
 });
 
 test("directed melee expands one successful impact before damage mitigation", () => {
