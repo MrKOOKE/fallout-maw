@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "86c5166c1f7bf6a863608179b3040544f8e79c743aeeec816fc26aad9bbec3c5",
-  "updatedAt": "2026-07-30T07:39:47.946Z",
+  "revision": "e2fb28997a6a9f071888b0519e1e21831e91e845dc063166c5531be585a23aae",
+  "updatedAt": "2026-07-31T19:29:02.131Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -9386,12 +9386,12 @@
           "failureRefundPercent": 80,
           "mode": "skillThreshold"
         },
+        "medicine": {
+          "mode": "skillThreshold"
+        },
         "repair": {
           "criticalFailureToolCostIncreasePercent": 0,
           "failureToolCostIncreasePercent": 100,
-          "mode": "skillThreshold"
-        },
-        "medicine": {
           "mode": "skillThreshold"
         }
       }
@@ -56569,7 +56569,7 @@
           "Братство": 0,
           "Игроки": 0,
           "Легион": 0,
-          "НКР": -39,
+          "НКР": -40,
           "Неопределено": 0,
           "Рейдеры": -40
         },
@@ -56583,7 +56583,7 @@
         },
         "НКР": {
           "Братство": 0,
-          "Игроки": -39,
+          "Игроки": -40,
           "Легион": 0,
           "НКР": 0,
           "Неопределено": 0,

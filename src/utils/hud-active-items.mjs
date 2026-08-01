@@ -96,6 +96,7 @@ function getHudWeaponSetsCacheSignature(actor) {
     const system = item.system ?? {};
     const placement = system.placement ?? {};
     const container = system.functions?.container ?? {};
+    const integratedBodyWeapon = placement.mode === "implant" || placement.mode === "prosthesis";
     parts.push([
       item.id,
       placement.mode,
@@ -104,7 +105,9 @@ function getHudWeaponSetsCacheSignature(actor) {
       placement.limbKey,
       placement.constructPartOrder,
       system.equipped ? 1 : 0,
-      container.extraWeaponSlots ?? 0
+      container.extraWeaponSlots ?? 0,
+      integratedBodyWeapon ? (system.functions?.[placement.mode]?.enabled ? 1 : 0) : "",
+      integratedBodyWeapon ? (system.functions?.weapon?.enabled ? 1 : 0) : ""
     ].join(":"));
   }
   for (const effect of getActorApplicableEffects(actor)) {

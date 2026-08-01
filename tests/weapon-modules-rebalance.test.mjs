@@ -49,7 +49,8 @@ const {
 } = await import("../scripts/rebalance/module-slot-allocation.mjs");
 const {
   applyWeaponModuleModifiers,
-  createWeaponModuleSlotItemData
+  createWeaponModuleSlotItemData,
+  getWeaponModuleTooltipCapabilities
 } = await import("../src/utils/weapon-modules.mjs");
 
 const auditPath = path.join(
@@ -123,6 +124,31 @@ test("installed module snapshots retain gameplay data without embedded Document 
   assert.equal(snapshot.system.functions.module.enabled, true);
   assert.equal(snapshot.effects[0].name, "Module effect");
   assert.equal(source.system.quantity, 7, "snapshot preparation must not mutate the inventory Item");
+});
+
+test("module tooltip capabilities exclude ordinary numeric modifiers", () => {
+  const ordinary = moduleItem({ accuracyBonus: 20, maxRangeMeters: 36 });
+  assert.deepEqual(getWeaponModuleTooltipCapabilities(ordinary), {
+    lightSource: false,
+    weaponActions: false
+  });
+
+  const light = moduleItem({ accuracyBonus: 5 });
+  light.system.functions.lightSource = { enabled: true, dim: 10, bright: 5 };
+  assert.deepEqual(getWeaponModuleTooltipCapabilities(light), {
+    lightSource: true,
+    weaponActions: false
+  });
+
+  const action = moduleItem({});
+  action.system.functions.module.additionalWeapons = {
+    underbarrel: { enabled: true, name: "Underbarrel launcher" },
+    disabled: { enabled: false, name: "Disabled action" }
+  };
+  assert.deepEqual(getWeaponModuleTooltipCapabilities(action), {
+    lightSource: false,
+    weaponActions: true
+  });
 });
 
 test("module catalogue is complete, source-first, and respects AP limits", () => {

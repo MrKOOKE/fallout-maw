@@ -19,6 +19,7 @@ function createClock(initial = 0) {
 function createSession(id, {
   createdAt = 0,
   updatedAt,
+  expiresAt,
   revision,
   operationPending = false,
   actorUuid = `Actor.${id}`,
@@ -29,6 +30,7 @@ function createSession(id, {
     id,
     createdAt,
     ...(updatedAt === undefined ? {} : { updatedAt }),
+    ...(expiresAt === undefined ? {} : { expiresAt }),
     ...(revision === undefined ? {} : { revision }),
     ...(operationPending ? { operationPending: true } : {}),
     entries: entryActorUuids.map(entryActorUuid => ({
@@ -198,7 +200,7 @@ test("actor index is cleared by capacity eviction, expiry, delete, and clear", (
   const registry = createCombatEndSessionRegistry({
     clock: time.clock,
     maxSessions: 2,
-    sessionTtlMs: 10
+    sessionTtlMs: 20
   });
 
   registry.upsert(createSession("combat-a", {
@@ -207,10 +209,12 @@ test("actor index is cleared by capacity eviction, expiry, delete, and clear", (
   }));
   registry.upsert(createSession("combat-b", {
     createdAt: 20,
+    expiresAt: 110,
     actorUuid: "Actor.expiry"
   }));
   registry.upsert(createSession("combat-c", {
     createdAt: 30,
+    expiresAt: 120,
     actorUuid: "Actor.delete"
   }));
   assert.deepEqual(registry.sessionIdsForActor("Actor.capacity"), []);
@@ -219,6 +223,7 @@ test("actor index is cleared by capacity eviction, expiry, delete, and clear", (
   registry.upsert(createSession("combat-c", {
     createdAt: 30,
     updatedAt: 105,
+    expiresAt: 120,
     actorUuid: "Actor.delete",
     revision: 1
   }));
@@ -362,7 +367,7 @@ test("multiple local pins retain their existing slots while new states are evict
   assert.equal(registry.getStats().sessions.overCapacity, 0);
 });
 
-test("session and dismissal TTLs expire independently from last receipt", () => {
+test("session TTL is a hard deadline which repeated receipt cannot extend", () => {
   const time = createClock(100);
   const registry = createCombatEndSessionRegistry({
     clock: time.clock,
@@ -384,13 +389,96 @@ test("session and dismissal TTLs expire independently from last receipt", () => 
   time.set(149);
   const refreshed = createSession("combat-a", { updatedAt: 149 });
   refreshed.revision = 1;
-  registry.upsert(refreshed);
-  time.set(198);
-  registry.prune();
+  assert.equal(registry.upsert(refreshed).stored, true);
   assert.equal(registry.has("combat-a"), true);
-  time.set(199);
+  time.set(150);
   registry.prune();
   assert.equal(registry.has("combat-a"), false);
+});
+
+test("an already expired replicated snapshot is rejected immediately", () => {
+  const registry = createCombatEndSessionRegistry({
+    clock: () => 100,
+    sessionTtlMs: 50
+  });
+  const result = registry.upsert(createSession("combat-expired", {
+    expiresAt: 100
+  }));
+
+  assert.equal(result.accepted, false);
+  assert.equal(result.stored, false);
+  assert.equal(result.reason, "expired");
+  assert.equal(registry.has("combat-expired"), false);
+});
+
+test("a replicated expiry remains immutable across newer revisions", () => {
+  const time = createClock(100);
+  const registry = createCombatEndSessionRegistry({
+    clock: time.clock,
+    sessionTtlMs: 1_000
+  });
+  registry.upsert(createSession("combat-a", { expiresAt: 150 }));
+  time.set(140);
+  registry.upsert(createSession("combat-a", {
+    expiresAt: 10_000,
+    revision: 1,
+    updatedAt: 140
+  }));
+  assert.equal(registry.get("combat-a")?.expiresAt, 150);
+  time.set(150);
+  registry.prune();
+  assert.equal(registry.has("combat-a"), false);
+});
+
+test("a replicated expiry cannot exceed the local retention deadline", () => {
+  const time = createClock(100);
+  const registry = createCombatEndSessionRegistry({
+    clock: time.clock,
+    sessionTtlMs: 50
+  });
+
+  registry.upsert(createSession("combat-a", { expiresAt: 10_000 }));
+  assert.equal(registry.get("combat-a")?.expiresAt, 150);
+  time.set(150);
+  registry.prune();
+  assert.equal(registry.has("combat-a"), false);
+});
+
+test("high-volume combat replication stays bounded and cannot postpone cleanup", () => {
+  const time = createClock(100);
+  const registry = createCombatEndSessionRegistry({
+    clock: time.clock,
+    maxSessions: 32,
+    sessionTtlMs: 50
+  });
+
+  for (let index = 0; index < 2_000; index += 1) {
+    registry.upsert(createSession(`combat-${index}`, {
+      createdAt: index,
+      updatedAt: index,
+      operationPending: true
+    }));
+    assert.ok(registry.size <= 32);
+  }
+
+  const survivors = [...registry.values()].map((session) => structuredClone(session));
+  time.set(149);
+  for (let revision = 1; revision <= 100; revision += 1) {
+    for (const session of survivors) {
+      registry.upsert({
+        ...session,
+        revision,
+        updatedAt: 2_000 + revision,
+        expiresAt: 10_000
+      });
+    }
+    assert.equal(registry.size, 32);
+  }
+
+  time.set(150);
+  registry.prune();
+  assert.equal(registry.size, 0);
+  assert.equal(registry.getStats().sessions.overCapacity, 0);
 });
 
 test("session capacity eviction is deterministic across insertion orders", () => {

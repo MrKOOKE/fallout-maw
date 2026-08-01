@@ -25,7 +25,7 @@
     {{/each}}
   </ol>
   <footer class="form-footer">
-    <button type="button" data-action="dismiss">
+    <button type="button" data-action="dismiss" {{#if completionPending}}disabled{{/if}}>
       <i class="fa-solid fa-check" inert></i>
       <span>Завершить</span>
     </button>

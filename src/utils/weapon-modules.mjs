@@ -33,6 +33,17 @@ export function getWeaponModuleDisplayName(itemOrData = null) {
   return name || getWeaponModuleTechnicalName(itemOrData);
 }
 
+export function getWeaponModuleTooltipCapabilities(itemOrData = null) {
+  const additionalWeapons = getModuleFunction(itemOrData).additionalWeapons;
+  const weaponEntries = Array.isArray(additionalWeapons)
+    ? additionalWeapons
+    : Object.values(additionalWeapons ?? {});
+  return {
+    lightSource: hasItemFunction(itemOrData, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true }),
+    weaponActions: weaponEntries.some(entry => entry?.enabled)
+  };
+}
+
 /**
  * Create the portable Item snapshot stored inside a weapon module slot.
  *

@@ -156,7 +156,7 @@
                 <div class="fallout-maw-slot-card-label">{{label}}</div>
                 <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot fallout-maw-natural-weapon-slot" data-natural-weapon-slot="{{key}}">
                   {{#if item}}
-                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if integratedBodyWeapon}}data-integrated-body-weapon-projection{{/if}}>
                     <img src="{{item.img}}" alt="{{item.name}}">
                   </article>
                   {{/if}}

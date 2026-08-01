@@ -1060,14 +1060,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static async #onReplaceHudWeapon(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
+    const actor = this.actor;
     const itemId = String(target.dataset.itemId ?? "");
-    if (isMiddleMouseClick(event)) return this.actor?.items.get(itemId)?.sheet?.render(true);
+    if (isMiddleMouseClick(event)) return actor?.items.get(itemId)?.sheet?.render(true);
     if (event.button !== 0) return undefined;
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     const weaponSlotKey = String(target.dataset.weaponSlot ?? "");
     if (!itemId || !weaponSetKey || !weaponSlotKey) return undefined;
-    await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
-    await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
+    if (!canReplaceHudWeaponSlot(actor, weaponSetKey, weaponSlotKey, itemId)) return undefined;
+    await actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    await actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     this.#weaponEquipTarget = { weaponSetKey, weaponSlotKey, replaceItemId: itemId };
     this.#activeTray = "weaponEquip";
     this.#dualWeaponActionSelection = null;
@@ -3160,6 +3162,13 @@ function getSelectedHudWeaponSlot(weaponSet = null, selectedWeaponId = "") {
   return (weaponSet.slots ?? []).find(slot => slot.item?.id === selectedWeaponId && !slot.phantom) ?? null;
 }
 
+function canReplaceHudWeaponSlot(actor, weaponSetKey = "", weaponSlotKey = "", itemId = "") {
+  const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
+  const slot = (set?.slots ?? []).find(entry => entry.key === weaponSlotKey && !entry.phantom);
+  if (!slot || slot.canReplace === false) return false;
+  return !itemId || String(slot.item?.id ?? "") === String(itemId);
+}
+
 function prepareHudWeaponEquipChoices(actor, target = null, hudIcons = {}, requestIndex = null) {
   if (!actor || !target?.weaponSetKey || !target?.weaponSlotKey) return [];
   const cost = getWeaponSwitchActionPointCost(actor);
@@ -3520,7 +3529,12 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
       actions: prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled, hudIcons, { weaponBroken })
     }))
     .filter(row => row.actions.length);
-  if (rows.length && selectedWeaponSlot?.weaponSetKey && selectedWeaponSlot?.key) {
+  if (
+    rows.length
+    && selectedWeaponSlot?.weaponSetKey
+    && selectedWeaponSlot?.key
+    && selectedWeaponSlot.canReplace !== false
+  ) {
     rows.at(-1).actions.push({
       key: "replaceWeapon",
       label: "Заменить",

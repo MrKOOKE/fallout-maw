@@ -1841,7 +1841,7 @@
       "WeaponRequirementCharacteristic": "Характеристика",
       "WeaponRequirementSkill": "Навык",
       "WeaponRequirementTarget": "Параметр",
-      "WeaponCostMagazine": "Магазин",
+      "WeaponCostMagazine": "Расход магазина на атаку",
       "WeaponCostQuantity": "Штучность предмета",
       "WeaponCostCondition": "Расход состояния",
       "WeaponCostEnergy": "Потребление энергии",

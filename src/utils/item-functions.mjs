@@ -1,4 +1,5 @@
 import { resolveWorldItemSync } from "./world-items.mjs";
+import { NATURAL_RACE_WEAPON_SET_KEY } from "../races/natural-item-identity.mjs";
 
 export const ITEM_FUNCTIONS = {
   actorContainer: "actorContainer",
@@ -218,6 +219,24 @@ export function isInstalledProsthesis(itemOrSystem = null, limbKey = "") {
   if (String(system.placement?.mode ?? "") !== "prosthesis") return false;
   const key = String(limbKey ?? "").trim();
   return !key || String(system.placement?.limbKey ?? "").trim() === key;
+}
+
+export function isInstalledBodyWeapon(itemOrSystem = null) {
+  const system = getItemSystem(itemOrSystem);
+  const mode = String(system.placement?.mode ?? "");
+  if (mode !== ITEM_FUNCTIONS.implant && mode !== ITEM_FUNCTIONS.prosthesis) return false;
+  return Boolean(system.equipped)
+    && hasItemFunction(system, mode, { ignoreBroken: true })
+    && hasItemFunction(system, ITEM_FUNCTIONS.weapon, { ignoreBroken: true });
+}
+
+export function getDeployedWeaponSetKey(itemOrSystem = null) {
+  const system = getItemSystem(itemOrSystem);
+  const placement = system.placement ?? {};
+  if (String(placement.mode ?? "") === ITEM_FUNCTIONS.weapon) {
+    return String(placement.weaponSet ?? "");
+  }
+  return isInstalledBodyWeapon(system) ? NATURAL_RACE_WEAPON_SET_KEY : "";
 }
 
 export function isActiveItem(itemOrSystem = null) {

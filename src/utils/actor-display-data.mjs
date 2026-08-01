@@ -32,7 +32,14 @@ import {
   prepareInventoryGridContext,
   usesVirtualInventoryStacks
 } from "./inventory-containers.mjs";
-import { getActiveItemChargesData, getConstructPartFunction, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import {
+  getActiveItemChargesData,
+  getConstructPartFunction,
+  hasItemFunction,
+  isInstalledBodyWeapon,
+  isItemBrokenByCondition,
+  ITEM_FUNCTIONS
+} from "./item-functions.mjs";
 import { prepareActorContainerInventoryContext } from "./actor-containers.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
 import {
@@ -179,10 +186,24 @@ function prepareWeaponSetsSlice(actor, race, { includeLocked = true } = {}) {
     && !isNaturalRaceItem(item)
     && (includeLocked || !isItemLocked(item))
   ));
-  const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies, null, itemDisplayOptions));
+  const integratedBodyWeaponSlots = [];
+  const collectIntegratedBodyWeapons = actor?.type !== "construct";
+  const allItemData = allItems.map(item => {
+    const displayItem = createInventoryItemData(item, allItems, currencies, null, itemDisplayOptions);
+    if (collectIntegratedBodyWeapons && isInstalledBodyWeapon(item)) {
+      integratedBodyWeaponSlots.push({
+        key: `integratedBodyWeapon:${item.id}`,
+        label: displayItem.name,
+        integratedBodyWeapon: true,
+        canReplace: false,
+        item: displayItem
+      });
+    }
+    return displayItem;
+  });
   const naturalWeaponSet = actor?.type === "construct"
     ? getConstructNaturalWeaponSetContext(actor, allItemData)
-    : getNaturalWeaponSetContext(actor, race, currencies);
+    : getNaturalWeaponSetContext(actor, race, currencies, { additionalSlots: integratedBodyWeaponSlots });
   const assignedItemIds = new Set();
   const containerIds = getInventoryContainerIds(actor.items);
   const topLevelItems = allItemData.filter(item => isRootInventoryItem(item, allItems, containerIds));

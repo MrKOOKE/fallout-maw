@@ -1,7 +1,11 @@
 ﻿import { calculateSkillCheckSuccessChance, createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { isDeusExMachinaProgressItemUpdate } from "../abilities/deus-ex-machina-progress-runtime.mjs";
-import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
+import {
+  getCombatVisualizationLayer,
+  playWeaponAttackAnimations,
+  playWeaponExplosionAnimation
+} from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import {
@@ -29,6 +33,7 @@ import {
   getConditionFunction,
   getConditionWeakeningData,
   getDamageSourceFunction,
+  getDeployedWeaponSetKey,
   getEnergyConsumerFunction,
   getWeaponAttackPowerState,
   getWeaponFunctionById,
@@ -464,6 +469,7 @@ export function registerWeaponAttackSocket() {
   CONFIG.queries[ORDINARY_ATTACK_TICKET_QUERY] = handleOrdinaryWeaponAttackTicketQuery;
   game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
   Hooks.on("canvasReady", clearRemoteAttackPreviews);
+  Hooks.on("canvasTearDown", clearWeaponAttackCanvasState);
   if (!delayedVolleyProcessorRegistered) {
     registerQueuedWorldTimeProcessor(processDelayedVolleyExplosions, { priority: 90 });
     Hooks.on("canvasReady", () => {
@@ -511,7 +517,7 @@ class DualWeaponAttackPreview {
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
     this.entries = [];
-    getAttackPreviewLayer().addChild(this.container);
+    getCombatVisualizationLayer().addChild(this.container);
     this.onItemUpdate = this.onItemUpdate.bind(this);
     Hooks.on("updateItem", this.onItemUpdate);
     setWeaponNoisePreview(this.token, this.sourceId, this.noiseLevel);
@@ -1649,6 +1655,7 @@ class CommandedWeaponAttackController {
       noiseLevel: getWeaponNoiseLevel(getWeaponAttackData(entry.weapon, entry.weaponFunctionId)),
       previewBroadcasted: false,
       lastBroadcastPreviewState: null,
+      lastTargetMarkerRenderState: null,
       pointer: null,
       geometry: null,
       lockedGeometry: null,
@@ -1668,7 +1675,7 @@ class CommandedWeaponAttackController {
   }
 
   activate() {
-    getAttackPreviewLayer().addChild(this.container);
+    getCombatVisualizationLayer().addChild(this.container);
     for (const entry of this.entries) {
       setWeaponNoisePreview(entry.token, entry.noisePreviewSourceId, entry.noiseLevel);
     }
@@ -1730,7 +1737,7 @@ class CommandedWeaponAttackController {
     if (this.processing) return;
     this.updateRightClickCancelCandidate(event);
     event.stopPropagation();
-    this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
+    this.pointer = event.data.getLocalPosition(getCombatVisualizationLayer());
     this.previewFrameScheduler.request();
   }
 
@@ -1999,13 +2006,18 @@ class CommandedWeaponAttackController {
       locked: entry.locked,
       hasTargets: entry.targets.length > 0
     });
-    drawTargetMarkers(entry.targetMarkers, entry.targets, null, time, entry.burstRanges);
+    const markerState = getTargetMarkerRenderState(entry.targets, null, entry.burstRanges);
+    if (!isSameTargetMarkerRenderState(markerState, entry.lastTargetMarkerRenderState)) {
+      entry.lastTargetMarkerRenderState = markerState;
+      drawTargetMarkers(entry.targetMarkers, entry.targets, null, time, entry.burstRanges);
+    }
     this.drawFocusedTargetMarkerForEntry(entry, time);
   }
 
   clearEntryTargetMarkers(entry) {
     clearTargetMarkerLayer(entry.targetMarkers);
     clearTargetMarkerLayer(entry.focusedTargetMarker);
+    entry.lastTargetMarkerRenderState = null;
   }
 
   drawFocusedTargetMarkerForEntry(entry, time = performance.now()) {
@@ -2405,6 +2417,19 @@ function settlePendingOrdinaryAttackRequest(payload = {}, socketSenderUserId = "
   globalThis.clearTimeout(pending.hardTimeout);
   pending.resolve(payload.result ?? { ok: false, executed: false, reason: "authorityError" });
   return true;
+}
+
+function clearWeaponAttackCanvasState() {
+  const attack = activeAttack;
+  const dualAttack = activeDualWeaponAttack;
+  const commandedAttack = activeCommandedAttack;
+  activeAttack = null;
+  activeDualWeaponAttack = null;
+  activeCommandedAttack = null;
+  if (attack && !attack.destroyed) attack.destroy();
+  if (dualAttack && !dualAttack.destroyed) dualAttack.destroy();
+  if (commandedAttack && !commandedAttack.destroyed) commandedAttack.destroy();
+  clearRemoteAttackPreviews();
 }
 
 async function handleOrdinaryWeaponAttackSocketRequest(payload = {}, socketSenderUserId = "") {
@@ -2903,7 +2928,9 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     skipActionPointCost: true,
     reportedActionPointCost: authorityContext ? selection.actionPointCost : null,
     reactionCoordinator,
-    chainRef
+    chainRef,
+    suppressAttackPreviewBroadcast: Boolean(authorityContext),
+    headlessExecution: Boolean(authorityContext)
   })));
   for (const result of results) {
     if (result.status === "rejected") console.error("Fallout MaW | Commanded weapon attack execution failed", result.reason);
@@ -4032,7 +4059,7 @@ export class WeaponAttackController {
   attachPreview() {
     if (this.container.parent) return;
     this.container.eventMode = "none";
-    getAttackPreviewLayer().addChild(this.container);
+    getCombatVisualizationLayer().addChild(this.container);
   }
 
   async notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
@@ -4735,6 +4762,7 @@ export class WeaponAttackController {
   }
 
   completeProcessingCycle({ refresh = true } = {}) {
+    if (this.destroyed) return true;
     this.processing = false;
     void this.abortSkillCheckCollectors();
     if (this.attackModifier?.finishAfterAttack || this.finishAfterAttack) this.finishRequested = true;
@@ -4816,7 +4844,7 @@ export class WeaponAttackController {
   }
 
   async playAttackAnimationsIfNeeded(trajectories = [], { attempted = true, delayMs = null } = {}) {
-    if (!attempted || !this.shouldPlayWeaponAnimationForAttempt()) return;
+    if (this.destroyed || !attempted || !this.shouldPlayWeaponAnimationForAttempt()) return;
     await this.playAttemptWeaponAnimations(trajectories, { delayMs });
   }
 
@@ -5228,7 +5256,7 @@ export class WeaponAttackController {
       this.refreshAimedLimbMenu();
       return;
     }
-    this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
+    this.pointer = event.data.getLocalPosition(getCombatVisualizationLayer());
     this.previewFrameScheduler.request();
   }
 
@@ -8472,6 +8500,8 @@ function isVolleyAttackAction(weapon, actionKey, weaponFunctionId = "") {
 function broadcastAttackPreview(payload = {}) {
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    sceneId: canvas.scene?.id ?? "",
+    levelId: canvas.level?.id ?? "",
     ...payload,
     senderUserId: game.user?.id ?? ""
   });
@@ -8565,7 +8595,10 @@ function handleWeaponAttackSocketMessage(payload = {}, socketSenderUserId = "") 
     return;
   }
   if (payload.action !== "updatePreview") return;
-  if (payload.sceneId !== canvas.scene?.id) {
+  if (
+    payload.sceneId !== canvas.scene?.id
+    || String(payload.levelId ?? "") !== String(canvas.level?.id ?? "")
+  ) {
     removeRemoteAttackPreview(payload.attackId);
     return;
   }
@@ -8597,12 +8630,11 @@ function updateRemoteAttackPreview(payload = {}) {
     };
     preview.container.eventMode = "none";
     preview.container.addChild(preview.shape, preview.targetMarkers);
-    getAttackPreviewLayer().addChild(preview.container);
+    getCombatVisualizationLayer().addChild(preview.container);
     remoteAttackPreviews.set(attackId, preview);
   }
 
   preview.shape.clear();
-  clearTargetMarkerLayer(preview.targetMarkers);
   drawAttackShape(preview.shape, geometry, {
     locked: Boolean(payload.processing),
     hasTargets: Array.isArray(payload.targetMarkers) && payload.targetMarkers.length > 0
@@ -8613,7 +8645,7 @@ function updateRemoteAttackPreview(payload = {}) {
 function removeRemoteAttackPreview(attackId = "") {
   const preview = remoteAttackPreviews.get(String(attackId));
   if (!preview) return;
-  preview.container.destroy({ children: true });
+  if (!preview.container.destroyed) preview.container.destroy({ children: true });
   remoteAttackPreviews.delete(String(attackId));
 }
 
@@ -14479,7 +14511,7 @@ function getActiveAimedTargetWeaponSetKey(actor, race = null) {
 
   const selectedWeaponId = String(actor.getFlag?.(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
   const selectedWeaponSet = selectedWeaponId
-    ? String(actor.items?.get?.(selectedWeaponId)?.system?.placement?.weaponSet ?? "")
+    ? getDeployedWeaponSetKey(actor.items?.get?.(selectedWeaponId))
     : "";
   if (selectedWeaponSet && availableSetKeys.has(selectedWeaponSet)) return selectedWeaponSet;
 
@@ -14488,7 +14520,10 @@ function getActiveAimedTargetWeaponSetKey(actor, race = null) {
 
 function getActorWeaponSetKeys(actor, race = null) {
   const keys = new Set((race?.weaponSets ?? []).map(set => String(set.key ?? "")).filter(Boolean));
-  if (actor?.type !== "construct" && Array.from(actor?.items ?? []).some(item => isNaturalRaceWeapon(item))) {
+  if (
+    actor?.type !== "construct"
+    && Array.from(actor?.items ?? []).some(item => getDeployedWeaponSetKey(item) === NATURAL_RACE_WEAPON_SET_KEY)
+  ) {
     keys.add(NATURAL_RACE_WEAPON_SET_KEY);
   }
   for (const item of actor?.items ?? []) {
@@ -14995,10 +15030,6 @@ function getClientPointFromEvent(event) {
 
 function getFoundryDragResistance() {
   return Math.max(1, Number(foundry.canvas?.interaction?.MouseInteractionManager?.DEFAULT_DRAG_RESISTANCE_PX) || 10);
-}
-
-function getAttackPreviewLayer() {
-  return canvas.interface ?? canvas.tokens ?? canvas.stage;
 }
 
 export async function spendWeaponReloadActionPoints(actor, weapon, weaponFunctionId = "") {

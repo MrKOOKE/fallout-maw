@@ -61,6 +61,7 @@ import {
 import { getReactionTimeoutMs, getResponsibleOwner, isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { getWeaponActionBlockState } from "./runtime-state.mjs";
 import {
+  getDeployedWeaponSetKey,
   ITEM_FUNCTIONS,
   getEnabledWeaponFunctions,
   hasItemFunction
@@ -100,8 +101,7 @@ export function collectAbilityWeaponAttackOptions(actor, actionSource = {}, {
     : action.attackActionKeys;
   const options = [];
   for (const weapon of actor?.items?.contents ?? actor?.items ?? []) {
-    const placement = weapon?.system?.placement ?? {};
-    if (weapon?.type !== "gear" || placement.mode !== "weapon" || !placement.weaponSet) continue;
+    if (weapon?.type !== "gear" || !getDeployedWeaponSetKey(weapon)) continue;
     if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || isWeaponPlacementDisabled(actor, weapon)) continue;
     for (const weaponFunction of getEnabledWeaponFunctions(weapon)) {
       const weaponFunctionId = String(weaponFunction?.id ?? ITEM_FUNCTIONS.weapon);

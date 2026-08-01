@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-31T06:16:52.281Z",
+  "generatedAt": "2026-08-01T05:17:35.797Z",
   "status": "design-only",
   "worldDatabaseTouched": false,
   "scope": {
@@ -276,32 +276,33 @@
       "C": 0,
       "B": 45,
       "A": 100,
-      "S": 200
+      "S": 440
     },
     "skillBonusPointValue": 1,
     "characteristicPointValue": 30,
     "movementPointValue": 30,
+    "skillAdvantagePointValue": 120,
     "appliesTo": "base non-weaponized models"
   },
   "economyBenchmarks": {
     "weapons": {
       "D": {
-        "count": 131,
-        "p25": 216,
-        "median": 260,
+        "count": 128,
+        "p25": 197,
+        "median": 249,
         "p75": 359
       },
       "C": {
-        "count": 294,
+        "count": 284,
         "p25": 1043,
-        "median": 1425,
+        "median": 1400,
         "p75": 1761
       },
       "B": {
-        "count": 263,
+        "count": 276,
         "p25": 4934,
-        "median": 6089,
-        "p75": 7499
+        "median": 6027,
+        "p75": 7449
       },
       "A": {
         "count": 103,
@@ -318,15 +319,15 @@
     },
     "equipment": {
       "D": {
-        "count": 80,
-        "p25": 226,
-        "median": 292,
-        "p75": 347
+        "count": 96,
+        "p25": 258,
+        "median": 304,
+        "p75": 443
       },
       "C": {
-        "count": 220,
-        "p25": 1367,
-        "median": 2093,
+        "count": 204,
+        "p25": 1355,
+        "median": 2044,
         "p75": 2616
       },
       "B": {
@@ -397,21 +398,21 @@
     ]
   },
   "summary": {
-    "total": 29,
-    "base": 18,
-    "weaponized": 11,
+    "total": 43,
+    "base": 30,
+    "weaponized": 13,
     "byFamily": {
       "arm": 16,
-      "leg": 5,
-      "eyes": 4,
-      "groin": 4
+      "leg": 11,
+      "eyes": 8,
+      "groin": 8
     },
     "byClass": {
       "D": 3,
-      "C": 7,
-      "B": 9,
-      "A": 5,
-      "S": 5
+      "C": 11,
+      "B": 13,
+      "A": 8,
+      "S": 8
     }
   },
   "validation": {
@@ -455,6 +456,7 @@
         "max": 100,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -549,6 +551,7 @@
         "max": 170,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -633,6 +636,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -748,6 +752,7 @@
         "max": 340,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -878,6 +883,7 @@
         "max": 510,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -903,11 +909,23 @@
             "mode": "add",
             "value": 30,
             "label": "Ближний бой"
+          },
+          {
+            "key": "system.skills.repair.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Ремесло"
+          },
+          {
+            "key": "system.skills.meleeCombat.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Ближний бой"
           }
         ],
         "useConditionWeakening": true
       },
-      "passiveUtilityScore": 200,
+      "passiveUtilityScore": 440,
       "weapon": null,
       "recipe": {
         "difficulty": 220,
@@ -999,7 +1017,7 @@
         "calculatedPrice": 42541
       },
       "price": 42541,
-      "notes": "Экспериментальная полимиомерная конечность Биг-МТ. Две характеристики дают эквивалент 120 очков, навыки — ещё 80; общий бюджет S: 200."
+      "notes": "Экспериментальная полимиомерная конечность Биг-МТ. S-уровень оплачивает не только силу приводов: она даёт преимущество Ремесла и Ближнего боя; общий бюджет полезности 440."
     },
     {
       "key": "leg-d-wood",
@@ -1032,6 +1050,7 @@
         "max": 100,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1120,6 +1139,7 @@
         "max": 170,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -1204,6 +1224,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1319,6 +1340,7 @@
         "max": 340,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1455,6 +1477,7 @@
         "max": 510,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1480,11 +1503,23 @@
             "mode": "add",
             "value": 30,
             "label": "Скрытность"
+          },
+          {
+            "key": "system.skills.athletics.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Атлетика"
+          },
+          {
+            "key": "system.skills.stealth.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Скрытность"
           }
         ],
         "useConditionWeakening": true
       },
-      "passiveUtilityScore": 200,
+      "passiveUtilityScore": 440,
       "weapon": null,
       "recipe": {
         "difficulty": 220,
@@ -1576,7 +1611,7 @@
         "calculatedPrice": 45930
       },
       "price": 45930,
-      "notes": "Экспериментальная кинетическая нога с фазовым каркасом и бесшумными демпферами. Общий бюджет полезности S: 200."
+      "notes": "Экспериментальная кинетическая нога с фазовым каркасом и бесшумными демпферами. Преимущество Атлетики и Скрытности делает её механически отличной от A-класса; общий бюджет 440."
     },
     {
       "key": "eyes-c-optical",
@@ -1608,6 +1643,7 @@
         "max": 108,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -1682,6 +1718,7 @@
         "max": 162,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1787,6 +1824,7 @@
         "max": 216,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1904,6 +1942,7 @@
         "max": 324,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -1929,11 +1968,23 @@
             "mode": "add",
             "value": 40,
             "label": "Наука"
+          },
+          {
+            "key": "system.skills.rangedCombat.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Дальний бой"
+          },
+          {
+            "key": "system.skills.naturalist.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Натуралист"
           }
         ],
         "useConditionWeakening": true
       },
-      "passiveUtilityScore": 200,
+      "passiveUtilityScore": 440,
       "weapon": null,
       "recipe": {
         "difficulty": 220,
@@ -1989,7 +2040,7 @@
         "calculatedPrice": 23120
       },
       "price": 23120,
-      "notes": "Мультиспектральный исследовательско-тактический комплекс Биг-МТ. ПНВ остаётся резервом; общий бюджет S: 200."
+      "notes": "Мультиспектральный исследовательско-тактический комплекс Биг-МТ. Преимущество Дальнего боя и Натуралиста оправдывает S-ступень; ПНВ остаётся резервом, общий бюджет 440."
     },
     {
       "key": "groin-c-frame",
@@ -2021,6 +2072,7 @@
         "max": 136,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -2095,6 +2147,7 @@
         "max": 204,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -2200,6 +2253,7 @@
         "max": 272,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -2329,6 +2383,7 @@
         "max": 408,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -2354,11 +2409,23 @@
             "mode": "add",
             "value": 50,
             "label": "Атлетика"
+          },
+          {
+            "key": "system.skills.resilience.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Стойкость"
+          },
+          {
+            "key": "system.skills.athletics.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Атлетика"
           }
         ],
         "useConditionWeakening": true
       },
-      "passiveUtilityScore": 200,
+      "passiveUtilityScore": 440,
       "weapon": null,
       "recipe": {
         "difficulty": 220,
@@ -2450,7 +2517,7 @@
         "calculatedPrice": 37413
       },
       "price": 37413,
-      "notes": "Полимиомерная силовая платформа для нижней части корпуса. Не даёт Контроль энергии; общий бюджет полезности S: 200."
+      "notes": "Полимиомерная силовая платформа для нижней части корпуса. Даёт преимущество Стойкости и Атлетики, но не Контроль энергии; общий бюджет полезности 440."
     },
     {
       "key": "arm-d-hook",
@@ -2483,6 +2550,7 @@
         "max": 100,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [
           {
@@ -2592,6 +2660,7 @@
         "max": 170,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -2697,6 +2766,7 @@
         "max": 170,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -2807,6 +2877,7 @@
         "max": 170,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -2918,6 +2989,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3038,6 +3110,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3158,6 +3231,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3278,6 +3352,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3399,6 +3474,7 @@
         "max": 255,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3530,6 +3606,7 @@
         "max": 340,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3669,6 +3746,7 @@
         "max": 510,
         "weakeningThreshold": 20
       },
+      "stateDeviation": null,
       "freeSettings": {
         "effects": [],
         "useConditionWeakening": false
@@ -3794,6 +3872,1719 @@
       },
       "price": 97798,
       "notes": "Крайне дорогая S-платформа с четырьмя ударами от полного магазина в 2000 единиц энергии."
+    },
+    {
+      "key": "leg-c-miner",
+      "family": "leg",
+      "familyLabel": "Ноги",
+      "class": "C",
+      "name": "Jim's Limbs JL-5R «Шахтёр»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/protez-nogi.webp",
+      "folderPath": [
+        "Протезы",
+        "Ноги",
+        "C"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 200,
+        "max": 200,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": {
+        "baseline": 170,
+        "max": 200,
+        "paidByRecipe": true
+      },
+      "freeSettings": {
+        "effects": [],
+        "useConditionWeakening": false
+      },
+      "passiveUtilityScore": 0,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 70,
+        "difficultyMarkupPercent": 9,
+        "rawComponentCost": 1786,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "UixDzPJuR77ohltt",
+            "name": "Компонент армирования C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 5,
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 635
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 3,
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 672
+          },
+          {
+            "kind": "textile",
+            "class": "D",
+            "quantity": 1,
+            "itemId": "BtqXf8xqC9SP3ZIT",
+            "name": "Компонент текстиля D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ],
+        "calculatedPrice": 1947
+      },
+      "price": 1947,
+      "notes": "Усиленная рабочая нога: платит массой и рецептом за больший запас состояния, но не даёт навыковых бонусов."
+    },
+    {
+      "key": "leg-c-hoof",
+      "family": "leg",
+      "familyLabel": "Ноги",
+      "class": "C",
+      "name": "РобКо «Копыто»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/sportivnyj-protez-nogi.webp",
+      "folderPath": [
+        "Протезы",
+        "Ноги",
+        "C"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 170,
+        "max": 170,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [],
+        "useConditionWeakening": false
+      },
+      "passiveUtilityScore": 0,
+      "weapon": {
+        "mode": "manual",
+        "role": "Встроенное дробящее оружие ноги",
+        "damage": 96,
+        "pellets": 2,
+        "specialProperties": [
+          "concentratedPelletImpact"
+        ],
+        "penetration": 8,
+        "damageTypes": {
+          "bludgeoning": 100
+        },
+        "magazine": 0,
+        "resourcePerAttack": null,
+        "notes": "Привод и усиленная пятка образуют C-классовую атаку без отдельного расходника."
+      },
+      "recipe": {
+        "difficulty": 70,
+        "difficultyMarkupPercent": 9,
+        "rawComponentCost": 2331,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "UixDzPJuR77ohltt",
+            "name": "Компонент армирования C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          },
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 3,
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 381
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 5,
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 1120
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          },
+          {
+            "kind": "textile",
+            "class": "D",
+            "quantity": 1,
+            "itemId": "BtqXf8xqC9SP3ZIT",
+            "name": "Компонент текстиля D класса",
+            "unitPrice": 31,
+            "subtotal": 31
+          }
+        ],
+        "calculatedPrice": 2541
+      },
+      "price": 2541,
+      "notes": "Привод и усиленная пятка образуют C-классовую атаку без отдельного расходника."
+    },
+    {
+      "key": "leg-b-jack",
+      "family": "leg",
+      "familyLabel": "Ноги",
+      "class": "B",
+      "name": "РобКо «Домкрат»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/protez-nogi-silovoj-broni-rejdera.webp",
+      "folderPath": [
+        "Протезы",
+        "Ноги",
+        "B"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 100,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 255,
+        "max": 255,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.strength",
+            "mode": "add",
+            "value": 1,
+            "label": "Сила"
+          },
+          {
+            "key": "system.skills.athletics.bonus",
+            "mode": "add",
+            "value": 15,
+            "label": "Атлетика"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 45,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 110,
+        "difficultyMarkupPercent": 18,
+        "rawComponentCost": 4480,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "0QfaywkaOisatK8N",
+            "name": "Компонент электроники B класса",
+            "unitPrice": 625,
+            "subtotal": 625
+          },
+          {
+            "kind": "frame",
+            "class": "B",
+            "quantity": 3,
+            "itemId": "Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "unitPrice": 426,
+            "subtotal": 1278
+          },
+          {
+            "kind": "mechanics",
+            "class": "B",
+            "quantity": 3,
+            "itemId": "Odn6MG7PkbQc62zX",
+            "name": "Компонент механики B класса",
+            "unitPrice": 625,
+            "subtotal": 1875
+          },
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          }
+        ],
+        "calculatedPrice": 5286
+      },
+      "price": 5286,
+      "notes": "Грузовая сервонога: специализация на переносе нагрузки и силовом движении вместо скрытности «Спринтера»."
+    },
+    {
+      "key": "leg-b-ram",
+      "family": "leg",
+      "familyLabel": "Ноги",
+      "class": "B",
+      "name": "Вест-Тек «Крушитель»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/kiber-noga-2.webp",
+      "folderPath": [
+        "Протезы",
+        "Ноги",
+        "B"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 100,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 255,
+        "max": 255,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [],
+        "useConditionWeakening": false
+      },
+      "passiveUtilityScore": 0,
+      "weapon": {
+        "mode": "manual-with-fixed-source",
+        "role": "Энергизированный таран ноги",
+        "source": "Энергетический аккумулятор (B)",
+        "exactSourceClass": "B",
+        "damage": 210,
+        "pellets": 3,
+        "specialProperties": [
+          "concentratedPelletImpact"
+        ],
+        "penetration": 14,
+        "damageTypes": {
+          "bludgeoning": 100
+        },
+        "magazine": 12,
+        "resourcePerAttack": 3,
+        "attacksPerReload": 4,
+        "notes": "Силовой удар питается тем же B-аккумулятором, что и силовой кастет, и делает четыре атаки до перезарядки."
+      },
+      "recipe": {
+        "difficulty": 110,
+        "difficultyMarkupPercent": 18,
+        "rawComponentCost": 10205,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "B",
+            "quantity": 2,
+            "itemId": "SDZz9ePMcdPVZQhg",
+            "name": "Компонент армирования B класса",
+            "unitPrice": 625,
+            "subtotal": 1250
+          },
+          {
+            "kind": "electronics",
+            "class": "B",
+            "quantity": 3,
+            "itemId": "0QfaywkaOisatK8N",
+            "name": "Компонент электроники B класса",
+            "unitPrice": 625,
+            "subtotal": 1875
+          },
+          {
+            "kind": "frame",
+            "class": "B",
+            "quantity": 5,
+            "itemId": "Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "unitPrice": 426,
+            "subtotal": 2130
+          },
+          {
+            "kind": "mechanics",
+            "class": "B",
+            "quantity": 7,
+            "itemId": "Odn6MG7PkbQc62zX",
+            "name": "Компонент механики B класса",
+            "unitPrice": 625,
+            "subtotal": 4375
+          },
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ],
+        "calculatedPrice": 12042
+      },
+      "price": 12042,
+      "notes": "Силовой удар питается тем же B-аккумулятором, что и силовой кастет, и делает четыре атаки до перезарядки."
+    },
+    {
+      "key": "leg-a-centurion",
+      "family": "leg",
+      "familyLabel": "Ноги",
+      "class": "A",
+      "name": "Вест-Тек «Центурион»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/kiber-noga.webp",
+      "folderPath": [
+        "Протезы",
+        "Ноги",
+        "A"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": true,
+        "difficulty": 140,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 340,
+        "max": 340,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.strength",
+            "mode": "add",
+            "value": 1,
+            "label": "Сила"
+          },
+          {
+            "key": "system.characteristics.dexterity",
+            "mode": "add",
+            "value": 1,
+            "label": "Ловкость"
+          },
+          {
+            "key": "system.skills.athletics.bonus",
+            "mode": "add",
+            "value": 25,
+            "label": "Атлетика"
+          },
+          {
+            "key": "system.skills.resilience.bonus",
+            "mode": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 100,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 160,
+        "difficultyMarkupPercent": 34,
+        "rawComponentCost": 11494,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "It2PbILpbXfuiadi",
+            "name": "Компонент электроники A класса",
+            "unitPrice": 1093,
+            "subtotal": 2186
+          },
+          {
+            "kind": "frame",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "w3xIoO171uQbdr6z",
+            "name": "Компонент каркаса A класса",
+            "unitPrice": 840,
+            "subtotal": 2520
+          },
+          {
+            "kind": "mechanics",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "wi6byx3I7USPwOqA",
+            "name": "Компонент механики A класса",
+            "unitPrice": 1278,
+            "subtotal": 3834
+          },
+          {
+            "kind": "electronics",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "0QfaywkaOisatK8N",
+            "name": "Компонент электроники B класса",
+            "unitPrice": 625,
+            "subtotal": 625
+          },
+          {
+            "kind": "frame",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "unitPrice": 426,
+            "subtotal": 426
+          },
+          {
+            "kind": "mechanics",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "Odn6MG7PkbQc62zX",
+            "name": "Компонент механики B класса",
+            "unitPrice": 625,
+            "subtotal": 625
+          },
+          {
+            "kind": "properties",
+            "class": "B",
+            "quantity": 3,
+            "itemId": "kMWPNzGd70409Gyf",
+            "name": "Компонент свойств B класса",
+            "unitPrice": 426,
+            "subtotal": 1278
+          }
+        ],
+        "calculatedPrice": 15402
+      },
+      "price": 15402,
+      "notes": "Военная опорная система: силовая и устойчивая альтернатива скоростной «Саранче»."
+    },
+    {
+      "key": "leg-s-talos",
+      "family": "leg",
+      "familyLabel": "Ноги",
+      "class": "S",
+      "name": "Биг-МТ «Талос»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/kiber-noga-2.webp",
+      "folderPath": [
+        "Протезы",
+        "Ноги",
+        "S"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "leftLeg",
+          "rightLeg"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": true,
+        "difficulty": 180,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 510,
+        "max": 510,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.strength",
+            "mode": "add",
+            "value": 2,
+            "label": "Сила"
+          },
+          {
+            "key": "system.characteristics.endurance",
+            "mode": "add",
+            "value": 2,
+            "label": "Выносливость"
+          },
+          {
+            "key": "system.skills.athletics.bonus",
+            "mode": "add",
+            "value": 40,
+            "label": "Атлетика"
+          },
+          {
+            "key": "system.skills.resilience.bonus",
+            "mode": "add",
+            "value": 20,
+            "label": "Стойкость"
+          },
+          {
+            "key": "system.skills.stealth.bonus",
+            "mode": "add",
+            "value": 20,
+            "label": "Скрытность"
+          },
+          {
+            "key": "system.skills.athletics.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Атлетика"
+          },
+          {
+            "key": "system.skills.resilience.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Стойкость"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 440,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 220,
+        "difficultyMarkupPercent": 60,
+        "rawComponentCost": 30824,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "d7X6WOpKVzNpowOk",
+            "name": "Компонент электроники S класса",
+            "unitPrice": 2952,
+            "subtotal": 5904
+          },
+          {
+            "kind": "frame",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "QwZQBTprygdNvKUb",
+            "name": "Компонент каркаса S класса",
+            "unitPrice": 1560,
+            "subtotal": 3120
+          },
+          {
+            "kind": "mechanics",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "fZIB2VLVZlX8fkrW",
+            "name": "Компонент механики S класса",
+            "unitPrice": 2952,
+            "subtotal": 5904
+          },
+          {
+            "kind": "properties",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "k6IWvSo2c0ZxvYDm",
+            "name": "Компонент свойств S класса",
+            "unitPrice": 1560,
+            "subtotal": 3120
+          },
+          {
+            "kind": "armor",
+            "class": "A",
+            "quantity": 1,
+            "itemId": "HeUFgD0VHAH8XazV",
+            "name": "Компонент армирования A класса",
+            "unitPrice": 1278,
+            "subtotal": 1278
+          },
+          {
+            "kind": "electronics",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "It2PbILpbXfuiadi",
+            "name": "Компонент электроники A класса",
+            "unitPrice": 1093,
+            "subtotal": 2186
+          },
+          {
+            "kind": "frame",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "w3xIoO171uQbdr6z",
+            "name": "Компонент каркаса A класса",
+            "unitPrice": 840,
+            "subtotal": 1680
+          },
+          {
+            "kind": "mechanics",
+            "class": "A",
+            "quantity": 4,
+            "itemId": "wi6byx3I7USPwOqA",
+            "name": "Компонент механики A класса",
+            "unitPrice": 1278,
+            "subtotal": 5112
+          },
+          {
+            "kind": "properties",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "uGZQIOgrlqT5dkme",
+            "name": "Компонент свойств A класса",
+            "unitPrice": 840,
+            "subtotal": 2520
+          }
+        ],
+        "calculatedPrice": 49318
+      },
+      "price": 49318,
+      "notes": "Экспериментальная несущая платформа: не быстрее «Икара», зато заметно сильнее и устойчивее."
+    },
+    {
+      "key": "eyes-c-armored",
+      "family": "eyes",
+      "familyLabel": "Глаза",
+      "class": "C",
+      "name": "Мед-Тек «Монокль-М»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/protez-monoklya.webp",
+      "folderPath": [
+        "Протезы",
+        "Глаза",
+        "C"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 130,
+        "max": 130,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": {
+        "baseline": 108,
+        "max": 130,
+        "paidByRecipe": true
+      },
+      "freeSettings": {
+        "effects": [],
+        "useConditionWeakening": false
+      },
+      "passiveUtilityScore": 0,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 70,
+        "difficultyMarkupPercent": 9,
+        "rawComponentCost": 1180,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "UixDzPJuR77ohltt",
+            "name": "Компонент армирования C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 254
+          }
+        ],
+        "calculatedPrice": 1286
+      },
+      "price": 1286,
+      "notes": "Закрытая промышленная оптика: более живучая C-модель без сенсорного преимущества."
+    },
+    {
+      "key": "eyes-b-lab",
+      "family": "eyes",
+      "familyLabel": "Глаза",
+      "class": "B",
+      "name": "РобКо «Лаборант»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/monokol-kiber.webp",
+      "folderPath": [
+        "Протезы",
+        "Глаза",
+        "B"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 100,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 162,
+        "max": 162,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.skills.science.bonus",
+            "mode": "add",
+            "value": 25,
+            "label": "Наука"
+          },
+          {
+            "key": "system.skills.doctor.bonus",
+            "mode": "add",
+            "value": 20,
+            "label": "Доктор"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 45,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 110,
+        "difficultyMarkupPercent": 18,
+        "rawComponentCost": 2677,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "B",
+            "quantity": 2,
+            "itemId": "0QfaywkaOisatK8N",
+            "name": "Компонент электроники B класса",
+            "unitPrice": 625,
+            "subtotal": 1250
+          },
+          {
+            "kind": "frame",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "unitPrice": 426,
+            "subtotal": 426
+          },
+          {
+            "kind": "properties",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "kMWPNzGd70409Gyf",
+            "name": "Компонент свойств B класса",
+            "unitPrice": 426,
+            "subtotal": 426
+          },
+          {
+            "kind": "electronics",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "W22bRWHvKwAwdmpE",
+            "name": "Компонент электроники C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ],
+        "calculatedPrice": 3159
+      },
+      "price": 3159,
+      "notes": "Диагностическая оптика для лабораторной и хирургической работы вместо баллистической специализации."
+    },
+    {
+      "key": "eyes-a-helios",
+      "family": "eyes",
+      "familyLabel": "Глаза",
+      "class": "A",
+      "name": "Вест-Тек «Гелиос»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/implanty(glaz).webp",
+      "folderPath": [
+        "Протезы",
+        "Глаза",
+        "A"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": true,
+        "difficulty": 140,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 216,
+        "max": 216,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.perception",
+            "mode": "add",
+            "value": 1,
+            "label": "Восприятие"
+          },
+          {
+            "key": "system.skills.science.bonus",
+            "mode": "add",
+            "value": 40,
+            "label": "Наука"
+          },
+          {
+            "key": "system.skills.doctor.bonus",
+            "mode": "add",
+            "value": 30,
+            "label": "Доктор"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 100,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 160,
+        "difficultyMarkupPercent": 34,
+        "rawComponentCost": 5968,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "It2PbILpbXfuiadi",
+            "name": "Компонент электроники A класса",
+            "unitPrice": 1093,
+            "subtotal": 2186
+          },
+          {
+            "kind": "frame",
+            "class": "A",
+            "quantity": 1,
+            "itemId": "w3xIoO171uQbdr6z",
+            "name": "Компонент каркаса A класса",
+            "unitPrice": 840,
+            "subtotal": 840
+          },
+          {
+            "kind": "properties",
+            "class": "A",
+            "quantity": 1,
+            "itemId": "uGZQIOgrlqT5dkme",
+            "name": "Компонент свойств A класса",
+            "unitPrice": 840,
+            "subtotal": 840
+          },
+          {
+            "kind": "electronics",
+            "class": "B",
+            "quantity": 2,
+            "itemId": "0QfaywkaOisatK8N",
+            "name": "Компонент электроники B класса",
+            "unitPrice": 625,
+            "subtotal": 1250
+          },
+          {
+            "kind": "properties",
+            "class": "B",
+            "quantity": 2,
+            "itemId": "kMWPNzGd70409Gyf",
+            "name": "Компонент свойств B класса",
+            "unitPrice": 426,
+            "subtotal": 852
+          }
+        ],
+        "calculatedPrice": 7997
+      },
+      "price": 7997,
+      "notes": "Военный аналитический визор: воспринимает материалы и повреждения, а не рассчитывает огонь."
+    },
+    {
+      "key": "eyes-s-panopt",
+      "family": "eyes",
+      "familyLabel": "Глаза",
+      "class": "S",
+      "name": "Биг-МТ «Панопт»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-10.webp",
+      "folderPath": [
+        "Протезы",
+        "Глаза",
+        "S"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "eyes"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": true,
+        "difficulty": 180,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 324,
+        "max": 324,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.perception",
+            "mode": "add",
+            "value": 2,
+            "label": "Восприятие"
+          },
+          {
+            "key": "system.skills.science.bonus",
+            "mode": "add",
+            "value": 60,
+            "label": "Наука"
+          },
+          {
+            "key": "system.skills.doctor.bonus",
+            "mode": "add",
+            "value": 40,
+            "label": "Доктор"
+          },
+          {
+            "key": "system.skills.naturalist.bonus",
+            "mode": "add",
+            "value": 40,
+            "label": "Натуралист"
+          },
+          {
+            "key": "system.skills.science.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Наука"
+          },
+          {
+            "key": "system.skills.doctor.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Доктор"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 440,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 220,
+        "difficultyMarkupPercent": 60,
+        "rawComponentCost": 16383,
+        "ingredients": [
+          {
+            "kind": "electronics",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "d7X6WOpKVzNpowOk",
+            "name": "Компонент электроники S класса",
+            "unitPrice": 2952,
+            "subtotal": 5904
+          },
+          {
+            "kind": "frame",
+            "class": "S",
+            "quantity": 1,
+            "itemId": "QwZQBTprygdNvKUb",
+            "name": "Компонент каркаса S класса",
+            "unitPrice": 1560,
+            "subtotal": 1560
+          },
+          {
+            "kind": "properties",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "k6IWvSo2c0ZxvYDm",
+            "name": "Компонент свойств S класса",
+            "unitPrice": 1560,
+            "subtotal": 3120
+          },
+          {
+            "kind": "electronics",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "It2PbILpbXfuiadi",
+            "name": "Компонент электроники A класса",
+            "unitPrice": 1093,
+            "subtotal": 3279
+          },
+          {
+            "kind": "properties",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "uGZQIOgrlqT5dkme",
+            "name": "Компонент свойств A класса",
+            "unitPrice": 840,
+            "subtotal": 2520
+          }
+        ],
+        "calculatedPrice": 26213
+      },
+      "price": 26213,
+      "notes": "Исследовательская S-оптика с преимуществом Науки и Доктора; боевая ниша оставлена «Оракулу»."
+    },
+    {
+      "key": "groin-c-reinforced",
+      "family": "groin",
+      "familyLabel": "Пах",
+      "class": "C",
+      "name": "Jim's Limbs JP-5 «Стропила»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ekranirovannyj-protez.webp",
+      "folderPath": [
+        "Протезы",
+        "Пах",
+        "C"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 60,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 165,
+        "max": 165,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": {
+        "baseline": 136,
+        "max": 165,
+        "paidByRecipe": true
+      },
+      "freeSettings": {
+        "effects": [],
+        "useConditionWeakening": false
+      },
+      "passiveUtilityScore": 0,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 70,
+        "difficultyMarkupPercent": 9,
+        "rawComponentCost": 1455,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "UixDzPJuR77ohltt",
+            "name": "Компонент армирования C класса",
+            "unitPrice": 224,
+            "subtotal": 224
+          },
+          {
+            "kind": "frame",
+            "class": "C",
+            "quantity": 5,
+            "itemId": "IjNHxcqFdzwxRJBX",
+            "name": "Компонент каркаса C класса",
+            "unitPrice": 127,
+            "subtotal": 635
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          },
+          {
+            "kind": "textile",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "FJtScwRBSg0yYJkD",
+            "name": "Компонент текстиля C класса",
+            "unitPrice": 148,
+            "subtotal": 148
+          }
+        ],
+        "calculatedPrice": 1586
+      },
+      "price": 1586,
+      "notes": "Усиленная тазовая рама: больше состояния за более тяжёлый и дорогой каркас, без навыковых бонусов."
+    },
+    {
+      "key": "groin-b-buttress",
+      "family": "groin",
+      "familyLabel": "Пах",
+      "class": "B",
+      "name": "РобКо «Контрфорс»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ekranirovannyj-protez.webp",
+      "folderPath": [
+        "Протезы",
+        "Пах",
+        "B"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": false,
+        "difficulty": 100,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 204,
+        "max": 204,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.strength",
+            "mode": "add",
+            "value": 1,
+            "label": "Сила"
+          },
+          {
+            "key": "system.skills.resilience.bonus",
+            "mode": "add",
+            "value": 15,
+            "label": "Стойкость"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 45,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 110,
+        "difficultyMarkupPercent": 18,
+        "rawComponentCost": 3728,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "SDZz9ePMcdPVZQhg",
+            "name": "Компонент армирования B класса",
+            "unitPrice": 625,
+            "subtotal": 625
+          },
+          {
+            "kind": "frame",
+            "class": "B",
+            "quantity": 3,
+            "itemId": "Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "unitPrice": 426,
+            "subtotal": 1278
+          },
+          {
+            "kind": "mechanics",
+            "class": "B",
+            "quantity": 2,
+            "itemId": "Odn6MG7PkbQc62zX",
+            "name": "Компонент механики B класса",
+            "unitPrice": 625,
+            "subtotal": 1250
+          },
+          {
+            "kind": "mechanics",
+            "class": "C",
+            "quantity": 2,
+            "itemId": "Asz5d8D4m2AuyfdE",
+            "name": "Компонент механики C класса",
+            "unitPrice": 224,
+            "subtotal": 448
+          },
+          {
+            "kind": "properties",
+            "class": "C",
+            "quantity": 1,
+            "itemId": "DMvUAbNSujpN3F47",
+            "name": "Компонент свойств C класса",
+            "unitPrice": 127,
+            "subtotal": 127
+          }
+        ],
+        "calculatedPrice": 4399
+      },
+      "price": 4399,
+      "notes": "Грузовая тазовая система: сила и устойчивость вместо атлетической универсальности «Бастиона»."
+    },
+    {
+      "key": "groin-a-fortress",
+      "family": "groin",
+      "familyLabel": "Пах",
+      "class": "A",
+      "name": "Вест-Тек «Крепость»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-8.webp",
+      "folderPath": [
+        "Протезы",
+        "Пах",
+        "A"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": true,
+        "difficulty": 140,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 272,
+        "max": 272,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.endurance",
+            "mode": "add",
+            "value": 1,
+            "label": "Выносливость"
+          },
+          {
+            "key": "system.skills.resilience.bonus",
+            "mode": "add",
+            "value": 35,
+            "label": "Стойкость"
+          },
+          {
+            "key": "system.skills.athletics.bonus",
+            "mode": "add",
+            "value": 20,
+            "label": "Атлетика"
+          },
+          {
+            "key": "system.skills.speech.bonus",
+            "mode": "add",
+            "value": 15,
+            "label": "Красноречие"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 100,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 160,
+        "difficultyMarkupPercent": 34,
+        "rawComponentCost": 9296,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "A",
+            "quantity": 1,
+            "itemId": "HeUFgD0VHAH8XazV",
+            "name": "Компонент армирования A класса",
+            "unitPrice": 1278,
+            "subtotal": 1278
+          },
+          {
+            "kind": "frame",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "w3xIoO171uQbdr6z",
+            "name": "Компонент каркаса A класса",
+            "unitPrice": 840,
+            "subtotal": 2520
+          },
+          {
+            "kind": "mechanics",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "wi6byx3I7USPwOqA",
+            "name": "Компонент механики A класса",
+            "unitPrice": 1278,
+            "subtotal": 2556
+          },
+          {
+            "kind": "properties",
+            "class": "A",
+            "quantity": 1,
+            "itemId": "uGZQIOgrlqT5dkme",
+            "name": "Компонент свойств A класса",
+            "unitPrice": 840,
+            "subtotal": 840
+          },
+          {
+            "kind": "armor",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "SDZz9ePMcdPVZQhg",
+            "name": "Компонент армирования B класса",
+            "unitPrice": 625,
+            "subtotal": 625
+          },
+          {
+            "kind": "frame",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "Za5sDkVpsbqop6wM",
+            "name": "Компонент каркаса B класса",
+            "unitPrice": 426,
+            "subtotal": 426
+          },
+          {
+            "kind": "mechanics",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "Odn6MG7PkbQc62zX",
+            "name": "Компонент механики B класса",
+            "unitPrice": 625,
+            "subtotal": 625
+          },
+          {
+            "kind": "properties",
+            "class": "B",
+            "quantity": 1,
+            "itemId": "kMWPNzGd70409Gyf",
+            "name": "Компонент свойств B класса",
+            "unitPrice": 426,
+            "subtotal": 426
+          }
+        ],
+        "calculatedPrice": 12457
+      },
+      "price": 12457,
+      "notes": "Усиленный военный тазовый узел: больше стойкости, но меньше чистой мобильности, чем у «Атланта»."
+    },
+    {
+      "key": "groin-s-colossus",
+      "family": "groin",
+      "familyLabel": "Пах",
+      "class": "S",
+      "name": "Биг-МТ «Колосс»",
+      "img": "systems/fallout-maw/assets/Predmety/Implanty/ikonka_implant-11.webp",
+      "folderPath": [
+        "Протезы",
+        "Пах",
+        "S"
+      ],
+      "prosthesis": {
+        "enabled": true,
+        "limbKeys": [
+          "groin"
+        ],
+        "integrationPercent": 50,
+        "blockedPeriodicEffects": [
+          "poison"
+        ],
+        "breakShockResistant": true,
+        "difficulty": 180,
+        "skillKey": "doctor"
+      },
+      "condition": {
+        "value": 408,
+        "max": 408,
+        "weakeningThreshold": 20
+      },
+      "stateDeviation": null,
+      "freeSettings": {
+        "effects": [
+          {
+            "key": "system.characteristics.endurance",
+            "mode": "add",
+            "value": 2,
+            "label": "Выносливость"
+          },
+          {
+            "key": "system.characteristics.strength",
+            "mode": "add",
+            "value": 2,
+            "label": "Сила"
+          },
+          {
+            "key": "system.skills.resilience.bonus",
+            "mode": "add",
+            "value": 50,
+            "label": "Стойкость"
+          },
+          {
+            "key": "system.skills.athletics.bonus",
+            "mode": "add",
+            "value": 30,
+            "label": "Атлетика"
+          },
+          {
+            "key": "system.skills.resilience.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Стойкость"
+          },
+          {
+            "key": "system.skills.athletics.advantage",
+            "mode": "add",
+            "value": 1,
+            "label": "Преимущество: Атлетика"
+          }
+        ],
+        "useConditionWeakening": true
+      },
+      "passiveUtilityScore": 440,
+      "weapon": null,
+      "recipe": {
+        "difficulty": 220,
+        "difficultyMarkupPercent": 60,
+        "rawComponentCost": 25939,
+        "ingredients": [
+          {
+            "kind": "armor",
+            "class": "S",
+            "quantity": 1,
+            "itemId": "k2xwBuAEJRfFPuCy",
+            "name": "Компонент армирования S класса",
+            "unitPrice": 2952,
+            "subtotal": 2952
+          },
+          {
+            "kind": "frame",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "QwZQBTprygdNvKUb",
+            "name": "Компонент каркаса S класса",
+            "unitPrice": 1560,
+            "subtotal": 3120
+          },
+          {
+            "kind": "mechanics",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "fZIB2VLVZlX8fkrW",
+            "name": "Компонент механики S класса",
+            "unitPrice": 2952,
+            "subtotal": 5904
+          },
+          {
+            "kind": "properties",
+            "class": "S",
+            "quantity": 2,
+            "itemId": "k6IWvSo2c0ZxvYDm",
+            "name": "Компонент свойств S класса",
+            "unitPrice": 1560,
+            "subtotal": 3120
+          },
+          {
+            "kind": "armor",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "HeUFgD0VHAH8XazV",
+            "name": "Компонент армирования A класса",
+            "unitPrice": 1278,
+            "subtotal": 2556
+          },
+          {
+            "kind": "electronics",
+            "class": "A",
+            "quantity": 1,
+            "itemId": "It2PbILpbXfuiadi",
+            "name": "Компонент электроники A класса",
+            "unitPrice": 1093,
+            "subtotal": 1093
+          },
+          {
+            "kind": "frame",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "w3xIoO171uQbdr6z",
+            "name": "Компонент каркаса A класса",
+            "unitPrice": 840,
+            "subtotal": 1680
+          },
+          {
+            "kind": "mechanics",
+            "class": "A",
+            "quantity": 3,
+            "itemId": "wi6byx3I7USPwOqA",
+            "name": "Компонент механики A класса",
+            "unitPrice": 1278,
+            "subtotal": 3834
+          },
+          {
+            "kind": "properties",
+            "class": "A",
+            "quantity": 2,
+            "itemId": "uGZQIOgrlqT5dkme",
+            "name": "Компонент свойств A класса",
+            "unitPrice": 840,
+            "subtotal": 1680
+          }
+        ],
+        "calculatedPrice": 41502
+      },
+      "price": 41502,
+      "notes": "Сверхтяжёлая опорная система: сильнее «Кариатиды», но не даёт её дополнительного навыкового охвата."
     }
   ]
 }

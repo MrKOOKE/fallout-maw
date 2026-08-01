@@ -177,7 +177,12 @@ import {
   expandInventoryDeleteIds
 } from "../inventory/mutation.mjs";
 import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
-import { ITEM_FUNCTIONS, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
+import {
+  getDeployedWeaponSetKey,
+  ITEM_FUNCTIONS,
+  getEnabledWeaponFunctions,
+  hasItemFunction
+} from "../utils/item-functions.mjs";
 import { resolveActiveHudWeaponSet } from "../utils/hud-active-items.mjs";
 import { isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import {
@@ -4861,7 +4866,7 @@ async function executeOversightReaction({ offer } = {}) {
 function getOversightAttackCandidates(actor, sourceToken, targetToken) {
   const candidates = [];
   for (const weapon of actor?.items?.contents ?? []) {
-    if (weapon.type !== "gear" || weapon.system?.placement?.mode !== "weapon" || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
+    if (weapon.type !== "gear" || !getDeployedWeaponSetKey(weapon) || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
       for (const action of OVERSIGHT_ACTIONS) {
         if (!hasWeaponAction(weapon, action.key, weaponFunctionId)) continue;
@@ -5120,9 +5125,8 @@ function getWhirlwindWeaponCandidate(actor) {
 function getWhirlwindWeaponCandidates(actor) {
   const rows = [];
   for (const weapon of actor?.items?.contents ?? []) {
-    const placement = weapon.system?.placement ?? {};
-    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
-    const weaponSet = String(placement.weaponSet ?? "");
+    if (weapon.type !== "gear") continue;
+    const weaponSet = getDeployedWeaponSetKey(weapon);
     if (!weaponSet) continue;
     if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) continue;
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
@@ -5249,9 +5253,8 @@ function getLungeWeaponCandidate(actor) {
 function getLungeWeaponCandidates(actor) {
   const rows = [];
   for (const weapon of actor?.items?.contents ?? []) {
-    const placement = weapon.system?.placement ?? {};
-    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
-    const weaponSet = String(placement.weaponSet ?? "");
+    if (weapon.type !== "gear") continue;
+    const weaponSet = getDeployedWeaponSetKey(weapon);
     if (!weaponSet) continue;
     if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) continue;
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
@@ -6624,9 +6627,8 @@ function getActorWhereAreYouGoingEntry(actor, offer = null) {
 function getWhereAreYouGoingWeaponCandidates(actor) {
   const rows = [];
   for (const weapon of actor?.items?.contents ?? []) {
-    const placement = weapon.system?.placement ?? {};
-    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
-    const weaponSet = String(placement.weaponSet ?? "");
+    if (weapon.type !== "gear") continue;
+    const weaponSet = getDeployedWeaponSetKey(weapon);
     if (!weaponSet || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
       if (!hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) continue;
@@ -6681,9 +6683,8 @@ function getCounterAttackWeaponCandidates(actor, settings = {}) {
   const rows = [];
   const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
   for (const weapon of actor?.items?.contents ?? []) {
-    const placement = weapon.system?.placement ?? {};
-    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
-    const weaponSet = String(placement.weaponSet ?? "");
+    if (weapon.type !== "gear") continue;
+    const weaponSet = getDeployedWeaponSetKey(weapon);
     if (!weaponSet || (selectedSet && weaponSet !== selectedSet)) continue;
     if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
     for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
@@ -7008,12 +7009,13 @@ function getActorCounterSniperEntry(actor, offer = null) {
 function getCounterSniperWeaponCandidate(actor, { weaponId = "", weaponFunctionId = "" } = {}) {
   const candidates = [];
   for (const weapon of actor?.items?.contents ?? []) {
-    const placement = weapon.system?.placement ?? {};
-    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon" || !placement.weaponSet) continue;
+    if (weapon.type !== "gear") continue;
+    const weaponSet = getDeployedWeaponSetKey(weapon);
+    if (!weaponSet) continue;
     if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
     for (const candidateFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
       if (!hasWeaponAction(weapon, "aimedShot", candidateFunctionId)) continue;
-      candidates.push({ weapon, weaponSet: String(placement.weaponSet), weaponFunctionId: candidateFunctionId });
+      candidates.push({ weapon, weaponSet, weaponFunctionId: candidateFunctionId });
     }
   }
   if (weaponId) {

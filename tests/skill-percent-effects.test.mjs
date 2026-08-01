@@ -53,7 +53,10 @@ const {
   getReverseEffectKey,
   isSkillBonusPercentEffectKey
 } = await import("../src/utils/active-effect-keys.mjs");
-const { expandActorEffectChangeKeys } = await import("../src/utils/active-effect-changes.mjs");
+const {
+  expandActorEffectChangeKeys,
+  prepareActorEffectChangeForApplication
+} = await import("../src/utils/active-effect-changes.mjs");
 const {
   buildAllSkillsBonusPercentEffectKeyToken,
   buildEffectKeyTokens,
@@ -65,7 +68,10 @@ const {
   getWeaponActionActiveUseKeys,
   isActiveUseEffectKey
 } = await import("../src/abilities/active-use-keys.mjs");
-const { getActorFormulaApplicationPhase } = await import("../src/utils/actor-formulas.mjs");
+const {
+  formulaUsesPreparedActorReferences,
+  getActorFormulaApplicationPhase
+} = await import("../src/utils/actor-formulas.mjs");
 
 test("actor skill schema exposes only derived fields for the percentage layer", () => {
   const source = readFileSync(
@@ -164,6 +170,39 @@ test("actor percentage changes are forced into the derived-data phase without re
     phase: "final",
     value: "@skills.naturalist.value / 10"
   }), "final");
+});
+
+test("characteristic aliases keep evaluator priority over colliding prepared indicator aliases", () => {
+  const formulaData = {
+    characteristicSettings: [{ key: "endurance", abbr: "con", label: "Endurance" }],
+    characteristics: { endurance: 10 },
+    skillSettings: [],
+    formulaVariables: {
+      con: 99,
+      consciousnessValue: 99
+    },
+    formulaReferences: {}
+  };
+  const limbBonusChange = {
+    key: "system.limbs.all.maxBonus",
+    phase: "initial",
+    value: "con"
+  };
+
+  assert.equal(formulaUsesPreparedActorReferences("con", formulaData), false);
+  assert.equal(
+    getActorFormulaApplicationPhase(limbBonusChange, null, { formulaData }),
+    "initial"
+  );
+  assert.equal(
+    prepareActorEffectChangeForApplication({}, limbBonusChange, { formulaData }).value,
+    10
+  );
+  assert.equal(formulaUsesPreparedActorReferences("consciousnessValue", formulaData), true);
+  assert.equal(
+    getActorFormulaApplicationPhase({ ...limbBonusChange, value: "consciousnessValue" }, null, { formulaData }),
+    "final"
+  );
 });
 
 test("reverse interaction autocomplete exposes specific and all-skills percentage keys", () => {

@@ -300,6 +300,7 @@ import {
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   getWeaponModuleTechnicalName,
+  getWeaponModuleTooltipCapabilities,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
 import {
@@ -1755,7 +1756,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.stopPropagation();
     this.#showInventoryContextMenu(item, event, {
       stackIndex: Math.max(0, toInteger(itemElement.dataset.stackIndex)),
-      stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity))
+      stackQuantity: Math.max(0, toInteger(itemElement.dataset.stackQuantity)),
+      fixedWeaponProjection: itemElement.hasAttribute("data-integrated-body-weapon-projection")
     });
   }
 
@@ -3311,11 +3313,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return Boolean(getWeaponSlotRequirement(itemData).selectedKeys.size);
   }
 
-  async #showInventoryContextMenu(item, event, { stackIndex = 0, stackQuantity = 0 } = {}) {
+  async #showInventoryContextMenu(item, event, {
+    stackIndex = 0,
+    stackQuantity = 0,
+    fixedWeaponProjection = false
+  } = {}) {
     this.#clearInventoryTooltip({ force: true });
     this.#closeInventoryContextMenu();
     this.#inventoryContextMenuOpen = true;
-    if (isNaturalRaceWeapon(item)) return this.#showNaturalWeaponContextMenu(item, event);
+    if (isNaturalRaceWeapon(item) || fixedWeaponProjection) return this.#showNaturalWeaponContextMenu(item, event);
     const isAbility = item.type === "ability";
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
@@ -6127,7 +6133,9 @@ function getModuleTooltipRows(item, evaluatingActor = null) {
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), weapon.maxRangeMeters, { suffix: " м" });
   pushModuleEffectiveRangeRow(rows, weapon.effectiveRange);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), weapon.penetration);
-  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"), weapon.noiseLevel);
+  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponNoiseLevel"), weapon.noiseLevel, {
+    higherIsBetter: false
+  });
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), weapon.magazineMax);
   rows.push(...getModuleActionPointRows(weapon.actionPointCosts));
   rows.push(...getModuleAddedWeaponFunctionRows(item, moduleData.additionalWeapons, evaluatingActor));
@@ -6308,22 +6316,12 @@ function getWeaponInstalledModuleTooltipTabs(item, sourceActor = null, evaluatin
 }
 
 function buildInstalledWeaponModuleTooltipSections(item, sourceActor = null, evaluatingActor = sourceActor) {
-  return [
-    buildContainerTooltipSection(item, sourceActor),
-    buildConditionTooltipSection(item),
-    buildFirstAidTooltipSection(item, evaluatingActor),
-    buildNeedChangeTooltipSection(item, evaluatingActor),
-    buildOneTimeUseTooltipSection(item, evaluatingActor),
-    buildDamageMitigationTooltipSection(item, evaluatingActor),
-    buildDamageSourceTooltipSection(item, evaluatingActor),
-    buildEnergySourceTooltipSection(item),
-    buildEnergyConsumerTooltipSection(item, { sourceActor, evaluatingActor }),
-    buildLightSourceTooltipSection(item),
-    buildModuleTooltipSection(item, evaluatingActor),
-    buildConstructPartTooltipSection(item),
-    buildProsthesisTooltipSection(item, evaluatingActor),
-    ...buildToolTooltipSections(item)
-  ].filter(Boolean);
+  const capabilities = getWeaponModuleTooltipCapabilities(item);
+  // Numeric module modifiers are already reflected and attributed in the host
+  // weapon rows. Module-added attacks are already first-class weapon tabs via
+  // getEnabledWeaponFunctions, so only a standalone light source needs an
+  // additional installed-module panel here.
+  return capabilities.lightSource ? [buildLightSourceTooltipSection(item)].filter(Boolean) : [];
 }
 
 function renderWeaponTooltipModuleSlots(item, entries = [], sourceActor = null, evaluatingActor = sourceActor) {
@@ -6452,12 +6450,14 @@ function buildWeaponTooltipRows(item, entry = {}, {
       html: renderTooltipValueTokens(getWeaponDamageTypeLabels(getEffectiveWeaponDamageData(item, data)))
     }]
   ];
-  if (isSourceDamageMode(data) || hasWeaponTooltipDamageSourceReferences(data?.magazine)) {
-    rows.push([
+  const magazineSourceRow = (
+    isSourceDamageMode(data) || hasWeaponTooltipDamageSourceReferences(data?.magazine)
+  )
+    ? [
       game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSource"),
       renderWeaponMagazineSourceChips(data, { evaluatingActor: actor, sourceActor })
-    ]);
-  }
+    ]
+    : null;
   const magazineMax = hasWeaponResourceCostData(data, "magazine") ? toInteger(data.magazine?.max) : 0;
   if (magazineMax) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
@@ -6532,6 +6532,7 @@ function buildWeaponTooltipRows(item, entry = {}, {
   if (actions.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponActions"), {
     html: renderTooltipValueTokens(actions)
   }]);
+  if (magazineSourceRow) rows.push(magazineSourceRow);
   return rows;
 }
 

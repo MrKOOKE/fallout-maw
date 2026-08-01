@@ -44,9 +44,14 @@ const PRESET_SETTING_KEYS = new Set([
 ]);
 
 let settingsRegistered = false;
+let combatCarouselHooksRegistered = false;
+let pendingCombatTrackerRenderHookId = null;
 
 export function registerCombatCarouselHooks() {
   registerCombatCarouselSettings();
+
+  if (combatCarouselHooksRegistered) return;
+  combatCarouselHooksRegistered = true;
 
   CONFIG.combatTrackerDock = {
     CombatDock,
@@ -60,25 +65,30 @@ export function registerCombatCarouselHooks() {
   };
 
   Hooks.on("createCombat", combat => {
-    if (isCombatCarouselEnabled() && game.combat === combat) new CombatDock(combat).render(true);
+    if (isCombatCarouselEnabled() && getCurrentCombat() === combat) ensureCombatDock(combat);
   });
 
-  Hooks.on("updateCombat", (combat, updates) => {
+  Hooks.on("updateCombat", combat => {
     if (!isCombatCarouselEnabled()) {
       ui.combatDock?.close();
       return;
     }
-    if (updates.active || updates.scene === null) new CombatDock(combat).render(true);
-    if (updates.scene && combat.scene !== game.scenes.viewed && ui.combatDock?.combat === combat) ui.combatDock.close();
+    if (combat !== ui.combatDock?.combat && combat !== getCurrentCombat()) return;
+    syncCombatDockToCurrentCombat();
   });
 
   Hooks.on("canvasReady", () => {
-    Hooks.once("renderCombatTracker", () => {
+    clearPendingCombatTrackerRenderHook();
+    pendingCombatTrackerRenderHookId = Hooks.once("renderCombatTracker", () => {
+      pendingCombatTrackerRenderHookId = null;
       if (!isCombatCarouselEnabled()) return ui.combatDock?.close();
-      const currentCombat = getCurrentCombat();
-      if (currentCombat) new CombatDock(currentCombat).render(true);
-      else ui.combatDock?.close();
+      syncCombatDockToCurrentCombat();
     });
+  });
+
+  Hooks.on("canvasTearDown", () => {
+    clearPendingCombatTrackerRenderHook();
+    ui.combatDock?.close();
   });
 
   registerCombatCarouselHotkeys();
@@ -90,8 +100,7 @@ export function initializeCombatCarousel() {
     ui.combatDock?.close();
     return;
   }
-  const currentCombat = getCurrentCombat();
-  if (currentCombat) new CombatDock(currentCombat).render(true);
+  syncCombatDockToCurrentCombat();
 }
 
 export function refreshCombatCarousel() {
@@ -102,6 +111,32 @@ export function refreshCombatCarousel() {
 
 function getCurrentCombat() {
   return ui.combat?.viewed ?? game.combats?.active ?? game.combat ?? null;
+}
+
+function syncCombatDockToCurrentCombat() {
+  const currentCombat = getCurrentCombat();
+  if (!currentCombat) {
+    ui.combatDock?.close();
+    return null;
+  }
+  return ensureCombatDock(currentCombat);
+}
+
+function ensureCombatDock(combat) {
+  const current = ui.combatDock;
+  if (current?.combat === combat && !current._closed) {
+    if (!current.rendered) current.render(true);
+    return current;
+  }
+  const dock = new CombatDock(combat);
+  dock.render(true);
+  return dock;
+}
+
+function clearPendingCombatTrackerRenderHook() {
+  if (pendingCombatTrackerRenderHookId === null) return;
+  Hooks.off("renderCombatTracker", pendingCombatTrackerRenderHookId);
+  pendingCombatTrackerRenderHookId = null;
 }
 
 function isCombatCarouselEnabled() {

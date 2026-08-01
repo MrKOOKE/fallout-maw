@@ -222,7 +222,7 @@ export function isNaturalRaceFeature(itemOrData) {
   return isNaturalRaceItem(itemOrData, NATURAL_RACE_ITEM_KINDS.feature);
 }
 
-export function getNaturalWeaponSetContext(actor, race, currencies = []) {
+export function getNaturalWeaponSetContext(actor, race, currencies = [], { additionalSlots = [] } = {}) {
   const naturalSet = getActorNaturalItemSet(actor, race);
   const slots = (naturalSet?.naturalWeapons ?? []).map(entry => {
     const item = actor?.items?.contents?.find(candidate => {
@@ -235,6 +235,7 @@ export function getNaturalWeaponSetContext(actor, race, currencies = []) {
       item: item ? createNaturalWeaponDisplayItem(item, currencies) : null
     };
   });
+  slots.push(...(Array.isArray(additionalSlots) ? additionalSlots : []));
   if (!slots.length) return null;
   return {
     key: NATURAL_RACE_WEAPON_SET_KEY,

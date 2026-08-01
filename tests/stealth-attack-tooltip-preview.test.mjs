@@ -88,3 +88,32 @@ test("ordinary token HUD weapon tooltip keeps the shared actor-sheet renderer", 
   );
   assert.match(tokenActionHudSource, /renderInventoryItemTooltipHTML\(item, this\.actor/);
 });
+
+test("installed weapon modules only receive standalone light panels", () => {
+  const sections = sliceBetween(
+    actorSheetSource,
+    "function buildInstalledWeaponModuleTooltipSections",
+    "function renderWeaponTooltipModuleSlots"
+  );
+
+  assert.match(sections, /getWeaponModuleTooltipCapabilities\(item\)/);
+  assert.match(sections, /capabilities\.lightSource \? \[buildLightSourceTooltipSection\(item\)\]/);
+  assert.doesNotMatch(sections, /buildModuleTooltipSection/);
+  assert.doesNotMatch(sections, /buildConditionTooltipSection/);
+});
+
+test("weapon tooltip renders magazine sources after every ordinary weapon row", () => {
+  const rows = sliceBetween(
+    actorSheetSource,
+    "function buildWeaponTooltipRows",
+    "function getWeaponTooltipSectionTitle"
+  );
+  const sourceDefinition = rows.indexOf("const magazineSourceRow");
+  const actions = rows.indexOf("const actions = getWeaponActionLabels");
+  const sourceAppend = rows.indexOf("if (magazineSourceRow) rows.push(magazineSourceRow)");
+
+  assert.ok(sourceDefinition >= 0);
+  assert.ok(actions > sourceDefinition);
+  assert.ok(sourceAppend > actions, "magazine source chips must be the final weapon row");
+  assert.ok(sourceAppend < rows.indexOf("return rows"));
+});

@@ -12,18 +12,24 @@ import {
 import { openSearchInventoryWindow } from "../apps/search-inventory.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import { DEFAULT_FACTION_NAME, getActorFactionBelongs } from "../settings/factions.mjs";
-import { createCombatEndSessionRegistry } from "./combat-end-session-registry.mjs";
+import {
+  COMBAT_END_SESSION_REGISTRY_DEFAULTS,
+  createCombatEndSessionRegistry
+} from "./combat-end-session-registry.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const COMBAT_END_SOCKET = `system.${SYSTEM_ID}`;
 const COMBAT_END_SOCKET_SCOPE = "fallout-maw.combatEndResolution";
 const COMBAT_END_FINISH_QUERY = `${SYSTEM_ID}.combatEndFinish`;
+const COMBAT_END_COMPLETE_QUERY = `${SYSTEM_ID}.combatEndComplete`;
 const COMBAT_END_FINISH_QUERY_TIMEOUT = 60 * 1000;
 const COMBAT_END_FINISH_CLAIM_TTL = 60 * 1000;
 const COMBAT_END_MAX_PENDING_FINISHES = 128;
 const COMBAT_END_REGISTRY_PRUNE_INTERVAL = 60 * 1000;
 const COMBAT_END_AUTHORITY_SYNC_DELAY = 100;
+const COMBAT_END_RECOVERY_TIMEOUT = 2 * 1000;
+const COMBAT_END_MAX_RECOVERY_DONORS = 8;
 
 const STATUS_DEAD = "dead";
 const STATUS_UNCONSCIOUS = "unconscious";
@@ -36,11 +42,19 @@ const pendingFinishOperations = new Map();
 let combatEndOperationQueue = Promise.resolve();
 let combatEndRegistryPruneInterval = null;
 let combatEndAuthoritySyncTimeout = null;
+let combatEndRecoveryTimeout = null;
+let combatEndFinishClaimExpiryTimeout = null;
 let observedCombatEndAuthorityUserId = "";
+let pendingCombatEndRecovery = null;
+let combatEndHooksRegistered = false;
+let combatEndSocketRegistered = false;
 
 export function registerCombatEndResolutionHooks() {
+  if (combatEndHooksRegistered) return;
+  combatEndHooksRegistered = true;
   CONFIG.queries ??= {};
   CONFIG.queries[COMBAT_END_FINISH_QUERY] = handleCombatEndFinishQuery;
+  CONFIG.queries[COMBAT_END_COMPLETE_QUERY] = handleCombatEndCompleteQuery;
   Hooks.on(COMBAT_DELETION_SETTLED_HOOK, handleCombatDeleted);
   Hooks.on("updateActor", actor => refreshCombatEndSessionsForActor(actor));
   Hooks.on("deleteActor", actor => removeActorFromCombatEndSessions(actor));
@@ -48,6 +62,7 @@ export function registerCombatEndResolutionHooks() {
     pruneCombatEndSessionRegistry();
     rerenderCombatEndApplications();
   });
+  Hooks.on("canvasReady", reconcileCombatEndApplicationPresentation);
   Hooks.on("userConnected", handleCombatEndUserConnected);
   if (combatEndRegistryPruneInterval === null) {
     combatEndRegistryPruneInterval = globalThis.setInterval(
@@ -58,15 +73,14 @@ export function registerCombatEndResolutionHooks() {
 }
 
 export function registerCombatEndResolutionSocket() {
+  if (combatEndSocketRegistered) return;
+  combatEndSocketRegistered = true;
   game.socket.on(COMBAT_END_SOCKET, handleCombatEndSocketMessage);
   observedCombatEndAuthorityUserId = getResponsibleGM()?.id ?? "";
   if (isResponsibleGM()) {
-    game.socket.emit(COMBAT_END_SOCKET, {
-      scope: COMBAT_END_SOCKET_SCOPE,
-      type: "syncRequest",
-      requesterUserId: game.user?.id ?? ""
-    });
-    scheduleCombatEndAuthorityCanonicalRefresh();
+    if (!requestCombatEndAuthorityRecovery()) {
+      scheduleCombatEndAuthorityCanonicalRefresh();
+    }
   }
 }
 
@@ -78,6 +92,7 @@ function handleCombatDeleted(combat) {
 }
 
 function createCombatEndSession(combat) {
+  const now = Date.now();
   const combatants = Array.from(combat?.combatants ?? []);
   const participantActorUuids = Array.from(new Set(combatants
     .map(combatant => combatant.actor?.uuid ?? "")
@@ -102,12 +117,14 @@ function createCombatEndSession(combat) {
 
   if (!entries.length) return null;
   return {
-    id: `${combat?.id ?? "combat"}-${foundry.utils.randomID()}`,
+    id: String(combat?.id ?? foundry.utils.randomID()),
     combatId: combat?.id ?? "",
+    sceneId: combat?.scene?.id ?? combat?.sceneId ?? combat?._source?.scene ?? "",
     participantActorUuids,
     entries,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
+    expiresAt: now + COMBAT_END_SESSION_REGISTRY_DEFAULTS.sessionTtlMs,
     revision: 0,
     operationPending: false
   };
@@ -182,6 +199,7 @@ function broadcastCombatEndSession(session) {
     authorityUserId: game.user?.id ?? "",
     session: snapshot
   });
+  scheduleCombatEndFinishClaimExpiryRefresh();
   return true;
 }
 
@@ -199,34 +217,76 @@ function serializeSession(session) {
   return foundry.utils.deepClone(session);
 }
 
-function renderCombatEndSession(session) {
+function renderCombatEndSession(session, { present = true } = {}) {
   if (!session?.id) return;
   const result = combatEndSessionRegistry.upsert(session);
   applyCombatEndRegistryChanges(result);
-  if (!result.accepted || !result.stored) return;
+  if (!result.stored) return;
   const storedSession = combatEndSessionRegistry.get(session.id);
-  if (!storedSession || combatEndSessionRegistry.isDismissed(session.id)) return;
+  if (!storedSession) return;
+  presentStoredCombatEndSession(storedSession, { present });
+}
 
-  let application = renderedApplications.get(session.id);
-  if (!application) {
-    application = new CombatEndResolutionApplication(storedSession);
-    renderedApplications.set(session.id, application);
-  } else {
+function presentStoredCombatEndSession(storedSession, { present = true } = {}) {
+  const sessionId = String(storedSession?.id ?? "");
+  if (!sessionId) return null;
+  let application = renderedApplications.get(sessionId);
+  if (application) {
     application.updateSession(storedSession);
+    if (!present) return application;
+    if (!shouldPresentCombatEndSession(storedSession)) {
+      closeCombatEndApplication(sessionId, { dismiss: false, animate: false });
+      return null;
+    }
+    if (application.rendered) application.render({ force: true });
+    return application;
   }
+  if (
+    !present
+    || combatEndSessionRegistry.isDismissed(sessionId)
+    || !shouldPresentCombatEndSession(storedSession)
+  ) return null;
+
+  application = new CombatEndResolutionApplication(storedSession);
+  renderedApplications.set(sessionId, application);
   application.render({ force: true });
+  return application;
+}
+
+function shouldPresentCombatEndSession(session) {
+  const sceneId = String(session?.sceneId ?? "");
+  const viewedSceneId = String(canvas?.scene?.id ?? game.scenes?.viewed?.id ?? "");
+  if (sceneId && viewedSceneId && sceneId !== viewedSceneId) return false;
+  if (game.user?.isGM) return true;
+  return (session?.participantActorUuids ?? []).some(actorUuid => (
+    resolveActorSync(actorUuid)?.testUserPermission?.(game.user, "OWNER")
+  ));
+}
+
+function reconcileCombatEndApplicationPresentation() {
+  pruneCombatEndSessionRegistry();
+  for (const sessionId of Array.from(renderedApplications.keys())) {
+    if (!combatEndSessionRegistry.has(sessionId)) {
+      closeCombatEndApplication(sessionId, { dismiss: false, animate: false });
+    }
+  }
+  for (const session of combatEndSessionRegistry.values()) presentStoredCombatEndSession(session);
 }
 
 function closeCombatEndApplication(sessionId, options = {}) {
   const application = renderedApplications.get(sessionId);
   if (!application) return;
+  renderedApplications.delete(sessionId);
   void application.close(options);
 }
 
 function rerenderCombatEndApplications() {
-  for (const application of renderedApplications.values()) {
-    if (application.rendered) application.render({ force: true });
+  for (const sessionId of Array.from(renderedApplications.keys())) {
+    if (!combatEndSessionRegistry.has(sessionId)) {
+      closeCombatEndApplication(sessionId, { dismiss: false, animate: false });
+    }
   }
+  for (const session of combatEndSessionRegistry.values()) presentStoredCombatEndSession(session);
 }
 
 function pruneCombatEndSessionRegistry() {
@@ -236,7 +296,7 @@ function pruneCombatEndSessionRegistry() {
 function applyCombatEndRegistryChanges(changes = {}) {
   const removedSessions = Array.isArray(changes.removedSessions) ? changes.removedSessions : [];
   for (const removal of removedSessions) {
-    closeCombatEndApplication(removal.id, { dismiss: false });
+    closeCombatEndApplication(removal.id, { dismiss: false, animate: false });
   }
   if (!isResponsibleGM()) return;
   for (const removal of removedSessions) {
@@ -245,45 +305,99 @@ function applyCombatEndRegistryChanges(changes = {}) {
   }
 }
 
-function handleCombatEndUserConnected(user, connected) {
+function handleCombatEndUserConnected(user) {
   if (!user?.id) return;
   pruneCombatEndSessionRegistry();
   const activeGM = getResponsibleGM();
   const authorityUserId = activeGM?.id ?? "";
-  const authorityChanged = authorityUserId !== observedCombatEndAuthorityUserId;
+  const previousAuthorityUserId = observedCombatEndAuthorityUserId;
+  const authorityChanged = authorityUserId !== previousAuthorityUserId;
   observedCombatEndAuthorityUserId = authorityUserId;
-  if (!activeGM) return;
-
-  if (authorityChanged) {
-    if (activeGM.id === game.user?.id) {
-      game.socket.emit(COMBAT_END_SOCKET, {
-        scope: COMBAT_END_SOCKET_SCOPE,
-        type: "syncRequest",
-        requesterUserId: game.user.id
-      });
-      scheduleCombatEndAuthorityCanonicalRefresh();
-    }
+  if (!activeGM) {
+    clearPendingCombatEndRecovery();
+    clearCombatEndFinishClaimExpiryRefresh();
     return;
   }
 
-  // An ordinary player joining only needs one snapshot from the authority.
-  // Unrelated disconnects must not make every client exchange the entire
-  // registry or cause the authority to rescan every actor.
-  if (connected && activeGM.id === game.user?.id && user.id !== game.user.id) {
-    sendCombatEndSessionSync(user.id);
+  if (authorityChanged) {
+    if (activeGM.id === game.user?.id) {
+      const recoveryStarted = requestCombatEndAuthorityRecovery({
+        preferredDonorUserId: previousAuthorityUserId
+      });
+      if (!recoveryStarted) scheduleCombatEndAuthorityCanonicalRefresh();
+    } else {
+      clearPendingCombatEndRecovery();
+      clearCombatEndFinishClaimExpiryRefresh();
+    }
   }
 }
 
-function sendCombatEndSessionSync(recipientUserId = "") {
+function requestCombatEndAuthorityRecovery({ preferredDonorUserId = "" } = {}) {
+  if (!isResponsibleGM()) return false;
+  clearPendingCombatEndRecovery();
+  const donors = getCombatEndRecoveryDonors(preferredDonorUserId);
+  if (!donors.length) return false;
+  const requestId = foundry.utils.randomID();
+  const donorUserIds = donors.map(user => user.id);
+  pendingCombatEndRecovery = {
+    requestId,
+    donorUserIds: new Set(donorUserIds),
+    respondedUserIds: new Set()
+  };
+  combatEndRecoveryTimeout = globalThis.setTimeout(() => {
+    finishCombatEndAuthorityRecovery();
+  }, COMBAT_END_RECOVERY_TIMEOUT);
+  game.socket?.emit?.(COMBAT_END_SOCKET, {
+    scope: COMBAT_END_SOCKET_SCOPE,
+    type: "syncRequest",
+    requestId,
+    requesterUserId: game.user?.id ?? "",
+    donorUserIds
+  });
+  return true;
+}
+
+function getCombatEndRecoveryDonors(preferredDonorUserId = "") {
+  const preferredId = String(preferredDonorUserId ?? "");
+  return (game.users?.contents ?? [])
+    .filter(user => user?.active && user.isGM && user.id !== game.user?.id)
+    .sort((left, right) => (
+      Number(right.id === preferredId) - Number(left.id === preferredId)
+      || Number(Boolean(right.isGM)) - Number(Boolean(left.isGM))
+      || left.id.localeCompare(right.id)
+    ))
+    .slice(0, COMBAT_END_MAX_RECOVERY_DONORS);
+}
+
+function clearPendingCombatEndRecovery() {
+  if (combatEndRecoveryTimeout !== null) {
+    globalThis.clearTimeout(combatEndRecoveryTimeout);
+    combatEndRecoveryTimeout = null;
+  }
+  pendingCombatEndRecovery = null;
+}
+
+function finishCombatEndAuthorityRecovery() {
+  if (!pendingCombatEndRecovery) return;
+  clearPendingCombatEndRecovery();
+  scheduleCombatEndAuthorityCanonicalRefresh();
+}
+
+function sendCombatEndSessionSync(recipientUserId = "", requestId = "") {
   const recipient = String(recipientUserId ?? "");
   if (!recipient || recipient === game.user?.id) return;
   pruneCombatEndSessionRegistry();
+  const recoverableSessions = Array.from(combatEndSessionRegistry.values())
+    .filter(session => (
+      session?.operationPending || sessionHasActiveCombatEndFinishClaims(session)
+    ));
   game.socket?.emit?.(COMBAT_END_SOCKET, {
     scope: COMBAT_END_SOCKET_SCOPE,
     type: "syncState",
+    requestId: String(requestId ?? ""),
     senderUserId: game.user?.id ?? "",
     recipientUserId: recipient,
-    sessions: Array.from(combatEndSessionRegistry.values(), serializeSession),
+    sessions: recoverableSessions.map(serializeSession),
     terminals: Array.from(combatEndSessionRegistry.terminalEntries(), ([id, revision]) => ({
       id,
       revision,
@@ -408,28 +522,79 @@ async function runCombatEndFinish(payload = {}) {
   }
 }
 
-async function handleCombatEndSocketMessage(message = {}) {
+async function requestCombatEndComplete(sessionId = "") {
+  const gm = getResponsibleGM();
+  if (!gm) throw new Error("Нет активного GM для завершения послебоевой сессии.");
+  if (gm.id === game.user?.id) return completeCombatEndSessionAsAuthority(sessionId);
+  return gm.query(
+    COMBAT_END_COMPLETE_QUERY,
+    { sessionId: String(sessionId ?? "") },
+    { timeout: COMBAT_END_FINISH_QUERY_TIMEOUT }
+  );
+}
+
+function completeCombatEndSessionAsAuthority(sessionId = "") {
+  if (!isResponsibleGM()) throw new Error("Combat-end authority changed.");
+  const id = String(sessionId ?? "");
+  expireCombatEndFinishClaimsAsAuthority();
+  const session = combatEndSessionRegistry.get(id);
+  if (!session) return { ok: true, alreadyComplete: true };
+  if (sessionHasActiveCombatEndFinishClaims(session)) {
+    return {
+      ok: false,
+      message: "Дождитесь завершения выполняемого послебоевого действия."
+    };
+  }
+  session.operationPending = false;
+  broadcastCombatEndTerminal(id, session.revision);
+  return { ok: true };
+}
+
+async function handleCombatEndSocketMessage(message = {}, socketSenderUserId = "") {
   if (message.scope !== COMBAT_END_SOCKET_SCOPE) return;
+  const senderUserId = String(socketSenderUserId ?? "");
+  if (!senderUserId) return;
 
   if (message.type === "state") {
-    if (!isCurrentCombatEndAuthority(message.authorityUserId)) return;
+    if (
+      message.authorityUserId !== senderUserId
+      || !isCurrentCombatEndAuthority(senderUserId)
+    ) return;
     renderCombatEndSession(message.session);
     return;
   }
 
   if (message.type === "syncRequest") {
-    if (!isCurrentCombatEndAuthority(message.requesterUserId)) return;
-    sendCombatEndSessionSync(message.requesterUserId);
+    if (
+      message.requesterUserId !== senderUserId
+      || !isCurrentCombatEndAuthority(senderUserId)
+      || !Array.isArray(message.donorUserIds)
+      || !message.donorUserIds.includes(game.user?.id)
+    ) return;
+    sendCombatEndSessionSync(message.requesterUserId, message.requestId);
     return;
   }
 
   if (message.type === "syncState") {
-    if (message.recipientUserId !== game.user?.id) return;
-    const sentByAuthority = isCurrentCombatEndAuthority(message.senderUserId);
-    if (!sentByAuthority && !isResponsibleGM()) return;
-    for (const session of message.sessions ?? []) renderCombatEndSession(session);
-    for (const terminal of message.terminals ?? []) renderCombatEndSession(terminal);
-    if (isResponsibleGM()) scheduleCombatEndAuthorityCanonicalRefresh();
+    const recovery = pendingCombatEndRecovery;
+    if (
+      !isResponsibleGM()
+      || message.recipientUserId !== game.user?.id
+      || message.senderUserId !== senderUserId
+      || recovery?.requestId !== message.requestId
+      || !recovery?.donorUserIds?.has(senderUserId)
+      || recovery.respondedUserIds.has(senderUserId)
+    ) return;
+    for (const session of message.sessions ?? []) {
+      renderCombatEndSession(session, { present: false });
+    }
+    for (const terminal of message.terminals ?? []) {
+      renderCombatEndSession(terminal, { present: false });
+    }
+    recovery.respondedUserIds.add(senderUserId);
+    if (recovery.respondedUserIds.size >= recovery.donorUserIds.size) {
+      finishCombatEndAuthorityRecovery();
+    }
     return;
   }
 
@@ -446,6 +611,21 @@ async function handleCombatEndFinishQuery(payload = {}, { user: requester } = {}
     attackerActorUuid: String(payload?.attackerActorUuid ?? ""),
     requesterUserId: requester.id
   });
+}
+
+async function handleCombatEndCompleteQuery(payload = {}, { user: requester } = {}) {
+  if (!isResponsibleGM()) throw new Error("Combat-end authority changed.");
+  if (!requester?.id || game.users?.get?.(requester.id) !== requester) {
+    throw new Error("Combat-end requester is not an authenticated world user.");
+  }
+  const sessionId = String(payload?.sessionId ?? "");
+  const session = combatEndSessionRegistry.get(sessionId);
+  if (session && !requester.isGM && !(session.participantActorUuids ?? []).some(actorUuid => (
+    resolveActorSync(actorUuid)?.testUserPermission?.(requester, "OWNER")
+  ))) {
+    throw new Error("The requester may not complete this combat-end session.");
+  }
+  return completeCombatEndSessionAsAuthority(sessionId);
 }
 
 function enqueueCombatEndOperation(operation) {
@@ -701,8 +881,56 @@ function isMatchingCombatEndFinishClaim(entry, operationId, authorityUserId) {
   );
 }
 
-function sessionHasActiveCombatEndFinishClaims(session) {
-  return (session?.entries ?? []).some(entry => Boolean(getActiveCombatEndFinishClaim(entry)));
+function sessionHasActiveCombatEndFinishClaims(session, at = Date.now()) {
+  return (session?.entries ?? []).some(entry => Boolean(getActiveCombatEndFinishClaim(entry, at)));
+}
+
+function scheduleCombatEndFinishClaimExpiryRefresh() {
+  clearCombatEndFinishClaimExpiryRefresh();
+  if (!isResponsibleGM()) return;
+  const now = Date.now();
+  let nextExpiry = Number.POSITIVE_INFINITY;
+  for (const session of combatEndSessionRegistry.values()) {
+    for (const entry of session?.entries ?? []) {
+      const expiresAt = Number(entry?.finishClaim?.expiresAt);
+      if (Number.isFinite(expiresAt)) nextExpiry = Math.min(nextExpiry, expiresAt);
+    }
+  }
+  if (!Number.isFinite(nextExpiry)) return;
+  combatEndFinishClaimExpiryTimeout = globalThis.setTimeout(() => {
+    combatEndFinishClaimExpiryTimeout = null;
+    expireCombatEndFinishClaimsAsAuthority();
+  }, Math.max(0, nextExpiry - now + 1));
+}
+
+function clearCombatEndFinishClaimExpiryRefresh() {
+  if (combatEndFinishClaimExpiryTimeout === null) return;
+  globalThis.clearTimeout(combatEndFinishClaimExpiryTimeout);
+  combatEndFinishClaimExpiryTimeout = null;
+}
+
+function expireCombatEndFinishClaimsAsAuthority(at = Date.now()) {
+  if (!isResponsibleGM()) {
+    clearCombatEndFinishClaimExpiryRefresh();
+    return;
+  }
+  const changedSessions = [];
+  for (const session of combatEndSessionRegistry.values()) {
+    let changed = false;
+    for (const entry of session?.entries ?? []) {
+      if (!entry?.finishClaim || getActiveCombatEndFinishClaim(entry, at)) continue;
+      clearCombatEndFinishClaim(entry);
+      changed = true;
+    }
+    const operationPending = sessionHasActiveCombatEndFinishClaims(session, at);
+    if (session.operationPending !== operationPending) {
+      session.operationPending = operationPending;
+      changed = true;
+    }
+    if (changed) changedSessions.push(session);
+  }
+  for (const session of changedSessions) broadcastCombatEndSession(session);
+  scheduleCombatEndFinishClaimExpiryRefresh();
 }
 
 function isCombatEndAuthority(authorityUserId = "") {
@@ -793,6 +1021,10 @@ function toInteger(value) {
 class CombatEndResolutionApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #session;
   #pendingFinishes = new Set();
+  #completionPending = false;
+  #positionFrame = null;
+  #closePromise = null;
+  #closing = false;
   #resizeHandler = () => this.#queuePosition();
 
   constructor(session, options = {}) {
@@ -849,6 +1081,7 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
         search: icons.search || "icons/svg/item-bag.svg",
         finish: icons.finish || "icons/svg/skull.svg"
       },
+      completionPending: this.#completionPending,
       entries: (this.#session.entries ?? []).map(entry => this.#prepareEntryContext(entry, actionActor))
     };
   }
@@ -861,15 +1094,33 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     this.#queuePosition();
   }
 
-  async close(options = {}) {
-    if (options.dismiss !== false && this.#session?.id) {
+  close(options = {}) {
+    if (this.#closePromise) return this.#closePromise;
+    if (this.#closing) return Promise.resolve();
+    this.#closing = true;
+    let completedByAuthority = false;
+    if (options.dismiss !== false && this.#session?.id && isResponsibleGM()) {
+      try {
+        completedByAuthority = Boolean(
+          completeCombatEndSessionAsAuthority(this.#session.id)?.ok
+        );
+      } catch {
+        completedByAuthority = false;
+      }
+    }
+    if (options.dismiss !== false && !completedByAuthority && this.#session?.id) {
       const changes = combatEndSessionRegistry.dismiss(this.#session.id);
       applyCombatEndRegistryChanges(changes);
     }
     const view = this.element?.ownerDocument?.defaultView ?? window;
     view.removeEventListener("resize", this.#resizeHandler);
+    if (this.#positionFrame) {
+      this.#positionFrame.view.cancelAnimationFrame?.(this.#positionFrame.id);
+      this.#positionFrame = null;
+    }
     renderedApplications.delete(this.#session?.id);
-    return super.close(options);
+    this.#closePromise = Promise.resolve(super.close(options));
+    return this.#closePromise;
   }
 
   #prepareEntryContext(entry, actionActor) {
@@ -943,9 +1194,24 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     }
   }
 
-  static async #onDismiss(event) {
+  static async #onDismiss(event, target) {
     event.preventDefault();
-    await this.close();
+    if (this.#completionPending) return;
+    this.#completionPending = true;
+    if (target) target.disabled = true;
+    try {
+      const result = await requestCombatEndComplete(this.#session?.id);
+      if (!result?.ok) {
+        if (result?.message) ui.notifications.warn(result.message);
+        return;
+      }
+      await this.close({ dismiss: false });
+    } catch (error) {
+      ui.notifications.error(error?.message || "Не удалось завершить послебоевую сессию.");
+    } finally {
+      this.#completionPending = false;
+      if (target?.isConnected) target.disabled = false;
+    }
   }
 
   #getEntryFromTarget(target) {
@@ -955,8 +1221,17 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
   }
 
   #queuePosition() {
+    if (this.#positionFrame) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
-    view.requestAnimationFrame?.(() => this.#positionNearSidebar()) ?? this.#positionNearSidebar();
+    if (typeof view.requestAnimationFrame !== "function") {
+      this.#positionNearSidebar();
+      return;
+    }
+    const id = view.requestAnimationFrame(() => {
+      this.#positionFrame = null;
+      this.#positionNearSidebar();
+    });
+    this.#positionFrame = { view, id };
   }
 
   #positionNearSidebar() {

@@ -72,7 +72,7 @@ test("weapon editors and locales expose noise after penetration", () => {
   assert.match(itemSheet, /penetration: 0,\r?\n\s+noiseLevel: 1,\r?\n\s+magazine:/);
   assert.match(
     actorSheet,
-    /pushModuleChangeRow\([^\n]+WeaponPenetration[^\n]+\);\r?\n\s+pushModuleChangeRow\([^\n]+WeaponNoiseLevel[^\n]+\);\r?\n\s+pushModuleChangeRow\([^\n]+WeaponMagazine/
+    /pushModuleChangeRow\([^\n]+WeaponPenetration[^\n]+\);\r?\n\s+pushModuleChangeRow\([^\n]+WeaponNoiseLevel[\s\S]*?higherIsBetter: false\r?\n\s+\}\);\r?\n\s+pushModuleChangeRow\([^\n]+WeaponMagazine/
   );
   assert.match(
     actorSheet,

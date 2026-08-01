@@ -12,10 +12,11 @@ export const COMBAT_END_SESSION_REGISTRY_DEFAULTS = Object.freeze({
 /**
  * Create the client-local replica of combat-end sessions.
  *
- * Every connected client keeps the authoritative session snapshots it receives.
- * Dismissal is deliberately a separate, local concern: hiding a window must not
- * discard the state a client may need after responsible-GM failover. Terminal
- * empty states are instead authoritative, revisioned tombstones.
+ * Connected clients may keep authoritative session snapshots they receive.
+ * Dismissal is a separate local concern, while terminal empty states are
+ * authoritative revisioned tombstones. A live session has one immutable local
+ * expiry deadline: repeated socket delivery must never keep old combat work
+ * alive forever.
  */
 export function createCombatEndSessionRegistry(options = {}) {
   return new CombatEndSessionRegistry(options);
@@ -152,11 +153,28 @@ export class CombatEndSessionRegistry {
       };
     }
 
+    const expiresAt = previous?.expiresAt ?? getSessionExpiryAt(
+      session,
+      at,
+      this.#sessionTtlMs
+    );
+    if (!previous && expiresAt <= at) {
+      return {
+        accepted: false,
+        stored: false,
+        reason: "expired",
+        revision,
+        ...changes
+      };
+    }
+    session.expiresAt = expiresAt;
+
     if (previous) this.#removeSessionFromActorIndex(id, previous.actorUuids);
     const actorUuids = collectSessionActorUuids(session);
     this.#sessions.set(id, {
       session,
       lastSeenAt: Math.max(previous?.lastSeenAt ?? at, at),
+      expiresAt,
       orderAt: getReplicatedSessionTimestamp(session),
       actorUuids,
       pinCount: previous?.pinCount ?? 0,
@@ -253,7 +271,7 @@ export class CombatEndSessionRegistry {
     }
 
     record.pinCount -= 1;
-    if (record.pinCount === 0 && (record.lastSeenAt + this.#sessionTtlMs) <= at) {
+    if (record.pinCount === 0 && record.expiresAt <= at) {
       this.#removeSession(id, "expired", changes);
     }
     this.#enforceSessionCapacity(changes);
@@ -378,14 +396,13 @@ export class CombatEndSessionRegistry {
     for (const [id, record] of this.#sessions) {
       if (!Array.isArray(record.session?.entries) || record.session.entries.length === 0) {
         emptyIds.push(id);
-      } else if (!isSessionLocallyPinned(record)
-        && (record.lastSeenAt + this.#sessionTtlMs) <= at) {
-        expiredSessions.push({ id, lastSeenAt: record.lastSeenAt });
+      } else if (!isSessionLocallyPinned(record) && record.expiresAt <= at) {
+        expiredSessions.push({ id, expiresAt: record.expiresAt });
       }
     }
     emptyIds.sort(compareIds);
     expiredSessions.sort((left, right) => (
-      compareNumbers(left.lastSeenAt, right.lastSeenAt)
+      compareNumbers(left.expiresAt, right.expiresAt)
       || compareIds(left.id, right.id)
     ));
 
@@ -587,6 +604,15 @@ function getReplicatedSessionTimestamp(session) {
   if (Number.isFinite(updatedAt)) return updatedAt;
   const createdAt = Number(session?.createdAt);
   return Number.isFinite(createdAt) ? createdAt : 0;
+}
+
+function getSessionExpiryAt(session, receivedAt, ttlMs) {
+  const replicatedExpiry = Number(session?.expiresAt);
+  const localDeadline = receivedAt + ttlMs;
+  if (Number.isFinite(replicatedExpiry) && replicatedExpiry > 0) {
+    return Math.min(replicatedExpiry, localDeadline);
+  }
+  return localDeadline;
 }
 
 function collectSessionActorUuids(session) {

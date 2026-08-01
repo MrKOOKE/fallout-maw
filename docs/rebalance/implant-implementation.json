@@ -1,0 +1,4386 @@
+{
+  "generatedAt": "2026-08-01T04:10:36.390Z",
+  "mode": "write",
+  "status": "written-and-verified",
+  "actorsRead": 0,
+  "actorsChanged": 0,
+  "packsRead": 0,
+  "items": 60,
+  "folders": 37,
+  "deletedGeneratedItems": 0,
+  "deletedGeneratedFolders": 0,
+  "byClass": {
+    "S": {
+      "count": 12,
+      "minPrice": 41099,
+      "maxPrice": 73402
+    },
+    "A": {
+      "count": 12,
+      "minPrice": 12765,
+      "maxPrice": 18727
+    },
+    "B": {
+      "count": 20,
+      "minPrice": 4811,
+      "maxPrice": 8528
+    },
+    "C": {
+      "count": 10,
+      "minPrice": 1149,
+      "maxPrice": 2126
+    },
+    "D": {
+      "count": 6,
+      "minPrice": 336,
+      "maxPrice": 400
+    }
+  },
+  "specialFunctions": {
+    "freeSettings": 55,
+    "damageMitigation": 4,
+    "weapon": 1,
+    "capacityControllers": 11,
+    "exclusiveGroups": 5
+  },
+  "knownRuntimeFollowups": [
+    "Повреждение состояния импланта от урона части тела требует отдельного обработчика по записанному плану 20%.",
+    "Запрет суммирования одинаковых разветвителей и взаимоисключающих линий NEMEAN/PHOENIX пока хранится в метаданных предметов и требует системной проверки установки."
+  ],
+  "itemsDetail": [
+    {
+      "id": "bb9dec6bc18af034",
+      "key": "s-omnibus",
+      "name": "Big MT «Омнибус» — всетелевая нейрошина",
+      "class": "S",
+      "folderId": "1b577b5a847d6f9d",
+      "sort": 100000,
+      "price": 73402,
+      "condition": 800,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "all",
+          "path": "system.limbs.all.implantLimitBonus",
+          "type": "add",
+          "value": 1,
+          "label": "Лимит имплантов всех частей"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 6,
+          "unitPrice": 2952
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 6,
+          "unitPrice": 1560
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 2,
+          "unitPrice": 1661
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 5,
+          "unitPrice": 840
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 3,
+          "unitPrice": 899
+        }
+      ]
+    },
+    {
+      "id": "eadc0eeae40fe49a",
+      "key": "s-hecatoncheir",
+      "name": "Вест-Тек «Гекатонхейр» — боевые миомеры",
+      "class": "S",
+      "folderId": "ff60bb0cafd1a7cb",
+      "sort": 100000,
+      "price": 55269,
+      "condition": 600,
+      "limbs": [
+        "leftArm",
+        "rightArm"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "strength",
+          "path": "system.characteristics.strength",
+          "type": "add",
+          "value": 4,
+          "label": "Сила"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 100,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 50,
+          "label": "Атлетика"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 5,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "quantity": 3,
+          "unitPrice": 2952
+        }
+      ]
+    },
+    {
+      "id": "5cc4e0b581e0ed3e",
+      "key": "s-hermes",
+      "name": "Big MT «Гермес» — локомоторный контур",
+      "class": "S",
+      "folderId": "7f1c8d55e419c9d1",
+      "sort": 100000,
+      "price": 55269,
+      "condition": 600,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 3,
+          "label": "Ловкость"
+        },
+        {
+          "kind": "resource",
+          "key": "movementPoints",
+          "path": "system.resources.movementPoints.bonus",
+          "type": "add",
+          "value": 2,
+          "label": "Очки передвижения"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "athletics",
+          "path": "system.skills.athletics.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 100,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 50,
+          "label": "Скрытность"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 5,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "quantity": 3,
+          "unitPrice": 2952
+        }
+      ]
+    },
+    {
+      "id": "71a18bf90bdcc2b9",
+      "key": "s-aegis",
+      "name": "NEMEAN «Эгида» — адаптивная дерма",
+      "class": "S",
+      "folderId": "a025a330f9af7c21",
+      "sort": 100000,
+      "price": 53634,
+      "condition": 600,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [],
+      "mitigation": {
+        "mode": "defense",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "piercing": 38,
+          "slashing": 38,
+          "bludgeoning": 38,
+          "firearm": 38,
+          "energy": 22,
+          "fire": 22,
+          "cryo": 22,
+          "electric": 22,
+          "acid": 22
+        }
+      },
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 2,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 3,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 4,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "k2xwBuAEJRfFPuCy",
+          "name": "Компонент армирования S класса",
+          "quantity": 4,
+          "unitPrice": 2952
+        }
+      ]
+    },
+    {
+      "id": "990dbc785e34d840",
+      "key": "s-ares",
+      "name": "Вест-Тек «Арес» — тотальный боевой контур",
+      "class": "S",
+      "folderId": "1b577b5a847d6f9d",
+      "sort": 200000,
+      "price": 51195,
+      "condition": 600,
+      "limbs": [
+        "head",
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 2,
+          "label": "Ловкость"
+        },
+        {
+          "kind": "allCombatAdvantage",
+          "key": "allCombat",
+          "path": "system.combat.all.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: все атакующие проверки"
+        },
+        {
+          "kind": "initiativeAdvantage",
+          "key": "initiative",
+          "path": "system.attributes.initiative.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество инициативы"
+        },
+        {
+          "kind": "combatValue",
+          "key": "accuracy",
+          "path": "system.combat.accuracy",
+          "type": "add",
+          "value": 20,
+          "label": "Точность всех атак"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 6,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 4,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 2,
+          "unitPrice": 899
+        }
+      ]
+    },
+    {
+      "id": "1b644ccc812704fc",
+      "key": "s-chimera",
+      "name": "Мед-Тек «Химера» — эндокринная матрица",
+      "class": "S",
+      "folderId": "efe3f841c3f9bf9d",
+      "sort": 100000,
+      "price": 49502,
+      "condition": 600,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "endurance",
+          "path": "system.characteristics.endurance",
+          "type": "add",
+          "value": 3,
+          "label": "Выносливость"
+        },
+        {
+          "kind": "characteristic",
+          "key": "charisma",
+          "path": "system.characteristics.charisma",
+          "type": "add",
+          "value": 2,
+          "label": "Харизма"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "resilience",
+          "path": "system.skills.resilience.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 70,
+          "label": "Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 50,
+          "label": "Красноречие"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 4,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 5,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 4,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
+      "id": "07bb629d44e49d96",
+      "key": "s-lazarus",
+      "name": "PHOENIX «Лазарь» — регенеративный орган",
+      "class": "S",
+      "folderId": "a025a330f9af7c21",
+      "sort": 200000,
+      "price": 45210,
+      "condition": 600,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "endurance",
+          "path": "system.characteristics.endurance",
+          "type": "add",
+          "value": 3,
+          "label": "Выносливость"
+        },
+        {
+          "kind": "periodicHealing",
+          "key": "healing",
+          "path": "fallout-maw.healing",
+          "type": "add",
+          "value": 5,
+          "label": "Заживление каждые 6 секунд"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 60,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 2,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 6,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 5,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
+      "id": "765daf16b8fd7f25",
+      "key": "s-orpheus",
+      "name": "Мед-Тек «Орфей» — эмпатическая сеть",
+      "class": "S",
+      "folderId": "1b577b5a847d6f9d",
+      "sort": 300000,
+      "price": 41691,
+      "condition": 600,
+      "limbs": [
+        "head",
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "charisma",
+          "path": "system.characteristics.charisma",
+          "type": "add",
+          "value": 3,
+          "label": "Харизма"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "speech",
+          "path": "system.skills.speech.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 80,
+          "label": "Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 40,
+          "label": "Азарт"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 4,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 3,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
+      "id": "7cdbe62c32df3ee6",
+      "key": "s-laplace",
+      "name": "РобКо «Лаплас» — вероятностная матрица",
+      "class": "S",
+      "folderId": "1b577b5a847d6f9d",
+      "sort": 400000,
+      "price": 41099,
+      "condition": 600,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "luck",
+          "path": "system.characteristics.luck",
+          "type": "add",
+          "value": 3,
+          "label": "Удача"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "gambling",
+          "path": "system.skills.gambling.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Азарт"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 80,
+          "label": "Азарт"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Красноречие"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 5,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
+      "id": "934091f2bfbbab60",
+      "key": "s-cassandra",
+      "name": "Big MT «Кассандра» — предиктивная оптика",
+      "class": "S",
+      "folderId": "64f3b43561845af3",
+      "sort": 100000,
+      "price": 41099,
+      "condition": 600,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "perception",
+          "path": "system.characteristics.perception",
+          "type": "add",
+          "value": 3,
+          "label": "Восприятие"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 5,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
+      "id": "cf38d272273cad54",
+      "key": "s-mnemosyne",
+      "name": "Big MT «Мнемозина» — когнитивное ядро",
+      "class": "S",
+      "folderId": "1b577b5a847d6f9d",
+      "sort": 500000,
+      "price": 41099,
+      "condition": 600,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "intelligence",
+          "path": "system.characteristics.intelligence",
+          "type": "add",
+          "value": 3,
+          "label": "Интеллект"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "science",
+          "path": "system.skills.science.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 50,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 35,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 35,
+          "label": "Ремесло"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 5,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ]
+    },
+    {
+      "id": "4e3278a6374fe9d6",
+      "key": "s-ghost",
+      "name": "Big MT «Призрак» — бесшумный моторный контур",
+      "class": "S",
+      "folderId": "a025a330f9af7c21",
+      "sort": 300000,
+      "price": 41099,
+      "condition": 600,
+      "limbs": [
+        "torso",
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 2,
+          "label": "Ловкость"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "stealth",
+          "path": "system.skills.stealth.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 100,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 50,
+          "label": "Атлетика"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 220,
+      "craftComponents": [
+        {
+          "id": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "quantity": 4,
+          "unitPrice": 2952
+        },
+        {
+          "id": "tyqQLLfOSUDaCc2Z",
+          "name": "Компонент химиката S класса",
+          "quantity": 1,
+          "unitPrice": 1661
+        },
+        {
+          "id": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "id": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "quantity": 1,
+          "unitPrice": 2952
+        }
+      ]
+    },
+    {
+      "id": "a6642e2e3044f5eb",
+      "key": "a-prometheus",
+      "name": "Вест-Тек «Прометей» — боевой ускоритель",
+      "class": "A",
+      "folderId": "6b140ca712b4efc5",
+      "sort": 100000,
+      "price": 18727,
+      "condition": 500,
+      "limbs": [
+        "head",
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 2,
+          "label": "Ловкость"
+        },
+        {
+          "kind": "resource",
+          "key": "actionPoints",
+          "path": "system.resources.actionPoints.bonus",
+          "type": "add",
+          "value": 1,
+          "label": "Очки действия"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Дальний бой"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 2,
+          "unitPrice": 899
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "df6ad20d1b3317b9",
+      "key": "a-leg-bus",
+      "name": "Тазовая шина «Две ноги»",
+      "class": "A",
+      "folderId": "9a69dae184819554",
+      "sort": 100000,
+      "price": 18077,
+      "condition": 600,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "leftLeg",
+          "path": "system.limbs.leftLeg.implantLimitBonus",
+          "type": "add",
+          "value": 1,
+          "label": "Лимит имплантов: Левая нога"
+        },
+        {
+          "kind": "implantLimit",
+          "key": "rightLeg",
+          "path": "system.limbs.rightLeg.implantLimitBonus",
+          "type": "add",
+          "value": 1,
+          "label": "Лимит имплантов: Правая нога"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "126643caaec3131c",
+      "key": "a-arm-bus",
+      "name": "Торакальная шина «Две руки»",
+      "class": "A",
+      "folderId": "bf60db24262f1a2a",
+      "sort": 100000,
+      "price": 18077,
+      "condition": 600,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "leftArm",
+          "path": "system.limbs.leftArm.implantLimitBonus",
+          "type": "add",
+          "value": 1,
+          "label": "Лимит имплантов: Левая рука"
+        },
+        {
+          "kind": "implantLimit",
+          "key": "rightArm",
+          "path": "system.limbs.rightArm.implantLimitBonus",
+          "type": "add",
+          "value": 1,
+          "label": "Лимит имплантов: Правая рука"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "12710fab6d7d0da7",
+      "key": "a-hephaestus",
+      "name": "Вест-Тек «Гефест» — прецизионные миомеры",
+      "class": "A",
+      "folderId": "81b47687c1e4abf3",
+      "sort": 100000,
+      "price": 17236,
+      "condition": 500,
+      "limbs": [
+        "leftArm",
+        "rightArm"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "strength",
+          "path": "system.characteristics.strength",
+          "type": "add",
+          "value": 2,
+          "label": "Сила"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Ремесло"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 4,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 2,
+          "unitPrice": 1278
+        }
+      ]
+    },
+    {
+      "id": "0260e41dc28333a5",
+      "key": "a-mercury",
+      "name": "Big MT «Меркурий» — кинетические сухожилия",
+      "class": "A",
+      "folderId": "ee92fafbda26b3d5",
+      "sort": 100000,
+      "price": 17236,
+      "condition": 500,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 2,
+          "label": "Ловкость"
+        },
+        {
+          "kind": "resource",
+          "key": "movementPoints",
+          "path": "system.resources.movementPoints.bonus",
+          "type": "add",
+          "value": 1,
+          "label": "Очки передвижения"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "athletics",
+          "path": "system.skills.athletics.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Скрытность"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 4,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 2,
+          "unitPrice": 1278
+        }
+      ]
+    },
+    {
+      "id": "604476f94c35cddf",
+      "key": "a-nemean-ii",
+      "name": "NEMEAN Mk II «Чешуя»",
+      "class": "A",
+      "folderId": "bf60db24262f1a2a",
+      "sort": 200000,
+      "price": 16099,
+      "condition": 500,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [],
+      "mitigation": {
+        "mode": "defense",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "piercing": 22,
+          "slashing": 22,
+          "bludgeoning": 22,
+          "firearm": 22,
+          "energy": 10,
+          "acid": 10
+        }
+      },
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 2,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "HeUFgD0VHAH8XazV",
+          "name": "Компонент армирования A класса",
+          "quantity": 3,
+          "unitPrice": 1278
+        }
+      ]
+    },
+    {
+      "id": "88035fbeb06d23ae",
+      "key": "a-cerberus-eye",
+      "name": "Вест-Тек «Цербер» — трёхканальная оптика",
+      "class": "A",
+      "folderId": "78b7d8933430b79b",
+      "sort": 100000,
+      "price": 15276,
+      "condition": 500,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "perception",
+          "path": "system.characteristics.perception",
+          "type": "add",
+          "value": 2,
+          "label": "Восприятие"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "3dbe00859a393053",
+      "key": "a-energy-lattice",
+      "name": "Нейрорешётка «Фарадей»",
+      "class": "A",
+      "folderId": "6b140ca712b4efc5",
+      "sort": 200000,
+      "price": 15276,
+      "condition": 500,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "intelligence",
+          "path": "system.characteristics.intelligence",
+          "type": "add",
+          "value": 2,
+          "label": "Интеллект"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "energy",
+          "path": "system.skills.energy.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Наука"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "fe8f9233f3e7c9e3",
+      "key": "a-grx",
+      "name": "Big MT GRX — рефлекторный ускоритель",
+      "class": "A",
+      "folderId": "6b140ca712b4efc5",
+      "sort": 300000,
+      "price": 15276,
+      "condition": 500,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "resource",
+          "key": "actionPoints",
+          "path": "system.resources.actionPoints.bonus",
+          "type": "add",
+          "value": 1,
+          "label": "Очки действия"
+        },
+        {
+          "kind": "initiativeAdvantage",
+          "key": "initiative",
+          "path": "system.attributes.initiative.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество инициативы"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Дальний бой"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 5,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "d478db32b1725fe0",
+      "key": "a-phoenix",
+      "name": "PHOENIX — моноцитарный регенератор",
+      "class": "A",
+      "folderId": "bf60db24262f1a2a",
+      "sort": 300000,
+      "price": 14496,
+      "condition": 500,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "endurance",
+          "path": "system.characteristics.endurance",
+          "type": "add",
+          "value": 2,
+          "label": "Выносливость"
+        },
+        {
+          "kind": "periodicHealing",
+          "key": "healing",
+          "path": "fallout-maw.healing",
+          "type": "add",
+          "value": 1,
+          "label": "Заживление каждые 6 секунд"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Стойкость"
+        },
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 2,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 4,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "b46dc082e3d291ce",
+      "key": "a-predator",
+      "name": "Спинальный контур «Хищник»",
+      "class": "A",
+      "folderId": "bf60db24262f1a2a",
+      "sort": 400000,
+      "price": 13273,
+      "condition": 500,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 2,
+          "label": "Ловкость"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 40,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Атлетика"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 4,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 1,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "quantity": 1,
+          "unitPrice": 1278
+        }
+      ]
+    },
+    {
+      "id": "b065bbd6b341e952",
+      "key": "a-orator",
+      "name": "Резонатор личности «Серебряный язык»",
+      "class": "A",
+      "folderId": "6b140ca712b4efc5",
+      "sort": 400000,
+      "price": 12765,
+      "condition": 500,
+      "limbs": [
+        "head",
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "charisma",
+          "path": "system.characteristics.charisma",
+          "type": "add",
+          "value": 2,
+          "label": "Харизма"
+        },
+        {
+          "kind": "skillAdvantage",
+          "key": "speech",
+          "path": "system.skills.speech.advantage",
+          "type": "add",
+          "value": 1,
+          "label": "Преимущество: Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Азарт"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 160,
+      "craftComponents": [
+        {
+          "id": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "quantity": 4,
+          "unitPrice": 1093
+        },
+        {
+          "id": "T2Z8K1muRKCZSxRX",
+          "name": "Компонент химиката A класса",
+          "quantity": 2,
+          "unitPrice": 899
+        },
+        {
+          "id": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ]
+    },
+    {
+      "id": "4ed0e767c9e82728",
+      "key": "b-local-socket-eyes",
+      "name": "Риппердок L-1 — разветвитель: Глаза",
+      "class": "B",
+      "folderId": "af0a4eebfd7d84b9",
+      "sort": 100000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "eyes",
+          "path": "system.limbs.eyes.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Глаза"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "4904aa18717c651d",
+      "key": "b-local-socket-head",
+      "name": "Риппердок L-1 — разветвитель: Голова",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 100000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "head",
+          "path": "system.limbs.head.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Голова"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "672e78c2e0f343e9",
+      "key": "b-local-socket-leftLeg",
+      "name": "Риппердок L-1 — разветвитель: Левая нога",
+      "class": "B",
+      "folderId": "3ef153b94dbfdeae",
+      "sort": 100000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "leftLeg"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "leftLeg",
+          "path": "system.limbs.leftLeg.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Левая нога"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "2a0efdd6d94410ac",
+      "key": "b-local-socket-leftArm",
+      "name": "Риппердок L-1 — разветвитель: Левая рука",
+      "class": "B",
+      "folderId": "290a39934faff97a",
+      "sort": 100000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "leftArm"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "leftArm",
+          "path": "system.limbs.leftArm.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Левая рука"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "6bc7529bafaa90ee",
+      "key": "b-local-socket-groin",
+      "name": "Риппердок L-1 — разветвитель: Пах",
+      "class": "B",
+      "folderId": "62c1a1e53711ada6",
+      "sort": 100000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "groin",
+          "path": "system.limbs.groin.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Пах"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "4b0ae844e8eaa819",
+      "key": "b-local-socket-rightLeg",
+      "name": "Риппердок L-1 — разветвитель: Правая нога",
+      "class": "B",
+      "folderId": "3ef153b94dbfdeae",
+      "sort": 200000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "rightLeg",
+          "path": "system.limbs.rightLeg.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Правая нога"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "ce7ec7420f3b0339",
+      "key": "b-local-socket-rightArm",
+      "name": "Риппердок L-1 — разветвитель: Правая рука",
+      "class": "B",
+      "folderId": "290a39934faff97a",
+      "sort": 200000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "rightArm"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "rightArm",
+          "path": "system.limbs.rightArm.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Правая рука"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "10468cdbcd4a8bba",
+      "key": "b-local-socket-torso",
+      "name": "Риппердок L-1 — разветвитель: Туловище",
+      "class": "B",
+      "folderId": "49a221b0d0d65043",
+      "sort": 100000,
+      "price": 8528,
+      "condition": 500,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "implantLimit",
+          "key": "torso",
+          "path": "system.limbs.torso.implantLimitBonus",
+          "type": "add",
+          "value": 2,
+          "label": "Лимит имплантов: Туловище"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 6,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "d962dac748270756",
+      "key": "b-nemean",
+      "name": "NEMEAN — субдермальная броня",
+      "class": "B",
+      "folderId": "49a221b0d0d65043",
+      "sort": 200000,
+      "price": 7556,
+      "condition": 400,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [],
+      "mitigation": {
+        "mode": "defense",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "piercing": 12,
+          "slashing": 12,
+          "bludgeoning": 12,
+          "firearm": 12
+        }
+      },
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 3,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "SDZz9ePMcdPVZQhg",
+          "name": "Компонент армирования B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        }
+      ]
+    },
+    {
+      "id": "6af45786662bd888",
+      "key": "b-energy-sync",
+      "name": "Синхронизатор поля «Тесла»",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 200000,
+      "price": 6759,
+      "condition": 400,
+      "limbs": [
+        "head",
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 55,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Наука"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 5,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 3,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "0452404224e87b74",
+      "key": "b-luck",
+      "name": "РобКо «Вероятность» — калькулятор риска",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 300000,
+      "price": 6256,
+      "condition": 400,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "luck",
+          "path": "system.characteristics.luck",
+          "type": "add",
+          "value": 2,
+          "label": "Удача"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 5,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "461c1a5471460d8a",
+      "key": "b-ballistic-eye",
+      "name": "Баллистический визор «Следопыт»",
+      "class": "B",
+      "folderId": "af0a4eebfd7d84b9",
+      "sort": 200000,
+      "price": 5754,
+      "condition": 400,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 5,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "70d35ac3c444527c",
+      "key": "b-intelligence",
+      "name": "РобКо «Логик» — когнитивный сопроцессор",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 400000,
+      "price": 5754,
+      "condition": 400,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "intelligence",
+          "path": "system.characteristics.intelligence",
+          "type": "add",
+          "value": 2,
+          "label": "Интеллект"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 5,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "557235bcf9184da2",
+      "key": "b-strength",
+      "name": "Вест-Тек «Геркулес» — силовой миомер",
+      "class": "B",
+      "folderId": "290a39934faff97a",
+      "sort": 300000,
+      "price": 5519,
+      "condition": 400,
+      "limbs": [
+        "leftArm",
+        "rightArm",
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "strength",
+          "path": "system.characteristics.strength",
+          "type": "add",
+          "value": 2,
+          "label": "Сила"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        }
+      ]
+    },
+    {
+      "id": "92c0d17754fb32ff",
+      "key": "b-endurance",
+      "name": "Мед-Тек «Атлас» — кардиорегулятор",
+      "class": "B",
+      "folderId": "49a221b0d0d65043",
+      "sort": 300000,
+      "price": 5343,
+      "condition": 400,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "endurance",
+          "path": "system.characteristics.endurance",
+          "type": "add",
+          "value": 2,
+          "label": "Выносливость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 3,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "Odn6MG7PkbQc62zX",
+          "name": "Компонент механики B класса",
+          "quantity": 1,
+          "unitPrice": 625
+        }
+      ]
+    },
+    {
+      "id": "d557367abe380e78",
+      "key": "b-adrenal",
+      "name": "Адреналовый каскад «Красная зона»",
+      "class": "B",
+      "folderId": "49a221b0d0d65043",
+      "sort": 400000,
+      "price": 5138,
+      "condition": 400,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 30,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 2,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 4,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "0bdc8849ba22a49e",
+      "key": "b-stealth-combat",
+      "name": "Нейроинтерфейс «Тихий бой»",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 500000,
+      "price": 5016,
+      "condition": 400,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 45,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 35,
+          "label": "Ближний бой"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "af37291ba236275d",
+      "key": "b-dexterity",
+      "name": "РобКо «Рефлекс» — моторный ускоритель",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 600000,
+      "price": 5016,
+      "condition": 400,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "dexterity",
+          "path": "system.characteristics.dexterity",
+          "type": "add",
+          "value": 2,
+          "label": "Ловкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "2f5e8c90717fe75c",
+      "key": "b-perception",
+      "name": "РобКо «Смотритель» — усилитель зрительного нерва",
+      "class": "B",
+      "folderId": "af0a4eebfd7d84b9",
+      "sort": 300000,
+      "price": 5016,
+      "condition": 400,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "perception",
+          "path": "system.characteristics.perception",
+          "type": "add",
+          "value": 2,
+          "label": "Восприятие"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 4,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 1,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "1e4bff41869a1824",
+      "key": "b-charisma",
+      "name": "Мед-Тек «Эмпат» — социальный резонатор",
+      "class": "B",
+      "folderId": "401d9446ba890de0",
+      "sort": 700000,
+      "price": 4811,
+      "condition": 400,
+      "limbs": [
+        "head",
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "characteristic",
+          "key": "charisma",
+          "path": "system.characteristics.charisma",
+          "type": "add",
+          "value": 2,
+          "label": "Харизма"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 110,
+      "craftComponents": [
+        {
+          "id": "0QfaywkaOisatK8N",
+          "name": "Компонент электроники B класса",
+          "quantity": 3,
+          "unitPrice": 625
+        },
+        {
+          "id": "2HRhGkYO5fkTukKZ",
+          "name": "Компонент химиката B класса",
+          "quantity": 2,
+          "unitPrice": 451
+        },
+        {
+          "id": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "004e28205fb83393",
+      "key": "c-hidden-claw",
+      "name": "Подкожный клинок «Коготь»",
+      "class": "C",
+      "folderId": "b54c36faf63a505f",
+      "sort": 100000,
+      "price": 2126,
+      "condition": 300,
+      "limbs": [
+        "leftArm",
+        "rightArm"
+      ],
+      "effects": [],
+      "mitigation": null,
+      "weapon": true,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "UixDzPJuR77ohltt",
+          "name": "Компонент армирования C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 2,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "11f7b67f618889b9",
+      "key": "c-y3",
+      "name": "Big MT Y-3 «Чистая кровь»",
+      "class": "C",
+      "folderId": "6c1d03b6cec4ec65",
+      "sort": 100000,
+      "price": 1984,
+      "condition": 300,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [],
+      "mitigation": {
+        "mode": "resistance",
+        "limbKeys": [
+          "head",
+          "eyes",
+          "torso",
+          "groin",
+          "leftArm",
+          "rightArm",
+          "leftLeg",
+          "rightLeg"
+        ],
+        "values": {
+          "poison": 15,
+          "radiation": 15
+        }
+      },
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 5,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 3,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "95e1b1480fe3d2ff",
+      "key": "c-pituitary",
+      "name": "Мед-Тек «Гипофиз» — эндокринный корректор",
+      "class": "C",
+      "folderId": "0a027eeda304c57e",
+      "sort": 100000,
+      "price": 1427,
+      "condition": 300,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 2,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 2,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "29eb9426a704cffe",
+      "key": "c-sinatra",
+      "name": "Голосовой резонатор «Синатра»",
+      "class": "C",
+      "folderId": "a7ede32efab96747",
+      "sort": 100000,
+      "price": 1393,
+      "condition": 300,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 25,
+          "label": "Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Азарт"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "47075f5b330d7068",
+      "key": "c-marathon",
+      "name": "Кардиопомпа «Марафон»",
+      "class": "C",
+      "folderId": "6c1d03b6cec4ec65",
+      "sort": 200000,
+      "price": 1393,
+      "condition": 300,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "Asz5d8D4m2AuyfdE",
+          "name": "Компонент механики C класса",
+          "quantity": 1,
+          "unitPrice": 224
+        }
+      ]
+    },
+    {
+      "id": "823cf14ca5e27701",
+      "key": "c-kestrel",
+      "name": "Оптический комплекс «Пустельга»",
+      "class": "C",
+      "folderId": "6dae7fa83bca5efb",
+      "sort": 100000,
+      "price": 1393,
+      "condition": 300,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 4,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "92daa29e46589979",
+      "key": "c-psi-regulator",
+      "name": "Пси-регулятор «Заземление»",
+      "class": "C",
+      "folderId": "a7ede32efab96747",
+      "sort": 200000,
+      "price": 1149,
+      "condition": 300,
+      "limbs": [
+        "head",
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "energy",
+          "path": "system.skills.energy.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Контроль энергии"
+        },
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Наука"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "e3db8cc579519362",
+      "key": "c-cognitor",
+      "name": "РобКо NAR-1 «Когнитор»",
+      "class": "C",
+      "folderId": "a7ede32efab96747",
+      "sort": 300000,
+      "price": 1149,
+      "condition": 300,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Ремесло"
+        },
+        {
+          "kind": "skill",
+          "key": "gambling",
+          "path": "system.skills.gambling.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Азарт"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "45386c4457d96eb5",
+      "key": "c-steady-hand",
+      "name": "Синаптический стабилизатор «Точная рука»",
+      "class": "C",
+      "folderId": "b54c36faf63a505f",
+      "sort": 200000,
+      "price": 1149,
+      "condition": 300,
+      "limbs": [
+        "leftArm",
+        "rightArm"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "doctor",
+          "path": "system.skills.doctor.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Доктор"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Ремесло"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "ade8b175d928ebf8",
+      "key": "c-m5",
+      "name": "Big MT M-5 «Тихоход»",
+      "class": "C",
+      "folderId": "d14ec3edead0bd87",
+      "sort": 100000,
+      "price": 1149,
+      "condition": 300,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Скрытность"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Атлетика"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 70,
+      "craftComponents": [
+        {
+          "id": "W22bRWHvKwAwdmpE",
+          "name": "Компонент электроники C класса",
+          "quantity": 3,
+          "unitPrice": 224
+        },
+        {
+          "id": "YGNLXmADX9pkDtek",
+          "name": "Компонент химиката C класса",
+          "quantity": 1,
+          "unitPrice": 128
+        },
+        {
+          "id": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "id": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ]
+    },
+    {
+      "id": "336ff22fcb95fa10",
+      "key": "d-coagulator",
+      "name": "Подкожный коагулятор «Стежок»",
+      "class": "D",
+      "folderId": "4ae8bc29be140443",
+      "sort": 100000,
+      "price": 400,
+      "condition": 200,
+      "limbs": [
+        "torso"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 20,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 40,
+      "craftComponents": [
+        {
+          "id": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "quantity": 4,
+          "unitPrice": 42
+        },
+        {
+          "id": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "quantity": 4,
+          "unitPrice": 31
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
+      "id": "b6fcb400799e2bfd",
+      "key": "d-endocrine",
+      "name": "Эндокринный стабилизатор «Ровный пульс»",
+      "class": "D",
+      "folderId": "2369f6db90e42510",
+      "sort": 100000,
+      "price": 400,
+      "condition": 200,
+      "limbs": [
+        "groin"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "speech",
+          "path": "system.skills.speech.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Красноречие"
+        },
+        {
+          "kind": "skill",
+          "key": "resilience",
+          "path": "system.skills.resilience.bonus",
+          "type": "add",
+          "value": 10,
+          "label": "Стойкость"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 40,
+      "craftComponents": [
+        {
+          "id": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "quantity": 4,
+          "unitPrice": 42
+        },
+        {
+          "id": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "quantity": 4,
+          "unitPrice": 31
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
+      "id": "c25f0e44b951990d",
+      "key": "d-arm-stimulator",
+      "name": "Миостимулятор «Рывок»",
+      "class": "D",
+      "folderId": "7692b4a372a95843",
+      "sort": 100000,
+      "price": 336,
+      "condition": 200,
+      "limbs": [
+        "leftArm",
+        "rightArm"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "meleeCombat",
+          "path": "system.skills.meleeCombat.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Ближний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Атлетика"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 40,
+      "craftComponents": [
+        {
+          "id": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "quantity": 4,
+          "unitPrice": 42
+        },
+        {
+          "id": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
+      "id": "662d96d8fbbe7b6f",
+      "key": "d-cheat-sheet",
+      "name": "Нейрошунт «Шпаргалка»",
+      "class": "D",
+      "folderId": "1667e60c05dfc247",
+      "sort": 100000,
+      "price": 336,
+      "condition": 200,
+      "limbs": [
+        "head"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "science",
+          "path": "system.skills.science.bonus",
+          "type": "add",
+          "value": 12,
+          "label": "Наука"
+        },
+        {
+          "kind": "skill",
+          "key": "repair",
+          "path": "system.skills.repair.bonus",
+          "type": "add",
+          "value": 8,
+          "label": "Ремесло"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 40,
+      "craftComponents": [
+        {
+          "id": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "quantity": 4,
+          "unitPrice": 42
+        },
+        {
+          "id": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
+      "id": "f890c9d6dda40435",
+      "key": "d-retinal-mark",
+      "name": "Ретинальная метка «Искатель»",
+      "class": "D",
+      "folderId": "75f9bac0124fde61",
+      "sort": 100000,
+      "price": 336,
+      "condition": 200,
+      "limbs": [
+        "eyes"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "rangedCombat",
+          "path": "system.skills.rangedCombat.bonus",
+          "type": "add",
+          "value": 15,
+          "label": "Дальний бой"
+        },
+        {
+          "kind": "skill",
+          "key": "naturalist",
+          "path": "system.skills.naturalist.bonus",
+          "type": "add",
+          "value": 5,
+          "label": "Натуралист"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 40,
+      "craftComponents": [
+        {
+          "id": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "quantity": 4,
+          "unitPrice": 42
+        },
+        {
+          "id": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    },
+    {
+      "id": "0225c94d80031194",
+      "key": "d-leg-tensioner",
+      "name": "Сухожильный натяжитель «Пружина»",
+      "class": "D",
+      "folderId": "5ed4b7686f2cc1e7",
+      "sort": 100000,
+      "price": 336,
+      "condition": 200,
+      "limbs": [
+        "leftLeg",
+        "rightLeg"
+      ],
+      "effects": [
+        {
+          "kind": "skill",
+          "key": "athletics",
+          "path": "system.skills.athletics.bonus",
+          "type": "add",
+          "value": 14,
+          "label": "Атлетика"
+        },
+        {
+          "kind": "skill",
+          "key": "stealth",
+          "path": "system.skills.stealth.bonus",
+          "type": "add",
+          "value": 6,
+          "label": "Скрытность"
+        }
+      ],
+      "mitigation": null,
+      "weapon": false,
+      "craftDifficulty": 40,
+      "craftComponents": [
+        {
+          "id": "kicA1KGhQ2MFDInk",
+          "name": "Компонент электроники D класса",
+          "quantity": 4,
+          "unitPrice": 42
+        },
+        {
+          "id": "iFCrgqlvEdFwWtxB",
+          "name": "Компонент химиката D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "id": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ]
+    }
+  ]
+}

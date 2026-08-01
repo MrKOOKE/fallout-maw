@@ -4,6 +4,7 @@ import {
   buildActorFormulaReferenceData
 } from "../formulas/actor-references.mjs";
 import { evaluateFormula, evaluateSkillFormulas, getSkillValues } from "../formulas/evaluation.mjs";
+import { getCharacteristicAliases, getSkillAliases } from "../formulas/normalization.mjs";
 import { DEFAULT_NEEDS } from "../config/defaults.mjs";
 import {
   getActorNeedSettings,
@@ -128,12 +129,34 @@ export function getActorFormulaApplicationPhase(change = {}, actor = null, { for
 export function formulaUsesPreparedActorReferences(formula = "", data = {}) {
   const source = String(formula ?? "");
   if (!source) return false;
+  const characteristicAliases = getFormulaDefinitionAliasSet(
+    data,
+    "characteristicSettings",
+    "_formulaCharacteristicAliases",
+    getCharacteristicAliases
+  );
+  const skillAliases = getFormulaDefinitionAliasSet(
+    data,
+    "skillSettings",
+    "_formulaSkillAliases",
+    getSkillAliases
+  );
   const variableAliases = getFormulaAliasSet(data, "formulaVariables", "_formulaVariableAliases");
   const referenceAliases = getFormulaAliasSet(data, "formulaReferences", "_formulaReferenceAliases");
   for (const match of source.matchAll(FORMULA_IDENTIFIER_PATTERN)) {
-    const identifier = String(match[0] ?? "").replace(/^@/, "");
+    const token = String(match[0] ?? "");
+    const explicitReference = token.startsWith("@");
+    const identifier = token.replace(/^@/, "");
     if (!identifier) continue;
     const normalized = identifier.toLowerCase();
+    // Match the evaluator's identifier precedence. A bare characteristic or
+    // skill alias wins over an equally named prepared indicator variable.
+    // In particular, `con` is Endurance even when a consciousness resource
+    // also exposes `con` as an indicator alias.
+    if (!explicitReference && (
+      characteristicAliases.has(normalized)
+      || skillAliases.has(normalized)
+    )) continue;
     if (variableAliases.has(normalized)) return true;
     if (
       !normalized.startsWith("characteristics.")
@@ -293,6 +316,19 @@ function resolveFormulaDataOption(value) {
 function getFormulaAliasSet(data, sourceKey, cacheKey) {
   if (data?.[cacheKey] instanceof Set) return data[cacheKey];
   const aliases = new Set(Object.keys(data?.[sourceKey] ?? {}).map(key => key.toLowerCase()));
+  if (data && typeof data === "object") {
+    Object.defineProperty(data, cacheKey, {
+      configurable: true,
+      enumerable: false,
+      value: aliases
+    });
+  }
+  return aliases;
+}
+
+function getFormulaDefinitionAliasSet(data, sourceKey, cacheKey, buildAliases) {
+  if (data?.[cacheKey] instanceof Set) return data[cacheKey];
+  const aliases = new Set(Object.keys(buildAliases(data?.[sourceKey])).map(key => key.toLowerCase()));
   if (data && typeof data === "object") {
     Object.defineProperty(data, cacheKey, {
       configurable: true,

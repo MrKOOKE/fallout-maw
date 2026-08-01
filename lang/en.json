@@ -1781,7 +1781,7 @@
       "WeaponRequirementCharacteristic": "Characteristic",
       "WeaponRequirementSkill": "Skill",
       "WeaponRequirementTarget": "Target",
-      "WeaponCostMagazine": "Magazine",
+      "WeaponCostMagazine": "Magazine Consumption per Attack",
       "WeaponCostQuantity": "Item Quantity",
       "WeaponCostCondition": "Condition Cost",
       "WeaponCostEnergy": "Energy Consumption",
