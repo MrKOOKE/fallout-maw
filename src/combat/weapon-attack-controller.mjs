@@ -11705,9 +11705,10 @@ function buildAttackTrajectories(attackerToken, coneGeometry, targets = [], coun
   const trajectories = [];
   const reserved = new Set();
   const spacing = getPelletPointSpacing();
+  const pelletGeometry = getRandomBurstMissGeometry(attackerToken, coneGeometry);
 
   for (let index = 0; index < amount; index += 1) {
-    const trajectory = buildReservedPelletTrajectory(attackerToken, coneGeometry, reserved, spacing);
+    const trajectory = buildReservedPelletTrajectory(attackerToken, pelletGeometry, reserved, spacing);
     trajectories.push(trajectory);
   }
 
@@ -11721,10 +11722,14 @@ function buildAimedAttackTrajectories(attackerToken, coneGeometry, centerTraject
   const trajectories = [centerTrajectory];
   const reserved = new Set();
   const spacing = getPelletPointSpacing();
+  const pelletGeometry = {
+    ...coneGeometry,
+    elevationSlope: Number(centerTrajectory?.elevationSlope) || 0
+  };
   reservePelletPoint(centerTrajectory.end, reserved, spacing, true);
 
   for (let index = 1; index < amount; index += 1) {
-    trajectories.push(buildReservedPelletTrajectory(attackerToken, coneGeometry, reserved, spacing));
+    trajectories.push(buildReservedPelletTrajectory(attackerToken, pelletGeometry, reserved, spacing));
   }
 
   return trajectories;

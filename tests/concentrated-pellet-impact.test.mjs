@@ -128,6 +128,24 @@ test("weapon runtime collapses trajectories and burst bullets before expanding o
   assert.match(hit, /pelletImpactIndex:\s*impactIndex/);
 });
 
+test("all shotgun pellets inherit the selected target elevation slope", () => {
+  const ordinary = sliceBetween(
+    controllerSource,
+    "function buildAttackTrajectories",
+    "function buildAimedAttackTrajectories"
+  );
+  const aimed = sliceBetween(
+    controllerSource,
+    "function buildAimedAttackTrajectories",
+    "function buildReservedPelletTrajectory"
+  );
+
+  assert.match(ordinary, /const pelletGeometry = getRandomBurstMissGeometry\(attackerToken, coneGeometry\)/);
+  assert.match(ordinary, /buildReservedPelletTrajectory\(attackerToken, pelletGeometry/);
+  assert.match(aimed, /elevationSlope:\s*Number\(centerTrajectory\?\.elevationSlope\) \|\| 0/);
+  assert.match(aimed, /buildReservedPelletTrajectory\(attackerToken, pelletGeometry/);
+});
+
 test("directed melee expands one successful impact before damage mitigation", () => {
   const directed = sliceBetween(
     controllerSource,
