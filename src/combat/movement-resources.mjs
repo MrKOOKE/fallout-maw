@@ -404,7 +404,7 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
   }
 }
 
-async function runMovementResourceSpendingSerially(actor, operation) {
+export async function runMovementResourceSpendingSerially(actor, operation) {
   const actorKey = String(actor?.uuid ?? actor?.id ?? "");
   if (!actorKey) return operation();
   const previous = movementResourceSpendingQueues.get(actorKey) ?? Promise.resolve();

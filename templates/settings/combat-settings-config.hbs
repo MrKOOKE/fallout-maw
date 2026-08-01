@@ -76,6 +76,33 @@
         </div>
       </section>
 
+      <section class="fallout-maw-combat-settings-section wide" data-combat-settings-section="attack-movement-loss">
+        <header class="fallout-maw-combat-settings-section-header">
+          <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">
+            <i class="fa-solid fa-person-running"></i>
+          </span>
+          <h3>{{localize "FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossTitle"}}</h3>
+        </header>
+        <p class="fallout-maw-combat-settings-description">
+          {{localize "FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossHint"}}
+        </p>
+        <div class="fallout-maw-combat-settings-fields">
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossMode"}}</span>
+            <select name="attackActionPointMovementLoss.mode">
+              {{#each attackActionPointMovementLossModeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label class="fallout-maw-combat-settings-field">
+            <span>{{localize "FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossPercent"}}</span>
+            <input type="number" name="attackActionPointMovementLoss.percent" value="{{settings.attackActionPointMovementLoss.percent}}" min="0" step="1">
+            <small>{{localize "FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossPercentHint"}}</small>
+          </label>
+        </div>
+      </section>
+
       <section class="fallout-maw-combat-settings-section" data-combat-settings-section="limbs">
         <header class="fallout-maw-combat-settings-section-header">
           <span class="fallout-maw-combat-settings-section-icon" aria-hidden="true">

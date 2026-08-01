@@ -57,8 +57,9 @@ import {
   getActorActiveCombat,
   getStrictActionPointState,
   isActorInActiveCombat,
-  spendStrictActionPoints
+  spendStrictActionPointsWithReceipt
 } from "../combat/reaction-resources.mjs";
+import { applyAttackActionPointMovementLoss } from "../combat/attack-action-point-movement-loss.mjs";
 import { getReactionTimeoutMs, getResponsibleOwner, isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { getWeaponActionBlockState } from "./runtime-state.mjs";
 import {
@@ -2272,13 +2273,28 @@ async function executeAbilityActionAttackQuery(data = {}, chainRef = null, autho
   const attackModifier = data.preventCancel
     ? createForcedAttackModifier({ label: getWeaponActionLabel(actionKey) })
     : null;
-  const onBeforeExecute = async () => {
+  const onBeforeExecute = async (execution = {}) => {
     if (actionPointCost <= 0) return true;
     if (!canSpendStrictActionPoints(actor, actionPointCost, { label: getWeaponActionLabel(actionKey) })) return false;
-    await spendStrictActionPoints(actor, actionPointCost, {
+    const transaction = await spendStrictActionPointsWithReceipt(actor, actionPointCost, {
       source: "abilityAction",
       actionKey,
       chainRef
+    });
+    if (transaction.spent !== actionPointCost || !transaction.receipt) return false;
+    await applyAttackActionPointMovementLoss(actor, transaction.receipt.amount, {
+      actorToken: attackerToken,
+      weapon,
+      actionKey,
+      weaponActionKey: actionKey,
+      weaponFunctionId,
+      attackId: execution?.controller?.attackId ?? "",
+      chanceOperationId: execution?.controller?.chanceOperationId
+        ?? execution?.controller?.attackId
+        ?? "",
+      chainRef,
+      requester: "weaponAttack",
+      source: "abilityAction"
     });
     return true;
   };

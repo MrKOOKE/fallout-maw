@@ -155,6 +155,8 @@ const SEARCH_INVENTORY_TRADE_KIND_PERSONAL = "personal";
 const TRADE_OFFER_SIDES = Object.freeze(["searcher", "searched"]);
 const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
+const SEARCH_NOTIFICATION_FALLBACK_ICON = "icons/svg/item-bag.svg";
+const SEARCH_AUDIT_MAX_AGE_MS = 30 * 60 * 1000;
 const TRADE_OFFER_DEFAULT_COLUMNS = 14;
 const TRADE_OFFER_MAX_ROWS = 60;
 const PERSONAL_TRADE_SETTLEMENT_LEDGER_PATH = `flags.${SYSTEM_ID}.inventory.personalTradeSettlements`;
@@ -184,6 +186,7 @@ const pendingSearchInventoryTradeInvites = new Map();
 const pendingSearchInventoryPersonalTradeApprovals = new Map();
 const searchInventoryOperationQueues = new Map();
 const activeSearchInventoryTradeSessions = new Map();
+const activeSearchInventoryAudits = new Map();
 
 export function registerSearchInventorySocket() {
   registerDroppedItemsSearchOpener(openSearchInventoryWindow);
@@ -208,13 +211,25 @@ export async function openSearchInventoryWindow({ searcherActor, searchedActor }
 }
 
 function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {}) {
+  const searchAuditSessionId = foundry.utils.randomID();
   searchInventoryWindow ??= new SearchInventoryApplication();
   searchInventoryWindow.setActors(searcherActor, searchedActor, {
     mode: SEARCH_INVENTORY_MODE_SEARCH,
     sessionId: "",
-    tradeCurrencyKey: ""
+    tradeCurrencyKey: "",
+    searchAuditSessionId
   });
-  return searchInventoryWindow.render({ force: true });
+  const result = searchInventoryWindow.render({ force: true });
+  void requestSearchAuditStart({
+    searchAuditSessionId,
+    searcherActorUuid: searcherActor.uuid,
+    searchedActorUuid: searchedActor.uuid,
+    searcherActorName: searcherActor.name ?? "",
+    searchedActorName: searchedActor.name ?? "",
+    searcherActorImg: searcherActor.img ?? "",
+    searchedActorImg: searchedActor.img ?? ""
+  }).catch(error => console.error(`${SYSTEM_ID} | Search audit start failed`, error));
+  return result;
 }
 
 export async function requestTradeInventoryWindow({ traderActor, tradeActor } = {}) {
@@ -360,6 +375,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #searcherActor = null;
   #searchedActor = null;
   #mode = SEARCH_INVENTORY_MODE_SEARCH;
+  #searchAuditSessionId = "";
   #tradeSessionId = "";
   #tradeCurrencyKey = "";
   #tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR;
@@ -481,13 +497,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tradeRole = TRADE_ROLE_PARTICIPANT,
     tradeSide = "",
     tradeSnapshot = null,
-    tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR
+    tradeKind = SEARCH_INVENTORY_TRADE_KIND_REGULAR,
+    searchAuditSessionId = ""
   } = {}) {
     this.#searcherActorUuid = searcherActor?.uuid ?? "";
     this.#searchedActorUuid = searchedActor?.uuid ?? "";
     this.#searcherActor = searcherActor ?? null;
     this.#searchedActor = searchedActor ?? null;
     this.#mode = mode === SEARCH_INVENTORY_MODE_TRADE ? SEARCH_INVENTORY_MODE_TRADE : SEARCH_INVENTORY_MODE_SEARCH;
+    this.#searchAuditSessionId = this.#isTradeMode()
+      ? ""
+      : (String(searchAuditSessionId ?? "") || foundry.utils.randomID());
     this.#tradeSessionId = String(sessionId ?? "");
     this.#tradeCurrencyKey = normalizeTradeCurrencyKey(tradeCurrencyKey);
     this.#tradeKind = tradeKind === SEARCH_INVENTORY_TRADE_KIND_PERSONAL
@@ -700,6 +720,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async _onClose(options) {
+    const searchAuditPayload = !this.#isTradeMode() && this.#searchAuditSessionId
+      ? {
+        searchAuditSessionId: this.#searchAuditSessionId,
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid,
+        searcherActorName: this.#searcherActor?.name ?? "",
+        searchedActorName: this.#searchedActor?.name ?? "",
+        searcherActorImg: this.#searcherActor?.img ?? "",
+        searchedActorImg: this.#searchedActor?.img ?? ""
+      }
+      : null;
     await super._onClose(options);
     this.#unbindViewportResize();
     for (const [hookName, hookId] of this.#hookIds) Hooks.off(hookName, hookId);
@@ -725,6 +756,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
     }
     this.#suppressCloseBroadcast = false;
+    this.#searchAuditSessionId = "";
+    if (searchAuditPayload) {
+      void requestSearchAuditCompletion(searchAuditPayload)
+        .catch(error => console.error(`${SYSTEM_ID} | Search audit completion failed`, error));
+    }
     if (searchInventoryWindow === this) searchInventoryWindow = null;
   }
 
@@ -1564,7 +1600,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #prepareSearchOperationPayload(payload = {}) {
-    if (!this.#isTradeMode()) return payload;
+    if (!this.#isTradeMode()) {
+      return {
+        ...payload,
+        searchAuditSessionId: this.#searchAuditSessionId
+      };
+    }
     return {
       ...payload,
       mode: SEARCH_INVENTORY_MODE_TRADE,
@@ -4628,6 +4669,427 @@ function isActorDeadForButchering(actor) {
   )));
 }
 
+function isLivingSearchTarget(actor) {
+  return Boolean(actor && !isDroppedItemsActor(actor) && !isActorDeadForButchering(actor));
+}
+
+function getSearchAuditTransferDirection({
+  payload = {},
+  searcherActor = null,
+  searchedActor = null,
+  sourceActor = null,
+  targetActor = null
+} = {}) {
+  if (
+    isTradePayload(payload)
+    || !String(payload?.searchAuditSessionId ?? "")
+    || !searcherActor
+    || !searchedActor
+    || !sourceActor
+    || !targetActor
+  ) return "";
+  if (
+    sourceActor.uuid === searchedActor.uuid
+    && targetActor.uuid === searcherActor.uuid
+  ) return isLivingSearchTarget(searchedActor) ? "taken" : "";
+  if (
+    sourceActor.uuid === searcherActor.uuid
+    && targetActor.uuid === searchedActor.uuid
+  ) return "placed";
+  return "";
+}
+
+function createSearchAuditRecord({
+  sessionId = "",
+  requesterUserId = "",
+  searcherActor = null,
+  searchedActor = null
+} = {}) {
+  return {
+    sessionId: String(sessionId ?? ""),
+    requesterUserId: String(requesterUserId ?? ""),
+    searcherActor: createSearchNotificationActorData(searcherActor),
+    searchedActor: createSearchNotificationActorData(searchedActor),
+    showTaken: isLivingSearchTarget(searchedActor),
+    takenEntries: new Map(),
+    placedEntries: new Map(),
+    updatedAt: Date.now()
+  };
+}
+
+function recordSearchAuditTransfer({
+  payload = {},
+  requesterUserId = "",
+  searcherActor = null,
+  searchedActor = null,
+  sourceActor = null,
+  targetActor = null,
+  entries = []
+} = {}) {
+  const direction = getSearchAuditTransferDirection({
+    payload,
+    searcherActor,
+    searchedActor,
+    sourceActor,
+    targetActor
+  });
+  if (!direction) return;
+
+  const normalizedEntries = normalizeSearchNotificationEntries(entries);
+  if (!normalizedEntries.length) return;
+  pruneExpiredSearchAudits();
+  const sessionId = String(payload.searchAuditSessionId ?? "");
+  const auditKey = getSearchAuditKey(sessionId, requesterUserId);
+  const audit = activeSearchInventoryAudits.get(auditKey) ?? createSearchAuditRecord({
+    sessionId,
+    requesterUserId,
+    searcherActor,
+    searchedActor
+  });
+  if (
+    audit.searcherActor.uuid !== searcherActor.uuid
+    || audit.searchedActor.uuid !== searchedActor.uuid
+  ) {
+    console.warn(`${SYSTEM_ID} | Search audit actor mismatch; transfer entry was not recorded.`);
+    return;
+  }
+
+  const entryMap = direction === "placed" ? audit.placedEntries : audit.takenEntries;
+  for (const entry of normalizedEntries) {
+    const entryKey = entry.key || `${entry.kind}:${entry.name}:${entry.img}`;
+    const current = entryMap.get(entryKey);
+    entryMap.set(entryKey, {
+      ...entry,
+      quantity: Math.max(0, toInteger(current?.quantity)) + entry.quantity
+    });
+  }
+  audit.updatedAt = Date.now();
+  activeSearchInventoryAudits.set(auditKey, audit);
+}
+
+async function requestSearchAuditStart(payload = {}) {
+  const responsibleGM = getResponsibleGM();
+  if (responsibleGM && responsibleGM.id !== game.user?.id) {
+    return requestSearchInventorySocket("startSearchAudit", payload, responsibleGM);
+  }
+  if (!game.user?.isGM) throw new Error("Нет активного GM для начала обыска.");
+  return enqueueSearchInventoryOperation(
+    () => performSearchAuditStart(payload, game.user?.id ?? "")
+  );
+}
+
+async function performSearchAuditStart(payload = {}, requesterUserId = "") {
+  const sessionId = String(payload.searchAuditSessionId ?? "");
+  if (!sessionId) throw new Error("Search audit session id is missing.");
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  if (!searcherActor || !searchedActor) throw new Error("Search actor not found.");
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+
+  pruneExpiredSearchAudits();
+  const auditKey = getSearchAuditKey(sessionId, requesterUserId);
+  if (activeSearchInventoryAudits.has(auditKey)) return { ok: true, idempotent: true };
+  activeSearchInventoryAudits.set(auditKey, createSearchAuditRecord({
+    sessionId,
+    requesterUserId,
+    searcherActor,
+    searchedActor
+  }));
+  await createGMSearchStart({
+    searcherActor,
+    searchedActor,
+    requesterUserId
+  });
+  return { ok: true };
+}
+
+async function requestSearchAuditCompletion(payload = {}) {
+  const responsibleGM = getResponsibleGM();
+  if (responsibleGM && responsibleGM.id !== game.user?.id) {
+    return requestSearchInventorySocket("completeSearchAudit", payload, responsibleGM);
+  }
+  if (!game.user?.isGM) throw new Error("Нет активного GM для завершения обыска.");
+  return enqueueSearchInventoryOperation(
+    () => performSearchAuditCompletion(payload, game.user?.id ?? "")
+  );
+}
+
+async function performSearchAuditCompletion(payload = {}, requesterUserId = "") {
+  const sessionId = String(payload.searchAuditSessionId ?? "");
+  if (!sessionId) throw new Error("Search audit session id is missing.");
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  if (!searcherActor) throw new Error("Searching actor not found.");
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+
+  pruneExpiredSearchAudits();
+  const auditKey = getSearchAuditKey(sessionId, requesterUserId);
+  const audit = activeSearchInventoryAudits.get(auditKey) ?? null;
+  if (audit && (
+    audit.searcherActor.uuid !== searcherActor.uuid
+    || audit.searchedActor.uuid !== String(payload.searchedActorUuid ?? "")
+  )) {
+    throw new Error("Search audit actor mismatch.");
+  }
+
+  const searchedActorData = searchedActor
+    ? createSearchNotificationActorData(searchedActor)
+    : createSearchNotificationActorData(null, {
+      uuid: payload.searchedActorUuid,
+      name: payload.searchedActorName,
+      img: payload.searchedActorImg
+    });
+  const takenEntries = audit ? Array.from(audit.takenEntries.values()) : [];
+  const placedEntries = audit ? Array.from(audit.placedEntries.values()) : [];
+  try {
+    return await createGMSearchSummary({
+      searcherActor,
+      searchedActor: searchedActorData,
+      requesterUserId,
+      takenEntries,
+      placedEntries,
+      showTaken: audit?.showTaken ?? isLivingSearchTarget(searchedActor)
+    });
+  } finally {
+    activeSearchInventoryAudits.delete(auditKey);
+  }
+}
+
+async function createGMSearchStart({
+  searcherActor = null,
+  searchedActor = null,
+  requesterUserId = ""
+} = {}) {
+  return createGMSearchNotification({
+    event: "opened",
+    searcherActor,
+    searchedActor,
+    requesterUserId,
+    content: renderGMSearchStartContent({
+      searcherActor,
+      searchedActor,
+      requesterUserId
+    })
+  });
+}
+
+async function createGMSearchSummary({
+  searcherActor = null,
+  searchedActor = null,
+  requesterUserId = "",
+  takenEntries = [],
+  placedEntries = [],
+  showTaken = false
+} = {}) {
+  return createGMSearchNotification({
+    event: "closed",
+    searcherActor,
+    searchedActor,
+    requesterUserId,
+    content: renderGMSearchSummaryContent({
+      searcherActor,
+      searchedActor,
+      requesterUserId,
+      takenEntries,
+      placedEntries,
+      showTaken
+    })
+  });
+}
+
+async function createGMSearchNotification({
+  event = "",
+  searcherActor = null,
+  searchedActor = null,
+  requesterUserId = "",
+  content = ""
+} = {}) {
+  if (!game.user?.isGM) return null;
+  const whisper = ChatMessage.getWhisperRecipients("GM").map(user => user.id);
+  if (!whisper.length && game.user?.isGM && game.user.id) whisper.push(game.user.id);
+  if (!whisper.length) return null;
+
+  try {
+    return await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: searcherActor }),
+      whisper,
+      content,
+      flags: {
+        [SYSTEM_ID]: {
+          searchInventoryNotification: {
+            event: String(event ?? ""),
+            requesterUserId: String(requesterUserId ?? ""),
+            searcherActorUuid: String(searcherActor?.uuid ?? ""),
+            searchedActorUuid: String(searchedActor?.uuid ?? "")
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | GM search notification could not be created`, error);
+    return null;
+  }
+}
+
+function renderGMSearchStartContent({
+  searcherActor = null,
+  searchedActor = null,
+  requesterUserId = ""
+} = {}) {
+  const requesterName = getSearchNotificationRequesterName(requesterUserId);
+  return `
+    <article class="fallout-maw-chat-card fallout-maw-search-notification-card is-start">
+      ${renderSearchNotificationHeader({
+        icon: "fa-solid fa-magnifying-glass",
+        title: "Обыск начат"
+      })}
+      <section class="fallout-maw-search-notification-route">
+        ${renderSearchNotificationActor(searcherActor, "Обыскивает")}
+        ${renderSearchNotificationActor(searchedActor, "Цель")}
+      </section>
+      <p class="fallout-maw-search-notification-description">
+        <strong>${escapeHTML(requesterName)}</strong> открыл окно обыска.
+      </p>
+    </article>
+  `;
+}
+
+function renderGMSearchSummaryContent({
+  searcherActor = null,
+  searchedActor = null,
+  requesterUserId = "",
+  takenEntries = [],
+  placedEntries = [],
+  showTaken = false
+} = {}) {
+  const requesterName = getSearchNotificationRequesterName(requesterUserId);
+  const taken = showTaken
+    ? renderSearchNotificationEntries(takenEntries, {
+      title: "Забрано у цели",
+      emptyText: "Ничего не забрано",
+      direction: "taken"
+    })
+    : "";
+  const placed = renderSearchNotificationEntries(placedEntries, {
+    title: "Положено цели",
+    emptyText: "Ничего не положено",
+    direction: "placed"
+  });
+
+  return `
+    <article class="fallout-maw-chat-card fallout-maw-search-notification-card">
+      ${renderSearchNotificationHeader({
+        icon: "fa-solid fa-clipboard-list",
+        title: "Итоги обыска"
+      })}
+      <section class="fallout-maw-search-notification-route">
+        ${renderSearchNotificationActor(searcherActor, "Обыскивал")}
+        ${renderSearchNotificationActor(searchedActor, "Цель")}
+      </section>
+      <p class="fallout-maw-search-notification-description">
+        <strong>${escapeHTML(requesterName)}</strong> завершил обыск.
+      </p>
+      ${taken}
+      ${placed}
+    </article>
+  `;
+}
+
+function getSearchNotificationRequesterName(requesterUserId = "") {
+  const requester = game.users?.get?.(String(requesterUserId ?? "")) ?? null;
+  return String(requester?.name ?? game.user?.name ?? "Неизвестный пользователь");
+}
+
+function renderSearchNotificationHeader({
+  icon = "fa-solid fa-magnifying-glass",
+  title = ""
+} = {}) {
+  return `
+    <header class="fallout-maw-search-notification-header">
+      <span class="fallout-maw-search-notification-icon"><i class="${escapeHTML(icon)}"></i></span>
+      <span>
+        <strong>${escapeHTML(title)}</strong>
+        <small>Только для GM</small>
+      </span>
+    </header>
+  `;
+}
+
+function createSearchNotificationActorData(actor = null, fallback = {}) {
+  return {
+    uuid: String(actor?.uuid ?? fallback?.uuid ?? ""),
+    name: String(actor?.name ?? fallback?.name ?? "Неизвестный актёр"),
+    img: String(actor?.img ?? fallback?.img ?? SEARCH_NOTIFICATION_FALLBACK_ICON)
+  };
+}
+
+function renderSearchNotificationActor(actor = null, roleLabel = "") {
+  const data = createSearchNotificationActorData(actor);
+  return `
+    <span class="fallout-maw-search-notification-actor">
+      <img src="${escapeHTML(data.img)}" alt="">
+      <span>
+        <small>${escapeHTML(roleLabel)}</small>
+        <strong>${escapeHTML(data.name)}</strong>
+      </span>
+    </span>
+  `;
+}
+
+function normalizeSearchNotificationEntries(entries = []) {
+  return (entries ?? [])
+    .map(entry => ({
+      kind: entry?.kind === "currency" ? "currency" : "item",
+      key: String(entry?.key ?? "").trim(),
+      name: String(entry?.name ?? "").trim(),
+      img: String(entry?.img ?? "").trim(),
+      quantity: Math.max(0, toInteger(entry?.quantity))
+    }))
+    .filter(entry => entry.name && entry.quantity > 0);
+}
+
+function renderSearchNotificationEntries(entries = [], {
+  title = "",
+  emptyText = "",
+  direction = "taken"
+} = {}) {
+  const normalizedEntries = normalizeSearchNotificationEntries(entries);
+  const rows = normalizedEntries.map(entry => {
+    const img = entry.img || SEARCH_NOTIFICATION_FALLBACK_ICON;
+    return `
+      <span class="fallout-maw-search-notification-loot-row ${entry.kind}">
+        <img src="${escapeHTML(img)}" alt="">
+        <span>
+          <strong>${escapeHTML(entry.name)}</strong>
+          <small>${entry.kind === "currency" ? "Валюта" : "Предмет"}</small>
+        </span>
+        <b>×${entry.quantity}</b>
+      </span>
+    `;
+  }).join("");
+  return `
+    <section class="fallout-maw-search-notification-loot is-${escapeHTML(direction)}">
+      <header>
+        <strong>${escapeHTML(title)}</strong>
+        <span>${normalizedEntries.length}</span>
+      </header>
+      ${rows || `<p class="fallout-maw-search-notification-empty">${escapeHTML(emptyText)}</p>`}
+    </section>
+  `;
+}
+
+function getSearchAuditKey(sessionId = "", requesterUserId = "") {
+  return `${String(requesterUserId ?? "")}:${String(sessionId ?? "")}`;
+}
+
+function pruneExpiredSearchAudits(now = Date.now()) {
+  for (const [auditKey, audit] of activeSearchInventoryAudits) {
+    if ((now - Math.max(0, Number(audit?.updatedAt) || 0)) > SEARCH_AUDIT_MAX_AGE_MS) {
+      activeSearchInventoryAudits.delete(auditKey);
+    }
+  }
+}
+
 async function resolveButcheringRewardDocuments(config = {}) {
   const documents = new Map();
   for (const stage of config.stages ?? []) {
@@ -4892,6 +5354,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
   }
   assertSearchTransferableItem(item, { allowButchering: true });
   const quantity = getTransferItemQuantity(item, payload.quantity);
+  const sourceQuantityBefore = Math.max(0, getItemQuantity(item));
   const targetParentId = String(payload.targetParentId ?? ROOT_CONTAINER_ID);
   validateTargetParent(targetActor, targetParentId);
 
@@ -4927,6 +5390,28 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     allowButchering: isItemInButcheringStorage(item),
     mutationPlans: tradeMutationPlans
   });
+  const sourceItemAfter = sourceActor.items?.get(item.id);
+  const movedQuantity = Math.max(
+    0,
+    sourceQuantityBefore - (sourceItemAfter ? Math.max(0, getItemQuantity(sourceItemAfter)) : 0)
+  );
+  if (movedQuantity > 0) {
+    recordSearchAuditTransfer({
+      payload,
+      requesterUserId,
+      searcherActor,
+      searchedActor,
+      sourceActor,
+      targetActor,
+      entries: [{
+        kind: "item",
+        key: String(item.id ?? ""),
+        name: item.name,
+        img: item.img,
+        quantity: movedQuantity
+      }]
+    });
+  }
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return result;
 }
@@ -5037,6 +5522,7 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   assertSearchTransferableItem(sourceItem, { allowButchering: true });
   assertSearchTransferableItem(targetItem);
   const quantity = toInteger(payload.quantity);
+  const sourceQuantityBefore = Math.max(0, getItemQuantity(sourceItem));
   const tradePayment = getTradePaymentRequest({
     payload,
     searcherActor,
@@ -5061,6 +5547,28 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
     targetStackIndex: Math.max(0, toInteger(payload.targetStackIndex)),
     mutationPlans: tradeMutationPlans
   });
+  const sourceItemAfter = sourceActor.items?.get(sourceItem.id);
+  const movedQuantity = Math.max(
+    0,
+    sourceQuantityBefore - (sourceItemAfter ? Math.max(0, getItemQuantity(sourceItemAfter)) : 0)
+  );
+  if (movedQuantity > 0) {
+    recordSearchAuditTransfer({
+      payload,
+      requesterUserId,
+      searcherActor,
+      searchedActor,
+      sourceActor,
+      targetActor,
+      entries: [{
+        kind: "item",
+        key: String(sourceItem.id ?? ""),
+        name: sourceItem.name,
+        img: sourceItem.img,
+        quantity: movedQuantity
+      }]
+    });
+  }
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return result;
 }
@@ -5098,6 +5606,22 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
       actorUpdate: { [`system.currencies.${currencyKey}`]: targetAmount + amount }
     }
   ], { reason: "currency-transfer" });
+  const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
+  recordSearchAuditTransfer({
+    payload,
+    requesterUserId,
+    searcherActor,
+    searchedActor,
+    sourceActor,
+    targetActor,
+    entries: [{
+      kind: "currency",
+      key: currencyKey,
+      name: currency?.label ?? currencyKey,
+      img: currency?.img,
+      quantity: amount
+    }]
+  });
   await requestDroppedItemsActorCleanup(sourceActor.uuid);
   return { amount };
 }
@@ -9412,7 +9936,15 @@ async function handleSearchInventorySocketMessage(message = {}) {
 
   try {
     let result;
-    if (message.action === "transferItem") {
+    if (message.action === "startSearchAudit") {
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchAuditStart(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "completeSearchAudit") {
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchAuditCompletion(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "transferItem") {
       result = await enqueueSearchInventoryOperation(
         () => performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "")
       );

@@ -4,7 +4,16 @@ export const LIMB_DESTRUCTION_MODES = Object.freeze({
   disabled: "disabled"
 });
 
+export const ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES = Object.freeze({
+  percent: "percent",
+  disabled: "disabled",
+  fullLoss: "fullLoss"
+});
+
 const LIMB_DESTRUCTION_MODE_VALUES = new Set(Object.values(LIMB_DESTRUCTION_MODES));
+const ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODE_VALUES = new Set(
+  Object.values(ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES)
+);
 
 export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
   turnOrder: Object.freeze({
@@ -15,6 +24,10 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
   }),
   reactions: Object.freeze({
     timeoutSeconds: 20
+  }),
+  attackActionPointMovementLoss: Object.freeze({
+    mode: ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.percent,
+    percent: 100
   }),
   knockback: Object.freeze({
     repeatDifficultyThreshold: 100,
@@ -84,6 +97,16 @@ export function normalizeCombatSettings(value = {}) {
     },
     reactions: {
       timeoutSeconds: clampInteger(source.reactions?.timeoutSeconds, DEFAULT_COMBAT_SETTINGS.reactions.timeoutSeconds, 1, 600)
+    },
+    attackActionPointMovementLoss: {
+      mode: normalizeAttackActionPointMovementLossMode(
+        source.attackActionPointMovementLoss?.mode,
+        DEFAULT_COMBAT_SETTINGS.attackActionPointMovementLoss.mode
+      ),
+      percent: normalizeNonNegativeInteger(
+        source.attackActionPointMovementLoss?.percent,
+        DEFAULT_COMBAT_SETTINGS.attackActionPointMovementLoss.percent
+      )
     },
     knockback: {
       repeatDifficultyThreshold: clampInteger(source.knockback?.repeatDifficultyThreshold, DEFAULT_COMBAT_SETTINGS.knockback.repeatDifficultyThreshold, 1, 10000),
@@ -171,6 +194,17 @@ function normalizeFormula(value, fallback) {
 function normalizeLimbDestructionMode(value, fallback) {
   const mode = String(value ?? "").trim();
   return LIMB_DESTRUCTION_MODE_VALUES.has(mode) ? mode : fallback;
+}
+
+function normalizeAttackActionPointMovementLossMode(value, fallback) {
+  const mode = String(value ?? "").trim();
+  return ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODE_VALUES.has(mode) ? mode : fallback;
+}
+
+function normalizeNonNegativeInteger(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.trunc(number));
 }
 
 function clampInteger(value, fallback, min, max) {

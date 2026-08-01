@@ -3,7 +3,10 @@ import {
   getCombatSettings,
   setCombatSettings
 } from "../settings/accessors.mjs";
-import { LIMB_DESTRUCTION_MODES } from "../settings/combat.mjs";
+import {
+  ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES,
+  LIMB_DESTRUCTION_MODES
+} from "../settings/combat.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
@@ -86,6 +89,26 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
       playerOwnedLimbDestructionChoices: buildLimbDestructionChoices(
         this.settings.limbDestruction?.playerOwnedMode
       ),
+      attackActionPointMovementLossModeChoices: [
+        {
+          value: ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.percent,
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossModePercent"),
+          selected: this.settings.attackActionPointMovementLoss?.mode
+            === ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.percent
+        },
+        {
+          value: ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.disabled,
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossModeDisabled"),
+          selected: this.settings.attackActionPointMovementLoss?.mode
+            === ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.disabled
+        },
+        {
+          value: ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.fullLoss,
+          label: game.i18n.localize("FALLOUTMAW.Settings.Combat.AttackActionPointMovementLossModeFullLoss"),
+          selected: this.settings.attackActionPointMovementLoss?.mode
+            === ATTACK_ACTION_POINT_MOVEMENT_LOSS_MODES.fullLoss
+        }
+      ],
       turnOrderSchemeChoices: [
         {
           value: "normal",

@@ -66,10 +66,11 @@ import {
   getStrictActionPointState,
   notifyCombatActionPointReceipt,
   refundCombatActionPointReceipt,
-  spendCombatActionPoints,
+  refundStrictActionPointReceipt,
   spendCombatActionPointsWithReceipt,
-  spendStrictActionPoints
+  spendStrictActionPointsWithReceipt
 } from "./reaction-resources.mjs";
+import { applyAttackActionPointMovementLoss } from "./attack-action-point-movement-loss.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   applySkillBonusPercent,
@@ -805,7 +806,24 @@ export async function startAbilityAttackActionAndWait({
       console.error("Fallout MaW | Ability attack resource payment failed", error);
       payment = { ok: false, reason: "spendFailed", error };
     }
-    if (payment?.ok) return true;
+    if (payment?.ok) {
+      const spentActionPoints = getPaidActorResourceAmount(payment, "actionPoints");
+      if (spentActionPoints > 0) {
+        await applyAttackActionPointMovementLoss(sourceToken.actor, spentActionPoints, {
+          actorToken: sourceToken,
+          weapon: item,
+          actionKey,
+          weaponActionKey: actionKey,
+          weaponFunctionId: abilityFunction.id,
+          attackId: costContext.rootId,
+          chanceOperationId: costContext.rootId,
+          chainRef,
+          requester: "weaponAttack",
+          source: "abilityAttackCost"
+        });
+      }
+      return true;
+    }
     notifyAbilityTriggerCostFailure(payment);
     return false;
   };
@@ -1290,6 +1308,7 @@ export function startDualWeaponAttack({
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
       const actionPointCostApplied = isCombatActionPointSpendingActive(actor);
       const sharedActionEntries = actionCosts.filter(entry => entry.value === actionPointCost);
+      const primarySharedAction = sharedActionEntries[0]?.entry ?? captured[0];
       if (actionPointCostApplied) {
         for (const { entry } of sharedActionEntries) {
           Hooks.callAll("fallout-maw.weaponActionWillResolve", {
@@ -1307,7 +1326,27 @@ export function startDualWeaponAttack({
           });
         }
       }
-      if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
+      if (isCombatActionPointSpendingActive(actor) && actionPointCost > 0) {
+        const transaction = await spendCombatActionPointsWithReceipt(actor, actionPointCost, {
+          source: "weaponAction",
+          actionKey: primarySharedAction?.actionKey ?? "",
+          attackId: sharedActionUseId
+        });
+        if (transaction.spent !== actionPointCost || !transaction.receipt) return false;
+        if (transaction.receipt.resourceKey === "actionPoints") {
+          await applyAttackActionPointMovementLoss(actor, transaction.receipt.amount, {
+            actorToken: token,
+            weapon: primarySharedAction?.weapon ?? null,
+            actionKey: primarySharedAction?.actionKey ?? "",
+            weaponActionKey: primarySharedAction?.actionKey ?? "",
+            weaponFunctionId: primarySharedAction?.weaponFunctionId ?? "",
+            attackId: sharedActionUseId,
+            chanceOperationId: sharedActionUseId,
+            requester: "weaponAttack",
+            source: "dualWeaponAttack"
+          });
+        }
+      }
       activeDualWeaponAttack?.suppressNoisePreview();
       const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, {
         skipActionPointCost: true,
@@ -1323,7 +1362,7 @@ export function startDualWeaponAttack({
         .filter(result => result.status === "fulfilled" && result.value?.weaponNoiseAttempted)
         .map(result => getWeaponNoiseLevel({ noiseLevel: result.value.noiseLevel }));
       if (actionPointCostApplied) {
-        const primary = sharedActionEntries[0]?.entry ?? captured[0];
+        const primary = primarySharedAction;
         await publishWeaponAttackResolved({
           attackerUuid: actor.uuid,
           actorUuid: actor.uuid,
@@ -3051,7 +3090,11 @@ async function processCommandedWeaponAttackSelections(selections = [], {
     error: result.status === "rejected" ? String(result.reason?.message ?? result.reason ?? "") : ""
   }));
   const executedCount = outcomes.filter(outcome => outcome.executed).length;
-  if (!executedCount) await rollbackCommandedActionPointCosts(actionPointReceipts.receipts, chainRef);
+  if (!executedCount) {
+    await rollbackCommandedActionPointCosts(actionPointReceipts.receipts, chainRef);
+  } else {
+    await applyCommandedActionPointMovementLoss(actionPointReceipts.receipts, chainRef);
+  }
   return createCommandedAttackResult({
     started: true,
     committed: true,
@@ -3068,18 +3111,15 @@ async function spendCommandedActionPointCosts(actionPointCosts = new Map(), chai
     for (const { actor, amount } of actionPointCosts.values()) {
       const cost = Math.max(0, toInteger(amount));
       if (cost <= 0 || !isActorInActiveCombat(actor)) continue;
-      const before = getStrictActionPointState(actor);
-      if (!before || before.value < cost) throw new Error("Action point state changed before spend.");
-      await spendStrictActionPoints(actor, cost, {
+      const transaction = await spendStrictActionPointsWithReceipt(actor, cost, {
         source: "abilityAction",
         actionKey: "commandedAttack",
         chainRef
       });
-      const after = getStrictActionPointState(actor);
-      if (!after || after.current !== before.current - cost) {
+      if (transaction.spent !== cost || !transaction.receipt) {
         throw new Error("Action point spend was not applied exactly.");
       }
-      receipts.push({ actor, before });
+      receipts.push({ actor, receipt: transaction.receipt });
     }
     return { ok: true, receipts };
   } catch (error) {
@@ -3090,22 +3130,45 @@ async function spendCommandedActionPointCosts(actionPointCosts = new Map(), chai
 }
 
 async function rollbackCommandedActionPointCosts(receipts = [], chainRef = null) {
-  for (const receipt of [...receipts].reverse()) {
-    const actor = receipt?.actor;
-    const before = receipt?.before;
-    if (!actor || !before) continue;
+  for (const entry of [...receipts].reverse()) {
+    const actor = entry?.actor;
+    const receipt = entry?.receipt;
+    if (!actor || !receipt) continue;
     try {
-      await actor.update({
-        [`system.resources.actionPoints.value`]: before.current,
-        [`system.resources.actionPoints.spent`]: Math.max(0, before.max - before.current)
-      }, chainRef ? {
-        chainRef,
-        falloutMawSystemEventChainRef: chainRef,
-        falloutMawCommandedAttackRollback: true
-      } : { falloutMawCommandedAttackRollback: true });
+      const restored = await refundStrictActionPointReceipt(actor, receipt, { chainRef });
+      if (restored < Math.max(0, toInteger(receipt.amount))) {
+        throw new Error(`Only ${restored} of ${receipt.amount} commanded attack action points were rolled back.`);
+      }
     } catch (error) {
       console.error("Fallout MaW | Failed to roll back commanded attack action points", error);
     }
+  }
+}
+
+async function applyCommandedActionPointMovementLoss(receipts = [], chainRef = null) {
+  const commandOperationId = String(
+    chainRef?.rootId
+    ?? chainRef?.operationId
+    ?? foundry.utils.randomID()
+  );
+  for (const entry of receipts) {
+    const actor = entry?.actor;
+    const receipt = entry?.receipt;
+    if (!actor || receipt?.resourceKey !== "actionPoints") continue;
+    const operationId = [
+      "commanded-attack-movement-loss",
+      String(actor.uuid ?? actor.id ?? ""),
+      commandOperationId
+    ].join(":");
+    await applyAttackActionPointMovementLoss(actor, receipt.amount, {
+      actionKey: "commandedAttack",
+      weaponActionKey: "commandedAttack",
+      attackId: operationId,
+      chanceOperationId: operationId,
+      chainRef,
+      requester: "weaponAttack",
+      source: "commandedAttack"
+    });
   }
 }
 
@@ -5124,6 +5187,7 @@ export class WeaponAttackController {
       committedActionPointSpend = null;
     };
     const weaponAttempted = this.shouldSpendWeaponResourcesForAttempt();
+    let committedActorResourceCosts = [];
     if (weaponAttempted) {
       const modifierState = this.getWeaponActionModifierState();
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId, { modifierState });
@@ -5180,12 +5244,33 @@ export class WeaponAttackController {
           this.attackCanceledByReaction = true;
           return false;
         }
+        committedActorResourceCosts = resourcesSpent.actorCosts ?? [];
       } catch (error) {
         await rollbackSpentQuantityItemTile(spentQuantityTileOperationId);
         throw error;
       }
     } else {
       await commitActionPointSpend();
+    }
+    const spentAttackActionPoints = (
+      committedActionPointSpend?.receipt?.resourceKey === "actionPoints"
+        ? Math.max(0, toInteger(committedActionPointSpend.receipt.amount))
+        : 0
+    ) + getPaidActorResourceAmount(committedActorResourceCosts, "actionPoints");
+    if (spentAttackActionPoints > 0) {
+      await applyAttackActionPointMovementLoss(this.token.actor, spentAttackActionPoints, {
+        ...resolvedActionContext,
+        actorToken: this.token,
+        weapon: this.weapon,
+        actionKey: this.actionKey,
+        weaponActionKey: this.actionKey,
+        weaponFunctionId: this.weaponFunctionId,
+        attackId: this.attackId,
+        chanceOperationId: this.chanceOperationId || this.attackId,
+        chainRef: this.chainRef,
+        requester: "weaponAttack",
+        source: "weaponAttack"
+      });
     }
     const spentActionPointCost = await finalizeCommittedWeaponActionPointSpend(
       this.token.actor,
@@ -10189,6 +10274,21 @@ function getWeaponActorResourceCostTotal(
   }).get(String(resourceKey ?? "").trim()) ?? 0;
 }
 
+function getPaidActorResourceAmount(source = null, resourceKey = "") {
+  const costs = Array.isArray(source)
+    ? source
+    : source?.actorCosts
+      ?? source?.execution?.spendReceipt?.costs
+      ?? source?.spendReceipt?.costs
+      ?? [];
+  const key = String(resourceKey ?? "").trim();
+  return costs.reduce((total, cost) => (
+    String(cost?.resourceKey ?? "").trim() === key
+      ? total + Math.max(0, toInteger(cost?.amount))
+      : total
+  ), 0);
+}
+
 function getActorAttackResourceAvailable(actor = null, resourceKey = "") {
   const key = String(resourceKey ?? "").trim();
   if (!actor || !key || !isCombatResourceCostActive(actor, key)) return 0;
@@ -10592,7 +10692,10 @@ async function spendWeaponResources(
       }
     };
 
-    if (!actorCostRows.length) return commitRemainingCosts();
+    if (!actorCostRows.length) {
+      const committed = await commitRemainingCosts();
+      return committed ? { actorCosts: [] } : false;
+    }
 
     const identity = [
       "weapon-resource",
@@ -10630,7 +10733,9 @@ async function spendWeaponResources(
       notifyAbilityTriggerCostFailure(payment);
       return false;
     }
-    return true;
+    return {
+      actorCosts: payment.execution?.spendReceipt?.costs ?? []
+    };
   });
 }
 
