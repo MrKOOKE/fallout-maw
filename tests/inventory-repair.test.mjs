@@ -25,7 +25,7 @@ test("a valid plain-object inventory is already repaired", () => {
   assert.deepEqual(plan.repairs, []);
 });
 
-test("a stale storage lock is cleared from active placements without moving the Item", () => {
+test("manual locks on valid active placements remain untouched", () => {
   const weapon = createItem({
     id: "released-weapon",
     mode: "weapon",
@@ -36,21 +36,10 @@ test("a stale storage lock is cleared from active placements without moving the 
 
   const plan = planInventoryRepair([weapon], { columns: 2, rows: 1 });
 
-  assert.deepEqual(plan.updates, [{
-    _id: "released-weapon",
-    "system.locked": false
-  }]);
-  assert.deepEqual(plan.repairs, [{
-    itemId: "released-weapon",
-    reasons: ["stale-active-lock"],
-    targetParentId: "",
-    placementMode: "weapon"
-  }]);
-  assert.equal(
-    applyUpdates([weapon], plan.updates)[0].system.placement.mode,
-    "weapon",
-    "migration must preserve the active slot"
-  );
+  assert.deepEqual(plan.updates, []);
+  assert.deepEqual(plan.repairs, []);
+  assert.equal(weapon.system.locked, true);
+  assert.equal(weapon.system.placement.mode, "weapon");
 });
 
 test("manual locks in ordinary inventory remain untouched", () => {

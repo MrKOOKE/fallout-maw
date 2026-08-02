@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-29T05:09:37.416Z",
+  "generatedAt": "2026-08-01T18:31:46.839Z",
   "mode": "write",
   "status": "written-and-verified",
   "order": [
@@ -9,11 +9,25 @@
     "C",
     "D"
   ],
-  "classFolders": 342,
-  "classParents": 124,
-  "sortedItems": 1703,
-  "folderUpdates": 466,
+  "classFolders": 400,
+  "classParents": 132,
+  "sortedItems": 2247,
+  "folderUpdates": 532,
   "groups": [
+    {
+      "folderId": "00d0540f09ea0454",
+      "folder": "B",
+      "parentId": "7c934ccd69eba452",
+      "items": 2,
+      "highest": {
+        "name": "РобКо «Лаборант»",
+        "price": 3811
+      },
+      "lowest": {
+        "name": "РобКо «Следопыт»",
+        "price": 2157
+      }
+    },
     {
       "folderId": "010a13b11aa1e7ef",
       "folder": "C",
@@ -38,8 +52,8 @@
         "price": 168
       },
       "lowest": {
-        "name": ".50 MG «Разрывной»",
-        "price": 109
+        "name": ".50 MG «Зажигательный»",
+        "price": 118
       }
     },
     {
@@ -54,6 +68,20 @@
       "lowest": {
         "name": "Гамма-патрон «Фокусированный»",
         "price": 59
+      }
+    },
+    {
+      "folderId": "039d26dae7479371",
+      "folder": "D",
+      "parentId": "fc56c6de9c92bce7",
+      "items": 2,
+      "highest": {
+        "name": "Кустарная рука-крюк «Клешня»",
+        "price": 281
+      },
+      "lowest": {
+        "name": "Кустарная рука «Жестянщик»",
+        "price": 184
       }
     },
     {
@@ -175,7 +203,7 @@
       "items": 12,
       "highest": {
         "name": "ФИДО",
-        "price": 9028
+        "price": 9453
       },
       "lowest": {
         "name": "«Десперадо»",
@@ -231,11 +259,11 @@
       "items": 10,
       "highest": {
         "name": "Аргоновыйы Автомат",
-        "price": 9145
+        "price": 9570
       },
       "lowest": {
         "name": "Протонный Меч",
-        "price": 1382
+        "price": 3955
       }
     },
     {
@@ -244,12 +272,12 @@
       "parentId": "bcad3d4067f13909",
       "items": 3,
       "highest": {
-        "name": "Лёгкий автоматический затвор",
-        "price": 1991
+        "name": "Улучшенный затвор винтовки",
+        "price": 1111
       },
       "lowest": {
         "name": "Улучшенная возвратная пружина",
-        "price": 1845
+        "price": 929
       }
     },
     {
@@ -273,11 +301,39 @@
       "items": 1,
       "highest": {
         "name": "Активно стабилизируемый приклад",
-        "price": 10930
+        "price": 10002
       },
       "lowest": {
         "name": "Активно стабилизируемый приклад",
-        "price": 10930
+        "price": 10002
+      }
+    },
+    {
+      "folderId": "0a027eeda304c57e",
+      "folder": "C",
+      "parentId": "24f361e318cb32dd",
+      "items": 5,
+      "highest": {
+        "name": "Железистый контур «Самоконтроль»",
+        "price": 1844
+      },
+      "lowest": {
+        "name": "Мед-Тек «Гипофиз» — эндокринный корректор",
+        "price": 1427
+      }
+    },
+    {
+      "folderId": "0ab22ede07036da4",
+      "folder": "B",
+      "parentId": "dd9efb278cbea839",
+      "items": 37,
+      "highest": {
+        "name": "Блестящее Платье",
+        "price": 1505
+      },
+      "lowest": {
+        "name": "Униформа офицера Анклава",
+        "price": 1505
       }
     },
     {
@@ -385,11 +441,11 @@
       "items": 6,
       "highest": {
         "name": "Оптический прицел для энергооружия",
-        "price": 9634
+        "price": 6309
       },
       "lowest": {
-        "name": "Переменный прицел 1–6x",
-        "price": 7989
+        "name": "Компактный переменный прицел 1–6x",
+        "price": 4433
       }
     },
     {
@@ -399,11 +455,25 @@
       "items": 11,
       "highest": {
         "name": "Борз",
-        "price": 383
+        "price": 460
       },
       "lowest": {
         "name": "ПМБ",
         "price": 196
+      }
+    },
+    {
+      "folderId": "12ba4e97af8560c5",
+      "folder": "A",
+      "parentId": "e9ccb2b59d523fc0",
+      "items": 4,
+      "highest": {
+        "name": "Инструментальный ранец «Станция»",
+        "price": 14084
+      },
+      "lowest": {
+        "name": "Тяжёлый военный ранец",
+        "price": 8333
       }
     },
     {
@@ -435,6 +505,34 @@
       }
     },
     {
+      "folderId": "13e4aed13a8c053f",
+      "folder": "S",
+      "parentId": "30676a0d95d2ddb6",
+      "items": 2,
+      "highest": {
+        "name": "Биг-МТ «Талос»",
+        "price": 59926
+      },
+      "lowest": {
+        "name": "Биг-МТ «Икар»",
+        "price": 48426
+      }
+    },
+    {
+      "folderId": "14317430bbe623b1",
+      "folder": "B",
+      "parentId": "dc48897b3625af21",
+      "items": 4,
+      "highest": {
+        "name": "Модульная утилитарная разгрузка",
+        "price": 4899
+      },
+      "lowest": {
+        "name": "Большая полевая разгрузка",
+        "price": 2939
+      }
+    },
+    {
       "folderId": "14d375c0a9b7859f",
       "folder": "A",
       "parentId": "45bae4d890b4d16b",
@@ -455,11 +553,25 @@
       "items": 4,
       "highest": {
         "name": "Фокусирующая линза",
-        "price": 1341
+        "price": 666
       },
       "lowest": {
-        "name": "Стабилизированный усилитель энергооружия",
-        "price": 845
+        "name": "Расширенный теплоотвод",
+        "price": 276
+      }
+    },
+    {
+      "folderId": "1667e60c05dfc247",
+      "folder": "D",
+      "parentId": "0354111a868d006f",
+      "items": 5,
+      "highest": {
+        "name": "Катушка концентрации «Заземлитель»",
+        "price": 423
+      },
+      "lowest": {
+        "name": "Нейрошунт «Шпаргалка»",
+        "price": 336
       }
     },
     {
@@ -567,11 +679,11 @@
       "items": 4,
       "highest": {
         "name": "Прецизионный фокусирующий излучатель",
-        "price": 12124
+        "price": 8684
       },
       "lowest": {
-        "name": "Активная система охлаждения",
-        "price": 5551
+        "name": "Усиленный конденсатор",
+        "price": 3508
       }
     },
     {
@@ -581,11 +693,11 @@
       "items": 2,
       "highest": {
         "name": "Высокоэнергетический узел ближнего боя",
-        "price": 9710
+        "price": 5868
       },
       "lowest": {
         "name": "Укреплённый каркас силового кастета",
-        "price": 8644
+        "price": 5093
       }
     },
     {
@@ -608,26 +720,12 @@
       "parentId": "8d0a47e01b22414f",
       "items": 2,
       "highest": {
-        "name": "Усиленный пулемётный приклад",
-        "price": 1762
-      },
-      "lowest": {
         "name": "Боевая оружейная рукоять",
-        "price": 1616
-      }
-    },
-    {
-      "folderId": "1acef0bcaeafa56e",
-      "folder": "C",
-      "parentId": "6887fb730d9ecff3",
-      "items": 7,
-      "highest": {
-        "name": "Маска Ликвидатора",
-        "price": 1451
+        "price": 1454
       },
       "lowest": {
-        "name": "Химическая Маска",
-        "price": 1379
+        "name": "Усиленный пулемётный приклад",
+        "price": 964
       }
     },
     {
@@ -645,17 +743,31 @@
       }
     },
     {
+      "folderId": "1b577b5a847d6f9d",
+      "folder": "S",
+      "parentId": "0354111a868d006f",
+      "items": 5,
+      "highest": {
+        "name": "Big MT «Омнибус» — всетелевая нейрошина",
+        "price": 73402
+      },
+      "lowest": {
+        "name": "Big MT «Мнемозина» — когнитивное ядро",
+        "price": 41099
+      }
+    },
+    {
       "folderId": "1c4879cc4ba8aaf2",
       "folder": "B",
       "parentId": "f47fd05e93abae7f",
       "items": 4,
       "highest": {
-        "name": "Удлинённый ствол гранатомёта",
-        "price": 3785
+        "name": "Дополнительный бак огнемёта",
+        "price": 2253
       },
       "lowest": {
-        "name": "Широкоугольный дозатор огнемёта",
-        "price": 1873
+        "name": "Улучшенная механика гранатомёта",
+        "price": 1479
       }
     },
     {
@@ -683,7 +795,7 @@
       },
       "lowest": {
         "name": "Плазменный Кулак Mk.II",
-        "price": 8697
+        "price": 10032
       }
     },
     {
@@ -712,6 +824,34 @@
       "lowest": {
         "name": "Ржавая Силовая броня X-01",
         "price": 53981
+      }
+    },
+    {
+      "folderId": "1e3361a6d8cc3ba5",
+      "folder": "A",
+      "parentId": "7c934ccd69eba452",
+      "items": 2,
+      "highest": {
+        "name": "Вест-Тек «Гелиос»",
+        "price": 9694
+      },
+      "lowest": {
+        "name": "Вест-Тек «Аргус»",
+        "price": 5695
+      }
+    },
+    {
+      "folderId": "1f766bc95aca65f0",
+      "folder": "C",
+      "parentId": "7c934ccd69eba452",
+      "items": 2,
+      "highest": {
+        "name": "Мед-Тек «Монокль-М»",
+        "price": 1182
+      },
+      "lowest": {
+        "name": "Мед-Тек «Ясный взгляд»",
+        "price": 765
       }
     },
     {
@@ -749,11 +889,11 @@
       "items": 9,
       "highest": {
         "name": "Штурмовая Винтовка K9000",
-        "price": 6846
+        "price": 7271
       },
       "lowest": {
-        "name": "Пистолет-пулемёт Раттлер",
-        "price": 3932
+        "name": "«Свет во тьме»",
+        "price": 4285
       }
     },
     {
@@ -768,6 +908,20 @@
       "lowest": {
         "name": "Сатурнитовый Шлем «ТермоСил-X»",
         "price": 13353
+      }
+    },
+    {
+      "folderId": "2369f6db90e42510",
+      "folder": "D",
+      "parentId": "24f361e318cb32dd",
+      "items": 4,
+      "highest": {
+        "name": "Адреналовый капсюль «Старт»",
+        "price": 433
+      },
+      "lowest": {
+        "name": "Эндокринный стабилизатор «Ровный пульс»",
+        "price": 400
       }
     },
     {
@@ -791,7 +945,7 @@
       "items": 9,
       "highest": {
         "name": "Ружьё-киберпёс K9000",
-        "price": 9028
+        "price": 9453
       },
       "lowest": {
         "name": "Поп-Пушка",
@@ -827,17 +981,17 @@
       }
     },
     {
-      "folderId": "280b5f3dada4a558",
-      "folder": "C",
-      "parentId": "2f3211efbb4183ac",
-      "items": 1,
+      "folderId": "290a39934faff97a",
+      "folder": "B",
+      "parentId": "ca20435e4cb4ed5b",
+      "items": 4,
       "highest": {
-        "name": "Полицейский Респиратор",
-        "price": 1379
+        "name": "Риппердок L-1 — разветвитель: Левая рука",
+        "price": 8528
       },
       "lowest": {
-        "name": "Полицейский Респиратор",
-        "price": 1379
+        "name": "Вест-Тек «Геркулес» — силовой миомер",
+        "price": 5519
       }
     },
     {
@@ -847,11 +1001,11 @@
       "items": 1,
       "highest": {
         "name": "Любовь и ненависть",
-        "price": 1143
+        "price": 1189
       },
       "lowest": {
         "name": "Любовь и ненависть",
-        "price": 1143
+        "price": 1189
       }
     },
     {
@@ -925,6 +1079,20 @@
       }
     },
     {
+      "folderId": "2dbe3bdf1678974d",
+      "folder": "S",
+      "parentId": "dd9efb278cbea839",
+      "items": 8,
+      "highest": {
+        "name": "Боевой костюм Старейщины",
+        "price": 6271
+      },
+      "lowest": {
+        "name": "Таинственное одеяние",
+        "price": 6271
+      }
+    },
+    {
       "folderId": "2dd80fb531120495",
       "folder": "D",
       "parentId": "5c1255b2c8667274",
@@ -945,7 +1113,7 @@
       "items": 22,
       "highest": {
         "name": "Пистолет-Пулемёт Вэнса",
-        "price": 1774
+        "price": 2218
       },
       "lowest": {
         "name": "VP70",
@@ -958,12 +1126,12 @@
       "parentId": "77ffc3da288b4ee3",
       "items": 5,
       "highest": {
-        "name": "Китайский Резак",
-        "price": 1683
+        "name": "Шоковая перчатка",
+        "price": 2176
       },
       "lowest": {
         "name": "Электропогонялка",
-        "price": 274
+        "price": 1417
       }
     },
     {
@@ -1009,20 +1177,6 @@
       }
     },
     {
-      "folderId": "3057243393e82c08",
-      "folder": "B",
-      "parentId": "2f3211efbb4183ac",
-      "items": 1,
-      "highest": {
-        "name": "Биозащитный Респиратор",
-        "price": 4699
-      },
-      "lowest": {
-        "name": "Биозащитный Респиратор",
-        "price": 4699
-      }
-    },
-    {
       "folderId": "30751f9fa4e1d90f",
       "folder": "B",
       "parentId": "e443b3057969776c",
@@ -1043,11 +1197,39 @@
       "items": 4,
       "highest": {
         "name": "Автомат заряжания спецбоеприпасов",
-        "price": 39683
+        "price": 33611
       },
       "lowest": {
         "name": "Боекомплект крупнокалиберного оружия",
-        "price": 15670
+        "price": 13569
+      }
+    },
+    {
+      "folderId": "31dde4e0d9b21564",
+      "folder": "C",
+      "parentId": "e9ccb2b59d523fc0",
+      "items": 5,
+      "highest": {
+        "name": "Рюкзак «Корвега»",
+        "price": 1683
+      },
+      "lowest": {
+        "name": "Походный рюкзак",
+        "price": 1083
+      }
+    },
+    {
+      "folderId": "32ae2d595ccfe95a",
+      "folder": "S",
+      "parentId": "93a6ab8a2f0bc115",
+      "items": 3,
+      "highest": {
+        "name": "Пояс мастера-пустынника",
+        "price": 16659
+      },
+      "lowest": {
+        "name": "Утилитарный пояс «Волт-Тек»",
+        "price": 14568
       }
     },
     {
@@ -1071,7 +1253,7 @@
       "items": 5,
       "highest": {
         "name": "Гранатомёт «Красная победа»",
-        "price": 9156
+        "price": 9591
       },
       "lowest": {
         "name": "«Милосердие»",
@@ -1085,11 +1267,11 @@
       "items": 1,
       "highest": {
         "name": "Жвах-перчатка",
-        "price": 1323
+        "price": 1606
       },
       "lowest": {
         "name": "Жвах-перчатка",
-        "price": 1323
+        "price": 1606
       }
     },
     {
@@ -1098,12 +1280,12 @@
       "parentId": "0f9e84c339149b39",
       "items": 2,
       "highest": {
-        "name": "Аннабель",
-        "price": 2662
+        "name": "Ракетная Винтовка",
+        "price": 2663
       },
       "lowest": {
-        "name": "Ракетная Винтовка",
-        "price": 2581
+        "name": "Аннабель",
+        "price": 2662
       }
     },
     {
@@ -1112,11 +1294,11 @@
       "parentId": "f96e9923d23faa59",
       "items": 14,
       "highest": {
-        "name": "Наплечный пулемёт",
-        "price": 6905
+        "name": "Адаптивный Карабин",
+        "price": 7156
       },
       "lowest": {
-        "name": "Пистолет N99 10-мм Компакт СПЕЦ",
+        "name": "Боевой Пистолет",
         "price": 4434
       }
     },
@@ -1126,11 +1308,11 @@
       "parentId": "2653ce285def9210",
       "items": 14,
       "highest": {
-        "name": "«Ронин»",
-        "price": 971
+        "name": "Топор Грогнака",
+        "price": 1051
       },
       "lowest": {
-        "name": "Топор",
+        "name": "Топорик",
         "price": 765
       }
     },
@@ -1163,20 +1345,6 @@
       }
     },
     {
-      "folderId": "39008e20f369acbf",
-      "folder": "B",
-      "parentId": "f574170a33b1942e",
-      "items": 5,
-      "highest": {
-        "name": "Шлем костюма Химзащиты",
-        "price": 5308
-      },
-      "lowest": {
-        "name": "Купол Скафандра Учёного Mk.II",
-        "price": 5027
-      }
-    },
-    {
       "folderId": "3afd5fefd5d0551d",
       "folder": "B",
       "parentId": "b8b6ff58e0d382bc",
@@ -1186,8 +1354,8 @@
         "price": 9218
       },
       "lowest": {
-        "name": "Реактивная Кувалда",
-        "price": 1564
+        "name": "«Шиш-кебаб»",
+        "price": 4499
       }
     },
     {
@@ -1205,6 +1373,20 @@
       }
     },
     {
+      "folderId": "3cfddbd1a420bf3b",
+      "folder": "B",
+      "parentId": "c7d6edd990f96d92",
+      "items": 19,
+      "highest": {
+        "name": "Полицейский Противогаз Mk.III",
+        "price": 5820
+      },
+      "lowest": {
+        "name": "Шляпа Заступника",
+        "price": 1150
+      }
+    },
+    {
       "folderId": "3d05a42324af39e0",
       "folder": "C",
       "parentId": "160c1a5226a9445b",
@@ -1215,7 +1397,7 @@
       },
       "lowest": {
         "name": "R91 «Лазутчик»",
-        "price": 1089
+        "price": 1168
       }
     },
     {
@@ -1253,11 +1435,11 @@
       "items": 4,
       "highest": {
         "name": "Металлическая броня Рейдеров",
-        "price": 3557
+        "price": 858
       },
       "lowest": {
-        "name": "Грубая металлическая броня",
-        "price": 3322
+        "name": "Металлические доспехи",
+        "price": 761
       }
     },
     {
@@ -1272,6 +1454,48 @@
       "lowest": {
         "name": "12 калибр",
         "price": 6
+      }
+    },
+    {
+      "folderId": "3ed7db1c0e7cd880",
+      "folder": "C",
+      "parentId": "d302eec245e858bd",
+      "items": 2,
+      "highest": {
+        "name": "Jim's Limbs JP-5 «Стропила»",
+        "price": 1527
+      },
+      "lowest": {
+        "name": "Мед-Тек «Опора»",
+        "price": 1065
+      }
+    },
+    {
+      "folderId": "3ef153b94dbfdeae",
+      "folder": "B",
+      "parentId": "a7d3542ee97e4dc8",
+      "items": 3,
+      "highest": {
+        "name": "Риппердок L-1 — разветвитель: Левая нога",
+        "price": 8528
+      },
+      "lowest": {
+        "name": "РобКо «Пилигрим» — суставные демпферы",
+        "price": 5519
+      }
+    },
+    {
+      "folderId": "401d9446ba890de0",
+      "folder": "B",
+      "parentId": "0354111a868d006f",
+      "items": 7,
+      "highest": {
+        "name": "Риппердок L-1 — разветвитель: Голова",
+        "price": 8528
+      },
+      "lowest": {
+        "name": "Мед-Тек «Эмпат» — социальный резонатор",
+        "price": 4811
       }
     },
     {
@@ -1362,28 +1586,14 @@
       "folderId": "4529c0df6b91e681",
       "folder": "A",
       "parentId": "b5335994e7892bbd",
-      "items": 2,
+      "items": 3,
       "highest": {
         "name": "Адаптивный винтовочный дульный комплекс",
-        "price": 5499
+        "price": 6378
       },
       "lowest": {
         "name": "Адаптивный компактный глушитель-компенсатор",
-        "price": 5499
-      }
-    },
-    {
-      "folderId": "4549d98cf5902427",
-      "folder": "C",
-      "parentId": "f574170a33b1942e",
-      "items": 4,
-      "highest": {
-        "name": "Купол Скафандра Учёного",
-        "price": 1747
-      },
-      "lowest": {
-        "name": "Антирадиационный шлем",
-        "price": 1629
+        "price": 5837
       }
     },
     {
@@ -1406,12 +1616,12 @@
       "parentId": "8d0a47e01b22414f",
       "items": 2,
       "highest": {
-        "name": "Адаптивная оружейная рукоять",
-        "price": 5349
+        "name": "Облегчённый композитный приклад",
+        "price": 3627
       },
       "lowest": {
-        "name": "Облегчённый композитный приклад",
-        "price": 4181
+        "name": "Адаптивная оружейная рукоять",
+        "price": 3099
       }
     },
     {
@@ -1471,6 +1681,34 @@
       }
     },
     {
+      "folderId": "49a221b0d0d65043",
+      "folder": "B",
+      "parentId": "c266d9bb29a52d11",
+      "items": 4,
+      "highest": {
+        "name": "Риппердок L-1 — разветвитель: Туловище",
+        "price": 8528
+      },
+      "lowest": {
+        "name": "Адреналовый каскад «Красная зона»",
+        "price": 5138
+      }
+    },
+    {
+      "folderId": "4a126926a8582ddf",
+      "folder": "C",
+      "parentId": "c7d6edd990f96d92",
+      "items": 41,
+      "highest": {
+        "name": "Маска Ликвидатора",
+        "price": 1438
+      },
+      "lowest": {
+        "name": "Шляпа Шерифа",
+        "price": 356
+      }
+    },
+    {
       "folderId": "4a847b57e770a8a7",
       "folder": "B",
       "parentId": "8fa1822953c16961",
@@ -1482,6 +1720,34 @@
       "lowest": {
         "name": "Баллистический кулак",
         "price": 3884
+      }
+    },
+    {
+      "folderId": "4ae8bc29be140443",
+      "folder": "D",
+      "parentId": "c266d9bb29a52d11",
+      "items": 5,
+      "highest": {
+        "name": "Кровяной сорбент «Угольник»",
+        "price": 529
+      },
+      "lowest": {
+        "name": "Подкожный коагулятор «Стежок»",
+        "price": 400
+      }
+    },
+    {
+      "folderId": "4da49dda63e8e400",
+      "folder": "D",
+      "parentId": "dd9efb278cbea839",
+      "items": 46,
+      "highest": {
+        "name": "Оливковый Поддоспешник",
+        "price": 193
+      },
+      "lowest": {
+        "name": "Чёрный Поддоспешник",
+        "price": 129
       }
     },
     {
@@ -1533,11 +1799,11 @@
       "items": 4,
       "highest": {
         "name": "Прецизионная фокусирующая линза",
-        "price": 5424
+        "price": 2873
       },
       "lowest": {
         "name": "Боевой теплоотвод",
-        "price": 2563
+        "price": 1187
       }
     },
     {
@@ -1547,11 +1813,11 @@
       "items": 12,
       "highest": {
         "name": "Карабин с Гранатомётом",
-        "price": 2917
+        "price": 2999
       },
       "lowest": {
-        "name": "Пистолет Пулемёт Хеклер&Кох",
-        "price": 1353
+        "name": "АКС-74У",
+        "price": 1367
       }
     },
     {
@@ -1560,8 +1826,8 @@
       "parentId": "7c72aff66e2bf872",
       "items": 11,
       "highest": {
-        "name": "Плазменный Карабин",
-        "price": 7602
+        "name": "Плазменный Разрушитель",
+        "price": 7873
       },
       "lowest": {
         "name": "Плазменный Распылитель",
@@ -1575,11 +1841,11 @@
       "items": 1,
       "highest": {
         "name": "Система наведения пусковой установки",
-        "price": 11296
+        "price": 6053
       },
       "lowest": {
         "name": "Система наведения пусковой установки",
-        "price": 11296
+        "price": 6053
       }
     },
     {
@@ -1628,10 +1894,10 @@
       "folderId": "52f6ac6003292918",
       "folder": "B",
       "parentId": "2a111f5f90e0f939",
-      "items": 25,
+      "items": 28,
       "highest": {
-        "name": "Биозащитная броня",
-        "price": 5329
+        "name": "Антирадиационный костюм Убежища",
+        "price": 7250
       },
       "lowest": {
         "name": "Форма Силовика Хьюстона",
@@ -1644,8 +1910,8 @@
       "parentId": "9f072be3edb24587",
       "items": 15,
       "highest": {
-        "name": "Пулемёт MG 08/15",
-        "price": 7499
+        "name": "М60",
+        "price": 7763
       },
       "lowest": {
         "name": "7,62 FN FAL",
@@ -1658,12 +1924,26 @@
       "parentId": "cb8d7ac2138eaf6a",
       "items": 4,
       "highest": {
-        "name": "Гранатомёт",
-        "price": 7646
+        "name": "Пусковая установка",
+        "price": 8061
       },
       "lowest": {
-        "name": "Пусковая установка",
+        "name": "Нарукавник с Гранатомётом",
         "price": 7646
+      }
+    },
+    {
+      "folderId": "539700a5ed2c85e5",
+      "folder": "B",
+      "parentId": "93a6ab8a2f0bc115",
+      "items": 5,
+      "highest": {
+        "name": "Рейдерский пояс-кобура",
+        "price": 3429
+      },
+      "lowest": {
+        "name": "Тактический пояс с подсумками",
+        "price": 2450
       }
     },
     {
@@ -1673,11 +1953,11 @@
       "items": 1,
       "highest": {
         "name": "Лазерный дальномер",
-        "price": 5671
+        "price": 5446
       },
       "lowest": {
         "name": "Лазерный дальномер",
-        "price": 5671
+        "price": 5446
       }
     },
     {
@@ -1793,6 +2073,20 @@
       }
     },
     {
+      "folderId": "5ed4b7686f2cc1e7",
+      "folder": "D",
+      "parentId": "a7d3542ee97e4dc8",
+      "items": 4,
+      "highest": {
+        "name": "Маршевая миоструна «Ходок»",
+        "price": 423
+      },
+      "lowest": {
+        "name": "Сухожильный натяжитель «Пружина»",
+        "price": 336
+      }
+    },
+    {
       "folderId": "5ee4ae412817f346",
       "folder": "C",
       "parentId": "8c279d3434947d14",
@@ -1813,7 +2107,7 @@
       "items": 5,
       "highest": {
         "name": "Винтовка кал. 22",
-        "price": 460
+        "price": 537
       },
       "lowest": {
         "name": "Винтажный Пистолет .22",
@@ -1826,12 +2120,12 @@
       "parentId": "3c0ba91bad12f700",
       "items": 4,
       "highest": {
-        "name": "Прецизионный свободновывешенный ствол",
-        "price": 3048
+        "name": "Тяжёлый стабилизированный ствол",
+        "price": 2145
       },
       "lowest": {
         "name": "Матчевый компактный ствол",
-        "price": 2137
+        "price": 1257
       }
     },
     {
@@ -1841,10 +2135,10 @@
       "items": 15,
       "highest": {
         "name": "Загадочный Молоток",
-        "price": 1272
+        "price": 1238
       },
       "lowest": {
-        "name": "Бейсбольная бита с гвоздями",
+        "name": "Волшебный Молоток",
         "price": 765
       }
     },
@@ -1869,11 +2163,11 @@
       "items": 1,
       "highest": {
         "name": ".308 Winchester «Продвинутый бронебойный»",
-        "price": 166
+        "price": 147
       },
       "lowest": {
         "name": ".308 Winchester «Продвинутый бронебойный»",
-        "price": 166
+        "price": 147
       }
     },
     {
@@ -1888,6 +2182,20 @@
       "lowest": {
         "name": ".22 LR",
         "price": 4
+      }
+    },
+    {
+      "folderId": "62c1a1e53711ada6",
+      "folder": "B",
+      "parentId": "24f361e318cb32dd",
+      "items": 2,
+      "highest": {
+        "name": "Риппердок L-1 — разветвитель: Пах",
+        "price": 8528
+      },
+      "lowest": {
+        "name": "Мед-Тек «Гомеостат» — железистый регулятор",
+        "price": 5875
       }
     },
     {
@@ -1947,17 +2255,17 @@
       }
     },
     {
-      "folderId": "6543476fc9e2bb53",
-      "folder": "D",
-      "parentId": "6887fb730d9ecff3",
-      "items": 3,
+      "folderId": "64f3b43561845af3",
+      "folder": "S",
+      "parentId": "42262daa7247698e",
+      "items": 2,
       "highest": {
-        "name": "Крепкий Противогаз",
-        "price": 767
+        "name": "Биг-МТ «Янус» — научно-медицинская оптика",
+        "price": 51195
       },
       "lowest": {
-        "name": "Дыхательная Маска",
-        "price": 455
+        "name": "Big MT «Кассандра» — предиктивная оптика",
+        "price": 41099
       }
     },
     {
@@ -2003,6 +2311,34 @@
       }
     },
     {
+      "folderId": "6b140ca712b4efc5",
+      "folder": "A",
+      "parentId": "0354111a868d006f",
+      "items": 4,
+      "highest": {
+        "name": "Вест-Тек «Прометей» — боевой ускоритель",
+        "price": 18727
+      },
+      "lowest": {
+        "name": "Резонатор личности «Серебряный язык»",
+        "price": 12765
+      }
+    },
+    {
+      "folderId": "6c1d03b6cec4ec65",
+      "folder": "C",
+      "parentId": "c266d9bb29a52d11",
+      "items": 7,
+      "highest": {
+        "name": "Синтопочка «Чистильщик»",
+        "price": 2612
+      },
+      "lowest": {
+        "name": "Кардиопомпа «Марафон»",
+        "price": 1393
+      }
+    },
+    {
       "folderId": "6c8c3c338dda86ec",
       "folder": "C",
       "parentId": "7477a8a305bbb413",
@@ -2014,6 +2350,20 @@
       "lowest": {
         "name": "9-мм «Зажигательный»",
         "price": 14
+      }
+    },
+    {
+      "folderId": "6dae7fa83bca5efb",
+      "folder": "C",
+      "parentId": "42262daa7247698e",
+      "items": 6,
+      "highest": {
+        "name": "Мед-Тек «Триаж» — диагностическая сетка",
+        "price": 1777
+      },
+      "lowest": {
+        "name": "Оптический комплекс «Пустельга»",
+        "price": 1393
       }
     },
     {
@@ -2101,27 +2451,27 @@
       }
     },
     {
-      "folderId": "74c090008cd0f987",
+      "folderId": "7339b35b66803635",
       "folder": "D",
-      "parentId": "2f3211efbb4183ac",
-      "items": 4,
+      "parentId": "93a6ab8a2f0bc115",
+      "items": 5,
       "highest": {
-        "name": "Хирургическая Маска",
-        "price": 443
+        "name": "Тактический подсумок",
+        "price": 161
       },
       "lowest": {
-        "name": "Старый Респиратор",
-        "price": 334
+        "name": "Холщовая поясная сумка",
+        "price": 97
       }
     },
     {
       "folderId": "7599b145ebab198b",
       "folder": "B",
       "parentId": "ce097c658d00d7d6",
-      "items": 11,
+      "items": 16,
       "highest": {
-        "name": "Пластмассовый Шлем",
-        "price": 3194
+        "name": "Шлем костюма Химзащиты",
+        "price": 5308
       },
       "lowest": {
         "name": "Лётный Шлем",
@@ -2135,11 +2485,25 @@
       "items": 1,
       "highest": {
         "name": "Активно стабилизируемый ствол",
-        "price": 16767
+        "price": 24685
       },
       "lowest": {
         "name": "Активно стабилизируемый ствол",
-        "price": 16767
+        "price": 24685
+      }
+    },
+    {
+      "folderId": "75f9bac0124fde61",
+      "folder": "D",
+      "parentId": "42262daa7247698e",
+      "items": 6,
+      "highest": {
+        "name": "Защитная плёнка «Сварщик»",
+        "price": 520
+      },
+      "lowest": {
+        "name": "Ретинальная метка «Искатель»",
+        "price": 336
       }
     },
     {
@@ -2149,11 +2513,25 @@
       "items": 1,
       "highest": {
         "name": "Высокоскоростной мотор тяжёлого оружия",
-        "price": 6714
+        "price": 5182
       },
       "lowest": {
         "name": "Высокоскоростной мотор тяжёлого оружия",
-        "price": 6714
+        "price": 5182
+      }
+    },
+    {
+      "folderId": "7692b4a372a95843",
+      "folder": "D",
+      "parentId": "ca20435e4cb4ed5b",
+      "items": 4,
+      "highest": {
+        "name": "Сухожильная сетка «Костяшка»",
+        "price": 456
+      },
+      "lowest": {
+        "name": "Миостимулятор «Рывок»",
+        "price": 336
       }
     },
     {
@@ -2176,12 +2554,26 @@
       "parentId": "d5e292bccdfd0e3d",
       "items": 11,
       "highest": {
-        "name": "«Большой бум»",
-        "price": 427
+        "name": "Гражданское Полуавтоматическое Ружьё 12 кал.",
+        "price": 504
       },
       "lowest": {
         "name": "Охотничий Травматический дробовик",
         "price": 271
+      }
+    },
+    {
+      "folderId": "77c75152c8fd5602",
+      "folder": "B",
+      "parentId": "30676a0d95d2ddb6",
+      "items": 3,
+      "highest": {
+        "name": "Вест-Тек «Крушитель»",
+        "price": 12545
+      },
+      "lowest": {
+        "name": "РобКо «Спринтер»",
+        "price": 4399
       }
     },
     {
@@ -2199,17 +2591,17 @@
       }
     },
     {
-      "folderId": "792cc2c8667d593e",
-      "folder": "C",
-      "parentId": "8b033f9dee700d0e",
+      "folderId": "78b7d8933430b79b",
+      "folder": "A",
+      "parentId": "42262daa7247698e",
       "items": 2,
       "highest": {
-        "name": "Защитные очки Mk.II",
-        "price": 477
+        "name": "Вест-Тек «Спектр» — полевая аналитическая оптика",
+        "price": 15276
       },
       "lowest": {
-        "name": "Укреплённые Защитные Очки",
-        "price": 435
+        "name": "Вест-Тек «Цербер» — трёхканальная оптика",
+        "price": 15276
       }
     },
     {
@@ -2224,6 +2616,20 @@
       "lowest": {
         "name": "9-мм",
         "price": 4
+      }
+    },
+    {
+      "folderId": "7a0b8e84ea7bd62b",
+      "folder": "B",
+      "parentId": "fc56c6de9c92bce7",
+      "items": 6,
+      "highest": {
+        "name": "Вест-Тек «Инферно»",
+        "price": 14494
+      },
+      "lowest": {
+        "name": "РобКо M-7 «Манипулятор»",
+        "price": 4046
       }
     },
     {
@@ -2274,19 +2680,19 @@
       "parentId": "f47fd05e93abae7f",
       "items": 3,
       "highest": {
-        "name": "Учебный комплект пусковой установки",
-        "price": 833
+        "name": "Сдвоенный бак огнемёта",
+        "price": 509
       },
       "lowest": {
         "name": "Фокусирующее сопло огнемёта",
-        "price": 728
+        "price": 287
       }
     },
     {
       "folderId": "7dd98800d1902fcc",
       "folder": "D",
       "parentId": "ce097c658d00d7d6",
-      "items": 22,
+      "items": 27,
       "highest": {
         "name": "Шлем Синта Разведчика",
         "price": 558
@@ -2303,7 +2709,7 @@
       "items": 2,
       "highest": {
         "name": "Укороченный дробовой ствол",
-        "price": 173
+        "price": 174
       },
       "lowest": {
         "name": "Укреплённый оружейный ствол",
@@ -2345,11 +2751,25 @@
       "items": 5,
       "highest": {
         "name": "Быстрая пистолетная рукоять",
-        "price": 506
+        "price": 401
       },
       "lowest": {
         "name": "Полимерная ложа",
-        "price": 334
+        "price": 229
+      }
+    },
+    {
+      "folderId": "7f1c8d55e419c9d1",
+      "folder": "S",
+      "parentId": "a7d3542ee97e4dc8",
+      "items": 2,
+      "highest": {
+        "name": "Биг-МТ «Вектор» — инерционный локомотор",
+        "price": 57765
+      },
+      "lowest": {
+        "name": "Big MT «Гермес» — локомоторный контур",
+        "price": 55269
       }
     },
     {
@@ -2409,6 +2829,20 @@
       }
     },
     {
+      "folderId": "81b47687c1e4abf3",
+      "folder": "A",
+      "parentId": "ca20435e4cb4ed5b",
+      "items": 2,
+      "highest": {
+        "name": "Вест-Тек «Тремор-ноль» — прецизионный нерв",
+        "price": 18701
+      },
+      "lowest": {
+        "name": "Вест-Тек «Гефест» — прецизионные миомеры",
+        "price": 17236
+      }
+    },
+    {
       "folderId": "820763f2079f2342",
       "folder": "B",
       "parentId": "a9a72c9ab169a1be",
@@ -2443,11 +2877,11 @@
       "items": 4,
       "highest": {
         "name": "Голографический прицел",
-        "price": 881
+        "price": 538
       },
       "lowest": {
         "name": "Компактный оптический прицел x2",
-        "price": 589
+        "price": 390
       }
     },
     {
@@ -2470,12 +2904,12 @@
       "parentId": "dd01297187bfa329",
       "items": 4,
       "highest": {
-        "name": "Увеличенный магазин для карабина",
-        "price": 209
+        "name": "Кустарный барабан револьвера",
+        "price": 165
       },
       "lowest": {
         "name": "Удлинитель трубчатого магазина",
-        "price": 165
+        "price": 120
       }
     },
     {
@@ -2484,12 +2918,12 @@
       "parentId": "7ba395aebd9462ca",
       "items": 4,
       "highest": {
-        "name": "Подствольный огнемёт",
-        "price": 4731
+        "name": "Однозарядный 25-мм подствольный гранатомёт",
+        "price": 2885
       },
       "lowest": {
         "name": "Магазинный подствольный дробовик",
-        "price": 3884
+        "price": 2322
       }
     },
     {
@@ -2540,12 +2974,12 @@
       "parentId": "46f36e8f9644520e",
       "items": 4,
       "highest": {
-        "name": "Сверхпроводящий ускоритель Гаусса",
-        "price": 33824
+        "name": "Сверхпроводящий энергоконтур",
+        "price": 32716
       },
       "lowest": {
         "name": "Сверхпроводящая система охлаждения",
-        "price": 24683
+        "price": 19016
       }
     },
     {
@@ -2569,25 +3003,11 @@
       "items": 10,
       "highest": {
         "name": "Армейская утепленная Боевая Броня",
-        "price": 4020
+        "price": 3974
       },
       "lowest": {
         "name": "Броня Охранны Города Убежища",
-        "price": 3313
-      }
-    },
-    {
-      "folderId": "89b6f86ed880c406",
-      "folder": "D",
-      "parentId": "5017f6f17a694bb0",
-      "items": 5,
-      "highest": {
-        "name": "Лицо Аниматроника",
-        "price": 284
-      },
-      "lowest": {
-        "name": "Маска Борца",
-        "price": 173
+        "price": 3107
       }
     },
     {
@@ -2602,6 +3022,20 @@
       "lowest": {
         "name": "Гранатомётный выстрел большого формата «Зажигательный»",
         "price": 1516
+      }
+    },
+    {
+      "folderId": "8a522481bfe91405",
+      "folder": "A",
+      "parentId": "dc48897b3625af21",
+      "items": 3,
+      "highest": {
+        "name": "Модульная разгрузка Братства",
+        "price": 12001
+      },
+      "lowest": {
+        "name": "Тактическая система быстрого доступа",
+        "price": 6250
       }
     },
     {
@@ -2650,10 +3084,10 @@
       "folderId": "8e273ff4aa281f34",
       "folder": "C",
       "parentId": "2a111f5f90e0f939",
-      "items": 17,
+      "items": 18,
       "highest": {
-        "name": "Боевая кожаная куртка",
-        "price": 1517
+        "name": "Антирадиационный костюм",
+        "price": 2002
       },
       "lowest": {
         "name": "Разведброня",
@@ -2689,6 +3123,20 @@
       }
     },
     {
+      "folderId": "9015ab8828873082",
+      "folder": "B",
+      "parentId": "e9ccb2b59d523fc0",
+      "items": 5,
+      "highest": {
+        "name": "Инструментальный рюкзак",
+        "price": 5879
+      },
+      "lowest": {
+        "name": "Тактический рюкзак",
+        "price": 3919
+      }
+    },
+    {
       "folderId": "904d2f6560835fd8",
       "folder": "B",
       "parentId": "e52bbb9792ea2fb3",
@@ -2703,31 +3151,31 @@
       }
     },
     {
-      "folderId": "9140b3ad4bd68b77",
-      "folder": "B",
-      "parentId": "415b5d8576712cff",
-      "items": 3,
+      "folderId": "9170dd4f6e73d18c",
+      "folder": "S",
+      "parentId": "e9ccb2b59d523fc0",
+      "items": 2,
       "highest": {
-        "name": "Антирадиационный костюм Убежища",
-        "price": 7250
+        "name": "Силовой грузовой ранец «Атлас»",
+        "price": 19650
       },
       "lowest": {
-        "name": "Костюм Химзащиты",
-        "price": 6942
+        "name": "Криогенный транспортный модуль «Полюс»",
+        "price": 18524
       }
     },
     {
       "folderId": "917bd30198216c7f",
       "folder": "C",
       "parentId": "b5335994e7892bbd",
-      "items": 5,
+      "items": 6,
       "highest": {
         "name": "Чок для дробовика",
-        "price": 740
+        "price": 538
       },
       "lowest": {
         "name": "Компенсатор для пистолета и ПП",
-        "price": 555
+        "price": 218
       }
     },
     {
@@ -2765,7 +3213,7 @@
       "items": 19,
       "highest": {
         "name": "Утяжелённый Китайский автомат Type 93",
-        "price": 10373
+        "price": 10788
       },
       "lowest": {
         "name": "Бозар 5,56 МИНИ",
@@ -2773,17 +3221,17 @@
       }
     },
     {
-      "folderId": "94f4b13417af00a0",
-      "folder": "D",
-      "parentId": "697ef56e4a221f80",
-      "items": 3,
+      "folderId": "93bb9090d2505030",
+      "folder": "S",
+      "parentId": "dc48897b3625af21",
+      "items": 2,
       "highest": {
-        "name": "Оливковый Поддоспешник",
-        "price": 193
+        "name": "Адаптивная разгрузка «Квартирмейстер»",
+        "price": 19875
       },
       "lowest": {
-        "name": "Чёрный Поддоспешник",
-        "price": 129
+        "name": "Силовая грузовая система «Муравей»",
+        "price": 17159
       }
     },
     {
@@ -2793,11 +3241,11 @@
       "items": 1,
       "highest": {
         "name": "Криолятор",
-        "price": 13501
+        "price": 13936
       },
       "lowest": {
         "name": "Криолятор",
-        "price": 13501
+        "price": 13936
       }
     },
     {
@@ -2807,11 +3255,11 @@
       "items": 2,
       "highest": {
         "name": "Комбинированный фонарь-целеуказатель",
-        "price": 2248
+        "price": 1417
       },
       "lowest": {
         "name": "Складные сошки",
-        "price": 1991
+        "price": 1111
       }
     },
     {
@@ -2835,11 +3283,11 @@
       "items": 1,
       "highest": {
         "name": "Дробовик .410 Булл-Пап",
-        "price": 1690
+        "price": 1802
       },
       "lowest": {
         "name": "Дробовик .410 Булл-Пап",
-        "price": 1690
+        "price": 1802
       }
     },
     {
@@ -2890,12 +3338,12 @@
       "parentId": "a7e0aaf6c3e286e3",
       "items": 5,
       "highest": {
-        "name": "Оптический прицел x6",
-        "price": 4156
+        "name": "Компактный электронный прицел",
+        "price": 2295
       },
       "lowest": {
-        "name": "Оптический прицел x4",
-        "price": 3048
+        "name": "Переменный прицел 1–4x",
+        "price": 1747
       }
     },
     {
@@ -2960,26 +3408,26 @@
       "parentId": "46f36e8f9644520e",
       "items": 3,
       "highest": {
-        "name": "Увеличенный приёмник энергооружия",
-        "price": 253
+        "name": "Кустарный фокусирующий излучатель",
+        "price": 230
       },
       "lowest": {
-        "name": "Пассивный теплорассеиватель",
+        "name": "Увеличенный приёмник энергооружия",
         "price": 163
       }
     },
     {
-      "folderId": "9a522ffe8e253016",
-      "folder": "D",
-      "parentId": "8b033f9dee700d0e",
-      "items": 6,
+      "folderId": "9a69dae184819554",
+      "folder": "A",
+      "parentId": "24f361e318cb32dd",
+      "items": 2,
       "highest": {
-        "name": "Мотоциклетные очки",
-        "price": 237
+        "name": "Тазовая шина «Две ноги»",
+        "price": 18077
       },
       "lowest": {
-        "name": "Улучшеные Мотоциклетные Очки",
-        "price": 161
+        "name": "Мед-Тек «Якорь» — контур гомеостаза",
+        "price": 17425
       }
     },
     {
@@ -3002,12 +3450,12 @@
       "parentId": "bcad3d4067f13909",
       "items": 3,
       "highest": {
-        "name": "Кованая рычажная коробка",
-        "price": 589
+        "name": "Кованая коробка штурмовой винтовки",
+        "price": 264
       },
       "lowest": {
-        "name": "Кованая коробка штурмовой винтовки",
-        "price": 462
+        "name": "Износостойкие части штурмовой винтовки",
+        "price": 218
       }
     },
     {
@@ -3031,11 +3479,11 @@
       "items": 1,
       "highest": {
         "name": "Микроядерный гипераппарат «Альфа»",
-        "price": 6210
+        "price": 6645
       },
       "lowest": {
         "name": "Микроядерный гипераппарат «Альфа»",
-        "price": 6210
+        "price": 6645
       }
     },
     {
@@ -3050,6 +3498,20 @@
       "lowest": {
         "name": ".357 Magnum «Зажигательный»",
         "price": 39
+      }
+    },
+    {
+      "folderId": "9c62458bf9b25711",
+      "folder": "A",
+      "parentId": "dd9efb278cbea839",
+      "items": 23,
+      "highest": {
+        "name": "Брючный Костюм Ягуар",
+        "price": 3308
+      },
+      "lowest": {
+        "name": "Чёрный Фрак",
+        "price": 3308
       }
     },
     {
@@ -3072,12 +3534,40 @@
       "parentId": "aeeb257bef863201",
       "items": 14,
       "highest": {
-        "name": "Лезвие штурмовика",
-        "price": 1182
+        "name": "Боевой нож",
+        "price": 1189
       },
       "lowest": {
         "name": "Большой меч",
         "price": 765
+      }
+    },
+    {
+      "folderId": "a025a330f9af7c21",
+      "folder": "S",
+      "parentId": "c266d9bb29a52d11",
+      "items": 3,
+      "highest": {
+        "name": "NEMEAN «Эгида» — адаптивная дерма",
+        "price": 53634
+      },
+      "lowest": {
+        "name": "Big MT «Призрак» — бесшумный моторный контур",
+        "price": 41099
+      }
+    },
+    {
+      "folderId": "a09d5375a654111e",
+      "folder": "C",
+      "parentId": "dc48897b3625af21",
+      "items": 4,
+      "highest": {
+        "name": "Разгрузка с наплечником",
+        "price": 1383
+      },
+      "lowest": {
+        "name": "Полевая разгрузка",
+        "price": 784
       }
     },
     {
@@ -3109,6 +3599,20 @@
       }
     },
     {
+      "folderId": "a5904c39e8b7cb87",
+      "folder": "D",
+      "parentId": "e9ccb2b59d523fc0",
+      "items": 4,
+      "highest": {
+        "name": "Кожаный дорожный рюкзак",
+        "price": 355
+      },
+      "lowest": {
+        "name": "Самодельный вещмешок",
+        "price": 193
+      }
+    },
+    {
       "folderId": "a63a3d3c9972e3ca",
       "folder": "S",
       "parentId": "b2fe831a2b191acb",
@@ -3123,17 +3627,17 @@
       }
     },
     {
-      "folderId": "a6db9641becad58e",
+      "folderId": "a643fbac9154a3c9",
       "folder": "C",
-      "parentId": "415b5d8576712cff",
-      "items": 1,
+      "parentId": "93a6ab8a2f0bc115",
+      "items": 5,
       "highest": {
-        "name": "Антирадиационный костюм",
-        "price": 2050
+        "name": "Медицинский поясной комплект",
+        "price": 922
       },
       "lowest": {
-        "name": "Антирадиационный костюм",
-        "price": 2050
+        "name": "Ремень полевого медика",
+        "price": 600
       }
     },
     {
@@ -3143,11 +3647,25 @@
       "items": 1,
       "highest": {
         "name": "Встроенный гранатомёт XM29",
-        "price": 11875
+        "price": 6639
       },
       "lowest": {
         "name": "Встроенный гранатомёт XM29",
-        "price": 11875
+        "price": 6639
+      }
+    },
+    {
+      "folderId": "a7ede32efab96747",
+      "folder": "C",
+      "parentId": "0354111a868d006f",
+      "items": 7,
+      "highest": {
+        "name": "Нейрошунт «Резерв» — контур концентрации",
+        "price": 1776
+      },
+      "lowest": {
+        "name": "РобКо NAR-1 «Когнитор»",
+        "price": 1149
       }
     },
     {
@@ -3162,6 +3680,20 @@
       "lowest": {
         "name": "Дон Педро",
         "price": 3368
+      }
+    },
+    {
+      "folderId": "a84a05cc8e0e34d6",
+      "folder": "A",
+      "parentId": "fc56c6de9c92bce7",
+      "items": 2,
+      "highest": {
+        "name": "Вест-Тек «Плазменный молот»",
+        "price": 30257
+      },
+      "lowest": {
+        "name": "Вест-Тек «Миомер» A-12",
+        "price": 10280
       }
     },
     {
@@ -3271,6 +3803,20 @@
       }
     },
     {
+      "folderId": "af0a4eebfd7d84b9",
+      "folder": "B",
+      "parentId": "42262daa7247698e",
+      "items": 4,
+      "highest": {
+        "name": "Риппердок L-1 — разветвитель: Глаза",
+        "price": 8528
+      },
+      "lowest": {
+        "name": "РобКо «Смотритель» — усилитель зрительного нерва",
+        "price": 5016
+      }
+    },
+    {
       "folderId": "b0855a4146cf7277",
       "folder": "A",
       "parentId": "b82c6ba50b9d2173",
@@ -3282,6 +3828,34 @@
       "lowest": {
         "name": "Броня Морской Пехоты",
         "price": 23908
+      }
+    },
+    {
+      "folderId": "b16f386cdae64256",
+      "folder": "S",
+      "parentId": "c7d6edd990f96d92",
+      "items": 57,
+      "highest": {
+        "name": "Алекс",
+        "price": 5348
+      },
+      "lowest": {
+        "name": "Ядер Кепка",
+        "price": 4379
+      }
+    },
+    {
+      "folderId": "b235ae0c2f3f3b29",
+      "folder": "S",
+      "parentId": "7c934ccd69eba452",
+      "items": 2,
+      "highest": {
+        "name": "Биг-МТ «Панопт»",
+        "price": 34776
+      },
+      "lowest": {
+        "name": "Биг-МТ «Оракул»",
+        "price": 25616
       }
     },
     {
@@ -3305,7 +3879,7 @@
       "items": 20,
       "highest": {
         "name": "Боксёрские перчатки",
-        "price": 281
+        "price": 249
       },
       "lowest": {
         "name": "Трубный ключ",
@@ -3351,7 +3925,7 @@
       },
       "lowest": {
         "name": "Снайперский Пистолет",
-        "price": 10537
+        "price": 11903
       }
     },
     {
@@ -3366,6 +3940,20 @@
       "lowest": {
         "name": "Высокоразрядная оружейная батарея (C)",
         "price": 674
+      }
+    },
+    {
+      "folderId": "b54c36faf63a505f",
+      "folder": "C",
+      "parentId": "ca20435e4cb4ed5b",
+      "items": 6,
+      "highest": {
+        "name": "Подкожный клинок «Коготь»",
+        "price": 2126
+      },
+      "lowest": {
+        "name": "Синаптический стабилизатор «Точная рука»",
+        "price": 1149
       }
     },
     {
@@ -3403,11 +3991,11 @@
       "items": 2,
       "highest": {
         "name": "Импульсный узел ближнего боя Mk.IV",
-        "price": 33620
+        "price": 37089
       },
       "lowest": {
         "name": "Сервопривод силового кастета Mk.IV",
-        "price": 33620
+        "price": 29502
       }
     },
     {
@@ -3467,17 +4055,31 @@
       }
     },
     {
+      "folderId": "bbd3e5526f2144c8",
+      "folder": "B",
+      "parentId": "d302eec245e858bd",
+      "items": 2,
+      "highest": {
+        "name": "РобКо «Контрфорс»",
+        "price": 5166
+      },
+      "lowest": {
+        "name": "РобКо «Бастион»",
+        "price": 4637
+      }
+    },
+    {
       "folderId": "bc48cc0d7a29856c",
       "folder": "S",
       "parentId": "a7e0aaf6c3e286e3",
       "items": 3,
       "highest": {
         "name": "Вычислительный прицельный комплекс",
-        "price": 32140
+        "price": 27295
       },
       "lowest": {
         "name": "Оптический прицел x12",
-        "price": 17156
+        "price": 21463
       }
     },
     {
@@ -3501,11 +4103,11 @@
       "items": 3,
       "highest": {
         "name": "Прецизионные части штурмовой винтовки",
-        "price": 22373
+        "price": 20780
       },
       "lowest": {
         "name": "Прецизионная золотая рычажная коробка",
-        "price": 14010
+        "price": 10839
       }
     },
     {
@@ -3520,6 +4122,34 @@
       "lowest": {
         "name": "Защитные очки Mk.III",
         "price": 1272
+      }
+    },
+    {
+      "folderId": "bf60db24262f1a2a",
+      "folder": "A",
+      "parentId": "c266d9bb29a52d11",
+      "items": 4,
+      "highest": {
+        "name": "Торакальная шина «Две руки»",
+        "price": 18077
+      },
+      "lowest": {
+        "name": "Спинальный контур «Хищник»",
+        "price": 13273
+      }
+    },
+    {
+      "folderId": "bfe74995885a79dd",
+      "folder": "D",
+      "parentId": "30676a0d95d2ddb6",
+      "items": 1,
+      "highest": {
+        "name": "Нога-костыль «Пустошник»",
+        "price": 216
+      },
+      "lowest": {
+        "name": "Нога-костыль «Пустошник»",
+        "price": 216
       }
     },
     {
@@ -3565,31 +4195,31 @@
       }
     },
     {
+      "folderId": "c141dc9d011d10c9",
+      "folder": "D",
+      "parentId": "dc48897b3625af21",
+      "items": 4,
+      "highest": {
+        "name": "Холщовый разгрузочный жилет",
+        "price": 226
+      },
+      "lowest": {
+        "name": "Малая полевая разгрузка",
+        "price": 129
+      }
+    },
+    {
       "folderId": "c23c973287bca06b",
       "folder": "C",
       "parentId": "575c44da5563bc2b",
       "items": 6,
       "highest": {
-        "name": "Стабилизатор энергоузла ближнего боя",
-        "price": 950
+        "name": "Карбидные зубцы",
+        "price": 508
       },
       "lowest": {
         "name": "Кленовая ударная часть",
-        "price": 450
-      }
-    },
-    {
-      "folderId": "c3d439fc5210b04f",
-      "folder": "C",
-      "parentId": "697ef56e4a221f80",
-      "items": 1,
-      "highest": {
-        "name": "Укреплённый Комбинезон Убежища",
-        "price": 633
-      },
-      "lowest": {
-        "name": "Укреплённый Комбинезон Убежища",
-        "price": 633
+        "price": 252
       }
     },
     {
@@ -3603,7 +4233,7 @@
       },
       "lowest": {
         "name": "Автоматический Пистолет кал. 22 с глушителем",
-        "price": 1319
+        "price": 1400
       }
     },
     {
@@ -3613,11 +4243,11 @@
       "items": 4,
       "highest": {
         "name": "Удлинённый винтовочный ствол",
-        "price": 881
+        "price": 424
       },
       "lowest": {
-        "name": "Удлинённый компактный ствол",
-        "price": 589
+        "name": "Облегчённый компактный ствол",
+        "price": 252
       }
     },
     {
@@ -3638,7 +4268,7 @@
       "folderId": "c4fde0bdacceadbc",
       "folder": "C",
       "parentId": "ce097c658d00d7d6",
-      "items": 8,
+      "items": 12,
       "highest": {
         "name": "Шлем разведчика НКР",
         "price": 2228
@@ -3668,12 +4298,26 @@
       "parentId": "d5e292bccdfd0e3d",
       "items": 22,
       "highest": {
-        "name": "Уличный Задира",
-        "price": 2040
+        "name": "Двуствольное ружьё СПЕЦ",
+        "price": 2050
       },
       "lowest": {
         "name": "Дробовик Вышибалы",
         "price": 1194
+      }
+    },
+    {
+      "folderId": "c563d8a307741a58",
+      "folder": "A",
+      "parentId": "c7d6edd990f96d92",
+      "items": 20,
+      "highest": {
+        "name": "Маска Чудовища",
+        "price": 3163
+      },
+      "lowest": {
+        "name": "Эротичный Цилиндр",
+        "price": 2611
       }
     },
     {
@@ -3682,12 +4326,12 @@
       "parentId": "7ba395aebd9462ca",
       "items": 7,
       "highest": {
-        "name": "Компактный подствольный огнемёт",
-        "price": 1381
+        "name": "Подствольный гранатомёт M203",
+        "price": 679
       },
       "lowest": {
         "name": "Штык-нож",
-        "price": 567
+        "price": 264
       }
     },
     {
@@ -3725,7 +4369,7 @@
       "items": 13,
       "highest": {
         "name": "H&K ШОББ",
-        "price": 7238
+        "price": 7817
       },
       "lowest": {
         "name": "Дробовик Сити-Киллер .12",
@@ -3780,12 +4424,12 @@
       "parentId": "77ffc3da288b4ee3",
       "items": 19,
       "highest": {
-        "name": "Эксперементальное Звуковое Ружьё",
-        "price": 7791
+        "name": "«Потрошитель» Mk II",
+        "price": 8272
       },
       "lowest": {
         "name": "Индустриальный кастет",
-        "price": 480
+        "price": 4105
       }
     },
     {
@@ -3806,14 +4450,14 @@
       "folderId": "cd00f66da54c2393",
       "folder": "S",
       "parentId": "b5335994e7892bbd",
-      "items": 1,
+      "items": 3,
       "highest": {
         "name": "Управляемый дульный комплекс",
-        "price": 12100
+        "price": 19626
       },
       "lowest": {
-        "name": "Управляемый дульный комплекс",
-        "price": 12100
+        "name": "Активный компактный глушитель",
+        "price": 13960
       }
     },
     {
@@ -3878,12 +4522,12 @@
       "parentId": "c4449a4cc29017d7",
       "items": 4,
       "highest": {
-        "name": "Вертикальная тактическая рукоять",
-        "price": 589
+        "name": "Дальнобойный оружейный фонарь",
+        "price": 520
       },
       "lowest": {
-        "name": "Дальнобойный оружейный фонарь",
-        "price": 428
+        "name": "Угловая тактическая рукоять",
+        "price": 252
       }
     },
     {
@@ -3929,6 +4573,20 @@
       }
     },
     {
+      "folderId": "d06af0e01c7a009f",
+      "folder": "D",
+      "parentId": "c7d6edd990f96d92",
+      "items": 60,
+      "highest": {
+        "name": "Крепкий Противогаз",
+        "price": 767
+      },
+      "lowest": {
+        "name": "Шарф красный",
+        "price": 97
+      }
+    },
+    {
       "folderId": "d08cb9cbbf795e6b",
       "folder": "D",
       "parentId": "5878e999f3121192",
@@ -3940,6 +4598,20 @@
       "lowest": {
         "name": "Лазерный пистолет AEP7",
         "price": 414
+      }
+    },
+    {
+      "folderId": "d14ec3edead0bd87",
+      "folder": "C",
+      "parentId": "a7d3542ee97e4dc8",
+      "items": 5,
+      "highest": {
+        "name": "Коленный рефлекс «Отход»",
+        "price": 1881
+      },
+      "lowest": {
+        "name": "Big MT M-5 «Тихоход»",
+        "price": 1149
       }
     },
     {
@@ -3990,12 +4662,26 @@
       "parentId": "af88b9dfce366c87",
       "items": 12,
       "highest": {
-        "name": "Броня НКР",
-        "price": 2640
+        "name": "Броня Легионера",
+        "price": 680
       },
       "lowest": {
-        "name": "Боевая Броня воина Легиона",
-        "price": 2329
+        "name": "Бронированный Пыльник Мутанта",
+        "price": 543
+      }
+    },
+    {
+      "folderId": "d32403a714240c3a",
+      "folder": "A",
+      "parentId": "30676a0d95d2ddb6",
+      "items": 2,
+      "highest": {
+        "name": "Вест-Тек «Центурион»",
+        "price": 17365
+      },
+      "lowest": {
+        "name": "Вест-Тек «Саранча»",
+        "price": 13119
       }
     },
     {
@@ -4061,25 +4747,11 @@
       "items": 1,
       "highest": {
         "name": "Подствольный фонарь",
-        "price": 120
+        "price": 165
       },
       "lowest": {
         "name": "Подствольный фонарь",
-        "price": 120
-      }
-    },
-    {
-      "folderId": "d79be5bc0cf5d72c",
-      "folder": "B",
-      "parentId": "6887fb730d9ecff3",
-      "items": 2,
-      "highest": {
-        "name": "Полицейский Противогаз Mk.III",
-        "price": 5820
-      },
-      "lowest": {
-        "name": "Защитный Противогаз «Исследователь»",
-        "price": 5526
+        "price": 165
       }
     },
     {
@@ -4103,11 +4775,25 @@
       "items": 9,
       "highest": {
         "name": "«Колорадо»",
-        "price": 6488
+        "price": 6913
       },
       "lowest": {
         "name": "Спортивный револьвер Казулл",
         "price": 3136
+      }
+    },
+    {
+      "folderId": "db4f883bfb138f2d",
+      "folder": "A",
+      "parentId": "d302eec245e858bd",
+      "items": 2,
+      "highest": {
+        "name": "Вест-Тек «Крепость»",
+        "price": 16132
+      },
+      "lowest": {
+        "name": "Вест-Тек «Атлант»",
+        "price": 9907
       }
     },
     {
@@ -4117,7 +4803,7 @@
       "items": 3,
       "highest": {
         "name": "Цилиндрическая насадка",
-        "price": 174
+        "price": 142
       },
       "lowest": {
         "name": "Компактный пламегаситель",
@@ -4145,11 +4831,11 @@
       "items": 1,
       "highest": {
         "name": "Система наведения пусковой установки Mk.II",
-        "price": 33237
+        "price": 25251
       },
       "lowest": {
         "name": "Система наведения пусковой установки Mk.II",
-        "price": 33237
+        "price": 25251
       }
     },
     {
@@ -4187,11 +4873,11 @@
       "items": 2,
       "highest": {
         "name": "Прецизионный винтовочный ствол",
-        "price": 9042
+        "price": 6144
       },
       "lowest": {
         "name": "Прецизионный компактный ствол",
-        "price": 7766
+        "price": 4272
       }
     },
     {
@@ -4248,6 +4934,34 @@
       "lowest": {
         "name": "Пистолет Флечетт",
         "price": 3136
+      }
+    },
+    {
+      "folderId": "e202392bb2e2e216",
+      "folder": "C",
+      "parentId": "fc56c6de9c92bce7",
+      "items": 4,
+      "highest": {
+        "name": "Огнемётная рука «Саламандра»",
+        "price": 3341
+      },
+      "lowest": {
+        "name": "Jim's Limbs JA-3 «Рабочая рука»",
+        "price": 1043
+      }
+    },
+    {
+      "folderId": "e2297d1a164909cf",
+      "folder": "A",
+      "parentId": "93a6ab8a2f0bc115",
+      "items": 4,
+      "highest": {
+        "name": "Пояс разведчика Анклава",
+        "price": 7605
+      },
+      "lowest": {
+        "name": "Модульный поясной комплект",
+        "price": 5208
       }
     },
     {
@@ -4312,12 +5026,12 @@
       "parentId": "dd01297187bfa329",
       "items": 7,
       "highest": {
-        "name": "Барабанный магазин для ПП",
-        "price": 2980
+        "name": "Быстросменная кассета спецбоеприпасов",
+        "price": 2287
       },
       "lowest": {
         "name": "Сбалансированный компактный магазин",
-        "price": 2102
+        "price": 1187
       }
     },
     {
@@ -4326,12 +5040,12 @@
       "parentId": "26cf5df118bc7492",
       "items": 2,
       "highest": {
-        "name": "Ядерный выстрел «Сингулярный»",
-        "price": 10678
+        "name": "Ядерный выстрел «Квантовый»",
+        "price": 9402
       },
       "lowest": {
-        "name": "Ядерный выстрел «Квантовый»",
-        "price": 6845
+        "name": "Ядерный выстрел «Сингулярный»",
+        "price": 8085
       }
     },
     {
@@ -4383,11 +5097,25 @@
       "items": 10,
       "highest": {
         "name": "CZ57 «Авенджер»",
-        "price": 9871
+        "price": 10296
       },
       "lowest": {
         "name": "СМГ Булл-Пап 5-мм",
-        "price": 4258
+        "price": 4784
+      }
+    },
+    {
+      "folderId": "e8f730cd70af265d",
+      "folder": "S",
+      "parentId": "d302eec245e858bd",
+      "items": 2,
+      "highest": {
+        "name": "Биг-МТ «Колосс»",
+        "price": 52110
+      },
+      "lowest": {
+        "name": "Биг-МТ «Кариатида»",
+        "price": 39909
       }
     },
     {
@@ -4397,11 +5125,25 @@
       "items": 5,
       "highest": {
         "name": "Программируемая кассета спецбоеприпасов",
-        "price": 8338
+        "price": 7452
       },
       "lowest": {
         "name": "Прецизионный барабан револьвера",
-        "price": 4724
+        "price": 2177
+      }
+    },
+    {
+      "folderId": "eca6bced2803d5d3",
+      "folder": "C",
+      "parentId": "dd9efb278cbea839",
+      "items": 37,
+      "highest": {
+        "name": "КСЗД с карманами",
+        "price": 800
+      },
+      "lowest": {
+        "name": "Форма Национальной Гвардии",
+        "price": 484
       }
     },
     {
@@ -4447,6 +5189,20 @@
       }
     },
     {
+      "folderId": "ee92fafbda26b3d5",
+      "folder": "A",
+      "parentId": "a7d3542ee97e4dc8",
+      "items": 2,
+      "highest": {
+        "name": "Вест-Тек «Гироплатформа» — опора стрелка",
+        "price": 18701
+      },
+      "lowest": {
+        "name": "Big MT «Меркурий» — кинетические сухожилия",
+        "price": 17236
+      }
+    },
+    {
       "folderId": "eeb2a9e456e8499e",
       "folder": "B",
       "parentId": "bcab150b360396a6",
@@ -4467,11 +5223,25 @@
       "items": 2,
       "highest": {
         "name": "Коллиматорный прицел x1",
-        "price": 211
+        "price": 174
       },
       "lowest": {
         "name": "Компактный коллиматор x1",
-        "price": 174
+        "price": 142
+      }
+    },
+    {
+      "folderId": "efe3f841c3f9bf9d",
+      "folder": "S",
+      "parentId": "24f361e318cb32dd",
+      "items": 2,
+      "highest": {
+        "name": "Мед-Тек «Морфей» — адаптивный эндокринный орган",
+        "price": 49502
+      },
+      "lowest": {
+        "name": "Мед-Тек «Химера» — эндокринная матрица",
+        "price": 49502
       }
     },
     {
@@ -4523,11 +5293,11 @@
       "items": 2,
       "highest": {
         "name": "Оригинальный клинок",
-        "price": 197
+        "price": 153
       },
       "lowest": {
         "name": "Пробковая сердцевина",
-        "price": 142
+        "price": 108
       }
     },
     {
@@ -4551,11 +5321,25 @@
       "items": 1,
       "highest": {
         "name": "Тактический вычислительный блок",
-        "price": 14010
+        "price": 13887
       },
       "lowest": {
         "name": "Тактический вычислительный блок",
-        "price": 14010
+        "price": 13887
+      }
+    },
+    {
+      "folderId": "f42fb80a83092655",
+      "folder": "S",
+      "parentId": "fc56c6de9c92bce7",
+      "items": 2,
+      "highest": {
+        "name": "Квантовая рука Биг-МТ «Фантом»",
+        "price": 108406
+      },
+      "lowest": {
+        "name": "Биг-МТ «Дедал»",
+        "price": 45037
       }
     },
     {
@@ -4564,12 +5348,12 @@
       "parentId": "b5335994e7892bbd",
       "items": 4,
       "highest": {
-        "name": "Глушитель для дробовика",
-        "price": 2185
+        "name": "Крупнокалиберный глушитель",
+        "price": 1954
       },
       "lowest": {
         "name": "Усиленный компенсатор отдачи",
-        "price": 1845
+        "price": 929
       }
     },
     {
@@ -4592,12 +5376,12 @@
       "parentId": "dd01297187bfa329",
       "items": 7,
       "highest": {
-        "name": "Увеличенный магазин для винтовки",
-        "price": 934
+        "name": "Дополнительная кассета спецбоеприпасов",
+        "price": 520
       },
       "lowest": {
         "name": "Сбалансированный барабан револьвера",
-        "price": 589
+        "price": 390
       }
     },
     {
@@ -4634,12 +5418,12 @@
       "parentId": "575c44da5563bc2b",
       "items": 2,
       "highest": {
-        "name": "Усиленный поршень силового кастета",
-        "price": 3632
+        "name": "Импульсный энергоузел ближнего боя",
+        "price": 2211
       },
       "lowest": {
-        "name": "Импульсный энергоузел ближнего боя",
-        "price": 3050
+        "name": "Усиленный поршень силового кастета",
+        "price": 1983
       }
     },
     {
@@ -4676,8 +5460,8 @@
       "parentId": "8d3dada38b5ffc3c",
       "items": 9,
       "highest": {
-        "name": "Гранатомёт М205",
-        "price": 8510
+        "name": "Китайский Гранатомёт 25-мм",
+        "price": 8935
       },
       "lowest": {
         "name": "«Бурное прощание»",
@@ -4719,7 +5503,7 @@
       "items": 4,
       "highest": {
         "name": "Кустарная подствольная горелка",
-        "price": 284
+        "price": 355
       },
       "lowest": {
         "name": "Ударный подствольный упор",
@@ -4780,6 +5564,34 @@
       "lowest": {
         "name": "Арбалет для новичков",
         "price": 448
+      }
+    },
+    {
+      "folderId": "ff0fc9669ed517a1",
+      "folder": "C",
+      "parentId": "30676a0d95d2ddb6",
+      "items": 3,
+      "highest": {
+        "name": "РобКо «Копыто»",
+        "price": 2679
+      },
+      "lowest": {
+        "name": "Jim's Limbs JL-4 «Выбор ветерана»",
+        "price": 1426
+      }
+    },
+    {
+      "folderId": "ff60bb0cafd1a7cb",
+      "folder": "S",
+      "parentId": "ca20435e4cb4ed5b",
+      "items": 2,
+      "highest": {
+        "name": "Биг-МТ «Демиург» — творческий моторный контур",
+        "price": 57765
+      },
+      "lowest": {
+        "name": "Вест-Тек «Гекатонхейр» — боевые миомеры",
+        "price": 55269
       }
     },
     {

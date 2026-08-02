@@ -82,11 +82,6 @@ export function planInventoryRepair(items, rootDimensions = {}, options = {}) {
   const sourceById = new Map(sourceItems.map(item => [getItemId(item), item]));
   const projectedById = new Map(projectedItems.map(item => [getItemId(item), item]));
   const sourceOrder = new Map(sourceItems.map((item, index) => [getItemId(item), index]));
-  const staleActiveLockIds = new Set(
-    sourceItems
-      .filter(hasStaleActivePlacementLock)
-      .map(getItemId)
-  );
   const recoveryById = new Map();
   const dimensions = normalizeGridDimensions(rootDimensions);
   const rootOptions = {
@@ -276,41 +271,17 @@ export function planInventoryRepair(items, rootDimensions = {}, options = {}) {
     const source = sourceById.get(recovery.itemId);
     const planned = plannedPlacements.get(recovery.itemId);
     if (!source || !planned?.placements?.length) continue;
-    const clearStaleLock = (
-      staleActiveLockIds.has(recovery.itemId)
-      && planned.target !== LOCKED_STORAGE_TARGET
-    );
     const update = createRecoveryUpdate(source, planned.placements, planned.target);
-    if (clearStaleLock) update["system.locked"] = false;
     updates.push(update);
     repairs.push({
       itemId: recovery.itemId,
-      reasons: [
-        ...recovery.reasons,
-        ...(clearStaleLock ? ["stale-active-lock"] : [])
-      ],
+      reasons: [...recovery.reasons],
       targetParentId: planned.target === LOCKED_STORAGE_TARGET
         ? LOCKED_STORAGE_PARENT_ID
         : ROOT_CONTAINER_ID,
       placementMode: planned.target === LOCKED_STORAGE_TARGET
         ? LOCKED_STORAGE_PLACEMENT_MODE
         : INVENTORY_PLACEMENT_MODE
-    });
-  }
-
-  for (const itemId of staleActiveLockIds) {
-    if (recoveryById.has(itemId)) continue;
-    const source = sourceById.get(itemId);
-    if (!source) continue;
-    updates.push({
-      _id: itemId,
-      "system.locked": false
-    });
-    repairs.push({
-      itemId,
-      reasons: ["stale-active-lock"],
-      targetParentId: getItemContainerParentId(source),
-      placementMode: getPlacementMode(source)
     });
   }
 
@@ -950,13 +921,6 @@ function createRecoveryUpdate(item, placements, target) {
       : [];
   }
   return update;
-}
-
-function hasStaleActivePlacementLock(item) {
-  return (
-    Boolean(getItemSystem(item).locked)
-    && KNOWN_NON_INVENTORY_PLACEMENT_MODES.has(getPlacementMode(item))
-  );
 }
 
 function prepareProjectedItemForContext(item, target) {

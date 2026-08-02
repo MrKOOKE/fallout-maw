@@ -38,10 +38,12 @@ const {
   DEFERRED_MODULE_IMAGES,
   MODULE_CATALOG,
   MODULE_SLOT_KEYS,
+  MODULE_ATTACK_PRESENTATIONS,
   MODULE_TRADEOFF_POLICY_V3,
   analyzeModuleValue,
   buildModuleRecipeSpec,
-  validateModuleCatalog
+  validateModuleCatalog,
+  getModuleAttackPresentation
 } = await import("../scripts/rebalance/module-catalog.mjs");
 const {
   allocateWeaponSlotKeys,
@@ -181,6 +183,38 @@ test("module catalogue is complete, source-first, and respects AP limits", () =>
 
   for (const image of DEFERRED_MODULE_IMAGES) {
     assert.equal(fs.existsSync(path.join(dataRoot, image)), true, image);
+  }
+});
+
+test("every attacking module has working attack media and grenades have explosion media", () => {
+  const attackingModules = MODULE_CATALOG.filter(definition => definition.attack);
+  assert.equal(attackingModules.length, 16);
+  assert.deepEqual(
+    new Set(attackingModules.map(definition => definition.attack.type)),
+    new Set(Object.keys(MODULE_ATTACK_PRESENTATIONS))
+  );
+
+  for (const definition of attackingModules) {
+    const presentation = getModuleAttackPresentation(definition);
+    assert.ok(presentation, definition.name);
+    assert.ok(presentation.attackAnimationKey, `${definition.name}: attack animation`);
+    assert.ok(presentation.attackSoundPath, `${definition.name}: attack sound`);
+    assert.equal(
+      fs.existsSync(path.join(dataRoot, presentation.attackSoundPath)),
+      true,
+      `${definition.name}: ${presentation.attackSoundPath}`
+    );
+    assert.equal(presentation.attackAnimationDelayMs, 200, definition.name);
+
+    if (["grenade25", "grenade40"].includes(definition.attack.type)) {
+      assert.ok(presentation.explosionAnimationKey, `${definition.name}: explosion animation`);
+      assert.ok(presentation.explosionSoundPath, `${definition.name}: explosion sound`);
+      assert.equal(
+        fs.existsSync(path.join(dataRoot, presentation.explosionSoundPath)),
+        true,
+        `${definition.name}: ${presentation.explosionSoundPath}`
+      );
+    }
   }
 });
 

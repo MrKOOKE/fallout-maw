@@ -1,0 +1,4460 @@
+{
+  "generatedAt": "2026-08-01T19:25:06.223Z",
+  "mode": "write",
+  "status": "written-and-verified",
+  "folderCleanup": {
+    "movedItems": [],
+    "reclassifiedBackpackItem": "cbCIjHEgqOLiVWFf",
+    "renamedLegacyItems": [],
+    "legacyNameSuffixRemovedTotal": 36,
+    "deletedFolders": [
+      {
+        "id": "5017f6f17a694bb0",
+        "path": ""
+      },
+      {
+        "id": "415b5d8576712cff",
+        "path": ""
+      },
+      {
+        "id": "f574170a33b1942e",
+        "path": ""
+      },
+      {
+        "id": "8b033f9dee700d0e",
+        "path": ""
+      },
+      {
+        "id": "697ef56e4a221f80",
+        "path": ""
+      },
+      {
+        "id": "6887fb730d9ecff3",
+        "path": ""
+      },
+      {
+        "id": "2f3211efbb4183ac",
+        "path": ""
+      }
+    ],
+    "preservedArmorFolders": [
+      "Силовая броня",
+      "Силовые шлемы",
+      "Тяжёлая броня",
+      "Тяжёлые шлемы",
+      "Средняя броня",
+      "Средние шлемы",
+      "Лёгкая броня",
+      "Лёгкие шлемы"
+    ]
+  },
+  "counts": {
+    "backpacks": 20,
+    "rigs": 17,
+    "pouches": 12,
+    "belts": 10
+  },
+  "classSummary": {
+    "S": {
+      "backpack": {
+        "count": 2,
+        "minPrice": 18524,
+        "maxPrice": 19650
+      },
+      "rig": {
+        "count": 2,
+        "minPrice": 17159,
+        "maxPrice": 19875
+      },
+      "pouch": {
+        "count": 1,
+        "minPrice": 17784,
+        "maxPrice": 17784
+      },
+      "belt": {
+        "count": 2,
+        "minPrice": 14568,
+        "maxPrice": 16659
+      }
+    },
+    "A": {
+      "backpack": {
+        "count": 4,
+        "minPrice": 8333,
+        "maxPrice": 14084
+      },
+      "rig": {
+        "count": 3,
+        "minPrice": 6250,
+        "maxPrice": 12001
+      },
+      "pouch": {
+        "count": 2,
+        "minPrice": 6250,
+        "maxPrice": 7291
+      },
+      "belt": {
+        "count": 2,
+        "minPrice": 5208,
+        "maxPrice": 7605
+      }
+    },
+    "B": {
+      "backpack": {
+        "count": 5,
+        "minPrice": 3919,
+        "maxPrice": 5879
+      },
+      "rig": {
+        "count": 4,
+        "minPrice": 2939,
+        "maxPrice": 4899
+      },
+      "pouch": {
+        "count": 3,
+        "minPrice": 2939,
+        "maxPrice": 3919
+      },
+      "belt": {
+        "count": 2,
+        "minPrice": 2450,
+        "maxPrice": 2939
+      }
+    },
+    "C": {
+      "backpack": {
+        "count": 5,
+        "minPrice": 1083,
+        "maxPrice": 1683
+      },
+      "rig": {
+        "count": 4,
+        "minPrice": 784,
+        "maxPrice": 1383
+      },
+      "pouch": {
+        "count": 3,
+        "minPrice": 761,
+        "maxPrice": 922
+      },
+      "belt": {
+        "count": 2,
+        "minPrice": 600,
+        "maxPrice": 761
+      }
+    },
+    "D": {
+      "backpack": {
+        "count": 4,
+        "minPrice": 193,
+        "maxPrice": 355
+      },
+      "rig": {
+        "count": 4,
+        "minPrice": 129,
+        "maxPrice": 226
+      },
+      "pouch": {
+        "count": 3,
+        "minPrice": 129,
+        "maxPrice": 161
+      },
+      "belt": {
+        "count": 2,
+        "minPrice": 97,
+        "maxPrice": 129
+      }
+    }
+  },
+  "items": [
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "D",
+      "gridCells": 16,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 4,
+        "cells": 16,
+        "compactness": 1
+      },
+      "maxLoad": 18,
+      "loadReduction": 20,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 31
+        }
+      ],
+      "price": 193,
+      "id": "gX5IwNWOX98H8NDj",
+      "name": "Самодельный вещмешок",
+      "folder": "Снаряжение / Рюкзаки / D",
+      "weight": 1.1,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "D",
+      "gridCells": 16,
+      "gridBase": {
+        "columns": 4,
+        "rows": 3
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 4,
+        "cells": 16,
+        "compactness": 1
+      },
+      "maxLoad": 22,
+      "loadReduction": 20,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 31
+        }
+      ],
+      "price": 226,
+      "id": "5QvC64S1tmSqwDZl",
+      "name": "Холщовый вещмешок",
+      "folder": "Снаряжение / Рюкзаки / D",
+      "weight": 1.3,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "D",
+      "gridCells": 20,
+      "gridBase": {
+        "columns": 4,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 5,
+        "cells": 20,
+        "compactness": 1
+      },
+      "maxLoad": 26,
+      "loadReduction": 22,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 290,
+      "id": "qulZro7V7NvYD4sP",
+      "name": "Малый походный рюкзак",
+      "folder": "Снаряжение / Рюкзаки / D",
+      "weight": 1.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "D",
+      "gridCells": 24,
+      "gridBase": {
+        "columns": 5,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 2
+        },
+        {
+          "width": 1,
+          "height": 2
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 7,
+        "height": 4,
+        "cells": 24,
+        "compactness": 0.857
+      },
+      "maxLoad": 30,
+      "loadReduction": 25,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 31
+        }
+      ],
+      "price": 355,
+      "id": "xyGm22ww9Qnd6q6b",
+      "name": "Кожаный дорожный рюкзак",
+      "folder": "Снаряжение / Рюкзаки / D",
+      "weight": 1.8,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "C",
+      "gridCells": 30,
+      "gridBase": {
+        "columns": 5,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 3,
+          "height": 2
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 6,
+        "cells": 30,
+        "compactness": 1
+      },
+      "maxLoad": 45,
+      "loadReduction": 25,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1083,
+      "id": "edcd9260a4d6abe4",
+      "name": "Походный рюкзак",
+      "folder": "Снаряжение / Рюкзаки / C",
+      "weight": 2.2,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "C",
+      "gridCells": 35,
+      "gridBase": {
+        "columns": 5,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 3,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 7,
+        "cells": 35,
+        "compactness": 1
+      },
+      "maxLoad": 55,
+      "loadReduction": 28,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1383,
+      "id": "ab8d644a653ad2b1",
+      "name": "Камуфляжный походный рюкзак",
+      "folder": "Снаряжение / Рюкзаки / C",
+      "weight": 2.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "C",
+      "gridCells": 30,
+      "gridBase": {
+        "columns": 5,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 5,
+        "cells": 30,
+        "compactness": 0.667
+      },
+      "maxLoad": 50,
+      "loadReduction": 32,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1360,
+      "id": "26574bd2d4770d3b",
+      "name": "Китайский походный рюкзак",
+      "folder": "Снаряжение / Рюкзаки / C",
+      "weight": 2.1,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "C",
+      "gridCells": 30,
+      "gridBase": {
+        "columns": 5,
+        "rows": 5
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 6,
+        "cells": 30,
+        "compactness": 1
+      },
+      "maxLoad": 60,
+      "loadReduction": 30,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 7,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1683,
+      "id": "8oRQdZwNvzASqNrA",
+      "name": "Рюкзак «Корвега»",
+      "folder": "Снаряжение / Рюкзаки / C",
+      "weight": 2.8,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "C",
+      "gridCells": 32,
+      "gridBase": {
+        "columns": 5,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 3
+        },
+        {
+          "width": 2,
+          "height": 3
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 32,
+        "compactness": 0.889
+      },
+      "maxLoad": 55,
+      "loadReduction": 35,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1660,
+      "id": "af10718c28918cf3",
+      "name": "Рюкзак спасателя",
+      "folder": "Снаряжение / Рюкзаки / C",
+      "weight": 2.6,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "B",
+      "gridCells": 42,
+      "gridBase": {
+        "columns": 6,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 7,
+        "cells": 42,
+        "compactness": 1
+      },
+      "maxLoad": 75,
+      "loadReduction": 38,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ],
+      "price": 3919,
+      "id": "a1d2d5b9997a4a43",
+      "name": "Тактический рюкзак",
+      "folder": "Снаряжение / Рюкзаки / B",
+      "weight": 3.4,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "B",
+      "gridCells": 42,
+      "gridBase": {
+        "columns": 6,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 7,
+        "cells": 42,
+        "compactness": 1
+      },
+      "maxLoad": 80,
+      "loadReduction": 40,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ],
+      "price": 4409,
+      "id": "ec4cb49f71d08ced",
+      "name": "Камуфляжный тактический рюкзак",
+      "folder": "Снаряжение / Рюкзаки / B",
+      "weight": 3.7,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "B",
+      "gridCells": 42,
+      "gridBase": {
+        "columns": 6,
+        "rows": 5
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 7,
+        "cells": 42,
+        "compactness": 1
+      },
+      "maxLoad": 90,
+      "loadReduction": 42,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 5389,
+      "id": "8ca22fbe0e4bd097",
+      "name": "Военный рейдовый рюкзак",
+      "folder": "Снаряжение / Рюкзаки / B",
+      "weight": 4.4,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "B",
+      "gridCells": 42,
+      "gridBase": {
+        "columns": 6,
+        "rows": 4
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 3
+        },
+        {
+          "width": 2,
+          "height": 3
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 10,
+        "height": 5,
+        "cells": 42,
+        "compactness": 0.84
+      },
+      "maxLoad": 85,
+      "loadReduction": 45,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 3,
+          "unitPrice": 426
+        }
+      ],
+      "price": 5879,
+      "id": "bf5767700c5dc227",
+      "name": "Рюкзак ликвидатора",
+      "folder": "Снаряжение / Рюкзаки / B",
+      "weight": 4.1,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "B",
+      "gridCells": 46,
+      "gridBase": {
+        "columns": 6,
+        "rows": 5
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 4
+        },
+        {
+          "width": 2,
+          "height": 4
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 10,
+        "height": 5,
+        "cells": 46,
+        "compactness": 0.92
+      },
+      "maxLoad": 100,
+      "loadReduction": 35,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 7,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ],
+      "price": 5879,
+      "id": "b733afe9a05935e3",
+      "name": "Инструментальный рюкзак",
+      "folder": "Снаряжение / Рюкзаки / B",
+      "weight": 5.2,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "A",
+      "gridCells": 49,
+      "gridBase": {
+        "columns": 7,
+        "rows": 5
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 7,
+        "height": 7,
+        "cells": 49,
+        "compactness": 1
+      },
+      "maxLoad": 120,
+      "loadReduction": 48,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 8333,
+      "id": "171179b035e6f718",
+      "name": "Тяжёлый военный ранец",
+      "folder": "Снаряжение / Рюкзаки / A",
+      "weight": 5.8,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "A",
+      "gridCells": 54,
+      "gridBase": {
+        "columns": 7,
+        "rows": 5
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 3
+        },
+        {
+          "width": 2,
+          "height": 3
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 11,
+        "height": 6,
+        "cells": 54,
+        "compactness": 0.818
+      },
+      "maxLoad": 130,
+      "loadReduction": 50,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "class": "A",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 1278
+        }
+      ],
+      "price": 12001,
+      "id": "24618becb32f227d",
+      "name": "Экспедиционный модуль Братства",
+      "folder": "Снаряжение / Рюкзаки / A",
+      "weight": 6.2,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "A",
+      "gridCells": 58,
+      "gridBase": {
+        "columns": 7,
+        "rows": 5
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 4
+        },
+        {
+          "width": 2,
+          "height": 4
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 11,
+        "height": 6,
+        "cells": 58,
+        "compactness": 0.879
+      },
+      "maxLoad": 140,
+      "loadReduction": 52,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "class": "A",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 1278
+        }
+      ],
+      "price": 13042,
+      "id": "e69f061dd9c5725b",
+      "name": "Грузовой ранец спасателя",
+      "folder": "Снаряжение / Рюкзаки / A",
+      "weight": 6.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "A",
+      "gridCells": 58,
+      "gridBase": {
+        "columns": 7,
+        "rows": 6
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 4
+        },
+        {
+          "width": 2,
+          "height": 4
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 11,
+        "height": 6,
+        "cells": 58,
+        "compactness": 0.879
+      },
+      "maxLoad": 150,
+      "loadReduction": 45,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "class": "A",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 1278
+        }
+      ],
+      "price": 14084,
+      "id": "f5247d578aabe968",
+      "name": "Инструментальный ранец «Станция»",
+      "folder": "Снаряжение / Рюкзаки / A",
+      "weight": 7.4,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "S",
+      "gridCells": 72,
+      "gridBase": {
+        "columns": 8,
+        "rows": 6
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 4
+        },
+        {
+          "width": 2,
+          "height": 4
+        },
+        {
+          "width": 4,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 12,
+        "height": 7,
+        "cells": 72,
+        "compactness": 0.857
+      },
+      "maxLoad": 170,
+      "loadReduction": 60,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "class": "S",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "class": "S",
+          "kind": "electronics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 18524,
+      "id": "3d099fd426fcdf7e",
+      "name": "Криогенный транспортный модуль «Полюс»",
+      "folder": "Снаряжение / Рюкзаки / S",
+      "weight": 9.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "backpack",
+      "class": "S",
+      "gridCells": 76,
+      "gridBase": {
+        "columns": 8,
+        "rows": 6
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 5
+        },
+        {
+          "width": 2,
+          "height": 5
+        },
+        {
+          "width": 4,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 12,
+        "height": 7,
+        "cells": 76,
+        "compactness": 0.905
+      },
+      "maxLoad": 200,
+      "loadReduction": 68,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "class": "S",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "class": "S",
+          "kind": "electronics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 19650,
+      "id": "f92a5f0e6e46ba5b",
+      "name": "Силовой грузовой ранец «Атлас»",
+      "folder": "Снаряжение / Рюкзаки / S",
+      "weight": 11.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "D",
+      "gridCells": 8,
+      "gridBase": {
+        "columns": 2,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 3,
+        "cells": 8,
+        "compactness": 0.667
+      },
+      "maxLoad": 12,
+      "loadReduction": 35,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 129,
+      "id": "a435958d5c45a596",
+      "name": "Малая полевая разгрузка",
+      "folder": "Снаряжение / Разгрузки / D",
+      "weight": 0.67,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "D",
+      "gridCells": 10,
+      "gridBase": {
+        "columns": 2,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 4,
+        "cells": 10,
+        "compactness": 0.625
+      },
+      "maxLoad": 15,
+      "loadReduction": 36,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 161,
+      "id": "e159046994fcbd10",
+      "name": "Разгрузка путешественника",
+      "folder": "Снаряжение / Разгрузки / D",
+      "weight": 0.83,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "D",
+      "gridCells": 10,
+      "gridBase": {
+        "columns": 2,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 2
+        },
+        {
+          "width": 1,
+          "height": 2
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 4,
+        "cells": 10,
+        "compactness": 0.625
+      },
+      "maxLoad": 15,
+      "loadReduction": 36,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 193,
+      "id": "60658c2e6109c2d8",
+      "name": "Патронташная разгрузка",
+      "folder": "Снаряжение / Разгрузки / D",
+      "weight": 0.83,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "D",
+      "gridCells": 12,
+      "gridBase": {
+        "columns": 2,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 4,
+        "cells": 12,
+        "compactness": 0.5
+      },
+      "maxLoad": 18,
+      "loadReduction": 38,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 226,
+      "id": "cf699c86846bed7a",
+      "name": "Холщовый разгрузочный жилет",
+      "folder": "Снаряжение / Разгрузки / D",
+      "weight": 1,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "C",
+      "gridCells": 12,
+      "gridBase": {
+        "columns": 2,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 4,
+        "cells": 12,
+        "compactness": 0.5
+      },
+      "maxLoad": 24,
+      "loadReduction": 50,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 784,
+      "id": "06aa4cfb3ad2fd19",
+      "name": "Полевая разгрузка",
+      "folder": "Снаряжение / Разгрузки / C",
+      "weight": 1.33,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "C",
+      "gridCells": 14,
+      "gridBase": {
+        "columns": 2,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 4,
+        "cells": 14,
+        "compactness": 0.583
+      },
+      "maxLoad": 25,
+      "loadReduction": 50,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1083,
+      "id": "9cb8cc34b12a9705",
+      "name": "Медицинская разгрузка",
+      "folder": "Снаряжение / Разгрузки / C",
+      "weight": 1.39,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "C",
+      "gridCells": 14,
+      "gridBase": {
+        "columns": 3,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 4,
+        "cells": 14,
+        "compactness": 0.875
+      },
+      "maxLoad": 28,
+      "loadReduction": 52,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1222,
+      "id": "d2b7f5b51ec6127a",
+      "name": "Разгрузка гренадёра",
+      "folder": "Снаряжение / Разгрузки / C",
+      "weight": 1.56,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "C",
+      "gridCells": 16,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 4,
+        "cells": 16,
+        "compactness": 1
+      },
+      "maxLoad": 30,
+      "loadReduction": 53,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 1383,
+      "id": "cbb5ad429aa6f9d1",
+      "name": "Разгрузка с наплечником",
+      "folder": "Снаряжение / Разгрузки / C",
+      "weight": 1.67,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "B",
+      "gridCells": 18,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 4,
+        "cells": 18,
+        "compactness": 0.75
+      },
+      "maxLoad": 36,
+      "loadReduction": 65,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 426
+        }
+      ],
+      "price": 2939,
+      "id": "3e059869e1e352bc",
+      "name": "Большая полевая разгрузка",
+      "folder": "Снаряжение / Разгрузки / B",
+      "weight": 2,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "B",
+      "gridCells": 20,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 4,
+        "cells": 20,
+        "compactness": 0.833
+      },
+      "maxLoad": 38,
+      "loadReduction": 66,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 3919,
+      "id": "1f630c7b95639a7b",
+      "name": "Разгрузка под патроны Mk.II",
+      "folder": "Снаряжение / Разгрузки / B",
+      "weight": 2.11,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "B",
+      "gridCells": 20,
+      "gridBase": {
+        "columns": 4,
+        "rows": 3
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        },
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 5,
+        "cells": 20,
+        "compactness": 1
+      },
+      "maxLoad": 45,
+      "loadReduction": 69,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 4409,
+      "id": "23964c15214f12ff",
+      "name": "Тяжёлая разгрузка",
+      "folder": "Снаряжение / Разгрузки / B",
+      "weight": 2.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "B",
+      "gridCells": 22,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 22,
+        "compactness": 0.611
+      },
+      "maxLoad": 42,
+      "loadReduction": 68,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 4899,
+      "id": "4676e53f3c3fe0e9",
+      "name": "Модульная утилитарная разгрузка",
+      "folder": "Снаряжение / Разгрузки / B",
+      "weight": 2.33,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "A",
+      "gridCells": 22,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 22,
+        "compactness": 0.611
+      },
+      "maxLoad": 55,
+      "loadReduction": 75,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 6250,
+      "id": "aba631688e227631",
+      "name": "Тактическая система быстрого доступа",
+      "folder": "Снаряжение / Разгрузки / A",
+      "weight": 3.06,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "A",
+      "gridCells": 24,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 5,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 24,
+        "compactness": 0.667
+      },
+      "maxLoad": 60,
+      "loadReduction": 77,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 5,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        }
+      ],
+      "price": 9374,
+      "id": "09567dae146e46c4",
+      "name": "Штурмовая разгрузка Анклава",
+      "folder": "Снаряжение / Разгрузки / A",
+      "weight": 3.33,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "A",
+      "gridCells": 26,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 26,
+        "compactness": 0.722
+      },
+      "maxLoad": 65,
+      "loadReduction": 80,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 6,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "wi6byx3I7USPwOqA",
+          "name": "Компонент механики A класса",
+          "class": "A",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 1278
+        }
+      ],
+      "price": 12001,
+      "id": "047ccee0c9a5121d",
+      "name": "Модульная разгрузка Братства",
+      "folder": "Снаряжение / Разгрузки / A",
+      "weight": 3.61,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "S",
+      "gridCells": 28,
+      "gridBase": {
+        "columns": 6,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 28,
+        "compactness": 0.778
+      },
+      "maxLoad": 80,
+      "loadReduction": 85,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "class": "S",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 19875,
+      "id": "d6db335d550835da",
+      "name": "Адаптивная разгрузка «Квартирмейстер»",
+      "folder": "Снаряжение / Разгрузки / S",
+      "weight": 4.44,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "rig",
+      "class": "S",
+      "gridCells": 32,
+      "gridBase": {
+        "columns": 6,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        },
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 9,
+        "height": 4,
+        "cells": 32,
+        "compactness": 0.889
+      },
+      "maxLoad": 90,
+      "loadReduction": 90,
+      "effects": {},
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "class": "S",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "class": "A",
+          "kind": "electronics",
+          "quantity": 1,
+          "unitPrice": 1093
+        }
+      ],
+      "price": 17159,
+      "id": "cd4145242c3d81ca",
+      "name": "Силовая грузовая система «Муравей»",
+      "folder": "Снаряжение / Разгрузки / S",
+      "weight": 5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "D",
+      "gridCells": 4,
+      "gridBase": {
+        "columns": 3,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 3,
+        "height": 2,
+        "cells": 4,
+        "compactness": 0.667
+      },
+      "maxLoad": 6,
+      "loadReduction": 40,
+      "effects": {
+        "resilience": 5
+      },
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 129,
+      "id": "f2a81b132b9d7d4f",
+      "name": "Холщовая поясная сумка",
+      "folder": "Снаряжение / Поясное снаряжение / D",
+      "weight": 0.33,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "D",
+      "gridCells": 5,
+      "gridBase": {
+        "columns": 3,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 3,
+        "height": 2,
+        "cells": 5,
+        "compactness": 0.833
+      },
+      "maxLoad": 7,
+      "loadReduction": 41,
+      "effects": {
+        "doctor": 5
+      },
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 161,
+      "id": "9d4a1c7089c47ee4",
+      "name": "Медицинская набедренная сумка",
+      "folder": "Снаряжение / Поясное снаряжение / D",
+      "weight": 0.42,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "D",
+      "gridCells": 6,
+      "gridBase": {
+        "columns": 3,
+        "rows": 2
+      },
+      "gridBlocks": [],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 3,
+        "height": 2,
+        "cells": 6,
+        "compactness": 1
+      },
+      "maxLoad": 8,
+      "loadReduction": 42,
+      "effects": {
+        "rangedCombat": 5
+      },
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 161,
+      "id": "0b4562b2477cecda",
+      "name": "Тактический подсумок",
+      "folder": "Снаряжение / Поясное снаряжение / D",
+      "weight": 0.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "C",
+      "gridCells": 7,
+      "gridBase": {
+        "columns": 4,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 2,
+        "cells": 7,
+        "compactness": 0.875
+      },
+      "maxLoad": 12,
+      "loadReduction": 55,
+      "effects": {
+        "stealth": 10
+      },
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 761,
+      "id": "b73f044b0d78c900",
+      "name": "Камуфляжная поясная сумка",
+      "folder": "Снаряжение / Поясное снаряжение / C",
+      "weight": 0.58,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "C",
+      "gridCells": 8,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 2,
+        "cells": 8,
+        "compactness": 1
+      },
+      "maxLoad": 14,
+      "loadReduction": 57,
+      "effects": {
+        "repair": 10
+      },
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 761,
+      "id": "1cdc6593df22b64c",
+      "name": "Сдвоенный утилитарный подсумок",
+      "folder": "Снаряжение / Поясное снаряжение / C",
+      "weight": 0.67,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "C",
+      "gridCells": 8,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 2,
+        "cells": 8,
+        "compactness": 1
+      },
+      "maxLoad": 14,
+      "loadReduction": 57,
+      "effects": {
+        "doctor": 15
+      },
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "IjNHxcqFdzwxRJBX",
+          "name": "Компонент каркаса C класса",
+          "class": "C",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 127
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 127
+        }
+      ],
+      "price": 922,
+      "id": "57a8ff1b5e4dd910",
+      "name": "Медицинский поясной комплект",
+      "folder": "Снаряжение / Поясное снаряжение / C",
+      "weight": 0.67,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "B",
+      "gridCells": 10,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 3,
+        "cells": 10,
+        "compactness": 0.833
+      },
+      "maxLoad": 20,
+      "loadReduction": 70,
+      "effects": {
+        "rangedCombat": 10,
+        "athletics": 5
+      },
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 2939,
+      "id": "916c57182424469e",
+      "name": "Тактический пояс с подсумками",
+      "folder": "Снаряжение / Поясное снаряжение / B",
+      "weight": 0.83,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "B",
+      "gridCells": 12,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 3,
+        "cells": 12,
+        "compactness": 0.8
+      },
+      "maxLoad": 24,
+      "loadReduction": 74,
+      "effects": {
+        "repair": 15
+      },
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 3429,
+      "id": "f00dc9390b3ea7b0",
+      "name": "Утилитарные тактические подсумки",
+      "folder": "Снаряжение / Поясное снаряжение / B",
+      "weight": 1,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "B",
+      "gridCells": 9,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 3,
+        "cells": 9,
+        "compactness": 0.75
+      },
+      "maxLoad": 18,
+      "loadReduction": 68,
+      "effects": {
+        "rangedCombat": 10,
+        "meleeCombat": 5
+      },
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 3919,
+      "id": "9c3a3b933d3d4622",
+      "name": "Рейдерский пояс-кобура",
+      "folder": "Снаряжение / Поясное снаряжение / B",
+      "weight": 0.75,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "A",
+      "gridCells": 14,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 3,
+        "cells": 14,
+        "compactness": 0.933
+      },
+      "maxLoad": 30,
+      "loadReduction": 80,
+      "effects": {
+        "repair": 20,
+        "athletics": 10
+      },
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        }
+      ],
+      "price": 6250,
+      "id": "9b6e33443ead646a",
+      "name": "Модульный поясной комплект",
+      "folder": "Снаряжение / Поясное снаряжение / A",
+      "weight": 1.17,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "A",
+      "gridCells": 16,
+      "gridBase": {
+        "columns": 5,
+        "rows": 3
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 4,
+        "cells": 16,
+        "compactness": 0.8
+      },
+      "maxLoad": 35,
+      "loadReduction": 85,
+      "effects": {
+        "naturalist": 20,
+        "resilience": 10
+      },
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 4,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        }
+      ],
+      "price": 7291,
+      "id": "39965291fe3153da",
+      "name": "Экспедиционный пояс",
+      "folder": "Снаряжение / Поясное снаряжение / A",
+      "weight": 1.33,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "pouch",
+      "class": "S",
+      "gridCells": 18,
+      "gridBase": {
+        "columns": 6,
+        "rows": 3
+      },
+      "gridBlocks": [],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 3,
+        "cells": 18,
+        "compactness": 1
+      },
+      "maxLoad": 45,
+      "loadReduction": 90,
+      "effects": {
+        "athletics": 20,
+        "resilience": 20,
+        "repair": 15
+      },
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "fZIB2VLVZlX8fkrW",
+          "name": "Компонент механики S класса",
+          "class": "S",
+          "kind": "mechanics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 17784,
+      "id": "86dfe63620766724",
+      "name": "Адаптивный поясной контейнер",
+      "folder": "Снаряжение / Поясное снаряжение / S",
+      "weight": 1.5,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "D",
+      "gridCells": 4,
+      "gridBase": {
+        "columns": 3,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 3,
+        "height": 2,
+        "cells": 4,
+        "compactness": 0.667
+      },
+      "maxLoad": 6,
+      "loadReduction": 40,
+      "effects": {
+        "repair": 10
+      },
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 97,
+      "id": "dd67f312b81b0529",
+      "name": "Потёртый рабочий ремень",
+      "folder": "Снаряжение / Поясное снаряжение / D",
+      "weight": 0.35,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "D",
+      "gridCells": 5,
+      "gridBase": {
+        "columns": 3,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 3,
+        "height": 2,
+        "cells": 5,
+        "compactness": 0.833
+      },
+      "maxLoad": 8,
+      "loadReduction": 43,
+      "effects": {
+        "naturalist": 5,
+        "athletics": 5
+      },
+      "recipe": [
+        {
+          "itemId": "BtqXf8xqC9SP3ZIT",
+          "name": "Компонент текстиля D класса",
+          "class": "D",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "JEMb1FInHzmTfV8I",
+          "name": "Компонент каркаса D класса",
+          "class": "D",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 31
+        },
+        {
+          "itemId": "EVqMOdv1cMFiaGpj",
+          "name": "Компонент свойств D класса",
+          "class": "D",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 31
+        }
+      ],
+      "price": 129,
+      "id": "b59ce634653c1471",
+      "name": "Пояс следопыта",
+      "folder": "Снаряжение / Поясное снаряжение / D",
+      "weight": 0.35,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "C",
+      "gridCells": 7,
+      "gridBase": {
+        "columns": 4,
+        "rows": 1
+      },
+      "gridBlocks": [
+        {
+          "width": 3,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 2,
+        "cells": 7,
+        "compactness": 0.875
+      },
+      "maxLoad": 12,
+      "loadReduction": 55,
+      "effects": {
+        "doctor": 15,
+        "athletics": 5
+      },
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ],
+      "price": 600,
+      "id": "f94312a20d47f875",
+      "name": "Ремень полевого медика",
+      "folder": "Снаряжение / Поясное снаряжение / C",
+      "weight": 0.43,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "C",
+      "gridCells": 8,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 2,
+        "cells": 8,
+        "compactness": 1
+      },
+      "maxLoad": 14,
+      "loadReduction": 58,
+      "effects": {
+        "speech": 10,
+        "resilience": 10
+      },
+      "recipe": [
+        {
+          "itemId": "FJtScwRBSg0yYJkD",
+          "name": "Компонент текстиля C класса",
+          "class": "C",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 148
+        },
+        {
+          "itemId": "DMvUAbNSujpN3F47",
+          "name": "Компонент свойств C класса",
+          "class": "C",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 127
+        }
+      ],
+      "price": 761,
+      "id": "5c29db371aa004a2",
+      "name": "Пояс караванщика",
+      "folder": "Снаряжение / Поясное снаряжение / C",
+      "weight": 0.43,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "B",
+      "gridCells": 10,
+      "gridBase": {
+        "columns": 4,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 4,
+        "height": 3,
+        "cells": 10,
+        "compactness": 0.833
+      },
+      "maxLoad": 18,
+      "loadReduction": 68,
+      "effects": {
+        "repair": 20,
+        "science": 10
+      },
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 2450,
+      "id": "33c1080a96ef5e3d",
+      "name": "Инженерная портупея",
+      "folder": "Снаряжение / Поясное снаряжение / B",
+      "weight": 0.51,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "B",
+      "gridCells": 12,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 3,
+        "cells": 12,
+        "compactness": 0.8
+      },
+      "maxLoad": 22,
+      "loadReduction": 72,
+      "effects": {
+        "rangedCombat": 20,
+        "naturalist": 10
+      },
+      "recipe": [
+        {
+          "itemId": "HgfZibc95BHfvA0i",
+          "name": "Компонент текстиля B класса",
+          "class": "B",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "Za5sDkVpsbqop6wM",
+          "name": "Компонент каркаса B класса",
+          "class": "B",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 426
+        },
+        {
+          "itemId": "kMWPNzGd70409Gyf",
+          "name": "Компонент свойств B класса",
+          "class": "B",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 426
+        }
+      ],
+      "price": 2939,
+      "id": "505188c6db388922",
+      "name": "Рейнджерский оружейный пояс",
+      "folder": "Снаряжение / Поясное снаряжение / B",
+      "weight": 0.51,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "A",
+      "gridCells": 14,
+      "gridBase": {
+        "columns": 5,
+        "rows": 2
+      },
+      "gridBlocks": [
+        {
+          "width": 4,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 3,
+        "cells": 14,
+        "compactness": 0.933
+      },
+      "maxLoad": 28,
+      "loadReduction": 80,
+      "effects": {
+        "speech": 25,
+        "resilience": 15
+      },
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        }
+      ],
+      "price": 5208,
+      "id": "fffe4cb57385ac0c",
+      "name": "Командирская портупея",
+      "folder": "Снаряжение / Поясное снаряжение / A",
+      "weight": 0.59,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "A",
+      "gridCells": 16,
+      "gridBase": {
+        "columns": 5,
+        "rows": 3
+      },
+      "gridBlocks": [
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 5,
+        "height": 4,
+        "cells": 16,
+        "compactness": 0.8
+      },
+      "maxLoad": 32,
+      "loadReduction": 84,
+      "effects": {
+        "stealth": 25,
+        "naturalist": 15
+      },
+      "recipe": [
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 3,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "w3xIoO171uQbdr6z",
+          "name": "Компонент каркаса A класса",
+          "class": "A",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "It2PbILpbXfuiadi",
+          "name": "Компонент электроники A класса",
+          "class": "A",
+          "kind": "electronics",
+          "quantity": 1,
+          "unitPrice": 1093
+        }
+      ],
+      "price": 7605,
+      "id": "40620df4459b08de",
+      "name": "Пояс разведчика Анклава",
+      "folder": "Снаряжение / Поясное снаряжение / A",
+      "weight": 0.59,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "S",
+      "gridCells": 18,
+      "gridBase": {
+        "columns": 6,
+        "rows": 3
+      },
+      "gridBlocks": [],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 3,
+        "cells": 18,
+        "compactness": 1
+      },
+      "maxLoad": 40,
+      "loadReduction": 90,
+      "effects": {
+        "repair": 25,
+        "science": 20,
+        "athletics": 10
+      },
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "class": "S",
+          "kind": "electronics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 14568,
+      "id": "23d5ba4b57ac7d10",
+      "name": "Утилитарный пояс «Волт-Тек»",
+      "folder": "Снаряжение / Поясное снаряжение / S",
+      "weight": 0.67,
+      "condition": null
+    },
+    {
+      "schemaVersion": 2,
+      "generated": true,
+      "kind": "belt",
+      "class": "S",
+      "gridCells": 20,
+      "gridBase": {
+        "columns": 6,
+        "rows": 3
+      },
+      "gridBlocks": [
+        {
+          "width": 2,
+          "height": 1
+        }
+      ],
+      "gridGeometry": {
+        "aligned": true,
+        "overlaps": [],
+        "connected": true,
+        "width": 6,
+        "height": 4,
+        "cells": 20,
+        "compactness": 0.833
+      },
+      "maxLoad": 45,
+      "loadReduction": 92,
+      "effects": {
+        "rangedCombat": 25,
+        "naturalist": 20,
+        "resilience": 10
+      },
+      "recipe": [
+        {
+          "itemId": "cKascv1gESQLCKWn",
+          "name": "Компонент текстиля S класса",
+          "class": "S",
+          "kind": "textile",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "QwZQBTprygdNvKUb",
+          "name": "Компонент каркаса S класса",
+          "class": "S",
+          "kind": "frame",
+          "quantity": 1,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "k6IWvSo2c0ZxvYDm",
+          "name": "Компонент свойств S класса",
+          "class": "S",
+          "kind": "properties",
+          "quantity": 2,
+          "unitPrice": 1560
+        },
+        {
+          "itemId": "d7X6WOpKVzNpowOk",
+          "name": "Компонент электроники S класса",
+          "class": "S",
+          "kind": "electronics",
+          "quantity": 1,
+          "unitPrice": 2952
+        },
+        {
+          "itemId": "LAoRACaRgu9aPuID",
+          "name": "Компонент текстиля A класса",
+          "class": "A",
+          "kind": "textile",
+          "quantity": 1,
+          "unitPrice": 840
+        },
+        {
+          "itemId": "uGZQIOgrlqT5dkme",
+          "name": "Компонент свойств A класса",
+          "class": "A",
+          "kind": "properties",
+          "quantity": 1,
+          "unitPrice": 840
+        }
+      ],
+      "price": 16659,
+      "id": "a8a706b8a8039040",
+      "name": "Пояс мастера-пустынника",
+      "folder": "Снаряжение / Поясное снаряжение / S",
+      "weight": 0.67,
+      "condition": null
+    }
+  ],
+  "validation": {
+    "issues": []
+  },
+  "readback": {
+    "foldersDeleted": 7,
+    "itemsWritten": 555,
+    "generatedCarryItems": 59,
+    "legacyNamesCleaned": 0,
+    "legacyNamesCleanedTotal": 36,
+    "mismatches": 0
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-07-29T07:24:27.129Z",
-  "mode": "dry-run",
-  "status": "validated-dry-run",
+  "generatedAt": "2026-08-02T04:40:14.711Z",
+  "mode": "write",
+  "status": "written-and-verified",
   "summary": {
     "modules": 172,
     "weapons": 787,
@@ -239,7 +239,7 @@
       }
     ],
     "cleanedConstructWeaponSlots": 0,
-    "excludedThrownGrenades": 12,
+    "excludedThrownGrenades": 26,
     "excludedConstructWeapons": 15
   },
   "modules": [
