@@ -1,5 +1,9 @@
 import { getUniqueLimbSets } from "../settings/traumas.mjs";
 import {
+  getEquipmentSlotRequirement,
+  getRaceEquipmentSlotSelectionKeys
+} from "./equipment-slots.mjs";
+import {
   CONSTRUCT_PART_MITIGATION_LIMB_KEY,
   ITEM_FUNCTIONS,
   getConstructPartFunction,
@@ -11,7 +15,7 @@ const FALLBACK_DAMAGE_TYPE_ICON = "icons/svg/d20-grey.svg";
 
 export function buildDamageMitigationLimbSetChoices(itemOrSystem, creatureOptions = {}) {
   if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) return [];
-  const limbSets = getUniqueLimbSets(creatureOptions);
+  const limbSets = getCompatibleDamageMitigationLimbSets(itemOrSystem, creatureOptions);
   const selectedIds = new Set(getSelectedDamageMitigationLimbSetIds(itemOrSystem, limbSets));
 
   return limbSets.map(group => {
@@ -22,6 +26,20 @@ export function buildDamageMitigationLimbSetChoices(itemOrSystem, creatureOption
       limbsShortLabel: group.limbs.map(limb => getLimbShortLabel(limb.label || limb.key)).join(", ")
     };
   });
+}
+
+export function getCompatibleDamageMitigationLimbSets(itemOrSystem, creatureOptions = {}) {
+  const limbSets = getUniqueLimbSets(creatureOptions);
+  const requirement = getEquipmentSlotRequirement(itemOrSystem);
+  if (!requirement.selectedKeys.size) return limbSets;
+
+  const compatibleRaceIds = new Set((creatureOptions?.races ?? [])
+    .filter(race => isRaceCompatibleWithEquipmentRequirement(race, requirement))
+    .map(race => String(race?.id ?? ""))
+    .filter(Boolean));
+  return limbSets.filter(group => (
+    group.races.some(race => compatibleRaceIds.has(String(race?.id ?? "")))
+  ));
 }
 
 export function resolveDamageMitigationEditorLimbSetId(requestedId = "", limbSetChoices = []) {
@@ -41,7 +59,7 @@ export function buildDamageMitigationTables(
     return [buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings)];
   }
 
-  const limbSets = getUniqueLimbSets(creatureOptions);
+  const limbSets = getCompatibleDamageMitigationLimbSets(itemOrSystem, creatureOptions);
   const entries = getDamageMitigationFunction(itemOrSystem)?.entries ?? {};
   if (!limbSets.length) return [];
 
@@ -52,13 +70,18 @@ export function buildDamageMitigationTables(
   const editorGroup = limbSetId
     ? limbSets.find(group => group.id === limbSetId)
     : null;
-  const groups = actorGroup && selectedIds.has(actorGroup.id)
-    ? [actorGroup]
+  const groups = actorRaceId
+    ? actorGroup && selectedIds.has(actorGroup.id) ? [actorGroup] : []
     : editorGroup
       ? [editorGroup]
       : limbSets.filter(group => selectedIds.has(group.id));
 
   return groups.map(group => buildDamageMitigationTableForGroup(group, entries, damageTypeSettings));
+}
+
+function isRaceCompatibleWithEquipmentRequirement(race, requirement) {
+  const raceSlotKeys = getRaceEquipmentSlotSelectionKeys(race);
+  return Array.from(requirement.selectedKeys).some(key => raceSlotKeys.has(key));
 }
 
 export function getSelectedDamageMitigationLimbSetIds(itemOrSystem, limbSets = []) {

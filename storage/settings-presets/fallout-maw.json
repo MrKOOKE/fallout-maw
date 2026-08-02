@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "91ea79e8b9f7211f65c3a6b22db861b6ef3be95e77d99ed23e1304928c4914d4",
-  "updatedAt": "2026-08-02T14:33:47.254Z",
+  "revision": "1d9c63169ec70dc6af9ef042602f1762c02475e61dd0fca043b124ba27129eee",
+  "updatedAt": "2026-08-02T16:40:29.850Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -55405,7 +55405,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -57944,7 +57944,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -59062,7 +59062,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -60167,7 +60167,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -62659,7 +62659,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -65367,40 +65367,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "4ec1318800e0a71c",
@@ -68593,40 +68561,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "92637f556c6d787b",
@@ -69744,7 +69680,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -70853,7 +70789,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -72880,40 +72816,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "newRace4",
@@ -75037,40 +74941,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "d05b9133aa7db64e",
@@ -77596,40 +77468,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "033f0b895b1d7b6f",
@@ -79191,40 +79031,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "812827ffb1bb2744",
@@ -80367,40 +80175,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "836703e7133dbd53",
@@ -81497,40 +81273,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "c83c0a5dea6621ba",
@@ -82894,40 +82638,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "1b1babc05938b6d5",
@@ -84074,40 +83786,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "newRace3",
@@ -95348,7 +95028,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],
@@ -96914,40 +96594,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "baaa733c2a4457e3",
@@ -98075,40 +97723,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "0a432e817c194267",
@@ -101734,40 +101350,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "de8ee5d9564c08db",
@@ -102885,40 +102469,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "fed63f767ca29c69",
@@ -104497,40 +104049,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "07df45e1431276bd",
@@ -105988,40 +105508,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "e39cfb9171244a7f",
@@ -107078,40 +106566,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "fa047de9d08d3db2",
@@ -108865,40 +108321,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "7d5b2e5793575956",
@@ -109976,40 +109400,8 @@
             },
             "equipmentSlots": [
               {
-                "key": "helmet",
-                "label": "Шлем"
-              },
-              {
-                "key": "glasses",
-                "label": "Очки"
-              },
-              {
-                "key": "mask",
-                "label": "Маска"
-              },
-              {
-                "key": "clothing",
-                "label": "Одежда"
-              },
-              {
-                "key": "armor",
-                "label": "Броня"
-              },
-              {
-                "key": "cloak",
-                "label": "Накидка"
-              },
-              {
-                "key": "rig",
-                "label": "Разгрузка"
-              },
-              {
-                "key": "belt",
-                "label": "Пояс"
-              },
-              {
-                "key": "backpack",
-                "label": "Рюкзак"
+                "key": "back",
+                "label": "Спина"
               }
             ],
             "id": "89d93a9301b7e836",
@@ -111137,7 +110529,7 @@
             },
             "equipmentSlots": [
               {
-                "key": "equipmentSlot",
+                "key": "back",
                 "label": "Спина"
               }
             ],

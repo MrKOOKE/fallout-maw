@@ -1,0 +1,431 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-02T15:39:48.165Z",
+  "write": true,
+  "scope": {
+    "worldItemsOnly": true,
+    "actorsRead": false,
+    "packsRead": false
+  },
+  "requestedCorrectionCount": 23,
+  "changedItemCount": 24,
+  "corrections": [
+    {
+      "id": "AWz7F4cUMo7XiR5f",
+      "name": "Броня Рекрута Легиона",
+      "beforeClass": "C",
+      "targetClass": "D",
+      "beforePath": "Снаряжение / Лёгкая броня / C",
+      "afterPath": "Снаряжение / Лёгкая броня / D",
+      "mitigationFactor": 0.7142857142857143,
+      "changedMitigationCells": 54,
+      "requirement": null,
+      "energy": null,
+      "reason": "Рекрутская спортивно-кожаная броня является нижней ступенью линии Легиона."
+    },
+    {
+      "id": "pbylFTVH1mqWrRrz",
+      "name": "Броня Легионера",
+      "beforeClass": "D",
+      "targetClass": "C",
+      "beforePath": "Снаряжение / Средняя броня / D",
+      "afterPath": "Снаряжение / Средняя броня / C",
+      "mitigationFactor": 1,
+      "changedMitigationCells": 0,
+      "requirement": {
+        "before": 50,
+        "after": 60,
+        "base": 50,
+        "deviation": 10
+      },
+      "energy": null,
+      "reason": "Штатная броня легионера технологически и конструктивно выше рекрутской."
+    },
+    {
+      "id": "oQUqgB9gWVuEbKiW",
+      "name": "Боевая Броня воина Легиона",
+      "beforeClass": "D",
+      "targetClass": "C",
+      "beforePath": "Снаряжение / Средняя броня / D",
+      "afterPath": "Снаряжение / Средняя броня / C",
+      "mitigationFactor": 1,
+      "changedMitigationCells": 0,
+      "requirement": {
+        "before": 50,
+        "after": 60,
+        "base": 50,
+        "deviation": 10
+      },
+      "energy": null,
+      "reason": "Боевая броня воина Легиона не должна находиться ниже рекрутской."
+    },
+    {
+      "id": "D70BtrOnTOvdx6Up",
+      "name": "Доспех Война Легиона",
+      "beforeClass": "D",
+      "targetClass": "C",
+      "beforePath": "Снаряжение / Тяжёлая броня / D",
+      "afterPath": "Снаряжение / Тяжёлая броня / C",
+      "mitigationFactor": 1,
+      "changedMitigationCells": 0,
+      "requirement": {
+        "before": 60,
+        "after": 80,
+        "base": 80,
+        "deviation": 0
+      },
+      "energy": null,
+      "reason": "Тяжёлый доспех воина Легиона остаётся тяжёлой C-платформой, а не D-заглушкой."
+    },
+    {
+      "id": "grVtlNslc2KVYPzo",
+      "name": "Броня Центуриона Легиона",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Тяжёлая броня / C",
+      "afterPath": "Снаряжение / Тяжёлая броня / B",
+      "mitigationFactor": 1.5,
+      "changedMitigationCells": 54,
+      "requirement": {
+        "before": 100,
+        "after": 120,
+        "base": 100,
+        "deviation": 20
+      },
+      "energy": null,
+      "reason": "Центурионская броня — верх штатной линии Легиона и содержит трофейные детали боевой/силовой брони."
+    },
+    {
+      "id": "YwkgJ5NTcJLGaPMD",
+      "name": "Шлем Центуриона Легиона",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Тяжёлые шлемы / C",
+      "afterPath": "Снаряжение / Тяжёлые шлемы / B",
+      "mitigationFactor": 1.5,
+      "changedMitigationCells": 9,
+      "requirement": null,
+      "energy": null,
+      "reason": "Шлем центуриона синхронизирован с верхней ступенью комплекта."
+    },
+    {
+      "id": "g5z4hetNqYPdK5wh",
+      "name": "Низкокачественная броня НКР",
+      "beforeClass": "C",
+      "targetClass": "D",
+      "beforePath": "Снаряжение / Лёгкая броня / C",
+      "afterPath": "Снаряжение / Лёгкая броня / D",
+      "mitigationFactor": 0.7142857142857143,
+      "changedMitigationCells": 54,
+      "requirement": null,
+      "energy": null,
+      "reason": "Низкокачественная броня НКР не должна иметь класс выше штатной массовой брони НКР."
+    },
+    {
+      "id": "JVjFDnfFuuC1J9gi",
+      "name": "Низкокачественный шлем бойца НКР",
+      "beforeClass": "C",
+      "targetClass": "D",
+      "beforePath": "Снаряжение / Средние шлемы / C",
+      "afterPath": "Снаряжение / Средние шлемы / D",
+      "mitigationFactor": 0.75,
+      "changedMitigationCells": 9,
+      "requirement": null,
+      "energy": null,
+      "reason": "Низкокачественный шлем НКР является нижней ступенью штатного шлема бойца."
+    },
+    {
+      "id": "QBca1oYgeGWZGEGZ",
+      "name": "Броня из дублёной кожи мод. II",
+      "beforeClass": "D",
+      "targetClass": "C",
+      "beforePath": "Снаряжение / Лёгкая броня / D",
+      "afterPath": "Снаряжение / Лёгкая броня / C",
+      "mitigationFactor": 1.4,
+      "changedMitigationCells": 54,
+      "requirement": null,
+      "energy": null,
+      "reason": "Leather Armor Mk II — усиленная многослойная версия базовой дублёной кожи."
+    },
+    {
+      "id": "yHkkedPvoVNUuKCd",
+      "name": "Улучшеные Мотоциклетные Очки",
+      "beforeClass": "D",
+      "targetClass": "C",
+      "beforePath": "Снаряжение / Головные уборы / D",
+      "afterPath": "Снаряжение / Головные уборы / C",
+      "mitigationFactor": 1.3333333333333333,
+      "changedMitigationCells": 9,
+      "requirement": null,
+      "energy": null,
+      "reason": "Улучшенные мотоциклетные очки не должны быть дешевле и слабее базовой модели того же D-класса."
+    },
+    {
+      "id": "wy2DvIF81vuwBI5h",
+      "name": "Опалённая силовая броня «Сьерра»",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ",
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 40
+      },
+      "reason": "Опалённая «Сьерра» — полностью функциональная именная модификация T-45d."
+    },
+    {
+      "id": "srqMVujhUmUTcR6A",
+      "name": "Опалённая силовой шлем «Сьерра»",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовые шлемы / C",
+      "afterPath": "Снаряжение / Силовые шлемы / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 22,
+      "requirement": null,
+      "energy": null,
+      "reason": "Шлем «Сьерры» синхронизирован с T-45d-комплектом."
+    },
+    {
+      "id": "bridMYqCwev9dmLR",
+      "name": "Силовая броня «Атомных Котов»",
+      "beforeClass": "C",
+      "targetClass": "A",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / A",
+      "mitigationFactor": 2.142857142857143,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 55
+      },
+      "reason": "Изображение и линия прямо определяют броню Атомных Котов как T-60."
+    },
+    {
+      "id": "bkxjdFgGex88fSDM",
+      "name": "Силовая броня «ЗЕВС»",
+      "beforeClass": "C",
+      "targetClass": "A",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / A",
+      "mitigationFactor": 2.142857142857143,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 55
+      },
+      "reason": "Файл apa-02-zevs относит «ЗЕВС» к линии Advanced Power Armor Mk II."
+    },
+    {
+      "id": "YorvYWQH4gVPqfnm",
+      "name": "Силовая броня «Крушитель черепов»",
+      "beforeClass": "C",
+      "targetClass": "A",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / A",
+      "mitigationFactor": 2.142857142857143,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 55
+      },
+      "reason": "Файл модели прямо определяет «Крушителя черепов» как вариант T-60."
+    },
+    {
+      "id": "6XSmUcYT4Jfjwwzr",
+      "name": "Силовая Броня «Наварро»",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ",
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 40
+      },
+      "reason": "«Наварро» использует корпус линии Advanced Power Armor Mk I."
+    },
+    {
+      "id": "EVRMmgqXv5fITXx1",
+      "name": "Силовая Броня «Пустынный лис»",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ",
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 40
+      },
+      "reason": "«Пустынный лис» использует корпус линии Advanced Power Armor Mk I."
+    },
+    {
+      "id": "2b87ar0pdmckDruy",
+      "name": "Силовая броня «Рассказчик»",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ",
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 40
+      },
+      "reason": "«Рассказчик» является отдельной T-49-платформой среднего технологического эшелона."
+    },
+    {
+      "id": "Y99tQ5sp6nexMWyk",
+      "name": "Силовой шлем «Рассказчик»",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовые шлемы / C",
+      "afterPath": "Снаряжение / Силовые шлемы / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 22,
+      "requirement": null,
+      "energy": null,
+      "reason": "Шлем «Рассказчика» синхронизирован с T-49-комплектом."
+    },
+    {
+      "id": "4zC2PIKDX1t5EeVl",
+      "name": "Силовая броня MP-47",
+      "beforeClass": "C",
+      "targetClass": "B",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / B",
+      "mitigationFactor": 1.5714285714285714,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ",
+          "Item.810613648446db93",
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 40
+      },
+      "reason": "Файл t-45d-med определяет MP-47 как медицинский вариант T-45d."
+    },
+    {
+      "id": "E2o1wef27rfbAIAO",
+      "name": "Силовая броня «Геенна»",
+      "beforeClass": "C",
+      "targetClass": "S",
+      "beforePath": "Снаряжение / Силовая броня / C",
+      "afterPath": "Снаряжение / Силовая броня / S",
+      "mitigationFactor": 3.142857142857143,
+      "changedMitigationCells": 66,
+      "requirement": null,
+      "energy": {
+        "beforeSourceUuids": [
+          "Item.idCnJLNhPJOKiJFQ"
+        ],
+        "afterSourceUuids": [
+          "Item.60ac3df89403b230"
+        ],
+        "amountPerHour": 75
+      },
+      "reason": "Парный шлем прямо маркирован APA Mk.III; «Геенна» образует верхнюю ступень APA-линии."
+    },
+    {
+      "id": "mpXUguOW8IjC5FQV",
+      "name": "Силовой Шлем «Геенна»",
+      "beforeClass": "C",
+      "targetClass": "S",
+      "beforePath": "Снаряжение / Силовые шлемы / C",
+      "afterPath": "Снаряжение / Силовые шлемы / S",
+      "mitigationFactor": 3.142857142857143,
+      "changedMitigationCells": 22,
+      "requirement": null,
+      "energy": null,
+      "reason": "Файл шлема прямо маркирован shlem-apa-mk.iii-geenna."
+    },
+    {
+      "id": "25E28djkDeIISZZD",
+      "name": "Силовой шлем «Уостер»",
+      "beforeClass": "C",
+      "targetClass": "A",
+      "beforePath": "Снаряжение / Силовые шлемы / C",
+      "afterPath": "Снаряжение / Силовые шлемы / A",
+      "mitigationFactor": 2.142857142857143,
+      "changedMitigationCells": 22,
+      "requirement": null,
+      "energy": null,
+      "reason": "Файл модели прямо определяет «Уостер» как рейдерский вариант T-60."
+    }
+  ],
+  "technicalFixes": [
+    {
+      "id": "wDgiP17mmGFuT4ug",
+      "name": "Комбинезон Узника",
+      "fix": "Класс ремонта синхронизирован с папкой S; состояние и бонусы не изменены.",
+      "changed": [
+        {
+          "before": "D",
+          "after": "S"
+        }
+      ]
+    }
+  ]
+}

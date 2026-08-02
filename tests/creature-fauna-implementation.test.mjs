@@ -85,6 +85,22 @@ test("expanded creature options preserve anchors and contain the complete practi
       }
     }
   }
+
+  const humanSlotLabels = expanded.races
+    .find(race => race.id === resolveCreatureCatalogStorageId(CREATURE_RACE_SPECS.find(spec => spec.key === "human")))
+    ?.equipmentSlots.map(slot => slot.label);
+  const humanLimbs = expanded.races
+    .find(race => race.id === resolveCreatureCatalogStorageId(CREATURE_RACE_SPECS.find(spec => spec.key === "human")))
+    ?.limbs.map(limb => ({ key: limb.key, label: limb.label }));
+  for (const spec of CREATURE_RACE_SPECS) {
+    const race = expanded.races.find(entry => entry.id === resolveCreatureCatalogStorageId(spec));
+    if (["human", "ghoul", "super-mutant", "zetan"].includes(spec.key)) {
+      assert.deepEqual(race.equipmentSlots.map(slot => slot.label), humanSlotLabels);
+      assert.deepEqual(race.limbs.map(limb => ({ key: limb.key, label: limb.label })), humanLimbs);
+    } else {
+      assert.deepEqual(race.equipmentSlots, [{ key: "back", label: "\u0421\u043f\u0438\u043d\u0430" }]);
+    }
+  }
 });
 
 test("actor-specific natural armor is locked, equipped and complete on every limb", () => {

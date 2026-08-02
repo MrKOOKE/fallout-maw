@@ -739,7 +739,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       damageMitigationUsesConstructPart: hasConstructPartFunction,
       damageMitigationLimbSetChoices,
       damageMitigationLimbSetEditorChoices,
-      showDamageMitigationLimbSetSelector: damageMitigationLimbSetEditorChoices.length > 1,
+      showDamageMitigationLimbSetSelector: damageMitigationLimbSetEditorChoices.length > 0,
       damageMitigationTables: buildDamageMitigationTables(item, creatureOptions, damageTypeSettings, {
         limbSetId: this.#activeMitigationLimbSetId
       }),

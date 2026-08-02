@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-31T13:00:36.977Z",
-  "mode": "dry-run",
-  "status": "ready-to-write",
+  "generatedAt": "2026-08-02T16:13:37.542Z",
+  "mode": "write",
+  "status": "written-and-verified",
   "scope": {
     "actorsRead": false,
-    "civilianItemsExcluded": 323,
+    "civilianItemsExcluded": 377,
     "constructWeaponItemsExcluded": 15,
     "constructConditionItemsExcluded": 42,
     "gaussDamageSourcesForcedPiercing": 3,
@@ -16,13 +16,13 @@
     "energyConsumersExactClassBlocked": 0,
     "standardMagazineSourcesAdjusted": 0,
     "standardMagazineSourcesBlocked": 0,
-    "conditionOnlyArmorItems": 0,
+    "conditionOnlyArmorItems": 8,
     "weaponContentAdjusted": 0,
     "persistentDamageAreas": 14,
     "groups": {
       "damageSources": 195,
       "energySources": 7,
-      "weapons": 799,
+      "weapons": 813,
       "equipment": 531
     }
   },
@@ -40,73 +40,42 @@
   "unpaidPositiveQuality": [],
   "equipmentIndividualization": {
     "file": "equipment-individualization.json",
-    "restoredBeforeRecalculation": 327,
-    "originalCloneGroups": 87,
-    "originalCloneItems": 325,
-    "individualizedItems": 327,
-    "collisionAdjustments": 14,
+    "restoredBeforeRecalculation": 402,
+    "originalCloneGroups": 86,
+    "originalCloneItems": 308,
+    "individualizedItems": 402,
+    "collisionAdjustments": 7,
     "remainingCloneGroups": 0,
     "remainingEquipmentCloneGroups": []
   },
   "namedVariantDeviationAudit": {
     "adjustments": [
       {
-        "itemId": "21BhM3uQKKzkURn6",
-        "itemName": "Силовая броня «Гризли»",
+        "itemId": "6ccRYpSo0474lNMK",
+        "itemName": "Силовой шлем «Расхититель костей»",
         "group": "equipment",
         "class": "C",
-        "family": "powerArmor",
+        "family": "powerHelmet",
         "componentClass": "D",
-        "componentCount": 2,
-        "requiredPrice": 7301,
-        "finalPrice": 7335,
+        "componentCount": 4,
+        "requiredPrice": 2586,
+        "finalPrice": 2617,
         "comparedWith": [
-          "Силовая броня «Атомных Котов»",
-          "Силовая броня «Крушитель черепов»"
+          "Силовой шлем «Центурион»"
         ]
       },
       {
-        "itemId": "6XSmUcYT4Jfjwwzr",
-        "itemName": "Силовая Броня «Наварро»",
+        "itemId": "TC4VehrrGZDeX3ma",
+        "itemName": "Силовой шлем «Освободитель»",
         "group": "equipment",
         "class": "C",
-        "family": "powerArmor",
+        "family": "powerHelmet",
         "componentClass": "D",
-        "componentCount": 2,
-        "requiredPrice": 7301,
-        "finalPrice": 7335,
+        "componentCount": 5,
+        "requiredPrice": 2586,
+        "finalPrice": 2617,
         "comparedWith": [
-          "Силовая броня «Крушитель черепов»"
-        ]
-      },
-      {
-        "itemId": "HozO1sNldCRtd8Je",
-        "itemName": "Силовая броня «Расхититель костей»",
-        "group": "equipment",
-        "class": "C",
-        "family": "powerArmor",
-        "componentClass": "D",
-        "componentCount": 2,
-        "requiredPrice": 7301,
-        "finalPrice": 7335,
-        "comparedWith": [
-          "Силовая броня «Атомных Котов»",
-          "Силовая броня «Крушитель черепов»"
-        ]
-      },
-      {
-        "itemId": "OUz3E5kdDPWuxgTW",
-        "itemName": "Силовая броня «Центурион»",
-        "group": "equipment",
-        "class": "C",
-        "family": "powerArmor",
-        "componentClass": "D",
-        "componentCount": 2,
-        "requiredPrice": 7301,
-        "finalPrice": 7335,
-        "comparedWith": [
-          "Силовая броня «Атомных Котов»",
-          "Силовая броня «Крушитель черепов»"
+          "Силовой шлем «Центурион»"
         ]
       },
       {
@@ -127,12 +96,12 @@
         "itemId": "bridMYqCwev9dmLR",
         "itemName": "Силовая броня «Атомных Котов»",
         "group": "equipment",
-        "class": "C",
+        "class": "A",
         "family": "powerArmor",
-        "componentClass": "D",
-        "componentCount": 2,
-        "requiredPrice": 7301,
-        "finalPrice": 7335,
+        "componentClass": "B",
+        "componentCount": 1,
+        "requiredPrice": 54520,
+        "finalPrice": 55073,
         "comparedWith": [
           "Силовая броня «Крушитель черепов»"
         ]
@@ -166,45 +135,17 @@
         ]
       },
       {
-        "itemId": "21BhM3uQKKzkURn6",
-        "itemName": "Силовая броня «Гризли»",
+        "itemId": "6ccRYpSo0474lNMK",
+        "itemName": "Силовой шлем «Расхититель костей»",
         "group": "equipment",
         "class": "C",
-        "family": "powerArmor",
+        "family": "powerHelmet",
         "componentClass": "D",
         "componentCount": 1,
-        "requiredPrice": 7336,
-        "finalPrice": 7370,
+        "requiredPrice": 2618,
+        "finalPrice": 2652,
         "comparedWith": [
-          "Силовая броня «Атомных Котов»"
-        ]
-      },
-      {
-        "itemId": "HozO1sNldCRtd8Je",
-        "itemName": "Силовая броня «Расхититель костей»",
-        "group": "equipment",
-        "class": "C",
-        "family": "powerArmor",
-        "componentClass": "D",
-        "componentCount": 1,
-        "requiredPrice": 7336,
-        "finalPrice": 7370,
-        "comparedWith": [
-          "Силовая броня «Атомных Котов»"
-        ]
-      },
-      {
-        "itemId": "OUz3E5kdDPWuxgTW",
-        "itemName": "Силовая броня «Центурион»",
-        "group": "equipment",
-        "class": "C",
-        "family": "powerArmor",
-        "componentClass": "D",
-        "componentCount": 1,
-        "requiredPrice": 7336,
-        "finalPrice": 7370,
-        "comparedWith": [
-          "Силовая броня «Атомных Котов»"
+          "Силовой шлем «Освободитель»"
         ]
       }
     ],
@@ -216,10 +157,10 @@
       "damageSources": {
         "items": 195,
         "itemsWithPaidDeviations": 184,
-        "payments": 431,
+        "payments": 432,
         "paymentChannels": {
           "area": 17,
-          "damage": 134,
+          "damage": 133,
           "damage+area": 11,
           "damage+critical": 17,
           "damage+handling": 8,
@@ -229,7 +170,7 @@
           "handling": 57,
           "handling+area": 3,
           "namedVariantDominance": 3,
-          "penetration": 115,
+          "penetration": 117,
           "special": 24,
           "special+area": 3
         }
@@ -243,49 +184,49 @@
         }
       },
       "weapons": {
-        "items": 799,
-        "itemsWithPaidDeviations": 717,
-        "payments": 2293,
+        "items": 813,
+        "itemsWithPaidDeviations": 732,
+        "payments": 2288,
         "paymentChannels": {
-          "actions": 200,
+          "actions": 195,
           "additionalWeapons": 2,
-          "condition": 70,
-          "fireControl": 393,
-          "manualDamageEfficiency": 15,
+          "condition": 71,
+          "fireControl": 387,
+          "manualDamageEfficiency": 20,
           "modularity": 170,
-          "noise": 117,
+          "noise": 92,
           "platformScore": 72,
-          "precision": 269,
-          "range": 181,
-          "sourcePercentile": 253,
-          "technology": 245,
-          "weight": 306
+          "precision": 277,
+          "range": 186,
+          "sourcePercentile": 257,
+          "technology": 249,
+          "weight": 310
         }
       },
       "equipment": {
         "items": 531,
-        "itemsWithPaidDeviations": 521,
-        "payments": 1862,
+        "itemsWithPaidDeviations": 525,
+        "payments": 2280,
         "paymentChannels": {
-          "characteristicBonus": 44,
-          "condition": 46,
-          "coverage": 17,
-          "energyProtection": 95,
-          "environmentalProtection": 64,
-          "individualization": 428,
-          "kineticProtection": 71,
-          "namedVariantDominance": 8,
-          "protection": 66,
+          "characteristicBonus": 49,
+          "condition": 43,
+          "coverage": 22,
+          "energyProtection": 104,
+          "environmentalProtection": 76,
+          "individualization": 745,
+          "kineticProtection": 92,
+          "namedVariantDominance": 4,
+          "protection": 93,
           "quality": 55,
-          "skillBonus": 93,
+          "skillBonus": 103,
           "specialization": 620,
-          "thermalProtection": 65,
+          "thermalProtection": 83,
           "wearRequirement": 12,
-          "weight": 178
+          "weight": 179
         }
       }
     },
-    "sameRecipeDistinctCapabilities": 220
+    "sameRecipeDistinctCapabilities": 219
   },
   "weaponContentRebalance": {
     "items": 0,
@@ -316,13 +257,13 @@
     }
   },
   "conditionRebalance": {
-    "items": 1330,
-    "weapons": 799,
-    "armor": 531,
+    "items": 1352,
+    "weapons": 813,
+    "armor": 539,
     "maxChanged": 0,
     "valueChanged": 0,
     "conditionCostsChanged": 0,
-    "durabilitySurplusItems": 70,
+    "durabilitySurplusItems": 71,
     "weakeningThresholdChanged": 0,
     "weakeningThreshold": 20
   },
@@ -435,19 +376,6 @@
           "max": 80
         }
       },
-      "S": {
-        "items": 1,
-        "price": {
-          "min": 23700,
-          "median": 23700,
-          "max": 23700
-        },
-        "difficulty": {
-          "min": 180,
-          "median": 180,
-          "max": 180
-        }
-      },
       "D": {
         "items": 1,
         "price": {
@@ -460,14 +388,27 @@
           "median": 30,
           "max": 30
         }
+      },
+      "S": {
+        "items": 1,
+        "price": {
+          "min": 23700,
+          "median": 23700,
+          "max": 23700
+        },
+        "difficulty": {
+          "min": 180,
+          "median": 180,
+          "max": 180
+        }
       }
     },
     "weapons": {
       "C": {
-        "items": 284,
+        "items": 289,
         "price": {
           "min": 140,
-          "median": 1406.5,
+          "median": 1400,
           "max": 3305
         },
         "difficulty": {
@@ -477,7 +418,7 @@
         }
       },
       "D": {
-        "items": 128,
+        "items": 129,
         "price": {
           "min": 32,
           "median": 249,
@@ -490,10 +431,10 @@
         }
       },
       "B": {
-        "items": 276,
+        "items": 282,
         "price": {
           "min": 384,
-          "median": 6031,
+          "median": 5906,
           "max": 13936
         },
         "difficulty": {
@@ -503,10 +444,10 @@
         }
       },
       "A": {
-        "items": 103,
+        "items": 104,
         "price": {
           "min": 2750,
-          "median": 16675,
+          "median": 16631.5,
           "max": 32100
         },
         "difficulty": {
@@ -516,39 +457,26 @@
         }
       },
       "S": {
-        "items": 8,
+        "items": 9,
         "price": {
           "min": 7319,
-          "median": 31195,
+          "median": 27586,
           "max": 55976
         },
         "difficulty": {
-          "min": 180,
+          "min": 170,
           "median": 180,
           "max": 190
         }
       }
     },
     "equipment": {
-      "D": {
-        "items": 96,
-        "price": {
-          "min": 129,
-          "median": 304,
-          "max": 858
-        },
-        "difficulty": {
-          "min": 25,
-          "median": 40,
-          "max": 60
-        }
-      },
       "B": {
-        "items": 166,
+        "items": 175,
         "price": {
-          "min": 1272,
-          "median": 6564.5,
-          "max": 31078
+          "min": 1927,
+          "median": 7079,
+          "max": 32954
         },
         "difficulty": {
           "min": 90,
@@ -557,11 +485,11 @@
         }
       },
       "C": {
-        "items": 204,
+        "items": 191,
         "price": {
-          "min": 435,
-          "median": 2044.5,
-          "max": 8724
+          "min": 472,
+          "median": 2045,
+          "max": 9138
         },
         "difficulty": {
           "min": 60,
@@ -569,25 +497,38 @@
           "max": 110
         }
       },
+      "D": {
+        "items": 94,
+        "price": {
+          "min": 129,
+          "median": 322.5,
+          "max": 878
+        },
+        "difficulty": {
+          "min": 25,
+          "median": 40,
+          "max": 60
+        }
+      },
       "A": {
-        "items": 54,
+        "items": 58,
         "price": {
           "min": 4211,
-          "median": 17804.5,
-          "max": 64950
+          "median": 19187.5,
+          "max": 70976
         },
         "difficulty": {
           "min": 130,
-          "median": 142.5,
+          "median": 145,
           "max": 170
         }
       },
       "S": {
-        "items": 11,
+        "items": 13,
         "price": {
-          "min": 13353,
-          "median": 56272,
-          "max": 146859
+          "min": 19399,
+          "median": 62318,
+          "max": 156804
         },
         "difficulty": {
           "min": 160,
@@ -597,6 +538,19 @@
       }
     }
   },
-  "preparedUpdates": 1532,
-  "databaseWritten": false
+  "preparedUpdates": 1554,
+  "databaseWritten": true,
+  "postWrite": {
+    "updatedItemsChecked": 1554,
+    "readbackMismatches": [],
+    "damageSourceCombatReadbackMismatches": [],
+    "weaponContentReadbackMismatches": [],
+    "energyConsumerReadbackMismatches": [],
+    "conditionReadbackMismatches": [],
+    "equipmentIndividualizationReadbackMismatches": [],
+    "priceFormulaMismatches": [],
+    "craftStructureMismatches": [],
+    "civilianItemsChecked": 377,
+    "civilianMismatches": []
+  }
 }

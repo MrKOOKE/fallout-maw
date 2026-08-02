@@ -12,6 +12,10 @@ const CREATURE_OPTIONS = {
     {
       id: "human",
       name: "Human",
+      equipmentSlots: [
+        { key: "armor", label: "Armor" },
+        { key: "helmet", label: "Helmet" }
+      ],
       limbs: [
         { key: "head", label: "Head" },
         { key: "torso", label: "Torso" },
@@ -21,6 +25,9 @@ const CREATURE_OPTIONS = {
     {
       id: "robot",
       name: "Robot",
+      equipmentSlots: [
+        { key: "chassis", label: "Chassis" }
+      ],
       limbs: [
         { key: "head", label: "Head" },
         { key: "torso", label: "Torso" },
@@ -34,9 +41,21 @@ const DAMAGE_TYPES = [
   { key: "fire", label: "Fire" }
 ];
 
-function createMitigationItem(limbSetIds = []) {
+function selectionKey(label) {
+  const normalized = String(label).trim().toLocaleLowerCase();
+  let hash = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = ((hash << 5) - hash) + normalized.charCodeAt(index);
+    hash |= 0;
+  }
+  return `slot${Math.abs(hash).toString(36)}`;
+}
+
+function createMitigationItem(limbSetIds = [], occupiedSlotLabels = [], occupiedSlotMode = "all") {
   return {
     system: {
+      occupiedSlotMode,
+      occupiedSlots: Object.fromEntries(occupiedSlotLabels.map(label => [selectionKey(label), true])),
       functions: {
         damageMitigation: {
           enabled: true,
@@ -69,6 +88,24 @@ test("the mitigation editor resolves one active limb set", () => {
   assert.equal(tables[0].id, activeId);
   assert.equal(tables[0].limbSetLabel, "Hea, Tor, Arm");
   assert.equal(tables[0].rows[0].cells.find(cell => cell.limbKey === "head")?.value, 7);
+});
+
+test("the mitigation editor only offers anatomies compatible with occupied equipment slots", () => {
+  const armor = createMitigationItem([], ["Armor"]);
+  const armorChoices = buildDamageMitigationLimbSetChoices(armor, CREATURE_OPTIONS);
+  assert.deepEqual(armorChoices.flatMap(choice => choice.races.map(race => race.id)), ["human"]);
+
+  const chassis = createMitigationItem([], ["Chassis"]);
+  const chassisChoices = buildDamageMitigationLimbSetChoices(chassis, CREATURE_OPTIONS);
+  assert.deepEqual(chassisChoices.flatMap(choice => choice.races.map(race => race.id)), ["robot"]);
+});
+
+test("race-specific occupied slots remain alternatives in both slot modes", () => {
+  const allSlots = createMitigationItem([], ["Armor", "Chassis"], "all");
+  assert.equal(buildDamageMitigationLimbSetChoices(allSlots, CREATURE_OPTIONS).length, 2);
+
+  const oneOfSlots = createMitigationItem([], ["Armor", "Chassis"], "oneOf");
+  assert.equal(buildDamageMitigationLimbSetChoices(oneOfSlots, CREATURE_OPTIONS).length, 2);
 });
 
 test("the mitigation editor can open any racial limb set without changing applicability", () => {

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-31T13:21:58.643Z",
+  "generatedAt": "2026-08-02T15:47:02.067Z",
   "rule": "Energy weapons accept only an exact-class source. Powered protective equipment accepts sources of its own class or any higher class; lower-class sources are removed.",
-  "writeRequested": false,
-  "consumerCount": 90,
+  "writeRequested": true,
+  "consumerCount": 91,
   "incompatibleConsumerCount": 0,
   "changedConsumerCount": 0,
   "blockedConsumerCount": 0,
@@ -55,7 +55,7 @@
     {
       "id": "2b87ar0pdmckDruy",
       "name": "Силовая броня «Рассказчик»",
-      "class": "C",
+      "class": "B",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
@@ -65,13 +65,31 @@
           "class": "B",
           "compatible": true,
           "reason": null
+        },
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
         }
       ],
       "incompatibleCount": 0,
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -187,7 +205,7 @@
     {
       "id": "4zC2PIKDX1t5EeVl",
       "name": "Силовая броня MP-47",
-      "class": "C",
+      "class": "B",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
@@ -197,13 +215,31 @@
           "class": "B",
           "compatible": true,
           "reason": null
+        },
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
         }
       ],
       "incompatibleCount": 0,
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -231,7 +267,7 @@
     {
       "id": "6XSmUcYT4Jfjwwzr",
       "name": "Силовая Броня «Наварро»",
-      "class": "C",
+      "class": "B",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
@@ -241,13 +277,31 @@
           "class": "B",
           "compatible": true,
           "reason": null
+        },
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
         }
       ],
       "incompatibleCount": 0,
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -292,6 +346,28 @@
       "blocked": false,
       "resultingSourceUuids": [
         "Item.idCnJLNhPJOKiJFQ"
+      ]
+    },
+    {
+      "id": "7e70003e3b010004",
+      "name": "Квантовая рука Биг-МТ «Фантом»",
+      "class": "S",
+      "compatibilityMode": "exact-class",
+      "configured": [
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
+        }
+      ],
+      "incompatibleCount": 0,
+      "changed": false,
+      "blocked": false,
+      "resultingSourceUuids": [
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -539,14 +615,14 @@
     {
       "id": "E2o1wef27rfbAIAO",
       "name": "Силовая броня «Геенна»",
-      "class": "C",
+      "class": "S",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
-          "uuid": "Item.idCnJLNhPJOKiJFQ",
-          "itemId": "idCnJLNhPJOKiJFQ",
-          "name": "Ядерный блок (B)",
-          "class": "B",
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
           "compatible": true,
           "reason": null
         }
@@ -555,13 +631,13 @@
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.60ac3df89403b230"
       ]
     },
     {
       "id": "EVRMmgqXv5fITXx1",
       "name": "Силовая Броня «Пустынный лис»",
-      "class": "C",
+      "class": "B",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
@@ -571,13 +647,31 @@
           "class": "B",
           "compatible": true,
           "reason": null
+        },
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
         }
       ],
       "incompatibleCount": 0,
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -1155,14 +1249,22 @@
     {
       "id": "YorvYWQH4gVPqfnm",
       "name": "Силовая броня «Крушитель черепов»",
-      "class": "C",
+      "class": "A",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
-          "uuid": "Item.idCnJLNhPJOKiJFQ",
-          "itemId": "idCnJLNhPJOKiJFQ",
-          "name": "Ядерный блок (B)",
-          "class": "B",
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
           "compatible": true,
           "reason": null
         }
@@ -1171,7 +1273,8 @@
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -1265,14 +1368,22 @@
     {
       "id": "bkxjdFgGex88fSDM",
       "name": "Силовая броня «ЗЕВС»",
-      "class": "C",
+      "class": "A",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
-          "uuid": "Item.idCnJLNhPJOKiJFQ",
-          "itemId": "idCnJLNhPJOKiJFQ",
-          "name": "Ядерный блок (B)",
-          "class": "B",
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
           "compatible": true,
           "reason": null
         }
@@ -1281,20 +1392,29 @@
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
       "id": "bridMYqCwev9dmLR",
       "name": "Силовая броня «Атомных Котов»",
-      "class": "C",
+      "class": "A",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
-          "uuid": "Item.idCnJLNhPJOKiJFQ",
-          "itemId": "idCnJLNhPJOKiJFQ",
-          "name": "Ядерный блок (B)",
-          "class": "B",
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
           "compatible": true,
           "reason": null
         }
@@ -1303,7 +1423,8 @@
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
@@ -1859,7 +1980,7 @@
     {
       "id": "wy2DvIF81vuwBI5h",
       "name": "Опалённая силовая броня «Сьерра»",
-      "class": "C",
+      "class": "B",
       "compatibilityMode": "same-or-higher-class",
       "configured": [
         {
@@ -1869,13 +1990,31 @@
           "class": "B",
           "compatible": true,
           "reason": null
+        },
+        {
+          "uuid": "Item.810613648446db93",
+          "itemId": "810613648446db93",
+          "name": "Ядерный блок (A)",
+          "class": "A",
+          "compatible": true,
+          "reason": null
+        },
+        {
+          "uuid": "Item.60ac3df89403b230",
+          "itemId": "60ac3df89403b230",
+          "name": "Ядерный блок (S)",
+          "class": "S",
+          "compatible": true,
+          "reason": null
         }
       ],
       "incompatibleCount": 0,
       "changed": false,
       "blocked": false,
       "resultingSourceUuids": [
-        "Item.idCnJLNhPJOKiJFQ"
+        "Item.idCnJLNhPJOKiJFQ",
+        "Item.810613648446db93",
+        "Item.60ac3df89403b230"
       ]
     },
     {
