@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "1d9c63169ec70dc6af9ef042602f1762c02475e61dd0fca043b124ba27129eee",
-  "updatedAt": "2026-08-02T16:40:29.850Z",
+  "revision": "97a34f2e6ceef55ee4eff5c4163b6a5b29be9637394c058cffc4bbfe57faee02",
+  "updatedAt": "2026-08-02T17:04:36.313Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -29360,7 +29360,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Руки и ноги.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -49997,7 +49997,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Руки и ноги.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "actorContainer": {
@@ -50480,7 +50480,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Тяжёлый пинок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -50714,7 +50714,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -50940,7 +50940,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -51174,7 +51174,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -51401,7 +51401,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Потрошение.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -51628,7 +51628,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -51862,7 +51862,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -52089,7 +52089,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -52323,7 +52323,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Радиоактивные когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -52554,7 +52554,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -53643,7 +53643,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Тяжёлые кулаки.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -53877,7 +53877,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар тени.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -54111,7 +54111,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Сокрушающий удар.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -54338,7 +54338,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Топот.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -54565,7 +54565,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Бросок обломка.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -55647,7 +55647,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "actorContainer": {
@@ -56130,7 +56130,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -56364,7 +56364,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "actorContainer": {
@@ -56847,7 +56847,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Подземный рывок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -57081,7 +57081,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -57308,7 +57308,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Подземный рывок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -57892,22 +57892,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -58199,7 +58184,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар рогами.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -58426,7 +58411,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар копытами.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -59010,22 +58995,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -59304,7 +59274,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар копытами.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -59531,7 +59501,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -60115,22 +60085,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -60409,7 +60364,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -60636,7 +60591,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Наскок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -60870,7 +60825,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -61097,7 +61052,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Наскок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -61331,7 +61286,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -61558,7 +61513,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Наскок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -61792,7 +61747,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Заразный укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -62023,7 +61978,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Наскок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -62607,22 +62562,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -62901,7 +62841,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -63128,7 +63068,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -63355,7 +63295,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -63589,7 +63529,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -63816,7 +63756,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -64043,7 +63983,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -64277,7 +64217,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -64504,7 +64444,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -64731,7 +64671,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -65315,22 +65255,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -65609,7 +65534,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -65836,7 +65761,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -66070,7 +65995,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -66297,7 +66222,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -66531,7 +66456,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -66758,7 +66683,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -66992,7 +66917,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -67219,7 +67144,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Огненное дыхание.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -67446,7 +67371,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -67680,7 +67605,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитый укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -67911,7 +67836,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -68495,36 +68420,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -68803,7 +68699,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -69030,7 +68926,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -69614,36 +69510,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -69922,7 +69789,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитый укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -70153,7 +70020,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -70737,22 +70604,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -71031,7 +70883,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -71258,7 +71110,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -71492,7 +71344,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -71719,7 +71571,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -71953,7 +71805,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -72180,7 +72032,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -72764,22 +72616,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "kt1u4nXGGEkDYWNW",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -73083,7 +72920,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "actorContainer": {
@@ -73566,7 +73403,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Плевок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "actorContainer": {
@@ -74056,7 +73893,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Радиоактивный укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -74287,7 +74124,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Радиоактивный плевок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -74875,36 +74712,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -75208,7 +75016,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Жвалы.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -75435,7 +75243,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Захват.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -75669,7 +75477,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Жвалы.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -75896,7 +75704,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Захват.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -76130,7 +75938,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Жвалы.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -76357,7 +76165,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Захват.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -76591,7 +76399,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Жвалы.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -76818,7 +76626,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Струя пламени.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -77402,36 +77210,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -77685,7 +77464,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Выстрел личинкой.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -77912,7 +77691,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитое жало.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -78150,7 +77929,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Залп личинками.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -78377,7 +78156,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитое жало.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -78965,36 +78744,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -79298,7 +79048,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -79525,7 +79275,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -80109,36 +79859,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -80392,7 +80113,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитое жало.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -80623,7 +80344,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -81207,36 +80928,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -81530,7 +81222,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Клешни.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -81757,7 +81449,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитое жало.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -81988,7 +81680,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -82572,36 +82264,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -82905,7 +82568,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Взрывной секрет.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -83136,7 +82799,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Жвалы.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -83720,36 +83383,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -84028,7 +83662,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "actorContainer": {
@@ -84511,7 +84145,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -84738,7 +84372,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -84972,7 +84606,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -85199,7 +84833,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -85426,7 +85060,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -85660,7 +85294,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -85887,7 +85521,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -86114,7 +85748,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -86348,7 +85982,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -86575,7 +86209,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -86802,7 +86436,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -87036,7 +86670,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -87263,7 +86897,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -87490,7 +87124,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -87724,7 +87358,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -87951,7 +87585,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -88178,7 +87812,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -88412,7 +88046,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -88639,7 +88273,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -88866,7 +88500,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -89100,7 +88734,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Засадный удар.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -89327,7 +88961,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -89554,7 +89188,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -89788,7 +89422,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Радиоактивные когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -90019,7 +89653,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -90246,7 +89880,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -90480,7 +90114,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -90707,7 +90341,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -90934,7 +90568,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -91168,7 +90802,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -91395,7 +91029,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -91622,7 +91256,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -91856,7 +91490,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -92083,7 +91717,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -92310,7 +91944,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -92544,7 +92178,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -92771,7 +92405,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -92998,7 +92632,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -93232,7 +92866,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -93459,7 +93093,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -93686,7 +93320,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -93920,7 +93554,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Радиоактивные когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -94151,7 +93785,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -94378,7 +94012,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар хвостом.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -94962,36 +94596,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "newType2",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -95270,7 +94875,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -95497,7 +95102,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Наскок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -95731,7 +95336,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -95958,7 +95563,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Наскок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -96542,22 +96147,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType2",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -96846,7 +96436,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар языком.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -97073,7 +96663,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Кислотный плевок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -97657,36 +97247,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "newType2",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -97940,7 +97501,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Клешни.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -98167,7 +97728,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -98401,7 +97962,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Клешни.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -98628,7 +98189,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Кислотный плевок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -98862,7 +98423,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -99089,7 +98650,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Звуковая волна.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -99316,7 +98877,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -99550,7 +99111,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Клешни.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -99777,7 +99338,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Кислотная кладка.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -100004,7 +99565,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -100238,7 +99799,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Радиоактивные клешни.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -100469,7 +100030,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Квантовый плевок.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -100700,7 +100261,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Таран.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -101284,36 +100845,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "newType2",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -101592,7 +101124,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -101819,7 +101351,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Звуковой импульс.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -102403,36 +101935,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "newType2",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -102711,7 +102214,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -102938,7 +102441,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -103172,7 +102675,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Сокрушающий удар.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -103399,7 +102902,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -103983,36 +103486,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "newType2",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -104166,7 +103640,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Шипастая пасть.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -104393,7 +103867,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Растительный шип.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -104627,7 +104101,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Хлещущие побеги.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -104854,7 +104328,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Коррозийная капсула.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -105442,36 +104916,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "36d48d4b1f41e3f1",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -105675,7 +105120,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар щупальцем.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -105902,7 +105347,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Токсичное облако.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -106500,36 +105945,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "36d48d4b1f41e3f1",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -106783,7 +106199,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Когти.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -107010,7 +106426,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Залп шипов.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -107244,7 +106660,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар древесной массой.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -107471,7 +106887,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Облако спор.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -108255,36 +107671,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "36d48d4b1f41e3f1",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -108513,7 +107900,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар щупальцами.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -108740,7 +108127,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Облако пыльцы.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -109334,36 +108721,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "36d48d4b1f41e3f1",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -109652,7 +109010,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Сокрушающий удар.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -109879,7 +109237,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар отростком.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -110463,36 +109821,7 @@
               "formula": "20 + con * 10"
             },
             "typeId": "776d7e8f7bdad3e6",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              },
-              {
-                "key": "weaponSet2",
-                "label": "Набор 2",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -110771,7 +110100,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Ядовитый укус.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -111002,7 +110331,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Мёртвая хватка.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -111586,22 +110915,7 @@
               "formula": "10 + con * 5"
             },
             "typeId": "776d7e8f7bdad3e6",
-            "weaponSets": [
-              {
-                "key": "weaponSet1",
-                "label": "Набор 1",
-                "slots": [
-                  {
-                    "key": "rightHand",
-                    "limbKey": "rightArm"
-                  },
-                  {
-                    "key": "leftHand",
-                    "limbKey": "leftArm"
-                  }
-                ]
-              }
-            ]
+            "weaponSets": []
           },
           {
             "baseParameters": {
@@ -111887,7 +111201,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Удар.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {
@@ -112121,7 +111435,7 @@
                             "zoom": 1
                           }
                         },
-                        "description": "<p>Природная или встроенная атака: Усиленный удар.</p>",
+                        "description": "",
                         "equipped": false,
                         "functions": {
                           "condition": {

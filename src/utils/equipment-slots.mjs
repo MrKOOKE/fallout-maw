@@ -234,6 +234,7 @@ export function groupRaceWeaponSlotsBySet(creatureOptions) {
         });
       }
     }
+    if (!slots.length) continue;
     const signature = slots.map(slot => slot.selectionKey).sort().join("|");
     const group = groups.get(signature) ?? { races: [], slots };
     group.races.push(race.name);

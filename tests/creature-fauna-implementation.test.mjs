@@ -44,6 +44,57 @@ const preset = JSON.parse(await fs.readFile(
 ));
 const currentOptions = preset.settings.find(entry => entry.id === "fallout-maw.creatureOptions")?.value;
 
+test("creature settings preserve an explicit absence of ordinary weapon slots", async () => {
+  globalThis.foundry ??= {
+    applications: {
+      api: { DialogV2: class {} },
+      ux: { FormDataExtended: class {} },
+      handlebars: { renderTemplate: async () => "" }
+    },
+    documents: { modifyBatch: async () => [] },
+    utils: {
+      deepClone: value => structuredClone(value),
+      randomID: () => "testNaturalItem1",
+      mergeObject: (original, other) => ({ ...original, ...other }),
+      setProperty: (object, path, value) => {
+        const parts = String(path).split(".");
+        const last = parts.pop();
+        let target = object;
+        for (const part of parts) target = target[part] ??= {};
+        target[last] = value;
+        return true;
+      },
+      unsetProperty: (object, path) => {
+        const parts = String(path).split(".");
+        const last = parts.pop();
+        const target = parts.reduce((value, part) => value?.[part], object);
+        return target ? delete target[last] : false;
+      }
+    }
+  };
+  const { normalizeCreatureOptions } = await import("../src/settings/creature-options.mjs");
+  const baseRace = {
+    id: "beast",
+    typeId: "animal",
+    name: "Beast",
+    limbs: [{ key: "head", label: "Head" }]
+  };
+  const normalizeRace = race => normalizeCreatureOptions({
+    types: [{ id: "animal", name: "Animal" }],
+    races: [race]
+  }).races[0];
+
+  assert.deepEqual(normalizeRace({ ...baseRace, weaponSets: [] }).weaponSets, []);
+  assert.deepEqual(
+    normalizeRace({
+      ...baseRace,
+      weaponSets: [{ key: "empty", label: "Empty", slots: [] }]
+    }).weaponSets,
+    [{ key: "empty", label: "Empty", slots: [] }]
+  );
+  assert.ok(normalizeRace(baseRace).weaponSets.length > 0);
+});
+
 test("expanded creature options preserve anchors and contain the complete practical catalog", () => {
   const expanded = buildExpandedCreatureOptions(currentOptions);
   const summary = validateExpandedCreatureOptions(expanded);
@@ -76,6 +127,7 @@ test("expanded creature options preserve anchors and contain the complete practi
         const system = attack.item.system;
         assert.equal(attack.item.type, "gear");
         assert.equal(attack.item.img, NATURAL_WEAPON_STOCK_IMG);
+        assert.equal(system.description, "");
         assert.equal(system.functions.weapon.enabled, true);
         assert.equal(system.placement.mode, "weapon");
         assert.equal(system.placement.weaponSet, "naturalRaceWeapons");
@@ -92,13 +144,18 @@ test("expanded creature options preserve anchors and contain the complete practi
   const humanLimbs = expanded.races
     .find(race => race.id === resolveCreatureCatalogStorageId(CREATURE_RACE_SPECS.find(spec => spec.key === "human")))
     ?.limbs.map(limb => ({ key: limb.key, label: limb.label }));
+  const humanWeaponSets = expanded.races
+    .find(race => race.id === resolveCreatureCatalogStorageId(CREATURE_RACE_SPECS.find(spec => spec.key === "human")))
+    ?.weaponSets;
   for (const spec of CREATURE_RACE_SPECS) {
     const race = expanded.races.find(entry => entry.id === resolveCreatureCatalogStorageId(spec));
     if (["human", "ghoul", "super-mutant", "zetan"].includes(spec.key)) {
       assert.deepEqual(race.equipmentSlots.map(slot => slot.label), humanSlotLabels);
       assert.deepEqual(race.limbs.map(limb => ({ key: limb.key, label: limb.label })), humanLimbs);
+      assert.deepEqual(race.weaponSets, humanWeaponSets);
     } else {
       assert.deepEqual(race.equipmentSlots, [{ key: "back", label: "\u0421\u043f\u0438\u043d\u0430" }]);
+      assert.deepEqual(race.weaponSets, []);
     }
   }
 });
@@ -126,6 +183,7 @@ test("actor-specific natural armor is locked, equipped and complete on every lim
     assert.equal(item._id, deterministicWorldId(`natural-armor:${spec.actorId}`));
     assert.equal(item.system.locked, true);
     assert.equal(item.system.equipped, true);
+    assert.equal(item.system.description, "");
     assert.equal(item.system.weight, 0);
     assert.equal(item.system.placement.mode, "equipment");
     assert.equal(item.system.functions.condition.enabled, false);

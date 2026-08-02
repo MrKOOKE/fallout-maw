@@ -271,7 +271,7 @@ function normalizeEquipmentSlots(slots) {
 function normalizeWeaponSets(sets, limbs = []) {
   const limbKeys = new Set(limbs.map(limb => limb.key));
   const fallbackLimbKey = limbs[0]?.key ?? "";
-  const source = Array.isArray(sets) && sets.length ? sets : createDefaultWeaponSets();
+  const source = Array.isArray(sets) ? sets : createDefaultWeaponSets();
 
   return source
     .map((set, index) => ({
@@ -283,7 +283,7 @@ function normalizeWeaponSets(sets, limbs = []) {
 }
 
 function normalizeWeaponSlots(slots, limbKeys, fallbackLimbKey) {
-  const source = Array.isArray(slots) && slots.length
+  const source = Array.isArray(slots)
     ? slots
     : [
       { key: "rightHand", limbKey: "rightArm" },

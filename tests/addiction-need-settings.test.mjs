@@ -91,6 +91,7 @@ test("active Lost preset configures addiction for human and ghoul without rewrit
   ));
   const creatureOptions = preset.settings.find(entry => entry.id === "fallout-maw.creatureOptions")?.value;
   const currentAddictions = creatureOptions.races
+    .filter(race => ["haGXisDaATsuiumk", "newRace2"].includes(race.id))
     .flatMap(race => race.needSettings ?? [])
     .filter(need => need.key === "addiction");
   const savedAddictions = preset.saves
