@@ -67,3 +67,18 @@ test("ability settings list exposes and handles the copy action", () => {
     /\.ability-settings-config \.fallout-maw-ability-compact-row\s*\{[\s\S]*?grid-template-columns:\s*2\.5rem minmax\(180px, 1fr\) repeat\(5, 2\.25rem\);/
   );
 });
+
+test("ability settings confirms before mutating the catalog on deletion", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/apps/ability-settings-config.mjs"), "utf8");
+  const methodStart = source.indexOf("static async #onDeleteAbility");
+  const methodEnd = source.indexOf("\n  }\n\n}", methodStart);
+  const method = source.slice(methodStart, methodEnd);
+
+  assert.ok(methodStart >= 0, "delete handler must be asynchronous");
+  assert.match(method, /await DialogV2\.confirm\(/);
+  assert.match(method, /if \(!confirmed\) return undefined;/);
+  assert.ok(
+    method.indexOf("if (!confirmed)") < method.indexOf(".splice(abilityIndex, 1)"),
+    "catalog mutation must happen only after confirmation"
+  );
+});

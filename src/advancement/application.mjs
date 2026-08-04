@@ -9,7 +9,7 @@ import {
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   getCharacteristicSettings,
-  getCreatureOptions,
+  getCreatureRaceSummaries,
   getAbilityCatalog,
   getLevelSettings,
   getProficiencySettings,
@@ -30,7 +30,13 @@ import {
   collectAdvancementPureValueProjection
 } from "./pure-value-effects.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
-import { ABILITY_ACQUISITION_ABILITY_MODES, ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
+import {
+  ABILITY_ACQUISITION_ABILITY_MODES,
+  ABILITY_ACQUISITION_CONDITION_TYPES,
+  getAbilitySourceId,
+  LOCKED_FEATURES_CATEGORY_ID,
+  prepareAbilityItemData
+} from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import {
   getNextSkillDevelopmentCostThreshold,
@@ -55,6 +61,11 @@ const REPEAT_INTERVAL_MS = 45;
 
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
+  #abilityById = new Map();
+  #abilityEntriesById = new Map();
+  #abilityRequirementContext = null;
+  #abilityRequirementRowsById = new Map();
+  #abilityTooltipHTMLCache = new Map();
   #advancementPureValues = null;
   #actorUpdateHookId = null;
   #abilityTooltipAnchor = null;
@@ -130,8 +141,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   };
 
   static PARTS = {
-    form: {
-      template: TEMPLATES.advancement.dialog
+    page: {
+      template: TEMPLATES.advancement.development
+    },
+    navigation: {
+      template: TEMPLATES.advancement.navigation
     }
   };
 
@@ -153,6 +167,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return super.render(options);
   }
 
+  _configureRenderOptions(options) {
+    options.parts ??= ["page", "navigation"];
+    super._configureRenderOptions(options);
+  }
+
+  _configureRenderParts(options) {
+    const parts = super._configureRenderParts(options);
+    parts.page.template = TEMPLATES.advancement[this.#page];
+    parts.page.templates = this.#page === "abilities" ? [TEMPLATES.advancement.abilityDetails] : [];
+    return parts;
+  }
+
   _getFrameButtons(options) {
     const buttons = super._getFrameButtons(options);
     if (game.user?.isGM) {
@@ -167,23 +193,23 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   async _prepareContext(options) {
     await this.#ensureDraft();
+    if (this.#page === "abilities") return this.#prepareAbilitiesPageContext(options);
+    if (this.#page === "proficiencies") return this.#prepareProficienciesPageContext(options);
 
     const characteristicSettings = getCharacteristicSettings();
-    const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
-    this.#advancementPureValues = collectAdvancementPureValueProjection(
+    this.#advancementPureValues ??= collectAdvancementPureValueProjection(
       this.actor,
       characteristicSettings,
       skillSettings
     );
-    this.#skillAdvancementMultiplierSource = getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
-    this.#skillAdvancementMultiplierChanges = null;
+    this.#skillAdvancementMultiplierSource ??= getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
     const skillDevelopmentCostSettings = getSkillDevelopmentCostSettings();
     const skillDevelopmentLimit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
     const levelSettings = getLevelSettings();
-    const creatureOptions = getCreatureOptions();
-    const race = creatureOptions.races.find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
+    const race = getCreatureRaceSummaries()
+      .find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
     const liveCharacteristics = this.actor.system?.characteristics ?? this.#draft.characteristics;
@@ -206,15 +232,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       ? 100
       : Math.max(0, Math.min(100, ((currentExperience - currentThreshold) / experienceRange) * 100));
     const canLevelUp = (this.#draft.level < maxLevel) && (this.#gmMode || (currentExperience >= nextThreshold));
-    const abilityRequirementContext = this.#getAbilityRequirementContext({
-      characteristicSettings,
-      skillSettings,
-      skillAdvancementSettings,
-      characteristics: cleanCharacteristics,
-      multiplierChanges: skillAdvancementMultiplierChanges
-    });
-    const abilityCategories = await this.#prepareAbilityCategories(remaining, skillSettings, abilityRequirementContext);
-    const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
     const pointDisplays = this.#preparePointDisplays(remaining);
     const pageIndex = this.#getPageIndex();
 
@@ -337,10 +354,69 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
             remainingSkillPoints: remaining.skills
           })
         };
-      }),
-      proficiencies: proficiencySettings.map(proficiency => this.#prepareProficiencyEntry(proficiency, remaining)),
+      })
+    };
+  }
+
+  async #prepareProficienciesPageContext(options) {
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
+    const pointDisplays = this.#preparePointDisplays(remaining);
+    const pageIndex = this.#getPageIndex();
+    return {
+      ...(await super._prepareContext(options)),
+      actor: this.actor,
+      isGMMode: this.#gmMode,
+      page: this.#page,
+      isDevelopmentPage: false,
+      isProficienciesPage: true,
+      isAbilitiesPage: false,
+      isFirstPage: pageIndex <= 0,
+      isLastPage: pageIndex >= (ADVANCEMENT_PAGES.length - 1),
+      proficiencyPointsDisplay: pointDisplays.proficiencies,
+      proficiencies: getProficiencySettings().map(proficiency => this.#prepareProficiencyEntry(proficiency, remaining))
+    };
+  }
+
+  async #prepareAbilitiesPageContext(options) {
+    const characteristicSettings = getCharacteristicSettings();
+    const skillSettings = getSkillSettings();
+    const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    this.#advancementPureValues ??= collectAdvancementPureValueProjection(this.actor, characteristicSettings, skillSettings);
+    this.#skillAdvancementMultiplierSource ??= getSkillAdvancementMultiplierChanges(this.actor, skillSettings);
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
+    const characteristics = this.#getCleanCharacteristics(characteristicSettings);
+    const multiplierChanges = this.#getSkillAdvancementMultiplierChanges(skillSettings, {
+      characteristicSettings,
+      skillAdvancementSettings,
+      characteristics
+    });
+    const requirementContext = this.#getAbilityRequirementContext({
+      characteristicSettings,
+      skillSettings,
+      skillAdvancementSettings,
+      characteristics,
+      multiplierChanges
+    });
+    const abilityCategories = this.#prepareAbilityCategories(remaining, skillSettings, requirementContext, {
+      characteristicSettings,
+      races: getCreatureRaceSummaries()
+    });
+    const pointDisplays = this.#preparePointDisplays(remaining);
+    const pageIndex = this.#getPageIndex();
+    return {
+      ...(await super._prepareContext(options)),
+      actor: this.actor,
+      isGMMode: this.#gmMode,
+      page: this.#page,
+      isDevelopmentPage: false,
+      isProficienciesPage: false,
+      isAbilitiesPage: true,
+      isFirstPage: pageIndex <= 0,
+      isLastPage: pageIndex >= (ADVANCEMENT_PAGES.length - 1),
+      traitPointsDisplay: pointDisplays.traits,
+      researchPointsDisplay: pointDisplays.researches,
       abilityCategories,
-      selectedAbility
+      selectedAbility: this.#prepareSelectedAbility()
     };
   }
 
@@ -646,7 +722,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   #onAbilityDescriptionMiddlePointerDown(event) {
     if (event.button !== 1) return;
-    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    const anchor = event.target?.closest?.("[data-ability-description-source-id]");
     const insideTooltip = this.#abilityTooltipElement?.contains(event.target);
     if (!anchor && !insideTooltip) return;
     event.preventDefault();
@@ -654,18 +730,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   #onAbilityDescriptionPointerOver(event) {
     if (this.#abilityTooltipPinned) return;
-    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    const anchor = event.target?.closest?.("[data-ability-description-source-id]");
     if (!anchor || anchor.contains(event.relatedTarget)) return;
-    const html = String(anchor.dataset.abilityDescriptionTooltip ?? "").trim();
-    if (!html) return;
 
     this.#clearAbilityDescriptionTooltip();
     this.#abilityTooltipAnchor = anchor;
-    this.#abilityTooltipTimer = window.setTimeout(() => this.#showAbilityDescriptionTooltip(anchor, html), 500);
+    this.#abilityTooltipTimer = window.setTimeout(() => {
+      void this.#showAbilityDescriptionTooltip(anchor);
+    }, 500);
   }
 
   #onAbilityDescriptionPointerOut(event) {
-    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    const anchor = event.target?.closest?.("[data-ability-description-source-id]");
     if (!anchor || anchor.contains(event.relatedTarget)) return;
     if (this.#abilityTooltipPinned) return;
     if (this.#abilityTooltipElement?.contains(event.relatedTarget)) return;
@@ -674,14 +750,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   #onAbilityDescriptionAuxClick(event) {
     if (event.button !== 1) return;
-    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    const anchor = event.target?.closest?.("[data-ability-description-source-id]");
     if (!anchor) return;
 
     event.preventDefault();
     event.stopPropagation();
-    const html = String(anchor.dataset.abilityDescriptionTooltip ?? "").trim();
-    if (!html) return;
-
     if (this.#abilityTooltipPinned && this.#abilityTooltipAnchor === anchor) {
       this.#clearAbilityDescriptionTooltip();
       return;
@@ -689,12 +762,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     this.#clearAbilityDescriptionTooltip();
     this.#abilityTooltipAnchor = anchor;
-    this.#showAbilityDescriptionTooltip(anchor, html, { pinned: true });
+    void this.#showAbilityDescriptionTooltip(anchor, { pinned: true });
   }
 
   #onAbilityDescriptionDocumentPointerDown(event) {
     if (!this.#abilityTooltipElement) return;
-    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    const anchor = event.target?.closest?.("[data-ability-description-source-id]");
     const insideTooltip = this.#abilityTooltipElement.contains(event.target);
     if (event.button === 1 && (anchor || insideTooltip)) event.preventDefault();
     if (anchor) return;
@@ -702,12 +775,25 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#clearAbilityDescriptionTooltip();
   }
 
-  #showAbilityDescriptionTooltip(anchor, html, { pinned = false } = {}) {
+  async #showAbilityDescriptionTooltip(anchor, { pinned = false } = {}) {
     if (this.#abilityTooltipTimer) {
       window.clearTimeout(this.#abilityTooltipTimer);
       this.#abilityTooltipTimer = null;
     }
     if (!anchor?.isConnected || this.#abilityTooltipAnchor !== anchor) return;
+
+    const sourceId = String(anchor.dataset.abilityDescriptionSourceId ?? "");
+    const source = this.#abilityById.get(sourceId);
+    if (!source) return;
+    let html = this.#abilityTooltipHTMLCache.get(sourceId);
+    if (html === undefined) {
+      html = await renderAbilityDescriptionTooltipHTML(source.ability, {
+        actor: this.actor,
+        requirementRows: this.#abilityRequirementRowsById.get(sourceId) ?? []
+      });
+      this.#abilityTooltipHTMLCache.set(sourceId, html);
+    }
+    if (!html || !anchor.isConnected || this.#abilityTooltipAnchor !== anchor) return;
 
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip";
@@ -956,15 +1042,41 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!categoryId) return undefined;
     if (this.#expandedAbilityCategories.has(categoryId)) this.#expandedAbilityCategories.delete(categoryId);
     else this.#expandedAbilityCategories.add(categoryId);
-    return this.forceRender();
+    const expanded = this.#expandedAbilityCategories.has(categoryId);
+    target.closest("[data-ability-category]")?.classList.toggle("collapsed", !expanded);
+    const icon = target.querySelector(".fallout-maw-advancement-collapse-icon");
+    if (icon) icon.textContent = expanded ? "▼" : "▶";
+    return undefined;
   }
 
-  static #onSelectAbility(event, target) {
+  static async #onSelectAbility(event, target) {
     event.preventDefault();
     const sourceId = target.dataset.abilitySourceId ?? "";
     if (!sourceId) return undefined;
     this.#selectedAbilitySourceId = sourceId;
-    return this.forceRender();
+    for (const entry of this.element?.querySelectorAll?.("[data-ability-entry]") ?? []) {
+      entry.classList.toggle("selected", entry.dataset.abilitySourceId === sourceId);
+    }
+    return this.#renderAbilityDetails(sourceId);
+  }
+
+  async #renderAbilityDetails(sourceId = this.#selectedAbilitySourceId) {
+    const selectedAbility = this.#abilityEntriesById.get(sourceId) ?? null;
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft?.development);
+    const pointDisplays = this.#preparePointDisplays(remaining);
+    const html = await foundry.applications.handlebars.renderTemplate(TEMPLATES.advancement.abilityDetails, {
+      isGMMode: this.#gmMode,
+      researchPointsDisplay: pointDisplays.researches,
+      selectedAbility,
+      traitPointsDisplay: pointDisplays.traits
+    });
+    if (sourceId !== this.#selectedAbilitySourceId) return;
+    const current = this.element?.querySelector?.("[data-ability-details-region]");
+    if (!current) return;
+    const template = document.createElement("template");
+    template.innerHTML = html.trim();
+    const replacement = template.content.firstElementChild;
+    if (replacement) current.replaceWith(replacement);
   }
 
   static async #onSpendAbilityResearch(event, target) {
@@ -973,7 +1085,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#syncDraftFromForm();
 
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
-    const entry = findCatalogAbility(sourceId);
+    const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (entry.ability.system?.acquisition?.onlyManual) return this.forceRender();
@@ -1025,7 +1137,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#syncDraftFromForm();
 
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
-    const entry = findCatalogAbility(sourceId);
+    const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (this.#getAbilityResearch(sourceId)) return this.forceRender();
@@ -1042,7 +1154,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#syncDraftFromForm();
 
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
-    const entry = findCatalogAbility(sourceId);
+    const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || entry.category?.id !== LOCKED_FEATURES_CATEGORY_ID || actorHasAbility(this.actor, sourceId)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
 
@@ -1075,7 +1187,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!game.user?.isGM || !this.#gmMode) return this.forceRender();
 
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
-    const entry = findCatalogAbility(sourceId);
+    const entry = this.#abilityById.get(sourceId) ?? findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
 
     const granted = await grantCatalogAbility(this.actor, sourceId);
@@ -1530,7 +1642,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         })
       ])
     );
-    return { characteristics, skills };
+    return { ...this.#abilityRequirementContext, characteristics, skills };
   }
 
   #getPureSkillValue(key, {
@@ -1578,16 +1690,50 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     }, 0);
   }
 
-  async #prepareAbilityCategories(remaining = {}, skillSettings = [], requirementContext = {}) {
+  #prepareAbilityCategories(remaining = {}, skillSettings = [], requirementContext = {}, {
+    characteristicSettings = [],
+    races = []
+  } = {}) {
     const catalog = getAbilityCatalog();
-    return Promise.all((catalog.categories ?? []).map(async category => {
+    const ownedAbilityIds = new Set(this.actor.items
+      .filter(item => item.type === "ability")
+      .map(item => getAbilitySourceId(item))
+      .filter(Boolean));
+    const researchBySourceId = new Map((this.actor.system?.researches ?? [])
+      .filter(research => research.type === "ability" && research.sourceId)
+      .map(research => [research.sourceId, research]));
+    const skillByKey = new Map(skillSettings.map(skill => [skill.key, skill]));
+    this.#abilityById = new Map();
+    for (const category of catalog.categories ?? []) {
+      for (const ability of category.abilities ?? []) {
+        this.#abilityById.set(String(ability?.id ?? ""), { ability, category });
+      }
+    }
+    this.#abilityEntriesById.clear();
+    this.#abilityRequirementRowsById.clear();
+    this.#abilityTooltipHTMLCache.clear();
+    this.#abilityRequirementContext = {
+      ...requirementContext,
+      abilityById: this.#abilityById,
+      characteristicSettings,
+      ownedAbilityIds,
+      races,
+      skillSettings
+    };
+
+    return (catalog.categories ?? []).map(category => {
       const isFeatures = category.id === LOCKED_FEATURES_CATEGORY_ID;
       const traitTotal = isFeatures ? this.#getTraitSessionTotal(remaining.traits) : 0;
       const traitRemaining = Math.max(0, toInteger(remaining.traits));
-      const abilities = await Promise.all((category.abilities ?? [])
+      const abilities = (category.abilities ?? [])
         .filter(ability => ability?.visible !== false)
-        .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
-        .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings, requirementContext)));
+        .filter(ability => !ownedAbilityIds.has(String(ability?.id ?? "")))
+        .map(ability => this.#prepareAbilityEntry(category, ability, remaining, {
+          ownedAbilityIds,
+          researchBySourceId,
+          requirementContext: this.#abilityRequirementContext,
+          skillByKey
+        }));
       return {
         ...category,
         displayName: isFeatures
@@ -1597,12 +1743,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         expanded: this.#expandedAbilityCategories.has(String(category.id ?? "")),
         abilities: abilities.sort(compareAbilityAvailability)
       };
-    }));
+    });
   }
 
-  #prepareSelectedAbility(categories = []) {
+  #prepareSelectedAbility() {
     if (!this.#selectedAbilitySourceId) return null;
-    const selected = categories.flatMap(category => category.abilities ?? []).find(ability => ability.sourceId === this.#selectedAbilitySourceId) ?? null;
+    const selected = this.#abilityEntriesById.get(this.#selectedAbilitySourceId) ?? null;
     if (!selected) {
       this.#selectedAbilitySourceId = "";
       return null;
@@ -1614,28 +1760,32 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return Math.max(0, toInteger(traitRemaining)) + this.#getTraitSessionSpent();
   }
 
-  async #prepareAbilityEntry(category, ability, remaining = {}, skillSettings = [], requirementContext = {}) {
+  #prepareAbilityEntry(category, ability, remaining = {}, {
+    ownedAbilityIds = new Set(),
+    researchBySourceId = new Map(),
+    requirementContext = {},
+    skillByKey = new Map()
+  } = {}) {
     const sourceId = String(ability?.id ?? "");
     const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const cost = Math.max(0, toInteger(ability?.system?.cost));
-    const research = this.#getAbilityResearch(sourceId);
+    const research = researchBySourceId.get(sourceId) ?? null;
     const target = Math.max(1, Number(research?.target) || cost || 1);
     const progress = research ? Math.min(target, Math.max(0, Number(research.progress) || 0)) : 0;
     const remainingCost = Math.max(0, target - progress);
-    const owned = actorHasAbility(this.actor, sourceId);
+    const owned = ownedAbilityIds.has(sourceId);
     const onlyFree = Boolean(ability?.system?.acquisition?.onlyFree);
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
     const completed = Boolean(research) && progress >= target;
-    const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
+    const skillLabel = skillByKey.get(ability?.system?.acquisition?.skillKey)?.label
+      ?? skillByKey.values().next().value?.label
+      ?? "";
     const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability, requirementContext);
     const requirementsMet = requirementRows.every(requirement => requirement.met);
     const acquisitionAvailable = this.#gmMode || requirementsMet;
     const requirementLabel = getAbilityAcquisitionRequirementLabel(requirementRows);
-    const descriptionTooltipHTML = await renderAbilityDescriptionTooltipHTML(ability, {
-      actor: this.actor,
-      requirementRows
-    });
-    return {
+    this.#abilityRequirementRowsById.set(sourceId, requirementRows);
+    const entry = {
       ...ability,
       sourceId,
       categoryId: category.id,
@@ -1650,7 +1800,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       onlyManual,
       acquisitionAvailable,
       requirementLabel,
-      descriptionTooltipHTML,
+      hasDescriptionTooltip: Boolean(String(ability?.description ?? "").trim() || requirementRows.length),
       canPurchaseTrait: isFeature && !owned && acquisitionAvailable && toInteger(remaining.traits) > 0,
       canSpendFree: !isFeature && !owned && acquisitionAvailable && Boolean(research) && !onlyManual && (completed || (remainingCost > 0 && toInteger(remaining.researches) > 0)),
       canSelectRewardChanges: completed,
@@ -1663,6 +1813,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       acquisitionLabel: onlyFree ? "Только свободные ОИ" : onlyManual ? "Только ручное исследование" : "Свободные ОИ или ручное исследование",
       manualLabel: skillLabel ? `${skillLabel}, сложность ${toInteger(ability?.system?.acquisition?.difficulty ?? 60)}` : ""
     };
+    this.#abilityEntriesById.set(sourceId, entry);
+    return entry;
   }
 
   #getAbilityResearch(sourceId = "") {
@@ -2001,6 +2153,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       "name"
     ].some(path => foundry.utils.hasProperty(changes, path));
 
+    this.#invalidateActorDerivedCaches();
     if (affectsDraft && this.#draft) this.#syncDraftFromActor();
     await this.forceRender();
   }
@@ -2009,7 +2162,15 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (this.#isClosing) return;
     if (effect?.parent?.id !== this.actor?.id) return;
     if (!this.rendered) return;
+    this.#invalidateActorDerivedCaches();
     await this.forceRender();
+  }
+
+  #invalidateActorDerivedCaches() {
+    this.#advancementPureValues = null;
+    this.#skillAdvancementMultiplierSource = null;
+    this.#skillAdvancementMultiplierChanges = null;
+    this.#abilityTooltipHTMLCache.clear();
   }
 
   async #saveDraft({ notify = true } = {}) {
@@ -2050,6 +2211,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         console.error(`${FALLOUT_MAW.id} | Failed to commit advancement repeat update`, error);
       })
       .then(() => this.actor.update(actorUpdate, {
+        render: false,
         [ADVANCEMENT_UPDATE_SOURCE_OPTION]: this.id
       }));
     this.#repeatCommitPromise = commit;
@@ -2075,6 +2237,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #syncDraftFromActor() {
+    this.#invalidateActorDerivedCaches();
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     const proficiencySettings = getProficiencySettings();
@@ -2118,9 +2281,9 @@ function abilityAcquisitionRequirementsMet(actor, ability = {}, context = {}) {
 
 function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {}) {
   const rows = [];
-  const races = getCreatureOptions().races ?? [];
-  const characteristics = getCharacteristicSettings();
-  const skills = getSkillSettings();
+  const races = context.races ?? getCreatureRaceSummaries();
+  const characteristics = context.characteristicSettings ?? getCharacteristicSettings();
+  const skills = context.skillSettings ?? getSkillSettings();
   const requirementCharacteristics = context?.characteristics ?? actor?.system?.characteristics ?? {};
   const requirementSkills = context?.skills ?? {};
   for (const requirement of ability.system?.acquisitionRequirements ?? []) {
@@ -2192,9 +2355,11 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {})
       if (!abilityIds.length) continue;
       const requiresPresence = mode === ABILITY_ACQUISITION_ABILITY_MODES.present;
       for (const abilityId of abilityIds) {
-        const catalogEntry = findCatalogAbility(abilityId);
+        const catalogEntry = context.abilityById?.get(abilityId) ?? findCatalogAbility(abilityId);
         const abilityName = catalogEntry?.ability?.name || abilityId;
-        const hasAbility = actorHasAbility(actor, abilityId);
+        const hasAbility = context.ownedAbilityIds instanceof Set
+          ? context.ownedAbilityIds.has(abilityId)
+          : actorHasAbility(actor, abilityId);
         const met = requiresPresence ? hasAbility : !hasAbility;
         const currentLabel = hasAbility ? "Есть" : "Нет";
         const requiredLabel = requiresPresence ? "Есть" : "Нет";

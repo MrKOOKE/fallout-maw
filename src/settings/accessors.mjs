@@ -371,6 +371,20 @@ export function getCreatureOptions(characteristics = getCharacteristicSettings()
   }
 }
 
+export function getCreatureRaceSummaries() {
+  try {
+    const options = game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING);
+    return (Array.isArray(options?.races) ? options.races : [])
+      .filter(race => race?.id)
+      .map(race => ({
+        id: String(race.id),
+        name: String(race.name || race.id)
+      }));
+  } catch (_error) {
+    return [];
+  }
+}
+
 export async function setCreatureOptions(options, characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
   return game.settings.set(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, normalizeCreatureOptions(options, characteristics, damageTypes));
 }

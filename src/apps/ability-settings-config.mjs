@@ -343,13 +343,34 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     return new AbilityCatalogItemEditor(this, categoryId, abilityId).render(true);
   }
 
-  static #onDeleteAbility(event, target) {
+  static async #onDeleteAbility(event, target) {
     event.preventDefault();
-    this.catalog = this.readCatalogFromForm();
     const categoryElement = target.closest("[data-ability-category-row]");
     const categoryIndex = getRowIndex(this.form, target, "[data-ability-category-row]");
     const abilityIndex = getScopedRowIndex(categoryElement, target, "[data-ability-row]");
     if (categoryIndex < 0 || abilityIndex < 0) return undefined;
+
+    const catalog = this.readCatalogFromForm();
+    const category = catalog.categories[categoryIndex];
+    const ability = category?.abilities?.[abilityIndex];
+    if (!ability) return undefined;
+
+    const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
+    const kind = isFeature ? "особенность" : "способность";
+    const confirmed = await DialogV2.confirm({
+      window: {
+        title: isFeature ? "Удаление особенности" : "Удаление способности",
+        icon: "fa-solid fa-trash"
+      },
+      content: `<p>Удалить ${kind} «${escapeHTML(ability.name)}»?</p>`,
+      yes: { label: "Удалить" },
+      no: { label: "Отмена" },
+      rejectClose: false,
+      modal: true
+    });
+    if (!confirmed) return undefined;
+
+    this.catalog = catalog;
     this.catalog.categories[categoryIndex]?.abilities?.splice(abilityIndex, 1);
     return this.forceRender();
   }

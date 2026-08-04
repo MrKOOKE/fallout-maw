@@ -13,7 +13,11 @@ export const COMBAT_DELETION_SETTLED_HOOK = "falloutMawCombatDeletionSettled";
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,
   advancement: Object.freeze({
-    dialog: `systems/${SYSTEM_ID}/templates/actor/advancement-dialog.hbs`
+    development: `systems/${SYSTEM_ID}/templates/actor/advancement-development.hbs`,
+    proficiencies: `systems/${SYSTEM_ID}/templates/actor/advancement-proficiencies.hbs`,
+    abilities: `systems/${SYSTEM_ID}/templates/actor/advancement-abilities.hbs`,
+    abilityDetails: `systems/${SYSTEM_ID}/templates/actor/parts/advancement-ability-details.hbs`,
+    navigation: `systems/${SYSTEM_ID}/templates/actor/parts/advancement-navigation.hbs`
   }),
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
   limbDamageDialog: `systems/${SYSTEM_ID}/templates/actor/limb-damage-dialog.hbs`,

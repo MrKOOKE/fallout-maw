@@ -1,0 +1,42 @@
+<div class="fallout-maw-config-body fallout-maw-advancement-body fallout-maw-advancement-body-proficiencies">
+  <section class="fallout-maw-panel fallout-maw-advancement-section fallout-maw-advancement-proficiencies-section">
+    <div class="fallout-maw-advancement-section-title">
+      <h2>{{localize "FALLOUTMAW.Common.Proficiencies"}}</h2>
+    </div>
+
+    <div class="fallout-maw-advancement-proficiency-points">
+      <div class="fallout-maw-advancement-meter">
+        <span>{{localize "FALLOUTMAW.Advancement.ProficiencyPoints"}}</span>
+        <strong data-advancement-point-display="proficiencies">{{proficiencyPointsDisplay}}</strong>
+      </div>
+    </div>
+
+    <div class="fallout-maw-advancement-proficiencies">
+      {{#each proficiencies}}
+      <div class="fallout-maw-advancement-proficiency-row" data-advancement-proficiency-row="{{key}}">
+        <div class="fallout-maw-resource-card-header">
+          <span class="fallout-maw-resource-name fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
+          <span class="fallout-maw-resource-value"><strong data-proficiency-value>{{value}} / {{max}}</strong></span>
+        </div>
+        <div class="fallout-maw-resource-meter fallout-maw-advancement-proficiency-meter" style="{{meterStyle}}" data-proficiency-meter role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}" data-proficiency-fill></span>
+          <span class="fallout-maw-advancement-proficiency-phantom" style="{{phantomStyle}}" data-proficiency-phantom {{#unless hasPhantom}}hidden{{/unless}}></span>
+        </div>
+        <input
+          type="range"
+          class="fallout-maw-advancement-proficiency-slider"
+          data-proficiency-slider
+          data-proficiency-key="{{key}}"
+          value="{{value}}"
+          min="{{sliderMin}}"
+          max="{{sliderMax}}"
+          step="1"
+          {{#if sliderDisabled}}disabled{{/if}}
+        >
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Proficiencies.Empty"}}</p>
+      {{/each}}
+    </div>
+  </section>
+</div>
