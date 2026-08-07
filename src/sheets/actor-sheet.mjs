@@ -303,6 +303,7 @@ import {
   getWeaponModuleTooltipCapabilities,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
+import { planWeaponMagazineCapacityTransition } from "../items/weapon-magazine.mjs";
 import {
   getDamageSourceAdjustedNoiseLevel,
   mergeDamageSourceSpecialProperties,
@@ -4066,6 +4067,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
 
     let returnPlan = { updates: [], creates: [] };
+    let magazinePlan = { overflow: 0, updates: [], creates: [] };
     try {
       if (oldItemData?.system) {
         returnPlan = planActorInventoryGrant(this.actor, oldItemData, {
@@ -4074,6 +4076,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         });
         if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       }
+      magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+        reservedCreates: returnPlan.creates
+      });
     } catch (error) {
       ui.notifications.warn(error.message);
       return;
@@ -4083,18 +4088,21 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       amount: 1,
       stackIndex: 0
     });
+    const weaponUpdate = {
+      _id: weapon.id,
+      [`${path}.moduleSlots`]: slots
+    };
+    if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await executeInventoryMutation({
       actor: this.actor,
       updates: [
-        {
-          _id: weapon.id,
-          [`${path}.moduleSlots`]: slots
-        },
+        weaponUpdate,
         ...returnPlan.updates,
+        ...magazinePlan.updates,
         ...consumptionPlan.updates
       ],
       deletes: consumptionPlan.deletes,
-      creates: returnPlan.creates
+      creates: [...returnPlan.creates, ...magazinePlan.creates]
     }, { reason: "install-weapon-module" });
     this.#restoreTooltipModuleSlotsTab(weapon.id);
     await this.#refreshInventoryTooltip();
@@ -4108,26 +4116,33 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!slot) return;
     slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
     let returnPlan;
+    let magazinePlan = { overflow: 0, updates: [], creates: [] };
     try {
       returnPlan = planActorInventoryGrant(this.actor, itemData, {
         quantity: 1,
         merge: false
       });
       if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+        reservedCreates: returnPlan.creates
+      });
     } catch (error) {
       ui.notifications.warn(error.message);
       return;
     }
+    const weaponUpdate = {
+      _id: weapon.id,
+      [`${path}.moduleSlots`]: slots
+    };
+    if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await executeInventoryMutation({
       actor: this.actor,
       updates: [
-        {
-          _id: weapon.id,
-          [`${path}.moduleSlots`]: slots
-        },
-        ...returnPlan.updates
+        weaponUpdate,
+        ...returnPlan.updates,
+        ...magazinePlan.updates
       ],
-      creates: returnPlan.creates
+      creates: [...returnPlan.creates, ...magazinePlan.creates]
     }, { reason: "uninstall-weapon-module" });
     this.#restoreTooltipModuleSlotsTab(weapon.id);
     await this.#refreshInventoryTooltip();

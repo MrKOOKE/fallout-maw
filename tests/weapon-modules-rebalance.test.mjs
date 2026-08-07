@@ -52,6 +52,8 @@ const {
 const {
   applyWeaponModuleModifiers,
   createWeaponModuleSlotItemData,
+  getEffectiveWeaponFunctionData,
+  getWeaponMagazineCapacityTransition,
   getWeaponModuleTooltipCapabilities
 } = await import("../src/utils/weapon-modules.mjs");
 
@@ -474,6 +476,51 @@ test("weapon module bonuses do not depend on condition", () => {
     moduleSlots: [{ id: "test", itemData: moduleItem(modifiers, 0, 100) }]
   });
   assert.deepEqual(zeroCondition, used);
+});
+
+test("effective weapon data exposes an installed magazine extension to runtime consumers", () => {
+  const extender = moduleItem({ magazineMax: 10 });
+  const weapon = {
+    system: {
+      functions: {
+        weapon: {
+          enabled: true,
+          magazine: { value: 5, max: 6 },
+          moduleSlots: [{ id: "magazine", itemData: extender }]
+        }
+      }
+    }
+  };
+
+  const effective = getEffectiveWeaponFunctionData(weapon, "weapon");
+
+  assert.equal(effective.magazine.max, 16);
+  assert.equal(effective.magazine.value, 5);
+});
+
+test("removing a magazine extension returns only rounds above the new capacity", () => {
+  const base = {
+    magazine: { value: 16, max: 6 }
+  };
+
+  const reduced = getWeaponMagazineCapacityTransition(base, []);
+  assert.deepEqual(reduced, {
+    current: 16,
+    max: 6,
+    overflow: 10,
+    value: 6
+  });
+
+  const enlarged = getWeaponMagazineCapacityTransition(base, [{
+    id: "magazine",
+    itemData: moduleItem({ magazineMax: 10 })
+  }]);
+  assert.deepEqual(enlarged, {
+    current: 16,
+    max: 16,
+    overflow: 0,
+    value: 16
+  });
 });
 
 test("attacking module bonuses weaken with their condition", () => {

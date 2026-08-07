@@ -27,11 +27,11 @@ export const DEFAULT_STEALTH_SETTINGS = Object.freeze({
     Object.freeze({ threshold: 0.2, penaltyPercent: 20 })
   ]),
   difficultyLevels: Object.freeze([
-    Object.freeze({ threshold: 1, difficultyBonus: 0 }),
-    Object.freeze({ threshold: 0.75, difficultyBonus: 20 }),
-    Object.freeze({ threshold: 0.5, difficultyBonus: 40 }),
-    Object.freeze({ threshold: 0.2, difficultyBonus: 80 }),
-    Object.freeze({ threshold: 0, difficultyBonus: 120 })
+    Object.freeze({ label: "Темно", threshold: 1, difficultyBonus: 0 }),
+    Object.freeze({ label: "Тускло", threshold: 0.75, difficultyBonus: 20 }),
+    Object.freeze({ label: "Светло", threshold: 0.5, difficultyBonus: 40 }),
+    Object.freeze({ label: "Яркий свет", threshold: 0.2, difficultyBonus: 80 }),
+    Object.freeze({ label: "Очень яркий свет", threshold: 0, difficultyBonus: 120 })
   ]),
   autoDetection: Object.freeze({
     enabled: true,
@@ -55,7 +55,14 @@ export function normalizeStealthSettings(value = {}) {
     detection: normalizeDetectionSettings(source.detection),
     attackBonuses: normalizeAttackBonusSettings(source.attackBonuses),
     attenuationLevels: normalizeThresholdRows(source.attenuationLevels, DEFAULT_STEALTH_SETTINGS.attenuationLevels, "penaltyPercent", 0, 100),
-    difficultyLevels: normalizeThresholdRows(source.difficultyLevels, DEFAULT_STEALTH_SETTINGS.difficultyLevels, "difficultyBonus", -999, 999),
+    difficultyLevels: normalizeThresholdRows(
+      source.difficultyLevels,
+      DEFAULT_STEALTH_SETTINGS.difficultyLevels,
+      "difficultyBonus",
+      -999,
+      999,
+      { preserveLabel: true }
+    ),
     autoDetection: normalizeAutoDetection(source.autoDetection)
   };
 }
@@ -86,15 +93,25 @@ function normalizeAttackBonusSettings(value = {}) {
   };
 }
 
-function normalizeThresholdRows(value = [], defaults = [], key = "", min = -Infinity, max = Infinity) {
+function normalizeThresholdRows(value = [], defaults = [], key = "", min = -Infinity, max = Infinity, { preserveLabel = false } = {}) {
   const source = Array.isArray(value)
     ? value
     : Object.values(value && typeof value === "object" ? value : {});
   const rows = source
-    .map(entry => ({
-      threshold: clampNumber(entry?.threshold, NaN, 0, 1),
-      [key]: clampNumber(entry?.[key], NaN, min, max)
-    }))
+    .map((entry, index) => {
+      const threshold = clampNumber(entry?.threshold, NaN, 0, 1);
+      const normalized = {
+        threshold,
+        [key]: clampNumber(entry?.[key], NaN, min, max)
+      };
+      if (preserveLabel) {
+        const fallback = defaults.find(candidate => Number(candidate.threshold) === threshold)?.label
+          ?? defaults[index]?.label
+          ?? `Степень ${index + 1}`;
+        normalized.label = String(entry?.label ?? fallback).trim() || fallback;
+      }
+      return normalized;
+    })
     .filter(entry => Number.isFinite(entry.threshold) && Number.isFinite(entry[key]));
   const normalized = rows.length ? rows : foundry.utils.deepClone(defaults);
   return normalized.sort((left, right) => right.threshold - left.threshold);

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, test } from "node:test";
 
 import { invalidateLightingAnalysisCache } from "../src/stealth/lighting.mjs";
@@ -25,9 +26,9 @@ const SETTINGS = Object.freeze({
     Object.freeze({ threshold: 0, penaltyPercent: 0 })
   ]),
   difficultyLevels: Object.freeze([
-    Object.freeze({ threshold: 0.75, difficultyBonus: 20 }),
-    Object.freeze({ threshold: 0.5, difficultyBonus: 40 }),
-    Object.freeze({ threshold: 0, difficultyBonus: 120 })
+    Object.freeze({ label: "Тускло", threshold: 0.75, difficultyBonus: 20 }),
+    Object.freeze({ label: "Светло", threshold: 0.5, difficultyBonus: 40 }),
+    Object.freeze({ label: "Очень яркий свет", threshold: 0, difficultyBonus: 120 })
   ]),
   autoDetection: Object.freeze({ enabled: true, movementThresholdFormula: "0" })
 });
@@ -71,11 +72,19 @@ test("lighting thresholds switch exactly at their configured boundaries", () => 
 
   assert.deepEqual(calculateLightingModifiers(0.75, SETTINGS), {
     difficultyBonus: 20,
+    levelLabel: "Тускло",
     perceptionMultiplier: 1,
     radius: 0,
     threshold: 0.75,
     condition: "Темнота 0.75"
   });
+});
+
+test("stealth window keeps only the configured lighting level and numeric values", async () => {
+  const template = await readFile(new URL("../templates/actor/stealth-window.hbs", import.meta.url), "utf8");
+  assert.match(template, /Освещение:<\/span>\s*<strong>\{\{lighting\.levelLabel\}\}<\/strong>/);
+  assert.match(template, /<strong>\{\{stealthValue\}\}<\/strong>/);
+  assert.doesNotMatch(template, /stealthValue\}\}%|lighting\.darknessLabel|\{\{radius\}\}|perceptionMultiplier/);
 });
 
 test("difficulty combines target skill, lighting and hidden-observer modifier", () => {

@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "preset-29RLMkIuBBuzp9eClV99Sxcj",
   "name": "Lost",
-  "revision": "f0dc1f26b7dc8b30a46140adc549365d7274a7bbc1cbe69834cc85ebbcad3d86",
-  "updatedAt": "2026-08-04T10:28:33.207Z",
+  "revision": "10e9ff6115fcbf76a16d8ed435eddc79f3831df87791e4bc789c63f3a18e1d04",
+  "updatedAt": "2026-08-05T21:06:05.657Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -6912,7 +6912,392 @@
             "name": "Натуралист"
           },
           {
-            "abilities": [],
+            "abilities": [
+              {
+                "description": "<p>Стоимость актвации: 40 энерги.<br>Перегрузка: 100 энергии на 1 час.<br>Активация доступна только в бою.</p><p>После активации на протяжение 6 секунд:</p><ul><li><p>Скрытность: +100</p></li><li><p>Шанс на крит: +[[5+stealth/10]]%</p></li><li><p>Урон +[[1+stealth/5]]%</p></li></ul>",
+                "id": "VEDCce6huLaqclCD",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Лучший момент",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {
+                        "changeEvaluation": "target",
+                        "costs": [
+                          {
+                            "formula": "40",
+                            "id": "NmzUQVAOHMAJZKj7",
+                            "overloadAmount": 100,
+                            "overloadDurationSeconds": 3600,
+                            "payer": "source",
+                            "resourceKey": "power"
+                          }
+                        ],
+                        "excludeSelf": true,
+                        "includeSelf": false,
+                        "name": "",
+                        "radiusFormula": "",
+                        "targetGroups": [
+                          "ally"
+                        ],
+                        "targetLimit": "1",
+                        "targetMode": "self",
+                        "targetSelectionMode": "manual",
+                        "wallsBlock": false
+                      },
+                      "changes": [
+                        {
+                          "id": "uEplGg8mBIWvG84S",
+                          "key": "system.skills.stealth.bonus",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "100"
+                        },
+                        {
+                          "id": "luNjMqEUxhFRohxc",
+                          "key": "system.combat.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+ste/10"
+                        },
+                        {
+                          "id": "Ro2m94zJE0Dg8VFL",
+                          "key": "system.combat.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+ste/5"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "durationSeconds": 6,
+                          "equipmentSlotKey": "",
+                          "groupId": "",
+                          "healthTarget": "general",
+                          "id": "J2NCtaRme4qAYA3v",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "operator": "lte",
+                          "percent": 50,
+                          "type": "duration"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "BWjaLMgQIgJZxUt0",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "activeApplication"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость реакции: 20 энерги.<br>Перегрузка: 40 энергии на 1 час.</p><p>Когда вас обнаруживают вы можете срегировать и повторно пройти проверку скрытности с +1 Преимуществом.</p>",
+                "id": "T45p6MMdy8am3Ggh",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Наверное показалось \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Находясь в бою:</p><ul><li><p>Если вы атаковали из Скрытности, сложность вашего обнаружения: +20</p></li><li><p>Ели вас никто не атаковал до конца хода: +20 к Скрытности на 6 секунд.</p></li></ul>",
+                "id": "nmjfPrvEYKcK6ge9",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Неприметный \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Пассивная/Активная способность.</p><p>Пассивная:</p><ul><li><p>Успешное убийство из скрытности восстанавливает все ОД потраченное на атаку (Не чаще 1 раза за 6 секунд).</p></li><li><p>Успешно вырубив или убив цель из скрытности вы получаете 1 и 3 заряда соответственно</p></li></ul><p>Накоплено зарядов: 0/6</p><p>Активаня<br>Стоимость активации: 20 энергии.</p><p>Потратив все зяряды ваша следующая атака из скрытности получает:</p><ul><li><p>+50% к урону</p></li><li><p>Невозможность обнаружения</p></li></ul>",
+                "id": "5P9gfSAkxDOtNbpt",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Песочный человек \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 210,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 160
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 6000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>+2 Преимущества на все проверки Скрытности в положение лежа.</p>",
+                "id": "KDZ1lZbFZTKPpekT",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Ползучая смерть",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "x9NK3bCWJTjYowgp",
+                          "key": "system.skills.stealth.advantage",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "2"
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "eventSubject": "reactor",
+                          "groupId": "",
+                          "id": "mnnuplNqYs2KL9tk",
+                          "postureActions": [
+                            "burrow"
+                          ],
+                          "postureSubject": "self",
+                          "type": "posture"
+                        }
+                      ],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "mP5Y3DJMNQtwg99q",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Атакуя из скрытности:</p><ul><li><p>Точность: +[[5+stealth/10]]</p></li><li><p>Урон: +[[1+stealth/10]]%</p></li><li><p>Шанс на крит: +[[1+stealth/30]]%</p></li></ul>",
+                "id": "Hl6ZtCYpARSz8BGb",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Скрытая угроза",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 110,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 60
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 1000,
+                  "formula": "",
+                  "functions": [
+                    {
+                      "actions": [],
+                      "activeSettings": {},
+                      "changes": [
+                        {
+                          "id": "6EwZ4frLpLPN2Gib",
+                          "key": "system.stealth.attackBonuses.damagePercent",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+ste/10"
+                        },
+                        {
+                          "id": "hxJZypjOayLz3JmK",
+                          "key": "system.stealth.attackBonuses.accuracy",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "5+ste/10"
+                        },
+                        {
+                          "id": "pDP53IZZKaxl1fmQ",
+                          "key": "system.stealth.attackBonuses.criticalChance",
+                          "phase": "initial",
+                          "priority": null,
+                          "type": "add",
+                          "value": "1+ste/30"
+                        }
+                      ],
+                      "conditions": [],
+                      "fixedKey": "",
+                      "fixedSettings": {},
+                      "id": "06yQb0eAwdo5T8ol",
+                      "includeInPureValues": false,
+                      "penalties": [],
+                      "reactionSettings": {
+                        "costs": [],
+                        "durationSeconds": 0
+                      },
+                      "sort": 0,
+                      "type": "effectChanges"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энерги.<br>Перегрузка: 40 энергии на 30 минут.<br>Активация доступна только в бою.</p><p>После активации на протяжение 6 секунд:</p><ul><li><p>Штраф на скрытность от степени освящения: -100%</p></li><li><p>ОП: +4</p></li></ul>",
+                "id": "W3fTc4enzRQxoXWS",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Специалист по побегам \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              },
+              {
+                "description": "<p>Стоимость активации: 20 энерги.<br>Перегрузка: 40 энергии на 1 час.</p><p>После активации вы можете выбрать врага и на протяжение 12 секунд</p><ul><li><p>+100 к проверкам Скрытности против этой цели</p></li><li><p>Каждое потраченное целью ОД дает вам столько же ОР.</p></li></ul>",
+                "id": "wZ6JtUCswuKpopiQ",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "name": "Тень \"НА РЕАЛИЗАЦИИ\"",
+                "system": {
+                  "acquisition": {
+                    "difficulty": 150,
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "stealth"
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "3nIUqSU13Ihk5u3B",
+                      "skillKey": "stealth",
+                      "type": "skill",
+                      "value": 100
+                    }
+                  ],
+                  "category": "Скрытность",
+                  "constructs": [],
+                  "cost": 3000,
+                  "formula": "",
+                  "functions": []
+                },
+                "visible": true
+              }
+            ],
             "id": "skill-stealth",
             "locked": false,
             "name": "Скрытность"
@@ -9984,6 +10369,10 @@
         "areas": {
           "movementDamageThresholdFormula": "(ОД + ОП) / 5"
         },
+        "attackActionPointMovementLoss": {
+          "mode": "percent",
+          "percent": 100
+        },
         "dodge": {
           "areaDamageMultiplier": 2,
           "attackCostPercent": 20,
@@ -9997,6 +10386,13 @@
         "knockback": {
           "repeatDifficultyStep": 50,
           "repeatDifficultyThreshold": 100
+        },
+        "limbDestruction": {
+          "nonPlayerMode": "standard",
+          "playerOwnedMode": "disabled"
+        },
+        "reactions": {
+          "timeoutSeconds": 20
         },
         "turnOrder": {
           "scheme": "block"
@@ -114422,6 +114818,7 @@
       "value": {
         "advancement": {
           "developmentLimit": 300,
+          "developmentLimitPureOnly": true,
           "entries": {
             "athletics": {
               "base": 0.7,
@@ -114546,10 +114943,10 @@
             "speech": {
               "base": 0.7,
               "characteristics": {
-                "charisma": 0.08,
+                "charisma": 0.06,
                 "dexterity": 0,
                 "endurance": 0,
-                "intelligence": 0,
+                "intelligence": 0.02,
                 "luck": 0,
                 "perception": 0,
                 "strength": 0
@@ -114559,11 +114956,11 @@
               "base": 0.7,
               "characteristics": {
                 "charisma": 0,
-                "dexterity": 0.08,
+                "dexterity": 0.06,
                 "endurance": 0,
                 "intelligence": 0,
                 "luck": 0,
-                "perception": 0,
+                "perception": 0.02,
                 "strength": 0
               }
             }
@@ -114609,7 +115006,7 @@
           },
           {
             "abbr": "doc",
-            "formula": "wis + int*3",
+            "formula": "dex + int*3",
             "img": "icons/svg/d20-grey.svg",
             "key": "doctor",
             "label": "Доктор"
@@ -114623,7 +115020,7 @@
           },
           {
             "abbr": "ste",
-            "formula": "wis*2+ dex*2",
+            "formula": "wis+ dex*3",
             "img": "icons/svg/d20-grey.svg",
             "key": "stealth",
             "label": "Скрытность"
@@ -114701,22 +115098,27 @@
         "difficultyLevels": [
           {
             "difficultyBonus": 0,
+            "label": "Темно",
             "threshold": 1
           },
           {
             "difficultyBonus": 20,
+            "label": "Тускло",
             "threshold": 0.75
           },
           {
             "difficultyBonus": 40,
+            "label": "Светло",
             "threshold": 0.5
           },
           {
             "difficultyBonus": 80,
+            "label": "Яркий свет",
             "threshold": 0.2
           },
           {
             "difficultyBonus": 120,
+            "label": "Очень яркий свет",
             "threshold": 0
           }
         ]

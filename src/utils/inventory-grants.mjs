@@ -18,6 +18,7 @@ import {
   getItemLockedStateForPlacementTransition,
   getItemMaxStack,
   getItemQuantity,
+  getItemStackParts,
   getItemStackAdditionOverflowQuantity,
   getItemUnitWeight,
   isContainerItem,
@@ -63,7 +64,8 @@ export function planActorInventoryGrant(actor, itemOrData, {
   quantity = getItemQuantity(itemOrData),
   parentId = ROOT_CONTAINER_ID,
   preferredPlacement = null,
-  merge = true
+  merge = true,
+  reservedCreates = []
 } = {}) {
   if (!actor?.createEmbeddedDocuments || !itemOrData || isContainerItem(itemOrData)) return null;
 
@@ -71,9 +73,17 @@ export function planActorInventoryGrant(actor, itemOrData, {
   const itemData = prepareGrantItemData(itemOrData, grantQuantity, parentId);
   const context = getGrantInventoryContext(actor, parentId);
   if (!context) throwInventoryNoSpace();
+  const reservedItemData = normalizeReservedGrantCreates(reservedCreates, parentId);
+  const reservedPlacements = reservedItemData.flatMap(entry => getReservedGrantPlacements(entry, actor.items));
   if (parentId) {
     const container = actor.items?.get(parentId);
-    const nextWeight = getContainerContentsWeight(container, actor.items) + (getItemUnitWeight(itemData) * grantQuantity);
+    const reservedWeight = reservedItemData.reduce(
+      (total, entry) => total + (getItemUnitWeight(entry) * getItemQuantity(entry)),
+      0
+    );
+    const nextWeight = getContainerContentsWeight(container, actor.items)
+      + reservedWeight
+      + (getItemUnitWeight(itemData) * grantQuantity);
     if (nextWeight > (getContainerMaxLoad(container) + 0.0001)) throwInventoryNoSpace();
   }
   const contextItems = getContextInventoryItems(parentId, actor.items);
@@ -99,6 +109,7 @@ export function planActorInventoryGrant(actor, itemOrData, {
       columns: context.columns,
       rows: context.rows,
       allItems: actor.items,
+      reservedPlacements,
       options: context.options
     });
     if (!stackParts) throwInventoryNoSpace();
@@ -106,7 +117,7 @@ export function planActorInventoryGrant(actor, itemOrData, {
     if (target) {
       const update = createItemStackPartAdditionUpdate(target, grantQuantity, null, stackParts);
       if (!update) return { updates: [], creates: [], targetItemId: target.id };
-      if (!validateActorGrantLoad(actor, { updates: [update] })) throwActorLoadLimit();
+      if (!validateActorGrantLoad(actor, { updates: [update], creates: reservedItemData })) throwActorLoadLimit();
       return { updates: [update], creates: [], targetItemId: target.id };
     }
 
@@ -117,7 +128,7 @@ export function planActorInventoryGrant(actor, itemOrData, {
       stackParts[0],
       stackParts
     );
-    if (!validateActorGrantLoad(actor, { creates: [createData] })) throwActorLoadLimit();
+    if (!validateActorGrantLoad(actor, { creates: [...reservedItemData, createData] })) throwActorLoadLimit();
     return { updates: [], creates: [createData], targetItemId: "" };
   }
 
@@ -139,7 +150,7 @@ export function planActorInventoryGrant(actor, itemOrData, {
   }
 
   const creates = [];
-  const reservedPlacements = [];
+  const plannedPlacements = [...reservedPlacements];
   let firstPlacement = normalizedPreferredPlacement;
   const maxStack = getItemMaxStack(itemData);
   while (remaining > 0) {
@@ -151,22 +162,39 @@ export function planActorInventoryGrant(actor, itemOrData, {
       itemData,
       actor.items,
       [],
-      reservedPlacements,
+      plannedPlacements,
       context.options
     );
     if (!placement) throwInventoryNoSpace();
     creates.push(createGrantedInventoryItemData(itemData, stackQuantity, parentId, placement, []));
-    reservedPlacements.push(placement);
+    plannedPlacements.push(placement);
     firstPlacement = null;
     remaining -= stackQuantity;
   }
 
-  if (!validateActorGrantLoad(actor, { updates, creates })) throwActorLoadLimit();
+  if (!validateActorGrantLoad(actor, { updates, creates: [...reservedItemData, ...creates] })) throwActorLoadLimit();
   return {
     updates,
     creates,
     targetItemId: updates[0]?._id ?? ""
   };
+}
+
+function normalizeReservedGrantCreates(creates = [], parentId = ROOT_CONTAINER_ID) {
+  return (Array.isArray(creates) ? creates : [creates])
+    .filter(entry => entry && getItemContainerParentId(entry) === String(parentId ?? ROOT_CONTAINER_ID));
+}
+
+function getReservedGrantPlacements(itemData, allItems) {
+  if (usesVirtualInventoryStacks(itemData)) {
+    return getItemStackParts(itemData)
+      .filter(part => Number(part?.x) > 0 && Number(part?.y) > 0)
+      .map(part => normalizeInventoryPlacement(part, itemData, allItems));
+  }
+  const placement = itemData?.system?.placement;
+  return placement?.x && placement?.y
+    ? [normalizeInventoryPlacement(placement, itemData, allItems)]
+    : [];
 }
 
 export function areInventoryItemsStackCompatible(sourceData, targetItem) {

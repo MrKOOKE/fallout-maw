@@ -2,6 +2,8 @@ import {
   ITEM_FUNCTIONS,
   getConditionWeakeningData,
   getModuleFunction,
+  getWeaponFunctionById,
+  getWeaponFunctionModuleSlots,
   hasItemFunction
 } from "./item-functions.mjs";
 import { toInteger } from "./numbers.mjs";
@@ -121,6 +123,35 @@ export function applyWeaponModuleModifiers(weaponData = {}, options = {}) {
   }
   result.noiseLevel = Math.max(0, getWeaponNoiseLevel(result) + noiseDelta);
   return result;
+}
+
+/**
+ * Resolve one weapon function exactly as gameplay must use it: stored data
+ * plus the modules installed into that function's slots.
+ */
+export function getEffectiveWeaponFunctionData(itemOrSystem = null, functionId = "") {
+  const id = String(functionId || ITEM_FUNCTIONS.weapon);
+  const weaponData = getWeaponFunctionById(itemOrSystem, id) ?? {};
+  return applyWeaponModuleModifiers(weaponData, {
+    moduleSlots: getWeaponFunctionModuleSlots(itemOrSystem, id)
+  });
+}
+
+/**
+ * Project the loaded-round state after changing installed weapon modules.
+ * A zero maximum keeps the existing unlimited-magazine behaviour.
+ */
+export function getWeaponMagazineCapacityTransition(weaponData = {}, moduleSlots = []) {
+  const current = Math.max(0, toInteger(weaponData?.magazine?.value));
+  const effective = applyWeaponModuleModifiers(weaponData, { moduleSlots });
+  const max = Math.max(0, toInteger(effective?.magazine?.max));
+  const overflow = max > 0 ? Math.max(0, current - max) : 0;
+  return {
+    current,
+    max,
+    overflow,
+    value: current - overflow
+  };
 }
 
 function scaleWeaponModuleModifiers(modifiers = {}, ratio = 1) {

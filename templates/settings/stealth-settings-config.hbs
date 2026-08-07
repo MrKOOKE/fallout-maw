@@ -102,14 +102,16 @@
         <button type="button" data-action="addDifficultyLevel"><i class="fa-solid fa-plus"></i> Добавить</button>
       </div>
     </header>
-    <div class="fallout-maw-settings-table fallout-maw-stealth-settings-table">
+    <div class="fallout-maw-settings-table fallout-maw-stealth-settings-table fallout-maw-stealth-difficulty-settings-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>Название</span>
         <span>Порог темноты</span>
         <span>Бонус СЛ</span>
         <span></span>
       </div>
       {{#each difficultyLevels}}
       <div class="fallout-maw-settings-row">
+        <input type="text" name="difficultyLevels.{{index}}.label" value="{{label}}">
         <input type="number" name="difficultyLevels.{{index}}.threshold" value="{{threshold}}" min="0" max="1" step="0.01">
         <input type="number" name="difficultyLevels.{{index}}.difficultyBonus" value="{{difficultyBonus}}" step="1">
         <button class="fallout-maw-icon-button" type="button" data-action="removeDifficultyLevel" data-index="{{index}}" title="Удалить" aria-label="Удалить"><i class="fa-solid fa-trash"></i></button>

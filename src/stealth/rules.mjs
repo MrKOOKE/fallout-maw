@@ -95,6 +95,7 @@ export function getTokenLightingAnalysis(token, settings = getRuntimeStealthSett
     effectiveDarkness,
     darknessLabel: effectiveDarkness.toFixed(2),
     darknessPercent: Math.round(effectiveDarkness * 100),
+    levelLabel: modifiers.levelLabel,
     condition: modifiers.condition,
     modifiers
   };
@@ -104,6 +105,7 @@ export function calculateLightingModifiers(effectiveDarkness, settings = getRunt
   const entry = getStealthDifficultyLevel(effectiveDarkness, settings);
   return {
     difficultyBonus: Number(entry?.difficultyBonus) || 0,
+    levelLabel: String(entry?.label ?? "").trim() || "Степень освещения",
     perceptionMultiplier: 1,
     radius: 0,
     threshold: Number(entry?.threshold) || 0,

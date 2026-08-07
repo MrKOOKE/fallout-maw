@@ -45,6 +45,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
+import { getDroppedWorldItems } from "../utils/document-drop.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -557,7 +558,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     if (blockIndex < 0) return undefined;
 
     const data = this.#getDragEventData(event);
-    const abilityEntry = await createAbilityEntryFromDropData(data);
+    const abilityEntry = createAbilityEntryFromDropData(data);
     if (abilityEntry) {
       this.#config = this.#readConfigFromForm();
       this.#config.items.blocks[blockIndex]?.entries.push(createItemEntryFromAbilityEntry(abilityEntry));
@@ -565,12 +566,11 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       return this.render({ force: true });
     }
 
-    if (data?.type !== "Item") return undefined;
-    const item = await resolveItemDocumentFromDropData(data);
-    if (!item) return undefined;
+    const droppedItems = await resolveItemDocumentsFromDrop(event, data);
+    if (!droppedItems.length) return undefined;
 
     this.#config = this.#readConfigFromForm();
-    this.#config.items.blocks[blockIndex]?.entries.push(createItemEntryFromItem(item));
+    this.#config.items.blocks[blockIndex]?.entries.push(...droppedItems.map(createItemEntryFromItem));
     await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
@@ -1908,7 +1908,7 @@ function createItemEntryFromAbilityEntry(entry = {}) {
   };
 }
 
-async function createAbilityEntryFromDropData(data = {}) {
+function createAbilityEntryFromDropData(data = {}) {
   if (data?.type === ABILITY_CATALOG_DRAG_TYPE) {
     const sourceId = String(data.sourceId ?? "").trim();
     if (!sourceId) return null;
@@ -1921,17 +1921,14 @@ async function createAbilityEntryFromDropData(data = {}) {
       img: ability.img
     }])[0] ?? null;
   }
+  return null;
+}
 
-  if (data?.type !== "Item") return null;
+async function resolveItemDocumentsFromDrop(event, data = {}) {
+  if (data?.type === "Folder") return getDroppedWorldItems(event);
+  if (data?.type !== "Item") return [];
   const item = await resolveItemDocumentFromDropData(data);
-  if (!(item instanceof Item) || item.type !== "ability") return null;
-  return normalizeAbilityEntries([{
-    sourceId: getAbilitySourceId(item),
-    categoryId: getAbilitySourceCategoryId(item),
-    uuid: item.uuid,
-    name: item.name,
-    img: item.img
-  }])[0] ?? null;
+  return item ? [item] : [];
 }
 
 async function resolveItemDocumentFromDropData(data = {}) {

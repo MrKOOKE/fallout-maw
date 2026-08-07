@@ -58,11 +58,33 @@ test("custom attack bonus formulas are preserved and blank formulas use their de
   });
 });
 
+test("difficulty levels persist editable names and fill missing labels from base thresholds", () => {
+  assert.deepEqual(
+    DEFAULT_STEALTH_SETTINGS.difficultyLevels.map(level => level.label),
+    ["Темно", "Тускло", "Светло", "Яркий свет", "Очень яркий свет"]
+  );
+
+  const normalized = normalizeStealthSettings({
+    difficultyLevels: [
+      { threshold: 1, difficultyBonus: 0 },
+      { label: "Полумрак", threshold: 0.2, difficultyBonus: 80 },
+      { threshold: 0, difficultyBonus: 120 }
+    ]
+  });
+  assert.deepEqual(normalized.difficultyLevels.map(level => level.label), ["Темно", "Полумрак", "Очень яркий свет"]);
+});
+
 test("stealth settings template exposes all attack formula fields with autocomplete", async () => {
   const template = await readFile(new URL("../templates/settings/stealth-settings-config.hbs", import.meta.url), "utf8");
   for (const key of Object.keys(EXPECTED_ATTACK_BONUSES)) {
     assert.match(template, new RegExp(`name="attackBonuses\\.${key}"[^>]*data-formula-autocomplete="all"`));
   }
+});
+
+test("stealth settings template exposes a name for every difficulty row", async () => {
+  const template = await readFile(new URL("../templates/settings/stealth-settings-config.hbs", import.meta.url), "utf8");
+  assert.match(template, /name="difficultyLevels\.\{\{index\}\}\.label"/);
+  assert.match(template, /<span>Название<\/span>/);
 });
 
 test("stealth attack settings and tooltip attribution are localized in Russian and English", async () => {

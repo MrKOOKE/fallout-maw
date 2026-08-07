@@ -18,7 +18,6 @@ import {
   isValidStealthObserver
 } from "./observers.mjs";
 import {
-  calculateStealthRadius,
   canControlStealth,
   computeStealthDifficulty,
   getActorSkillValue,
@@ -214,7 +213,6 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
       token: this.token,
       stealthed: isActorStealthed(this.actor),
       stealthValue: getActorSkillValue(this.actor, "stealth"),
-      radius: calculateStealthRadius(lighting.effectiveDarkness, settings, this.actor),
       lighting
     };
   }

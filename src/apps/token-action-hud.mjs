@@ -174,10 +174,12 @@ import { getActorsCrossingLevelThreshold, playExperienceAwardMedia } from "../ad
 import {
   applyWeaponModuleModifiers,
   createWeaponModuleSlotItemData,
+  getEffectiveWeaponFunctionData,
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
+import { planWeaponMagazineCapacityTransition } from "../items/weapon-magazine.mjs";
 import {
   getDamageSourceAdjustedNoiseLevel,
   mergeDamageSourceSpecialProperties
@@ -1984,6 +1986,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const itemData = createWeaponModuleSlotItemData(moduleItem);
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
     let returnPlan = { updates: [], creates: [] };
+    let magazinePlan = { overflow: 0, updates: [], creates: [] };
     try {
       if (oldItemData?.system) {
         returnPlan = planActorInventoryGrant(this.actor, oldItemData, {
@@ -1992,6 +1995,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         });
         if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       }
+      magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+        reservedCreates: returnPlan.creates
+      });
     } catch (error) {
       ui.notifications.warn(error.message);
       return undefined;
@@ -2001,18 +2007,21 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       amount: 1,
       stackIndex: 0
     });
+    const weaponUpdate = {
+      _id: weapon.id,
+      [`${path}.moduleSlots`]: slots
+    };
+    if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await executeInventoryMutation({
       actor: this.actor,
       updates: [
-        {
-          _id: weapon.id,
-          [`${path}.moduleSlots`]: slots
-        },
+        weaponUpdate,
         ...returnPlan.updates,
+        ...magazinePlan.updates,
         ...consumptionPlan.updates
       ],
       deletes: consumptionPlan.deletes,
-      creates: returnPlan.creates
+      creates: [...returnPlan.creates, ...magazinePlan.creates]
     }, { reason: "install-weapon-module" });
     this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
@@ -2026,26 +2035,33 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!slot) return undefined;
     slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
     let returnPlan;
+    let magazinePlan = { overflow: 0, updates: [], creates: [] };
     try {
       returnPlan = planActorInventoryGrant(this.actor, itemData, {
         quantity: 1,
         merge: false
       });
       if (!returnPlan) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      magazinePlan = planWeaponMagazineCapacityTransition(this.actor, entry?.data ?? {}, slots, {
+        reservedCreates: returnPlan.creates
+      });
     } catch (error) {
       ui.notifications.warn(error.message);
       return undefined;
     }
+    const weaponUpdate = {
+      _id: weapon.id,
+      [`${path}.moduleSlots`]: slots
+    };
+    if (magazinePlan.overflow) weaponUpdate[`${path}.magazine.value`] = magazinePlan.value;
     await executeInventoryMutation({
       actor: this.actor,
       updates: [
-        {
-          _id: weapon.id,
-          [`${path}.moduleSlots`]: slots
-        },
-        ...returnPlan.updates
+        weaponUpdate,
+        ...returnPlan.updates,
+        ...magazinePlan.updates
       ],
-      creates: returnPlan.creates
+      creates: [...returnPlan.creates, ...magazinePlan.creates]
     }, { reason: "uninstall-weapon-module" });
     this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
@@ -4205,25 +4221,18 @@ function getAttackPowerPreviewTone(from = 0, to = 0, { higherIsBetter = true } =
   return positive ? "positive" : "negative";
 }
 
-function updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId) {
-  const weapon = actor.items.get(weaponId);
-  const el = dialog.element?.querySelector?.("[data-reload-magazine-readout]");
-  if (!el || !weapon) return;
-  const wd = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
-  const cur = Math.max(0, toInteger(wd?.magazine?.value));
-  const max = Math.max(0, toInteger(wd?.magazine?.max));
-  el.textContent = `${game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine")}: ${cur} / ${max}`;
-}
-
 function updateReloadDialogState(dialog, actor, weaponId, weaponFunctionId) {
   const weapon = actor?.items?.get(weaponId);
   if (!dialog?.element || !weapon) return;
-  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
+  const weaponData = getEffectiveWeaponFunctionData(weapon, weaponFunctionId);
   const state = buildWeaponReloadDialogState(actor, weaponData);
 
   const label = dialog.element.querySelector("[data-reload-source-label]");
   if (label) label.textContent = state.sourceLabel;
-  updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId);
+  const readout = dialog.element.querySelector("[data-reload-magazine-readout]");
+  if (readout) {
+    readout.textContent = `${game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine")}: ${state.current} / ${state.max}`;
+  }
 
   const activeInput = dialog.element.querySelector("[data-reload-active-source]");
   if (activeInput) activeInput.value = state.sourceItem?.uuid ?? "";
@@ -4283,7 +4292,7 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
     return undefined;
   }
 
-  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
+  const weaponData = getEffectiveWeaponFunctionData(weapon, weaponFunctionId);
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
 
   const state = buildWeaponReloadDialogState(actor, weaponData);
@@ -4320,7 +4329,7 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
     if (!nextSourceUuid) return;
     const freshWeapon = actor.items.get(weaponId);
     if (!freshWeapon) return;
-    const weaponData = getWeaponFunctionById(freshWeapon, weaponFunctionId) ?? {};
+    const weaponData = getEffectiveWeaponFunctionData(freshWeapon, weaponFunctionId);
     const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
     const configuredSources = getWeaponMagazineSourceItems(weaponData);
     const availableSources = getAvailableWeaponMagazineSourceItems(actor, weaponData, configuredSources);
@@ -4456,7 +4465,7 @@ function bindReloadDialogLiveUpdates(dialog, actor, weaponId, weaponFunctionId) 
     if (!item) return false;
     if (item.parent?.uuid === actor?.uuid) return true;
     const weapon = actor?.items?.get(weaponId);
-    const weaponData = weapon ? getWeaponFunctionById(weapon, weaponFunctionId) : null;
+    const weaponData = weapon ? getEffectiveWeaponFunctionData(weapon, weaponFunctionId) : null;
     return getWeaponMagazineSourceUuids(weaponData).includes(item.uuid);
   };
 
@@ -4546,7 +4555,7 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
   if (requester && !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
   const weapon = actor.items?.get(weaponId);
   if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) throw new Error("Weapon not found.");
-  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
+  const weaponData = getEffectiveWeaponFunctionData(weapon, weaponFunctionId);
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
   const configuredSources = getWeaponMagazineSourceItems(weaponData);
   const availableSources = getAvailableWeaponMagazineSourceItems(actor, weaponData, configuredSources);

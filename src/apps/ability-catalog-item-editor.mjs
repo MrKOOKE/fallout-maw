@@ -175,10 +175,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #activeTab = "details";
   #functionPickerActive = false;
   #fixedFunctionPickerActive = false;
-  #autosaveDebounced;
-  #autosaveDirty = false;
-  #autosaveInFlight = false;
-  #autosavePromise = Promise.resolve(null);
+  #closeSavePromise = null;
 
   constructor(catalogApp, categoryId, abilityId, options = {}) {
     super(options);
@@ -186,7 +183,6 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.categoryId = categoryId;
     this.abilityId = abilityId;
     this.ability = normalizeAbilityEntry(catalogApp.getAbility(categoryId, abilityId));
-    this.#autosaveDebounced = foundry.utils.debounce(() => void this.#flushAutosave(), 600);
   }
 
   static DEFAULT_OPTIONS = {
@@ -364,7 +360,6 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
-    this.form?.addEventListener("input", this.#onAutosaveInput);
     this.element?.querySelector?.("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseFunction(event));
     this.element?.querySelector?.("[data-choose-fixed-ability-function]")?.addEventListener("change", event => this.#onChooseFixedFunction(event));
     this.element?.querySelector?.("[data-fixed-ability-function-search]")?.addEventListener("input", event => this.#onFixedFunctionSearch(event));
@@ -436,26 +431,18 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     activateDescriptionFormulaAutocomplete(this.element);
   }
 
-  async _processFormData(_event, _form, _formData) {
+  _processFormData(_event, _form, _formData) {
     this.#syncFromForm();
-    this.#queueAutosave();
-    return this.#flushAutosave({ force: true });
-  }
-
-  #onAutosaveInput = event => {
-    if (!event.target?.closest?.("[data-field]")) return;
-    this.#queueAutosave();
-  };
-
-  _onChangeForm(formConfig, event) {
-    super._onChangeForm(formConfig, event);
-    if (!event.target?.closest?.("[data-field]")) return;
-    this.#queueAutosave();
+    return this.ability;
   }
 
   async close(options = {}) {
-    if (this.form) this.#syncFromForm();
-    if (this.#autosaveDirty) await this.#flushAutosave({ force: true });
+    if (!this.#closeSavePromise) {
+      if (this.form) this.#syncFromForm();
+      this.#closeSavePromise = this.catalogApp.saveAbility(this.categoryId, this.ability);
+    }
+    const saved = await this.#closeSavePromise;
+    if (saved) this.ability = saved;
     return super.close(options);
   }
 
@@ -1948,37 +1935,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
 
   #persist({ render = false, sync = true } = {}) {
     if (sync) this.#syncFromForm();
-    this.#queueAutosave();
     if (render) return this.render();
     return this.ability;
-  }
-
-  #queueAutosave() {
-    this.#autosaveDirty = true;
-    this.#autosaveDebounced();
-  }
-
-  async #flushAutosave({ force = false } = {}) {
-    this.#autosaveDebounced.cancel?.();
-    if (this.#autosaveInFlight) {
-      await this.#autosavePromise;
-      return this.#flushAutosave({ force });
-    }
-    if (!force && !this.#autosaveDirty) return this.ability;
-
-    if (this.form) this.#syncFromForm();
-    this.#autosaveDirty = false;
-    this.#autosaveInFlight = true;
-    this.#autosavePromise = this.catalogApp.saveAbility(this.categoryId, this.ability);
-
-    try {
-      const saved = await this.#autosavePromise;
-      if (saved) this.ability = saved;
-      return this.ability;
-    } finally {
-      this.#autosaveInFlight = false;
-      if (this.#autosaveDirty) this.#autosaveDebounced();
-    }
   }
 
   #syncFromForm() {

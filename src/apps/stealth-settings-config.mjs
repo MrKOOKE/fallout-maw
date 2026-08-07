@@ -120,7 +120,7 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
   static async #onAddDifficultyLevel(event) {
     event.preventDefault();
     this.#syncSettingsFromForm();
-    this.settings.difficultyLevels.push({ threshold: 0, difficultyBonus: 0 });
+    this.settings.difficultyLevels.push({ label: "Новая степень", threshold: 0, difficultyBonus: 0 });
     return this.forceRender();
   }
 

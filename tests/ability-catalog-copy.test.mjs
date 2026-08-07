@@ -82,3 +82,16 @@ test("ability settings confirms before mutating the catalog on deletion", () => 
     "catalog mutation must happen only after confirmation"
   );
 });
+
+test("ability editor saves its draft only while closing", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/apps/ability-catalog-item-editor.mjs"), "utf8");
+  const closeStart = source.indexOf("async close(options = {})");
+  const closeEnd = source.indexOf("static #onSelectTab", closeStart);
+  const close = source.slice(closeStart, closeEnd);
+
+  assert.equal(source.match(/catalogApp\.saveAbility\(/g)?.length, 1);
+  assert.match(close, /if \(this\.form\) this\.#syncFromForm\(\);/);
+  assert.match(close, /this\.#closeSavePromise = this\.catalogApp\.saveAbility\(this\.categoryId, this\.ability\);/);
+  assert.match(close, /const saved = await this\.#closeSavePromise;/);
+  assert.doesNotMatch(source, /autosave|#queueAutosave|#flushAutosave/i);
+});
