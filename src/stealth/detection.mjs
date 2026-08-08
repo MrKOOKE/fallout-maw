@@ -1,4 +1,7 @@
-import { testObserverVisibilityBatch } from "../canvas/physical-los.mjs";
+import {
+  createObserverOrdinaryVisionMask,
+  testObserverVisibilityBatch
+} from "../canvas/physical-los.mjs";
 import {
   getSmokeRegionRevision,
   getSmokeRegionsInBounds,
@@ -39,9 +42,11 @@ let detectionZoneCachedCells = 0;
 /**
  * Build the observer zones relevant to one hidden token.
  *
- * `visibleOnly` deliberately means that the hidden token can physically see
- * the observer. This preserves the anti-metagame direction of the original UI
- * while batching every target through one temporary VisionSource.
+ * For players, `visibleOnly` means that the hidden token can physically see
+ * the observer. This preserves the anti-metagame direction of the UI while
+ * batching every target through one temporary VisionSource. A GM must see the
+ * same complete observer set used by authoritative stealth checks, including
+ * asymmetric smoke-perception cases.
  */
 export function getStealthObserverZones(hiddenToken, {
   visibleOnly = false,
@@ -52,7 +57,7 @@ export function getStealthObserverZones(hiddenToken, {
 
   let observers = (activeCanvas.tokens?.placeables ?? [])
     .filter(observerToken => isValidStealthObserver(hiddenToken, observerToken));
-  if (visibleOnly && observers.length) {
+  if (visibleOnly && observers.length && !globalThis.game?.user?.isGM) {
     observers = observers.filter(isObserverVisibleToLocalPreview);
     const visibility = testObserverVisibilityBatch(hiddenToken, observers);
     observers = observers.filter(observerToken => visibility.get(getTokenDocumentUuid(observerToken)) === true);
@@ -119,21 +124,27 @@ export function buildObserverDetectionZone(observerToken, {
     height: radiusWithCell * 2
   }, { elevation: center.elevation });
 
-  for (let i = i0; i < i1; i += 1) {
-    for (let j = j0; j < j1; j += 1) {
-      const offset = { i, j };
-      const point = normalizePoint(activeCanvas.grid.getCenterPoint(offset), center.elevation);
-      const dx = point.x - center.x;
-      const dy = point.y - center.y;
-      if ((dx * dx) + (dy * dy) > radiusSquared) continue;
-      if (observerToken.checkCollision?.(point, { origin: center, type: "sight", mode: "any" })) continue;
-      if (computeDetectionPathCost(observerToken, center, point, settings, {
-        costLimit: maxRange,
-        sampleLimit: DETECTION_PREVIEW_PATH_SAMPLE_LIMIT,
-        smokeRegionCandidates
-      }) > maxRange) continue;
-      offsets.push(offset);
+  const ordinaryVision = createObserverOrdinaryVisionMask(observerToken, { origin: center });
+  try {
+    for (let i = i0; i < i1; i += 1) {
+      for (let j = j0; j < j1; j += 1) {
+        const offset = { i, j };
+        const point = normalizePoint(activeCanvas.grid.getCenterPoint(offset), center.elevation);
+        const dx = point.x - center.x;
+        const dy = point.y - center.y;
+        if ((dx * dx) + (dy * dy) > radiusSquared) continue;
+        if (ordinaryVision && !ordinaryVision.contains(point)) continue;
+        if (observerToken.checkCollision?.(point, { origin: center, type: "sight", mode: "any" })) continue;
+        if (computeDetectionPathCost(observerToken, center, point, settings, {
+          costLimit: maxRange,
+          sampleLimit: DETECTION_PREVIEW_PATH_SAMPLE_LIMIT,
+          smokeRegionCandidates
+        }) > maxRange) continue;
+        offsets.push(offset);
+      }
     }
+  } finally {
+    ordinaryVision?.destroy();
   }
 
   const zone = {
@@ -193,10 +204,20 @@ export function testStealthDetectionPoint(observerToken, observerOrigin, targetP
   if (directDistance > maxRange + margin) result = false;
   else if (observerToken.checkCollision?.(point, { origin, type: "sight", mode: "any" })) result = false;
   else {
-    const path = computeDetectionPathReach(observerToken, origin, point, settings, { baseRange });
-    result = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON
-      || Math.max(0, path.directDistance - path.baseReachDistance)
-        <= normalizedRangeBonus + DETECTION_DISTANCE_EPSILON;
+    const ordinaryVision = createObserverOrdinaryVisionMask(observerToken, { origin });
+    let ordinarilyVisible = true;
+    try {
+      ordinarilyVisible = !ordinaryVision || ordinaryVision.contains(point);
+    } finally {
+      ordinaryVision?.destroy();
+    }
+    if (!ordinarilyVisible) result = false;
+    else {
+      const path = computeDetectionPathReach(observerToken, origin, point, settings, { baseRange });
+      result = path.cost <= baseRange + DETECTION_DISTANCE_EPSILON
+        || Math.max(0, path.directDistance - path.baseReachDistance)
+          <= normalizedRangeBonus + DETECTION_DISTANCE_EPSILON;
+    }
   }
 
   writeCache(detectionPointCache, cacheKey, result, STEALTH_DETECTION_POINT_CACHE_LIMIT);

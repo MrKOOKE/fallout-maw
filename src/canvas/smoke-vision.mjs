@@ -144,6 +144,7 @@ function refreshVisionForSmokePerceptionActor(actor) {
   invalidateActorSmokePerception(actor);
   if (!getSmokeRegionIndex(canvas?.scene)?.hasVisionSmoke) return;
   if (!actor || !(canvas?.tokens?.placeables ?? []).some(token => token?.actor === actor)) return;
+  Hooks.callAll?.(`${SYSTEM_ID}.smokePerceptionChanged`, actor);
   canvas?.perception?.update?.({ initializeVision: true, refreshVision: true });
 }
 

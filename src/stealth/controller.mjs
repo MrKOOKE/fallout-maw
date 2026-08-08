@@ -129,6 +129,7 @@ export function registerStealthHooks() {
   Hooks.on("moveToken", onTokenMoved);
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, onStealthSettingsChanged);
   Hooks.on(`${SYSTEM_ID}.factionSettingsChanged`, onFactionSettingsChanged);
+  Hooks.on(`${SYSTEM_ID}.smokePerceptionChanged`, onSmokePerceptionChanged);
   hooksRegistered = true;
 }
 
@@ -731,6 +732,11 @@ function onStealthSettingsChanged() {
 function onFactionSettingsChanged() {
   invalidateStealthRelationCache();
   queueStealthedTokenVisibilityRefresh();
+  queueStealthRefresh({ visualization: true });
+}
+
+function onSmokePerceptionChanged() {
+  invalidateStealthDetectionCache();
   queueStealthRefresh({ visualization: true });
 }
 

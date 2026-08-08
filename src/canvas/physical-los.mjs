@@ -30,7 +30,7 @@ export function testObserverVisibilityBatch(observerToken, targetTokens = []) {
   }
 
   const tokenDocument = observerToken.document ?? observerToken;
-  const VisionSource = CONFIG.Canvas?.visionSourceClass;
+  const VisionSource = globalThis.CONFIG?.Canvas?.visionSourceClass;
   if (!observerToken.hasSight || !VisionSource || typeof observerToken._getVisionSourceData !== "function") {
     for (const targetToken of targetTokens) {
       const uuid = tokenDocumentUuid(targetToken);
@@ -105,6 +105,100 @@ export function testObserverVisibilityBatch(observerToken, targetTokens = []) {
   } finally {
     source.destroy();
   }
+}
+
+/**
+ * Build one temporary native VisionSource and expose its already-computed
+ * ordinary sight masks. This is intentionally polygon-only: callers may test
+ * thousands of preview points without rerunning Foundry collision and smoke
+ * ray construction for every point.
+ *
+ * A null result means that token vision is disabled or the native source API
+ * is unavailable, so callers should retain their ordinary fallback rules.
+ */
+export function createObserverOrdinaryVisionMask(observerToken, { origin = null } = {}) {
+  if (!globalThis.canvas?.ready || !observerToken) return null;
+  if (!canvas.visibility?.tokenVision) return null;
+  const tokenDocument = observerToken.document ?? observerToken;
+  const VisionSource = globalThis.CONFIG?.Canvas?.visionSourceClass;
+  if (!observerToken.hasSight || !VisionSource || typeof observerToken._getVisionSourceData !== "function") {
+    return null;
+  }
+
+  const source = new VisionSource({
+    sourceId: `${observerToken.sourceId ?? tokenDocument.id}.stealth-mask`,
+    object: observerToken
+  });
+  try {
+    Object.assign(source.blinded, observerToken._getVisionBlindedStates?.() ?? {});
+    const sourceData = observerToken._getVisionSourceData();
+    const sourceOrigin = origin ?? getTokenAimPoint(observerToken, sourceData);
+    source.initialize({
+      ...sourceData,
+      x: Number(sourceOrigin?.x ?? sourceData.x) || 0,
+      y: Number(sourceOrigin?.y ?? sourceData.y) || 0,
+      elevation: Number(sourceOrigin?.elevation ?? sourceData.elevation) || 0,
+      disabled: false,
+      preview: false
+    });
+
+    const basicMode = getTokenDetectionMode(tokenDocument, "basicSight");
+    const lightMode = getTokenDetectionMode(tokenDocument, "lightPerception");
+    const basicEnabled = hasPositiveDetectionRange(basicMode);
+    const lightEnabled = hasPositiveDetectionRange(lightMode);
+    const contains = point => {
+      if (source.isBlinded) return false;
+      const x = Number(point?.x) || 0;
+      const y = Number(point?.y) || 0;
+      if (
+        basicEnabled
+        && isPointWithinDetectionRange(observerToken, source, basicMode, point)
+        && source.shape?.contains?.(x, y)
+      ) return true;
+      return Boolean(
+        lightEnabled
+        && isPointWithinDetectionRange(observerToken, source, lightMode, point)
+        && source.light?.contains?.(x, y)
+        && canvas.effects?.testInsideLight?.(point)
+      );
+    };
+    return {
+      contains,
+      destroy() {
+        source.destroy();
+      }
+    };
+  } catch (error) {
+    source.destroy();
+    console.warn(`${SYSTEM_ID} | Native observer vision mask failed`, error);
+    return null;
+  }
+}
+
+function getTokenDetectionMode(document, id) {
+  const modes = document?.detectionModes;
+  return modes?.get?.(id) ?? modes?.[id] ?? null;
+}
+
+function hasPositiveDetectionRange(mode) {
+  if (!mode || mode.enabled === false) return false;
+  if (mode.range === null || mode.range === Infinity) return true;
+  return Number.isFinite(Number(mode.range)) && Number(mode.range) > 0;
+}
+
+function isPointWithinDetectionRange(observerToken, source, mode, point) {
+  const range = mode?.range;
+  if (range === null || range === Infinity) return true;
+  const sceneRange = Number(range);
+  if (!Number.isFinite(sceneRange) || sceneRange <= 0) return false;
+  if (Math.abs((Number(point?.elevation) || 0) - (Number(source.data?.elevation) || 0)) > sceneRange + 1e-8) {
+    return false;
+  }
+  const radius = Number(observerToken.getLightRadius?.(sceneRange));
+  if (!Number.isFinite(radius)) return true;
+  const dx = (Number(point?.x) || 0) - (Number(source.data?.x) || 0);
+  const dy = (Number(point?.y) || 0) - (Number(source.data?.y) || 0);
+  return ((dx * dx) + (dy * dy)) <= (radius * radius);
 }
 
 function tokenDocumentUuid(token) {

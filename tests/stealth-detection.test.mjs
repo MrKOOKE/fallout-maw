@@ -363,6 +363,45 @@ test("positive Light Perception keeps a zero-range Basic Sight observer operatio
   assert.ok(buildObserverDetectionZone(observer, { settings })?.offsets?.length);
 });
 
+test("stealth zones and authoritative points are intersected with the native observer vision mask", () => {
+  installRectangleMock();
+  class VisionSource {
+    constructor({ object }) {
+      this.object = object;
+      this.blinded = {};
+    }
+
+    initialize(data) {
+      this.data = data;
+      this.isBlinded = false;
+      this.shape = { contains: x => x <= 100 };
+      this.light = { contains: () => false };
+    }
+
+    destroy() {}
+  }
+  globalThis.CONFIG = {
+    specialStatusEffects: { BLIND: "blind" },
+    Canvas: { visionSourceClass: VisionSource }
+  };
+  globalThis.canvas = createLinearCanvas({ cells: 5, cellSize: 100 });
+  globalThis.canvas.visibility = { tokenVision: true };
+  globalThis.canvas.effects.testInsideLight = () => false;
+  const observer = createObserverWithUnlimitedSight("observer-native-mask");
+  observer.document.id = observer.id;
+  observer.sourceId = `Token.${observer.id}`;
+  observer.getLightRadius = range => Number(range) * 100;
+  observer._getVisionBlindedStates = () => ({});
+  observer._getVisionSourceData = () => ({ x: 0, y: 0, elevation: 0 });
+  const settings = createSettings("4");
+  const origin = { x: 0, y: 0, elevation: 0 };
+
+  const zone = buildObserverDetectionZone(observer, { origin, settings });
+  assert.deepEqual(zone.offsets.map(({ j }) => j), [0, 1]);
+  assert.equal(testStealthDetectionPoint(observer, origin, { x: 100, y: 0, elevation: 0 }, { settings }), true);
+  assert.equal(testStealthDetectionPoint(observer, origin, { x: 200, y: 0, elevation: 0 }, { settings }), false);
+});
+
 test("smoke density shapes stealth detection reciprocally from inside and outside", () => {
   installRectangleMock();
   globalThis.canvas = createLinearCanvas({ cells: 4, cellSize: 100, gridDistance: 1 });
@@ -523,6 +562,7 @@ test("local previews exclude hidden observers for players but retain them for GM
   );
 
   globalThis.game.user.isGM = true;
+  globalThis.canvas.visibility.tokenVision = true;
   assert.deepEqual(
     getStealthObserverZones(hiddenToken, { visibleOnly: true, settings })
       .map(zone => zone.observerToken.id),
