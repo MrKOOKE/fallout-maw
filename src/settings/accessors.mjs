@@ -12,6 +12,7 @@ import {
   normalizeNeedSettings,
   normalizeProficiencyInfluenceSettings,
   normalizeProficiencySettings,
+  resolveProficiencyInfluenceSettings,
   normalizeResourceSettings,
   normalizeSkillAdvancementSettings,
   normalizeSkillSettings
@@ -295,11 +296,12 @@ export async function setAbilityCatalog(catalog) {
   return normalized;
 }
 
-export function getProficiencyInfluenceSettings() {
+export function getProficiencyInfluenceSettings(proficiency = null) {
   try {
-    return normalizeProficiencyInfluenceSettings(game.settings.get(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING));
+    const settings = game.settings.get(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING);
+    return resolveProficiencyInfluenceSettings(settings, proficiency);
   } catch (_error) {
-    return createDefaultProficiencyInfluenceSettings();
+    return resolveProficiencyInfluenceSettings({}, proficiency);
   }
 }
 

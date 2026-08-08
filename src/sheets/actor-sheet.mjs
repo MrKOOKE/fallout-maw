@@ -7871,7 +7871,7 @@ function getWeaponProficiencyInfluenceBonus(actor, data = {}, influenceKey = "")
   if (!actor) return 0;
   const proficiency = getWeaponProficiencySetting(data);
   if (!proficiency) return 0;
-  const range = getProficiencyInfluenceSettings()?.[influenceKey] ?? { min: 0, max: 0 };
+  const range = getProficiencyInfluenceSettings(proficiency)?.[influenceKey] ?? { min: 0, max: 0 };
   const minimum = toInteger(range.min);
   const maximum = toInteger(range.max);
   const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);

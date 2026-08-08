@@ -1,7 +1,7 @@
 <div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceTitle"}}</h2>
+      <h2>{{localize "FALLOUTMAW.Settings.Proficiencies.BaseInfluenceTitle"}}</h2>
     </header>
     <div class="fallout-maw-proficiency-influence-grid">
       <label class="fallout-maw-split-number-field">
@@ -48,24 +48,85 @@
       </div>
     </header>
 
-    <div class="fallout-maw-settings-table proficiency-settings">
-      <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span></span>
-        <span>{{localize "FALLOUTMAW.Common.Code"}}</span>
-        <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
-        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
-        <span>{{localize "FALLOUTMAW.Common.Maximum"}}</span>
-        <span></span>
-      </div>
+    <div class="proficiency-settings">
       {{#each proficiencies}}
-      <div class="fallout-maw-settings-row" data-proficiency-row>
-        <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
-        <input type="text" data-field="abbr" value="{{abbr}}">
-        <input type="text" data-field="key" value="{{key}}">
-        <input type="text" data-field="label" value="{{label}}">
-        <input type="number" data-field="max" value="{{max}}" min="0" step="1">
-        <button type="button" data-action="deleteProficiency" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-      </div>
+      <details class="fallout-maw-proficiency-entry" data-proficiency-row>
+        <summary class="fallout-maw-proficiency-summary">
+          <span class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></span>
+          <span class="fallout-maw-proficiency-summary-name">
+            <strong>{{label}}</strong>
+            <small>{{abbr}} · {{key}}</small>
+          </span>
+          <span>{{localize "FALLOUTMAW.Settings.Proficiencies.MaximumSummary"}}: <strong>{{max}}</strong></span>
+          <span class="fallout-maw-proficiency-individual-badge" data-individual-influence-badge {{#unless influence.enabled}}hidden{{/unless}}>{{localize "FALLOUTMAW.Settings.Proficiencies.IndividualBadge"}}</span>
+          <i class="fa-solid fa-chevron-down fallout-maw-proficiency-chevron"></i>
+        </summary>
+
+        <div class="fallout-maw-proficiency-entry-body">
+          <div class="fallout-maw-proficiency-identity-grid">
+            <label>
+              <span>{{localize "FALLOUTMAW.Common.Code"}}</span>
+              <input type="text" data-field="abbr" value="{{abbr}}">
+            </label>
+            <label>
+              <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
+              <input type="text" data-field="key" value="{{key}}">
+            </label>
+            <label>
+              <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+              <input type="text" data-field="label" value="{{label}}">
+            </label>
+            <label>
+              <span>{{localize "FALLOUTMAW.Common.Maximum"}}</span>
+              <input type="number" data-field="max" value="{{max}}" min="0" step="1">
+            </label>
+          </div>
+
+          <label class="fallout-maw-proficiency-individual-toggle">
+            <input type="checkbox" data-individual-influence-enabled {{#if influence.enabled}}checked{{/if}}>
+            <span>{{localize "FALLOUTMAW.Settings.Proficiencies.IndividualInfluence"}}</span>
+          </label>
+
+          <div class="fallout-maw-proficiency-influence-grid fallout-maw-proficiency-individual-grid" data-individual-influence-fields>
+            <label class="fallout-maw-split-number-field">
+              <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceAccuracy"}}</span>
+              <div>
+                <input type="number" data-individual-influence-field="accuracy" data-influence-bound="min" value="{{influence.accuracy.min}}" step="1">
+                <strong>/</strong>
+                <input type="number" data-individual-influence-field="accuracy" data-influence-bound="max" value="{{influence.accuracy.max}}" step="1">
+              </div>
+            </label>
+            <label class="fallout-maw-split-number-field">
+              <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceDamage"}}</span>
+              <div>
+                <input type="number" data-individual-influence-field="damage" data-influence-bound="min" value="{{influence.damage.min}}" step="1">
+                <strong>/</strong>
+                <input type="number" data-individual-influence-field="damage" data-influence-bound="max" value="{{influence.damage.max}}" step="1">
+              </div>
+            </label>
+            <label class="fallout-maw-split-number-field">
+              <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceCriticalChance"}}</span>
+              <div>
+                <input type="number" data-individual-influence-field="criticalChance" data-influence-bound="min" value="{{influence.criticalChance.min}}" step="1">
+                <strong>/</strong>
+                <input type="number" data-individual-influence-field="criticalChance" data-influence-bound="max" value="{{influence.criticalChance.max}}" step="1">
+              </div>
+            </label>
+            <label class="fallout-maw-split-number-field">
+              <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceCriticalDamage"}}</span>
+              <div>
+                <input type="number" data-individual-influence-field="criticalDamage" data-influence-bound="min" value="{{influence.criticalDamage.min}}" step="1">
+                <strong>/</strong>
+                <input type="number" data-individual-influence-field="criticalDamage" data-influence-bound="max" value="{{influence.criticalDamage.max}}" step="1">
+              </div>
+            </label>
+          </div>
+
+          <div class="fallout-maw-button-row fallout-maw-proficiency-entry-actions">
+            <button type="button" data-action="deleteProficiency"><i class="fa-solid fa-trash"></i> {{localize 'FALLOUTMAW.Common.Delete'}}</button>
+          </div>
+        </div>
+      </details>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Proficiencies.Empty"}}</p>
       {{/each}}

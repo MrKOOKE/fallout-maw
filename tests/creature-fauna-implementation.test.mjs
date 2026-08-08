@@ -149,6 +149,8 @@ test("expanded creature options preserve anchors and contain the complete practi
     ?.weaponSets;
   for (const spec of CREATURE_RACE_SPECS) {
     const race = expanded.races.find(entry => entry.id === resolveCreatureCatalogStorageId(spec));
+    assert(race.limbs.length <= CREATURE_LIMB_KEYS.length);
+    assert(race.limbs.every(limb => CREATURE_LIMB_KEYS.includes(limb.key)));
     if (["human", "ghoul", "super-mutant", "zetan"].includes(spec.key)) {
       assert.deepEqual(race.equipmentSlots.map(slot => slot.label), humanSlotLabels);
       assert.deepEqual(race.limbs.map(limb => ({ key: limb.key, label: limb.label })), humanLimbs);
@@ -158,6 +160,9 @@ test("expanded creature options preserve anchors and contain the complete practi
       assert.deepEqual(race.weaponSets, []);
     }
   }
+  assert.equal(expanded.races.find(race => race.name === "Споровое растение").limbs.length, 4);
+  assert.equal(expanded.races.find(race => race.name === "Сердце душителя").limbs.length, 6);
+  assert.equal(expanded.races.find(race => race.name === "Опылитель заросших").limbs.length, 7);
 });
 
 test("actor-specific natural armor is locked, equipped and complete on every limb", () => {
@@ -188,7 +193,7 @@ test("actor-specific natural armor is locked, equipped and complete on every lim
     assert.equal(item.system.placement.mode, "equipment");
     assert.equal(item.system.functions.condition.enabled, false);
     assert.equal(item.system.functions.damageMitigation.enabled, true);
-    assert.equal(item.system.functions.damageMitigation.mode, "defense");
+    assert.equal(item.system.functions.damageMitigation.mode, "resistance");
     assert.deepEqual(item.system.functions.damageMitigation.requirements, []);
     assert.deepEqual(Object.keys(item.system.functions.damageMitigation.entries).sort(), [...CREATURE_LIMB_KEYS].sort());
     assert.deepEqual(
@@ -407,5 +412,7 @@ test("new creature Actor records are complete while natural weapons remain subty
     Object.values(actor.system.development.characteristics).reduce((sum, value) => sum + value, 0),
     0
   );
-  assert.ok(Object.values(actor.system.skills).some(entry => Number(entry?.bonus) > 0));
+  const estimate = estimateCreatureCombatProfile(actorSpec);
+  assert.ok(estimate.skills.meleeCombat > 0);
+  assert.ok(estimate.attackChances.meleeCombat >= 5);
 });

@@ -57,6 +57,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     activateSettingsReorder(this.element, "[data-proficiency-row]");
+    this.#bindIndividualInfluenceControls();
   }
 
   async _processFormData(_event, _form, _formData) {
@@ -79,7 +80,8 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
       key: this.#getUniqueKey("newProficiency"),
       abbr: this.#getUniqueAbbr("new"),
       label: "Новое владение",
-      max: 1000
+      max: 1000,
+      influence: createIndividualInfluenceSettings(this.influence)
     });
     return this.forceRender();
   }
@@ -103,8 +105,42 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
-      max: Math.max(0, toInteger(row.querySelector("[data-field='max']")?.value))
+      max: Math.max(0, toInteger(row.querySelector("[data-field='max']")?.value)),
+      influence: this.#readIndividualInfluenceFromRow(row)
     }));
+  }
+
+  #readIndividualInfluenceFromRow(row) {
+    return {
+      enabled: Boolean(row.querySelector("[data-individual-influence-enabled]")?.checked),
+      accuracy: this.#readIndividualInfluenceRange(row, "accuracy"),
+      damage: this.#readIndividualInfluenceRange(row, "damage"),
+      criticalChance: this.#readIndividualInfluenceRange(row, "criticalChance"),
+      criticalDamage: this.#readIndividualInfluenceRange(row, "criticalDamage")
+    };
+  }
+
+  #readIndividualInfluenceRange(row, key) {
+    return {
+      min: toInteger(row.querySelector(`[data-individual-influence-field='${key}'][data-influence-bound='min']`)?.value),
+      max: toInteger(row.querySelector(`[data-individual-influence-field='${key}'][data-influence-bound='max']`)?.value)
+    };
+  }
+
+  #bindIndividualInfluenceControls() {
+    for (const row of this.element?.querySelectorAll("[data-proficiency-row]") ?? []) {
+      const checkbox = row.querySelector("[data-individual-influence-enabled]");
+      const fields = row.querySelector("[data-individual-influence-fields]");
+      const badge = row.querySelector("[data-individual-influence-badge]");
+      if (!checkbox || !fields) continue;
+      const sync = () => {
+        fields.classList.toggle("disabled", !checkbox.checked);
+        for (const input of fields.querySelectorAll("input")) input.disabled = !checkbox.checked;
+        if (badge) badge.hidden = !checkbox.checked;
+      };
+      checkbox.addEventListener("change", sync);
+      sync();
+    }
   }
 
   #readInfluenceFromForm() {
@@ -159,6 +195,16 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     while (abbreviations.has(`${baseAbbr}${index}`)) index += 1;
     return `${baseAbbr}${index}`;
   }
+}
+
+function createIndividualInfluenceSettings(base = {}) {
+  return {
+    enabled: false,
+    accuracy: { ...base.accuracy },
+    damage: { ...base.damage },
+    criticalChance: { ...base.criticalChance },
+    criticalDamage: { ...base.criticalDamage }
+  };
 }
 
 function throwValidationError(message) {

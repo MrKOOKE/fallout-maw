@@ -14125,8 +14125,119 @@ label.checkbox.fallout-maw-ability-change-choice {
   justify-self: stretch;
 }
 
-.proficiency-settings .fallout-maw-settings-row {
-  grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(170px, 1.5fr) 110px 2.5rem;
+.proficiency-settings {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fallout-maw-proficiency-entry {
+  border: 1px solid rgba(131, 119, 74, 0.52);
+  border-radius: 5px;
+  overflow: clip;
+}
+
+.fallout-maw-proficiency-summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 2rem minmax(0, 1fr) auto auto 1rem;
+  list-style: none;
+  padding: 0.55rem 0.65rem;
+}
+
+.fallout-maw-proficiency-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallout-maw-proficiency-summary-name {
+  display: grid;
+  min-width: 0;
+}
+
+.fallout-maw-proficiency-summary-name strong,
+.fallout-maw-proficiency-summary-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-proficiency-summary-name small {
+  opacity: 0.72;
+}
+
+.fallout-maw-proficiency-individual-badge {
+  border: 1px solid rgba(184, 157, 78, 0.7);
+  border-radius: 999px;
+  color: #d8c27c;
+  font-size: 0.78rem;
+  padding: 0.1rem 0.45rem;
+}
+
+.fallout-maw-proficiency-chevron {
+  transition: transform 120ms ease;
+}
+
+.fallout-maw-proficiency-entry[open] .fallout-maw-proficiency-chevron {
+  transform: rotate(180deg);
+}
+
+.fallout-maw-proficiency-entry-body {
+  border-top: 1px solid rgba(131, 119, 74, 0.42);
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.fallout-maw-proficiency-identity-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 80px minmax(120px, 1fr) minmax(170px, 1.5fr) 110px;
+}
+
+.fallout-maw-proficiency-identity-grid > label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.fallout-maw-proficiency-individual-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  width: fit-content;
+}
+
+.fallout-maw-proficiency-individual-grid.disabled {
+  opacity: 0.52;
+}
+
+.fallout-maw-proficiency-entry-actions {
+  justify-content: flex-end;
+}
+
+.fallout-maw-proficiency-entry.dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
+
+@media (max-width: 760px) {
+  .fallout-maw-proficiency-summary {
+    grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  }
+
+  .fallout-maw-proficiency-summary > :nth-child(3),
+  .fallout-maw-proficiency-individual-badge {
+    grid-column: 2;
+  }
+
+  .fallout-maw-proficiency-chevron {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .fallout-maw-proficiency-identity-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .fallout-maw-proficiency-influence-grid {

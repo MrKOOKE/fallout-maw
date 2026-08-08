@@ -2432,13 +2432,17 @@
         "Title": "Настройка потребностей"
       },
       "Proficiencies": {
+        "BaseInfluenceTitle": "Базовое влияние владений",
         "Create": "Создать владение",
         "Empty": "Владения не созданы.",
+        "IndividualBadge": "Индивидуально",
+        "IndividualInfluence": "Индивидуальная настройка влияния",
         "InfluenceAccuracy": "Точность",
         "InfluenceCriticalChance": "Шанс на крит",
         "InfluenceCriticalDamage": "Крит урон",
         "InfluenceDamage": "Урон",
         "InfluenceTitle": "Влияние владений",
+        "MaximumSummary": "Максимум",
         "Title": "Настройка владений"
       },
       "Resources": {

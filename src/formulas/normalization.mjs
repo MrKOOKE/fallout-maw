@@ -353,23 +353,31 @@ export function normalizeSkillAdvancementSettings(
 
 export function normalizeProficiencySettings(settings) {
   const source = normalizeCollectionInput(settings, createDefaultProficiencySettings());
+  const baseInfluence = normalizeProficiencyInfluenceSettings(settings);
   return normalizeKeyedEntries(
     source,
     entry => {
       const key = String(entry?.key ?? "").trim();
+      const individualInfluence = entry?.influence ?? {};
       return {
         key,
         abbr: String(entry?.abbr ?? "").trim(),
         label: String(entry?.label ?? entry?.name ?? "").trim(),
-        max: Math.max(0, toInteger(entry?.max))
+        max: Math.max(0, toInteger(entry?.max)),
+        influence: {
+          enabled: individualInfluence?.enabled === true,
+          ...normalizeProficiencyInfluenceSettings(individualInfluence, baseInfluence)
+        }
       };
     },
     "Владение"
   );
 }
 
-export function normalizeProficiencyInfluenceSettings(settings = {}) {
-  const defaults = createDefaultProficiencyInfluenceSettings();
+export function normalizeProficiencyInfluenceSettings(
+  settings = {},
+  defaults = createDefaultProficiencyInfluenceSettings()
+) {
   const source = settings?.influence ?? settings ?? {};
   return {
     accuracy: normalizeProficiencyInfluenceRange(source.accuracy, defaults.accuracy),
@@ -526,6 +534,16 @@ function normalizeFixedResourceSetting(defaultResource, source = {}) {
       : source.formula || defaultResource.formula,
     color: normalizeHexColor(source.color, getDefaultColorForKey(defaultResource.key))
   };
+}
+
+export function resolveProficiencyInfluenceSettings(settings = {}, proficiency = null) {
+  const base = normalizeProficiencyInfluenceSettings(settings);
+  const entry = typeof proficiency === "string"
+    ? normalizeProficiencySettings(settings).find(candidate => candidate.key === proficiency)
+    : proficiency;
+  return entry?.influence?.enabled
+    ? normalizeProficiencyInfluenceSettings(entry.influence, base)
+    : base;
 }
 
 function removeInternalResourceSettings(settings = []) {

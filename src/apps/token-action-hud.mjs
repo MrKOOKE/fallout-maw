@@ -4134,7 +4134,7 @@ function getDialogWeaponProficiencyInfluenceBonus(actor = null, weaponData = {},
     ?? getProficiencySettings().at(0)
     ?? null;
   if (!proficiency) return 0;
-  const range = getProficiencyInfluenceSettings()?.[influenceKey] ?? { min: 0, max: 0 };
+  const range = getProficiencyInfluenceSettings(proficiency)?.[influenceKey] ?? { min: 0, max: 0 };
   const settingMax = Math.max(0, toInteger(proficiency.max));
   const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
   const ratio = settingMax > 0 ? Math.max(0, Math.min(1, actorValue / settingMax)) : 0;

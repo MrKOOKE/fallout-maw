@@ -2373,13 +2373,17 @@
         "Title": "Need Settings"
       },
       "Proficiencies": {
+        "BaseInfluenceTitle": "Base Proficiency Influence",
         "Create": "Create Proficiency",
         "Empty": "No proficiencies created.",
+        "IndividualBadge": "Individual",
+        "IndividualInfluence": "Individual influence settings",
         "InfluenceAccuracy": "Accuracy",
         "InfluenceCriticalChance": "Critical Chance",
         "InfluenceCriticalDamage": "Critical Damage",
         "InfluenceDamage": "Damage",
         "InfluenceTitle": "Proficiency Influence",
+        "MaximumSummary": "Maximum",
         "Title": "Proficiency Settings"
       },
       "Resources": {

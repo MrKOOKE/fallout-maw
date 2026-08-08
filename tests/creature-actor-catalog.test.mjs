@@ -21,8 +21,9 @@ test("every concrete non-human subtype has a physical Actor and combat roles may
   assert.ok(CREATURE_ACTOR_SPECS.some(spec => spec.key === "super-mutant:ordinary" && spec.name === "Супермутант"));
   const wolf = CREATURE_ACTOR_SPECS.find(spec => spec.key === "canine:wolf");
   const ordinarySuperMutant = CREATURE_ACTOR_SPECS.find(spec => spec.key === "super-mutant:ordinary");
-  assert.deepEqual([wolf.threatClass, wolf.level], ["C", 12]);
-  assert.deepEqual([ordinarySuperMutant.threatClass, ordinarySuperMutant.level], ["C", 14]);
+  assert.deepEqual([wolf.threatClass, wolf.level], ["C", 22]);
+  assert.deepEqual([ordinarySuperMutant.threatClass, ordinarySuperMutant.level], ["C", 20]);
+  assert.equal(Math.max(...CREATURE_ACTOR_SPECS.map(spec => spec.level)), 100);
 });
 
 test("all configured Actor portraits exist and subtype imagery stays separated", () => {

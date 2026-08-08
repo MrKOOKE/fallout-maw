@@ -135,18 +135,20 @@ test("natural attacks follow hidden threat classes and use only the neutral stoc
   const radroach = getSubtype("radroach", "ordinary").naturalAttacks;
   const deathclawClaw = getSubtype("deathclaw", "ordinary").naturalAttacks[0];
 
-  assert.deepEqual([ratBite.damage, ratBite.penetration], [30, 1]);
-  assert.deepEqual([moleRatBite.damage, moleRatBite.penetration], [40, 2]);
-  assert.deepEqual([feralClaw.damage, feralClaw.penetration], [60, 5]);
-  assert.deepEqual([reaverClaw.damage, reaverClaw.penetration], [110, 16]);
-  assert.deepEqual(radroach.map(attack => [attack.damage, attack.penetration]), [[10, 1], [25, 1]]);
-  assert.deepEqual([deathclawClaw.damage, deathclawClaw.penetration], [160, 30]);
+  assert.deepEqual([ratBite.damage, ratBite.penetration], [13, 3]);
+  assert.deepEqual([moleRatBite.damage, moleRatBite.penetration], [21, 4]);
+  assert.deepEqual([feralClaw.damage, feralClaw.penetration], [40, 3]);
+  assert.deepEqual([reaverClaw.damage, reaverClaw.penetration], [80, 8]);
+  assert.deepEqual(radroach.map(attack => [attack.damage, attack.penetration]), [[4, 1], [4, 0]]);
+  assert.deepEqual([deathclawClaw.damage, deathclawClaw.penetration], [180, 23]);
 
   for (const race of CREATURE_RACE_SPECS.filter(entry => entry.key !== "human")) {
     for (const subtype of race.subtypes) {
       const profile = getCreatureSubtypeCombatProfile(race.key, subtype.key);
       const benchmark = getThreatClassBenchmark(profile.threatClass);
-      assert.ok(Math.max(...subtype.naturalAttacks.map(attack => attack.damage)) <= benchmark.naturalDamage * profile.powerScale * 1.1 + 5);
+      assert.ok(Math.max(...subtype.naturalAttacks.map(attack => attack.damage)) <= profile.primaryDamage * 1.1 + 5);
+      assert.ok(profile.level >= 1 && profile.level <= 100);
+      assert.ok(profile.primaryDamage >= benchmark.damageRange[0] * 0.5);
       assert.ok(subtype.naturalAttacks.every(attack => attack.img === NATURAL_WEAPON_STOCK_IMG));
     }
   }
@@ -155,13 +157,13 @@ test("natural attacks follow hidden threat classes and use only the neutral stoc
 test("large natural damage is split into armor-facing shares and action costs enforce creature cadence", () => {
   const mythic = getSubtype("deathclaw", "mythic").naturalAttacks;
   const claw = mythic.find(attack => attack.key === "mythic-claws");
-  assert.equal(claw.damage, 360);
-  assert.equal(claw.pellets, 5);
-  assert.equal(claw.actions.find(action => action.key === "meleeAttack").actionPointCost, 16);
+  assert.equal(claw.damage, 400);
+  assert.equal(claw.pellets, 7);
+  assert.equal(claw.actions.find(action => action.key === "meleeAttack").actionPointCost, 15);
 
   const heart = getSubtype("strangler-heart", "colony-heart").naturalAttacks;
-  assert.equal(heart.find(attack => attack.key === "strangler-tendrils").pellets, 2);
-  assert.equal(heart.find(attack => attack.key === "toxic-cloud").actions[0].actionPointCost, 9);
+  assert.equal(heart.find(attack => attack.key === "strangler-tendrils").pellets, 3);
+  assert.equal(heart.find(attack => attack.key === "toxic-cloud").actions[0].actionPointCost, 6);
 
   const rat = getSubtype("rodent", "rat").naturalAttacks[0];
   assert.equal(rat.actions.find(action => action.key === "meleeAttack").actionPointCost, 2);
@@ -170,7 +172,59 @@ test("large natural damage is split into armor-facing shares and action costs en
     .find(attack => attack.key === "reaver-claw-burst");
   assert.equal(reaverBurst.actions[0].key, "burst");
   assert.equal(reaverBurst.actions[0].count, 3);
-  assert.equal(reaverBurst.actions[0].actionPointCost, 12);
+  assert.equal(reaverBurst.actions[0].actionPointCost, 9);
+});
+
+test("natural attack specializations create useful choices against armor", () => {
+  const dog = getSubtype("canine", "dog").naturalAttacks;
+  const dogBite = dog.find(attack => attack.key === "bite");
+  const dogPounce = dog.find(attack => attack.key.includes("pounce"));
+  assert.ok(dogBite.damage > dogPounce.damage);
+  assert.ok(dogBite.penetration > dogPounce.penetration);
+  assert.equal(dogBite.damageTypes[0].key, "piercing");
+
+  const yaoGuai = getSubtype("yao-guai", "ordinary").naturalAttacks;
+  const yaoClaws = yaoGuai.find(attack => attack.key === "claws");
+  const yaoBite = yaoGuai.find(attack => attack.key === "bite");
+  assert.ok(yaoClaws.damage > yaoBite.damage);
+  assert.ok(yaoClaws.penetration * 5 < yaoBite.penetration);
+  assert.equal(yaoClaws.specialization, "rend");
+  assert.equal(yaoBite.specialization, "puncture");
+
+  const radscorpion = getSubtype("radscorpion", "ordinary").naturalAttacks;
+  const pincers = radscorpion.find(attack => attack.key === "pincers");
+  const sting = radscorpion.find(attack => attack.key === "sting");
+  assert.ok(pincers.damage > sting.damage);
+  assert.ok(sting.penetration > pincers.penetration * 5);
+  assert.equal(sting.damageTypes.some(entry => entry.key === "poison"), true);
+
+  const deathclaw = getSubtype("deathclaw", "ordinary").naturalAttacks;
+  const claws = deathclaw.find(attack => attack.key === "claws");
+  const bite = deathclaw.find(attack => attack.key === "bite");
+  const tail = deathclaw.find(attack => attack.key.includes("tail"));
+  assert.ok(claws.damage > bite.damage);
+  assert.ok(bite.penetration > claws.penetration * 4);
+  assert.ok(tail.penetration < claws.penetration);
+  assert.ok(tail.pellets > 1);
+
+  const queen = getSubtype("mirelurk", "queen").naturalAttacks;
+  const acid = queen.find(attack => attack.key === "acid-brood");
+  assert.equal(acid.specialization, "corrosion");
+  assert.equal(acid.actions[0].key, "volley");
+  assert.equal(acid.actions[0].damageRadius, "2");
+  assert.equal(acid.actions[0].regionRadius, "2");
+
+  const larvaVolley = getSubtype("bloatfly", "queen").naturalAttacks
+    .find(attack => attack.key === "larva-volley");
+  assert.equal(larvaVolley.actions[0].key, "burst");
+  assert.equal(larvaVolley.actions[0].count, 3);
+
+  for (const race of CREATURE_RACE_SPECS.filter(entry => entry.key !== "human")) {
+    for (const subtype of race.subtypes) {
+      assert.ok(subtype.naturalAttacks.every(attack => attack.specialization));
+      assert.ok(subtype.naturalAttacks.every(attack => attack.specializationLabel));
+    }
+  }
 });
 
 test("natural attacks use the editor default icon and action-only concise names", () => {
@@ -183,5 +237,18 @@ test("natural attacks use the editor default icon and action-only concise names"
     .find(attack => attack.key === "reaver-bite").name, "Укус");
   assert.equal(getSubtype("deathclaw", "mythic").naturalAttacks
     .find(attack => attack.key === "mythic-bite").name, "Укус");
-  assert.ok(attacks.every(attack => !/гуля|когтя смерти|геккон|медоед|касадор|богомол|кротокрыс|гонч|водян|мерзост|бегемот/u.test(attack.name)));
+  assert.deepEqual(
+    getSubtype("radroach", "glowing").naturalAttacks.map(attack => attack.name),
+    ["Укус", "Плевок"]
+  );
+  assert.deepEqual(
+    getSubtype("deathclaw", "glowing").naturalAttacks.map(attack => attack.name),
+    ["Когти", "Укус", "Хвост"]
+  );
+  assert.deepEqual(
+    getSubtype("mirelurk", "queen").naturalAttacks.map(attack => attack.name),
+    ["Клешни", "Плевок", "Таран"]
+  );
+  assert.ok(attacks.every(attack => !/радио|ядов|зараз|кислот|огнен|квант|засад|токсич|гигант|мощн|тяж[её]л|сокруш|гуля|когтя смерти|геккон|медоед|касадор|богомол|кротокрыс|гонч|водян|мерзост|бегемот/u.test(attack.name.toLowerCase())));
+  assert.ok(attacks.every(attack => (attack.actions ?? []).every(action => !action.name || action.name === attack.name)));
 });
