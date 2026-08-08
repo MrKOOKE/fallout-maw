@@ -7,6 +7,7 @@ import {
 } from "../src/utils/region-special-properties.mjs";
 import {
   calculateSmokePathCost,
+  getSmokeLightBandAtPoint,
   invalidateSmokeRegionIndex,
   measureSmokePath,
   registerSmokeVisionHooks,
@@ -92,34 +93,14 @@ test("smoke visibility budget is reciprocal inside the same density", () => {
   assert.equal(reverse.visibleDistance, forward.visibleDistance);
 });
 
-test("light perception spends its visibility budget only while crossing smoke", () => {
-  const region = createSmokeRegion("lit-approach", 50);
-  region.shapes[0] = { type: "circle", x: 500, y: 0, radius: 100 };
-  region.object.bounds = { x: 400, y: -100, width: 200, height: 200 };
-  const scene = createScene([region]);
-  const from = { x: 0, y: 0, elevation: 0 };
-  const to = { x: 1000, y: 0, elevation: 0 };
-
-  const ordinary = measureSmokePath(from, to, { scene, elevation: 0, budget: 200 });
-  const illuminated = measureSmokePath(from, to, {
-    scene,
-    elevation: 0,
-    budget: 200,
-    chargeClearDistance: false
-  });
-
-  assert.equal(ordinary.visibleDistance, 200);
-  assert.ok(Math.abs(illuminated.cost - 400) < 1e-6);
-  assert.ok(Math.abs(illuminated.visibleDistance - 500) < 1e-6);
-});
-
-test("light perception cannot reveal a token across smoke outside the basic sight budget", () => {
+test("partial smoke constrains global light while restoring observer smoke blocking", () => {
   const previous = {
     CONFIG: globalThis.CONFIG,
     Hooks: globalThis.Hooks,
     canvas: globalThis.canvas,
     game: globalThis.game,
-    PIXI: globalThis.PIXI
+    PIXI: globalThis.PIXI,
+    foundry: globalThis.foundry
   };
   const nativeRange = () => true;
   const basicSight = { _testRange: nativeRange };
@@ -130,20 +111,78 @@ test("light perception cannot reveal a token across smoke outside the basic sigh
     get lightRadius() { return 200; }
     get radius() { return 200; }
     _createShapes() {
-      this.los = createMask("los");
-      this.light = createMask("native-light");
-      this.shape = createMask("native-sight");
+      const origin = { x: this.data?.x ?? 0, y: this.data?.y ?? 0 };
+      this.los = createMask("los", 200, origin);
+      this.light = createMask("native-light", 200, origin);
+      this.shape = createMask("native-sight", 200, origin);
     }
   }
-  function createMask(name) {
+  class MockLightSource {
+    static sourceType = "light";
+    get radius() { return 200; }
+    _createShapes() {
+      this.shape = createMask("emitted-light", 200, { x: this.data?.x ?? 0, y: this.data?.y ?? 0 });
+    }
+    testPoint(point) { return this.shape?.contains(point.x, point.y) ?? false; }
+    _configure() { this.nativeConfigured = true; }
+    _drawMesh() { return "native-illumination"; }
+    animate() { this.nativeAnimated = true; }
+    _destroy() { this.nativeDestroyed = true; }
+  }
+  function createMask(name, limit = 200, origin = { x: 0, y: 0 }) {
     return {
-      origin: { x: 0, y: 0 },
+      points: [0, 0, 1, 0, 0, 1],
+      origin,
       config: { radius: 200 },
       applyConstraint(constraint, options) {
         constrainedMasks.push({ name, constraint, options });
-        return this;
+        const constrained = createMask(name, limit, origin);
+        constrained.points = constraint.points;
+        return constrained;
+      },
+      intersectPolygon() { return this; },
+      clone() {
+        const clone = createMask(name, limit, origin);
+        clone.points = [...this.points];
+        return clone;
+      },
+      getBounds() {
+        if (this.points.length <= 6) {
+          return { x: origin.x - limit, y: origin.y - limit, width: limit * 2, height: limit * 2 };
+        }
+        const xs = this.points.filter((_, index) => index % 2 === 0);
+        const ys = this.points.filter((_, index) => index % 2 === 1);
+        const x = Math.min(...xs);
+        const y = Math.min(...ys);
+        return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+      },
+      signedArea() {
+        return this.points.length > 6 ? polygonArea(this.points) : limit * limit;
+      },
+      contains(x, y) {
+        return this.points.length > 6
+          ? pointInPolygon(this.points, x, y)
+          : Math.hypot(x - origin.x, y - origin.y) <= limit + 1e-6;
       }
     };
+  }
+  function polygonArea(points) {
+    let area = 0;
+    for (let i = 0, j = points.length - 2; i < points.length; j = i, i += 2) {
+      area += (points[j] * points[i + 1]) - (points[i] * points[j + 1]);
+    }
+    return area / 2;
+  }
+  function pointInPolygon(points, x, y) {
+    let inside = false;
+    for (let i = 0, j = points.length - 2; i < points.length; j = i, i += 2) {
+      const xi = points[i];
+      const yi = points[i + 1];
+      const xj = points[j];
+      const yj = points[j + 1];
+      if (((yi > y) !== (yj > y)) && (x < (((xj - xi) * (y - yi)) / (yj - yi)) + xi)) inside = !inside;
+    }
+    return inside;
   }
   const region = createSmokeRegion("light-perception", 50);
   region.shapes[0] = { type: "circle", x: 0, y: 0, radius: 100 };
@@ -154,10 +193,17 @@ test("light perception cannot reveal a token across smoke outside the basic sigh
     globalThis.CONFIG = {
       Canvas: {
         detectionModes: { basicSight, lightPerception, specialSense },
-        visionSourceClass: MockVisionSource
+        visionSourceClass: MockVisionSource,
+        lightSourceClass: MockLightSource
       }
     };
-    globalThis.PIXI = { Polygon: class { constructor(points) { this.points = points; } } };
+    globalThis.PIXI = {
+      Polygon: class {
+        constructor(points) { this.points = points; }
+        contains(x, y) { return pointInPolygon(this.points, x, y); }
+      }
+    };
+    globalThis.foundry = {};
     globalThis.Hooks = { on() {} };
     globalThis.game = { time: { worldTime: 0 } };
     globalThis.canvas = {
@@ -168,9 +214,16 @@ test("light perception cannot reveal a token across smoke outside the basic sigh
 
     registerSmokeVisionHooks();
 
+    const lightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
+    Object.assign(lightSource, {
+      active: true,
+      data: { x: 100, y: 0, elevation: 0, bright: 200, dim: 200 }
+    });
+    lightSource._createShapes();
+    globalThis.canvas.effects = { lightSources: new Set([lightSource]) };
     const visionSource = new globalThis.CONFIG.Canvas.visionSourceClass();
     Object.assign(visionSource, {
-      data: { x: 0, y: 0, elevation: 0, externalRadius: 0 },
+      data: { x: 10, y: 0, elevation: 0, externalRadius: 0 },
       object: {
         document: {
           detectionModes: {
@@ -184,22 +237,39 @@ test("light perception cannot reveal a token across smoke outside the basic sigh
       actor: {},
       document: { documentName: "Token", actor: {} }
     };
-    const outside = { point: { x: 200, y: 0, elevation: 0 } };
+    const outside = { point: { x: -100, y: 0, elevation: 0 } };
+    const reachedByForeignLight = { point: { x: 100, y: 0, elevation: 0 } };
 
     assert.notEqual(basicSight._testRange, nativeRange);
     assert.notEqual(lightPerception._testRange, nativeRange);
     assert.equal(specialSense._testRange, nativeRange);
     visionSource._createShapes();
-    assert.deepEqual(constrainedMasks.map(mask => mask.name), ["native-light", "native-sight"]);
-    assert.notEqual(constrainedMasks[0].constraint, constrainedMasks[1].constraint);
+    assert.deepEqual(constrainedMasks.map(mask => mask.name), [
+      "emitted-light",
+      "native-light",
+      "native-sight"
+    ]);
+    assert.ok(lightSource.shape.contains(10, 0));
+    assert.equal(lightSource.shape.config.radius, 200);
+    assert.equal(getSmokeLightBandAtPoint(lightSource, { x: 10, y: 0 }), "bright");
+    assert.equal(basicSight._testRange(visionSource, { range: 1 }, token, reachedByForeignLight), true);
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, outside), false);
+    assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, token, reachedByForeignLight), true);
     assert.equal(lightPerception._testRange(visionSource, { range: Infinity }, { document: {} }, outside), true);
+    lightSource._configure({});
+    assert.equal(lightSource.nativeConfigured, true);
+    assert.equal(lightSource._drawMesh("illumination"), "native-illumination");
+    lightSource.animate();
+    assert.equal(lightSource.nativeAnimated, true);
+    lightSource._destroy();
+    assert.equal(lightSource.nativeDestroyed, true);
   } finally {
     globalThis.CONFIG = previous.CONFIG;
     globalThis.Hooks = previous.Hooks;
     globalThis.canvas = previous.canvas;
     globalThis.game = previous.game;
     globalThis.PIXI = previous.PIXI;
+    globalThis.foundry = previous.foundry;
   }
 });
 
@@ -309,16 +379,19 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
   const edges = new Map();
   const meshes = { addChild() {} };
   let sweepCalls = 0;
-  let includedSmokeEdge = false;
+  const sweepTypes = [];
+  const includedSmokeEdges = [];
+  const perceptionUpdates = [];
 
   class MockSweep {
     static create(origin, config) {
       sweepCalls += 1;
+      sweepTypes.push(config.type);
       const polygon = new this();
       polygon.origin = origin;
       polygon.config = config;
-      includedSmokeEdge = [...globalThis.canvas.edges.values()]
-        .some(edge => polygon._testEdgeInclusion(edge, {}));
+      includedSmokeEdges.push([...globalThis.canvas.edges.values()]
+        .some(edge => polygon._testEdgeInclusion(edge, {})));
       return { origin, config, applyConstraint() { return this; } };
     }
 
@@ -335,6 +408,17 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
         this._getPolygonConfiguration()
       );
       this.los = this.light = this.shape;
+    }
+  }
+
+  class MockLightSource {
+    get radius() { return 100; }
+    _getPolygonConfiguration() { return { type: "light", radius: 100, edgeTypes: { wall: true } }; }
+    _createShapes() {
+      this.shape = globalThis.CONFIG.Canvas.polygonBackends.light.create(
+        this.data,
+        this._getPolygonConfiguration()
+      );
     }
   }
 
@@ -375,8 +459,9 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
           basicSight: { _testRange: () => true },
           lightPerception: { _testRange: () => true }
         },
-        polygonBackends: { sight: MockSweep },
-        visionSourceClass: MockVisionSource
+        polygonBackends: { sight: MockSweep, light: MockSweep },
+        visionSourceClass: MockVisionSource,
+        lightSourceClass: MockLightSource
       }
     };
     globalThis.Hooks = { on() {} };
@@ -393,7 +478,7 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
       visibility: { vision: { light: { global: { meshes } } } },
       performance: { mode: 0 },
       environment: { globalLightSource: { active: false } },
-      perception: { update() {} }
+      perception: { update(flags) { perceptionUpdates.push(flags); } }
     };
 
     registerSmokeVisionHooks();
@@ -402,7 +487,11 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     assert.equal(edges.size, 4);
     assert.equal([...edges.values()].every(edge => edge.type === "fallout-maw.smoke"), true);
     assert.equal([...edges.values()].every(edge => edge.sight === 20), true);
+    assert.equal([...edges.values()].every(edge => edge.light === 20), true);
     assert.equal([...edges.values()].every(edge => edge.object === undefined), true);
+    assert.equal(perceptionUpdates.some(flags => (
+      flags.initializeLightSources === true && flags.initializeVision === true
+    )), true);
 
     const source = new globalThis.CONFIG.Canvas.visionSourceClass();
     Object.assign(source, {
@@ -414,7 +503,16 @@ test("opaque Region polygon boundaries use Foundry CanvasEdges without Wall docu
     });
     source._createShapes();
     assert.equal(sweepCalls, 1);
-    assert.equal(includedSmokeEdge, true);
+    assert.equal(includedSmokeEdges[0], true);
+
+    const lightSource = new globalThis.CONFIG.Canvas.lightSourceClass();
+    Object.assign(lightSource, {
+      data: { x: 50, y: 50, elevation: 0, bright: 100, dim: 100 }
+    });
+    lightSource._createShapes();
+    assert.equal(sweepCalls, 2);
+    assert.deepEqual(sweepTypes, ["sight", "light"]);
+    assert.equal(includedSmokeEdges[1], true);
 
     globalThis.canvas.scene = createScene([]);
     syncSmokeDarknessMeshes({ forceRendering: true, forceVision: true });

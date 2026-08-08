@@ -477,10 +477,11 @@ function measureDetectionPath(
   }
 
   const minimumCost = directDistance + getSmokePathPenalty(smokePath);
-  if (normalizedBaseRange === null && entirelyUnaided) {
+  const smokeMayBeDispersed = smokePath.hasSmoke && pathMayIntersectLocalLight(origin, destination);
+  if (normalizedBaseRange === null && entirelyUnaided && !smokeMayBeDispersed) {
     return { cost: minimumCost, directDistance, baseReachDistance: directDistance };
   }
-  if (normalizedBaseRange === null && minimumCost > costLimit) {
+  if (normalizedBaseRange === null && minimumCost > costLimit && !smokeMayBeDispersed) {
     return { cost: minimumCost, directDistance, baseReachDistance: directDistance };
   }
 
@@ -538,10 +539,14 @@ function measureDetectionPath(
       : clampNumber((unaidedSightRange - startDistance) / distanceDelta, 0, 1);
     const unaidedDistance = segmentDistance * unaidedRatio;
     const attenuatedDistance = Math.max(0, segmentDistance - unaidedDistance);
-    const smokeCostFactor = getSmokeCostFactor(smokePath, previousRatio, ratio, segmentDistance);
+    const rawSmokeCostFactor = getSmokeCostFactor(smokePath, previousRatio, ratio, segmentDistance);
+    const lighting = attenuatedDistance > 0 || rawSmokeCostFactor > 0
+      ? analyzeLightingPoint(point)
+      : null;
+    const smokeCostFactor = applySmokeDispersion(rawSmokeCostFactor, lighting?.smokeDispersion ?? 0);
     consume(unaidedDistance, 1 + smokeCostFactor);
     if (attenuatedDistance > 0) {
-      const factor = getDetectionRangeFactor(analyzeLightingPoint(point).effectiveDarkness, settings);
+      const factor = getDetectionRangeFactor(lighting.effectiveDarkness, settings);
       consume(attenuatedDistance, (1 / Math.max(0.01, factor)) + smokeCostFactor);
     }
     if (consumed > costLimit && normalizedBaseRange === null) break;
@@ -580,6 +585,33 @@ function getSmokeCostFactor(smokePath, startRatio, endRatio, segmentDistance) {
   if (retained <= DETECTION_DISTANCE_EPSILON) return Infinity;
   const horizontalDistance = pixelsToSceneDistance(smokePath.length * (endRatio - startRatio));
   return (horizontalDistance * ((1 / retained) - 1)) / segmentDistance;
+}
+
+function applySmokeDispersion(smokeCostFactor, localLightIntensity) {
+  const dispersion = clampNumber(localLightIntensity, 0, 1);
+  if (dispersion >= 1 - DETECTION_DISTANCE_EPSILON) return 0;
+  if (!Number.isFinite(smokeCostFactor)) return Infinity;
+  return smokeCostFactor * (1 - dispersion);
+}
+
+function pathMayIntersectLocalLight(origin, destination) {
+  const minX = Math.min(origin.x, destination.x);
+  const maxX = Math.max(origin.x, destination.x);
+  const minY = Math.min(origin.y, destination.y);
+  const maxY = Math.max(origin.y, destination.y);
+  const sources = globalThis.canvas?.effects?.lightSources;
+  for (const source of sources?.values?.() ?? sources ?? []) {
+    if (!source?.active || source?.constructor?.name === "GlobalLightSource" || source?.name === "GlobalLight") continue;
+    const bounds = source.shape?.bounds ?? source.shape?.getBounds?.();
+    if (!bounds) return true;
+    if (
+      bounds.x <= maxX
+      && bounds.x + bounds.width >= minX
+      && bounds.y <= maxY
+      && bounds.y + bounds.height >= minY
+    ) return true;
+  }
+  return false;
 }
 
 function interpolatePathPoint(origin, destination, ratio) {

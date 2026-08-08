@@ -389,6 +389,21 @@ test("smoke density shapes stealth detection reciprocally from inside and outsid
   assert.equal(zone.offsets.some(({ j }) => j === 1), true);
   assert.equal(zone.offsets.some(({ j }) => j === 2), false);
 
+  globalThis.canvas.effects.lightSources.set("bright-smoke-dispersion", {
+    active: true,
+    origin: outside,
+    data: { bright: 300, dim: 300 },
+    testPoint: () => true
+  });
+  invalidateLightingAnalysisCache();
+  invalidateStealthDetectionCache();
+  assert.equal(computeDetectionPathCost(observer, inside, outside, settings), 2);
+  const illuminatedZone = buildObserverDetectionZone(observer, { origin: inside, settings });
+  assert.equal(illuminatedZone.offsets.some(({ j }) => j === 2), true);
+  globalThis.canvas.effects.lightSources.delete("bright-smoke-dispersion");
+  invalidateLightingAnalysisCache();
+  invalidateStealthDetectionCache();
+
   smoke.behaviors.contents[0].system.regionSpecialProperties[0].smoke.densityPercent = "100";
   invalidateSmokeRegionIndex(globalThis.canvas.scene);
   const opaqueZone = buildObserverDetectionZone(observer, { origin: inside, settings });

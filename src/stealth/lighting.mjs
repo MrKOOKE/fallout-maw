@@ -3,6 +3,8 @@
  * conditions.  Keep the calculation in one place so every subsystem sees the
  * same value and callers can cache the relatively expensive token sampling.
  */
+import { getSmokeLightBandAtPoint } from "../canvas/smoke-vision.mjs";
+
 const POINT_LIGHTING_CACHE_LIMIT = 2048;
 const TOKEN_LIGHTING_CACHE_LIMIT = 256;
 const TOKEN_CACHE_POINT_LIMIT = 64;
@@ -71,11 +73,12 @@ export function analyzeLightingPoint(point) {
       ?? 0
   );
   const darknessSourcePenalty = activeCanvas?.effects?.testInsideDarkness?.(elevatedPoint) ? 1 : baseDarkness;
-  const lightIntensity = getPointLightIntensity(elevatedPoint, baseDarkness, activeCanvas);
+  const light = getPointLightIntensity(elevatedPoint, baseDarkness, activeCanvas);
   const analysis = {
     baseDarkness,
-    effectiveDarkness: clampAlpha(Math.max(baseDarkness, darknessSourcePenalty) - lightIntensity),
-    lightIntensity
+    effectiveDarkness: clampAlpha(Math.max(baseDarkness, darknessSourcePenalty) - light.intensity),
+    lightIntensity: light.intensity,
+    smokeDispersion: light.localIntensity
   };
   setLruEntry(pointLightingCache, cacheKey, analysis, POINT_LIGHTING_CACHE_LIMIT);
   return cloneLightingAnalysis(analysis);
@@ -212,13 +215,19 @@ function cloneLightingAnalysis(analysis) {
 
 function getPointLightIntensity(point, baseDarkness, activeCanvas) {
   let intensity = getGlobalLightIntensity(point, baseDarkness, activeCanvas);
+  let localIntensity = 0;
   const lightSources = activeCanvas?.effects?.lightSources;
   for (const source of lightSources?.values?.() ?? lightSources ?? []) {
     if (!source?.active || isGlobalLightSource(source)) continue;
     if (!source.testPoint?.(point)) continue;
-    intensity = Math.max(intensity, getLocalLightIntensity(source, point));
+    const sourceIntensity = getLocalLightIntensity(source, point);
+    localIntensity = Math.max(localIntensity, sourceIntensity);
+    intensity = Math.max(intensity, sourceIntensity);
   }
-  return clampAlpha(intensity);
+  return {
+    intensity: clampAlpha(intensity),
+    localIntensity: clampAlpha(localIntensity)
+  };
 }
 
 function getGlobalLightIntensity(point, baseDarkness, activeCanvas) {
@@ -236,9 +245,13 @@ function getLocalLightIntensity(source, point) {
   const distance = Math.hypot(point.x - (Number(origin.x) || 0), point.y - (Number(origin.y) || 0));
   const brightRadius = Math.max(0, Number(source.data?.bright) || 0);
   const dimRadius = Math.max(brightRadius, Number(source.data?.dim) || Number(source.data?.radius) || 0);
-  if (brightRadius > 0 && distance <= brightRadius) return 1;
+  const smokeBand = getSmokeLightBandAtPoint(source, point);
+  if (smokeBand === "none") return 0;
+  if (smokeBand === "bright") return 1;
+  if (smokeBand === null && brightRadius > 0 && distance <= brightRadius) return 1;
   if (dimRadius <= 0 || distance > dimRadius) return 0;
   if (dimRadius <= brightRadius) return 0.5;
+  if (smokeBand === "dim" && distance <= brightRadius) return 0.5;
   const ratio = clampAlpha((distance - brightRadius) / Math.max(1, dimRadius - brightRadius));
   return 0.5 + ((1 - ratio) * 0.5);
 }
