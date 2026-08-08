@@ -1426,6 +1426,7 @@
         "SpecialProperties": "Area Special Properties",
         "AddSpecialProperty": "Add Property",
         "NoSpecialProperties": "No special properties configured.",
+        "ChooseSpecialProperty": "Choose a property",
         "Smoke": "Smoke",
         "SmokeThickness": "Smoke Thickness",
         "SmokeDensity": "Smoke Density, %",

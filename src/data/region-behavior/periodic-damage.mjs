@@ -1,4 +1,4 @@
-import { syncSmokeDarknessMeshes } from "../../canvas/smoke-vision.mjs";
+import { queueSmokeRegionRefresh } from "../../canvas/smoke-vision.mjs";
 const { ArrayField, BooleanField, NumberField, SchemaField, StringField } = foundry.data.fields;
 const DEFAULT_INTERVAL_SECONDS = 6;
 const REGION_EVENTS = globalThis.CONST?.REGION_EVENTS ?? {};
@@ -13,7 +13,7 @@ export default class PeriodicDamageRegionBehaviorType extends foundry.data.regio
         amount: new StringField({ required: true, blank: true, initial: "0" })
       }), { required: true, initial: [] }),
       regionSpecialProperties: new ArrayField(new SchemaField({
-        type: new StringField({ required: true, blank: false, choices: ["smoke"], initial: "smoke" }),
+        type: new StringField({ required: true, blank: false, choices: ["pending", "smoke"], initial: "pending" }),
         smoke: new SchemaField({
           thickness: new StringField({ required: true, blank: true, initial: "1" }),
           densityPercent: new StringField({ required: true, blank: true, initial: "50" })
@@ -28,9 +28,9 @@ export default class PeriodicDamageRegionBehaviorType extends foundry.data.regio
   }
 
   static events = {
-    [REGION_EVENTS.BEHAVIOR_VIEWED ?? "behaviorViewed"]: () => syncSmokeDarknessMeshes(),
-    [REGION_EVENTS.BEHAVIOR_UNVIEWED ?? "behaviorUnviewed"]: () => syncSmokeDarknessMeshes(),
-    [REGION_EVENTS.REGION_BOUNDARY ?? "regionBoundary"]: () => syncSmokeDarknessMeshes(),
-    [REGION_EVENTS.REGION_ANIMATION ?? "regionAnimation"]: () => syncSmokeDarknessMeshes()
+    [REGION_EVENTS.BEHAVIOR_VIEWED ?? "behaviorViewed"]: () => queueSmokeRegionRefresh(),
+    [REGION_EVENTS.BEHAVIOR_UNVIEWED ?? "behaviorUnviewed"]: () => queueSmokeRegionRefresh(),
+    [REGION_EVENTS.REGION_BOUNDARY ?? "regionBoundary"]: () => queueSmokeRegionRefresh(),
+    [REGION_EVENTS.REGION_ANIMATION ?? "regionAnimation"]: () => queueSmokeRegionRefresh({ forceVision: false })
   };
 }

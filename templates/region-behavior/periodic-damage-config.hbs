@@ -8,26 +8,6 @@
   </fieldset>
 
   <fieldset>
-    <legend>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</legend>
-    <div class="fallout-maw-panel-header">
-      <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h3>
-      <button type="button" data-action="addRegionSpecialProperty"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
-    </div>
-    <div class="fallout-maw-region-special-property-list">
-      {{#each regionSpecialProperties}}
-      <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-index="{{index}}">
-        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"}}</span>
-        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="number" min="0" max="1" step="0.01" name="system.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}"></label>
-        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="number" min="0" max="100" step="1" name="system.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}"></label>
-        <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteRegionSpecialProperty" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-      </div>
-      {{else}}
-      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.NoSpecialProperties"}}</p>
-      {{/each}}
-    </div>
-  </fieldset>
-
-  <fieldset>
     <legend>{{localize "BEHAVIOR.SECTIONS.status"}}</legend>
     <div>
       <span>{{localize "DOCUMENT.FIELDS.disabled.label"}}</span>
@@ -88,6 +68,32 @@
         <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DeleteRegionWhenExpired"}}</span>
         <input aria-label="{{localize 'FALLOUTMAW.RegionBehavior.PeriodicDamage.DeleteRegionWhenExpired'}}" type="checkbox" name="system.deleteRegionWhenExpired" {{checked system.deleteRegionWhenExpired}}>
       </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</legend>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h3>
+      <button type="button" data-action="addRegionSpecialProperty"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
+    </div>
+    <div class="fallout-maw-region-special-property-list">
+      {{#each regionSpecialProperties}}
+      <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-index="{{index}}">
+        <select name="system.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        {{#if isSmoke}}
+        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="number" min="0" max="1" step="0.01" name="system.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}"></label>
+        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="number" min="0" max="100" step="1" name="system.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}"></label>
+        {{/if}}
+        <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteRegionSpecialProperty" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.NoSpecialProperties"}}</p>
+      {{/each}}
     </div>
   </fieldset>
 </div>

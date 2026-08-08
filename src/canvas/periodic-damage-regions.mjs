@@ -4,7 +4,7 @@ import { measureTheoreticalMovementSegmentsCost } from "../combat/movement-resou
 import { evaluateFormulaVariables } from "../formulas/evaluation.mjs";
 import { getCombatSettings, getDamageTypeSettings } from "../settings/accessors.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
-import { toInteger } from "../utils/numbers.mjs";
+import { toInteger, toOptionalFiniteNumber } from "../utils/numbers.mjs";
 import { createPeriodicDamageEffectSyncScheduler } from "./periodic-damage-effect-sync-scheduler.mjs";
 
 const BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
@@ -399,10 +399,10 @@ function isBehaviorCurrentlyActive(region, behavior) {
   const state = behavior.getFlag?.(SYSTEM_ID, CLOCK_FLAG_KEY);
   const now = Number(game.time?.worldTime) || 0;
   if (Math.max(0, toInteger(system.delaySeconds)) > 0) {
-    const activateAt = Number(state?.activateAt);
+    const activateAt = toOptionalFiniteNumber(state?.activateAt);
     if (!Number.isFinite(activateAt) || now < activateAt) return false;
   }
-  const expiresAt = Number(state?.expiresAt);
+  const expiresAt = toOptionalFiniteNumber(state?.expiresAt);
   return !Number.isFinite(expiresAt) || now < expiresAt;
 }
 

@@ -7570,6 +7570,20 @@ label.fallout-maw-mitigation-cell {
   min-width: 0;
 }
 
+.fallout-maw-settings-row.fallout-maw-region-special-property-row {
+  align-items: end;
+  grid-template-columns: minmax(150px, 1.15fr) minmax(125px, 1fr) minmax(125px, 1fr) auto;
+}
+
+.fallout-maw-settings-row.fallout-maw-region-special-property-row > label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.fallout-maw-settings-row.fallout-maw-region-special-property-row > button:last-child {
+  grid-column: 4;
+}
+
 .fallout-maw-skill-row {
   grid-template-columns: minmax(160px, 1fr) 70px 70px 70px;
 }

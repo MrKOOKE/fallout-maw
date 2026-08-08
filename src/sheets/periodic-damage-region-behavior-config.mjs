@@ -3,7 +3,12 @@ import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
+import {
+  REGION_SPECIAL_PROPERTY_PENDING,
+  REGION_SPECIAL_PROPERTY_SMOKE,
+  createDefaultRegionSpecialPropertyData,
+  normalizeRegionSpecialProperties
+} from "../utils/region-special-properties.mjs";
 
 export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.sheets.RegionBehaviorConfig {
   static DEFAULT_OPTIONS = foundry.utils.mergeObject(super.DEFAULT_OPTIONS, {
@@ -45,7 +50,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
         index,
         damageTypeChoices: buildDamageTypeChoices(damageTypes, entry.damageTypeKey)
       })),
-      regionSpecialProperties: regionSpecialProperties.map((property, index) => ({ ...property, index })),
+      regionSpecialProperties: regionSpecialProperties.map((property, index) => prepareRegionSpecialPropertyRow(property, index)),
       buttons: this._getButtons()
     };
   }
@@ -55,6 +60,10 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings()
+    });
+    this.form?.addEventListener("change", event => {
+      if (!event.target?.matches?.("[data-region-special-property-type]")) return;
+      PeriodicDamageRegionBehaviorConfig.#onRegionSpecialPropertyTypeChange.call(this, event);
     });
   }
 
@@ -96,7 +105,17 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
   static async #onAddRegionSpecialProperty(event) {
     event.preventDefault();
     const current = normalizeRegionSpecialProperties(this.#getFormRegionSpecialProperties());
-    if (!current.length) current.push({ type: "smoke", smoke: { thickness: "1", densityPercent: "50" } });
+    if (!current.length) current.push(createDefaultRegionSpecialPropertyData());
+    this.#renderRegionSpecialProperties(current);
+  }
+
+  static async #onRegionSpecialPropertyTypeChange(event) {
+    event.preventDefault();
+    const select = event.target;
+    const index = Number(select?.dataset?.regionSpecialPropertyType);
+    const current = normalizeRegionSpecialProperties(this.#getFormRegionSpecialProperties());
+    if (!Number.isInteger(index) || index < 0 || !current[index]) return;
+    current[index] = createDefaultRegionSpecialPropertyData(select.value, current[index]);
     this.#renderRegionSpecialProperties(current);
   }
 
@@ -186,14 +205,36 @@ function normalizeDamageFormula(value) {
 }
 
 function renderRegionSpecialPropertyRow(property, index) {
+  const row = prepareRegionSpecialPropertyRow(property, index);
+  const options = row.choices.map(choice => (
+    `<option value="${escapeHtml(choice.value)}" ${choice.selected ? "selected" : ""}>${escapeHtml(choice.label)}</option>`
+  )).join("");
   return `
     <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-index="${index}">
-      <span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"))}</span>
-      <label><span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"))}</span><input type="number" min="0" max="1" step="0.01" name="system.regionSpecialProperties.${index}.smoke.thickness" value="${escapeHtml(property.smoke?.thickness ?? "1")}"></label>
-      <label><span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"))}</span><input type="number" min="0" max="100" step="1" name="system.regionSpecialProperties.${index}.smoke.densityPercent" value="${escapeHtml(property.smoke?.densityPercent ?? "50")}"></label>
+      <select name="system.regionSpecialProperties.${index}.type" data-region-special-property-type="${index}">${options}</select>
+      ${row.isSmoke ? `<label><span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"))}</span><input type="number" min="0" max="1" step="0.01" name="system.regionSpecialProperties.${index}.smoke.thickness" value="${escapeHtml(property.smoke?.thickness ?? "1")}"></label>
+      <label><span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"))}</span><input type="number" min="0" max="100" step="1" name="system.regionSpecialProperties.${index}.smoke.densityPercent" value="${escapeHtml(property.smoke?.densityPercent ?? "50")}"></label>` : ""}
       <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteRegionSpecialProperty" title="${escapeHtml(game.i18n.localize("FALLOUTMAW.Common.Delete"))}"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
+}
+
+function prepareRegionSpecialPropertyRow(property, index) {
+  return {
+    ...property,
+    index,
+    isSmoke: property.type === REGION_SPECIAL_PROPERTY_SMOKE,
+    choices: [
+      {
+        value: REGION_SPECIAL_PROPERTY_PENDING,
+        label: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.ChooseSpecialProperty")
+      },
+      {
+        value: REGION_SPECIAL_PROPERTY_SMOKE,
+        label: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke")
+      }
+    ].map(choice => ({ ...choice, selected: choice.value === property.type }))
+  };
 }
 
 function escapeHtml(value) {

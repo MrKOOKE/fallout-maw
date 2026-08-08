@@ -36,7 +36,12 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
-import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
+import {
+  REGION_SPECIAL_PROPERTY_PENDING,
+  REGION_SPECIAL_PROPERTY_SMOKE,
+  createDefaultRegionSpecialPropertyData,
+  normalizeRegionSpecialProperties
+} from "../utils/region-special-properties.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   computeContainerSpecialGridBaseAnchorSeed,
@@ -920,6 +925,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-add-region-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddRegionSpecialProperty(event));
+    });
+    this.element?.querySelectorAll("[data-region-special-property-type]").forEach(select => {
+      this.#addHandledFormChangeListener(select, event => this.#onRegionSpecialPropertyTypeChange(event));
     });
     this.element?.querySelectorAll("[data-delete-region-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteRegionSpecialProperty(event));
@@ -5507,7 +5515,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const path = String(event.currentTarget?.dataset?.regionSpecialPropertyPath ?? "").trim();
     if (!path) return undefined;
     const current = normalizeRegionSpecialProperties(foundry.utils.getProperty(this.item, `${path}.regionSpecialProperties`));
-    if (!current.length) current.push({ type: "smoke", smoke: { thickness: "1", densityPercent: "50" } });
+    if (!current.length) current.push(createDefaultRegionSpecialPropertyData());
+    return this.item.update({ [`${path}.regionSpecialProperties`]: current });
+  }
+
+  #onRegionSpecialPropertyTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const path = String(event.currentTarget?.dataset?.regionSpecialPropertyPath ?? "").trim();
+    const index = Number(event.currentTarget?.dataset?.regionSpecialPropertyType);
+    if (!path || !Number.isInteger(index) || index < 0) return undefined;
+    const current = normalizeRegionSpecialProperties(foundry.utils.getProperty(this.item, `${path}.regionSpecialProperties`));
+    if (!current[index]) return undefined;
+    current[index] = createDefaultRegionSpecialPropertyData(event.currentTarget.value, current[index]);
     return this.item.update({ [`${path}.regionSpecialProperties`]: current });
   }
 
@@ -13260,9 +13281,21 @@ function getWeaponFunctionSection(element) {
 }
 
 function buildRegionSpecialPropertyRows(entries = []) {
-  return normalizeRegionSpecialProperties(entries).map((property, index) => ({
+  const properties = normalizeRegionSpecialProperties(entries);
+  return properties.map((property, index) => ({
     ...property,
-    index
+    index,
+    isSmoke: property.type === REGION_SPECIAL_PROPERTY_SMOKE,
+    choices: [
+      {
+        value: REGION_SPECIAL_PROPERTY_PENDING,
+        label: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.ChooseSpecialProperty")
+      },
+      {
+        value: REGION_SPECIAL_PROPERTY_SMOKE,
+        label: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke")
+      }
+    ].map(choice => ({ ...choice, selected: choice.value === property.type }))
   }));
 }
 

@@ -1705,20 +1705,6 @@
         <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
         {{/each}}
       </div>
-      <div class="fallout-maw-panel-header">
-        <h4>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h4>
-        <button type="button" data-add-region-special-property data-region-special-property-path="{{path}}.area"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
-      </div>
-      <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
-        {{#each area.regionSpecialProperties}}
-        <div class="fallout-maw-settings-row" data-region-special-property-row="{{index}}">
-          <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"}}</span>
-          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="{{../path}}.area.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}"></label>
-          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="{{../path}}.area.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}"></label>
-          <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="{{../path}}.area" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-        </div>
-      {{/each}}
-      </div>
       <div class="fallout-maw-list-grid three-columns">
         <label>
           <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
@@ -1732,6 +1718,26 @@
           <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
           <input type="text" name="{{path}}.area.regionRadiusDeltaMeters" value="{{area.regionRadiusDeltaMeters}}" data-formula-autocomplete="all">
         </label>
+      </div>
+      <div class="fallout-maw-panel-header">
+        <h4>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h4>
+        <button type="button" data-add-region-special-property data-region-special-property-path="{{path}}.area"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
+      </div>
+      <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
+        {{#each area.regionSpecialProperties}}
+        <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-row="{{index}}">
+          <select name="{{../path}}.area.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}" data-region-special-property-path="{{../path}}.area">
+            {{#each choices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+          {{#if isSmoke}}
+          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="{{../path}}.area.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" data-formula-autocomplete="all"></label>
+          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="{{../path}}.area.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" data-formula-autocomplete="all"></label>
+          {{/if}}
+          <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="{{../path}}.area" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        {{/each}}
       </div>
       {{/if}}
 
@@ -5309,20 +5315,6 @@
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
       {{/each}}
     </div>
-    <div class="fallout-maw-panel-header">
-      <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h3>
-      <button type="button" data-add-region-special-property data-region-special-property-path="system.functions.damageSource.volley"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
-    </div>
-    <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
-      {{#each damageSourceVolleyRegionSpecialProperties}}
-      <div class="fallout-maw-settings-row" data-region-special-property-row="{{index}}">
-        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"}}</span>
-        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="system.functions.damageSource.volley.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}"></label>
-        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="system.functions.damageSource.volley.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}"></label>
-        <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="system.functions.damageSource.volley" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-      </div>
-      {{/each}}
-    </div>
     <div class="fallout-maw-list-grid three-columns">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
@@ -5336,6 +5328,26 @@
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
         <input type="text" name="system.functions.damageSource.volley.regionRadiusDeltaMeters" value="{{system.functions.damageSource.volley.regionRadiusDeltaMeters}}" data-formula-autocomplete="all">
       </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h3>
+      <button type="button" data-add-region-special-property data-region-special-property-path="system.functions.damageSource.volley"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
+      {{#each damageSourceVolleyRegionSpecialProperties}}
+      <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-row="{{index}}">
+        <select name="system.functions.damageSource.volley.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}" data-region-special-property-path="system.functions.damageSource.volley">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        {{#if isSmoke}}
+        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="system.functions.damageSource.volley.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" data-formula-autocomplete="all"></label>
+        <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="system.functions.damageSource.volley.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" data-formula-autocomplete="all"></label>
+        {{/if}}
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="system.functions.damageSource.volley" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
     </div>
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.DamageSourceDamageTypes"}}</h3>
@@ -6007,20 +6019,6 @@
         <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
         {{/each}}
       </div>
-      <div class="fallout-maw-panel-header">
-        <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h3>
-        <button type="button" data-add-region-special-property data-region-special-property-path="system.functions.trap.effect"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
-      </div>
-      <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
-        {{#each trapRegionSpecialProperties}}
-        <div class="fallout-maw-settings-row" data-region-special-property-row="{{index}}">
-          <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"}}</span>
-          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="system.functions.trap.effect.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}"></label>
-          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="system.functions.trap.effect.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}"></label>
-          <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="system.functions.trap.effect" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-        </div>
-        {{/each}}
-      </div>
       <div class="fallout-maw-list-grid three-columns">
         <label>
           <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
@@ -6038,6 +6036,26 @@
           <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
           <input type="text" name="system.functions.trap.effect.regionRadiusDeltaMeters" value="{{system.functions.trap.effect.regionRadiusDeltaMeters}}" data-formula-autocomplete="all">
         </label>
+      </div>
+      <div class="fallout-maw-panel-header">
+        <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h3>
+        <button type="button" data-add-region-special-property data-region-special-property-path="system.functions.trap.effect"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
+      </div>
+      <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
+        {{#each trapRegionSpecialProperties}}
+        <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-row="{{index}}">
+          <select name="system.functions.trap.effect.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}" data-region-special-property-path="system.functions.trap.effect">
+            {{#each choices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+          {{#if isSmoke}}
+          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="system.functions.trap.effect.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" data-formula-autocomplete="all"></label>
+          <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="system.functions.trap.effect.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" data-formula-autocomplete="all"></label>
+          {{/if}}
+          <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="system.functions.trap.effect" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        {{/each}}
       </div>
       {{/if}}
       <div class="fallout-maw-panel-header">
@@ -6497,20 +6515,6 @@
           <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
           {{/each}}
         </div>
-        <div class="fallout-maw-panel-header">
-          <h4>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h4>
-          <button type="button" data-add-region-special-property data-region-special-property-path="{{../path}}.volley" {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
-        </div>
-        <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
-          {{#each volleyRegionSpecialProperties}}
-          <div class="fallout-maw-settings-row" data-region-special-property-row="{{index}}">
-            <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"}}</span>
-            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
-            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
-            <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="{{../../path}}.volley" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
-          </div>
-          {{/each}}
-        </div>
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
@@ -6524,6 +6528,26 @@
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
             <input type="text" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
+        </div>
+        <div class="fallout-maw-panel-header">
+          <h4>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SpecialProperties"}}</h4>
+          <button type="button" data-add-region-special-property data-region-special-property-path="{{../path}}.volley" {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddSpecialProperty"}}</button>
+        </div>
+        <div class="fallout-maw-settings-table fallout-maw-region-special-property-list">
+          {{#each volleyRegionSpecialProperties}}
+          <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-row="{{index}}">
+            <select name="{{../../path}}.volley.regionSpecialProperties.{{index}}.type" data-region-special-property-type="{{index}}" data-region-special-property-path="{{../../path}}.volley" {{#if ../../usesDamageSource}}disabled{{/if}}>
+              {{#each choices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            {{#if isSmoke}}
+            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.thickness" value="{{smoke.thickness}}" data-formula-autocomplete="all" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
+            <label><span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"}}</span><input type="text" name="{{../../path}}.volley.regionSpecialProperties.{{index}}.smoke.densityPercent" value="{{smoke.densityPercent}}" data-formula-autocomplete="all" {{#if ../../usesDamageSource}}disabled{{/if}}></label>
+            {{/if}}
+            <button type="button" class="fallout-maw-icon-delete-button" data-delete-region-special-property="{{index}}" data-region-special-property-path="{{../../path}}.volley" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{/each}}
         </div>
         {{else}}
         <div class="fallout-maw-list-grid three-columns">

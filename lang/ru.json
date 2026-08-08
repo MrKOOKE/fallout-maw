@@ -1425,6 +1425,7 @@
         "SpecialProperties": "Особые свойства области",
         "AddSpecialProperty": "Добавить свойство",
         "NoSpecialProperties": "Особые свойства не заданы.",
+        "ChooseSpecialProperty": "Выберите свойство",
         "Smoke": "Задымление",
         "SmokeThickness": "Густота дыма",
         "SmokeDensity": "Плотность дыма, %",

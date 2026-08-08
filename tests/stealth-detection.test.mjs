@@ -14,6 +14,7 @@ import {
   weaponNoiseToRangeBonus
 } from "../src/stealth/detection.mjs";
 import { invalidateLightingAnalysisCache } from "../src/stealth/lighting.mjs";
+import { invalidateSmokeRegionIndex } from "../src/canvas/smoke-vision.mjs";
 
 const originalCanvas = globalThis.canvas;
 const originalConfig = globalThis.CONFIG;
@@ -362,6 +363,39 @@ test("positive Light Perception keeps a zero-range Basic Sight observer operatio
   assert.ok(buildObserverDetectionZone(observer, { settings })?.offsets?.length);
 });
 
+test("smoke density shapes stealth detection reciprocally from inside and outside", () => {
+  installRectangleMock();
+  globalThis.canvas = createLinearCanvas({ cells: 4, cellSize: 100, gridDistance: 1 });
+  const smoke = createSmokeRegion("stealth-smoke", 50, {
+    x: 0,
+    y: 0,
+    radius: 100,
+    bounds: { x: -100, y: -100, width: 200, height: 200 }
+  });
+  globalThis.canvas.scene.regions = { contents: [smoke] };
+  const observer = createObserver("observer-smoke");
+  observer.document.sight.range = 2;
+  observer.document.detectionModes.basicSight.range = 2;
+  const settings = createSettings("2");
+  const inside = { x: 0, y: 0, elevation: 0 };
+  const outside = { x: 200, y: 0, elevation: 0 };
+
+  assert.equal(computeDetectionPathCost(observer, inside, outside, settings), 3);
+  assert.equal(computeDetectionPathCost(observer, outside, inside, settings), 3);
+  assert.equal(testStealthDetectionPoint(observer, inside, outside, { settings }), false);
+  assert.equal(testStealthDetectionPoint(observer, outside, inside, { settings }), false);
+
+  const zone = buildObserverDetectionZone(observer, { origin: inside, settings });
+  assert.equal(zone.offsets.some(({ j }) => j === 1), true);
+  assert.equal(zone.offsets.some(({ j }) => j === 2), false);
+
+  smoke.behaviors.contents[0].system.regionSpecialProperties[0].smoke.densityPercent = "100";
+  invalidateSmokeRegionIndex(globalThis.canvas.scene);
+  const opaqueZone = buildObserverDetectionZone(observer, { origin: inside, settings });
+  assert.notStrictEqual(opaqueZone, zone);
+  assert.equal(opaqueZone.offsets.some(({ j }) => j === 1), false);
+});
+
 test("weapon noise adds exact unattenuated distance beyond a darkness-shaped base zone", () => {
   installRectangleMock();
   globalThis.canvas = createLinearCanvas({
@@ -603,6 +637,32 @@ function createSettings(rangeFormula) {
       Object.freeze({ threshold: 0, penaltyPercent: 0 })
     ])
   });
+}
+
+function createSmokeRegion(id, densityPercent, { x, y, radius, bounds }) {
+  return {
+    id,
+    hidden: false,
+    elevation: { bottom: null, top: null },
+    shapes: [{ type: "circle", x, y, radius }],
+    object: { bounds },
+    behaviors: {
+      contents: [{
+        uuid: `Behavior.${id}`,
+        type: "fallout-maw.periodicDamage",
+        disabled: false,
+        system: {
+          regionSpecialProperties: [{
+            type: "smoke",
+            smoke: { thickness: "1", densityPercent: String(densityPercent) }
+          }],
+          durationSeconds: 0,
+          delaySeconds: 0
+        },
+        getFlag: () => ({ activateAt: 0, expiresAt: null })
+      }]
+    }
+  };
 }
 
 function installRectangleMock() {

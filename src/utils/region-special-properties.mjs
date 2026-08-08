@@ -1,25 +1,42 @@
 export const REGION_SPECIAL_PROPERTY_SMOKE = "smoke";
+export const REGION_SPECIAL_PROPERTY_PENDING = "pending";
 
 const DEFAULT_SMOKE_THICKNESS = "1";
 const DEFAULT_SMOKE_DENSITY_PERCENT = "50";
 
-/** Normalize the persisted area special-property rows and keep one smoke row. */
+/** Normalize persisted rows, retaining at most one selectable area property. */
 export function normalizeRegionSpecialProperties(value = []) {
   const rows = Array.isArray(value) ? value : Object.values(value ?? {});
   const smoke = rows.find(row => String(row?.type ?? "").trim() === REGION_SPECIAL_PROPERTY_SMOKE);
-  if (!smoke) return [];
+  const selected = smoke ?? rows.find(row => row && typeof row === "object");
+  if (!selected) return [];
+  const type = smoke ? REGION_SPECIAL_PROPERTY_SMOKE : REGION_SPECIAL_PROPERTY_PENDING;
   return [{
-    type: REGION_SPECIAL_PROPERTY_SMOKE,
+    type,
     smoke: {
-      thickness: normalizeScalar(smoke.smoke?.thickness, DEFAULT_SMOKE_THICKNESS),
-      densityPercent: normalizeScalar(smoke.smoke?.densityPercent, DEFAULT_SMOKE_DENSITY_PERCENT)
+      thickness: normalizeScalar(selected.smoke?.thickness, DEFAULT_SMOKE_THICKNESS),
+      densityPercent: normalizeScalar(selected.smoke?.densityPercent, DEFAULT_SMOKE_DENSITY_PERCENT)
     }
   }];
 }
 
+/** Create a complete row when it is added or its selected type changes. */
+export function createDefaultRegionSpecialPropertyData(type = REGION_SPECIAL_PROPERTY_PENDING, source = {}) {
+  const normalizedType = type === REGION_SPECIAL_PROPERTY_SMOKE
+    ? REGION_SPECIAL_PROPERTY_SMOKE
+    : REGION_SPECIAL_PROPERTY_PENDING;
+  return {
+    type: normalizedType,
+    smoke: {
+      thickness: normalizeScalar(source?.smoke?.thickness, DEFAULT_SMOKE_THICKNESS),
+      densityPercent: normalizeScalar(source?.smoke?.densityPercent, DEFAULT_SMOKE_DENSITY_PERCENT)
+    }
+  };
+}
+
 /** Resolve one area row into the compact runtime representation. */
 export function resolveRegionSpecialProperties(value = [], evaluate = defaultEvaluate) {
-  return normalizeRegionSpecialProperties(value).map(row => {
+  return normalizeRegionSpecialProperties(value).filter(row => row.type === REGION_SPECIAL_PROPERTY_SMOKE).map(row => {
     const thickness = clamp(Number(evaluate(row.smoke.thickness)), 0, 1, 1);
     const densityPercent = clamp(Number(evaluate(row.smoke.densityPercent)), 0, 100, 50);
     return {

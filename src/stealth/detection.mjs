@@ -1,4 +1,9 @@
 import { testObserverVisibilityBatch } from "../canvas/physical-los.mjs";
+import {
+  getSmokeRegionRevision,
+  getSmokeRegionsInBounds,
+  measureSmokePath
+} from "../canvas/smoke-vision.mjs";
 import { analyzeLightingPoint } from "./lighting.mjs";
 import {
   isStealthObserverIncapacitated,
@@ -103,6 +108,12 @@ export function buildObserverDetectionZone(observerToken, {
   const offsets = [];
   const radiusWithCell = maxPixels + (activeCanvas.grid.size / 2);
   const radiusSquared = radiusWithCell * radiusWithCell;
+  const smokeRegionCandidates = getSmokeRegionsInBounds({
+    x: center.x - radiusWithCell,
+    y: center.y - radiusWithCell,
+    width: radiusWithCell * 2,
+    height: radiusWithCell * 2
+  }, { elevation: center.elevation });
 
   for (let i = i0; i < i1; i += 1) {
     for (let j = j0; j < j1; j += 1) {
@@ -114,7 +125,8 @@ export function buildObserverDetectionZone(observerToken, {
       if (observerToken.checkCollision?.(point, { origin: center, type: "sight", mode: "any" })) continue;
       if (computeDetectionPathCost(observerToken, center, point, settings, {
         costLimit: maxRange,
-        sampleLimit: DETECTION_PREVIEW_PATH_SAMPLE_LIMIT
+        sampleLimit: DETECTION_PREVIEW_PATH_SAMPLE_LIMIT,
+        smokeRegionCandidates
       }) > maxRange) continue;
       offsets.push(offset);
     }
@@ -415,68 +427,10 @@ function computeDetectionPathReach(
   settings,
   { baseRange = 0, sampleLimit = Infinity } = {}
 ) {
-  const directDistance = measurePointSceneDistance(origin, destination);
-  const normalizedBaseRange = Math.max(0, Number(baseRange) || 0);
-  if (directDistance <= 0) {
-    return { cost: 0, directDistance: 0, baseReachDistance: 0 };
-  }
-
-  const unaidedSightRange = getObserverUnaidedSightRange(observerToken);
-  if (unaidedSightRange === Infinity || unaidedSightRange >= directDistance) {
-    return {
-      cost: directDistance,
-      directDistance,
-      baseReachDistance: Math.min(directDistance, normalizedBaseRange)
-    };
-  }
-
-  const activeCanvas = globalThis.canvas;
-  const stepPixels = Math.max(1, Number(activeCanvas?.grid?.size) || 100);
-  const exactSteps = Math.max(1, Math.ceil(sceneDistanceToPixels(directDistance) / stepPixels));
-  const normalizedSampleLimit = Number.isFinite(Number(sampleLimit))
-    ? Math.max(1, Math.floor(Number(sampleLimit)))
-    : Infinity;
-  const steps = Math.min(exactSteps, normalizedSampleLimit);
-  let consumed = 0;
-  let traveled = 0;
-  let baseReachDistance = normalizedBaseRange <= 0 ? 0 : null;
-  let last = origin;
-
-  const consume = (distance, costFactor) => {
-    if (distance <= 0) return;
-    const factor = Math.max(0.0001, Number(costFactor) || 1);
-    const segmentCost = distance * factor;
-    if (baseReachDistance === null && consumed + segmentCost >= normalizedBaseRange) {
-      baseReachDistance = traveled + ((normalizedBaseRange - consumed) / factor);
-    }
-    consumed += segmentCost;
-    traveled += distance;
-  };
-
-  for (let index = 1; index <= steps; index += 1) {
-    const ratio = index / steps;
-    const point = {
-      x: origin.x + ((destination.x - origin.x) * ratio),
-      y: origin.y + ((destination.y - origin.y) * ratio),
-      elevation: origin.elevation + ((destination.elevation - origin.elevation) * ratio)
-    };
-    const segmentDistance = measurePointSceneDistance(last, point);
-    const startDistance = measurePointSceneDistance(origin, last);
-    const endDistance = measurePointSceneDistance(origin, point);
-    const distanceDelta = Math.max(0.0001, endDistance - startDistance);
-    const unaidedRatio = clampNumber((unaidedSightRange - startDistance) / distanceDelta, 0, 1);
-    const unaidedDistance = segmentDistance * unaidedRatio;
-    const attenuatedDistance = Math.max(0, segmentDistance - unaidedDistance);
-    consume(unaidedDistance, 1);
-    if (attenuatedDistance > 0) {
-      const factor = getDetectionRangeFactor(analyzeLightingPoint(point).effectiveDarkness, settings);
-      consume(attenuatedDistance, 1 / Math.max(0.01, factor));
-    }
-    last = point;
-  }
-
-  if (baseReachDistance === null) baseReachDistance = directDistance;
-  return { cost: consumed, directDistance, baseReachDistance };
+  return measureDetectionPath(observerToken, origin, destination, settings, {
+    baseRange,
+    sampleLimit
+  });
 }
 
 export function computeDetectionPathCost(
@@ -484,13 +438,53 @@ export function computeDetectionPathCost(
   origin,
   destination,
   settings = getRuntimeStealthSettings(),
-  { costLimit = Infinity, sampleLimit = Infinity } = {}
+  { costLimit = Infinity, sampleLimit = Infinity, smokeRegionCandidates = null } = {}
 ) {
-  const activeCanvas = globalThis.canvas;
+  return measureDetectionPath(observerToken, origin, destination, settings, {
+    costLimit,
+    sampleLimit,
+    smokeRegionCandidates
+  }).cost;
+}
+
+function measureDetectionPath(
+  observerToken,
+  origin,
+  destination,
+  settings,
+  { baseRange = null, costLimit = Infinity, sampleLimit = Infinity, smokeRegionCandidates = null } = {}
+) {
   const directDistance = measurePointSceneDistance(origin, destination);
-  if (directDistance <= 0) return 0;
+  const normalizedBaseRange = baseRange === null ? null : Math.max(0, Number(baseRange) || 0);
+  if (directDistance <= 0) {
+    return { cost: 0, directDistance: 0, baseReachDistance: 0 };
+  }
+
+  const smokePath = measureSmokePath(origin, destination, {
+    elevation: origin.elevation === destination.elevation ? origin.elevation : null,
+    regionCandidates: smokeRegionCandidates
+  });
   const unaidedSightRange = getObserverUnaidedSightRange(observerToken);
-  if (unaidedSightRange === Infinity || unaidedSightRange >= directDistance) return directDistance;
+  const entirelyUnaided = unaidedSightRange === Infinity || unaidedSightRange >= directDistance;
+  if (!smokePath.hasSmoke && entirelyUnaided) {
+    return {
+      cost: directDistance,
+      directDistance,
+      baseReachDistance: normalizedBaseRange === null
+        ? directDistance
+        : Math.min(directDistance, normalizedBaseRange)
+    };
+  }
+
+  const minimumCost = directDistance + getSmokePathPenalty(smokePath);
+  if (normalizedBaseRange === null && entirelyUnaided) {
+    return { cost: minimumCost, directDistance, baseReachDistance: directDistance };
+  }
+  if (normalizedBaseRange === null && minimumCost > costLimit) {
+    return { cost: minimumCost, directDistance, baseReachDistance: directDistance };
+  }
+
+  const activeCanvas = globalThis.canvas;
   const stepPixels = Math.max(1, Number(activeCanvas?.grid?.size) || 100);
   // Authoritative gameplay keeps one sample per grid step. Only callers which
   // explicitly provide sampleLimit (the visual preview) use a coarse ceiling.
@@ -499,32 +493,101 @@ export function computeDetectionPathCost(
     ? Math.max(1, Math.floor(Number(sampleLimit)))
     : Infinity;
   const steps = Math.min(exactSteps, normalizedSampleLimit);
+  const pathRatios = getDetectionPathRatios(steps, smokePath);
   let consumed = 0;
-  let last = origin;
+  let traveled = 0;
+  let baseReachDistance = normalizedBaseRange !== null && normalizedBaseRange <= 0 ? 0 : null;
 
-  for (let index = 1; index <= steps; index += 1) {
-    const ratio = index / steps;
+  const consume = (distance, costFactor) => {
+    if (distance <= 0) return;
+    const factor = Number(costFactor);
+    if (!Number.isFinite(factor)) {
+      if (baseReachDistance === null) baseReachDistance = traveled;
+      consumed = Infinity;
+      traveled += distance;
+      return;
+    }
+    const normalizedFactor = Math.max(0.0001, factor || 1);
+    const segmentCost = distance * normalizedFactor;
+    if (
+      normalizedBaseRange !== null
+      && baseReachDistance === null
+      && consumed + segmentCost >= normalizedBaseRange
+    ) {
+      baseReachDistance = traveled + ((normalizedBaseRange - consumed) / normalizedFactor);
+    }
+    consumed += segmentCost;
+    traveled += distance;
+  };
+
+  for (let index = 1; index < pathRatios.length; index += 1) {
+    const previousRatio = pathRatios[index - 1];
+    const ratio = pathRatios[index];
+    const last = interpolatePathPoint(origin, destination, previousRatio);
     const point = {
       x: origin.x + ((destination.x - origin.x) * ratio),
       y: origin.y + ((destination.y - origin.y) * ratio),
       elevation: origin.elevation + ((destination.elevation - origin.elevation) * ratio)
     };
     const segmentDistance = measurePointSceneDistance(last, point);
-    const startDistance = measurePointSceneDistance(origin, last);
-    const endDistance = measurePointSceneDistance(origin, point);
+    const startDistance = directDistance * previousRatio;
+    const endDistance = directDistance * ratio;
     const distanceDelta = Math.max(0.0001, endDistance - startDistance);
-    const unaidedRatio = clampNumber((unaidedSightRange - startDistance) / distanceDelta, 0, 1);
+    const unaidedRatio = unaidedSightRange === Infinity
+      ? 1
+      : clampNumber((unaidedSightRange - startDistance) / distanceDelta, 0, 1);
     const unaidedDistance = segmentDistance * unaidedRatio;
     const attenuatedDistance = Math.max(0, segmentDistance - unaidedDistance);
-    consumed += unaidedDistance;
+    const smokeCostFactor = getSmokeCostFactor(smokePath, previousRatio, ratio, segmentDistance);
+    consume(unaidedDistance, 1 + smokeCostFactor);
     if (attenuatedDistance > 0) {
       const factor = getDetectionRangeFactor(analyzeLightingPoint(point).effectiveDarkness, settings);
-      consumed += attenuatedDistance / Math.max(0.01, factor);
+      consume(attenuatedDistance, (1 / Math.max(0.01, factor)) + smokeCostFactor);
     }
-    if (consumed > costLimit) return consumed;
-    last = point;
+    if (consumed > costLimit && normalizedBaseRange === null) break;
+    if (consumed === Infinity) break;
   }
-  return consumed;
+
+  if (baseReachDistance === null) baseReachDistance = directDistance;
+  return { cost: consumed, directDistance, baseReachDistance };
+}
+
+function getDetectionPathRatios(steps, smokePath) {
+  const ratios = new Set([0, 1]);
+  for (let index = 1; index < steps; index += 1) ratios.add(index / steps);
+  if (smokePath.hasSmoke) {
+    for (const segment of smokePath.segments) {
+      ratios.add(segment.start);
+      ratios.add(segment.end);
+    }
+  }
+  return [...ratios].sort((left, right) => left - right);
+}
+
+function getSmokePathPenalty(smokePath) {
+  if (!smokePath.hasSmoke) return 0;
+  if (smokePath.cost === Infinity) return Infinity;
+  return pixelsToSceneDistance(Math.max(0, smokePath.cost - smokePath.length));
+}
+
+function getSmokeCostFactor(smokePath, startRatio, endRatio, segmentDistance) {
+  if (!smokePath.hasSmoke || segmentDistance <= 0) return 0;
+  const midpoint = (startRatio + endRatio) / 2;
+  const retained = smokePath.segments.find(segment => (
+    midpoint >= segment.start - DETECTION_DISTANCE_EPSILON
+    && midpoint <= segment.end + DETECTION_DISTANCE_EPSILON
+  ))?.retained ?? 1;
+  if (retained <= DETECTION_DISTANCE_EPSILON) return Infinity;
+  const horizontalDistance = pixelsToSceneDistance(smokePath.length * (endRatio - startRatio));
+  return (horizontalDistance * ((1 / retained) - 1)) / segmentDistance;
+}
+
+function interpolatePathPoint(origin, destination, ratio) {
+  return {
+    x: origin.x + ((destination.x - origin.x) * ratio),
+    y: origin.y + ((destination.y - origin.y) * ratio),
+    elevation: origin.elevation + ((destination.elevation - origin.elevation) * ratio)
+  };
 }
 
 function measurePointSceneDistance(left = {}, right = {}) {
@@ -618,6 +681,7 @@ function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
     normalizeExactCacheNumber(origin.elevation),
     Math.round(maxRange * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
+    getSmokeRegionRevision(activeCanvas?.scene),
     getSettingsSignature(settings)
   ].join(":");
 }
@@ -640,6 +704,7 @@ function getDetectionPointCacheKey(observerToken, origin, point, settings, baseR
     Math.round(baseRange * 100),
     Math.round(rangeBonus * 100),
     normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
+    getSmokeRegionRevision(activeCanvas?.scene),
     getSettingsSignature(settings)
   ].join(":");
 }

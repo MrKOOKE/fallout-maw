@@ -62,7 +62,8 @@ import {
   prepareActiveUseOperation
 } from "../abilities/active-use-runtime.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
-import { toInteger } from "../utils/numbers.mjs";
+import { toInteger, toOptionalFiniteNumber } from "../utils/numbers.mjs";
+import { getSmokeSpecialProperty } from "../utils/region-special-properties.mjs";
 import {
   getActorInventoryGridDimensions
 } from "../utils/actor-display-data.mjs";
@@ -5286,9 +5287,7 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, pr
   const delaySeconds = Math.max(0, toInteger(system.delaySeconds));
   const durationSeconds = Math.max(0, toInteger(system.durationSeconds));
   const hasRadiusWork = Math.abs(Number(system.radiusDeltaMeters) || 0) > 0;
-  const hasRegionSpecialProperties = (Array.isArray(system.regionSpecialProperties)
-    ? system.regionSpecialProperties
-    : Object.values(system.regionSpecialProperties ?? {})).length > 0;
+  const hasRegionSpecialProperties = Boolean(getSmokeSpecialProperty(system.regionSpecialProperties));
   if (!entries.length && !hasRadiusWork && durationSeconds <= 0
     && (!hasRegionSpecialProperties || delaySeconds <= 0)) return null;
   const state = await getRegionPeriodicDamageState(behavior, {
@@ -5300,7 +5299,7 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, pr
   });
   if (!state) return null;
 
-  const expiresAt = Number(state.expiresAt);
+  const expiresAt = toOptionalFiniteNumber(state.expiresAt);
   if (!entries.length && !hasRadiusWork) {
     if (!Number.isFinite(expiresAt) || now < expiresAt) return null;
     return {

@@ -1185,7 +1185,7 @@ function weaponDamageEntryField() {
 
 function regionSpecialPropertyField() {
   return new SchemaField({
-    type: new StringField({ required: true, blank: false, choices: ["smoke"], initial: "smoke" }),
+    type: new StringField({ required: true, blank: false, choices: ["pending", "smoke"], initial: "pending" }),
     smoke: new SchemaField({
       thickness: new StringField({ required: true, blank: true, initial: "1" }),
       densityPercent: new StringField({ required: true, blank: true, initial: "50" })

@@ -2,7 +2,12 @@ import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getDamageTypeSettings, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
-import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
+import {
+  REGION_SPECIAL_PROPERTY_PENDING,
+  REGION_SPECIAL_PROPERTY_SMOKE,
+  createDefaultRegionSpecialPropertyData,
+  normalizeRegionSpecialProperties
+} from "../utils/region-special-properties.mjs";
 import {
   ABILITY_ACQUISITION_ABILITY_MODES,
   ABILITY_ACQUISITION_CONDITION_TYPES,
@@ -404,7 +409,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       select.addEventListener("change", event => this.#onActiveApplicationTargetModeChange(event));
     });
     this.element?.querySelectorAll?.(
-      "[data-field='attack.targeting.mode'], [data-field='attack.specialProperty.type'], [data-field='attack.requirement.type'], [data-field='attack.hitTrial.subject'], [data-field='constructDamageAmountMode']"
+      "[data-field='attack.targeting.mode'], [data-field='attack.area.regionSpecialProperty.type'], [data-field='attack.specialProperty.type'], [data-field='attack.requirement.type'], [data-field='attack.hitTrial.subject'], [data-field='constructDamageAmountMode']"
     )?.forEach(select => {
       select.addEventListener("change", event => this.#onAttackSettingsStructureChange(event));
     });
@@ -1225,7 +1230,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     if (!abilityFunction) return this.#persist({ render: true, sync: false });
     const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
     if (!normalizeRegionSpecialProperties(settings.area.regionSpecialProperties).length) {
-      settings.area.regionSpecialProperties = [{ type: "smoke", smoke: { thickness: "1", densityPercent: "50" } }];
+      settings.area.regionSpecialProperties = [createDefaultRegionSpecialPropertyData()];
     }
     abilityFunction.attackSettings = settings;
     return this.#persist({ render: true, sync: false });
@@ -2218,13 +2223,14 @@ function readAttackRegionDamageRows(row) {
 function readAttackRegionSpecialProperties(row, previous = []) {
   const specialRow = row?.querySelector("[data-attack-region-special-property-row]");
   if (!specialRow) return normalizeRegionSpecialProperties(previous);
-  return [{
-    type: "smoke",
+  const type = specialRow.querySelector("[data-field='attack.area.regionSpecialProperty.type']")?.value
+    ?? REGION_SPECIAL_PROPERTY_PENDING;
+  return [createDefaultRegionSpecialPropertyData(type, {
     smoke: {
       thickness: specialRow.querySelector("[data-field='attack.area.regionSpecialProperty.thickness']")?.value ?? "1",
       densityPercent: specialRow.querySelector("[data-field='attack.area.regionSpecialProperty.densityPercent']")?.value ?? "50"
     }
-  }];
+  })];
 }
 
 function readAttackResourceCostRows(row) {
@@ -3668,7 +3674,7 @@ function prepareAttackActionSettingsForDisplay(settings = {}, constructs = []) {
         index,
         choices: buildAttackDamageTypeChoices(entry.damageTypeKey, damageTypes)
       }))
-      ,regionSpecialProperties: normalizeRegionSpecialProperties(normalized.area?.regionSpecialProperties).map((property, index) => ({ ...property, index }))
+      ,regionSpecialProperties: buildAttackRegionSpecialPropertyRows(normalized.area?.regionSpecialProperties)
     },
     specialProperties: prepareAttackSpecialPropertiesForDisplay(
       normalized.specialProperties,
@@ -3682,6 +3688,24 @@ function prepareAttackActionSettingsForDisplay(settings = {}, constructs = []) {
       resourceChoices: buildAttackConfiguredResourceChoices(resourceCosts, entry.resourceKey)
     }))
   };
+}
+
+function buildAttackRegionSpecialPropertyRows(properties = []) {
+  return normalizeRegionSpecialProperties(properties).map((property, index) => ({
+    ...property,
+    index,
+    isSmoke: property.type === REGION_SPECIAL_PROPERTY_SMOKE,
+    choices: [
+      {
+        value: REGION_SPECIAL_PROPERTY_PENDING,
+        label: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.ChooseSpecialProperty")
+      },
+      {
+        value: REGION_SPECIAL_PROPERTY_SMOKE,
+        label: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke")
+      }
+    ].map(choice => ({ ...choice, selected: choice.value === property.type }))
+  }));
 }
 
 function buildAttackHitTrialRows(value = [], constructs = []) {
