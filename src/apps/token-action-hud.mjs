@@ -4756,11 +4756,19 @@ function normalizeDamageSourceVolleySignature(volley = {}) {
     String(volley?.damageRadius ?? "0"),
     String(volley?.regionRadius ?? "0"),
     regionDamage,
+    normalizeRegionSpecialPropertySignature(volley?.regionSpecialProperties),
     String(volley?.regionDurationSeconds ?? "0"),
     String(volley?.regionDelaySeconds ?? "0"),
     String(volley?.regionRadiusDeltaMeters ?? "0"),
     String(volley?.explosionAnimationKey ?? "")
   ].join(";");
+}
+
+function normalizeRegionSpecialPropertySignature(entries = []) {
+  return (Array.isArray(entries) ? entries : Object.values(entries ?? {}))
+    .filter(entry => String(entry?.type ?? "").trim() === "smoke")
+    .map(entry => `smoke:${String(entry?.smoke?.thickness ?? "1")}:${String(entry?.smoke?.densityPercent ?? "50")}`)
+    .at(0) ?? "";
 }
 
 function createActorMagazineSourceReturnPlan(actor, sourceItem, quantity) {

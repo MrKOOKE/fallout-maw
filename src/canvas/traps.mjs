@@ -43,6 +43,7 @@ import {
   startCanvasTargetSelectionSession
 } from "./target-selection-lifecycle.mjs";
 import { changedDataIntersectsPaths } from "../utils/document-change-paths.mjs";
+import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
 
 const TRAP_SOCKET = `system.${SYSTEM_ID}`;
 const TRAP_SOCKET_SCOPE = "fallout-maw.traps";
@@ -2756,12 +2757,13 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
       amount: String(entry?.amount ?? "0").trim() || "0"
     }))
     .filter(entry => entry.damageTypeKey && isFormulaTextConfigured(entry.amount));
-  if (!radiusPixels || !damageEntries.length) return null;
+  const durationSeconds = Math.max(0, toInteger(trapData.effect.regionDurationSeconds));
+  if (!radiusPixels || durationSeconds <= 0) return null;
 
   const levelId = getRegionRestrictionLevelId(scene);
   const created = await scene.createEmbeddedDocuments("Region", [{
     name: `${tile.name}: область`,
-    color: "#dd8431",
+    color: damageEntries.length ? "#dd8431" : "#8a8a8a",
     shapes: [{
       type: "circle",
       x: center.x,
@@ -2780,9 +2782,10 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
       type: PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE,
       system: {
         damageEntries,
+        regionSpecialProperties: normalizeRegionSpecialProperties(trapData.effect.regionSpecialProperties),
         intervalSeconds: DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS,
         delaySeconds: Math.max(0, toInteger(trapData.effect.regionDelaySeconds)),
-        durationSeconds: Math.max(0, toInteger(trapData.effect.regionDurationSeconds)),
+        durationSeconds,
         radiusDeltaMeters: Number(trapData.effect.regionRadiusDeltaMeters) || 0,
         deleteRegionWhenExpired: true
       }
@@ -3381,6 +3384,7 @@ function normalizeTrapData(source = {}) {
       damageTypes: normalizeDamageTypeEntries(data.effect?.damageTypes, data.effect?.damageTypeKey),
       regionRadius: String(data.effect?.regionRadius ?? "0").trim() || "0",
       regionDamageEntries: normalizeRegionDamageEntries(data.effect?.regionDamageEntries),
+      regionSpecialProperties: normalizeRegionSpecialProperties(data.effect?.regionSpecialProperties),
       regionDurationSeconds: String(data.effect?.regionDurationSeconds ?? "0").trim() || "0",
       regionDelaySeconds: String(data.effect?.regionDelaySeconds ?? "0").trim() || "0",
       regionRadiusDeltaMeters: String(data.effect?.regionRadiusDeltaMeters ?? "0").trim() || "0"

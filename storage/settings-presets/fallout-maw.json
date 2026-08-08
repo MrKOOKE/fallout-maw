@@ -4,8 +4,8 @@
   "systemId": "fallout-maw",
   "id": "fallout-maw",
   "name": "Fallout-MaW",
-  "revision": "4413c0bdf1fb25961b9806628c595baf7fe8f9db51e5bbe2adf41b72fd3336e8",
-  "updatedAt": "2026-08-08T12:54:11.472Z",
+  "revision": "58aae7161f00f9e69c9c96c2d8f66bb60e119fdc4ee883d1cde5fe6d19fe48b2",
+  "updatedAt": "2026-08-08T14:15:49.601Z",
   "systemVersion": "0.2.1",
   "seedPending": false,
   "deleted": false,
@@ -111924,7 +111924,7 @@
         "resetEdgeModeAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetResultAfterUse": false,
-        "resultMode": "standard",
+        "resultMode": "success",
         "skillModifier": 0
       }
     },

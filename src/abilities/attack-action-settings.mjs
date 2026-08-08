@@ -1,3 +1,5 @@
+import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
+
 const ATTACK_ACTION_TARGETING_MODES = new Set(["cone", "selectedTargets", "area"]);
 const ATTACK_ACTION_SPECIAL_PROPERTY_TYPES = new Set([
   "pending",
@@ -199,6 +201,7 @@ function normalizeArea(value = {}) {
       damageTypeKey: normalizeText(entry?.damageTypeKey, "firearm"),
       amount: normalizeFormula(entry?.amount, "0")
     })),
+    regionSpecialProperties: normalizeRegionSpecialProperties(source.regionSpecialProperties),
     regionDurationSeconds: normalizeFormula(source.regionDurationSeconds, "0"),
     regionDelaySeconds: normalizeFormula(source.regionDelaySeconds, "0"),
     regionRadiusDeltaMeters: normalizeFormula(source.regionRadiusDeltaMeters, "0"),

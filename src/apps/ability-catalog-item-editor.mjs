@@ -2,6 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getDamageTypeSettings, getItemCategorySettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
+import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
 import {
   ABILITY_ACQUISITION_ABILITY_MODES,
   ABILITY_ACQUISITION_CONDITION_TYPES,
@@ -235,6 +236,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteAttackResourceCost: this.#onDeleteAttackResourceCost,
       addAttackRegionDamage: this.#onAddAttackRegionDamage,
       deleteAttackRegionDamage: this.#onDeleteAttackRegionDamage,
+      addAttackRegionSpecialProperty: this.#onAddAttackRegionSpecialProperty,
+      deleteAttackRegionSpecialProperty: this.#onDeleteAttackRegionSpecialProperty,
       addAttackSpecialProperty: this.#onAddAttackSpecialProperty,
       deleteAttackSpecialProperty: this.#onDeleteAttackSpecialProperty,
       addAttackRequirement: this.#onAddAttackRequirement,
@@ -1215,6 +1218,30 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  static #onAddAttackRegionSpecialProperty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    if (!normalizeRegionSpecialProperties(settings.area.regionSpecialProperties).length) {
+      settings.area.regionSpecialProperties = [{ type: "smoke", smoke: { thickness: "1", densityPercent: "50" } }];
+    }
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteAttackRegionSpecialProperty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = findAttackFunctionByTarget(this.ability, target);
+    if (!abilityFunction) return this.#persist({ render: true, sync: false });
+    const settings = normalizeAttackActionSettings(abilityFunction.attackSettings);
+    settings.area.regionSpecialProperties = [];
+    abilityFunction.attackSettings = settings;
+    return this.#persist({ render: true, sync: false });
+  }
+
   static #onAddAttackSpecialProperty(event, target) {
     event.preventDefault();
     this.#syncFromForm();
@@ -2142,6 +2169,7 @@ function readAttackActionSettings(row, previousValue = {}, functionType = row?.d
       damageRadius: getValue("attack.area.damageRadius", previous.area.damageRadius),
       regionRadius: getValue("attack.area.regionRadius", previous.area.regionRadius),
       regionDamageEntries: readAttackRegionDamageRows(row),
+      regionSpecialProperties: readAttackRegionSpecialProperties(row, previous.area.regionSpecialProperties),
       regionDurationSeconds: getValue("attack.area.regionDurationSeconds", previous.area.regionDurationSeconds),
       regionDelaySeconds: getValue("attack.area.regionDelaySeconds", previous.area.regionDelaySeconds),
       regionRadiusDeltaMeters: getValue("attack.area.regionRadiusDeltaMeters", previous.area.regionRadiusDeltaMeters),
@@ -2185,6 +2213,18 @@ function readAttackRegionDamageRows(row) {
     damageTypeKey: String(damageRow.querySelector("[data-field='attack.area.regionDamage.damageTypeKey']")?.value ?? "").trim(),
     amount: damageRow.querySelector("[data-field='attack.area.regionDamage.amount']")?.value ?? "0"
   })).filter(entry => entry.damageTypeKey);
+}
+
+function readAttackRegionSpecialProperties(row, previous = []) {
+  const specialRow = row?.querySelector("[data-attack-region-special-property-row]");
+  if (!specialRow) return normalizeRegionSpecialProperties(previous);
+  return [{
+    type: "smoke",
+    smoke: {
+      thickness: specialRow.querySelector("[data-field='attack.area.regionSpecialProperty.thickness']")?.value ?? "1",
+      densityPercent: specialRow.querySelector("[data-field='attack.area.regionSpecialProperty.densityPercent']")?.value ?? "50"
+    }
+  }];
 }
 
 function readAttackResourceCostRows(row) {
@@ -3628,6 +3668,7 @@ function prepareAttackActionSettingsForDisplay(settings = {}, constructs = []) {
         index,
         choices: buildAttackDamageTypeChoices(entry.damageTypeKey, damageTypes)
       }))
+      ,regionSpecialProperties: normalizeRegionSpecialProperties(normalized.area?.regionSpecialProperties).map((property, index) => ({ ...property, index }))
     },
     specialProperties: prepareAttackSpecialPropertiesForDisplay(
       normalized.specialProperties,

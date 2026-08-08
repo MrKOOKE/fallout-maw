@@ -5281,11 +5281,16 @@ async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
 async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, previousTime = now) {
   const system = behavior.system ?? {};
   const entries = getRegionPeriodicDamageEntries(system);
-  if (!entries.length) return null;
 
   const intervalSeconds = Math.max(1, toInteger(system.intervalSeconds) || ROUND_SECONDS);
   const delaySeconds = Math.max(0, toInteger(system.delaySeconds));
   const durationSeconds = Math.max(0, toInteger(system.durationSeconds));
+  const hasRadiusWork = Math.abs(Number(system.radiusDeltaMeters) || 0) > 0;
+  const hasRegionSpecialProperties = (Array.isArray(system.regionSpecialProperties)
+    ? system.regionSpecialProperties
+    : Object.values(system.regionSpecialProperties ?? {})).length > 0;
+  if (!entries.length && !hasRadiusWork && durationSeconds <= 0
+    && (!hasRegionSpecialProperties || delaySeconds <= 0)) return null;
   const state = await getRegionPeriodicDamageState(behavior, {
     now,
     previousTime,
@@ -5296,7 +5301,19 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, pr
   if (!state) return null;
 
   const expiresAt = Number(state.expiresAt);
-  const oneShotDelayed = delaySeconds > 0 && durationSeconds <= 0;
+  if (!entries.length && !hasRadiusWork) {
+    if (!Number.isFinite(expiresAt) || now < expiresAt) return null;
+    return {
+      region,
+      behavior,
+      system,
+      state,
+      nextTickTime: Number(state.nextTickTime),
+      dueTicks: 0,
+      shouldExpire: true,
+      requests: []
+    };
+  }
   let nextTickTime = Number(state.nextTickTime);
   if (!Number.isFinite(nextTickTime)) nextTickTime = now + intervalSeconds;
 
@@ -5304,12 +5321,10 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, pr
   while (now >= nextTickTime && (!Number.isFinite(expiresAt) || nextTickTime <= expiresAt)) {
     tickTimes.push(nextTickTime);
     nextTickTime += intervalSeconds;
-    if (oneShotDelayed) break;
   }
   const dueTicks = tickTimes.length;
 
-  const shouldExpire = oneShotDelayed && dueTicks > 0
-    || (Number.isFinite(expiresAt) && now >= expiresAt);
+  const shouldExpire = Number.isFinite(expiresAt) && now >= expiresAt;
   if (!dueTicks && !shouldExpire) return null;
 
   return {

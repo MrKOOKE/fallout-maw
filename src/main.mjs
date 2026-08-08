@@ -15,6 +15,7 @@ import {
   registerPeriodicDamageRegionHooks,
   syncPeriodicDamageRegionEffects
 } from "./canvas/periodic-damage-regions.mjs";
+import { registerSmokeVisionHooks } from "./canvas/smoke-vision.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
@@ -186,6 +187,7 @@ Hooks.once("init", () => {
   registerMovementInterruptionHooks();
   registerCanvasTargetSelectionLifecycleHooks();
   registerPeriodicDamageRegionHooks();
+  registerSmokeVisionHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerReactionResourceHooks();

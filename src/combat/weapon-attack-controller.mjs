@@ -72,6 +72,7 @@ import {
 } from "./reaction-resources.mjs";
 import { applyAttackActionPointMovementLoss } from "./attack-action-point-movement-loss.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { normalizeRegionSpecialProperties, resolveRegionSpecialProperties } from "../utils/region-special-properties.mjs";
 import {
   applySkillBonusPercent,
   getSkillValueBeforePercent
@@ -7505,6 +7506,7 @@ export class WeaponAttackController {
       radiusPixels: metersToPixels(settings.radiusMeters),
       color: getVolleyRegionColor(settings.damageEntries),
       damageEntries: settings.damageEntries,
+      regionSpecialProperties: settings.regionSpecialProperties,
       delaySeconds: 0,
       durationSeconds: settings.durationSeconds,
       radiusDeltaMeters: settings.radiusDeltaMeters
@@ -8787,6 +8789,9 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
       ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
       : [],
+    regionSpecialProperties: Array.isArray(sourceVolley?.regionSpecialProperties)
+      ? foundry.utils.deepClone(sourceVolley.regionSpecialProperties)
+      : [],
     regionDurationSeconds: normalizeFormulaText(sourceVolley?.regionDurationSeconds),
     regionDelaySeconds: normalizeFormulaText(sourceVolley?.regionDelaySeconds),
     regionRadiusDeltaMeters: normalizeFormulaText(sourceVolley?.regionRadiusDeltaMeters),
@@ -9178,15 +9183,16 @@ async function createVolleyDamageRegionNow(regionData = {}) {
       amount: String(entry?.amount ?? "0").trim() || "0"
     }))
     .filter(entry => entry.damageTypeKey && isFormulaTextConfigured(entry.amount));
-  if (!radiusPixels || !damageEntries.length) return null;
+  if (!radiusPixels) return null;
 
   const durationSeconds = Math.max(0, toInteger(regionData.durationSeconds));
   const delaySeconds = Math.max(0, toInteger(regionData.delaySeconds));
+  if (durationSeconds <= 0) return null;
   const levelId = getRegionRestrictionLevelId(scene);
 
   const created = await scene.createEmbeddedDocuments("Region", [{
     name: String(regionData.name ?? "").trim() || game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
-    color: String(regionData.color ?? "#dd8431"),
+    color: String(regionData.color ?? (damageEntries.length ? "#dd8431" : "#8a8a8a")),
     shapes: [{
       type: "circle",
       x: center.x,
@@ -9205,6 +9211,7 @@ async function createVolleyDamageRegionNow(regionData = {}) {
       type: PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE,
       system: {
         damageEntries,
+        regionSpecialProperties: normalizeRegionSpecialProperties(regionData.regionSpecialProperties),
         intervalSeconds: DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS,
         delaySeconds,
         durationSeconds,
@@ -12452,6 +12459,7 @@ function buildDelayedVolleyExplosionRegionRequest({
       radiusPixels: metersToPixels(regionSettings.radiusMeters),
       color: getVolleyRegionColor(regionSettings.damageEntries),
       damageEntries: regionSettings.damageEntries,
+      regionSpecialProperties: regionSettings.regionSpecialProperties,
       durationSeconds: regionSettings.durationSeconds,
       radiusDeltaMeters: regionSettings.radiusDeltaMeters
     }
@@ -12563,6 +12571,23 @@ function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
     context: "volley region radius"
   });
   const damageEntries = getVolleyRegionDamageEntries(volley, weapon);
+  const actor = getWeaponOwnerActor(weapon);
+  const evaluateSmokeFormula = value => {
+    const direct = Number(value);
+    if (Number.isFinite(direct)) return direct;
+    try {
+      return evaluateFormula(String(value ?? "0"), buildActorFormulaData(actor));
+    } catch (_error) {
+      // Keep the established evaluator and its safe fallback for unsupported references.
+    }
+    return weapon?.type === "ability"
+      ? evaluateAbilityAttackFormula(value, actor, { minimum: 0, context: "volley smoke" })
+      : evaluateActorFormula(value, actor, { minimum: 0, context: "volley smoke" });
+  };
+  const regionSpecialProperties = resolveRegionSpecialProperties(
+    volley.regionSpecialProperties,
+    evaluateSmokeFormula
+  );
   const durationSeconds = evaluateWeaponFormula(weapon, volley.regionDurationSeconds, {
     minimum: 0,
     context: "volley region duration"
@@ -12571,9 +12596,10 @@ function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
     context: "volley region radius delta"
   });
   return {
-    enabled: radiusMeters > 0 && damageEntries.length > 0 && durationSeconds > 0,
+    enabled: radiusMeters > 0 && durationSeconds > 0,
     radiusMeters,
     damageEntries,
+    regionSpecialProperties,
     durationSeconds,
     radiusDeltaMeters
   };
@@ -12599,6 +12625,7 @@ function getVolleyRegionDamageEntries(volley = {}, weapon = null) {
 }
 
 function getVolleyRegionColor(damageEntries = []) {
+  if (!damageEntries.length) return "#8a8a8a";
   const damageTypes = getDamageTypeSettings();
   const dominant = [...damageEntries]
     .sort((left, right) => (Number(right.amount) || 0) - (Number(left.amount) || 0))

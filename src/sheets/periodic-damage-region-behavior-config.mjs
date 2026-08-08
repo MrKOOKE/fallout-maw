@@ -3,6 +3,7 @@ import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
 
 export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.sheets.RegionBehaviorConfig {
   static DEFAULT_OPTIONS = foundry.utils.mergeObject(super.DEFAULT_OPTIONS, {
@@ -10,7 +11,9 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     position: { width: 660 },
     actions: {
       addDamageEntry: this.#onAddDamageEntry,
-      deleteDamageEntry: this.#onDeleteDamageEntry
+      deleteDamageEntry: this.#onDeleteDamageEntry,
+      addRegionSpecialProperty: this.#onAddRegionSpecialProperty,
+      deleteRegionSpecialProperty: this.#onDeleteRegionSpecialProperty
     }
   }, { inplace: false });
 
@@ -30,6 +33,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const system = source.system ?? {};
     const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const damageEntries = normalizeDamageEntries(system.damageEntries);
+    const regionSpecialProperties = normalizeRegionSpecialProperties(system.regionSpecialProperties);
 
     return {
       ...context,
@@ -41,6 +45,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
         index,
         damageTypeChoices: buildDamageTypeChoices(damageTypes, entry.damageTypeKey)
       })),
+      regionSpecialProperties: regionSpecialProperties.map((property, index) => ({ ...property, index })),
       buttons: this._getButtons()
     };
   }
@@ -57,6 +62,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const data = foundry.utils.expandObject(formData.object ?? {});
     const system = data.system ?? {};
     system.damageEntries = normalizeDamageEntries(system.damageEntries);
+    system.regionSpecialProperties = normalizeRegionSpecialProperties(system.regionSpecialProperties);
     system.intervalSeconds = Math.max(1, toInteger(system.intervalSeconds) || 6);
     system.delaySeconds = Math.max(0, toInteger(system.delaySeconds));
     system.durationSeconds = Math.max(0, toInteger(system.durationSeconds));
@@ -87,6 +93,22 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     this.#renderDamageEntries(entries);
   }
 
+  static async #onAddRegionSpecialProperty(event) {
+    event.preventDefault();
+    const current = normalizeRegionSpecialProperties(this.#getFormRegionSpecialProperties());
+    if (!current.length) current.push({ type: "smoke", smoke: { thickness: "1", densityPercent: "50" } });
+    this.#renderRegionSpecialProperties(current);
+  }
+
+  static async #onDeleteRegionSpecialProperty(event) {
+    event.preventDefault();
+    const row = event.target.closest("[data-region-special-property-index]");
+    const index = Number(row?.dataset.regionSpecialPropertyIndex);
+    const current = normalizeRegionSpecialProperties(this.#getFormRegionSpecialProperties());
+    if (Number.isInteger(index) && index >= 0) current.splice(index, 1);
+    this.#renderRegionSpecialProperties(current);
+  }
+
   #getFormDamageEntries() {
     const formData = new foundry.applications.ux.FormDataExtended(this.form);
     const data = foundry.utils.expandObject(formData.object ?? {});
@@ -104,6 +126,20 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings()
     });
+  }
+
+  #getFormRegionSpecialProperties() {
+    const formData = new foundry.applications.ux.FormDataExtended(this.form);
+    const data = foundry.utils.expandObject(formData.object ?? {});
+    return data.system?.regionSpecialProperties;
+  }
+
+  #renderRegionSpecialProperties(properties = []) {
+    const container = this.form?.querySelector(".fallout-maw-region-special-property-list");
+    if (!container) return;
+    container.innerHTML = properties.length
+      ? properties.map((property, index) => renderRegionSpecialPropertyRow(property, index)).join("")
+      : `<p class="fallout-maw-empty-list">${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.NoSpecialProperties"))}</p>`;
   }
 }
 
@@ -147,6 +183,17 @@ function renderDamageEntryRow(entry, index, damageTypes = []) {
 
 function normalizeDamageFormula(value) {
   return String(value ?? "0").trim() || "0";
+}
+
+function renderRegionSpecialPropertyRow(property, index) {
+  return `
+    <div class="fallout-maw-settings-row fallout-maw-region-special-property-row" data-region-special-property-index="${index}">
+      <span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Smoke"))}</span>
+      <label><span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeThickness"))}</span><input type="number" min="0" max="1" step="0.01" name="system.regionSpecialProperties.${index}.smoke.thickness" value="${escapeHtml(property.smoke?.thickness ?? "1")}"></label>
+      <label><span>${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.SmokeDensity"))}</span><input type="number" min="0" max="100" step="1" name="system.regionSpecialProperties.${index}.smoke.densityPercent" value="${escapeHtml(property.smoke?.densityPercent ?? "50")}"></label>
+      <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteRegionSpecialProperty" title="${escapeHtml(game.i18n.localize("FALLOUTMAW.Common.Delete"))}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+  `;
 }
 
 function escapeHtml(value) {

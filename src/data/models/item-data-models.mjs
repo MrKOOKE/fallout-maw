@@ -230,6 +230,7 @@ function attackActionSettingsField(options = {}) {
       damageRadius: new StringField({ required: true, blank: true, initial: "0" }),
       regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
       regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+      regionSpecialProperties: new ArrayField(regionSpecialPropertyField(), { required: true, initial: [] }),
       regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
       regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
       regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
@@ -754,6 +755,7 @@ function damageSourceVolleyField() {
     damageRadius: new StringField({ required: true, blank: true, initial: "0" }),
     regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
     regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+    regionSpecialProperties: new ArrayField(regionSpecialPropertyField(), { required: true, initial: [] }),
     regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
     regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
     regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
@@ -807,6 +809,7 @@ function trapFunctionField(options = {}) {
       damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
       regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
       regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+      regionSpecialProperties: new ArrayField(regionSpecialPropertyField(), { required: true, initial: [] }),
       regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
       regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
       regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" })
@@ -888,6 +891,7 @@ function weaponFunctionField({ named = false, fieldOptions = {} } = {}) {
       damageRadius: new StringField({ required: true, blank: true, initial: "0" }),
       regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
       regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+      regionSpecialProperties: new ArrayField(regionSpecialPropertyField(), { required: true, initial: [] }),
       regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
       regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
       regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
@@ -1176,6 +1180,16 @@ function weaponDamageEntryField() {
   return new SchemaField({
     damageTypeKey: new StringField({ required: true, blank: true, initial: "firearm" }),
     amount: new StringField({ required: true, blank: true, initial: "0" })
+  });
+}
+
+function regionSpecialPropertyField() {
+  return new SchemaField({
+    type: new StringField({ required: true, blank: false, choices: ["smoke"], initial: "smoke" }),
+    smoke: new SchemaField({
+      thickness: new StringField({ required: true, blank: true, initial: "1" }),
+      densityPercent: new StringField({ required: true, blank: true, initial: "50" })
+    })
   });
 }
 

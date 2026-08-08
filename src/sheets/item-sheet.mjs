@@ -36,6 +36,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { reconcileWeaponResourceCostReferences } from "../combat/weapon-resource-cost-references.mjs";
+import { normalizeRegionSpecialProperties } from "../utils/region-special-properties.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   computeContainerSpecialGridBaseAnchorSeed,
@@ -624,6 +625,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         specialProperties: buildWeaponSpecialPropertyRowsForData(item.system?.functions?.damageSource)
       },
       damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
+      damageSourceVolleyRegionSpecialProperties: buildRegionSpecialPropertyRows(item.system?.functions?.damageSource?.volley?.regionSpecialProperties),
       energyClassChoices: buildEnergyClassChoices(item.system?.functions?.energySource?.class),
       energyConsumerInstalledSource: getEnergyConsumerInstalledSourceRow(item.system?.functions?.energyConsumer),
       energyConsumerSourceItems: buildEnergyConsumerSourceItems(item.system?.functions?.energyConsumer),
@@ -649,6 +651,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       trapDisarmClassChoices: buildToolClassChoices(item.system?.functions?.trap?.disarm?.toolClass ?? "D"),
       trapDamageTypeRows: buildWeaponDamageTypeRowsForData(item.system?.functions?.trap?.effect ?? {}, damageTypeSettings),
       trapRegionDamageRows: buildVolleyRegionDamageRowsForData(item.system?.functions?.trap?.effect?.regionDamageEntries, damageTypeSettings),
+      trapRegionSpecialProperties: buildRegionSpecialPropertyRows(item.system?.functions?.trap?.effect?.regionSpecialProperties),
       lightSourceResourceCosts: buildLightSourceResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction),
       firstAidEffectRows: buildFirstAidEffectRows(item),
       firstAidWithdrawalEffectRows: buildFirstAidWithdrawalEffectRows(item),
@@ -914,6 +917,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-damage-source-volley-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteDamageSourceVolleyRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-add-region-special-property]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddRegionSpecialProperty(event));
+    });
+    this.element?.querySelectorAll("[data-delete-region-special-property]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteRegionSpecialProperty(event));
     });
     this.element?.querySelectorAll("[data-add-trap-damage-type]").forEach(button => {
       button.addEventListener("click", event => this.#onAddTrapDamageType(event));
@@ -5491,6 +5500,25 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const entries = readDamageSourceVolleyRegionDamageRows(this.element);
     entries.splice(index, 1);
     return this.item.update({ "system.functions.damageSource.volley.regionDamageEntries": entries });
+  }
+
+  #onAddRegionSpecialProperty(event) {
+    event.preventDefault();
+    const path = String(event.currentTarget?.dataset?.regionSpecialPropertyPath ?? "").trim();
+    if (!path) return undefined;
+    const current = normalizeRegionSpecialProperties(foundry.utils.getProperty(this.item, `${path}.regionSpecialProperties`));
+    if (!current.length) current.push({ type: "smoke", smoke: { thickness: "1", densityPercent: "50" } });
+    return this.item.update({ [`${path}.regionSpecialProperties`]: current });
+  }
+
+  #onDeleteRegionSpecialProperty(event) {
+    event.preventDefault();
+    const path = String(event.currentTarget?.dataset?.regionSpecialPropertyPath ?? "").trim();
+    const index = Number(event.currentTarget?.dataset?.deleteRegionSpecialProperty);
+    if (!path || !Number.isInteger(index) || index < 0) return undefined;
+    const current = normalizeRegionSpecialProperties(foundry.utils.getProperty(this.item, `${path}.regionSpecialProperties`));
+    current.splice(index, 1);
+    return this.item.update({ [`${path}.regionSpecialProperties`]: current });
   }
 
   #onAddTrapDamageType(event) {
@@ -10110,7 +10138,8 @@ function prepareAttackActionSettingsForDisplay(source = {}, path = "", construct
       regionDamageRows: buildVolleyRegionDamageRowsForData(
         area.regionDamageEntries,
         getDamageTypeSettings()
-      )
+      ),
+      regionSpecialProperties: buildRegionSpecialPropertyRows(area.regionSpecialProperties)
     }
   };
 }
@@ -10882,6 +10911,7 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
       ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
       : [],
+    regionSpecialProperties: normalizeRegionSpecialProperties(sourceVolley?.regionSpecialProperties),
     regionDurationSeconds: normalizeDamageFormula(sourceVolley?.regionDurationSeconds),
     regionDelaySeconds: normalizeDamageFormula(sourceVolley?.regionDelaySeconds),
     regionRadiusDeltaMeters: normalizeDamageFormula(sourceVolley?.regionRadiusDeltaMeters),
@@ -11302,6 +11332,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
       volleyDamageRadius: normalizeDamageFormula(weaponData?.volley?.damageRadius),
       volleyRegionRadius: normalizeDamageFormula(weaponData?.volley?.regionRadius),
       volleyRegionDamageRows: buildVolleyRegionDamageRowsForData(weaponData?.volley?.regionDamageEntries, damageTypeSettings),
+      volleyRegionSpecialProperties: buildRegionSpecialPropertyRows(weaponData?.volley?.regionSpecialProperties),
       volleyRegionDurationSeconds: normalizeDamageFormula(weaponData?.volley?.regionDurationSeconds),
       volleyRegionDelaySeconds: normalizeDamageFormula(weaponData?.volley?.regionDelaySeconds),
       volleyRegionRadiusDeltaMeters: normalizeDamageFormula(weaponData?.volley?.regionRadiusDeltaMeters),
@@ -11364,6 +11395,7 @@ function createDefaultDamageSourceVolleyData() {
     damageRadius: 0,
     regionRadius: 0,
     regionDamageEntries: [],
+    regionSpecialProperties: [],
     regionDurationSeconds: 0,
     regionDelaySeconds: 0,
     regionRadiusDeltaMeters: 0,
@@ -11453,6 +11485,7 @@ function createDefaultTrapFunctionData(source = {}) {
       damageTypes: [{ key: "firearm", percent: 100 }],
       regionRadius: 0,
       regionDamageEntries: [],
+      regionSpecialProperties: [],
       regionDurationSeconds: 0,
       regionDelaySeconds: 0,
       regionRadiusDeltaMeters: 0
@@ -11533,6 +11566,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       damageRadius: 0,
       regionRadius: 0,
       regionDamageEntries: [],
+      regionSpecialProperties: [],
       regionDurationSeconds: 0,
       regionDelaySeconds: 0,
       regionRadiusDeltaMeters: 0,
@@ -13223,6 +13257,13 @@ function roundPathNumber(value) {
 
 function getWeaponFunctionSection(element) {
   return element?.closest?.("[data-weapon-function-section]") ?? null;
+}
+
+function buildRegionSpecialPropertyRows(entries = []) {
+  return normalizeRegionSpecialProperties(entries).map((property, index) => ({
+    ...property,
+    index
+  }));
 }
 
 function isAttackActionSettingsSection(section) {

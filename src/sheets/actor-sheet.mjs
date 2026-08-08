@@ -8209,6 +8209,9 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
       ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
       : [],
+    regionSpecialProperties: Array.isArray(sourceVolley?.regionSpecialProperties)
+      ? foundry.utils.deepClone(sourceVolley.regionSpecialProperties)
+      : [],
     regionDurationSeconds: normalizeFormulaText(sourceVolley?.regionDurationSeconds),
     regionDelaySeconds: normalizeFormulaText(sourceVolley?.regionDelaySeconds),
     regionRadiusDeltaMeters: normalizeFormulaText(sourceVolley?.regionRadiusDeltaMeters),
